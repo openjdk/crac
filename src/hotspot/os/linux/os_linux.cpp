@@ -6576,19 +6576,22 @@ static int call_criu() {
     wait(NULL);
     return 0;
   }
+
+  pid_t parent_before = getpid();
+
   // child
   if (fork()) {
     exit(0);
   }
   // grand-child
-  pid_t parent;
+  pid_t parent = getppid();
   int tries = 300;
   while (parent != 1 && 0 < tries--) {
     ::usleep(10);
     parent = getppid();
   }
 
-  if (parent != 1) {
+  if (parent == parent_before) {
     trace_cr("can't move out of JVM process hierarchy");
     union sigval sv = { .sival_int = -1 };
     sigqueue(jvm, RESTORE_SIGNAL, sv);

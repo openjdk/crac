@@ -1,10 +1,5 @@
 # CRaC JDK
 
-The `jdk-base` tracks latest OpenJDK GA revision.
-Now it is `jdk14-ga`.
-
-The main branch for CRaC implementation is `jdk-crac` (hosts `jdk.crac` package).
-
 ## Build
 
 CRaC JDK have extended build procedure.

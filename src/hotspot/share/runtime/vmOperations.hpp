@@ -127,6 +127,7 @@
   template(PrintMetadata)                         \
   template(GTestExecuteAtSafepoint)               \
   template(JFROldObject)                          \
+  template(VM_Crac)                               \
 
 class VM_Operation : public StackObj {
  public:

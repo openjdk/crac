@@ -1,5 +1,6 @@
 /*
  * Copyright (c) 1997, 2019, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2017, 2020, Azul Systems, Inc. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -3277,6 +3278,19 @@ jint Arguments::finalize_vm_init_args(bool patch_mod_javabase) {
 #ifndef CAN_SHOW_REGISTERS_ON_ASSERT
   UNSUPPORTED_OPTION(ShowRegistersOnAssert);
 #endif // CAN_SHOW_REGISTERS_ON_ASSERT
+
+  if (CRaCRestoreFrom) {
+    os::Linux::restore();
+    if (!CRaCIgnoreRestoreIfUnavailable) {
+      // FIXME switch to unified hotspot logging
+      warning("cannot restore");
+      return JNI_ERR;
+    }
+  }
+
+  if (CRaCCheckpointTo && !os::Linux::prepare_checkpoint()) {
+    return JNI_ERR;
+  }
 
   return JNI_OK;
 }

@@ -1,5 +1,6 @@
 /*
  * Copyright (c) 1999, 2019, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2017, 2020, Azul Systems, Inc. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -198,6 +199,13 @@ class Linux {
   }
 
   static jlong fast_thread_cpu_time(clockid_t clockid);
+
+  static void vm_create_start();
+  static bool prepare_checkpoint();
+  static Handle checkpoint(TRAPS);
+  static void restore();
+  static void register_persistent_fd(int fd, int st_dev, int st_ino);
+  static void deregister_persistent_fd(int fd, int st_dev, int st_ino);
 
   // Stack repair handling
 

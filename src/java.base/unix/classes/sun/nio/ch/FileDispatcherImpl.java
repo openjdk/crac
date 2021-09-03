@@ -28,14 +28,42 @@ package sun.nio.ch;
 import java.io.FileDescriptor;
 import java.io.IOException;
 
+import jdk.crac.Context;
+import jdk.crac.Resource;
 import jdk.internal.access.JavaIOFileDescriptorAccess;
 import jdk.internal.access.SharedSecrets;
+import jdk.internal.crac.Core;
+import jdk.internal.crac.JDKResource;
 
 class FileDispatcherImpl extends FileDispatcher {
+    static class ResourceProxy implements JDKResource {
+        @Override
+        public void beforeCheckpoint(Context<? extends Resource> context) throws Exception {
+            FileDispatcherImpl.beforeCheckpoint();
+        }
+
+        @Override
+        public void afterRestore(Context<? extends Resource> context)
+                throws IOException {
+            FileDispatcherImpl.afterRestore();
+        }
+
+        @Override
+        public int getPriority() {
+            return 0;
+        }
+    }
+
+    static Object closeLock = new Object();
+    static boolean forceNonDeferedClose;
+    static int closeCnt;
+
+    static ResourceProxy resourceProxy = new ResourceProxy();
 
     static {
         IOUtil.load();
         init();
+        Core.getJDKContext().register(resourceProxy);
     }
 
     private static final JavaIOFileDescriptorAccess fdAccess =
@@ -105,7 +133,30 @@ class FileDispatcherImpl extends FileDispatcher {
     }
 
     void preClose(FileDescriptor fd) throws IOException {
-        preClose0(fd);
+        boolean doPreclose = true;
+        synchronized (closeLock) {
+            if (forceNonDeferedClose) {
+                doPreclose = false;
+            }
+            if (doPreclose) {
+                ++closeCnt;
+            }
+        }
+
+        if (!doPreclose) {
+            return;
+        }
+
+        try {
+            preClose0(fd);
+        } finally {
+            synchronized (closeLock) {
+                closeCnt--;
+                if (forceNonDeferedClose && closeCnt == 0) {
+                    closeLock.notifyAll();
+                }
+            }
+        }
     }
 
     void dup(FileDescriptor fd1, FileDescriptor fd2) throws IOException {
@@ -135,6 +186,23 @@ class FileDispatcherImpl extends FileDispatcher {
                 ("Error setting up DirectIO", e);
         }
         return result;
+    }
+
+    static void beforeCheckpoint() throws InterruptedException {
+        synchronized (closeLock) {
+            forceNonDeferedClose = true;
+            while (closeCnt != 0) {
+                closeLock.wait();
+            }
+            beforeCheckpoint0();
+        }
+    }
+
+    static void afterRestore() throws IOException {
+        synchronized (closeLock) {
+            afterRestore0();
+            forceNonDeferedClose = false;
+        }
     }
 
     // -- Native methods --
@@ -188,4 +256,7 @@ class FileDispatcherImpl extends FileDispatcher {
 
     static native void init();
 
+    static native void beforeCheckpoint0();
+
+    static native void afterRestore0() throws IOException;
 }

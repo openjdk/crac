@@ -32,3 +32,6 @@ JNI_GetCreatedJavaVMs
 JNI_GetDefaultJavaVMInitArgs
 JVM_FindClassFromBootLoader
 JVM_InitAgentProperties
+JVM_Checkpoint
+JVM_RegisterPersistent
+JVM_DeregisterPersistent

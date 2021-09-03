@@ -912,4 +912,18 @@ public:
   virtual void execute(DCmdSource source, TRAPS);
 };
 
+class CheckpointDCmd : public DCmd {
+public:
+  CheckpointDCmd(outputStream* output, bool heap) : DCmd(output, heap) { }
+    static const char* name() { return "JDK.checkpoint"; }
+    static const char* description() {
+      return "Checkpoint via jdk.crac.checkpointRestore().";
+    }
+    static const char* impact() {
+      return "High: JVM terminates";
+    }
+    static int num_arguments() { return 0; }
+    virtual void execute(DCmdSource source, TRAPS);
+};
+
 #endif // SHARE_SERVICES_DIAGNOSTICCOMMAND_HPP

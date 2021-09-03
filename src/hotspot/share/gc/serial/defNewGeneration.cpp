@@ -1,5 +1,6 @@
 /*
  * Copyright (c) 2001, 2019, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2019, Azul Systems, Inc. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -362,6 +363,12 @@ size_t DefNewGeneration::adjust_for_thread_increase(size_t new_size_candidate,
 }
 
 void DefNewGeneration::compute_new_size() {
+  if (Universe::heap()->do_cleanup_unused()) {
+    os::cleanup_memory((char*)eden()->top(), (char*)eden()->end() - (char*)eden()->top());
+    os::cleanup_memory((char*)from()->top(), (char*)from()->end() - (char*)from()->top());
+    os::cleanup_memory((char*)to()->top(), (char*)to()->end() - (char*)to()->top());
+  }
+
   // This is called after a GC that includes the old generation, so from-space
   // will normally be empty.
   // Note that we check both spaces, since if scavenge failed they revert roles.

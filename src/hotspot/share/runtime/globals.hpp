@@ -2510,7 +2510,32 @@ const size_t minimumSymbolTableSize = 1024;
           "Start flight recording with options"))                           \
                                                                             \
   experimental(bool, UseFastUnorderedTimeStamps, false,                     \
-          "Use platform unstable time where supported for timestamps only")
+          "Use platform unstable time where supported for timestamps only") \
+                                                                            \
+  product(ccstr, CRaCCheckpointTo, NULL, "Path to checkpoint image")        \
+                                                                            \
+  product(ccstr, CRaCRestoreFrom, NULL, "Path to image for restore, "       \
+      "replaces the initializing VM on success")                            \
+                                                                            \
+  product(bool, CRaCIgnoreRestoreIfUnavailable, false, "Ignore "            \
+      "-XX:CRaCRestoreFrom and continue initialization if restore is "      \
+      "unavailable")                                                        \
+                                                                            \
+  diagnostic(bool, CRAllowToSkipCheckpoint, false,                          \
+          "Allow implementation to not call Checkpoint if helper not found")\
+                                                                            \
+  diagnostic(bool, CRHeapDumpOnCheckpointException, false, "Dump heap on "  \
+      "CheckpointException thrown because of C/RaC precondition failed")    \
+                                                                            \
+  diagnostic(bool, CRPrintResourcesOnCheckpoint, false, "Print resources "  \
+      "to decide CheckpointException")                                      \
+                                                                            \
+  diagnostic(bool, CRTraceStartupTime, false, "Trace startup time")         \
+                                                                            \
+  experimental(bool, CRDoThrowCheckpointException, true, "Throw "           \
+      "CheckpointException if uncheckpointable resource handle found")      \
+                                                                            \
+  product(bool, CRTrace, true, "Minimal C/R tracing")
 
 // Interface macros
 #define DECLARE_PRODUCT_FLAG(type, name, value, doc)      extern "C" type name;

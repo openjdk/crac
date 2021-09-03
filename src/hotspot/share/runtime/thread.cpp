@@ -3809,6 +3809,8 @@ jint Threads::create_vm(JavaVMInitArgs* args, bool* canTryAgain) {
     os::pause();
   }
 
+  os::Linux::vm_create_start();
+
   HOTSPOT_VM_INIT_BEGIN();
 
   // Timing (must come after argument parsing)

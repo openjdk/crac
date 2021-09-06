@@ -39,53 +39,53 @@
 #define MSGPREFIX "action-script: "
 
 static int post_resume(void) {
-	char *pidstr = getenv("CRTOOLS_INIT_PID");
-	if (!pidstr) {
-		fprintf(stderr, MSGPREFIX "cannot find CRTOOLS_INIT_PID env\n");
-		return 1;
-	}
-	int pid = atoi(pidstr);
+    char *pidstr = getenv("CRTOOLS_INIT_PID");
+    if (!pidstr) {
+        fprintf(stderr, MSGPREFIX "cannot find CRTOOLS_INIT_PID env\n");
+        return 1;
+    }
+    int pid = atoi(pidstr);
 
-	union sigval sv = { .sival_int = 0 };
-	if (-1 == sigqueue(pid, RESTORE_SIGNAL, sv)) {
-		perror(MSGPREFIX "sigqueue");
-		return 1;
-	}
+    union sigval sv = { .sival_int = 0 };
+    if (-1 == sigqueue(pid, RESTORE_SIGNAL, sv)) {
+        perror(MSGPREFIX "sigqueue");
+        return 1;
+    }
 
-	return 0;
+    return 0;
 }
 
 static int post_dump(void) {
-	char realdir[PATH_MAX];
+    char realdir[PATH_MAX];
 
-	char *imgdir = getenv("CRTOOLS_IMAGE_DIR");
-	if (!imgdir) {
-		fprintf(stderr, MSGPREFIX "cannot find CRTOOLS_IMAGE_DIR env\n");
-		return 1;
-	}
+    char *imgdir = getenv("CRTOOLS_IMAGE_DIR");
+    if (!imgdir) {
+        fprintf(stderr, MSGPREFIX "cannot find CRTOOLS_IMAGE_DIR env\n");
+        return 1;
+    }
 
-	if (!realpath(imgdir, realdir)) {
-		fprintf(stderr, MSGPREFIX "cannot canonicalize %s: %s\n", imgdir, strerror(errno));
-		return 1;
-	}
+    if (!realpath(imgdir, realdir)) {
+        fprintf(stderr, MSGPREFIX "cannot canonicalize %s: %s\n", imgdir, strerror(errno));
+        return 1;
+    }
 
-	int dirfd = open(realdir, O_DIRECTORY);
-	if (dirfd < 0) {
-		fprintf(stderr, MSGPREFIX "can not open image dir %s: %s\n", realdir, strerror(errno));
-		return 1;
-	}
+    int dirfd = open(realdir, O_DIRECTORY);
+    if (dirfd < 0) {
+        fprintf(stderr, MSGPREFIX "can not open image dir %s: %s\n", realdir, strerror(errno));
+        return 1;
+    }
 
-	int fd = openat(dirfd, "cppath", O_CREAT | O_WRONLY | O_TRUNC, 0644);
-	if (fd < 0) {
-		fprintf(stderr, MSGPREFIX "can not open file %s/cppath: %s\n", realdir, strerror(errno));
-		return 1;
-	}
+    int fd = openat(dirfd, "cppath", O_CREAT | O_WRONLY | O_TRUNC, 0644);
+    if (fd < 0) {
+        fprintf(stderr, MSGPREFIX "can not open file %s/cppath: %s\n", realdir, strerror(errno));
+        return 1;
+    }
 
-	if (write(fd, realdir, strlen(realdir)) < 0) {
-		fprintf(stderr, MSGPREFIX "can not write %s/cppath: %s\n", realdir, strerror(errno));
-		return 1;
-	}
-	return 0;
+    if (write(fd, realdir, strlen(realdir)) < 0) {
+        fprintf(stderr, MSGPREFIX "can not write %s/cppath: %s\n", realdir, strerror(errno));
+        return 1;
+    }
+    return 0;
 }
 
 /** Kicks VM after restore.
@@ -95,19 +95,19 @@ static int post_dump(void) {
  * pass the ID via ZE_CR_NEW_ARGS_ID env variable.
  */
 int main(int argc, char *argv[]) {
-	char *action = getenv("CRTOOLS_SCRIPT_ACTION");
-	if (!action) {
-		fprintf(stderr, MSGPREFIX "can not find CRTOOLS_SCRIPT_ACTION env\n");
-		return 1;
-	}
+    char *action = getenv("CRTOOLS_SCRIPT_ACTION");
+    if (!action) {
+        fprintf(stderr, MSGPREFIX "can not find CRTOOLS_SCRIPT_ACTION env\n");
+        return 1;
+    }
 
-	if (!strcmp(action, "post-resume")) {
-		return post_resume();
-	}
+    if (!strcmp(action, "post-resume")) {
+        return post_resume();
+    }
 
-	if (!strcmp(action, "post-dump")) {
-		return post_dump();
-	}
+    if (!strcmp(action, "post-dump")) {
+        return post_dump();
+    }
 
-	return 0;
+    return 0;
 }

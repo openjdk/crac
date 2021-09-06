@@ -1,2 +1,6 @@
-project=jdk
-bugids=dup
+[general]
+project=crac
+jbs=JDK
+
+[checks]
+error=whitespace

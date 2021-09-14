@@ -100,3 +100,51 @@ ifeq ($(call isTargetOs, macosx solaris aix linux), true)
 endif
 
 ################################################################################
+
+ifeq ($(OPENJDK_TARGET_OS), linux)
+  $(eval $(call SetupJdkExecutable, BUILD_RESTORE_SCRIPT, \
+      NAME := action-script, \
+      SRC := $(TOPDIR)/src/$(MODULE)/unix/native/action-script, \
+      INCLUDE_FILES := action-script.c, \
+      OPTIMIZATION := HIGH, \
+      CFLAGS := $(CFLAGS_JDKEXE), \
+      LDFLAGS := $(LDFLAGS_JDKEXE), \
+      OUTPUT_DIR := $(SUPPORT_OUTPUTDIR)/modules_libs/$(MODULE), \
+  ))
+  TARGETS += $(BUILD_RESTORE_SCRIPT)
+
+  $(eval $(call SetupJdkExecutable, BUILD_WAIT, \
+      NAME := wait, \
+      SRC := $(TOPDIR)/src/$(MODULE)/unix/native/wait, \
+      INCLUDE_FILES := wait.c, \
+      OPTIMIZATION := LOW, \
+      CFLAGS := $(CFLAGS_JDKEXE), \
+      LDFLAGS := $(LDFLAGS_JDKEXE), \
+      OUTPUT_DIR := $(SUPPORT_OUTPUTDIR)/modules_libs/$(MODULE), \
+  ))
+  TARGETS += $(BUILD_WAIT)
+
+  $(eval $(call SetupJdkExecutable, BUILD_CRIU_WRAPPER, \
+      NAME := criu, \
+      SRC := $(TOPDIR)/src/$(MODULE)/unix/native/criu, \
+      INCLUDE_FILES := criu.c, \
+      OPTIMIZATION := LOW, \
+      CFLAGS := $(CFLAGS_JDKEXE), \
+      LDFLAGS := $(LDFLAGS_JDKEXE), \
+      OUTPUT_DIR := $(SUPPORT_OUTPUTDIR)/modules_libs/$(MODULE), \
+  ))
+  TARGETS += $(BUILD_CRIU_WRAPPER)
+
+  $(eval $(call SetupJdkExecutable, BUILD_JAVA_TIME, \
+      NAME := javatime, \
+      SRC := $(TOPDIR)/src/$(MODULE)/unix/native/javatime, \
+      INCLUDE_FILES := javatime.c, \
+      OPTIMIZATION := LOW, \
+      CFLAGS := $(CFLAGS_JDKEXE), \
+      LDFLAGS := $(LDFLAGS_JDKEXE), \
+      OUTPUT_DIR := $(SUPPORT_OUTPUTDIR)/modules_libs/$(MODULE), \
+  ))
+  TARGETS += $(BUILD_JAVA_TIME)
+endif
+
+################################################################################

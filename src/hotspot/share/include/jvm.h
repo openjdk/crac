@@ -1216,6 +1216,27 @@ typedef struct JDK1_1InitArgs {
     jint debugPort;
 } JDK1_1InitArgs;
 
+enum {
+  JVM_CHECKPOINT_OK,
+  JVM_CHECKPOINT_ERROR,
+  JVM_CHECKPOINT_NONE,
+};
+
+enum cr_fail_type {
+  JVM_CR_FAIL      = 0,
+  JVM_CR_FAIL_FILE = 1,
+  JVM_CR_FAIL_SOCK = 2,
+  JVM_CR_FAIL_PIPE = 3,
+};
+
+JNIEXPORT jobjectArray JNICALL
+JVM_Checkpoint(JNIEnv *env);
+
+JNIEXPORT void JNICALL
+JVM_RegisterPersistent(int fd, int st_dev, int st_ino);
+
+JNIEXPORT void JNICALL
+JVM_DeregisterPersistent(int fd, int st_dev, int st_ino);
 
 #ifdef __cplusplus
 } /* extern "C" */

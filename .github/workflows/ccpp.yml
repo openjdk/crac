@@ -1,0 +1,60 @@
+name: Build
+
+on:
+  push:
+    branches:
+      - '*'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+
+    - name: Start build container
+      run: echo ${GITHUB_TOKEN} | docker login -u ${GITHUB_ACTOR} --password-stdin docker.pkg.github.com;
+        docker run -d --name build
+        -w $PWD
+        -v /home/runner:/home/runner
+        -u $(id -u):$(id -g)
+        --entrypoint tail
+        docker.pkg.github.com/crac/docker-build/image:latest
+        -f /dev/null
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+    - uses: actions/checkout@v2
+
+    - run: bash ./configure
+        --disable-warnings-as-errors
+        --with-version-pre=crac
+        --with-native-debug-symbols=none
+      shell: docker exec build bash -e {0}
+
+    - run: |
+        make images docs
+        mv build/linux-x86_64-server-release/images/jdk jdk14-crac
+        mv build/linux-x86_64-server-release/images/docs .
+      shell: docker exec build bash -e {0}
+
+    - name: Bundle CRIU
+      run: |
+        id=$(curl https://api.github.com/repos/crac/criu/releases/tags/release-crac | jq .assets[0].id)
+        curl https://api.github.com/repos/crac/criu/releases/assets/$id -LJOH 'Accept: application/octet-stream'
+        tar axf criu-dist.tar.gz
+        cp criu-dist/sbin/criu jdk14-crac/lib/criu
+        sudo chown root:root jdk14-crac/lib/criu
+        sudo chmod u+s jdk14-crac/lib/criu
+        tar -zcf jdk14-crac.tar.gz jdk14-crac
+
+    - uses: actions/upload-artifact@v2
+      with:
+        name: jdk
+        path: jdk14-crac.tar.gz
+
+    - name: Compress docs
+      run: tar -zcf docs.tar.gz docs
+
+    - uses: actions/upload-artifact@v2
+      with:
+        name: docs
+        path: docs.tar.gz

@@ -25,9 +25,11 @@
 package java.net;
 
 import java.io.IOException;
-import java.util.Set;
-import java.util.HashSet;
-import sun.net.ext.ExtendedSocketOptions;
+
+import jdk.crac.Context;
+import jdk.crac.Resource;
+import jdk.internal.crac.Core;
+import jdk.internal.crac.JDKResource;
 
 /*
  * On Unix systems we simply delegate to native methods.
@@ -37,8 +39,32 @@ import sun.net.ext.ExtendedSocketOptions;
 
 class PlainSocketImpl extends AbstractPlainSocketImpl
 {
+    static class ResourceProxy implements JDKResource {
+        @Override
+        public void beforeCheckpoint(Context<? extends Resource> context) throws Exception {
+            PlainSocketImpl.beforeCheckpoint();
+        }
+
+        @Override
+        public void afterRestore(Context<? extends Resource> context) throws Exception {
+            PlainSocketImpl.afterRestore();
+        }
+
+        @Override
+        public int getPriority() {
+            return 0;
+        }
+    }
+
+    static Object closeLock = new Object();
+    static boolean forceNonDeferedClose;
+    static int closeCnt;
+
+    static JDKResource resourceProxy = new ResourceProxy();
+
     static {
         initProto();
+        Core.getJDKContext().register(resourceProxy);
     }
 
     /**
@@ -61,6 +87,50 @@ class PlainSocketImpl extends AbstractPlainSocketImpl
         }
     }
 
+    @Override
+    void socketClose0(boolean useDeferredClose) throws IOException {
+        if (useDeferredClose) {
+            synchronized (closeLock) {
+                if (forceNonDeferedClose) {
+                    useDeferredClose = false;
+                }
+                if (useDeferredClose) {
+                    ++closeCnt;
+                }
+            }
+        }
+
+        try {
+            socketClose1(useDeferredClose);
+        } finally {
+            if (useDeferredClose) {
+                synchronized (closeLock) {
+                    --closeCnt;
+                    if (forceNonDeferedClose && closeCnt == 0) {
+                        closeLock.notifyAll();
+                    }
+                }
+            }
+        }
+    }
+
+    static void beforeCheckpoint() throws InterruptedException {
+        synchronized (closeLock) {
+            forceNonDeferedClose = true;
+            while (closeCnt != 0) {
+                closeLock.wait();
+            }
+            beforeCheckpoint0();
+        }
+    }
+
+    static void afterRestore() {
+        synchronized (closeLock) {
+            afterRestore0();
+            forceNonDeferedClose = false;
+        }
+    }
+
     void socketCreate(boolean stream) throws IOException {
         socketCreate(stream, isServer);
     }
@@ -79,7 +149,7 @@ class PlainSocketImpl extends AbstractPlainSocketImpl
 
     native int socketAvailable() throws IOException;
 
-    native void socketClose0(boolean useDeferredClose) throws IOException;
+    native void socketClose1(boolean useDeferredClose) throws IOException;
 
     native void socketShutdown(int howto) throws IOException;
 
@@ -91,4 +161,8 @@ class PlainSocketImpl extends AbstractPlainSocketImpl
     native int socketGetOption(int opt, Object iaContainerObj) throws SocketException;
 
     native void socketSendUrgentData(int data) throws IOException;
+
+    static native void beforeCheckpoint0();
+
+    static native void afterRestore0();
 }

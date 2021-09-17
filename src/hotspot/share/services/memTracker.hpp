@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013, 2019, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2013, 2020, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -68,6 +68,7 @@ class MemTracker : AllStatic {
                        MEMFLAGS flag = mtNone) { }
   static inline void record_virtual_memory_reserve_and_commit(void* addr, size_t size,
     const NativeCallStack& stack, MEMFLAGS flag = mtNone) { }
+  static inline void record_virtual_memory_split_reserved(void* addr, size_t size, size_t split) { }
   static inline void record_virtual_memory_commit(void* addr, size_t size, const NativeCallStack& stack) { }
   static inline void record_virtual_memory_type(void* addr, MEMFLAGS flag) { }
   static inline void record_thread_stack(void* addr, size_t size) { }
@@ -85,12 +86,10 @@ class MemTracker : AllStatic {
 #include "services/threadStackTracker.hpp"
 #include "services/virtualMemoryTracker.hpp"
 
-extern volatile bool NMT_stack_walkable;
-
-#define CURRENT_PC ((MemTracker::tracking_level() == NMT_detail && NMT_stack_walkable) ? \
-                    NativeCallStack(0, true) : NativeCallStack::empty_stack())
-#define CALLER_PC  ((MemTracker::tracking_level() == NMT_detail && NMT_stack_walkable) ?  \
-                    NativeCallStack(1, true) : NativeCallStack::empty_stack())
+#define CURRENT_PC ((MemTracker::tracking_level() == NMT_detail) ? \
+                    NativeCallStack(0) : NativeCallStack::empty_stack())
+#define CALLER_PC  ((MemTracker::tracking_level() == NMT_detail) ?  \
+                    NativeCallStack(1) : NativeCallStack::empty_stack())
 
 class MemBaseline;
 
@@ -240,6 +239,22 @@ class MemTracker : AllStatic {
     }
   }
 
+  // Given an existing memory mapping registered with NMT and a splitting
+  //  address, split the mapping in two. The memory region is supposed to
+  //  be fully uncommitted.
+  //
+  // The two new memory regions will be both registered under stack and
+  //  memory flags of the original region.
+  static inline void record_virtual_memory_split_reserved(void* addr, size_t size, size_t split) {
+    if (tracking_level() < NMT_summary) return;
+    if (addr != NULL) {
+      ThreadCritical tc;
+      // Recheck to avoid potential racing during NMT shutdown
+      if (tracking_level() < NMT_summary) return;
+      VirtualMemoryTracker::split_reserved_region((address)addr, size, split);
+    }
+  }
+
   static inline void record_virtual_memory_type(void* addr, MEMFLAGS flag) {
     if (tracking_level() < NMT_summary) return;
     if (addr != NULL) {
@@ -271,13 +286,10 @@ class MemTracker : AllStatic {
     return NMTQuery_lock;
   }
 
-  // Make a final report or report for hs_err file.
-  static void error_report(outputStream* output) {
-    if (tracking_level() >= NMT_summary) {
-      report(true, output);  // just print summary for error case.
-    }
-   }
+  // Report during error reporting.
+  static void error_report(outputStream* output);
 
+  // Report when handling PrintNMTStatistics before VM shutdown.
   static void final_report(outputStream* output);
 
   // Stored baseline
@@ -293,7 +305,7 @@ class MemTracker : AllStatic {
 
  private:
   static NMT_TrackingLevel init_tracking_level();
-  static void report(bool summary_only, outputStream* output);
+  static void report(bool summary_only, outputStream* output, size_t scale);
 
  private:
   // Tracking level

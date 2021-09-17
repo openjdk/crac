@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1996, 2017, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 1996, 2020, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -133,29 +133,24 @@ class CriticalSection {
 // Macros for using CriticalSection objects that help trace
 // lock/unlock actions
 
-/* Use THIS_FILE when it is available. */
-#ifndef THIS_FILE
-    #define THIS_FILE __FILE__
-#endif
-
 #define CRITICAL_SECTION_ENTER(cs) { \
     J2dTraceLn4(J2D_TRACE_VERBOSE2, \
                 "CS.Wait:  tid, cs, file, line = 0x%x, 0x%x, %s, %d", \
-                GetCurrentThreadId(), &(cs), THIS_FILE, __LINE__); \
+                GetCurrentThreadId(), &(cs), __FILE__, __LINE__); \
     (cs).Enter(); \
     J2dTraceLn4(J2D_TRACE_VERBOSE2, \
                 "CS.Enter: tid, cs, file, line = 0x%x, 0x%x, %s, %d", \
-                GetCurrentThreadId(), &(cs), THIS_FILE, __LINE__); \
+                GetCurrentThreadId(), &(cs), __FILE__, __LINE__); \
 }
 
 #define CRITICAL_SECTION_LEAVE(cs) { \
     J2dTraceLn4(J2D_TRACE_VERBOSE2, \
                 "CS.Leave: tid, cs, file, line = 0x%x, 0x%x, %s, %d", \
-                GetCurrentThreadId(), &(cs), THIS_FILE, __LINE__); \
+                GetCurrentThreadId(), &(cs), __FILE__, __LINE__); \
     (cs).Leave(); \
     J2dTraceLn4(J2D_TRACE_VERBOSE2, \
                 "CS.Left:  tid, cs, file, line = 0x%x, 0x%x, %s, %d", \
-                GetCurrentThreadId(), &(cs), THIS_FILE, __LINE__); \
+                GetCurrentThreadId(), &(cs), __FILE__, __LINE__); \
 }
 
 // Redefine WinAPI values related to touch input, if OS < Windows 7.
@@ -248,6 +243,8 @@ public:
     BOOL TIGetTouchInputInfo(HTOUCHINPUT hTouchInput,
         UINT cInputs, PTOUCHINPUT pInputs, int cbSize);
     BOOL TICloseTouchInputHandle(HTOUCHINPUT hTouchInput);
+
+    LRESULT InvokeInputMethodFunction(UINT msg, WPARAM wParam=0, LPARAM lParam=0);
 
     INLINE BOOL localPump() { return m_localPump; }
     INLINE BOOL VerifyComponents() { return FALSE; } // TODO: Use new DebugHelper class to set this flag
@@ -503,6 +500,10 @@ private:
     HMODULE m_dllHandle;  /* The module handle. */
 
     CriticalSection m_Sync;
+    CriticalSection m_inputMethodLock;
+
+    HANDLE m_inputMethodWaitEvent;
+    LRESULT m_inputMethodData;
 
 /* track display changes - used by palette-updating code.
    This is a workaround for a windows bug that prevents

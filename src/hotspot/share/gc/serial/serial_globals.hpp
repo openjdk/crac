@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2018, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2018, 2020, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -25,19 +25,14 @@
 #ifndef SHARE_GC_SERIAL_SERIAL_GLOBALS_HPP
 #define SHARE_GC_SERIAL_SERIAL_GLOBALS_HPP
 
-#define GC_SERIAL_FLAGS(develop,                                            \
-                        develop_pd,                                         \
-                        product,                                            \
-                        product_pd,                                         \
-                        diagnostic,                                         \
-                        diagnostic_pd,                                      \
-                        experimental,                                       \
-                        notproduct,                                         \
-                        manageable,                                         \
-                        product_rw,                                         \
-                        lp64_product,                                       \
-                        range,                                              \
-                        constraint,                                         \
-                        writeable)
+#define GC_SERIAL_FLAGS(develop,     \
+                        develop_pd,  \
+                        product,     \
+                        product_pd,  \
+                        notproduct,  \
+                        range,       \
+                        constraint)
+
+// end of GC_SERIAL_FLAGS
 
 #endif // SHARE_GC_SERIAL_SERIAL_GLOBALS_HPP

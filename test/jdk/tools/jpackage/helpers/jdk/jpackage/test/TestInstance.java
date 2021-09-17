@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2019, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2019, 2020, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -27,7 +27,13 @@ import java.lang.reflect.Array;
 import java.lang.reflect.Method;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Objects;
+import java.util.Set;
 import java.util.function.Predicate;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
@@ -236,7 +242,13 @@ final class TestInstance implements ThrowingRunnable {
             }
 
             if (!KEEP_WORK_DIR.contains(status)) {
-                TKit.deleteDirectoryRecursive(workDir);
+                if (Files.isSameFile(workDir, Path.of("."))) {
+                    // 1. If the work directory is the current directory, don't
+                    // delete it, just clean as deleting it would be confusing.
+                    TKit.deleteDirectoryContentsRecursive(workDir);
+                } else {
+                    TKit.deleteDirectoryRecursive(workDir);
+                }
             }
 
             TKit.log(String.format("%s %s; checks=%d", status, fullName,

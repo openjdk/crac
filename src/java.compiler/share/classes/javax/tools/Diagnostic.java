@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2005, 2014, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2005, 2019, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -71,7 +71,7 @@ public interface Diagnostic<S> {
         WARNING,
         /**
          * Problem similar to a warning, but is mandated by the tool's
-         * specification.  For example, the Java&trade; Language
+         * specification.  For example, the Java Language
          * Specification mandates warnings on certain
          * unchecked operations and the use of deprecated methods.
          */
@@ -112,7 +112,7 @@ public interface Diagnostic<S> {
      * associated with this diagnostic that indicates the location of
      * the problem.  In addition, the following must be true:
      *
-     * <p>{@code getStartPostion() <= getPosition()}
+     * <p>{@code getStartPosition() <= getPosition()}
      * <p>{@code getPosition() <= getEndPosition()}
      *
      * @return character offset from beginning of source; {@link

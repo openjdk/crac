@@ -1,5 +1,6 @@
 /*
  * Copyright (c) 2018, Red Hat, Inc. All rights reserved.
+ * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 2 only, as
@@ -24,10 +25,9 @@
 /**
  * @test TestClassLoaderLeak
  * @summary Test OOME in due to classloader leak
- * @key gc
- * @requires vm.gc.Shenandoah & !vm.graal.enabled
+ * @requires vm.gc.Shenandoah
  * @library /test/lib
- * @run main TestClassLoaderLeak
+ * @run driver TestClassLoaderLeak
  */
 
 import java.util.*;
@@ -125,9 +125,9 @@ public class TestClassLoaderLeak {
         }
 
         String[][][] modeHeuristics = new String[][][] {
-             {{"normal"},    {"adaptive", "compact", "static", "aggressive"}},
-             {{"traversal"}, {"adaptive", "aggressive"}},
-             {{"passive"},   {"passive"}}
+             {{"satb"},    {"adaptive", "compact", "static", "aggressive"}},
+             {{"iu"},      {"adaptive", "aggressive"}},
+             {{"passive"}, {"passive"}}
         };
 
         for (String[][] mh : modeHeuristics) {

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1999, 2016, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 1999, 2020, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -25,6 +25,7 @@
 package com.sun.tools.javac.jvm;
 
 import com.sun.tools.javac.util.ByteBuffer;
+import com.sun.tools.javac.util.Convert;
 import com.sun.tools.javac.util.Name.NameMapper;
 
 import java.io.IOException;
@@ -105,7 +106,7 @@ public class ModuleNameReader {
             throw new BadClassFile("invalid access flags for module: 0x" + Integer.toHexString(access_flags));
 
         int this_class = nextChar();
-        // could, should, check this_class == CONSTANT_Class("mdoule-info")
+        // could, should, check this_class == CONSTANT_Class("module-info")
         checkZero(nextChar(), "super_class");
         checkZero(nextChar(), "interface_count");
         checkZero(nextChar(), "fields_count");
@@ -147,8 +148,9 @@ public class ModuleNameReader {
 
     NameMapper<String> utf8Mapper(boolean internalize) {
         return internalize ?
-                (buf, offset, len) -> new String(ClassFile.internalize(buf, offset, len)) :
-                String::new;
+                (buf, offset, len) ->
+                    Convert.utf2string(ClassFile.internalize(buf, offset, len)) :
+                Convert::utf2string;
     }
 
 }

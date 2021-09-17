@@ -27,7 +27,6 @@
  * @summary AppCDS handling of protection domain.
  * @requires vm.cds
  * @library /test/lib
- * @modules jdk.jartool/sun.tools.jar
  * @compile test-classes/ProtDomain.java
  * @compile test-classes/ProtDomainB.java
  * @compile test-classes/JimageClassProtDomain.java
@@ -49,7 +48,6 @@ public class ProtectionDomain {
                          "com/sun/tools/javac/Main",
                          "jdk/nio/zipfs/ZipInfo",
                          "java/net/URL",
-                         "sun/rmi/rmic/Main",
                          "com/sun/jndi/dns/DnsName"));
 
     // First class is loaded from CDS, second class is loaded from JAR

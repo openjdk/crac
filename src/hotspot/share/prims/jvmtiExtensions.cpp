@@ -34,7 +34,14 @@ GrowableArray<jvmtiExtensionEventInfo*>* JvmtiExtensions::_ext_events;
 
 
 // extension function
-static jvmtiError JNICALL IsClassUnloadingEnabled(const jvmtiEnv* env, jboolean* enabled, ...) {
+static jvmtiError JNICALL IsClassUnloadingEnabled(const jvmtiEnv* env, ...) {
+  jboolean* enabled = NULL;
+  va_list ap;
+
+  va_start(ap, env);
+  enabled = va_arg(ap, jboolean *);
+  va_end(ap);
+
   if (enabled == NULL) {
     return JVMTI_ERROR_NULL_POINTER;
   }
@@ -49,8 +56,8 @@ static jvmtiError JNICALL IsClassUnloadingEnabled(const jvmtiEnv* env, jboolean*
 // event. The function and the event are registered here.
 //
 void JvmtiExtensions::register_extensions() {
-  _ext_functions = new (ResourceObj::C_HEAP, mtInternal) GrowableArray<jvmtiExtensionFunctionInfo*>(1,true);
-  _ext_events = new (ResourceObj::C_HEAP, mtInternal) GrowableArray<jvmtiExtensionEventInfo*>(1,true);
+  _ext_functions = new (ResourceObj::C_HEAP, mtServiceability) GrowableArray<jvmtiExtensionFunctionInfo*>(1, mtServiceability);
+  _ext_events = new (ResourceObj::C_HEAP, mtServiceability) GrowableArray<jvmtiExtensionEventInfo*>(1, mtServiceability);
 
   // register our extension function
   static jvmtiParamInfo func_params[] = {

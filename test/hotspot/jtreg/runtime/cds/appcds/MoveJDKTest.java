@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2018, 2019, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2018, 2020, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -28,7 +28,6 @@
  * @requires vm.cds
  * @requires os.family == "linux"
  * @library /test/lib
- * @modules jdk.jartool/sun.tools.jar
  * @compile test-classes/Hello.java
  * @run driver MoveJDKTest
  */
@@ -36,19 +35,19 @@
 // This test works only on Linux because it depends on symlinks and the name of the hotspot DLL (libjvm.so).
 // It probably doesn't work on Windows.
 // TODO: change libjvm.so to libjvm.dylib on MacOS, before adding "@requires os.family == mac"
-// TODO: test on solaris, before adding "@requires os.family == solaris"
 
 import java.io.File;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.StandardCopyOption;
+import jdk.test.lib.cds.CDSTestUtils;
 import jdk.test.lib.process.OutputAnalyzer;
 
 public class MoveJDKTest {
     public static void main(String[] args) throws Exception {
         String java_home_src = System.getProperty("java.home");
-        String java_home_dst = System.getProperty("user.dir") + File.separator + "moved_jdk";
+        String java_home_dst = CDSTestUtils.getOutputDir() + File.separator + "moved_jdk";
 
         TestCommon.startNewArchiveName();
         String jsaFile = TestCommon.getCurrentArchiveName();
@@ -180,12 +179,12 @@ public class MoveJDKTest {
     }
 
     private static String copyFakeModulesFromHelloJar() throws Exception {
-        String classDir = System.getProperty("test.classes");
+        String outDir = CDSTestUtils.getOutputDir();
         String newFile = "hello.modules";
-        String path = classDir + File.separator + newFile;
+        String path = outDir + File.separator + newFile;
 
-        Files.copy(Paths.get(classDir, "hello.jar"),
-            Paths.get(classDir, newFile),
+        Files.copy(Paths.get(outDir, "hello.jar"),
+            Paths.get(outDir, newFile),
             StandardCopyOption.REPLACE_EXISTING);
         return path;
     }

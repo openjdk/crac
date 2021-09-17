@@ -1,5 +1,6 @@
 /*
  * Copyright (c) 2017, 2019, Red Hat, Inc. All rights reserved.
+ * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 2 only, as
@@ -37,8 +38,8 @@ import sun.jvm.hotspot.types.CIntegerField;
 import sun.jvm.hotspot.utilities.BitMapInterface;
 
 import java.io.PrintStream;
-import java.util.Observable;
-import java.util.Observer;
+import sun.jvm.hotspot.utilities.Observable;
+import sun.jvm.hotspot.utilities.Observer;
 
 public class ShenandoahHeap extends CollectedHeap {
     static private CIntegerField numRegions;

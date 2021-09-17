@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2014, 2019, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2014, 2020, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -27,7 +27,6 @@
  * @summary If -Djava.system.class.loader=xxx is specified in command-line, disable archived non-system classes
  * @requires vm.cds
  * @library /test/lib
- * @modules jdk.jartool/sun.tools.jar
  * @compile test-classes/TestClassLoader.java
  * @compile test-classes/ReportMyLoader.java
  * @compile test-classes/TrySwitchMyLoader.java
@@ -73,6 +72,7 @@ public class SpecifySysLoaderProp {
     TestCommon.run(
         "-verbose:class",
         "-cp", appJar,
+        "-Xlog:cds",
         "-Djava.system.class.loader=TestClassLoader",
         "ReportMyLoader")
       .assertNormalExit("ReportMyLoader's loader = jdk.internal.loader.ClassLoaders$AppClassLoader@", //<-this is still printed because TestClassLoader simply delegates to Launcher$AppLoader, but ...
@@ -81,6 +81,7 @@ public class SpecifySysLoaderProp {
       .assertNormalExit(output -> {
         output.shouldMatch(".class,load. TestClassLoader source: file:");
         output.shouldMatch(".class,load. ReportMyLoader source: file:.*" + jarFileName);
+        output.shouldContain("full module graph: disabled due to incompatible property: java.system.class.loader=");
         });
 
     // (3) Try to change the java.system.class.loader programmatically after

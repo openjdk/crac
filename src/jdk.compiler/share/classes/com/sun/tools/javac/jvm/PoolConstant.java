@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2019, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2019, 2021, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -187,19 +187,15 @@ public interface PoolConstant {
 
             @Override
             public boolean equals(Object obj) {
-                if (obj instanceof BsmKey) {
-                    BsmKey other = (BsmKey)obj;
-                    return Objects.equals(bsmKey, other.bsmKey) &&
-                            Objects.equals(staticArgKeys, other.staticArgKeys);
-                } else {
-                    return false;
-                }
+                return (obj instanceof BsmKey key)
+                        && Objects.equals(bsmKey, key.bsmKey)
+                        && Objects.equals(staticArgKeys, key.staticArgKeys);
             }
         }
     }
 
     /**
-     * A pool constant implememntation describing a name and type pool entry.
+     * A pool constant implementation describing a name and type pool entry.
      */
     final class NameAndType implements PoolConstant {
 

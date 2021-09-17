@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2017, 2018 Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2017, 2018, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -39,14 +39,14 @@ class FakeOop {
   oopDesc _oop;
 
 public:
-  FakeOop() : _oop() { _oop.set_mark_raw(originalMark()); }
+  FakeOop() : _oop() { _oop.set_mark(originalMark()); }
 
   oop get_oop() { return &_oop; }
-  markWord mark() { return _oop.mark_raw(); }
-  void set_mark(markWord m) { _oop.set_mark_raw(m); }
+  markWord mark() { return _oop.mark(); }
+  void set_mark(markWord m) { _oop.set_mark(m); }
   void forward_to(oop obj) {
     markWord m = markWord::encode_pointer_as_mark(obj);
-    _oop.set_mark_raw(m);
+    _oop.set_mark(m);
   }
 
   static markWord originalMark() { return markWord(markWord::lock_mask_in_place); }

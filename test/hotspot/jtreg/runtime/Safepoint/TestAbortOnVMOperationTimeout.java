@@ -31,6 +31,7 @@ import jdk.test.lib.process.*;
  * @library /test/lib
  * @modules java.base/jdk.internal.misc
  *          java.management
+ * @run driver TestAbortOnVMOperationTimeout
  */
 
 public class TestAbortOnVMOperationTimeout {
@@ -73,7 +74,7 @@ public class TestAbortOnVMOperationTimeout {
         if (shouldPass) {
             output.shouldHaveExitValue(0);
         } else {
-            output.shouldMatch("VM operation took too long");
+            output.shouldContain("VM operation took too long");
             output.shouldNotHaveExitValue(0);
         }
     }

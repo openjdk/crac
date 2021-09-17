@@ -55,12 +55,15 @@ public class Core {
         // force JDK context initialization
         jdk.internal.crac.Core.getJDKContext();
 
-        traceStartupTime = AccessController.doPrivileged(
+        @SuppressWarnings("removal")
+        boolean doTraceStartupTime = AccessController.doPrivileged(
                 new PrivilegedAction<Boolean>() {
                     public Boolean run() {
                         return Boolean.parseBoolean(
                                 System.getProperty("jdk.crac.trace-startup-time"));
                     }});
+
+        traceStartupTime = doTraceStartupTime;
     }
 
     /** This class is not instantiable. */

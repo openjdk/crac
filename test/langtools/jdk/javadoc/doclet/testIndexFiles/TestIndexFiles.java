@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2017, 2018 Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2017, 2018, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -50,16 +50,20 @@ public class TestIndexFiles extends JavadocTester {
 
     void checkIndexFiles(boolean found) {
         checkOutput("index-files/index-1.html", found,
-                "<li>Prev Letter</li>\n"
-                + "<li><a href=\"index-2.html\">Next Letter</a></li>");
+                """
+                    <li>Prev Letter</li>
+                    <li><a href="index-2.html">Next Letter</a></li>""");
         checkOutput("index-files/index-5.html", found,
-                "<li><a href=\"index-4.html\">Prev Letter</a></li>\n"
-                + "<li>Next Letter</li>");
+                """
+                    <li><a href="index-4.html">Prev Letter</a></li>
+                    <li>Next Letter</li>""");
         checkOutput("index-files/index-1.html", found,
-                "<li><a href=\"index-0.html\">Prev Letter</a></li>\n"
-                + "<li><a href=\"index-1.html\">Next Letter</a></li>");
+                """
+                    <li><a href="index-0.html">Prev Letter</a></li>
+                    <li><a href="index-1.html">Next Letter</a></li>""");
         checkOutput("index-files/index-5.html", found,
-                "<li><a href=\"index-4.html\">Prev Letter</a></li>\n"
-                + "<li><a href=\"index-5.html\">Next Letter</a></li>");
+                """
+                    <li><a href="index-4.html">Prev Letter</a></li>
+                    <li><a href="index-5.html">Next Letter</a></li>""");
     }
 }

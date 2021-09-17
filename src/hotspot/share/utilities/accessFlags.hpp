@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1997, 2019, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 1997, 2021, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -25,8 +25,9 @@
 #ifndef SHARE_UTILITIES_ACCESSFLAGS_HPP
 #define SHARE_UTILITIES_ACCESSFLAGS_HPP
 
-#include "jvm.h"
+#include "jvm_constants.h"
 #include "utilities/debug.hpp"
+#include "utilities/globalDefinitions.hpp"
 #include "utilities/macros.hpp"
 
 // AccessFlags is an abstraction over Java access flags.
@@ -66,6 +67,8 @@ enum {
   JVM_ACC_IS_CLONEABLE_FAST       = (int)0x80000000,// True if klass implements the Cloneable interface and can be optimized in generated code
   JVM_ACC_HAS_FINAL_METHOD        = 0x01000000,     // True if klass has final method
   JVM_ACC_IS_SHARED_CLASS         = 0x02000000,     // True if klass is shared
+  JVM_ACC_IS_HIDDEN_CLASS         = 0x04000000,     // True if klass is hidden
+  JVM_ACC_IS_VALUE_BASED_CLASS    = 0x08000000,     // True if klass is marked as a ValueBased class
 
   // Klass* and Method* flags
   JVM_ACC_HAS_LOCAL_VARIABLE_TABLE= 0x00200000,
@@ -120,7 +123,6 @@ class AccessFlags {
   bool is_native      () const         { return (_flags & JVM_ACC_NATIVE      ) != 0; }
   bool is_interface   () const         { return (_flags & JVM_ACC_INTERFACE   ) != 0; }
   bool is_abstract    () const         { return (_flags & JVM_ACC_ABSTRACT    ) != 0; }
-  bool is_strict      () const         { return (_flags & JVM_ACC_STRICT      ) != 0; }
 
   // Attribute flags
   bool is_synthetic   () const         { return (_flags & JVM_ACC_SYNTHETIC   ) != 0; }
@@ -149,6 +151,8 @@ class AccessFlags {
   bool has_final_method        () const { return (_flags & JVM_ACC_HAS_FINAL_METHOD       ) != 0; }
   bool is_cloneable_fast       () const { return (_flags & JVM_ACC_IS_CLONEABLE_FAST      ) != 0; }
   bool is_shared_class         () const { return (_flags & JVM_ACC_IS_SHARED_CLASS        ) != 0; }
+  bool is_hidden_class         () const { return (_flags & JVM_ACC_IS_HIDDEN_CLASS        ) != 0; }
+  bool is_value_based_class    () const { return (_flags & JVM_ACC_IS_VALUE_BASED_CLASS   ) != 0; }
 
   // Klass* and Method* flags
   bool has_localvariable_table () const { return (_flags & JVM_ACC_HAS_LOCAL_VARIABLE_TABLE) != 0; }
@@ -221,6 +225,8 @@ class AccessFlags {
   void set_is_cloneable_fast()         { atomic_set_bits(JVM_ACC_IS_CLONEABLE_FAST);       }
   void set_has_miranda_methods()       { atomic_set_bits(JVM_ACC_HAS_MIRANDA_METHODS);     }
   void set_is_shared_class()           { atomic_set_bits(JVM_ACC_IS_SHARED_CLASS);         }
+  void set_is_hidden_class()           { atomic_set_bits(JVM_ACC_IS_HIDDEN_CLASS);         }
+  void set_is_value_based_class()      { atomic_set_bits(JVM_ACC_IS_VALUE_BASED_CLASS);    }
 
  public:
   // field flags

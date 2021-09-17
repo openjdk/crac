@@ -31,7 +31,7 @@ import com.sun.org.apache.bcel.internal.Const;
  * and represents a reference to a invoke dynamic.
  *
  * @see     Constant
- * @see  <a href="http://docs.oracle.com/javase/specs/jvms/se8/html/jvms-4.html#jvms-4.4.10">
+ * @see  <a href="https://docs.oracle.com/javase/specs/jvms/se8/html/jvms-4.html#jvms-4.4.10">
  * The CONSTANT_InvokeDynamic_info Structure in The Java Virtual Machine Specification</a>
  * @since 6.0
  */
@@ -80,7 +80,7 @@ public final class ConstantInvokeDynamic extends ConstantCP {
      * for use by ConstantInvokeDynamic.
      * @since 6.0
      */
-    public final int getBootstrapMethodAttrIndex() {
+    public int getBootstrapMethodAttrIndex() {
         return super.getClassIndex();  // AKA bootstrap_method_attr_index
     }
 
@@ -88,7 +88,7 @@ public final class ConstantInvokeDynamic extends ConstantCP {
      * @return String representation
      */
     @Override
-    public final String toString() {
+    public String toString() {
         return super.toString().replace("class_index", "bootstrap_method_attr_index");
     }
 }

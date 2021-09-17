@@ -1,5 +1,6 @@
 /*
  * Copyright (c) 2018, 2019, Red Hat, Inc. All rights reserved.
+ * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 2 only, as
@@ -69,6 +70,7 @@ public:
   size_t sum() const;
   int min_level() const;
   int max_level() const;
+  void clear();
 };
 
 #endif // SHARE_GC_SHENANDOAH_SHENANDOAHNUMBERSEQ_HPP

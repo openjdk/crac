@@ -1,5 +1,6 @@
 /*
  * Copyright (c) 2017, 2018, Red Hat, Inc. All rights reserved.
+ * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 2 only, as
@@ -24,8 +25,7 @@
 /*
  * @test TestExplicitGCNoConcurrent
  * @summary Test that Shenandoah reacts to explicit GC flags appropriately
- * @key gc
- * @requires vm.gc.Shenandoah & !vm.graal.enabled
+ * @requires vm.gc.Shenandoah
  * @library /test/lib
  * @modules java.base/jdk.internal.misc
  *          java.management
@@ -61,6 +61,7 @@ public class TestExplicitGCNoConcurrent {
 
         for (String opt : opts) {
             ProcessBuilder pb = ProcessTools.createJavaProcessBuilder(
+                    "-Xmx128m",
                     "-XX:+UnlockExperimentalVMOptions",
                     "-XX:+UseShenandoahGC",
                     "-Xlog:gc",

@@ -1,5 +1,6 @@
 /*
- * Copyright (c) 2019, Red Hat, Inc. All rights reserved.
+ * Copyright (c) 2019, 2020, Red Hat, Inc. All rights reserved.
+ * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 2 only, as
@@ -24,40 +25,37 @@
 #ifndef SHARE_GC_SHENANDOAH_SHENANDOAHPARALLELCLEANING_INLINE_HPP
 #define SHARE_GC_SHENANDOAH_SHENANDOAHPARALLELCLEANING_INLINE_HPP
 
+#include "gc/shenandoah/shenandoahParallelCleaning.hpp"
+
 #include "gc/shared/weakProcessor.inline.hpp"
 #include "gc/shenandoah/shenandoahHeap.hpp"
-#include "gc/shenandoah/shenandoahParallelCleaning.hpp"
 #include "gc/shenandoah/shenandoahUtils.hpp"
 #include "runtime/thread.hpp"
 #include "runtime/safepoint.hpp"
 
 template<typename IsAlive, typename KeepAlive>
-ShenandoahParallelWeakRootsCleaningTask<IsAlive, KeepAlive>::ShenandoahParallelWeakRootsCleaningTask(IsAlive* is_alive,
+ShenandoahParallelWeakRootsCleaningTask<IsAlive, KeepAlive>::ShenandoahParallelWeakRootsCleaningTask(ShenandoahPhaseTimings::Phase phase,
+                                                                                                     IsAlive* is_alive,
                                                                                                      KeepAlive* keep_alive,
                                                                                                      uint num_workers) :
-  AbstractGangTask("Parallel Weak Root Cleaning Task"),
+  AbstractGangTask("Shenandoah Weak Root Cleaning"),
+  _phase(phase),
   _weak_processing_task(num_workers),
-  _is_alive(is_alive), _keep_alive(keep_alive) {
+  _is_alive(is_alive),
+  _keep_alive(keep_alive) {
   assert(SafepointSynchronize::is_at_safepoint(), "Must be at a safepoint");
-
-  if (ShenandoahStringDedup::is_enabled()) {
-    StringDedup::gc_prologue(false);
-  }
 }
 
 template<typename IsAlive, typename KeepAlive>
 ShenandoahParallelWeakRootsCleaningTask<IsAlive, KeepAlive>::~ShenandoahParallelWeakRootsCleaningTask() {
-  if (StringDedup::is_enabled()) {
-    StringDedup::gc_epilogue();
-  }
+  _weak_processing_task.report_num_dead();
 }
 
 template<typename IsAlive, typename KeepAlive>
 void ShenandoahParallelWeakRootsCleaningTask<IsAlive, KeepAlive>::work(uint worker_id) {
-  _weak_processing_task.work<IsAlive, KeepAlive>(worker_id, _is_alive, _keep_alive);
-
-  if (ShenandoahStringDedup::is_enabled()) {
-    ShenandoahStringDedup::parallel_oops_do(_is_alive, _keep_alive, worker_id);
+  {
+    ShenandoahWorkerTimingsTracker x(_phase, ShenandoahPhaseTimings::VMWeakRoots, worker_id);
+    _weak_processing_task.work<IsAlive, KeepAlive>(worker_id, _is_alive, _keep_alive);
   }
 }
 

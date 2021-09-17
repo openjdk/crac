@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2019, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2019, 2020, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -36,9 +36,14 @@ import java.util.stream.Stream;
 import java.nio.file.Path;
 import java.util.function.Predicate;
 import java.util.jar.JarEntry;
+import jdk.jpackage.test.JavaAppDesc;
+import jdk.jpackage.test.JPackageCommand;
+import jdk.jpackage.test.TKit;
+import jdk.jpackage.test.Executor;
+import jdk.jpackage.test.HelloApp;
+import jdk.jpackage.test.JavaTool;
 import jdk.jpackage.test.Annotations.Parameters;
 import jdk.jpackage.test.Annotations.Test;
-import jdk.jpackage.test.*;
 import jdk.jpackage.test.Functional.ThrowingConsumer;
 import static jdk.jpackage.tests.MainClassTest.Script.MainClassType.*;
 
@@ -48,7 +53,7 @@ import static jdk.jpackage.tests.MainClassTest.Script.MainClassType.*;
  * @summary test different settings of main class name for jpackage
  * @library ../../../../helpers
  * @build jdk.jpackage.test.*
- * @modules jdk.incubator.jpackage/jdk.incubator.jpackage.internal
+ * @modules jdk.jpackage/jdk.jpackage.internal
  * @compile MainClassTest.java
  * @run main/othervm/timeout=360 -Xmx512m jdk.jpackage.test.Main
  *  --jpt-run=jdk.jpackage.tests.MainClassTest
@@ -77,7 +82,7 @@ public final class MainClassTest {
         }
 
         Script withJarMainClass(MainClassType v) {
-            appDesc.setJarWithMainClass(v != NotSet);
+            appDesc.setWithMainClass(v != NotSet);
             jarMainClass = v;
             return this;
         }
@@ -209,8 +214,7 @@ public final class MainClassTest {
             // file nor on command line.
             List<String> output = cmd
                     .saveConsoleOutput(true)
-                    .execute()
-                    .assertExitCodeIs(1)
+                    .execute(1)
                     .getOutput();
             TKit.assertTextStream(script.expectedErrorMessage).apply(output.stream());
             return;
@@ -236,7 +240,7 @@ public final class MainClassTest {
                     .setDirectory(cmd.outputDir())
                     .setExecutable(cmd.appLauncherPath())
                     .dumpOutput().saveOutput()
-                    .execute().assertExitCodeIs(1).getOutput();
+                    .execute(1).getOutput();
                 TKit.assertTextStream(String.format(
                         "Error: Could not find or load main class %s",
                         nonExistingMainClass)).apply(output.stream());
@@ -266,9 +270,10 @@ public final class MainClassTest {
                             script.appDesc.classFilePath()));
 
             // Create app's jar file with different main class.
-            var badAppDesc = JavaAppDesc.parse(script.appDesc.toString()).setClassName(
-                    nonExistingMainClass);
-            JPackageCommand.helloAppImage(badAppDesc).executePrerequisiteActions();
+            var badAppDesc = JavaAppDesc
+                    .parse(script.appDesc.toString())
+                    .setClassName(nonExistingMainClass);
+            HelloApp.createBundle(badAppDesc, jarFile.getParent());
 
             // Extract new jar but skip app's class.
             explodeJar(jarFile, workDir,
@@ -289,7 +294,7 @@ public final class MainClassTest {
             .addArguments("-v", "-c", "-M", "-f", jarFile.toString())
             .addArguments("-C", workDir.toString(), ".")
             .dumpOutput()
-            .execute().assertExitCodeIsZero();
+            .execute();
         });
     }
 

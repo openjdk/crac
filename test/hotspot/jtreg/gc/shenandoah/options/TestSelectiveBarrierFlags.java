@@ -1,5 +1,6 @@
 /*
  * Copyright (c) 2017, 2018, Red Hat, Inc. All rights reserved.
+ * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 2 only, as
@@ -24,12 +25,11 @@
 /* @test TestSelectiveBarrierFlags
  * @summary Test selective barrier enabling works, by aggressively compiling HelloWorld with combinations
  *          of barrier flags
- * @key gc
- * @requires vm.gc.Shenandoah & !vm.graal.enabled
+ * @requires vm.gc.Shenandoah
  * @library /test/lib
- * @run main/othervm TestSelectiveBarrierFlags -Xint
- * @run main/othervm TestSelectiveBarrierFlags -Xbatch -XX:CompileThreshold=100 -XX:TieredStopAtLevel=1
- * @run main/othervm TestSelectiveBarrierFlags -Xbatch -XX:CompileThreshold=100 -XX:-TieredCompilation -XX:+IgnoreUnrecognizedVMOptions -XX:+ShenandoahVerifyOptoBarriers
+ * @run driver TestSelectiveBarrierFlags -Xint
+ * @run driver TestSelectiveBarrierFlags -Xbatch -XX:CompileThreshold=100 -XX:TieredStopAtLevel=1
+ * @run driver TestSelectiveBarrierFlags -Xbatch -XX:CompileThreshold=100 -XX:-TieredCompilation -XX:+IgnoreUnrecognizedVMOptions -XX:+ShenandoahVerifyOptoBarriers
  */
 
 import java.util.*;
@@ -42,11 +42,12 @@ public class TestSelectiveBarrierFlags {
 
     public static void main(String[] args) throws Exception {
         String[][] opts = {
-                new String[] { "ShenandoahKeepAliveBarrier" },
                 new String[] { "ShenandoahLoadRefBarrier" },
-                new String[] { "ShenandoahSATBBarrier", "ShenandoahStoreValEnqueueBarrier" },
+                new String[] { "ShenandoahSATBBarrier", "ShenandoahIUBarrier" },
                 new String[] { "ShenandoahCASBarrier" },
                 new String[] { "ShenandoahCloneBarrier" },
+                new String[] { "ShenandoahNMethodBarrier" },
+                new String[] { "ShenandoahStackWatermarkBarrier" }
         };
 
         int size = 1;

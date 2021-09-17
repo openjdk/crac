@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2000, 2019, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2000, 2020, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -29,7 +29,7 @@
 #include <sys/types.h>
 #include <unistd.h>
 
-#if defined(__linux__) || defined(__solaris__)
+#if defined(__linux__)
 #include <sys/sendfile.h>
 #elif defined(_AIX)
 #include <string.h>
@@ -112,9 +112,9 @@ Java_sun_nio_ch_FileChannelImpl_map0(JNIEnv *env, jobject this,
 
     if (map_sync) {
         // ensure
-        //  1) this is Linux on AArch64 or x86_64
-        //  2) the mmap APIs are available/ at compile time
-#if !defined(LINUX) || ! (defined(aarch64) || (defined(amd64) && defined(_LP64)))
+        //  1) this is Linux on AArch64, x86_64, or PPC64 LE
+        //  2) the mmap APIs are available at compile time
+#if !defined(LINUX) || ! (defined(aarch64) || (defined(amd64) && defined(_LP64)) || defined(ppc64le))
         // TODO - implement for solaris/AIX/BSD/WINDOWS and for 32 bit
         JNU_ThrowInternalError(env, "should never call map on platform where MAP_SYNC is unimplemented");
         return IOS_THROWN;
@@ -182,36 +182,6 @@ Java_sun_nio_ch_FileChannelImpl_transferTo0(JNIEnv *env, jobject this,
         return IOS_THROWN;
     }
     return n;
-#elif defined (__solaris__)
-    sendfilevec64_t sfv;
-    size_t numBytes = 0;
-    jlong result;
-
-    sfv.sfv_fd = srcFD;
-    sfv.sfv_flag = 0;
-    sfv.sfv_off = (off64_t)position;
-    sfv.sfv_len = count;
-
-    result = sendfilev64(dstFD, &sfv, 1, &numBytes);
-
-    /* Solaris sendfilev() will return -1 even if some bytes have been
-     * transferred, so we check numBytes first.
-     */
-    if (numBytes > 0)
-        return numBytes;
-    if (result < 0) {
-        if (errno == EAGAIN)
-            return IOS_UNAVAILABLE;
-        if (errno == EOPNOTSUPP)
-            return IOS_UNSUPPORTED_CASE;
-        if ((errno == EINVAL) && ((ssize_t)count >= 0))
-            return IOS_UNSUPPORTED_CASE;
-        if (errno == EINTR)
-            return IOS_INTERRUPTED;
-        JNU_ThrowIOExceptionWithLastError(env, "Transfer failed");
-        return IOS_THROWN;
-    }
-    return result;
 #elif defined(__APPLE__)
     off_t numBytes;
     int result;

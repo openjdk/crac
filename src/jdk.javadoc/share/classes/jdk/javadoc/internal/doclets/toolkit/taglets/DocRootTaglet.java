@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2001, 2019, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2001, 2020, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -29,9 +29,8 @@ import java.util.EnumSet;
 import javax.lang.model.element.Element;
 
 import com.sun.source.doctree.DocTree;
+import jdk.javadoc.doclet.Taglet.Location;
 import jdk.javadoc.internal.doclets.toolkit.Content;
-
-import static com.sun.source.doctree.DocTree.Kind.DOC_ROOT;
 
 /**
  * An inline Taglet representing {&#064;docRoot}.  This taglet is
@@ -50,11 +49,11 @@ public class DocRootTaglet extends BaseTaglet {
      * Construct a new DocRootTaglet.
      */
     public DocRootTaglet() {
-        super(DOC_ROOT.tagName, true, EnumSet.allOf(Site.class));
+        super(DocTree.Kind.DOC_ROOT, true, EnumSet.allOf(Location.class));
     }
 
     @Override
-    public Content getTagletOutput(Element holder, DocTree tag, TagletWriter writer) {
+    public Content getInlineTagOutput(Element holder, DocTree tag, TagletWriter writer) {
         return writer.getDocRootOutput();
     }
 }

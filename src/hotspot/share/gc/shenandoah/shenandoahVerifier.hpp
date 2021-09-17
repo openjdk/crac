@@ -1,5 +1,6 @@
 /*
- * Copyright (c) 2017, 2019, Red Hat, Inc. All rights reserved.
+ * Copyright (c) 2017, 2020, Red Hat, Inc. All rights reserved.
+ * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 2 only, as
@@ -40,17 +41,7 @@ class ShenandoahVerifierTask {
 public:
   ShenandoahVerifierTask(oop o = NULL, int idx = 0): _obj(o) { }
   ShenandoahVerifierTask(oop o, size_t idx): _obj(o) { }
-  ShenandoahVerifierTask(const ShenandoahVerifierTask& t): _obj(t._obj) { }
-
-  ShenandoahVerifierTask& operator =(const ShenandoahVerifierTask& t) {
-    _obj = t._obj;
-    return *this;
-  }
-  volatile ShenandoahVerifierTask&
-  operator =(const volatile ShenandoahVerifierTask& t) volatile {
-    (void)const_cast<oop&>(_obj = t._obj);
-    return *this;
-  }
+  // Trivially copyable.
 
   inline oop obj()  const { return _obj; }
 
@@ -74,7 +65,11 @@ public:
     _verify_marked_incomplete,
 
     // Objects should be marked in "complete" bitmap.
-    _verify_marked_complete
+    _verify_marked_complete,
+
+    // Objects should be marked in "complete" bitmap, except j.l.r.Reference referents, which
+    // may be dangling after marking but before conc-weakrefs-processing.
+    _verify_marked_complete_except_references
   } VerifyMarked;
 
   typedef enum {
@@ -134,6 +129,9 @@ public:
     // Nothing is in progress, no forwarded objects
     _verify_gcstate_stable,
 
+    // Nothing is in progress, no forwarded objects, weak roots handling
+    _verify_gcstate_stable_weakroots,
+
     // Nothing is in progress, some objects are forwarded
     _verify_gcstate_forwarded,
 
@@ -183,17 +181,13 @@ public:
   void verify_after_updaterefs();
   void verify_before_fullgc();
   void verify_after_fullgc();
-  void verify_before_traversal();
-  void verify_after_traversal();
   void verify_after_degenerated();
   void verify_generic(VerifyOption option);
 
   // Roots should only contain to-space oops
   void verify_roots_in_to_space();
-  void verify_roots_in_to_space_except(ShenandoahRootVerifier::RootTypes types);
 
   void verify_roots_no_forwarded();
-  void verify_roots_no_forwarded_except(ShenandoahRootVerifier::RootTypes types);
 };
 
 #endif // SHARE_GC_SHENANDOAH_SHENANDOAHVERIFIER_HPP

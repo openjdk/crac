@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2000, 2017, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2000, 2021, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -63,7 +63,7 @@ public abstract class EType {
         } catch (Exception exc) {
             if (DEBUG) {
                 System.out.println ("Exception in getting allow_weak_crypto, " +
-                                    "using default value " +
+                                    "using default value: " +
                                     exc.getMessage());
             }
         }
@@ -236,8 +236,8 @@ public abstract class EType {
             result = BUILTIN_ETYPES;
         }
         if (!allowWeakCrypto) {
-            // The last 2 etypes are now weak ones
-            return Arrays.copyOfRange(result, 0, result.length - 2);
+            // The last 4 etypes are now weak ones
+            return Arrays.copyOfRange(result, 0, result.length - 4);
         }
         return result;
     }
@@ -256,7 +256,7 @@ public abstract class EType {
         } catch (KrbException exc) {
             if (DEBUG) {
                 System.out.println("Exception while getting " +
-                    configName + exc.getMessage());
+                    configName + ": " + exc.getMessage());
                 System.out.println("Using default builtin etypes");
             }
             return getBuiltInDefaults();

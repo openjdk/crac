@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2016, 2018, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2016, 2021, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -77,7 +77,7 @@ void RemoveForwardedPointerClosure::do_object(oop obj) {
 }
 
 void PreservedMarksSet::init(uint num) {
-  assert(_stacks == NULL && _num == 0, "do not re-initialize");
+  assert(_stacks == nullptr && _num == 0, "do not re-initialize");
   assert(num > 0, "pre-condition");
   if (_in_c_heap) {
     _stacks = NEW_C_HEAP_ARRAY(Padded<PreservedMarks>, num, mtGC);
@@ -92,31 +92,59 @@ void PreservedMarksSet::init(uint num) {
   assert_empty();
 }
 
-class ParRestoreTask : public AbstractGangTask {
-private:
+class RestorePreservedMarksTask : public AbstractGangTask {
   PreservedMarksSet* const _preserved_marks_set;
   SequentialSubTasksDone _sub_tasks;
-  volatile size_t* const _total_size_addr;
+  volatile size_t _total_size;
+#ifdef ASSERT
+  size_t _total_size_before;
+#endif // ASSERT
 
 public:
-  virtual void work(uint worker_id) {
+  void work(uint worker_id) override {
     uint task_id = 0;
-    while (_sub_tasks.try_claim_task(/* reference */ task_id)) {
-      _preserved_marks_set->get(task_id)->restore_and_increment(_total_size_addr);
+    while (_sub_tasks.try_claim_task(task_id)) {
+      _preserved_marks_set->get(task_id)->restore_and_increment(&_total_size);
     }
-    _sub_tasks.all_tasks_completed();
   }
 
-  ParRestoreTask(uint worker_num,
-                 PreservedMarksSet* preserved_marks_set,
-                 volatile size_t* total_size_addr)
-      : AbstractGangTask("Parallel Preserved Mark Restoration"),
-        _preserved_marks_set(preserved_marks_set),
-        _total_size_addr(total_size_addr) {
-    _sub_tasks.set_n_threads(worker_num);
-    _sub_tasks.set_n_tasks(preserved_marks_set->num());
+  RestorePreservedMarksTask(PreservedMarksSet* preserved_marks_set)
+    : AbstractGangTask("Restore Preserved Marks"),
+      _preserved_marks_set(preserved_marks_set),
+      _sub_tasks(preserved_marks_set->num()),
+      _total_size(0)
+      DEBUG_ONLY(COMMA _total_size_before(0)) {
+#ifdef ASSERT
+    // This is to make sure the total_size we'll calculate below is correct.
+    for (uint i = 0; i < _preserved_marks_set->num(); ++i) {
+      _total_size_before += _preserved_marks_set->get(i)->size();
+    }
+#endif // ASSERT
+  }
+
+  ~RestorePreservedMarksTask() {
+    assert(_total_size == _total_size_before, "total_size = %zu before = %zu", _total_size, _total_size_before);
+
+    log_trace(gc)("Restored %zu marks", _total_size);
   }
 };
+
+void PreservedMarksSet::restore(WorkGang* workers) {
+  {
+    RestorePreservedMarksTask cl(this);
+    if (workers == nullptr) {
+      cl.work(0);
+    } else {
+      workers->run_task(&cl);
+    }
+  }
+
+  assert_empty();
+}
+
+AbstractGangTask* PreservedMarksSet::create_task() {
+  return new RestorePreservedMarksTask(this);
+}
 
 void PreservedMarksSet::reclaim() {
   assert_empty();
@@ -130,28 +158,15 @@ void PreservedMarksSet::reclaim() {
   } else {
     // the array was resource-allocated, so nothing to do
   }
-  _stacks = NULL;
+  _stacks = nullptr;
   _num = 0;
 }
 
 #ifndef PRODUCT
 void PreservedMarksSet::assert_empty() {
-  assert(_stacks != NULL && _num > 0, "should have been initialized");
+  assert(_stacks != nullptr && _num > 0, "should have been initialized");
   for (uint i = 0; i < _num; i += 1) {
     get(i)->assert_empty();
   }
 }
 #endif // ndef PRODUCT
-
-void SharedRestorePreservedMarksTaskExecutor::restore(PreservedMarksSet* preserved_marks_set,
-                                                      volatile size_t* total_size_addr) {
-  if (_workers == NULL) {
-    for (uint i = 0; i < preserved_marks_set->num(); i += 1) {
-      *total_size_addr += preserved_marks_set->get(i)->size();
-      preserved_marks_set->get(i)->restore();
-    }
-  } else {
-    ParRestoreTask task(_workers->active_workers(), preserved_marks_set, total_size_addr);
-    _workers->run_task(&task);
-  }
-}

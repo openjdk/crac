@@ -29,7 +29,6 @@
  *          w/o a crash.
  * @requires vm.cds
  * @library /test/lib
- * @modules jdk.jartool/sun.tools.jar
  * @compile test-classes/Hello.java
  * @run main/timeout=240 SharedBaseAddress
  */
@@ -42,7 +41,8 @@ public class SharedBaseAddress {
     private static final String[] testTable = {
         "1g", "8g", "64g","512g", "4t",
         "32t", "128t", "0",
-        "1", "64k", "64M"
+        "1", "64k", "64M", "320g",
+        "0x800001000"  // Default base address + 1 page - probably valid but unaligned to metaspace alignment, see JDK 8247522
     };
 
     public static void main(String[] args) throws Exception {
@@ -51,6 +51,9 @@ public class SharedBaseAddress {
         for (String testEntry : testTable) {
             System.out.println("sharedBaseAddress = " + testEntry);
 
+            // Note: some platforms may restrict valid values for SharedBaseAddress; the VM should print
+            // a warning and use the default value instead. Similar, ASLR may prevent the given address
+            // from being used; this too should handled gracefully by using the default base address.
             OutputAnalyzer dumpOutput = TestCommon.dump(
                 appJar, new String[] {"Hello"}, "-XX:SharedBaseAddress=" + testEntry);
             TestCommon.checkDump(dumpOutput, "Loading classes to share");

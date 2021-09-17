@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2017, 2019, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2017, 2021, Oracle and/or its affiliates. All rights reserved.
  */
 /*
  * Licensed to the Apache Software Foundation (ASF) under one or more
@@ -40,9 +40,8 @@ import com.sun.org.apache.bcel.internal.util.BCELComparator;
  * one can do is to add a constant value attribute to a field (which must of
  * course be compatible with to the declared type).
  *
- * @version $Id$
  * @see Field
- * @LastModified: Jun 2019
+ * @LastModified: May 2021
  */
 public class FieldGen extends FieldGenOrMethodGen {
 
@@ -256,7 +255,7 @@ public class FieldGen extends FieldGenOrMethodGen {
             case Const.T_REFERENCE:
                 return super.getConstantPool().addString((String) value);
             default:
-                throw new RuntimeException("Oops: Unhandled : " + super.getType().getType()); // sic
+                throw new IllegalStateException("Unhandled : " + super.getType().getType()); // sic
         }
     }
 

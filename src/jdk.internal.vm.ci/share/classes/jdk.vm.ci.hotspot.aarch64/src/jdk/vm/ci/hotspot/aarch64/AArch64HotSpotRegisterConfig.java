@@ -34,6 +34,7 @@ import static jdk.vm.ci.aarch64.AArch64.r7;
 import static jdk.vm.ci.aarch64.AArch64.rscratch1;
 import static jdk.vm.ci.aarch64.AArch64.rscratch2;
 import static jdk.vm.ci.aarch64.AArch64.r12;
+import static jdk.vm.ci.aarch64.AArch64.r18;
 import static jdk.vm.ci.aarch64.AArch64.r27;
 import static jdk.vm.ci.aarch64.AArch64.r28;
 import static jdk.vm.ci.aarch64.AArch64.r29;
@@ -122,23 +123,21 @@ public class AArch64HotSpotRegisterConfig implements RegisterConfig {
      */
     public static final Register metaspaceMethodRegister = r12;
 
+    /**
+     * The platform ABI can use r18 to carry inter-procedural state (e.g. thread
+     * context). If not defined as such by the platform ABI, it can be used as
+     * additional temporary register.
+     */
+    public static final Register platformRegister = r18;
     public static final Register heapBaseRegister = r27;
     public static final Register threadRegister = r28;
     public static final Register fp = r29;
 
-    /**
-     * The heapBaseRegister, i.e. r27, is reserved unconditionally because HotSpot does not intend
-     * to support it as an allocatable register even when compressed oops is off. This register is
-     * excluded from callee-saved register at
-     * cpu/aarch64/sharedRuntime_aarch64.cpp:RegisterSaver::save_live_registers, which may lead to
-     * dereferencing unknown value from the stack at
-     * share/runtime/stackValue.cpp:StackValue::create_stack_value during deoptimization.
-     */
-    private static final RegisterArray reservedRegisters = new RegisterArray(rscratch1, rscratch2, heapBaseRegister, threadRegister, fp, lr, r31, zr, sp);
+    private static final RegisterArray reservedRegisters = new RegisterArray(rscratch1, rscratch2, threadRegister, fp, lr, r31, zr, sp);
 
-    private static RegisterArray initAllocatable(Architecture arch) {
+    private static RegisterArray initAllocatable(Architecture arch, boolean reserveForHeapBase, boolean canUsePlatformRegister) {
         RegisterArray allRegisters = arch.getAvailableValueRegisters();
-        Register[] registers = new Register[allRegisters.size() - reservedRegisters.size()];
+        Register[] registers = new Register[allRegisters.size() - reservedRegisters.size() - (reserveForHeapBase ? 1 : 0) - (!canUsePlatformRegister ? 1 : 0)];
         List<Register> reservedRegistersList = reservedRegisters.asList();
 
         int idx = 0;
@@ -147,7 +146,15 @@ public class AArch64HotSpotRegisterConfig implements RegisterConfig {
                 // skip reserved registers
                 continue;
             }
-            assert !(reg.equals(heapBaseRegister) || reg.equals(threadRegister) || reg.equals(fp) || reg.equals(lr) || reg.equals(r31) || reg.equals(zr) || reg.equals(sp)) : reg;
+            if (!canUsePlatformRegister && reg.equals(platformRegister)) {
+                continue;
+            }
+            assert !(reg.equals(threadRegister) || reg.equals(fp) || reg.equals(lr) || reg.equals(r31) || reg.equals(zr) || reg.equals(sp));
+            if (reserveForHeapBase && reg.equals(heapBaseRegister)) {
+                // skip heap base register
+                continue;
+            }
+
             registers[idx++] = reg;
         }
 
@@ -155,8 +162,8 @@ public class AArch64HotSpotRegisterConfig implements RegisterConfig {
         return new RegisterArray(registers);
     }
 
-    public AArch64HotSpotRegisterConfig(TargetDescription target) {
-        this(target, initAllocatable(target.arch));
+    public AArch64HotSpotRegisterConfig(TargetDescription target, boolean useCompressedOops, boolean canUsePlatformRegister) {
+        this(target, initAllocatable(target.arch, useCompressedOops, canUsePlatformRegister));
         assert callerSaved.size() >= allocatable.size();
     }
 

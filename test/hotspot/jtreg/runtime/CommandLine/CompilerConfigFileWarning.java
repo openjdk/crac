@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013, 2016, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2013, 2020, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -28,6 +28,7 @@
  * @library /test/lib
  * @modules java.base/jdk.internal.misc
  *          java.management
+ * @run driver CompilerConfigFileWarning
  */
 
 import java.io.PrintWriter;
@@ -47,7 +48,8 @@ public class CompilerConfigFileWarning {
 
         pb = ProcessTools.createJavaProcessBuilder("-XX:CompileCommandFile=hs_comp.txt", "-version");
         output = new OutputAnalyzer(pb.start());
-        output.shouldContain("CompileCommand: unrecognized command");
+        output.shouldContain("An error occurred during parsing");
+        output.shouldContain("Unrecognized option 'aaa'");
         output.shouldContain("aaa, aaa");
 
         // Skip on debug builds since we'll always read the file there

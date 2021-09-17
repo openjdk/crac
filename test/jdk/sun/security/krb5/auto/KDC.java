@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2008, 2019, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2008, 2020, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -922,8 +922,7 @@ public class KDC {
             if (body.kdcOptions.get(KDCOptions.ALLOW_POSTDATE)) {
                 bFlags[Krb5.TKT_OPTS_MAY_POSTDATE] = true;
             }
-            if (body.kdcOptions.get(KDCOptions.CNAME_IN_ADDL_TKT) &&
-                    !isReferral) {
+            if (body.kdcOptions.get(KDCOptions.CNAME_IN_ADDL_TKT)) {
                 if (!options.containsKey(Option.ALLOW_S4U2PROXY)) {
                     // Don't understand CNAME_IN_ADDL_TKT
                     throw new KrbException(Krb5.KDC_ERR_BADOPTION);
@@ -1169,6 +1168,9 @@ public class KDC {
                 bFlags[Krb5.TKT_OPTS_MAY_POSTDATE] = true;
             }
             bFlags[Krb5.TKT_OPTS_INITIAL] = true;
+            if (System.getProperty("test.kdc.always.enc.pa.rep") != null) {
+                bFlags[Krb5.TKT_OPTS_ENC_PA_REP] = true;
+            }
 
             // Creating PA-DATA
             DerValue[] pas2 = null, pas = null;

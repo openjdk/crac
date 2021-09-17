@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998, 2005, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 1998, 2020, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -27,6 +27,7 @@
 #include "ClassTypeImpl.h"
 #include "inStream.h"
 #include "outStream.h"
+#include "signature.h"
 
 static jboolean
 superclass(PacketInputStream *in, PacketOutputStream *out)
@@ -58,15 +59,18 @@ readStaticFieldValue(JNIEnv *env, PacketInputStream *in, jclass clazz,
                      jfieldID field, char *signature)
 {
     jvalue value;
-    jdwpError serror = JDWP_ERROR(NONE);
+    jbyte typeKey = jdwpTag(signature);
 
-    switch (signature[0]) {
-        case JDWP_TAG(ARRAY):
-        case JDWP_TAG(OBJECT):
-            value.l = inStream_readObjectRef(env, in);
-            JNI_FUNC_PTR(env,SetStaticObjectField)(env, clazz, field, value.l);
-            break;
+    if (isReferenceTag(typeKey)) {
+        value.l = inStream_readObjectRef(env, in);
+        JNI_FUNC_PTR(env,SetStaticObjectField)(env, clazz, field, value.l);
+        if (JNI_FUNC_PTR(env,ExceptionOccurred)(env)) {
+            return JDWP_ERROR(INTERNAL);
+        }
+        return JDWP_ERROR(NONE);
+    }
 
+    switch (typeKey) {
         case JDWP_TAG(BYTE):
             value.b = inStream_readByte(in);
             JNI_FUNC_PTR(env,SetStaticByteField)(env, clazz, field, value.b);
@@ -109,10 +113,9 @@ readStaticFieldValue(JNIEnv *env, PacketInputStream *in, jclass clazz,
     }
 
     if (JNI_FUNC_PTR(env,ExceptionOccurred)(env)) {
-        serror = JDWP_ERROR(INTERNAL);
+        return JDWP_ERROR(INTERNAL);
     }
-
-    return serror;
+    return JDWP_ERROR(NONE);
 }
 
 static jboolean
@@ -175,9 +178,11 @@ invokeStatic(PacketInputStream *in, PacketOutputStream *out)
     return sharedInvoke(in, out);
 }
 
-void *ClassType_Cmds[] = { (void *)0x4
-    ,(void *)superclass
-    ,(void *)setValues
-    ,(void *)invokeStatic
-    ,(void *)invokeStatic
+Command ClassType_Commands[] = {
+    {superclass, "Superclass"},
+    {setValues, "SetValues"},
+    {invokeStatic, "InvokeMethod"},
+    {invokeStatic, "NewInstance"}
 };
+
+DEBUG_DISPATCH_DEFINE_CMDSET(ClassType)

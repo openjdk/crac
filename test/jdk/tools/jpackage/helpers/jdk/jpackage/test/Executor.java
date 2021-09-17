@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2019, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2019, 2021, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -30,7 +30,13 @@ import java.io.OutputStream;
 import java.io.PrintStream;
 import java.io.StringReader;
 import java.nio.file.Path;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Objects;
+import java.util.Set;
 import java.util.regex.Pattern;
 import java.util.spi.ToolProvider;
 import java.util.stream.Collectors;
@@ -39,8 +45,14 @@ import jdk.jpackage.test.Functional.ThrowingSupplier;
 
 public final class Executor extends CommandArguments<Executor> {
 
+    public static Executor of(String... cmdline) {
+        return new Executor().setExecutable(cmdline[0]).addArguments(
+                Arrays.copyOfRange(cmdline, 1, cmdline.length));
+    }
+
     public Executor() {
         saveOutputType = new HashSet<>(Set.of(SaveOutputType.NONE));
+        removePath = false;
     }
 
     public Executor setExecutable(String v) {
@@ -70,6 +82,18 @@ public final class Executor extends CommandArguments<Executor> {
 
     public Executor setExecutable(JavaTool v) {
         return setExecutable(v.getPath());
+    }
+
+    public Executor setRemovePath(boolean value) {
+        removePath = value;
+        return this;
+    }
+
+    public Executor setWindowsTmpDir(String tmp) {
+        TKit.assertTrue(TKit.isWindows(),
+                "setWindowsTmpDir is only valid on Windows platform");
+        winTmpDir = tmp;
+        return this;
     }
 
     /**
@@ -166,11 +190,15 @@ public final class Executor extends CommandArguments<Executor> {
             return assertExitCodeIs(0);
         }
 
+        public int getExitCode() {
+            return exitCode;
+        }
+
         final int exitCode;
         private List<String> output;
     }
 
-    public Result execute() {
+    public Result executeWithoutExitCodeCheck() {
         if (toolProvider != null && directory != null) {
             throw new IllegalArgumentException(
                     "Can't change directory when using tool provider");
@@ -189,12 +217,50 @@ public final class Executor extends CommandArguments<Executor> {
         }).get();
     }
 
+    public Result execute(int expectedCode) {
+        return executeWithoutExitCodeCheck().assertExitCodeIs(expectedCode);
+    }
+
+    public Result execute() {
+        return execute(0);
+    }
+
     public String executeAndGetFirstLineOfOutput() {
-        return saveFirstLineOfOutput().execute().assertExitCodeIsZero().getFirstLineOfOutput();
+        return saveFirstLineOfOutput().execute().getFirstLineOfOutput();
     }
 
     public List<String> executeAndGetOutput() {
-        return saveOutput().execute().assertExitCodeIsZero().getOutput();
+        return saveOutput().execute().getOutput();
+    }
+
+    /*
+     * Repeates command "max" times and waits for "wait" seconds between each
+     * execution until command returns expected error code.
+     */
+    public Result executeAndRepeatUntilExitCode(int expectedCode, int max, int wait) {
+        Result result;
+        int count = 0;
+
+        do {
+            result = executeWithoutExitCodeCheck();
+            if (result.getExitCode() == expectedCode) {
+                return result;
+            }
+
+            try {
+                Thread.sleep(wait * 1000);
+            } catch (InterruptedException ex) {
+                throw new RuntimeException(ex);
+            }
+
+            count++;
+        } while (count < max);
+
+        return result.assertExitCodeIs(expectedCode);
+    }
+
+    public List<String> executeWithoutExitCodeCheckAndGetOutput() {
+        return saveOutput().executeWithoutExitCodeCheck().getOutput();
     }
 
     private boolean withSavedOutput() {
@@ -203,7 +269,9 @@ public final class Executor extends CommandArguments<Executor> {
     }
 
     private Path executablePath() {
-        if (directory == null || executable.isAbsolute()) {
+        if (directory == null
+                || executable.isAbsolute()
+                || !Set.of(".", "..").contains(executable.getName(0).toString())) {
             return executable;
         }
 
@@ -220,6 +288,9 @@ public final class Executor extends CommandArguments<Executor> {
         command.add(executablePath().toString());
         command.addAll(args);
         ProcessBuilder builder = new ProcessBuilder(command);
+        if (winTmpDir != null) {
+            builder.environment().put("TMP", winTmpDir);
+        }
         StringBuilder sb = new StringBuilder(getPrintableCommandLine());
         if (withSavedOutput()) {
             builder.redirectErrorStream(true);
@@ -236,8 +307,13 @@ public final class Executor extends CommandArguments<Executor> {
             builder.directory(directory.toFile());
             sb.append(String.format("; in directory [%s]", directory));
         }
+        if (removePath) {
+            // run this with cleared Path in Environment
+            TKit.trace("Clearing PATH in environment");
+            builder.environment().remove("PATH");
+        }
 
-        TKit.trace("Execute " + sb.toString() + "...");
+        trace("Execute " + sb.toString() + "...");
         Process process = builder.start();
 
         List<String> outputLines = null;
@@ -266,7 +342,7 @@ public final class Executor extends CommandArguments<Executor> {
         }
 
         Result reply = new Result(process.waitFor());
-        TKit.trace("Done. Exit code: " + reply.exitCode);
+        trace("Done. Exit code: " + reply.exitCode);
 
         if (outputLines != null) {
             reply.output = Collections.unmodifiableList(outputLines);
@@ -275,10 +351,10 @@ public final class Executor extends CommandArguments<Executor> {
     }
 
     private Result runToolProvider(PrintStream out, PrintStream err) {
-        TKit.trace("Execute " + getPrintableCommandLine() + "...");
+        trace("Execute " + getPrintableCommandLine() + "...");
         Result reply = new Result(toolProvider.run(out, err, args.toArray(
                 String[]::new)));
-        TKit.trace("Done. Exit code: " + reply.exitCode);
+        trace("Done. Exit code: " + reply.exitCode);
         return reply;
     }
 
@@ -353,10 +429,16 @@ public final class Executor extends CommandArguments<Executor> {
                         Collectors.joining(" "));
     }
 
+    private static void trace(String msg) {
+        TKit.trace(String.format("exec: %s", msg));
+    }
+
     private ToolProvider toolProvider;
     private Path executable;
     private Set<SaveOutputType> saveOutputType;
     private Path directory;
+    private boolean removePath;
+    private String winTmpDir = null;
 
     private static enum SaveOutputType {
         NONE, FULL, FIRST_LINE, DUMP

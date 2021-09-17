@@ -21,8 +21,9 @@
 
 import java.nio.channels.*;
 import java.io.IOException;
+import jdk.crac.*;
 
-class ChannelResource implements jdk.crac.Resource {
+class ChannelResource implements Resource {
 
     public enum SelectionType {SELECT, SELECT_TIMEOUT, SELECT_NOW};
 
@@ -34,7 +35,7 @@ class ChannelResource implements jdk.crac.Resource {
 
     public ChannelResource(SelectionType selType) {
         this.selType = selType;
-        jdk.crac.Core.getGlobalContext().register(this);
+        Core.getGlobalContext().register(this);
     }
 
     public void open() throws IOException {
@@ -48,7 +49,7 @@ class ChannelResource implements jdk.crac.Resource {
     }
 
     @Override
-    public void beforeCheckpoint() throws IOException {
+    public void beforeCheckpoint(Context<? extends Resource> context) throws IOException {
 
         channel.socket().close();
 
@@ -73,7 +74,8 @@ class ChannelResource implements jdk.crac.Resource {
     }
 
     @Override
-    public void afterRestore() {}
+    public void afterRestore(Context<? extends Resource> context) {
+    }
 }
 
 
@@ -88,7 +90,7 @@ public class Test {
             ch.open();
             ch.register(selector);
 
-            jdk.crac.Core.checkpointRestore();
+            Core.checkpointRestore();
 
             selector.close();
 
@@ -99,7 +101,7 @@ public class Test {
             Selector selector = Selector.open();
             ch.register(selector);
 
-            jdk.crac.Core.checkpointRestore();
+            Core.checkpointRestore();
 
             selector.close();
         }

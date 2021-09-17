@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2006, 2011, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2006, 2021, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -57,8 +57,6 @@ class KrbServiceLocator {
 
     private static final Random random = new Random();
 
-    private static final boolean DEBUG = Krb5.DEBUG;
-
     private KrbServiceLocator() {
     }
 
@@ -73,6 +71,7 @@ class KrbServiceLocator {
      * @return An ordered list of hostports for the Kerberos service or null if
      *          the service has not been located.
      */
+    @SuppressWarnings("removal")
     static String[] getKerberosService(String realmName) {
 
         // search realm in SRV TXT records
@@ -145,6 +144,7 @@ class KrbServiceLocator {
      * @return An ordered list of hostports for the Kerberos service or null if
      *          the service has not been located.
      */
+    @SuppressWarnings("removal")
     static String[] getKerberosService(String realmName, String protocol) {
 
         String dnsUrl = "dns:///_kerberos." + protocol + "." + realmName;

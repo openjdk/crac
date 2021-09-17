@@ -1,5 +1,26 @@
 #!/bin/bash
 
+# Copyright (c) 2020, 2021, Oracle and/or its affiliates. All rights reserved.
+# DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
+#
+# This code is free software; you can redistribute it and/or modify it
+# under the terms of the GNU General Public License version 2 only, as
+# published by the Free Software Foundation.
+#
+# This code is distributed in the hope that it will be useful, but WITHOUT
+# ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+# FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
+# version 2 for more details (a copy is included in the LICENSE file that
+# accompanied this code).
+#
+# You should have received a copy of the GNU General Public License version
+# 2 along with this work; if not, write to the Free Software Foundation,
+# Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301 USA.
+#
+# Please contact Oracle, 500 Oracle Parkway, Redwood Shores, CA 94065 USA
+# or visit www.oracle.com if you need additional information or have any
+# questions.
+
 #
 # Script to run jpackage tests.
 #
@@ -41,7 +62,7 @@ find_all_packaging_tests ()
 
 help_usage ()
 {
-  echo "Usage: `basename $0` [options] [test_names]"
+  echo "Usage: `basename $0` [options] [--] [jtreg_options|test_names]"
   echo "Options:"
   echo "  -h              - print this message"
   echo "  -v              - verbose output"
@@ -58,16 +79,12 @@ help_usage ()
   echo '  -l <logfile>    - value for `jpackage.test.logfile` property.'
   echo "                    Optional, for jtreg tests debug purposes only."
   echo "  -m <mode>       - mode to run jtreg tests."
-  echo '                    Should be one of `create`, `update`, `verify-install` or `verify-uninstall`.'
+  echo '                    Should be one of `create`, `update` or `print-default-tests`.'
   echo '                    Optional, default mode is `update`.'
   echo '                    - `create`'
   echo '                      Remove all package bundles from the output directory before running jtreg tests.'
   echo '                    - `update`'
   echo '                      Run jtreg tests and overrite existing package bundles in the output directory.'
-  echo '                    - `verify-install`'
-  echo '                      Verify installed packages created with the previous run of the script.'
-  echo '                    - `verify-uninstall`'
-  echo '                      Verify packages created with the previous run of the script were uninstalled cleanly.'
   echo '                    - `print-default-tests`'
   echo '                      Print default list of packaging tests and exit.'
 }
@@ -135,7 +152,10 @@ mode=update
 # jtreg extra arguments
 declare -a jtreg_args
 
-# Run all tests
+# Create packages only
+jtreg_args+=("-Djpackage.test.action=create")
+
+# run all tests
 run_all_tests=
 
 mapfile -t tests < <(find_all_packaging_tests)
@@ -206,10 +226,6 @@ if [ "$mode" = create ]; then
   true
 elif [ "$mode" = update ]; then
   true
-elif [ "$mode" = verify-install ]; then
-  jtreg_args+=("-Djpackage.test.action=$mode")
-elif [ "$mode" = verify-uninstall ]; then
-  jtreg_args+=("-Djpackage.test.action=$mode")
 else
   fatal_with_help_usage 'Invalid value of -m option:' [$mode]
 fi
@@ -218,7 +234,11 @@ if [ -z "$run_all_tests" ]; then
   jtreg_args+=(-Djpackage.test.SQETest=yes)
 fi
 
-# All remaining command line arguments are tests to run that should override the defaults
+# Drop arguments separator
+[ "$1" != "--" ] || shift
+
+# All remaining command line arguments are tests to run
+# that should override the defaults and explicit jtreg arguments
 [ $# -eq 0 ] || tests=($@)
 
 
@@ -249,18 +269,18 @@ installJtreg ()
 
 preRun ()
 {
-  local xargs_args=(-t --no-run-if-empty rm)
-  if [ -n "$dry_run" ]; then
-    xargs_args=(--no-run-if-empty echo rm)
-  fi
-
   if [ ! -d "$output_dir" ]; then
     exec_command mkdir -p "$output_dir"
   fi
   [ ! -d "$output_dir" ] || output_dir=$(cd "$output_dir" && pwd)
 
   # Clean output directory
-  [ "$mode" != "create" ] || find $output_dir -maxdepth 1 -type f -name '*.exe' -or -name '*.msi' -or -name '*.rpm' -or -name '*.deb' | xargs "${xargs_args[@]}"
+  if [ "$mode" == "create" ]; then
+    for f in $(find $output_dir -maxdepth 1 -type f -name '*.exe' -or -name '*.msi' -or -name '*.rpm' -or -name '*.deb'); do
+      echo rm "$f"
+      [ -n "$dry_run" ] || rm "$f"
+    done
+  fi
 }
 
 

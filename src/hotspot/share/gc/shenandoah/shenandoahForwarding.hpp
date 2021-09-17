@@ -1,5 +1,6 @@
 /*
  * Copyright (c) 2013, 2019, Red Hat, Inc. All rights reserved.
+ * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 2 only, as
@@ -33,14 +34,18 @@ public:
    */
   static inline oop get_forwardee(oop obj);
 
+  /* Gets forwardee from the given object. Only from mutator thread.
+   */
+  static inline oop get_forwardee_mutator(oop obj);
+
   /* Returns the raw value from forwardee slot.
    */
-  static inline HeapWord* get_forwardee_raw(oop obj);
+  static inline oop get_forwardee_raw(oop obj);
 
   /* Returns the raw value from forwardee slot without any checks.
    * Used for quick verification.
    */
-  static inline HeapWord* get_forwardee_raw_unchecked(oop obj);
+  static inline oop get_forwardee_raw_unchecked(oop obj);
 
   /**
    * Returns true if the object is forwarded, false otherwise.

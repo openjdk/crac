@@ -38,7 +38,7 @@ import com.sun.org.apache.bcel.internal.Const;
  */
 public final class ConstantPackage extends Constant implements ConstantObject {
 
-    private int name_index;
+    private int nameIndex;
 
 
     /**
@@ -61,17 +61,17 @@ public final class ConstantPackage extends Constant implements ConstantObject {
 
 
     /**
-     * @param name_index Name index in constant pool.  Should refer to a
+     * @param nameIndex Name index in constant pool.  Should refer to a
      * ConstantUtf8.
      */
-    public ConstantPackage(final int name_index) {
+    public ConstantPackage(final int nameIndex) {
         super(Const.CONSTANT_Package);
-        this.name_index = name_index;
+        this.nameIndex = nameIndex;
     }
 
 
     /**
-     * Called by objects that are traversing the nodes of the tree implicitely
+     * Called by objects that are traversing the nodes of the tree implicitly
      * defined by the contents of a Java class. I.e., the hierarchy of methods,
      * fields, attributes, etc. spawns a tree of objects.
      *
@@ -90,25 +90,25 @@ public final class ConstantPackage extends Constant implements ConstantObject {
      * @throws IOException
      */
     @Override
-    public final void dump( final DataOutputStream file ) throws IOException {
+    public void dump( final DataOutputStream file ) throws IOException {
         file.writeByte(super.getTag());
-        file.writeShort(name_index);
+        file.writeShort(nameIndex);
     }
 
 
     /**
      * @return Name index in constant pool of package name.
      */
-    public final int getNameIndex() {
-        return name_index;
+    public int getNameIndex() {
+        return nameIndex;
     }
 
 
     /**
-     * @param name_index the name index in the constant pool of this Constant Package
+     * @param nameIndex the name index in the constant pool of this Constant Package
      */
-    public final void setNameIndex( final int name_index ) {
-        this.name_index = name_index;
+    public void setNameIndex( final int nameIndex ) {
+        this.nameIndex = nameIndex;
     }
 
 
@@ -116,7 +116,7 @@ public final class ConstantPackage extends Constant implements ConstantObject {
      */
     @Override
     public Object getConstantValue( final ConstantPool cp ) {
-        final Constant c = cp.getConstant(name_index, Const.CONSTANT_Utf8);
+        final Constant c = cp.getConstant(nameIndex, Const.CONSTANT_Utf8);
         return ((ConstantUtf8) c).getBytes();
     }
 
@@ -132,7 +132,7 @@ public final class ConstantPackage extends Constant implements ConstantObject {
      * @return String representation.
      */
     @Override
-    public final String toString() {
-        return super.toString() + "(name_index = " + name_index + ")";
+    public String toString() {
+        return super.toString() + "(nameIndex = " + nameIndex + ")";
     }
 }

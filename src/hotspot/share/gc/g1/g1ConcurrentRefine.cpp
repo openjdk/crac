@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2001, 2019, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2001, 2020, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -30,9 +30,11 @@
 #include "logging/log.hpp"
 #include "memory/allocation.inline.hpp"
 #include "memory/iterator.hpp"
+#include "runtime/globals_extension.hpp"
 #include "runtime/java.hpp"
 #include "runtime/thread.hpp"
 #include "utilities/debug.hpp"
+#include "utilities/formatBuffer.hpp"
 #include "utilities/globalDefinitions.hpp"
 #include "utilities/pair.hpp"
 #include <math.h>
@@ -72,11 +74,7 @@ jint G1ConcurrentRefineThreadControl::initialize(G1ConcurrentRefine* cr, uint nu
   _cr = cr;
   _num_max_threads = num_max_threads;
 
-  _threads = NEW_C_HEAP_ARRAY_RETURN_NULL(G1ConcurrentRefineThread*, num_max_threads, mtGC);
-  if (_threads == NULL) {
-    vm_shutdown_during_initialization("Could not allocate thread holder array.");
-    return JNI_ENOMEM;
-  }
+  _threads = NEW_C_HEAP_ARRAY(G1ConcurrentRefineThread*, num_max_threads, mtGC);
 
   for (uint i = 0; i < num_max_threads; i++) {
     if (UseDynamicNumberOfGCThreads && i != 0 /* Always start first thread. */) {
@@ -89,6 +87,11 @@ jint G1ConcurrentRefineThreadControl::initialize(G1ConcurrentRefine* cr, uint nu
       }
     }
   }
+
+  if (num_max_threads > 0) {
+    G1BarrierSet::dirty_card_queue_set().set_primary_refinement_thread(_threads[0]);
+  }
+
   return JNI_OK;
 }
 
@@ -108,17 +111,8 @@ void G1ConcurrentRefineThreadControl::maybe_activate_next(uint cur_worker_id) {
     _threads[worker_id] = create_refinement_thread(worker_id, false);
     thread_to_activate = _threads[worker_id];
   }
-  if (thread_to_activate != NULL && !thread_to_activate->is_active()) {
+  if (thread_to_activate != NULL) {
     thread_to_activate->activate();
-  }
-}
-
-void G1ConcurrentRefineThreadControl::print_on(outputStream* st) const {
-  for (uint i = 0; i < _num_max_threads; ++i) {
-    if (_threads[i] != NULL) {
-      _threads[i]->print_on(st);
-      st->cr();
-    }
   }
 }
 
@@ -190,6 +184,18 @@ STATIC_ASSERT(max_yellow_zone <= max_red_zone);
 // For logging zone values, ensuring consistency of level and tags.
 #define LOG_ZONES(...) log_debug( CTRL_TAGS )(__VA_ARGS__)
 
+// Convert configuration values in units of buffers to number of cards.
+static size_t configuration_buffers_to_cards(size_t value, const char* value_name) {
+  if (value == 0) return 0;
+  size_t res = value * G1UpdateBufferSize;
+
+  if (res / value != G1UpdateBufferSize) { // Check overflow
+    vm_exit_during_initialization(err_msg("configuration_buffers_to_cards: "
+      "(%s = " SIZE_FORMAT ") * (G1UpdateBufferSize = " SIZE_FORMAT ") overflow!", value_name, value, G1UpdateBufferSize));
+  }
+  return res;
+}
+
 // Package for pair of refinement thread activation and deactivation
 // thresholds.  The activation and deactivation levels are resp. the first
 // and second values of the pair.
@@ -207,8 +213,9 @@ static Thresholds calc_thresholds(size_t green_zone,
     // available buffers near green_zone value.  When yellow_size is
     // large we don't want to allow a full step to accumulate before
     // doing any processing, as that might lead to significantly more
-    // than green_zone buffers to be processed during scanning.
-    step = MIN2(step, ParallelGCThreads / 2.0);
+    // than green_zone buffers to be processed during pause.  So limit
+    // to an extra half buffer per pause-time processing thread.
+    step = MIN2(step, configuration_buffers_to_cards(ParallelGCThreads, "ParallelGCThreads") / 2.0);
   }
   size_t activate_offset = static_cast<size_t>(ceil(step * (worker_id + 1)));
   size_t deactivate_offset = static_cast<size_t>(floor(step * worker_id));
@@ -233,12 +240,8 @@ jint G1ConcurrentRefine::initialize() {
   return _thread_control.initialize(this, max_num_threads());
 }
 
-static size_t buffers_to_cards(size_t value) {
-  return value * G1UpdateBufferSize;
-}
-
 static size_t calc_min_yellow_zone_size() {
-  size_t step = buffers_to_cards(G1ConcRefinementThresholdStep);
+  size_t step = configuration_buffers_to_cards(G1ConcRefinementThresholdStep, "G1ConcRefinementThresholdStep");
   uint n_workers = G1ConcurrentRefine::max_num_threads();
   if ((max_yellow_zone / step) < n_workers) {
     return max_yellow_zone;
@@ -249,15 +252,17 @@ static size_t calc_min_yellow_zone_size() {
 
 static size_t calc_init_green_zone() {
   size_t green = G1ConcRefinementGreenZone;
+  const char* name = "G1ConcRefinementGreenZone";
   if (FLAG_IS_DEFAULT(G1ConcRefinementGreenZone)) {
     green = ParallelGCThreads;
+    name = "ParallelGCThreads";
   }
-  green = buffers_to_cards(green);
+  green = configuration_buffers_to_cards(green, name);
   return MIN2(green, max_green_zone);
 }
 
 static size_t calc_init_yellow_zone(size_t green, size_t min_size) {
-  size_t config = buffers_to_cards(G1ConcRefinementYellowZone);
+  size_t config = configuration_buffers_to_cards(G1ConcRefinementYellowZone, "G1ConcRefinementYellowZone");
   size_t size = 0;
   if (FLAG_IS_DEFAULT(G1ConcRefinementYellowZone)) {
     size = green * 2;
@@ -272,7 +277,7 @@ static size_t calc_init_yellow_zone(size_t green, size_t min_size) {
 static size_t calc_init_red_zone(size_t green, size_t yellow) {
   size_t size = yellow - green;
   if (!FLAG_IS_DEFAULT(G1ConcRefinementRedZone)) {
-    size_t config = buffers_to_cards(G1ConcRefinementRedZone);
+    size_t config = configuration_buffers_to_cards(G1ConcRefinementRedZone, "G1ConcRefinementRedZone");
     if (yellow < config) {
       size = MAX2(size, config - yellow);
     }
@@ -297,13 +302,6 @@ G1ConcurrentRefine* G1ConcurrentRefine::create(jint* ecode) {
                                                   yellow_zone,
                                                   red_zone,
                                                   min_yellow_zone_size);
-
-  if (cr == NULL) {
-    *ecode = JNI_ENOMEM;
-    vm_shutdown_during_initialization("Could not create G1ConcurrentRefine");
-    return NULL;
-  }
-
   *ecode = cr->initialize();
   return cr;
 }
@@ -321,10 +319,6 @@ void G1ConcurrentRefine::threads_do(ThreadClosure *tc) {
 
 uint G1ConcurrentRefine::max_num_threads() {
   return G1ConcRefinementThreads;
-}
-
-void G1ConcurrentRefine::print_threads_on(outputStream* st) const {
-  _thread_control.print_on(st);
 }
 
 static size_t calc_new_green_zone(size_t green,
@@ -413,20 +407,18 @@ void G1ConcurrentRefine::adjust(double logged_cards_scan_time,
   dcqs.notify_if_necessary();
 }
 
-G1ConcurrentRefine::RefinementStats G1ConcurrentRefine::total_refinement_stats() const {
-  struct CollectData : public ThreadClosure {
-    Tickspan _total_time;
-    size_t _total_cards;
-    CollectData() : _total_time(), _total_cards(0) {}
+G1ConcurrentRefineStats G1ConcurrentRefine::get_and_reset_refinement_stats() {
+  struct CollectStats : public ThreadClosure {
+    G1ConcurrentRefineStats _total_stats;
     virtual void do_thread(Thread* t) {
       G1ConcurrentRefineThread* crt = static_cast<G1ConcurrentRefineThread*>(t);
-      _total_time += crt->total_refinement_time();
-      _total_cards += crt->total_refined_cards();
+      G1ConcurrentRefineStats& stats = *crt->refinement_stats();
+      _total_stats += stats;
+      stats.reset();
     }
   } collector;
-  // Cast away const so we can call non-modifying closure on threads.
-  const_cast<G1ConcurrentRefine*>(this)->threads_do(&collector);
-  return RefinementStats(collector._total_time, collector._total_cards);
+  threads_do(&collector);
+  return collector._total_stats;
 }
 
 size_t G1ConcurrentRefine::activation_threshold(uint worker_id) const {
@@ -443,23 +435,21 @@ uint G1ConcurrentRefine::worker_id_offset() {
   return G1DirtyCardQueueSet::num_par_ids();
 }
 
-void G1ConcurrentRefine::maybe_activate_more_threads(uint worker_id, size_t num_cur_buffers) {
-  if (num_cur_buffers > activation_threshold(worker_id + 1)) {
+void G1ConcurrentRefine::maybe_activate_more_threads(uint worker_id, size_t num_cur_cards) {
+  if (num_cur_cards > activation_threshold(worker_id + 1)) {
     _thread_control.maybe_activate_next(worker_id);
   }
 }
 
 bool G1ConcurrentRefine::do_refinement_step(uint worker_id,
-                                            size_t* total_refined_cards) {
+                                            G1ConcurrentRefineStats* stats) {
   G1DirtyCardQueueSet& dcqs = G1BarrierSet::dirty_card_queue_set();
 
   size_t curr_cards = dcqs.num_cards();
   // If the number of the cards falls down into the yellow zone,
   // that means that the transition period after the evacuation pause has ended.
-  // Since the value written to the DCQS is the same for all threads, there is no
-  // need to synchronize.
-  if (dcqs.max_cards_padding() > 0 && curr_cards <= yellow_zone()) {
-    dcqs.set_max_cards_padding(0);
+  if (curr_cards <= yellow_zone()) {
+    dcqs.discard_max_cards_padding();
   }
 
   maybe_activate_more_threads(worker_id, curr_cards);
@@ -467,5 +457,5 @@ bool G1ConcurrentRefine::do_refinement_step(uint worker_id,
   // Process the next buffer, if there are enough left.
   return dcqs.refine_completed_buffer_concurrently(worker_id + worker_id_offset(),
                                                    deactivation_threshold(worker_id),
-                                                   total_refined_cards);
+                                                   stats);
 }

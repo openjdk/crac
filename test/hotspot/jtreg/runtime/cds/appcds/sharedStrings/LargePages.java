@@ -27,7 +27,6 @@
  * @summary Basic shared string test with large pages
  * @requires vm.cds.archived.java.heap
  * @library /test/lib /test/hotspot/jtreg/runtime/cds/appcds
- * @modules jdk.jartool/sun.tools.jar
  * @build HelloString
  * @run driver LargePages
  */
@@ -44,11 +43,5 @@ public class LargePages {
         SharedStringsUtils.dump(TestCommon.list("HelloString"),
             "SharedStringsBasic.txt", "-XX:+UseLargePages", CDS_LOGGING);
         SharedStringsUtils.runWithArchive("HelloString", "-XX:+UseLargePages");
-
-        SharedStringsUtils.dump(TestCommon.list("HelloString"),
-            "SharedStringsBasic.txt", CDS_LOGGING,
-            "-XX:+UseLargePages", "-XX:+UseLargePagesInMetaspace");
-        SharedStringsUtils.runWithArchive("HelloString",
-            "-XX:+UseLargePages", "-XX:+UseLargePagesInMetaspace");
     }
 }

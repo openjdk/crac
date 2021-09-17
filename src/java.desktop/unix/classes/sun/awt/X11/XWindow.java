@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2002, 2018, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2002, 2020, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -25,22 +25,42 @@
 
 package sun.awt.X11;
 
-import java.awt.*;
-import java.awt.event.*;
-import java.awt.peer.ComponentPeer;
+import java.awt.AWTEvent;
+import java.awt.AWTKeyStroke;
+import java.awt.Color;
+import java.awt.Component;
+import java.awt.Container;
+import java.awt.Cursor;
+import java.awt.Font;
+import java.awt.FontMetrics;
+import java.awt.Graphics;
+import java.awt.GraphicsConfiguration;
+import java.awt.Point;
+import java.awt.Rectangle;
+import java.awt.SystemColor;
+import java.awt.Toolkit;
+import java.awt.Window;
+import java.awt.event.ComponentEvent;
+import java.awt.event.FocusEvent;
+import java.awt.event.InputEvent;
+import java.awt.event.KeyEvent;
+import java.awt.event.MouseEvent;
+import java.awt.event.MouseWheelEvent;
+import java.awt.event.PaintEvent;
 import java.awt.image.ColorModel;
-
+import java.awt.peer.ComponentPeer;
 import java.lang.ref.WeakReference;
 
+import sun.awt.AWTAccessor;
 import sun.awt.AWTAccessor.ComponentAccessor;
-import sun.util.logging.PlatformLogger;
-
-import sun.awt.*;
-
-import sun.awt.image.PixelConverter;
-
+import sun.awt.PaintEventDispatcher;
+import sun.awt.PeerEvent;
+import sun.awt.SunToolkit;
+import sun.awt.X11ComponentPeer;
+import sun.awt.X11GraphicsConfig;
 import sun.java2d.SunGraphics2D;
 import sun.java2d.SurfaceData;
+import sun.util.logging.PlatformLogger;
 
 class XWindow extends XBaseWindow implements X11ComponentPeer {
     private static PlatformLogger log = PlatformLogger.getLogger("sun.awt.X11.XWindow");
@@ -117,10 +137,6 @@ class XWindow extends XBaseWindow implements X11ComponentPeer {
     */
     private int mouseButtonClickAllowed = 0;
 
-    native int getNativeColor(Color clr, GraphicsConfiguration gc);
-    native void getWMInsets(long window, long left, long top, long right, long bottom, long border);
-    native long getTopWindow(long window, long rootWin);
-    native void getWindowBounds(long window, long x, long y, long width, long height);
     private static native void initIDs();
 
     static {
@@ -666,7 +682,7 @@ class XWindow extends XBaseWindow implements X11ComponentPeer {
         }
         int type = xev.get_type();
         when = xbe.get_time();
-        long jWhen = XToolkit.nowMillisUTC_offset(when);
+        long jWhen = System.currentTimeMillis();
 
         int x = scaleDown(xbe.get_x());
         int y = scaleDown(xbe.get_y());
@@ -814,7 +830,7 @@ class XWindow extends XBaseWindow implements X11ComponentPeer {
           lastY = 0;
         }
 
-        long jWhen = XToolkit.nowMillisUTC_offset(xme.get_time());
+        long jWhen = System.currentTimeMillis();
         int modifiers = getModifiers(xme.get_state(), 0, 0);
         boolean popupTrigger = false;
 
@@ -941,7 +957,7 @@ class XWindow extends XBaseWindow implements X11ComponentPeer {
             return;
         }
 
-        long jWhen = XToolkit.nowMillisUTC_offset(xce.get_time());
+        long jWhen = System.currentTimeMillis();
         int modifiers = getModifiers(xce.get_state(),0,0);
         int clickCount = 0;
         boolean popupTrigger = false;
@@ -1156,7 +1172,6 @@ class XWindow extends XBaseWindow implements X11ComponentPeer {
                            primaryUnicode2JavaKeycode( unicodeFromPrimaryKeysym ) :
                              jkc.getJavaKeycode();
         postKeyEvent( java.awt.event.KeyEvent.KEY_PRESSED,
-                          ev.get_time(),
                           isDeadKey ? jkeyExtended : jkeyToReturn,
                           (unicodeKey == 0 ? java.awt.event.KeyEvent.CHAR_UNDEFINED : unicodeKey),
                           jkc.getKeyLocation(),
@@ -1170,7 +1185,6 @@ class XWindow extends XBaseWindow implements X11ComponentPeer {
                     keyEventLog.fine("fire _TYPED on "+unicodeKey);
                 }
                 postKeyEvent( java.awt.event.KeyEvent.KEY_TYPED,
-                              ev.get_time(),
                               java.awt.event.KeyEvent.VK_UNDEFINED,
                               unicodeKey,
                               java.awt.event.KeyEvent.KEY_LOCATION_UNKNOWN,
@@ -1240,7 +1254,6 @@ class XWindow extends XBaseWindow implements X11ComponentPeer {
                            primaryUnicode2JavaKeycode( unicodeFromPrimaryKeysym ) :
                              jkc.getJavaKeycode();
         postKeyEvent(  java.awt.event.KeyEvent.KEY_RELEASED,
-                          ev.get_time(),
                           isDeadKey ? jkeyExtended : jkeyToReturn,
                           (unicodeKey == 0 ? java.awt.event.KeyEvent.CHAR_UNDEFINED : unicodeKey),
                           jkc.getKeyLocation(),
@@ -1454,12 +1467,12 @@ class XWindow extends XBaseWindow implements X11ComponentPeer {
         AWTAccessor.getAWTEventAccessor().setBData(e, data);
     }
 
-    public void postKeyEvent(int id, long when, int keyCode, int keyChar,
+    public void postKeyEvent(int id, int keyCode, int keyChar,
         int keyLocation, int state, long event, int eventSize, long rawCode,
         int unicodeFromPrimaryKeysym, int extendedKeyCode)
 
     {
-        long jWhen = XToolkit.nowMillisUTC_offset(when);
+        long jWhen = System.currentTimeMillis();
         int modifiers = getModifiers(state, 0, keyCode);
 
         KeyEvent ke = new KeyEvent(getEventSource(), id, jWhen,

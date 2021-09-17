@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1997, 2019, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 1997, 2020, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -34,7 +34,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 
-import jdk.internal.misc.VM;
+import jdk.internal.misc.CDS;
 import jdk.internal.vm.annotation.Stable;
 
 import sun.nio.cs.UTF_8;
@@ -514,12 +514,8 @@ public class Attributes implements Map<Object,Object>, Cloneable {
             if (this == o) {
                 return true;
             }
-            if (o instanceof Name) {
-                Name other = (Name)o;
-                return other.name.equalsIgnoreCase(name);
-            } else {
-                return false;
-            }
+            return o instanceof Name other
+                    && other.name.equalsIgnoreCase(name);
         }
 
         /**
@@ -591,7 +587,7 @@ public class Attributes implements Map<Object,Object>, Cloneable {
         public static final Name EXTENSION_LIST;
 
         /**
-         * {@code Name} object for {@code Extension-Name} manifest attribute.
+         * {@code Name} object for {@code Extension-Name} manifest attribute
          * used for the extension mechanism that is no longer supported.
          */
         public static final Name EXTENSION_NAME;
@@ -672,7 +668,7 @@ public class Attributes implements Map<Object,Object>, Cloneable {
 
         static {
 
-            VM.initializeFromArchive(Attributes.Name.class);
+            CDS.initializeFromArchive(Attributes.Name.class);
 
             if (KNOWN_NAMES == null) {
                 MANIFEST_VERSION = new Name("Manifest-Version");

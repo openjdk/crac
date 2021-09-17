@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012, 2016, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2012, 2019, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -55,7 +55,7 @@ public class PortFile {
     // Port file format:
     // byte ordering: high byte first = big endian
     // Magic nr, 4 byte int, first in file.
-    private final static int magicNr = 0x1174;
+    private static final int magicNr = 0x1174;
     // Followed by a 4 byte int, with the port nr.
     // Followed by a 8 byte long, with cookie nr.
 
@@ -169,7 +169,7 @@ public class PortFile {
     public void setValues(int port, long cookie) throws IOException {
         Assert.check(lock != null);
         rwfile.seek(0);
-        // Write the magic nr that identifes a port file.
+        // Write the magic nr that identifies a port file.
         rwfile.writeInt(magicNr);
         rwfile.writeInt(port);
         rwfile.writeLong(cookie);

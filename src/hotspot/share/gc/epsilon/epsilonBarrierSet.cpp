@@ -1,5 +1,6 @@
 /*
  * Copyright (c) 2017, 2018, Red Hat, Inc. All rights reserved.
+ * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 2 only, as
@@ -27,7 +28,6 @@
 #include "gc/epsilon/epsilonThreadLocalData.hpp"
 #include "gc/shared/barrierSet.hpp"
 #include "gc/shared/barrierSetAssembler.hpp"
-#include "utilities/macros.hpp"
 #ifdef COMPILER1
 #include "gc/shared/c1/barrierSetC1.hpp"
 #endif
@@ -40,7 +40,7 @@ EpsilonBarrierSet::EpsilonBarrierSet() : BarrierSet(
           make_barrier_set_c1<BarrierSetC1>(),
           make_barrier_set_c2<BarrierSetC2>(),
           NULL /* barrier_set_nmethod */,
-          BarrierSet::FakeRtti(BarrierSet::EpsilonBarrierSet)) {};
+          BarrierSet::FakeRtti(BarrierSet::EpsilonBarrierSet)) {}
 
 void EpsilonBarrierSet::on_thread_create(Thread *thread) {
   EpsilonThreadLocalData::create(thread);

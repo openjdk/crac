@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1997, 2019, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 1997, 2021, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -25,7 +25,6 @@
 #ifndef SHARE_OOPS_KLASS_HPP
 #define SHARE_OOPS_KLASS_HPP
 
-#include "classfile/classLoaderData.hpp"
 #include "memory/iterator.hpp"
 #include "memory/memRegion.hpp"
 #include "oops/markWord.hpp"
@@ -67,8 +66,8 @@ const uint KLASS_ID_COUNT = 6;
 // Forward declarations.
 template <class T> class Array;
 template <class T> class GrowableArray;
+class ClassLoaderData;
 class fieldDescriptor;
-class KlassSizeStats;
 class klassVtable;
 class ModuleEntry;
 class PackageEntry;
@@ -118,6 +117,9 @@ class Klass : public Metadata {
   // Klass identifier used to implement devirtualized oop closure dispatching.
   const KlassID _id;
 
+  // vtable length
+  int _vtable_len;
+
   // The fields _super_check_offset, _secondary_super_cache, _secondary_supers
   // and _primary_supers all help make fast subtype checks.  See big discussion
   // in doc/server_compiler/checktype.txt
@@ -137,7 +139,7 @@ class Klass : public Metadata {
   // Ordered list of all primary supertypes
   Klass*      _primary_supers[_primary_super_limit];
   // java/lang/Class instance mirroring this class
-  OopHandle _java_mirror;
+  OopHandle   _java_mirror;
   // Superclass
   Klass*      _super;
   // First subclass (NULL if none); _subklass->next_sibling() is next one
@@ -163,9 +165,6 @@ class Klass : public Metadata {
   markWord _prototype_header;   // Used when biased locking is both enabled and disabled for this type
   jint     _biased_lock_revocation_count;
 
-  // vtable length
-  int _vtable_len;
-
 private:
   // This is an index into FileMapHeader::_shared_path_table[], to
   // associate this class with the JAR file where it's loaded from during
@@ -177,12 +176,13 @@ private:
   // Flags of the current shared class.
   u2     _shared_class_flags;
   enum {
-    _has_raw_archived_mirror = 1
+    _archived_lambda_proxy_is_available = 2,
+    _has_value_based_class_annotation = 4,
+    _verified_at_dump_time = 8
   };
 #endif
-  // The _archived_mirror is set at CDS dump time pointing to the cached mirror
-  // in the open archive heap region when archiving java object is supported.
-  CDS_JAVA_HEAP_ONLY(narrowOop _archived_mirror;)
+
+  CDS_JAVA_HEAP_ONLY(int _archived_mirror_index;)
 
 protected:
 
@@ -195,12 +195,12 @@ protected:
  public:
   int id() { return _id; }
 
-  enum DefaultsLookupMode { find_defaults, skip_defaults };
-  enum OverpassLookupMode { find_overpass, skip_overpass };
-  enum StaticLookupMode   { find_static,   skip_static };
-  enum PrivateLookupMode  { find_private,  skip_private };
+  enum class DefaultsLookupMode { find, skip };
+  enum class OverpassLookupMode { find, skip };
+  enum class StaticLookupMode   { find, skip };
+  enum class PrivateLookupMode  { find, skip };
 
-  bool is_klass() const volatile { return true; }
+  virtual bool is_klass() const { return true; }
 
   // super() cannot be InstanceKlass* -- Java arrays are covariant, and _super is used
   // to implement that. NB: the _super of "[Ljava/lang/Integer;" is "[Ljava/lang/Number;"
@@ -261,17 +261,15 @@ protected:
   oop java_mirror_no_keepalive() const;
   void set_java_mirror(Handle m);
 
-  oop archived_java_mirror_raw() NOT_CDS_JAVA_HEAP_RETURN_(NULL); // no GC barrier
-  narrowOop archived_java_mirror_raw_narrow() NOT_CDS_JAVA_HEAP_RETURN_(0); // no GC barrier
-  void set_archived_java_mirror_raw(oop m) NOT_CDS_JAVA_HEAP_RETURN; // no GC barrier
+  oop archived_java_mirror() NOT_CDS_JAVA_HEAP_RETURN_(NULL);
+  void set_archived_java_mirror(oop m) NOT_CDS_JAVA_HEAP_RETURN;
 
   // Temporary mirror switch used by RedefineClasses
-  // Both mirrors are on the ClassLoaderData::_handles list already so no
-  // barriers are needed.
-  void set_java_mirror_handle(OopHandle mirror) { _java_mirror = mirror; }
-  OopHandle java_mirror_handle() const          {
-    return _java_mirror;
-  }
+  void replace_java_mirror(oop mirror);
+
+  // Set java mirror OopHandle to NULL for CDS
+  // This leaves the OopHandle in the CLD, but that's ok, you can't release them.
+  void clear_java_mirror_handle() { _java_mirror = OopHandle(); }
 
   // modifier flags
   jint modifier_flags() const          { return _modifier_flags; }
@@ -293,6 +291,7 @@ protected:
 
   void set_next_link(Klass* k) { _next_link = k; }
   Klass* next_link() const { return _next_link; }   // The next klass defined by the class loader.
+  Klass** next_link_addr() { return &_next_link; }
 
   // class loader data
   ClassLoaderData* class_loader_data() const               { return _class_loader_data; }
@@ -306,16 +305,43 @@ protected:
     _shared_class_path_index = index;
   };
 
-  void set_has_raw_archived_mirror() {
-    CDS_ONLY(_shared_class_flags |= _has_raw_archived_mirror;)
+  bool has_archived_mirror_index() const {
+    CDS_JAVA_HEAP_ONLY(return _archived_mirror_index >= 0;)
+    NOT_CDS_JAVA_HEAP(return false);
   }
-  void clear_has_raw_archived_mirror() {
-    CDS_ONLY(_shared_class_flags &= ~_has_raw_archived_mirror;)
+
+  void clear_archived_mirror_index() NOT_CDS_JAVA_HEAP_RETURN;
+
+  void set_lambda_proxy_is_available() {
+    CDS_ONLY(_shared_class_flags |= _archived_lambda_proxy_is_available;)
   }
-  bool has_raw_archived_mirror() const {
-    CDS_ONLY(return (_shared_class_flags & _has_raw_archived_mirror) != 0;)
+  void clear_lambda_proxy_is_available() {
+    CDS_ONLY(_shared_class_flags &= ~_archived_lambda_proxy_is_available;)
+  }
+  bool lambda_proxy_is_available() const {
+    CDS_ONLY(return (_shared_class_flags & _archived_lambda_proxy_is_available) != 0;)
     NOT_CDS(return false;)
   }
+
+  void set_has_value_based_class_annotation() {
+    CDS_ONLY(_shared_class_flags |= _has_value_based_class_annotation;)
+  }
+  void clear_has_value_based_class_annotation() {
+    CDS_ONLY(_shared_class_flags &= ~_has_value_based_class_annotation;)
+  }
+  bool has_value_based_class_annotation() const {
+    CDS_ONLY(return (_shared_class_flags & _has_value_based_class_annotation) != 0;)
+    NOT_CDS(return false;)
+  }
+
+  void set_verified_at_dump_time() {
+    CDS_ONLY(_shared_class_flags |= _verified_at_dump_time;)
+  }
+  bool verified_at_dump_time() const {
+    CDS_ONLY(return (_shared_class_flags & _verified_at_dump_time) != 0;)
+    NOT_CDS(return false;)
+  }
+
 
   // Obtain the module or package for this class
   virtual ModuleEntry* module() const = 0;
@@ -470,36 +496,29 @@ protected:
   virtual Klass* find_field(Symbol* name, Symbol* signature, fieldDescriptor* fd) const;
   virtual Method* uncached_lookup_method(const Symbol* name, const Symbol* signature,
                                          OverpassLookupMode overpass_mode,
-                                         PrivateLookupMode = find_private) const;
+                                         PrivateLookupMode = PrivateLookupMode::find) const;
  public:
   Method* lookup_method(const Symbol* name, const Symbol* signature) const {
-    return uncached_lookup_method(name, signature, find_overpass);
+    return uncached_lookup_method(name, signature, OverpassLookupMode::find);
   }
 
   // array class with specific rank
-  Klass* array_klass(int rank, TRAPS)         {  return array_klass_impl(false, rank, THREAD); }
+  virtual Klass* array_klass(int rank, TRAPS) = 0;
 
   // array class with this klass as element type
-  Klass* array_klass(TRAPS)                   {  return array_klass_impl(false, THREAD); }
+  virtual Klass* array_klass(TRAPS) = 0;
 
   // These will return NULL instead of allocating on the heap:
-  // NB: these can block for a mutex, like other functions with TRAPS arg.
-  Klass* array_klass_or_null(int rank);
-  Klass* array_klass_or_null();
+  virtual Klass* array_klass_or_null(int rank) = 0;
+  virtual Klass* array_klass_or_null() = 0;
 
   virtual oop protection_domain() const = 0;
 
   oop class_loader() const;
 
-  // This loads the klass's holder as a phantom. This is useful when a weak Klass
-  // pointer has been "peeked" and then must be kept alive before it may
-  // be used safely.  All uses of klass_holder need to apply the appropriate barriers,
-  // except during GC.
-  oop klass_holder() const { return class_loader_data()->holder_phantom(); }
+  inline oop klass_holder() const;
 
  protected:
-  virtual Klass* array_klass_impl(bool or_null, int rank, TRAPS);
-  virtual Klass* array_klass_impl(bool or_null, TRAPS);
 
   // Error handling when length > max_length or length < 0
   static void check_array_allocation_length(int length, int max_length, TRAPS);
@@ -507,6 +526,7 @@ protected:
   void set_vtable_length(int len) { _vtable_len= len; }
 
   vtableEntry* start_of_vtable() const;
+  void restore_unshareable_info(ClassLoaderData* loader_data, Handle protection_domain, TRAPS);
  public:
   Method* method_at_vtable(int index);
 
@@ -518,11 +538,10 @@ protected:
   // CDS support - remove and restore oops from metadata. Oops are not shared.
   virtual void remove_unshareable_info();
   virtual void remove_java_mirror();
-  virtual void restore_unshareable_info(ClassLoaderData* loader_data, Handle protection_domain, TRAPS);
 
   bool is_unshareable_info_restored() const {
     assert(is_shared(), "use this for shared classes only");
-    if (has_raw_archived_mirror()) {
+    if (has_archived_mirror_index()) {
       // _java_mirror is not a valid OopHandle but rather an encoded reference in the shared heap
       return false;
     } else if (_java_mirror.ptr_raw() == NULL) {
@@ -541,9 +560,6 @@ protected:
 
   // Size of klass in word size.
   virtual int size() const = 0;
-#if INCLUDE_SERVICES
-  virtual void collect_statistics(KlassSizeStats *sz) const;
-#endif
 
   // Returns the Java name for a class (Resource allocated)
   // For arrays, this returns the name of the element with a leading '['.
@@ -619,6 +635,12 @@ protected:
   void set_has_miranda_methods()        { _access_flags.set_has_miranda_methods(); }
   bool is_shared() const                { return access_flags().is_shared_class(); } // shadows MetaspaceObj::is_shared)()
   void set_is_shared()                  { _access_flags.set_is_shared_class(); }
+  bool is_hidden() const                { return access_flags().is_hidden_class(); }
+  void set_is_hidden()                  { _access_flags.set_is_hidden_class(); }
+  bool is_value_based()                 { return _access_flags.is_value_based_class(); }
+  void set_is_value_based()             { _access_flags.set_is_value_based_class(); }
+
+  inline bool is_non_strong_hidden() const;
 
   bool is_cloneable() const;
   void set_is_cloneable();
@@ -628,6 +650,7 @@ protected:
   // prototype markWord. If biased locking is enabled it may further be
   // biasable and have an epoch.
   markWord prototype_header() const      { return _prototype_header; }
+
   // NOTE: once instances of this klass are floating around in the
   // system, this header must only be updated at a safepoint.
   // NOTE 2: currently we only ever set the prototype header to the
@@ -651,10 +674,7 @@ protected:
   virtual void metaspace_pointers_do(MetaspaceClosure* iter);
   virtual MetaspaceObj::Type type() const { return ClassType; }
 
-  // Iff the class loader (or mirror for unsafe anonymous classes) is alive the
-  // Klass is considered alive. This is safe to call before the CLD is marked as
-  // unloading, and hence during concurrent class unloading.
-  bool is_loader_alive() const { return class_loader_data()->is_alive(); }
+  inline bool is_loader_alive() const;
 
   void clean_subklass();
 
@@ -673,9 +693,10 @@ protected:
   Symbol* name() const                   { return _name; }
   void set_name(Symbol* n);
 
+  virtual void release_C_heap_structures();
+
  public:
-  // jvm support
-  virtual jint compute_modifier_flags(TRAPS) const;
+  virtual jint compute_modifier_flags() const = 0;
 
   // JVMTI support
   virtual jint jvmti_class_status() const;

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1997, 2019, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 1997, 2021, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -23,20 +23,20 @@
  */
 
 #include "precompiled.hpp"
+#include "jvm_io.h"
+#include "cds/heapShared.hpp"
 #include "classfile/classLoaderData.inline.hpp"
 #include "classfile/classLoaderDataGraph.inline.hpp"
-#include "classfile/dictionary.hpp"
 #include "classfile/javaClasses.hpp"
 #include "classfile/moduleEntry.hpp"
 #include "classfile/systemDictionary.hpp"
+#include "classfile/systemDictionaryShared.hpp"
+#include "classfile/vmClasses.hpp"
 #include "classfile/vmSymbols.hpp"
 #include "gc/shared/collectedHeap.inline.hpp"
 #include "logging/log.hpp"
-#include "memory/heapInspection.hpp"
-#include "memory/heapShared.hpp"
 #include "memory/metadataFactory.hpp"
 #include "memory/metaspaceClosure.hpp"
-#include "memory/metaspaceShared.hpp"
 #include "memory/oopFactory.hpp"
 #include "memory/resourceArea.hpp"
 #include "memory/universe.hpp"
@@ -45,14 +45,17 @@
 #include "oops/klass.inline.hpp"
 #include "oops/oop.inline.hpp"
 #include "oops/oopHandle.inline.hpp"
+#include "prims/jvmtiExport.hpp"
+#include "runtime/arguments.hpp"
 #include "runtime/atomic.hpp"
 #include "runtime/handles.inline.hpp"
 #include "utilities/macros.hpp"
+#include "utilities/powerOfTwo.hpp"
 #include "utilities/stack.inline.hpp"
 
 void Klass::set_java_mirror(Handle m) {
   assert(!m.is_null(), "New mirror should never be null.");
-  assert(_java_mirror.resolve() == NULL, "should only be used to initialize mirror");
+  assert(_java_mirror.is_empty(), "should only be used to initialize mirror");
   _java_mirror = class_loader_data()->add_handle(m);
 }
 
@@ -60,9 +63,13 @@ oop Klass::java_mirror_no_keepalive() const {
   return _java_mirror.peek();
 }
 
+void Klass::replace_java_mirror(oop mirror) {
+  _java_mirror.replace(mirror);
+}
+
 bool Klass::is_cloneable() const {
   return _access_flags.is_cloneable_fast() ||
-         is_subtype_of(SystemDictionary::Cloneable_klass());
+         is_subtype_of(vmClasses::Cloneable_klass());
 }
 
 void Klass::set_is_cloneable() {
@@ -79,6 +86,10 @@ void Klass::set_is_cloneable() {
 void Klass::set_name(Symbol* n) {
   _name = n;
   if (_name != NULL) _name->increment_refcount();
+
+  if (Arguments::is_dumping_archive() && is_instance_klass()) {
+    SystemDictionaryShared::init_dumptime_info(InstanceKlass::cast(this));
+  }
 }
 
 bool Klass::is_subclass_of(const Klass* k) const {
@@ -92,6 +103,10 @@ bool Klass::is_subclass_of(const Klass* k) const {
     t = t->super();
   }
   return false;
+}
+
+void Klass::release_C_heap_structures() {
+  if (_name != NULL) _name->decrement_refcount();
 }
 
 bool Klass::search_secondary_supers(Klass* k) const {
@@ -186,14 +201,11 @@ void* Klass::operator new(size_t size, ClassLoaderData* loader_data, size_t word
 // which zeros out memory - calloc equivalent.
 // The constructor is also used from CppVtableCloner,
 // which doesn't zero out the memory before calling the constructor.
-// Need to set the _java_mirror field explicitly to not hit an assert that the field
-// should be NULL before setting it.
 Klass::Klass(KlassID id) : _id(id),
-                           _java_mirror(NULL),
                            _prototype_header(markWord::prototype()),
                            _shared_class_path_index(-1) {
   CDS_ONLY(_shared_class_flags = 0;)
-  CDS_JAVA_HEAP_ONLY(_archived_mirror = 0;)
+  CDS_JAVA_HEAP_ONLY(_archived_mirror_index = -1;)
   _primary_supers[0] = this;
   set_super_check_offset(in_bytes(primary_supers_offset()));
 }
@@ -232,8 +244,8 @@ void Klass::initialize_supers(Klass* k, Array<InstanceKlass*>* transitive_interf
     set_super(NULL);
     _primary_supers[0] = this;
     assert(super_depth() == 0, "Object must already be initialized properly");
-  } else if (k != super() || k == SystemDictionary::Object_klass()) {
-    assert(super() == NULL || super() == SystemDictionary::Object_klass(),
+  } else if (k != super() || k == vmClasses::Object_klass()) {
+    assert(super() == NULL || super() == vmClasses::Object_klass(),
            "initialize this only once to a non-trivial value");
     set_super(k);
     Klass* sup = k;
@@ -413,7 +425,9 @@ void Klass::set_next_sibling(Klass* s) {
 }
 
 void Klass::append_to_sibling_list() {
-  assert_locked_or_safepoint(Compile_lock);
+  if (Universe::is_fully_initialized()) {
+    assert_locked_or_safepoint(Compile_lock);
+  }
   debug_only(verify();)
   // add ourselves to superklass' subklass list
   InstanceKlass* super = superklass();
@@ -459,7 +473,7 @@ void Klass::clean_weak_klass_links(bool unloading_occurred, bool clean_alive_kla
     return;
   }
 
-  Klass* root = SystemDictionary::Object_klass();
+  Klass* root = vmClasses::Object_klass();
   Stack<Klass*, mtGC> stack;
 
   stack.push(root);
@@ -544,7 +558,7 @@ void Klass::remove_java_mirror() {
     log_trace(cds, unshareable)("remove java_mirror: %s", external_name());
   }
   // Just null out the mirror.  The class_loader_data() no longer exists.
-  _java_mirror = NULL;
+  clear_java_mirror_handle();
 }
 
 void Klass::restore_unshareable_info(ClassLoaderData* loader_data, Handle protection_domain, TRAPS) {
@@ -560,10 +574,9 @@ void Klass::restore_unshareable_info(ClassLoaderData* loader_data, Handle protec
   // set.  We leave the class on the CLD list, even if incomplete so that we don't
   // modify the CLD list outside a safepoint.
   if (class_loader_data() == NULL) {
-    // Restore class_loader_data to the null class loader data
     set_class_loader_data(loader_data);
 
-    // Add to null class loader list first before creating the mirror
+    // Add to class loader list first before creating the mirror
     // (same order as class file parsing)
     loader_data->add_class(this);
   }
@@ -584,7 +597,7 @@ void Klass::restore_unshareable_info(ClassLoaderData* loader_data, Handle protec
   // Obtain java.lang.Module, if available
   Handle module_handle(THREAD, ((module_entry != NULL) ? module_entry->module() : (oop)NULL));
 
-  if (this->has_raw_archived_mirror()) {
+  if (this->has_archived_mirror_index()) {
     ResourceMark rm(THREAD);
     log_debug(cds, mirror)("%s has raw archived mirror", external_name());
     if (HeapShared::open_archive_heap_region_mapped()) {
@@ -598,63 +611,38 @@ void Klass::restore_unshareable_info(ClassLoaderData* loader_data, Handle protec
 
     // No archived mirror data
     log_debug(cds, mirror)("No archived mirror data for %s", external_name());
-    _java_mirror = NULL;
-    this->clear_has_raw_archived_mirror();
+    clear_java_mirror_handle();
+    this->clear_archived_mirror_index();
   }
 
   // Only recreate it if not present.  A previous attempt to restore may have
   // gotten an OOM later but keep the mirror if it was created.
   if (java_mirror() == NULL) {
+    ResourceMark rm(THREAD);
     log_trace(cds, mirror)("Recreate mirror for %s", external_name());
-    java_lang_Class::create_mirror(this, loader, module_handle, protection_domain, CHECK);
+    java_lang_Class::create_mirror(this, loader, module_handle, protection_domain, Handle(), CHECK);
   }
 }
 
 #if INCLUDE_CDS_JAVA_HEAP
-// Used at CDS dump time to access the archived mirror. No GC barrier.
-oop Klass::archived_java_mirror_raw() {
-  assert(has_raw_archived_mirror(), "must have raw archived mirror");
-  return CompressedOops::decode(_archived_mirror);
+oop Klass::archived_java_mirror() {
+  assert(has_archived_mirror_index(), "must have archived mirror");
+  return HeapShared::get_root(_archived_mirror_index);
 }
 
-narrowOop Klass::archived_java_mirror_raw_narrow() {
-  assert(has_raw_archived_mirror(), "must have raw archived mirror");
-  return _archived_mirror;
+void Klass::clear_archived_mirror_index() {
+  if (_archived_mirror_index >= 0) {
+    HeapShared::clear_root(_archived_mirror_index);
+  }
+  _archived_mirror_index = -1;
 }
 
 // No GC barrier
-void Klass::set_archived_java_mirror_raw(oop m) {
+void Klass::set_archived_java_mirror(oop m) {
   assert(DumpSharedSpaces, "called only during runtime");
-  _archived_mirror = CompressedOops::encode(m);
+  _archived_mirror_index = HeapShared::append_root(m);
 }
 #endif // INCLUDE_CDS_JAVA_HEAP
-
-Klass* Klass::array_klass_or_null(int rank) {
-  EXCEPTION_MARK;
-  // No exception can be thrown by array_klass_impl when called with or_null == true.
-  // (In anycase, the execption mark will fail if it do so)
-  return array_klass_impl(true, rank, THREAD);
-}
-
-
-Klass* Klass::array_klass_or_null() {
-  EXCEPTION_MARK;
-  // No exception can be thrown by array_klass_impl when called with or_null == true.
-  // (In anycase, the execption mark will fail if it do so)
-  return array_klass_impl(true, THREAD);
-}
-
-
-Klass* Klass::array_klass_impl(bool or_null, int rank, TRAPS) {
-  fatal("array_klass should be dispatched to InstanceKlass, ObjArrayKlass or TypeArrayKlass");
-  return NULL;
-}
-
-
-Klass* Klass::array_klass_impl(bool or_null, TRAPS) {
-  fatal("array_klass should be dispatched to InstanceKlass, ObjArrayKlass or TypeArrayKlass");
-  return NULL;
-}
 
 void Klass::check_array_allocation_length(int length, int max_length, TRAPS) {
   if (length > max_length) {
@@ -670,23 +658,32 @@ void Klass::check_array_allocation_length(int length, int max_length, TRAPS) {
   }
 }
 
+// Replace the last '+' char with '/'.
+static char* convert_hidden_name_to_java(Symbol* name) {
+  size_t name_len = name->utf8_length();
+  char* result = NEW_RESOURCE_ARRAY(char, name_len + 1);
+  name->as_klass_external_name(result, (int)name_len + 1);
+  for (int index = (int)name_len; index > 0; index--) {
+    if (result[index] == '+') {
+      result[index] = JVM_SIGNATURE_SLASH;
+      break;
+    }
+  }
+  return result;
+}
+
 // In product mode, this function doesn't have virtual function calls so
 // there might be some performance advantage to handling InstanceKlass here.
 const char* Klass::external_name() const {
   if (is_instance_klass()) {
     const InstanceKlass* ik = static_cast<const InstanceKlass*>(this);
-    if (ik->is_unsafe_anonymous()) {
-      char addr_buf[20];
-      jio_snprintf(addr_buf, 20, "/" INTPTR_FORMAT, p2i(ik));
-      size_t addr_len = strlen(addr_buf);
-      size_t name_len = name()->utf8_length();
-      char*  result   = NEW_RESOURCE_ARRAY(char, name_len + addr_len + 1);
-      name()->as_klass_external_name(result, (int) name_len + 1);
-      assert(strlen(result) == name_len, "");
-      strcpy(result + name_len, addr_buf);
-      assert(strlen(result) == name_len + addr_len, "");
+    if (ik->is_hidden()) {
+      char* result = convert_hidden_name_to_java(name());
       return result;
     }
+  } else if (is_objArray_klass() && ObjArrayKlass::cast(this)->bottom_klass()->is_hidden()) {
+    char* result = convert_hidden_name_to_java(name());
+    return result;
   }
   if (name() == NULL)  return "<unknown>";
   return name()->as_klass_external_name();
@@ -694,6 +691,18 @@ const char* Klass::external_name() const {
 
 const char* Klass::signature_name() const {
   if (name() == NULL)  return "<unknown>";
+  if (is_objArray_klass() && ObjArrayKlass::cast(this)->bottom_klass()->is_hidden()) {
+    size_t name_len = name()->utf8_length();
+    char* result = NEW_RESOURCE_ARRAY(char, name_len + 1);
+    name()->as_C_string(result, (int)name_len + 1);
+    for (int index = (int)name_len; index > 0; index--) {
+      if (result[index] == '+') {
+        result[index] = JVM_SIGNATURE_DOT;
+        break;
+      }
+    }
+    return result;
+  }
   return name()->as_C_string();
 }
 
@@ -701,11 +710,6 @@ const char* Klass::external_kind() const {
   if (is_interface()) return "interface";
   if (is_abstract()) return "abstract class";
   return "class";
-}
-
-// Unless overridden, modifier_flags is 0.
-jint Klass::compute_modifier_flags(TRAPS) const {
-  return 0;
 }
 
 int Klass::atomic_incr_biased_lock_revocation_count() {
@@ -730,6 +734,7 @@ void Klass::print_on(outputStream* st) const {
 
 #define BULLET  " - "
 
+// Caller needs ResourceMark
 void Klass::oop_print_on(oop obj, outputStream* st) {
   // print title
   st->print_cr("%s ", internal_name());
@@ -755,18 +760,6 @@ void Klass::oop_print_value_on(oop obj, outputStream* st) {
   st->print("%s", internal_name());
   obj->print_address_on(st);
 }
-
-#if INCLUDE_SERVICES
-// Size Statistics
-void Klass::collect_statistics(KlassSizeStats *sz) const {
-  sz->_klass_bytes = sz->count(this);
-  sz->_mirror_bytes = sz->count(java_mirror_no_keepalive());
-  sz->_secondary_supers_bytes = sz->count_array(secondary_supers());
-
-  sz->_ro_bytes += sz->_secondary_supers_bytes;
-  sz->_rw_bytes += sz->_klass_bytes + sz->_mirror_bytes;
-}
-#endif // INCLUDE_SERVICES
 
 // Verification
 

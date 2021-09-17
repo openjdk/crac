@@ -1,5 +1,6 @@
 /*
  * Copyright (c) 2018, Red Hat, Inc. All rights reserved.
+ * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 2 only, as
@@ -23,10 +24,9 @@
 
 /* @test TestWrongBarrierDisable
  * @summary Test that disabling wrong barriers fails early
- * @key gc
- * @requires vm.gc.Shenandoah & !vm.graal.enabled
+ * @requires vm.gc.Shenandoah
  * @library /test/lib
- * @run main/othervm TestWrongBarrierDisable
+ * @run driver TestWrongBarrierDisable
  */
 
 import java.util.*;
@@ -39,30 +39,34 @@ public class TestWrongBarrierDisable {
     public static void main(String[] args) throws Exception {
         String[] concurrent = {
                 "ShenandoahLoadRefBarrier",
-                "ShenandoahCASBarrier",
-                "ShenandoahCloneBarrier",
                 "ShenandoahSATBBarrier",
-                "ShenandoahKeepAliveBarrier",
-        };
-
-        String[] traversal = {
-                "ShenandoahLoadRefBarrier",
                 "ShenandoahCASBarrier",
                 "ShenandoahCloneBarrier",
+                "ShenandoahNMethodBarrier",
+                "ShenandoahStackWatermarkBarrier",
+        };
+        String[] iu = {
+                "ShenandoahLoadRefBarrier",
+                "ShenandoahIUBarrier",
+                "ShenandoahCASBarrier",
+                "ShenandoahCloneBarrier",
+                "ShenandoahNMethodBarrier",
+                "ShenandoahStackWatermarkBarrier",
         };
 
         shouldFailAll("-XX:ShenandoahGCHeuristics=adaptive",   concurrent);
         shouldFailAll("-XX:ShenandoahGCHeuristics=static",     concurrent);
         shouldFailAll("-XX:ShenandoahGCHeuristics=compact",    concurrent);
         shouldFailAll("-XX:ShenandoahGCHeuristics=aggressive", concurrent);
-        shouldFailAll("-XX:ShenandoahGCMode=traversal",        traversal);
+        shouldFailAll("-XX:ShenandoahGCMode=iu",               iu);
         shouldPassAll("-XX:ShenandoahGCMode=passive",          concurrent);
-        shouldPassAll("-XX:ShenandoahGCMode=passive",          traversal);
+        shouldPassAll("-XX:ShenandoahGCMode=passive",          iu);
     }
 
     private static void shouldFailAll(String h, String[] barriers) throws Exception {
         for (String b : barriers) {
             ProcessBuilder pb = ProcessTools.createJavaProcessBuilder(
+                    "-Xmx128m",
                     "-XX:+UnlockDiagnosticVMOptions",
                     "-XX:+UnlockExperimentalVMOptions",
                     "-XX:+UseShenandoahGC",
@@ -72,7 +76,7 @@ public class TestWrongBarrierDisable {
             );
             OutputAnalyzer output = new OutputAnalyzer(pb.start());
             output.shouldNotHaveExitValue(0);
-            output.shouldContain("Heuristics needs ");
+            output.shouldContain("GC mode needs ");
             output.shouldContain("to work correctly");
         }
     }
@@ -80,6 +84,7 @@ public class TestWrongBarrierDisable {
     private static void shouldPassAll(String h, String[] barriers) throws Exception {
         for (String b : barriers) {
             ProcessBuilder pb = ProcessTools.createJavaProcessBuilder(
+                    "-Xmx128m",
                     "-XX:+UnlockDiagnosticVMOptions",
                     "-XX:+UnlockExperimentalVMOptions",
                     "-XX:+UseShenandoahGC",

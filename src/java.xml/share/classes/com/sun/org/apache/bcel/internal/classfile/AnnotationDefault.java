@@ -30,12 +30,11 @@ import com.sun.org.apache.bcel.internal.Const;
 /**
  * Represents the default value of a annotation for a method info
  *
- * @version $Id: AnnotationDefault 1 2005-02-13 03:15:08Z dbrosius $
  * @since 6.0
  */
 public class AnnotationDefault extends Attribute {
 
-    private ElementValue default_value;
+    private ElementValue defaultValue;
 
     /**
      * @param name_index    Index pointing to the name <em>Code</em>
@@ -45,7 +44,7 @@ public class AnnotationDefault extends Attribute {
      */
     AnnotationDefault(final int name_index, final int length, final DataInput input, final ConstantPool constant_pool) throws IOException {
         this(name_index, length, (ElementValue) null, constant_pool);
-        default_value = ElementValue.readElementValue(input, constant_pool);
+        defaultValue = ElementValue.readElementValue(input, constant_pool);
     }
 
     /**
@@ -56,7 +55,7 @@ public class AnnotationDefault extends Attribute {
      */
     public AnnotationDefault(final int name_index, final int length, final ElementValue defaultValue, final ConstantPool constant_pool) {
         super(Const.ATTR_ANNOTATION_DEFAULT, name_index, length, constant_pool);
-        this.default_value = defaultValue;
+        this.defaultValue = defaultValue;
     }
 
     /**
@@ -75,14 +74,14 @@ public class AnnotationDefault extends Attribute {
      * @param defaultValue the default value of this methodinfo's annotation
      */
     public final void setDefaultValue(final ElementValue defaultValue) {
-        default_value = defaultValue;
+        this.defaultValue = defaultValue;
     }
 
     /**
      * @return the default value
      */
     public final ElementValue getDefaultValue() {
-        return default_value;
+        return defaultValue;
     }
 
     @Override
@@ -93,6 +92,6 @@ public class AnnotationDefault extends Attribute {
     @Override
     public final void dump(final DataOutputStream dos) throws IOException {
         super.dump(dos);
-        default_value.dump(dos);
+        defaultValue.dump(dos);
     }
 }

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2003, 2019, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2003, 2020, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -25,9 +25,11 @@
 
 package jdk.javadoc.internal.doclets.toolkit.taglets;
 
+import java.util.Set;
 import javax.lang.model.element.Element;
 
 import com.sun.source.doctree.DocTree;
+import jdk.javadoc.doclet.Taglet.Location;
 import jdk.javadoc.internal.doclets.toolkit.Content;
 
 /**
@@ -35,118 +37,125 @@ import jdk.javadoc.internal.doclets.toolkit.Content;
  */
 
 public interface Taglet {
+    /**
+     * Returns the set of allowed locations for a block tag handled by this taglet.
+     *
+     * @return the set of allowable locations
+     */
+    Set<Location> getAllowedLocations();
 
     /**
-     * Return true if this <code>Taglet</code>
-     * is used in field documentation.
-     * @return true if this <code>Taglet</code>
-     * is used in field documentation and false
-     * otherwise.
+     * Indicates whether this {@code Taglet} can be used in field documentation.
+     *
+     * @return {@code true} if this {@code Taglet} can be used in field documentation
+     *         and {@code false} otherwise
      */
-    public abstract boolean inField();
+    boolean inField();
 
     /**
-     * Return true if this <code>Taglet</code>
-     * is used in constructor documentation.
-     * @return true if this <code>Taglet</code>
-     * is used in constructor documentation and false
-     * otherwise.
+     * Indicates whether this {@code Taglet} can be used in constructor documentation.
+     *
+     * @return {@code true} if this {@code Taglet} can be used in constructor documentation
+     *         and {@code false} otherwise
      */
-    public abstract boolean inConstructor();
+    boolean inConstructor();
 
     /**
-     * Return true if this <code>Taglet</code>
-     * is used in method documentation.
-     * @return true if this <code>Taglet</code>
-     * is used in method documentation and false
-     * otherwise.
+     * Indicates whether this {@code Taglet} can be used in method documentation.
+     *
+     * @return {@code true} if this {@code Taglet} can be used in method documentation
+     *         and {@code false} otherwise
      */
-    public abstract boolean inMethod();
+    boolean inMethod();
 
     /**
-     * Return true if this <code>Taglet</code>
-     * is used in overview documentation.
-     * @return true if this <code>Taglet</code>
-     * is used in method documentation and false
-     * otherwise.
+     * Indicates whether this {@code Taglet} can be used in overview documentation.
+     *
+     * @return {@code true} if this {@code Taglet} can be used in overview documentation
+     *         and {@code false} otherwise
      */
-    public abstract boolean inOverview();
+    boolean inOverview();
 
     /**
-     * Return true if this <code>Taglet</code>
-     * is used in module documentation.
-     * @return true if this <code>Taglet</code>
-     * is used in module documentation and false
-     * otherwise.
+     * Indicates whether this {@code Taglet} can be used in module documentation.
+     *
+     * @return {@code true} if this {@code Taglet} can be used in module documentation
+     *         and {@code false} otherwise
      */
-    public abstract boolean inModule();
+    boolean inModule();
 
     /**
-     * Return true if this <code>Taglet</code>
-     * is used in package documentation.
-     * @return true if this <code>Taglet</code>
-     * is used in package documentation and false
-     * otherwise.
+     * Indicates whether this {@code Taglet} can be used in package documentation.
+     *
+     * @return {@code true} if this {@code Taglet} can be used in package documentation
+     *         and {@code false} otherwise
      */
-    public abstract boolean inPackage();
+    boolean inPackage();
 
     /**
-     * Return true if this <code>Taglet</code>
-     * is used in type documentation (classes or
-     * interfaces).
-     * @return true if this <code>Taglet</code>
-     * is used in type documentation and false
-     * otherwise.
+     * Indicates whether this {@code Taglet} can be used in type documentation (classes or interfaces).
+     *
+     * @return {@code true} if this {@code Taglet} can be used in type documentation
+     *         and {@code false} otherwise
      */
-    public abstract boolean inType();
+    boolean inType();
 
     /**
-     * Return true if this <code>Taglet</code>
-     * is an inline tag. Return false otherwise.
-     * @return true if this <code>Taglet</code>
-     * is an inline tag and false otherwise.
+     * Indicates whether this {@code Taglet} represents an inline tag.
+     *
+     * @return {@code true} if this {@code Taglet} represents an inline tag
+     *         and {@code false} otherwise
      */
-    public abstract boolean isInlineTag();
+    boolean isInlineTag();
 
     /**
-     * Return the name of this custom tag.
-     * @return the name of this custom tag.
+     * Indicates whether this {@code Taglet} represents a block tag.
+     *
+     * @return {@code true} if this {@code Taglet} represents a block tag
+     * @implSpec This implementation returns the inverse
+     * result to {@code isInlineTag}.
      */
-    public abstract String getName();
+    default boolean isBlockTag() {
+        return !isInlineTag();
+    }
 
     /**
-     * Given the <code>Tag</code> representation of this custom
-     * tag, return its Content representation, which is output
-     * to the generated page.
-     * @param holder the element holding the tag
-     * @param tag the <code>Tag</code> representation of this custom tag.
-     * @param writer a {@link TagletWriter} Taglet writer.
-     * @throws UnsupportedOperationException thrown when the method is not supported by the taglet.
-     * @return the Content representation of this <code>Tag</code>.
+     * Returns the name of this tag.
+     * @return the name of this tag
      */
-    public abstract Content getTagletOutput(Element holder, DocTree tag, TagletWriter writer) throws
-            UnsupportedOperationException;
+    String getName();
 
     /**
-     * Given a <code>Doc</code> object, check if it holds any tags of
-     * this type.  If it does, return the string representing the output.
-     * If it does not, return null.
-     * @param holder a {@link Doc} object holding the custom tag.
-     * @param writer a {@link TagletWriter} Taglet writer.
-     * @throws UnsupportedTagletOperationException thrown when the method is not
-     *         supported by the taglet.
-     * @return the TagletOutput representation of this <code>Tag</code>.
+     * Returns the content to be included in the generated output for an
+     * instance of an inline tag handled by this taglet.
+     *
+     * @param owner  the element for the enclosing doc comment
+     * @param tag    the tag
+     * @param writer the taglet-writer used in this doclet
+     *
+     * @return the output for this tag
+     * @throws UnsupportedTagletOperationException if the method is not supported by the taglet
      */
-    public abstract Content getTagletOutput(Element holder, TagletWriter writer) throws
+    Content getInlineTagOutput(Element owner, DocTree tag, TagletWriter writer) throws
             UnsupportedTagletOperationException;
 
-    @Override
-    public abstract String toString();
+    /**
+     * Returns the content to be included in the generated output for
+     * all instances of block tags handled by this taglet.
+     *
+     * @param owner  the element for the enclosing doc comment
+     * @param writer the taglet-writer used in this doclet
+     *
+     * @return the output for this tag
+     * @throws UnsupportedTagletOperationException if the method is not supported by the taglet
+     */
+    Content getAllBlockTagOutput(Element owner, TagletWriter writer) throws
+            UnsupportedTagletOperationException;
 
-    static class UnsupportedTagletOperationException extends UnsupportedOperationException {
+    class UnsupportedTagletOperationException extends UnsupportedOperationException {
         private static final long serialVersionUID = -3530273193380250271L;
         public UnsupportedTagletOperationException(String message) {
             super(message);
         }
-    };
+    }
 }

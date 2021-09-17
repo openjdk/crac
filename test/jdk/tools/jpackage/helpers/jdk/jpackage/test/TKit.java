@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2019, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2019, 2021, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -22,14 +22,34 @@
  */
 package jdk.jpackage.test;
 
+import java.io.BufferedReader;
+import java.io.File;
 import java.io.FileOutputStream;
+import java.io.FileReader;
 import java.io.IOException;
 import java.io.PrintStream;
 import java.lang.reflect.InvocationTargetException;
-import java.nio.file.*;
+import java.nio.file.FileSystems;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.StandardWatchEventKinds;
+import java.nio.file.StandardCopyOption;
 import static java.nio.file.StandardWatchEventKinds.ENTRY_CREATE;
 import static java.nio.file.StandardWatchEventKinds.ENTRY_MODIFY;
-import java.util.*;
+import java.nio.file.WatchEvent;
+import java.nio.file.WatchKey;
+import java.nio.file.WatchService;
+import java.text.SimpleDateFormat;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.Collections;
+import java.util.Comparator;
+import java.util.Date;
+import java.util.Iterator;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+import java.util.Set;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.BiPredicate;
@@ -52,12 +72,16 @@ final public class TKit {
 
         for (int i = 0; i != 10; ++i) {
             if (root.resolve("apps").toFile().isDirectory()) {
-                return root.toAbsolutePath();
+                return root.normalize().toAbsolutePath();
             }
             root = root.resolve("..");
         }
 
         throw new RuntimeException("Failed to locate apps directory");
+    }).get();
+
+    public static final Path SRC_ROOT = Functional.identity(() -> {
+        return TEST_SRC_ROOT.resolve("../../../../src/jdk.jpackage").normalize().toAbsolutePath();
     }).get();
 
     public final static String ICON_SUFFIX = Functional.identity(() -> {
@@ -75,20 +99,6 @@ final public class TKit {
 
         throw throwUnknownPlatformError();
     }).get();
-
-    public static void run(String args[], ThrowingRunnable testBody) {
-        if (currentTest != null) {
-            throw new IllegalStateException(
-                    "Unexpeced nested or concurrent Test.run() call");
-        }
-
-        TestInstance test = new TestInstance(testBody);
-        ThrowingRunnable.toRunnable(() -> runTests(List.of(test))).run();
-        test.rethrowIfSkipped();
-        if (!test.passed()) {
-            throw new RuntimeException();
-        }
-    }
 
     static void withExtraLogStream(ThrowingRunnable action) {
         if (extraLogStream != null) {
@@ -150,14 +160,6 @@ final public class TKit {
         return currentTest.workDir();
     }
 
-    static Path defaultInputDir() {
-        return workDir().resolve("input");
-    }
-
-    static Path defaultOutputDir() {
-        return workDir().resolve("output");
-    }
-
     static String getCurrentDefaultAppName() {
         // Construct app name from swapping and joining test base name
         // and test function name.
@@ -182,21 +184,60 @@ final public class TKit {
         return ((OS.contains("nix") || OS.contains("nux")));
     }
 
+    public static boolean isUbuntu() {
+        if (!isLinux()) {
+            return false;
+        }
+        File releaseFile = new File("/etc/os-release");
+        if (releaseFile.exists()) {
+            try (BufferedReader lineReader = new BufferedReader(new FileReader(releaseFile))) {
+                String lineText = null;
+                while ((lineText = lineReader.readLine()) != null) {
+                    if (lineText.indexOf("NAME=\"Ubuntu") != -1) {
+                        lineReader.close();
+                        return true;
+                    }
+                }
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+        }
+        return false;
+    }
+
+    private static String addTimestamp(String msg) {
+        SimpleDateFormat sdf = new SimpleDateFormat("HH:mm:ss.SSS");
+        Date time = new Date(System.currentTimeMillis());
+        return String.format("[%s] %s", sdf.format(time), msg);
+    }
+
     static void log(String v) {
+        v = addTimestamp(v);
         System.out.println(v);
         if (extraLogStream != null) {
             extraLogStream.println(v);
         }
     }
 
-    public static void createTextFile(Path propsFilename, Collection<String> lines) {
-        createTextFile(propsFilename, lines.stream());
+    static Path removeRootFromAbsolutePath(Path v) {
+        if (!v.isAbsolute()) {
+            throw new IllegalArgumentException();
+        }
+
+        if (v.getNameCount() == 0) {
+            return Path.of("");
+        }
+        return v.subpath(0, v.getNameCount());
     }
 
-    public static void createTextFile(Path propsFilename, Stream<String> lines) {
+    public static void createTextFile(Path filename, Collection<String> lines) {
+        createTextFile(filename, lines.stream());
+    }
+
+    public static void createTextFile(Path filename, Stream<String> lines) {
         trace(String.format("Create [%s] text file...",
-                propsFilename.toAbsolutePath().normalize()));
-        ThrowingRunnable.toRunnable(() -> Files.write(propsFilename,
+                filename.toAbsolutePath().normalize()));
+        ThrowingRunnable.toRunnable(() -> Files.write(filename,
                 lines.peek(TKit::trace).collect(Collectors.toList()))).run();
         trace("Done");
     }
@@ -275,18 +316,16 @@ final public class TKit {
         return Files.createDirectory(createUniqueFileName(role));
     }
 
-    public static Path createTempFile(String role, String suffix) throws
+    public static Path createTempFile(Path templateFile) throws
             IOException {
-        if (role == null) {
-            return Files.createTempFile(workDir(), TEMP_FILE_PREFIX, suffix);
-        }
-        return Files.createFile(createUniqueFileName(role));
+        return Files.createFile(createUniqueFileName(
+                templateFile.getFileName().toString()));
     }
 
-    public static Path withTempFile(String role, String suffix,
+    public static Path withTempFile(Path templateFile,
             ThrowingConsumer<Path> action) {
         final Path tempFile = ThrowingSupplier.toSupplier(() -> createTempFile(
-                role, suffix)).get();
+                templateFile)).get();
         boolean keepIt = true;
         try {
             ThrowingConsumer.toConsumer(action).accept(tempFile);
@@ -381,6 +420,15 @@ final public class TKit {
         private boolean contentsOnly;
     }
 
+    public static boolean deleteIfExists(Path path) throws IOException {
+        if (isWindows()) {
+            if (path.toFile().exists()) {
+                Files.setAttribute(path, "dos:readonly", false);
+            }
+        }
+        return Files.deleteIfExists(path);
+    }
+
     /**
      * Deletes contents of the given directory recursively. Shortcut for
      * <code>deleteDirectoryContentsRecursive(path, null)</code>
@@ -449,10 +497,11 @@ final public class TKit {
     }
 
     public static Path createRelativePathCopy(final Path file) {
-        Path fileCopy = workDir().resolve(file.getFileName()).toAbsolutePath().normalize();
-
-        ThrowingRunnable.toRunnable(() -> Files.copy(file, fileCopy,
-                StandardCopyOption.REPLACE_EXISTING)).run();
+        Path fileCopy = ThrowingSupplier.toSupplier(() -> {
+            Path localPath = createTempFile(file);
+            Files.copy(file, localPath, StandardCopyOption.REPLACE_EXISTING);
+            return localPath;
+        }).get().toAbsolutePath().normalize();
 
         final Path basePath = Path.of(".").toAbsolutePath().normalize();
         try {
@@ -635,7 +684,18 @@ final public class TKit {
         }
     }
 
-     public static void assertDirectoryExists(Path path) {
+    public static void assertPathNotEmptyDirectory(Path path) {
+        if (Files.isDirectory(path)) {
+            ThrowingRunnable.toRunnable(() -> {
+                try (var files = Files.list(path)) {
+                    TKit.assertFalse(files.findFirst().isEmpty(), String.format
+                            ("Check [%s] is not an empty directory", path));
+                }
+            }).run();
+         }
+    }
+
+    public static void assertDirectoryExists(Path path) {
         assertPathExists(path, true);
         assertTrue(path.toFile().isDirectory(), String.format(
                 "Check [%s] is a directory", path));
@@ -713,32 +773,32 @@ final public class TKit {
         }
     }
 
-    public final static class TextStreamAsserter {
-        TextStreamAsserter(String value) {
+    public final static class TextStreamVerifier {
+        TextStreamVerifier(String value) {
             this.value = value;
             predicate(String::contains);
         }
 
-        public TextStreamAsserter label(String v) {
+        public TextStreamVerifier label(String v) {
             label = v;
             return this;
         }
 
-        public TextStreamAsserter predicate(BiPredicate<String, String> v) {
+        public TextStreamVerifier predicate(BiPredicate<String, String> v) {
             predicate = v;
             return this;
         }
 
-        public TextStreamAsserter negate() {
+        public TextStreamVerifier negate() {
             negate = true;
             return this;
         }
 
-        public TextStreamAsserter orElseThrow(RuntimeException v) {
+        public TextStreamVerifier orElseThrow(RuntimeException v) {
             return orElseThrow(() -> v);
         }
 
-        public TextStreamAsserter orElseThrow(Supplier<RuntimeException> v) {
+        public TextStreamVerifier orElseThrow(Supplier<RuntimeException> v) {
             createException = v;
             return this;
         }
@@ -779,8 +839,8 @@ final public class TKit {
         final private String value;
     }
 
-    public static TextStreamAsserter assertTextStream(String what) {
-        return new TextStreamAsserter(what);
+    public static TextStreamVerifier assertTextStream(String what) {
+        return new TextStreamVerifier(what);
     }
 
     private static PrintStream openLogStream() {
@@ -809,13 +869,23 @@ final public class TKit {
         return "jpackage.test." + propertyName;
     }
 
-    static Set<String> tokenizeConfigProperty(String propertyName) {
+    static List<String> tokenizeConfigPropertyAsList(String propertyName) {
         final String val = TKit.getConfigProperty(propertyName);
         if (val == null) {
             return null;
         }
-        return Stream.of(val.toLowerCase().split(",")).map(String::strip).filter(
-                Predicate.not(String::isEmpty)).collect(Collectors.toSet());
+        return Stream.of(val.toLowerCase().split(","))
+                .map(String::strip)
+                .filter(Predicate.not(String::isEmpty))
+                .collect(Collectors.toList());
+    }
+
+    static Set<String> tokenizeConfigProperty(String propertyName) {
+        List<String> tokens = tokenizeConfigPropertyAsList(propertyName);
+        if (tokens == null) {
+            return null;
+        }
+        return tokens.stream().collect(Collectors.toSet());
     }
 
     static final Path LOG_FILE = Functional.identity(() -> {

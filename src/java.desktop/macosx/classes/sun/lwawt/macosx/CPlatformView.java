@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2011, 2016, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2011, 2021, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -25,19 +25,23 @@
 
 package sun.lwawt.macosx;
 
-import java.awt.*;
+import java.awt.GraphicsDevice;
+import java.awt.GraphicsEnvironment;
+import java.awt.Point;
+import java.awt.Rectangle;
 import java.awt.geom.Rectangle2D;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 
-import sun.awt.CGraphicsConfig;
 import sun.awt.CGraphicsEnvironment;
+import sun.awt.CGraphicsDevice;
+import sun.java2d.metal.MTLLayer;
 import sun.lwawt.LWWindowPeer;
 
 import sun.java2d.SurfaceData;
 import sun.java2d.opengl.CGLLayer;
-import sun.java2d.opengl.CGLSurfaceData;
+import sun.lwawt.macosx.CFLayer;
 
 public class CPlatformView extends CFRetainedResource {
     private native long nativeCreateView(int x, int y, int width, int height, long windowLayerPtr);
@@ -48,7 +52,7 @@ public class CPlatformView extends CFRetainedResource {
 
     private LWWindowPeer peer;
     private SurfaceData surfaceData;
-    private CGLLayer windowLayer;
+    private CFLayer windowLayer;
     private CPlatformResponder responder;
 
     public CPlatformView() {
@@ -58,15 +62,18 @@ public class CPlatformView extends CFRetainedResource {
     public void initialize(LWWindowPeer peer, CPlatformResponder responder) {
         initializeBase(peer, responder);
 
-        if (!LWCToolkit.getSunAwtDisableCALayers()) {
-            this.windowLayer = createCGLayer();
-        }
+        this.windowLayer = CGraphicsDevice.usingMetalPipeline()? createMTLLayer() : createCGLayer();
         setPtr(nativeCreateView(0, 0, 0, 0, getWindowLayerPtr()));
     }
 
     public CGLLayer createCGLayer() {
         return new CGLLayer(peer);
     }
+
+    public MTLLayer createMTLLayer() {
+        return new MTLLayer(peer);
+    }
+
 
     protected void initializeBase(LWWindowPeer peer, CPlatformResponder responder) {
         this.peer = peer;
@@ -75,10 +82,6 @@ public class CPlatformView extends CFRetainedResource {
 
     public long getAWTView() {
         return ptr;
-    }
-
-    public boolean isOpaque() {
-        return !peer.isTranslucent();
     }
 
     /*
@@ -94,10 +97,6 @@ public class CPlatformView extends CFRetainedResource {
         return peer.getBounds();
     }
 
-    public Object getDestination() {
-        return peer;
-    }
-
     public void setToolTip(String msg) {
         execute(ptr -> CWrapper.NSView.setToolTip(ptr, msg));
     }
@@ -106,27 +105,8 @@ public class CPlatformView extends CFRetainedResource {
     // PAINTING METHODS
     // ----------------------------------------------------------------------
     public SurfaceData replaceSurfaceData() {
-        if (!LWCToolkit.getSunAwtDisableCALayers()) {
-            surfaceData = windowLayer.replaceSurfaceData();
-        } else {
-            if (surfaceData == null) {
-                CGraphicsConfig graphicsConfig = (CGraphicsConfig)getGraphicsConfiguration();
-                surfaceData = graphicsConfig.createSurfaceData(this);
-            } else {
-                validateSurface();
-            }
-        }
+        surfaceData = windowLayer.replaceSurfaceData();
         return surfaceData;
-    }
-
-    private void validateSurface() {
-        if (surfaceData != null) {
-            ((CGLSurfaceData)surfaceData).validate();
-        }
-    }
-
-    public GraphicsConfiguration getGraphicsConfiguration() {
-        return peer.getGraphicsConfiguration();
     }
 
     public SurfaceData getSurfaceData() {
@@ -135,18 +115,12 @@ public class CPlatformView extends CFRetainedResource {
 
     @Override
     public void dispose() {
-        if (!LWCToolkit.getSunAwtDisableCALayers()) {
-            windowLayer.dispose();
-        }
+        windowLayer.dispose();
         super.dispose();
     }
 
     public long getWindowLayerPtr() {
-        if (!LWCToolkit.getSunAwtDisableCALayers()) {
-            return windowLayer.getPointer();
-        } else {
-            return 0;
-        }
+        return windowLayer.getPointer();
     }
 
     public void setAutoResizable(boolean toResize) {

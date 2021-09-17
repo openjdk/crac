@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1999, 2019, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 1999, 2021, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -35,7 +35,8 @@
  * 8027645 8035076 8039124 8035975 8074678 6854417 8143854 8147531 7071819
  * 8151481 4867170 7080302 6728861 6995635 6736245 4916384 6328855 6192895
  * 6345469 6988218 6693451 7006761 8140212 8143282 8158482 8176029 8184706
- * 8194667 8197462 8184692 8221431 8224789 8228352 8230829
+ * 8194667 8197462 8184692 8221431 8224789 8228352 8230829 8236034 8235812
+ * 8216332 8214245 8237599 8241055 8247546 8258259 8037397
  *
  * @library /test/lib
  * @library /lib/testlibrary/java/lang
@@ -55,9 +56,13 @@ import java.io.ObjectOutputStream;
 import java.math.BigInteger;
 import java.nio.CharBuffer;
 import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Random;
 import java.util.Scanner;
 import java.util.function.Function;
@@ -66,6 +71,9 @@ import java.util.regex.Matcher;
 import java.util.regex.MatchResult;
 import java.util.regex.Pattern;
 import java.util.regex.PatternSyntaxException;
+import java.util.stream.IntStream;
+import java.util.stream.Stream;
+
 import jdk.test.lib.RandomFactory;
 
 /**
@@ -186,6 +194,11 @@ public class RegExTest {
         invalidGroupName();
         illegalRepetitionRange();
         surrogatePairWithCanonEq();
+        lineBreakWithQuantifier();
+        caseInsensitivePMatch();
+        surrogatePairOverlapRegion();
+        droppedClassesWithIntersection();
+
 
         if (failure) {
             throw new
@@ -4787,9 +4800,14 @@ public class RegExTest {
     }
 
     private static void grapheme() throws Exception {
-        Files.lines(UCDFiles.GRAPHEME_BREAK_TEST)
-            .filter( ln -> ln.length() != 0 && !ln.startsWith("#") )
+        final int[] lineNumber = new int[1];
+        Stream.concat(Files.lines(UCDFiles.GRAPHEME_BREAK_TEST),
+                Files.lines(Paths.get(System.getProperty("test.src", "."), "GraphemeTestCases.txt")))
             .forEach( ln -> {
+                    lineNumber[0]++;
+                    if (ln.length() == 0 || ln.startsWith("#")) {
+                        return;
+                    }
                     ln = ln.replaceAll("\\s+|\\([a-zA-Z]+\\)|\\[[a-zA-Z]]+\\]|#.*", "");
                     // System.out.println(str);
                     String[] strs = ln.split("\u00f7|\u00d7");
@@ -4810,22 +4828,69 @@ public class RegExTest {
                         }
                     }
                     Pattern p = Pattern.compile("\\X");
+                    // (1) test \X directly
                     Matcher m = p.matcher(src.toString());
-                    Scanner s = new Scanner(src.toString()).useDelimiter("\\b{g}");
                     for (String g : graphemes) {
                         // System.out.printf("     grapheme:=[%s]%n", g);
-                        // (1) test \\X directly
-                        if (!m.find() || !m.group().equals(g)) {
-                            System.out.println("Failed \\X [" + ln + "] : " + g);
+                        String group = null;
+                        if (!m.find() || !(group = m.group()).equals(g)) {
+                            System.out.println("Failed pattern \\X [" + ln + "] : "
+                                    + "expected: " + g + " - actual: " + group
+                                    + "(line " + lineNumber[0] + ")");
                             failCount++;
                         }
-                        // (2) test \\b{g} + \\X  via Scanner
-                        boolean hasNext = s.hasNext(p);
-                        // if (!s.hasNext() || !s.next().equals(next)) {
-                        if (!s.hasNext(p) || !s.next(p).equals(g)) {
-                            System.out.println("Failed b{g} [" + ln + "] : " + g);
+                    }
+                    if (m.find()) {
+                        failCount++;
+                    }
+                    // test \b{g} without \X via Pattern
+                    Pattern pbg = Pattern.compile("\\b{g}");
+                    m = pbg.matcher(src.toString());
+                    m.find();
+                    int prev = m.end();
+                    for (String g : graphemes) {
+                        String group = null;
+                        if (!m.find() || !(group = src.substring(prev, m.end())).equals(g)) {
+                            System.out.println("Failed pattern \\b{g} [" + ln + "] : "
+                                    + "expected: " + g + " - actual: " + group
+                                    + "(line " + lineNumber[0] + ")");
                             failCount++;
                         }
+                        if (!"".equals(m.group())) {
+                            failCount++;
+                        }
+                        prev = m.end();
+                    }
+                    if (m.find()) {
+                        failCount++;
+                    }
+                    // (2) test \b{g} + \X  via Scanner
+                    Scanner s = new Scanner(src.toString()).useDelimiter("\\b{g}");
+                    for (String g : graphemes) {
+                        String next = null;
+                        if (!s.hasNext(p) || !(next = s.next(p)).equals(g)) {
+                            System.out.println("Failed \\b{g} [" + ln + "] : "
+                                    + "expected: " + g + " - actual: " + next
+                                    + " (line " + lineNumber[0] + ")");
+                            failCount++;
+                        }
+                    }
+                    if (s.hasNext(p)) {
+                        failCount++;
+                    }
+                    // test \b{g} without \X via Scanner
+                    s = new Scanner(src.toString()).useDelimiter("\\b{g}");
+                    for (String g : graphemes) {
+                        String next = null;
+                        if (!s.hasNext() || !(next = s.next()).equals(g)) {
+                            System.out.println("Failed \\b{g} [" + ln + "] : "
+                                    + "expected: " + g + " - actual: " + next
+                                    + " (line " + lineNumber[0] + ")");
+                            failCount++;
+                        }
+                    }
+                    if (s.hasNext()) {
+                        failCount++;
                     }
                 });
         // some sanity checks
@@ -4999,5 +5064,230 @@ public class RegExTest {
             System.out.println("Unexpected exception: " + t);
         }
         report("surrogatePairWithCanonEq");
+    }
+
+    private static String s2x(String s) {
+        StringBuilder sb = new StringBuilder();
+        for (char ch : s.toCharArray()) {
+            sb.append(String.format("\\u%04x", (int)ch));
+        }
+        return sb.toString();
+    }
+
+    // This test is for 8235812, with cases excluded by 8258259
+    private static void lineBreakWithQuantifier() {
+        // key:    pattern
+        // value:  lengths of input that must match the pattern
+        Map<String, List<Integer>> cases = Map.ofEntries(
+            Map.entry("\\R?",      List.of(0, 1)),
+            Map.entry("\\R*",      List.of(0, 1, 2, 3)),
+            Map.entry("\\R+",      List.of(1, 2, 3)),
+            Map.entry("\\R{0}",    List.of(0)),
+            Map.entry("\\R{1}",    List.of(1)),
+//          Map.entry("\\R{2}",    List.of(2)),            // 8258259
+//          Map.entry("\\R{3}",    List.of(3)),            // 8258259
+            Map.entry("\\R{0,}",   List.of(0, 1, 2, 3)),
+            Map.entry("\\R{1,}",   List.of(1, 2, 3)),
+//          Map.entry("\\R{2,}",   List.of(2, 3)),         // 8258259
+//          Map.entry("\\R{3,}",   List.of(3)),            // 8258259
+            Map.entry("\\R{0,0}",  List.of(0)),
+            Map.entry("\\R{0,1}",  List.of(0, 1)),
+            Map.entry("\\R{0,2}",  List.of(0, 1, 2)),
+            Map.entry("\\R{0,3}",  List.of(0, 1, 2, 3)),
+            Map.entry("\\R{1,1}",  List.of(1)),
+            Map.entry("\\R{1,2}",  List.of(1, 2)),
+            Map.entry("\\R{1,3}",  List.of(1, 2, 3)),
+//          Map.entry("\\R{2,2}",  List.of(2)),            // 8258259
+//          Map.entry("\\R{2,3}",  List.of(2, 3)),         // 8258259
+//          Map.entry("\\R{3,3}",  List.of(3)),            // 8258259
+            Map.entry("\\R",       List.of(1)),
+            Map.entry("\\R\\R",    List.of(2)),
+            Map.entry("\\R\\R\\R", List.of(3))
+        );
+
+        // key:    length of input
+        // value:  all possible inputs of given length
+        Map<Integer, List<String>> inputs = new HashMap<>();
+        String[] Rs = { "\r\n", "\r", "\n",
+                        "\u000B", "\u000C", "\u0085", "\u2028", "\u2029" };
+        StringBuilder sb = new StringBuilder();
+        for (int len = 0; len <= 3; ++len) {
+            int[] idx = new int[len + 1];
+            do {
+                sb.setLength(0);
+                for (int j = 0; j < len; ++j)
+                    sb.append(Rs[idx[j]]);
+                inputs.computeIfAbsent(len, ArrayList::new).add(sb.toString());
+                idx[0]++;
+                for (int j = 0; j < len; ++j) {
+                    if (idx[j] < Rs.length)
+                        break;
+                    idx[j] = 0;
+                    idx[j+1]++;
+                }
+            } while (idx[len] == 0);
+        }
+
+        // exhaustive testing
+        for (String patStr : cases.keySet()) {
+            Pattern[] pats = patStr.endsWith("R")
+                ? new Pattern[] { Pattern.compile(patStr) }  // no quantifiers
+                : new Pattern[] { Pattern.compile(patStr),          // greedy
+                                  Pattern.compile(patStr + "?") };  // reluctant
+            Matcher m = pats[0].matcher("");
+            for (Pattern p : pats) {
+                m.usePattern(p);
+                for (int len : cases.get(patStr)) {
+                    for (String in : inputs.get(len)) {
+                        if (!m.reset(in).matches()) {
+                            failCount++;
+                            System.err.println("Expected to match '" +
+                                    s2x(in) + "' =~ /" + p + "/");
+                        }
+                    }
+                }
+            }
+        }
+        report("lineBreakWithQuantifier");
+    }
+
+    // This test is for 8214245
+    private static void caseInsensitivePMatch() {
+        for (String input : List.of("abcd", "AbCd", "ABCD")) {
+            for (String pattern : List.of("abcd", "aBcD", "[a-d]{4}",
+                    "(?:a|b|c|d){4}", "\\p{Lower}{4}", "\\p{Ll}{4}",
+                    "\\p{IsLl}{4}", "\\p{gc=Ll}{4}",
+                    "\\p{general_category=Ll}{4}", "\\p{IsLowercase}{4}",
+                    "\\p{javaLowerCase}{4}", "\\p{Upper}{4}", "\\p{Lu}{4}",
+                    "\\p{IsLu}{4}", "\\p{gc=Lu}{4}", "\\p{general_category=Lu}{4}",
+                    "\\p{IsUppercase}{4}", "\\p{javaUpperCase}{4}",
+                    "\\p{Lt}{4}", "\\p{IsLt}{4}", "\\p{gc=Lt}{4}",
+                    "\\p{general_category=Lt}{4}", "\\p{IsTitlecase}{4}",
+                    "\\p{javaTitleCase}{4}", "[\\p{Lower}]{4}", "[\\p{Ll}]{4}",
+                    "[\\p{IsLl}]{4}", "[\\p{gc=Ll}]{4}",
+                    "[\\p{general_category=Ll}]{4}", "[\\p{IsLowercase}]{4}",
+                    "[\\p{javaLowerCase}]{4}", "[\\p{Upper}]{4}", "[\\p{Lu}]{4}",
+                    "[\\p{IsLu}]{4}", "[\\p{gc=Lu}]{4}",
+                    "[\\p{general_category=Lu}]{4}", "[\\p{IsUppercase}]{4}",
+                    "[\\p{javaUpperCase}]{4}", "[\\p{Lt}]{4}", "[\\p{IsLt}]{4}",
+                    "[\\p{gc=Lt}]{4}", "[\\p{general_category=Lt}]{4}",
+                    "[\\p{IsTitlecase}]{4}", "[\\p{javaTitleCase}]{4}"))
+            {
+                if (!Pattern.compile(pattern, Pattern.CASE_INSENSITIVE)
+                            .matcher(input)
+                            .matches())
+                {
+                    failCount++;
+                    System.err.println("Expected to match: " +
+                                       "'" + input + "' =~ /" + pattern + "/");
+                }
+            }
+        }
+
+        for (String input : List.of("\u01c7", "\u01c8", "\u01c9")) {
+            for (String pattern : List.of("\u01c7", "\u01c8", "\u01c9",
+                    "[\u01c7\u01c8]", "[\u01c7\u01c9]", "[\u01c8\u01c9]",
+                    "[\u01c7-\u01c8]", "[\u01c8-\u01c9]", "[\u01c7-\u01c9]",
+                    "\\p{Lower}", "\\p{Ll}", "\\p{IsLl}", "\\p{gc=Ll}",
+                    "\\p{general_category=Ll}", "\\p{IsLowercase}",
+                    "\\p{javaLowerCase}", "\\p{Upper}", "\\p{Lu}",
+                    "\\p{IsLu}", "\\p{gc=Lu}", "\\p{general_category=Lu}",
+                    "\\p{IsUppercase}", "\\p{javaUpperCase}",
+                    "\\p{Lt}", "\\p{IsLt}", "\\p{gc=Lt}",
+                    "\\p{general_category=Lt}", "\\p{IsTitlecase}",
+                    "\\p{javaTitleCase}", "[\\p{Lower}]", "[\\p{Ll}]",
+                    "[\\p{IsLl}]", "[\\p{gc=Ll}]",
+                    "[\\p{general_category=Ll}]", "[\\p{IsLowercase}]",
+                    "[\\p{javaLowerCase}]", "[\\p{Upper}]", "[\\p{Lu}]",
+                    "[\\p{IsLu}]", "[\\p{gc=Lu}]",
+                    "[\\p{general_category=Lu}]", "[\\p{IsUppercase}]",
+                    "[\\p{javaUpperCase}]", "[\\p{Lt}]", "[\\p{IsLt}]",
+                    "[\\p{gc=Lt}]", "[\\p{general_category=Lt}]",
+                    "[\\p{IsTitlecase}]", "[\\p{javaTitleCase}]"))
+            {
+                if (!Pattern.compile(pattern, Pattern.CASE_INSENSITIVE
+                                            | Pattern.UNICODE_CHARACTER_CLASS)
+                            .matcher(input)
+                            .matches())
+                {
+                    failCount++;
+                    System.err.println("Expected to match: " +
+                                       "'" + input + "' =~ /" + pattern + "/");
+                }
+            }
+        }
+        report("caseInsensitivePMatch");
+    }
+
+    // This test is for 8237599
+    private static void surrogatePairOverlapRegion() {
+        String input = "\ud801\udc37";
+
+        Pattern p = Pattern.compile(".+");
+        Matcher m = p.matcher(input);
+        m.region(0, 1);
+
+        boolean ok = m.find();
+        if (!ok || !m.group(0).equals(input.substring(0, 1)))
+        {
+            failCount++;
+            System.out.println("Input \"" + input + "\".substr(0, 1)" +
+                    " expected to match pattern \"" + p + "\"");
+            if (ok) {
+                System.out.println("group(0): \"" + m.group(0) + "\"");
+            }
+        } else if (!m.hitEnd()) {
+            failCount++;
+            System.out.println("Expected m.hitEnd() == true");
+        }
+
+        p = Pattern.compile(".*(.)");
+        m = p.matcher(input);
+        m.region(1, 2);
+
+        ok = m.find();
+        if (!ok || !m.group(0).equals(input.substring(1, 2))
+                || !m.group(1).equals(input.substring(1, 2)))
+        {
+            failCount++;
+            System.out.println("Input \"" + input + "\".substr(1, 2)" +
+                    " expected to match pattern \"" + p + "\"");
+            if (ok) {
+                System.out.println("group(0): \"" + m.group(0) + "\"");
+                System.out.println("group(1): \"" + m.group(1) + "\"");
+            }
+        }
+        report("surrogatePairOverlapRegion");
+    }
+
+    //This test is for 8037397
+    private static void droppedClassesWithIntersection() {
+        String rx = "[A-Z&&[A-Z]0-9]";
+        String ry = "[A-Z&&[A-F][G-Z]0-9]";
+
+        Stream<Character> letterChars = IntStream.range('A', 'Z').mapToObj((i) -> (char) i);
+        Stream<Character> digitChars = IntStream.range('0', '9').mapToObj((i) -> (char) i);
+
+        boolean letterCharsMatch = letterChars.allMatch((ch) -> {
+            String chString = ch.toString();
+            return chString.matches(rx) && chString.matches(ry);
+        });
+
+        boolean digitCharsDontMatch = digitChars.noneMatch((ch) -> {
+            String chString = ch.toString();
+            return chString.matches(rx) && chString.matches(ry);
+        });
+
+
+        if (!letterCharsMatch) {
+            failCount++;
+            System.out.println("Compiling intersection pattern is dropping a character class in its matcher");
+        }
+
+        if (!digitCharsDontMatch) {
+            failCount++;
+            System.out.println("Compiling intersection pattern is matching digits where it should not");
+        }
+
     }
 }

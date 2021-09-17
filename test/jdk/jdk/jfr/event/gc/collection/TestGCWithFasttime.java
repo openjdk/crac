@@ -4,9 +4,7 @@
  *
  * This code is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 2 only, as
- * published by the Free Software Foundation.  Oracle designates this
- * particular file as subject to the "Classpath" exception as provided
- * by Oracle in the LICENSE file that accompanied this code.
+ * published by the Free Software Foundation.
  *
  * This code is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
@@ -39,7 +37,7 @@ import jdk.test.lib.jfr.GCHelper;
  * @requires vm.hasJFR
   * @requires vm.gc == "Parallel" | vm.gc == null
  * @library /test/lib /test/jdk
- * @run main/othervm -XX:+UseParallelGC -XX:+UseParallelOldGC jdk.jfr.event.gc.collection.TestGCWithFasttime
+ * @run main/othervm -XX:+UseParallelGC jdk.jfr.event.gc.collection.TestGCWithFasttime
  */
 public class TestGCWithFasttime {
     private static final String EVENT_NAME = GCHelper.event_garbage_collection;

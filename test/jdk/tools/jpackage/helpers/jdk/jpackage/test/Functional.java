@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2019, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2019, 2021, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -23,6 +23,7 @@
 package jdk.jpackage.test;
 
 import java.lang.reflect.InvocationTargetException;
+import java.util.function.BiConsumer;
 import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.Predicate;
@@ -38,6 +39,21 @@ public class Functional {
             return o -> {
                 try {
                     v.accept(o);
+                } catch (Throwable ex) {
+                    rethrowUnchecked(ex);
+                }
+            };
+        }
+    }
+
+    @FunctionalInterface
+    public interface ThrowingBiConsumer<T, U> {
+        void accept(T t, U u) throws Throwable;
+
+        public static <T, U> BiConsumer<T, U> toBiConsumer(ThrowingBiConsumer<T, U> v) {
+            return (t, u) -> {
+                try {
+                    v.accept(t, u);
                 } catch (Throwable ex) {
                     rethrowUnchecked(ex);
                 }
@@ -102,6 +118,10 @@ public class Functional {
         return v;
     }
 
+    public static <T, U> BiConsumer<T, U> identity(BiConsumer<T, U> v) {
+        return v;
+    }
+
     public static Runnable identity(Runnable v) {
         return v;
     }
@@ -130,12 +150,12 @@ public class Functional {
 
     @SuppressWarnings("unchecked")
     public static void rethrowUnchecked(Throwable throwable) throws ExceptionBox {
-        if (throwable instanceof ExceptionBox) {
-            throw (ExceptionBox)throwable;
+        if (throwable instanceof RuntimeException) {
+            throw (RuntimeException)throwable;
         }
 
         if (throwable instanceof InvocationTargetException) {
-            new ExceptionBox(throwable.getCause());
+            throw new ExceptionBox(throwable.getCause());
         }
 
         throw new ExceptionBox(throwable);

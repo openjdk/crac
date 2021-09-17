@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998, 2005, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 1998, 2020, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -28,6 +28,7 @@
 #include "commonRef.h"
 #include "inStream.h"
 #include "outStream.h"
+#include "signature.h"
 
 static jboolean
 referenceType(PacketInputStream *in, PacketOutputStream *out)
@@ -65,21 +66,22 @@ getValues(PacketInputStream *in, PacketOutputStream *out)
     return JNI_TRUE;
 }
 
-
 static jvmtiError
 readFieldValue(JNIEnv *env, PacketInputStream *in, jclass clazz,
                jobject object, jfieldID field, char *signature)
 {
     jvalue value;
-    jvmtiError error;
 
-    switch (signature[0]) {
-        case JDWP_TAG(ARRAY):
-        case JDWP_TAG(OBJECT):
-            value.l = inStream_readObjectRef(env, in);
-            JNI_FUNC_PTR(env,SetObjectField)(env, object, field, value.l);
-            break;
-
+    jbyte typeKey = jdwpTag(signature);
+    if (isReferenceTag(typeKey)) {
+        value.l = inStream_readObjectRef(env, in);
+        JNI_FUNC_PTR(env,SetObjectField)(env, object, field, value.l);
+        if (JNI_FUNC_PTR(env,ExceptionOccurred)(env)) {
+            return AGENT_ERROR_JNI_EXCEPTION;
+        }
+        return JVMTI_ERROR_NONE;
+    }
+    switch (typeKey) {
         case JDWP_TAG(BYTE):
             value.b = inStream_readByte(in);
             JNI_FUNC_PTR(env,SetByteField)(env, object, field, value.b);
@@ -121,12 +123,10 @@ readFieldValue(JNIEnv *env, PacketInputStream *in, jclass clazz,
             break;
     }
 
-    error = JVMTI_ERROR_NONE;
     if (JNI_FUNC_PTR(env,ExceptionOccurred)(env)) {
-        error = AGENT_ERROR_JNI_EXCEPTION;
+        return AGENT_ERROR_JNI_EXCEPTION;
     }
-
-    return error;
+    return JVMTI_ERROR_NONE;
 }
 
 static jboolean
@@ -352,15 +352,17 @@ referringObjects(PacketInputStream *in, PacketOutputStream *out)
     return JNI_TRUE;
 }
 
-void *ObjectReference_Cmds[] = { (void *)10
-    ,(void *)referenceType
-    ,(void *)getValues
-    ,(void *)setValues
-    ,(void *)NULL      /* no longer used */
-    ,(void *)monitorInfo
-    ,(void *)invokeInstance
-    ,(void *)disableCollection
-    ,(void *)enableCollection
-    ,(void *)isCollected
-    ,(void *)referringObjects
-    };
+Command ObjectReference_Commands[] = {
+    {referenceType, "ReferenceType"},
+    {getValues, "GetValues"},
+    {setValues, "SetValues"},
+    {NULL, "<unused>"},
+    {monitorInfo, "MonitorInfo"},
+    {invokeInstance, "InvokeInstance"},
+    {disableCollection, "DisableCollection"},
+    {enableCollection, "EnableCollection"},
+    {isCollected, "IsCollected"},
+    {referringObjects, "ReferringObjects"}
+};
+
+DEBUG_DISPATCH_DEFINE_CMDSET(ObjectReference)

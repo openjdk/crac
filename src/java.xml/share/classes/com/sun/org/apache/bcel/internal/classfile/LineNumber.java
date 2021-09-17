@@ -30,16 +30,15 @@ import java.io.IOException;
  * the source that corresponds to a relative address in the byte code. This
  * is used for debugging purposes.
  *
- * @version $Id$
  * @see     LineNumberTable
  */
 public final class LineNumber implements Cloneable, Node {
 
     /** Program Counter (PC) corresponds to line */
-    private short start_pc;
+    private short startPc;
 
     /** number in source file */
-    private short line_number;
+    private short lineNumber;
 
     /**
      * Initialize from another object.
@@ -55,7 +54,7 @@ public final class LineNumber implements Cloneable, Node {
      * Construct object from file stream.
      *
      * @param file Input stream
-     * @throws IOEXception if an I/O Exception occurs in readUnsignedShort
+     * @throws IOException if an I/O Exception occurs in readUnsignedShort
      */
     LineNumber(final DataInput file) throws IOException {
         this(file.readUnsignedShort(), file.readUnsignedShort());
@@ -63,12 +62,12 @@ public final class LineNumber implements Cloneable, Node {
 
 
     /**
-     * @param start_pc Program Counter (PC) corresponds to
-     * @param line_number line number in source file
+     * @param startPc Program Counter (PC) corresponds to
+     * @param lineNumber line number in source file
      */
-    public LineNumber(final int start_pc, final int line_number) {
-        this.start_pc = (short) start_pc;
-        this.line_number = (short)line_number;
+    public LineNumber(final int startPc, final int lineNumber) {
+        this.startPc = (short) startPc;
+        this.lineNumber = (short)lineNumber;
     }
 
 
@@ -89,43 +88,43 @@ public final class LineNumber implements Cloneable, Node {
      * Dump line number/pc pair to file stream in binary format.
      *
      * @param file Output file stream
-     * @throws IOEXception if an I/O Exception occurs in writeShort
+     * @throws IOException if an I/O Exception occurs in writeShort
      */
-    public final void dump( final DataOutputStream file ) throws IOException {
-        file.writeShort(start_pc);
-        file.writeShort(line_number);
+    public void dump( final DataOutputStream file ) throws IOException {
+        file.writeShort(startPc);
+        file.writeShort(lineNumber);
     }
 
 
     /**
      * @return Corresponding source line
      */
-    public final int getLineNumber() {
-        return 0xffff & line_number;
+    public int getLineNumber() {
+        return 0xffff & lineNumber;
     }
 
 
     /**
      * @return PC in code
      */
-    public final int getStartPC() {
-        return  0xffff & start_pc;
+    public int getStartPC() {
+        return  0xffff & startPc;
     }
 
 
     /**
-     * @param line_number the source line number
+     * @param lineNumber the source line number
      */
-    public final void setLineNumber( final int line_number ) {
-        this.line_number = (short) line_number;
+    public void setLineNumber( final int lineNumber ) {
+        this.lineNumber = (short) lineNumber;
     }
 
 
     /**
-     * @param start_pc the pc for this line number
+     * @param startPc the pc for this line number
      */
-    public final void setStartPC( final int start_pc ) {
-        this.start_pc = (short) start_pc;
+    public void setStartPC( final int startPc ) {
+        this.startPc = (short) startPc;
     }
 
 
@@ -133,8 +132,8 @@ public final class LineNumber implements Cloneable, Node {
      * @return String representation
      */
     @Override
-    public final String toString() {
-        return "LineNumber(" + start_pc + ", " + line_number + ")";
+    public String toString() {
+        return "LineNumber(" + startPc + ", " + lineNumber + ")";
     }
 
 

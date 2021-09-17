@@ -33,12 +33,11 @@ import com.sun.org.apache.bcel.internal.Const;
  * to the source file of this class.
  * It is instantiated from the <em>Attribute.readAttribute()</em> method.
  *
- * @version $Id$
  * @see     Attribute
  */
 public final class InnerClasses extends Attribute {
 
-    private InnerClass[] inner_classes;
+    private InnerClass[] innerClasses;
 
 
     /**
@@ -53,13 +52,13 @@ public final class InnerClasses extends Attribute {
     /**
      * @param name_index Index in constant pool to CONSTANT_Utf8
      * @param length Content length in bytes
-     * @param inner_classes array of inner classes attributes
+     * @param innerClasses array of inner classes attributes
      * @param constant_pool Array of constants
      */
-    public InnerClasses(final int name_index, final int length, final InnerClass[] inner_classes,
+    public InnerClasses(final int name_index, final int length, final InnerClass[] innerClasses,
             final ConstantPool constant_pool) {
         super(Const.ATTR_INNER_CLASSES, name_index, length, constant_pool);
-        this.inner_classes = inner_classes != null ? inner_classes : new InnerClass[0];
+        this.innerClasses = innerClasses != null ? innerClasses : new InnerClass[0];
     }
 
 
@@ -76,9 +75,9 @@ public final class InnerClasses extends Attribute {
             throws IOException {
         this(name_index, length, (InnerClass[]) null, constant_pool);
         final int number_of_classes = input.readUnsignedShort();
-        inner_classes = new InnerClass[number_of_classes];
+        innerClasses = new InnerClass[number_of_classes];
         for (int i = 0; i < number_of_classes; i++) {
-            inner_classes[i] = new InnerClass(input);
+            innerClasses[i] = new InnerClass(input);
         }
     }
 
@@ -103,10 +102,10 @@ public final class InnerClasses extends Attribute {
      * @throws IOException
      */
     @Override
-    public final void dump( final DataOutputStream file ) throws IOException {
+    public void dump( final DataOutputStream file ) throws IOException {
         super.dump(file);
-        file.writeShort(inner_classes.length);
-        for (final InnerClass inner_class : inner_classes) {
+        file.writeShort(innerClasses.length);
+        for (final InnerClass inner_class : innerClasses) {
             inner_class.dump(file);
         }
     }
@@ -115,16 +114,16 @@ public final class InnerClasses extends Attribute {
     /**
      * @return array of inner class "records"
      */
-    public final InnerClass[] getInnerClasses() {
-        return inner_classes;
+    public InnerClass[] getInnerClasses() {
+        return innerClasses;
     }
 
 
     /**
-     * @param inner_classes the array of inner classes
+     * @param innerClasses the array of inner classes
      */
-    public final void setInnerClasses( final InnerClass[] inner_classes ) {
-        this.inner_classes = inner_classes != null ? inner_classes : new InnerClass[0];
+    public void setInnerClasses( final InnerClass[] innerClasses ) {
+        this.innerClasses = innerClasses != null ? innerClasses : new InnerClass[0];
     }
 
 
@@ -132,15 +131,15 @@ public final class InnerClasses extends Attribute {
      * @return String representation.
      */
     @Override
-    public final String toString() {
+    public String toString() {
         final StringBuilder buf = new StringBuilder();
         buf.append("InnerClasses(");
-        buf.append(inner_classes.length);
+        buf.append(innerClasses.length);
         buf.append("):\n");
-        for (final InnerClass inner_class : inner_classes) {
+        for (final InnerClass inner_class : innerClasses) {
             buf.append(inner_class.toString(super.getConstantPool())).append("\n");
         }
-        return buf.toString();
+        return buf.substring(0, buf.length()-1); // remove the last newline
     }
 
 
@@ -151,9 +150,9 @@ public final class InnerClasses extends Attribute {
     public Attribute copy( final ConstantPool _constant_pool ) {
         // TODO this could be recoded to use a lower level constructor after creating a copy of the inner classes
         final InnerClasses c = (InnerClasses) clone();
-        c.inner_classes = new InnerClass[inner_classes.length];
-        for (int i = 0; i < inner_classes.length; i++) {
-            c.inner_classes[i] = inner_classes[i].copy();
+        c.innerClasses = new InnerClass[innerClasses.length];
+        for (int i = 0; i < innerClasses.length; i++) {
+            c.innerClasses[i] = innerClasses[i].copy();
         }
         c.setConstantPool(_constant_pool);
         return c;

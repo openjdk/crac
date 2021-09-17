@@ -27,7 +27,6 @@
  * @summary AppCDS handling of package.
  * @requires vm.cds
  * @library /test/lib
- * @modules jdk.jartool/sun.tools.jar
  * @compile test-classes/PackageTest.java
  * @compile test-classes/JimageClassPackage.java
  * @run driver SharedPackages
@@ -45,7 +44,6 @@ public class SharedPackages {
                                                     "sun/tools/javac/Main",
                                                     "jdk/nio/zipfs/ZipInfo",
                                                     "java/net/URL",
-                                                    "sun/rmi/rmic/Main",
                                                     "com/sun/jndi/dns/DnsName"));
 
         OutputAnalyzer output;

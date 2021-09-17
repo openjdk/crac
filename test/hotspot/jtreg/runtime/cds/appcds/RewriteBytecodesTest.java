@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015, 2019, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2015, 2021, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -28,10 +28,9 @@
  *          the archived class with the same name is not loaded.
  * @requires vm.cds
  * @library /test/lib
- * @modules jdk.jartool/sun.tools.jar
  * @compile test-classes/RewriteBytecodes.java test-classes/Util.java test-classes/Super.java test-classes/Child.java
  * @build sun.hotspot.WhiteBox
- * @run driver ClassFileInstaller sun.hotspot.WhiteBox
+ * @run driver jdk.test.lib.helpers.ClassFileInstaller sun.hotspot.WhiteBox
  * @run driver RewriteBytecodesTest
  */
 

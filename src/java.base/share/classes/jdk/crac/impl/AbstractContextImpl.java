@@ -33,6 +33,7 @@ import java.util.*;
 import java.util.stream.Collectors;
 
 public abstract class AbstractContextImpl<R extends Resource, P> extends Context<R> {
+    @SuppressWarnings("removal")
     private static final boolean DEBUG = AccessController.doPrivileged(
             new PrivilegedAction<Boolean>() {
                 public Boolean run() {

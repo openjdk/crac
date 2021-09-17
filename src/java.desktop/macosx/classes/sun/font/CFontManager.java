@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2011, 2019, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2011, 2021, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -96,8 +96,8 @@ public final class CFontManager extends SunFontManager {
         // already existing fonts in this list
         if (logicalFont || !genericFonts.containsKey(fontName)) {
             if (FontUtilities.debugFonts()) {
-                FontUtilities.getLogger().info("Add to Family "+familyName +
-                    ", Font " + fontName + " rank="+rank);
+                FontUtilities.logInfo("Add to Family " + familyName +
+                    ", Font " + fontName + " rank=" + rank);
             }
             FontFamily family = FontFamily.getFamily(familyName);
             if (family == null) {
@@ -144,6 +144,7 @@ public final class CFontManager extends SunFontManager {
     protected void registerFontsInDir(final String dirName, boolean useJavaRasterizer,
                                       int fontRank, boolean defer, boolean resolveSymLinks) {
 
+        @SuppressWarnings("removal")
         String[] files = AccessController.doPrivileged((PrivilegedAction<String[]>) () -> {
             return new File(dirName).list(getTrueTypeFilter());
         });
@@ -201,6 +202,7 @@ public final class CFontManager extends SunFontManager {
     Object waitForFontsToBeLoaded  = new Object();
     private boolean loadedAllFonts = false;
 
+    @SuppressWarnings("removal")
     public void loadFonts()
     {
         synchronized(waitForFontsToBeLoaded)

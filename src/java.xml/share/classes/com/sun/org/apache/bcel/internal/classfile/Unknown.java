@@ -38,7 +38,6 @@ import com.sun.org.apache.bcel.internal.Const;
  * {@link Attribute#addAttributeReader(String, UnknownAttributeReader)}.
 
  *
- * @version $Id$
  * @see Attribute
  * @see UnknownAttributeReader
  */
@@ -46,15 +45,15 @@ public final class Unknown extends Attribute {
 
     private byte[] bytes;
     private final String name;
-    private static final Map<String, Unknown> unknown_attributes = new HashMap<>();
+    private static final Map<String, Unknown> unknownAttributes = new HashMap<>();
 
 
     /** @return array of unknown attributes, but just one for each kind.
      */
     static Unknown[] getUnknownAttributes() {
-        final Unknown[] unknowns = new Unknown[unknown_attributes.size()];
-        unknown_attributes.values().toArray(unknowns);
-        unknown_attributes.clear();
+        final Unknown[] unknowns = new Unknown[unknownAttributes.size()];
+        unknownAttributes.values().toArray(unknowns);
+        unknownAttributes.clear();
         return unknowns;
     }
 
@@ -81,7 +80,7 @@ public final class Unknown extends Attribute {
         this.bytes = bytes;
         name = ((ConstantUtf8) constant_pool.getConstant(name_index, Const.CONSTANT_Utf8))
                 .getBytes();
-        unknown_attributes.put(name, this);
+        unknownAttributes.put(name, this);
     }
 
 
@@ -124,7 +123,7 @@ public final class Unknown extends Attribute {
      * @throws IOException
      */
     @Override
-    public final void dump( final DataOutputStream file ) throws IOException {
+    public void dump( final DataOutputStream file ) throws IOException {
         super.dump(file);
         if (super.getLength() > 0) {
             file.write(bytes, 0, super.getLength());
@@ -135,7 +134,7 @@ public final class Unknown extends Attribute {
     /**
      * @return data bytes.
      */
-    public final byte[] getBytes() {
+    public byte[] getBytes() {
         return bytes;
     }
 
@@ -144,7 +143,7 @@ public final class Unknown extends Attribute {
      * @return name of attribute.
      */
     @Override
-    public final String getName() {
+    public String getName() {
         return name;
     }
 
@@ -152,7 +151,7 @@ public final class Unknown extends Attribute {
     /**
      * @param bytes the bytes to set
      */
-    public final void setBytes( final byte[] bytes ) {
+    public void setBytes( final byte[] bytes ) {
         this.bytes = bytes;
     }
 
@@ -161,7 +160,7 @@ public final class Unknown extends Attribute {
      * @return String representation.
      */
     @Override
-    public final String toString() {
+    public String toString() {
         if (super.getLength() == 0 || bytes == null) {
             return "(Unknown attribute " + name + ")";
         }

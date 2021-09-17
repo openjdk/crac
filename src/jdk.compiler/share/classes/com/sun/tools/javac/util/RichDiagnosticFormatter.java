@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2009, 2019, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2009, 2021, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -51,8 +51,8 @@ import static com.sun.tools.javac.util.RichDiagnosticFormatter.RichConfiguration
 
 /**
  * A rich diagnostic formatter is a formatter that provides better integration
- * with javac's type system. A diagostic is first preprocessed in order to keep
- * track of each types/symbols in it; after these informations are collected,
+ * with javac's type system. A diagnostic is first preprocessed in order to keep
+ * track of each types/symbols in it; after this information is collected,
  * the diagnostic is rendered using a standard formatter, whose type/symbol printer
  * has been replaced by a more refined version provided by this rich formatter.
  * The rich formatter currently enables three different features: (i) simple class
@@ -180,17 +180,17 @@ public class RichDiagnosticFormatter extends
      * @param arg the argument to be translated
      */
     protected void preprocessArgument(Object arg) {
-        if (arg instanceof Type) {
-            preprocessType((Type)arg);
+        if (arg instanceof Type type) {
+            preprocessType(type);
         }
-        else if (arg instanceof Symbol) {
-            preprocessSymbol((Symbol)arg);
+        else if (arg instanceof Symbol symbol) {
+            preprocessSymbol(symbol);
         }
-        else if (arg instanceof JCDiagnostic) {
-            preprocessDiagnostic((JCDiagnostic)arg);
+        else if (arg instanceof JCDiagnostic diagnostic) {
+            preprocessDiagnostic(diagnostic);
         }
-        else if (arg instanceof Iterable<?> && !(arg instanceof Path)) {
-            for (Object o : (Iterable<?>)arg) {
+        else if (arg instanceof Iterable<?> iterable && !(arg instanceof Path)) {
+            for (Object o : iterable) {
                 preprocessArgument(o);
             }
         }
@@ -250,7 +250,7 @@ public class RichDiagnosticFormatter extends
     }
     //where
     /**
-     * This enum defines all posssible kinds of where clauses that can be
+     * This enum defines all possible kinds of where clauses that can be
      * attached by a rich diagnostic formatter to a given diagnostic
      */
     enum WhereClauseKind {
@@ -556,8 +556,8 @@ public class RichDiagnosticFormatter extends
             if (indexOf(t, WhereClauseKind.TYPEVAR) == -1) {
                 //access the bound type and skip error types
                 Type bound = t.getUpperBound();
-                while ((bound instanceof ErrorType))
-                    bound = ((ErrorType)bound).getOriginalType();
+                while ((bound instanceof ErrorType errorType))
+                    bound = errorType.getOriginalType();
                 //retrieve the bound list - if the type variable
                 //has not been attributed the bound is not set
                 List<Type> bounds = (bound != null) &&

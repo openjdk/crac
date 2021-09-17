@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2019, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2019, 2020, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -23,10 +23,8 @@
 
 package jdk.jpackage.test;
 
-import java.io.File;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import static java.nio.file.StandardCopyOption.REPLACE_EXISTING;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -67,7 +65,7 @@ public final class JarBuilder {
                         .setToolProvider(JavaTool.JAVAC)
                         .addArguments("-d", workDir.toString())
                         .addPathArguments(sourceFiles)
-                        .execute().assertExitCodeIsZero();
+                        .execute();
             }
 
             Files.createDirectories(outputJar.getParent());
@@ -87,7 +85,7 @@ public final class JarBuilder {
                 jarExe.addArguments("-e", mainClass);
             }
             jarExe.addArguments("-C", workDir.toString(), ".");
-            jarExe.execute().assertExitCodeIsZero();
+            jarExe.execute();
         });
     }
     private List<Path> sourceFiles;

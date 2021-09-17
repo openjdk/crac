@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2014 Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2014, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -260,7 +260,7 @@ public class InterfaceCalls {
     /** Interface call with five different receivers. */
     @Benchmark
     public void testCallPoly5(Blackhole bh) {
-        for (int kk = 0; kk < 3; kk++) {
+        for (int kk = 0; kk < 5; kk++) {
             bh.consume(as[kk].getInt());
         }
     }

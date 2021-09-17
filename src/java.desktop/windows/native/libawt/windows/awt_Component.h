@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1996, 2016, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 1996, 2020, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -275,6 +275,7 @@ public:
     /*
      * methods on this component
      */
+    virtual int GetScreenImOn();
     virtual void Show();
     virtual void Hide();
     virtual void Reshape(int x, int y, int w, int h);
@@ -755,9 +756,13 @@ protected:
     virtual void FillAlpha(void *bitmapBits, SIZE &size, BYTE alpha);
 
     int ScaleUpX(int x);
+    int ScaleUpAbsX(int x);
     int ScaleUpY(int y);
+    int ScaleUpAbsY(int y);
     int ScaleDownX(int x);
+    int ScaleDownAbsX(int x);
     int ScaleDownY(int y);
+    int ScaleDownAbsY(int y);
 
 private:
     /* A bitmask keeps the button's numbers as MK_LBUTTON, MK_MBUTTON, MK_RBUTTON
@@ -923,10 +928,12 @@ public:
     void            AddDCItem(DCItem *newItem);
     DCItem          *RemoveDC(HDC hDC, HWND hWnd);
     DCItem          *RemoveAllDCs(HWND hWnd);
+    DCItem          *RemoveAllDCs();
     void            RealizePalettes(int screen);
 };
 
 void ReleaseDCList(HWND hwnd, DCList &list);
+void ReleaseDCList(DCList &list);
 void MoveDCToPassiveList(HDC hDC, HWND hWnd);
 
 #include "ObjectList.h"

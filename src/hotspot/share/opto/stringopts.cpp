@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2009, 2018, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2009, 2020, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -23,6 +23,8 @@
  */
 
 #include "precompiled.hpp"
+#include "ci/ciSymbols.hpp"
+#include "classfile/javaClasses.hpp"
 #include "compiler/compileLog.hpp"
 #include "opto/addnode.hpp"
 #include "opto/callGenerator.hpp"
@@ -35,6 +37,7 @@
 #include "opto/stringopts.hpp"
 #include "opto/subnode.hpp"
 #include "runtime/sharedRuntime.hpp"
+#include "runtime/stubRoutines.hpp"
 
 #define __ kit.
 
@@ -230,7 +233,7 @@ class StringConcat : public ResourceObj {
       const TypePtr* no_memory_effects = NULL;
       Compile* C = _stringopts->C;
       CallStaticJavaNode* call = new CallStaticJavaNode(call_type, call_addr, "uncommon_trap",
-                                                        jvms->bci(), no_memory_effects);
+                                                        no_memory_effects);
       for (int e = 0; e < TypeFunc::Parms; e++) {
         call->init_req(e, uct->in(e));
       }
@@ -248,13 +251,13 @@ class StringConcat : public ResourceObj {
 
       _stringopts->gvn()->transform(call);
       C->gvn_replace_by(uct, call);
-      uct->disconnect_inputs(NULL, C);
+      uct->disconnect_inputs(C);
     }
   }
 
   void cleanup() {
     // disconnect the hook node
-    _arguments->disconnect_inputs(NULL, _stringopts->C);
+    _arguments->disconnect_inputs(_stringopts->C);
   }
 };
 
@@ -372,7 +375,7 @@ void StringConcat::eliminate_initialize(InitializeNode* init) {
     C->gvn_replace_by(mem_proj, mem);
   }
   C->gvn_replace_by(init, C->top());
-  init->disconnect_inputs(NULL, C);
+  init->disconnect_inputs(C);
 }
 
 Node_List PhaseStringOpts::collect_toString_calls() {
@@ -416,13 +419,13 @@ StringConcat* PhaseStringOpts::build_candidate(CallStaticJavaNode* call) {
   ciSymbol* int_sig;
   ciSymbol* char_sig;
   if (m->holder() == C->env()->StringBuilder_klass()) {
-    string_sig = ciSymbol::String_StringBuilder_signature();
-    int_sig = ciSymbol::int_StringBuilder_signature();
-    char_sig = ciSymbol::char_StringBuilder_signature();
+    string_sig = ciSymbols::String_StringBuilder_signature();
+    int_sig = ciSymbols::int_StringBuilder_signature();
+    char_sig = ciSymbols::char_StringBuilder_signature();
   } else if (m->holder() == C->env()->StringBuffer_klass()) {
-    string_sig = ciSymbol::String_StringBuffer_signature();
-    int_sig = ciSymbol::int_StringBuffer_signature();
-    char_sig = ciSymbol::char_StringBuffer_signature();
+    string_sig = ciSymbols::String_StringBuffer_signature();
+    int_sig = ciSymbols::int_StringBuffer_signature();
+    char_sig = ciSymbols::char_StringBuffer_signature();
   } else {
     return NULL;
   }
@@ -469,14 +472,14 @@ StringConcat* PhaseStringOpts::build_candidate(CallStaticJavaNode* call) {
         if (use != NULL &&
             use->method() != NULL &&
             !use->method()->is_static() &&
-            use->method()->name() == ciSymbol::object_initializer_name() &&
+            use->method()->name() == ciSymbols::object_initializer_name() &&
             use->method()->holder() == m->holder()) {
           // Matched the constructor.
           ciSymbol* sig = use->method()->signature()->as_symbol();
-          if (sig == ciSymbol::void_method_signature() ||
-              sig == ciSymbol::int_void_signature() ||
-              sig == ciSymbol::string_void_signature()) {
-            if (sig == ciSymbol::string_void_signature()) {
+          if (sig == ciSymbols::void_method_signature() ||
+              sig == ciSymbols::int_void_signature() ||
+              sig == ciSymbols::string_void_signature()) {
+            if (sig == ciSymbols::string_void_signature()) {
               // StringBuilder(String) so pick this up as the first argument
               assert(use->in(TypeFunc::Parms + 1) != NULL, "what?");
               const Type* type = _gvn->type(use->in(TypeFunc::Parms + 1));
@@ -533,12 +536,21 @@ StringConcat* PhaseStringOpts::build_candidate(CallStaticJavaNode* call) {
       break;
     } else if (!cnode->method()->is_static() &&
                cnode->method()->holder() == m->holder() &&
-               cnode->method()->name() == ciSymbol::append_name() &&
+               cnode->method()->name() == ciSymbols::append_name() &&
                (cnode->method()->signature()->as_symbol() == string_sig ||
                 cnode->method()->signature()->as_symbol() == char_sig ||
                 cnode->method()->signature()->as_symbol() == int_sig)) {
       sc->add_control(cnode);
       Node* arg = cnode->in(TypeFunc::Parms + 1);
+      if (arg == NULL || arg->is_top()) {
+#ifndef PRODUCT
+        if (PrintOptimizeStringConcat) {
+          tty->print("giving up because the call is effectively dead");
+          cnode->jvms()->dump_spec(tty); tty->cr();
+        }
+#endif
+        break;
+      }
       if (cnode->method()->signature()->as_symbol() == int_sig) {
         sc->push_int(arg);
       } else if (cnode->method()->signature()->as_symbol() == char_sig) {
@@ -584,13 +596,12 @@ StringConcat* PhaseStringOpts::build_candidate(CallStaticJavaNode* call) {
 
 PhaseStringOpts::PhaseStringOpts(PhaseGVN* gvn, Unique_Node_List*):
   Phase(StringOpts),
-  _gvn(gvn),
-  _visited(Thread::current()->resource_area()) {
+  _gvn(gvn) {
 
   assert(OptimizeStringConcat, "shouldn't be here");
 
   size_table_field = C->env()->Integer_klass()->get_field_by_name(ciSymbol::make("sizeTable"),
-                                                                  ciSymbol::make("[I"), true);
+                                                                  ciSymbols::int_array_signature(), true);
   if (size_table_field == NULL) {
     // Something wrong so give up.
     assert(false, "why can't we find Integer.sizeTable?");
@@ -1140,6 +1151,11 @@ Node* PhaseStringOpts::int_stringSize(GraphKit& kit, Node* arg) {
     int arg_val = arg->get_int();
     int count = 1;
     if (arg_val < 0) {
+      // Special case for min_jint - it can't be negated.
+      if (arg_val == min_jint) {
+        return __ intcon(11);
+      }
+
       arg_val = -arg_val;
       count++;
     }
@@ -1200,7 +1216,8 @@ Node* PhaseStringOpts::int_stringSize(GraphKit& kit, Node* arg) {
     //     return i+1;
 
     // Add loop predicate first.
-    kit.add_predicate();
+    kit.add_empty_predicates();
+    C->set_has_loops(true);
 
     RegionNode *loop = new RegionNode(3);
     loop->init_req(1, kit.control());
@@ -1276,8 +1293,9 @@ void PhaseStringOpts::getChars(GraphKit& kit, Node* arg, Node* dst_array, BasicT
   // }
 
   // Add loop predicate first.
-  kit.add_predicate();
+  kit.add_empty_predicates();
 
+  C->set_has_loops(true);
   RegionNode* head = new RegionNode(3);
   head->init_req(1, kit.control());
 
@@ -1300,7 +1318,8 @@ void PhaseStringOpts::getChars(GraphKit& kit, Node* arg, Node* dst_array, BasicT
   Node* index = __ SubI(charPos, __ intcon((bt == T_BYTE) ? 1 : 2));
   Node* ch = __ AddI(r, __ intcon('0'));
   Node* st = __ store_to_memory(kit.control(), kit.array_element_address(dst_array, index, T_BYTE),
-                                ch, bt, byte_adr_idx, MemNode::unordered, (bt != T_BYTE) /* mismatched */);
+                                ch, bt, byte_adr_idx, MemNode::unordered, false /* require_atomic_access */,
+                                false /* unaligned */, (bt != T_BYTE) /* mismatched */);
 
   iff = kit.create_and_map_if(head, __ Bool(__ CmpI(q, __ intcon(0)), BoolTest::ne),
                               PROB_FAIR, COUNT_UNKNOWN);
@@ -1338,7 +1357,8 @@ void PhaseStringOpts::getChars(GraphKit& kit, Node* arg, Node* dst_array, BasicT
   } else {
     Node* index = __ SubI(charPos, __ intcon((bt == T_BYTE) ? 1 : 2));
     st = __ store_to_memory(kit.control(), kit.array_element_address(dst_array, index, T_BYTE),
-                            sign, bt, byte_adr_idx, MemNode::unordered, (bt != T_BYTE) /* mismatched */);
+                            sign, bt, byte_adr_idx, MemNode::unordered, false /* require_atomic_access */,
+                            false /* unaligned */, (bt != T_BYTE) /* mismatched */);
 
     final_merge->init_req(merge_index + 1, kit.control());
     final_mem->init_req(merge_index + 1, st);
@@ -1531,7 +1551,8 @@ void PhaseStringOpts::copy_constant_string(GraphKit& kit, IdealKit& ideal, ciTyp
       } else {
         val = readChar(src_array, i++);
       }
-      __ store(__ ctrl(), adr, __ ConI(val), T_CHAR, byte_adr_idx, MemNode::unordered, true /* mismatched */);
+      __ store(__ ctrl(), adr, __ ConI(val), T_CHAR, byte_adr_idx, MemNode::unordered, false /* require_atomic_access */,
+               true /* mismatched */);
       index = __ AddI(index, __ ConI(2));
     }
     if (src_is_byte) {
@@ -1618,7 +1639,8 @@ Node* PhaseStringOpts::copy_char(GraphKit& kit, Node* val, Node* dst_array, Node
   }
   if (!dcon || !dbyte) {
     // Destination is UTF16. Store a char.
-    __ store(__ ctrl(), adr, val, T_CHAR, byte_adr_idx, MemNode::unordered, true /* mismatched */);
+    __ store(__ ctrl(), adr, val, T_CHAR, byte_adr_idx, MemNode::unordered, false /* require_atomic_access */,
+             true /* mismatched */);
     __ set(end, __ AddI(start, __ ConI(2)));
   }
   if (!dcon) {
@@ -1666,7 +1688,7 @@ jbyte PhaseStringOpts::get_constant_coder(GraphKit& kit, Node* str) {
   assert(str->is_Con(), "String must be constant");
   const TypeOopPtr* str_type = kit.gvn().type(str)->isa_oopptr();
   ciInstance* str_instance = str_type->const_oop()->as_instance();
-  jbyte coder = str_instance->field_value_by_offset(java_lang_String::coder_offset_in_bytes()).as_byte();
+  jbyte coder = str_instance->field_value_by_offset(java_lang_String::coder_offset()).as_byte();
   assert(CompactStrings || (coder == java_lang_String::CODER_UTF16), "Strings must be UTF16 encoded");
   return coder;
 }
@@ -1680,7 +1702,7 @@ ciTypeArray* PhaseStringOpts::get_constant_value(GraphKit& kit, Node* str) {
   assert(str->is_Con(), "String must be constant");
   const TypeOopPtr* str_type = kit.gvn().type(str)->isa_oopptr();
   ciInstance* str_instance = str_type->const_oop()->as_instance();
-  ciObject* src_array = str_instance->field_value_by_offset(java_lang_String::value_offset_in_bytes()).as_object();
+  ciObject* src_array = str_instance->field_value_by_offset(java_lang_String::value_offset()).as_object();
   return src_array->as_type_array();
 }
 
@@ -1972,6 +1994,6 @@ void PhaseStringOpts::replace_string_concat(StringConcat* sc) {
   kit.replace_call(sc->end(), result);
 
   // Unhook any hook nodes
-  string_sizes->disconnect_inputs(NULL, C);
+  string_sizes->disconnect_inputs(C);
   sc->cleanup();
 }

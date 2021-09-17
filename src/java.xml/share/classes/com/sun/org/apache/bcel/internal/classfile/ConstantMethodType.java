@@ -36,7 +36,7 @@ import com.sun.org.apache.bcel.internal.Const;
  */
 public final class ConstantMethodType extends Constant {
 
-    private int descriptor_index;
+    private int descriptorIndex;
 
 
     /**
@@ -60,7 +60,7 @@ public final class ConstantMethodType extends Constant {
 
     public ConstantMethodType(final int descriptor_index) {
         super(Const.CONSTANT_MethodType);
-        this.descriptor_index = descriptor_index;
+        this.descriptorIndex = descriptor_index;
     }
 
 
@@ -84,19 +84,19 @@ public final class ConstantMethodType extends Constant {
      * @throws IOException
      */
     @Override
-    public final void dump( final DataOutputStream file ) throws IOException {
+    public void dump( final DataOutputStream file ) throws IOException {
         file.writeByte(super.getTag());
-        file.writeShort(descriptor_index);
+        file.writeShort(descriptorIndex);
     }
 
 
     public int getDescriptorIndex() {
-        return descriptor_index;
+        return descriptorIndex;
     }
 
 
     public void setDescriptorIndex(final int descriptor_index) {
-        this.descriptor_index = descriptor_index;
+        this.descriptorIndex = descriptor_index;
     }
 
 
@@ -104,7 +104,7 @@ public final class ConstantMethodType extends Constant {
      * @return String representation
      */
     @Override
-    public final String toString() {
-        return super.toString() + "(descriptor_index = " + descriptor_index + ")";
+    public String toString() {
+        return super.toString() + "(descriptorIndex = " + descriptorIndex + ")";
     }
 }

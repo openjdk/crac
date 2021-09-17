@@ -1,5 +1,5 @@
 //
-// Copyright (c) 1999, 2009, Oracle and/or its affiliates. All rights reserved.
+// Copyright (c) 1999, 2020, Oracle and/or its affiliates. All rights reserved.
 // DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
 //
 // This code is free software; you can redistribute it and/or modify it
@@ -25,7 +25,7 @@
 // A test case consists of three lines:
 // The first line is a pattern used in the test
 // The second line is the input to search for the pattern in
-// The third line is a concatentation of the match, the number of groups,
+// The third line is a concatenation of the match, the number of groups,
 //     and the contents of the first four subexpressions.
 // Empty lines and lines beginning with comment slashes are ignored.
 //
@@ -34,7 +34,15 @@
 a
 true a 1
 
+^(a){0,1}a
+a
+true a 1
+
 ^(aa(bb)?)+$
+aabbaa
+true aabbaa 2 aa bb
+
+^(aa(bb){0,1})+$
 aabbaa
 true aabbaa 2 aa bb
 
@@ -42,7 +50,15 @@ true aabbaa 2 aa bb
 b
 true b 2 b
 
+((a|b){0,1}b)+
+b
+true b 2 b
+
 (aaa)?aaa
+aaa
+true aaa 1
+
+(aaa){0,1}aaa
 aaa
 true aaa 1
 
@@ -50,7 +66,15 @@ true aaa 1
 aba
 true aba 2 a b
 
+^(a(b){0,1})+$
+aba
+true aba 2 a b
+
 ^(a(b(c)?)?)?abc
+abc
+true abc 3
+
+^(a(b(c){0,1}){0,1}){0,1}abc
 abc
 true abc 3
 
@@ -750,7 +774,15 @@ a?b
 aaaab
 true ab 0
 
+a{0,1}b
+aaaab
+true ab 0
+
 a?b
+b
+true b 0
+
+a{0,1}b
 b
 true b 0
 
@@ -758,7 +790,15 @@ a?b
 aaaccc
 false 0
 
+a{0,1}b
+aaaccc
+false 0
+
 .?b
+aaaab
+true ab 0
+
+.{0,1}b
 aaaab
 true ab 0
 
@@ -767,7 +807,15 @@ a??b
 aaaab
 true ab 0
 
+a{0,1}?b
+aaaab
+true ab 0
+
 a??b
+b
+true b 0
+
+a{0,1}?b
 b
 true b 0
 
@@ -775,7 +823,15 @@ a??b
 aaaccc
 false 0
 
+a{0,1}?b
+aaaccc
+false 0
+
 .??b
+aaaab
+true ab 0
+
+.{0,1}?b
 aaaab
 true ab 0
 
@@ -784,7 +840,15 @@ a?+b
 aaaab
 true ab 0
 
+a{0,1}+b
+aaaab
+true ab 0
+
 a?+b
+b
+true b 0
+
+a{0,1}+b
 b
 true b 0
 
@@ -792,7 +856,15 @@ a?+b
 aaaccc
 false 0
 
+a{0,1}+b
+aaaccc
+false 0
+
 .?+b
+aaaab
+true ab 0
+
+.{0,1}+b
 aaaab
 true ab 0
 
@@ -1155,3 +1227,49 @@ true blahblah 0
 (|f)?+
 foo
 true  1 
+
+(|f){0,1}+
+foo
+true  1 
+
+//----------------------------------------------------------------
+// Unary numeral primality testing
+//----------------------------------------------------------------
+
+// Input is 7 (a prime), in unary; reluctant quantifier
+^(11+?)\1+$
+1111111
+false 1
+
+^(1{2,}?)\1+$
+1111111
+false 1
+
+// Input is 8 (a power of two), in unary; reluctant quantifier
+// group is shortest possible (2)
+^(11+?)\1+$
+11111111
+true 11111111 1 11
+
+^(1{2,}?)\1+$
+11111111
+true 11111111 1 11
+
+// Input is 7 (a prime), in unary; greedy quantifier
+^(11+)\1+$
+1111111
+false 1
+
+^(1{2,})\1+$
+1111111
+false 1
+
+// Input is 8 (a power of two), in unary; greedy quantifier
+// group is longest possible (4)
+^(11+)\1+$
+11111111
+true 11111111 1 1111
+
+^(1{2,})\1+$
+11111111
+true 11111111 1 1111

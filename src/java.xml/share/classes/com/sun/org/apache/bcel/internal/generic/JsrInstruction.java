@@ -24,7 +24,6 @@ package com.sun.org.apache.bcel.internal.generic;
 /**
  * Super class for JSR - Jump to subroutine
  *
- * @version $Id$
  */
 public abstract class JsrInstruction extends BranchInstruction implements UnconditionalBranch,
         TypedInstruction, StackProducer {
@@ -75,7 +74,7 @@ public abstract class JsrInstruction extends BranchInstruction implements Uncond
         while (ih != null) {
             ih = ih.getNext();
             if ((ih != null) && (ih.getInstruction() == this)) {
-                throw new RuntimeException("physicalSuccessor() called on a shared JsrInstruction.");
+                throw new IllegalStateException("physicalSuccessor() called on a shared JsrInstruction.");
             }
         }
         // Return the physical successor

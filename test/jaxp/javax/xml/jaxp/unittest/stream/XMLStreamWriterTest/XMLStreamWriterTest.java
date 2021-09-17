@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2014, 2019 Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2014, 2019, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -44,7 +44,7 @@ import org.w3c.dom.Document;
  * @test
  * @bug 6347190 8139584 8216408
  * @library /javax/xml/jaxp/libs /javax/xml/jaxp/unittest
- * @run testng/othervm -DrunSecMngr=true stream.XMLStreamWriterTest.XMLStreamWriterTest
+ * @run testng/othervm -DrunSecMngr=true -Djava.security.manager=allow stream.XMLStreamWriterTest.XMLStreamWriterTest
  * @run testng/othervm stream.XMLStreamWriterTest.XMLStreamWriterTest
  * @summary Tests XMLStreamWriter.
  */

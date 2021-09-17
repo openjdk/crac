@@ -1,5 +1,6 @@
 /*
- * Copyright (c) 2017, 2018, Red Hat, Inc. All rights reserved.
+ * Copyright (c) 2017, 2021, Red Hat, Inc. All rights reserved.
+ * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 2 only, as
@@ -24,8 +25,8 @@
 /*
  * @test TestStringDedup
  * @summary Test Shenandoah string deduplication implementation
- * @key gc
- * @requires vm.gc.Shenandoah & !vm.graal.enabled
+ * @key randomness
+ * @requires vm.gc.Shenandoah
  * @library /test/lib
  * @modules java.base/jdk.internal.misc:open
  * @modules java.base/java.lang:open
@@ -33,59 +34,60 @@
  *
  * @run main/othervm -Xmx256m -Xlog:gc+stats -XX:+UnlockDiagnosticVMOptions -XX:+UnlockExperimentalVMOptions -XX:+UseStringDeduplication
  *      -XX:+UseShenandoahGC -XX:ShenandoahGCMode=passive
- *      -XX:+ShenandoahDegeneratedGC
+ *      -XX:+ShenandoahDegeneratedGC -DGCCount=1
  *      TestStringDedup
  *
  * @run main/othervm -Xmx256m -Xlog:gc+stats -XX:+UnlockDiagnosticVMOptions -XX:+UnlockExperimentalVMOptions -XX:+UseStringDeduplication
  *      -XX:+UseShenandoahGC -XX:ShenandoahGCMode=passive
- *      -XX:-ShenandoahDegeneratedGC
+ *      -XX:-ShenandoahDegeneratedGC -DGCCount=1
  *      TestStringDedup
  */
 
 /*
  * @test TestStringDedup
  * @summary Test Shenandoah string deduplication implementation
- * @key gc
- * @requires vm.gc.Shenandoah & !vm.graal.enabled
+ * @key randomness
+ * @requires vm.gc.Shenandoah
  * @library /test/lib
  * @modules java.base/jdk.internal.misc:open
  * @modules java.base/java.lang:open
  *          java.management
  *
  * @run main/othervm -Xmx256m -Xlog:gc+stats -XX:+UnlockDiagnosticVMOptions -XX:+UnlockExperimentalVMOptions -XX:+UseStringDeduplication
- *      -XX:+UseShenandoahGC -XX:ShenandoahGCHeuristics=aggressive
+ *      -XX:+UseShenandoahGC -XX:ShenandoahGCHeuristics=aggressive -XX:StringDeduplicationAgeThreshold=3
  *      TestStringDedup
  *
  * @run main/othervm -Xmx256m -Xlog:gc+stats -XX:+UnlockDiagnosticVMOptions -XX:+UnlockExperimentalVMOptions -XX:+UseStringDeduplication
- *      -XX:+UseShenandoahGC
+ *      -XX:+UseShenandoahGC -XX:StringDeduplicationAgeThreshold=3
  *      TestStringDedup
  *
  * @run main/othervm -Xmx256m -Xlog:gc+stats -XX:+UnlockDiagnosticVMOptions -XX:+UnlockExperimentalVMOptions -XX:+UseStringDeduplication
- *      -XX:+UseShenandoahGC -XX:ShenandoahGCHeuristics=compact
+ *      -XX:+UseShenandoahGC -XX:ShenandoahGCHeuristics=compact -XX:StringDeduplicationAgeThreshold=3
  *      TestStringDedup
  */
 
 /*
  * @test TestStringDedup
  * @summary Test Shenandoah string deduplication implementation
- * @key gc
- * @requires vm.gc.Shenandoah & !vm.graal.enabled
+ * @key randomness
+ * @requires vm.gc.Shenandoah
  * @library /test/lib
  * @modules java.base/jdk.internal.misc:open
  * @modules java.base/java.lang:open
  *          java.management
  *
  * @run main/othervm -Xmx256m -Xlog:gc+stats -XX:+UnlockDiagnosticVMOptions -XX:+UnlockExperimentalVMOptions -XX:+UseStringDeduplication
- *      -XX:+UseShenandoahGC -XX:ShenandoahGCMode=traversal
+ *      -XX:+UseShenandoahGC -XX:ShenandoahGCMode=iu -XX:StringDeduplicationAgeThreshold=3
  *      TestStringDedup
  *
  * @run main/othervm -Xmx256m -Xlog:gc+stats -XX:+UnlockDiagnosticVMOptions -XX:+UnlockExperimentalVMOptions -XX:+UseStringDeduplication
- *      -XX:+UseShenandoahGC -XX:ShenandoahGCMode=traversal -XX:ShenandoahGCHeuristics=aggressive
+ *      -XX:+UseShenandoahGC -XX:ShenandoahGCMode=iu -XX:ShenandoahGCHeuristics=aggressive -XX:StringDeduplicationAgeThreshold=3
  *      TestStringDedup
  */
 
 import java.lang.reflect.*;
 import java.util.*;
+import jdk.test.lib.Utils;
 
 import sun.misc.*;
 
@@ -94,6 +96,8 @@ public class TestStringDedup {
     private static Unsafe unsafe;
 
     private static final int UniqueStrings = 20;
+    // How many GC cycles are needed to complete deduplication.
+    private static final int GCCount = Integer.getInteger("GCCount", 3);
 
     static {
         try {
@@ -135,7 +139,7 @@ public class TestStringDedup {
     }
 
     private static void generateStrings(ArrayList<StringAndId> strs, int unique_strs) {
-        Random rn = new Random();
+        Random rn = Utils.getRandomInstance();
         for (int u = 0; u < unique_strs; u++) {
             int n = rn.nextInt() % 10;
             n = Math.max(n, 2);
@@ -166,23 +170,31 @@ public class TestStringDedup {
                 }
             }
         }
-        System.out.println("Dedup: " + dedup + "/" + total + " unique: " + (total - dedup));
         return (total - dedup);
     }
 
     public static void main(String[] args) {
         ArrayList<StringAndId> astrs = new ArrayList<>();
         generateStrings(astrs, UniqueStrings);
-        System.gc();
-        System.gc();
-        System.gc();
-        System.gc();
-        System.gc();
-
-        if (verifyDedepString(astrs) != UniqueStrings) {
-            // Can not guarantee all strings are deduplicated, there can
-            // still have pending items in queues.
-            System.out.println("Not all strings are deduplicated");
+        for (int count = 0; count < GCCount; count ++) {
+          System.gc();
         }
+
+        int unique_count = 0;
+        for (int waitCount = 0; waitCount < 3; waitCount ++) {
+            // Let concurrent string dedup thread to run
+            try {
+                Thread.sleep(1000);
+            } catch (InterruptedException e) {
+            }
+
+            // All deduplicated, done.
+            unique_count = verifyDedepString(astrs);
+            if ( unique_count == UniqueStrings) {
+                return;
+            }
+        }
+
+        throw new RuntimeException("Expecting " + UniqueStrings + " unique strings, but got " + unique_count);
     }
 }

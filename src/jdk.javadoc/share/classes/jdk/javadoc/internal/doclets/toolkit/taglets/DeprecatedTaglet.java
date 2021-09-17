@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2003, 2019, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2003, 2020, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -29,9 +29,8 @@ import java.util.EnumSet;
 import javax.lang.model.element.Element;
 
 import com.sun.source.doctree.DocTree;
+import jdk.javadoc.doclet.Taglet.Location;
 import jdk.javadoc.internal.doclets.toolkit.Content;
-
-import static com.sun.source.doctree.DocTree.Kind.DEPRECATED;
 
 /**
  * A taglet that represents the @deprecated tag.
@@ -45,12 +44,12 @@ import static com.sun.source.doctree.DocTree.Kind.DEPRECATED;
 public class DeprecatedTaglet extends BaseTaglet {
 
     public DeprecatedTaglet() {
-        super(DEPRECATED.tagName, false,
-                EnumSet.of(Site.MODULE, Site.TYPE, Site.CONSTRUCTOR, Site.METHOD, Site.FIELD));
+        super(DocTree.Kind.DEPRECATED, false,
+                EnumSet.of(Location.MODULE, Location.TYPE, Location.CONSTRUCTOR, Location.METHOD, Location.FIELD));
     }
 
     @Override
-    public Content getTagletOutput(Element holder, TagletWriter writer) {
+    public Content getAllBlockTagOutput(Element holder, TagletWriter writer) {
         return writer.deprecatedTagOutput(holder);
     }
 }

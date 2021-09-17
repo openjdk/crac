@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1997, 2018, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 1997, 2020, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -104,11 +104,15 @@ import java.util.function.UnaryOperator;
  * <li>They are serializable if all elements are serializable.
  * <li>The order of elements in the list is the same as the order of the
  * provided arguments, or of the elements in the provided array.
+ * <li>The lists and their {@link #subList(int, int) subList} views implement the
+ * {@link RandomAccess} interface.
  * <li>They are <a href="../lang/doc-files/ValueBased.html">value-based</a>.
- * Callers should make no assumptions about the identity of the returned instances.
- * Factories are free to create new instances or reuse existing ones. Therefore,
- * identity-sensitive operations on these instances (reference equality ({@code ==}),
- * identity hash code, and synchronization) are unreliable and should be avoided.
+ * Programmers should treat instances that are {@linkplain #equals(Object) equal}
+ * as interchangeable and should not use them for synchronization, or
+ * unpredictable behavior may occur. For example, in a future release,
+ * synchronization may fail. Callers should make no assumptions about the
+ * identity of the returned instances. Factories are free to
+ * create new instances or reuse existing ones.
  * <li>They are serialized as specified on the
  * <a href="{@docRoot}/serialized-form.html#java.util.CollSer">Serialized Form</a>
  * page.
@@ -789,7 +793,7 @@ public interface List<E> extends Collection<E> {
      */
     @SuppressWarnings("unchecked")
     static <E> List<E> of() {
-        return (List<E>) ImmutableCollections.ListN.EMPTY_LIST;
+        return (List<E>) ImmutableCollections.EMPTY_LIST;
     }
 
     /**
@@ -840,7 +844,7 @@ public interface List<E> extends Collection<E> {
      * @since 9
      */
     static <E> List<E> of(E e1, E e2, E e3) {
-        return new ImmutableCollections.ListN<>(e1, e2, e3);
+        return ImmutableCollections.listFromTrustedArray(e1, e2, e3);
     }
 
     /**
@@ -859,7 +863,7 @@ public interface List<E> extends Collection<E> {
      * @since 9
      */
     static <E> List<E> of(E e1, E e2, E e3, E e4) {
-        return new ImmutableCollections.ListN<>(e1, e2, e3, e4);
+        return ImmutableCollections.listFromTrustedArray(e1, e2, e3, e4);
     }
 
     /**
@@ -879,7 +883,7 @@ public interface List<E> extends Collection<E> {
      * @since 9
      */
     static <E> List<E> of(E e1, E e2, E e3, E e4, E e5) {
-        return new ImmutableCollections.ListN<>(e1, e2, e3, e4, e5);
+        return ImmutableCollections.listFromTrustedArray(e1, e2, e3, e4, e5);
     }
 
     /**
@@ -900,8 +904,8 @@ public interface List<E> extends Collection<E> {
      * @since 9
      */
     static <E> List<E> of(E e1, E e2, E e3, E e4, E e5, E e6) {
-        return new ImmutableCollections.ListN<>(e1, e2, e3, e4, e5,
-                                                e6);
+        return ImmutableCollections.listFromTrustedArray(e1, e2, e3, e4, e5,
+                                                         e6);
     }
 
     /**
@@ -923,8 +927,8 @@ public interface List<E> extends Collection<E> {
      * @since 9
      */
     static <E> List<E> of(E e1, E e2, E e3, E e4, E e5, E e6, E e7) {
-        return new ImmutableCollections.ListN<>(e1, e2, e3, e4, e5,
-                                                e6, e7);
+        return ImmutableCollections.listFromTrustedArray(e1, e2, e3, e4, e5,
+                                                         e6, e7);
     }
 
     /**
@@ -947,8 +951,8 @@ public interface List<E> extends Collection<E> {
      * @since 9
      */
     static <E> List<E> of(E e1, E e2, E e3, E e4, E e5, E e6, E e7, E e8) {
-        return new ImmutableCollections.ListN<>(e1, e2, e3, e4, e5,
-                                                e6, e7, e8);
+        return ImmutableCollections.listFromTrustedArray(e1, e2, e3, e4, e5,
+                                                         e6, e7, e8);
     }
 
     /**
@@ -972,8 +976,8 @@ public interface List<E> extends Collection<E> {
      * @since 9
      */
     static <E> List<E> of(E e1, E e2, E e3, E e4, E e5, E e6, E e7, E e8, E e9) {
-        return new ImmutableCollections.ListN<>(e1, e2, e3, e4, e5,
-                                                e6, e7, e8, e9);
+        return ImmutableCollections.listFromTrustedArray(e1, e2, e3, e4, e5,
+                                                         e6, e7, e8, e9);
     }
 
     /**
@@ -998,8 +1002,8 @@ public interface List<E> extends Collection<E> {
      * @since 9
      */
     static <E> List<E> of(E e1, E e2, E e3, E e4, E e5, E e6, E e7, E e8, E e9, E e10) {
-        return new ImmutableCollections.ListN<>(e1, e2, e3, e4, e5,
-                                                e6, e7, e8, e9, e10);
+        return ImmutableCollections.listFromTrustedArray(e1, e2, e3, e4, e5,
+                                                         e6, e7, e8, e9, e10);
     }
 
     /**
@@ -1033,14 +1037,14 @@ public interface List<E> extends Collection<E> {
         switch (elements.length) { // implicit null check of elements
             case 0:
                 @SuppressWarnings("unchecked")
-                var list = (List<E>) ImmutableCollections.ListN.EMPTY_LIST;
+                var list = (List<E>) ImmutableCollections.EMPTY_LIST;
                 return list;
             case 1:
                 return new ImmutableCollections.List12<>(elements[0]);
             case 2:
                 return new ImmutableCollections.List12<>(elements[0], elements[1]);
             default:
-                return new ImmutableCollections.ListN<>(elements);
+                return ImmutableCollections.listFromArray(elements);
         }
     }
 

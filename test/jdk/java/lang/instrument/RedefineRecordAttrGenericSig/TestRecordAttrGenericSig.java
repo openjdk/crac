@@ -23,6 +23,7 @@
 
 /*
  * @test
+ * @bug 8246774
  * @summary Class redefinition must preclude changes to Record attributes
  * @comment This is a copy of test/jdk/java/lang/instrument/RedefineNestmateAttr/
  * @comment modified for records and the Record attribute.
@@ -31,14 +32,12 @@
  * @modules java.base/jdk.internal.misc
  * @modules java.compiler
  *          java.instrument
- *          jdk.jartool/sun.tools.jar
  * @compile ../NamedBuffer.java
  * @run main RedefineClassHelper
- * @compile --enable-preview --source 14 Host/Host.java
- * @compile --enable-preview --source 14 TestRecordAttrGenericSig.java
- * @run main/othervm -javaagent:redefineagent.jar -Xlog:redefine+class+record=trace --enable-preview TestRecordAttrGenericSig Host
- * @compile --enable-preview --source 14 HostA/Host.java
- * @run main/othervm -javaagent:redefineagent.jar -Xlog:redefine+class+record=trace --enable-preview TestRecordAttrGenericSig HostA
+ * @compile Host/Host.java
+ * @run main/othervm -javaagent:redefineagent.jar -Xlog:redefine+class+record=trace TestRecordAttrGenericSig Host
+ * @compile HostA/Host.java
+ * @run main/othervm -javaagent:redefineagent.jar -Xlog:redefine+class+record=trace TestRecordAttrGenericSig HostA
  */
 
 /* Test Description
@@ -110,6 +109,7 @@ public class TestRecordAttrGenericSig {
     static final String SRC = System.getProperty("test.src");
     static final String DEST = System.getProperty("test.classes");
     static final boolean VERBOSE = Boolean.getBoolean("verbose");
+    private static final String VERSION = Integer.toString(Runtime.version().feature());
 
     public static void main(String[] args) throws Throwable {
         String origin = args[0];
@@ -207,8 +207,6 @@ public class TestRecordAttrGenericSig {
                                         "            to: " + dst);
         CompilerUtils.compile(src.toPath(),
                               dst.toPath(),
-                              false /* don't recurse */,
-                              "--enable-preview",
-                              "--source", "14");
+                              false /* don't recurse */);
     }
 }

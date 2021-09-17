@@ -1,9 +1,10 @@
-Copyright (c) 2003, 2018, Oracle and/or its affiliates. All rights reserved.
+Copyright (c) 2003, 2020, Oracle and/or its affiliates. All rights reserved.
 DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
 
-This code is free software; you can redistribute it and\\\/or modify it
+This code is free software; you can redistribute it and/or modify it
 under the terms of the GNU General Public License version 2 only, as
 published by the Free Software Foundation.
+
 This code is distributed in the hope that it will be useful, but WITHOUT
 ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
 FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
@@ -53,7 +54,7 @@ Short description of files:
     text processing:
         Grep.java, Paragrep.java
     timeouts handling:
-        Harakiri.java, TimeoutHandler.java
+        Terminator.java, TimeoutHandler.java
     tree structures support:
         Denotation.java, TreeNodesDenotation.java
     RAS mode support:

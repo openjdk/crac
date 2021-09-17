@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2002, 2018, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2002, 2021, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -249,7 +249,6 @@ public class GTKLookAndFeel extends SynthLookAndFeel {
                 region == Region.SPINNER ||
                 region == Region.TABLE ||
                 region == Region.TEXT_AREA ||
-                region == Region.TEXT_FIELD ||
                 region == Region.TEXT_PANE ||
                 region == Region.TREE);
     }
@@ -312,7 +311,7 @@ public class GTKLookAndFeel extends SynthLookAndFeel {
             "com.sun.java.swing.plaf.gtk.GTKPainter$ListTableFocusBorder",
             "getNoFocusCellBorder");
 
-        GTKStyleFactory factory = (GTKStyleFactory)getStyleFactory();
+        SynthStyleFactory factory = getStyleFactory();
         GTKStyle tableStyle = (GTKStyle)factory.getStyle(null, Region.TREE);
         Color tableBg = tableStyle.getGTKColor(SynthConstants.ENABLED,
                 GTKColorType.TEXT_BACKGROUND);
@@ -505,7 +504,7 @@ public class GTKLookAndFeel extends SynthLookAndFeel {
                 this.region = region;
             }
             public Object createValue(UIDefaults table) {
-                GTKStyleFactory factory = (GTKStyleFactory)getStyleFactory();
+                SynthStyleFactory factory = getStyleFactory();
                 GTKStyle style = (GTKStyle)factory.getStyle(null, region);
                 return style.getDefaultFont();
             }
@@ -803,7 +802,7 @@ public class GTKLookAndFeel extends SynthLookAndFeel {
             "PasswordField.font", new FontLazyValue(Region.PASSWORD_FIELD),
 
 
-            "PopupMenu.consumeEventOnClose", Boolean.TRUE,
+            "PopupMenu.consumeEventOnClose", Boolean.FALSE,
             "PopupMenu.selectedWindowInputMapBindings", new Object[] {
                   "ESCAPE", "cancel",
                     "DOWN", "selectNext",
@@ -1305,7 +1304,7 @@ public class GTKLookAndFeel extends SynthLookAndFeel {
     }
 
     protected void initSystemColorDefaults(UIDefaults table) {
-        GTKStyleFactory factory = (GTKStyleFactory)getStyleFactory();
+        SynthStyleFactory factory = getStyleFactory();
         GTKStyle windowStyle =
                 (GTKStyle)factory.getStyle(null, Region.INTERNAL_FRAME);
         table.put("window", windowStyle.getGTKColor(SynthConstants.ENABLED,
@@ -1422,6 +1421,7 @@ public class GTKLookAndFeel extends SynthLookAndFeel {
         }
 
         if (UNIXToolkit.getGtkVersion() == UNIXToolkit.GtkVersions.GTK2) {
+            @SuppressWarnings("removal")
             String version = AccessController.doPrivileged(
                     new GetPropertyAction("jdk.gtk.version"));
             if (version != null) {

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1995, 2019, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 1995, 2020, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -89,59 +89,7 @@ enum {
 #define CMAP_ALLOC_DEFAULT      200     /* default number of colors in cmap */
 #define CMAP_ALLOC_MAX          245     /* maximum number of colors in cmap */
 
-#ifdef __solaris__
-#include <sys/utsname.h>
-
-struct {
-    char *machine;
-    int  cubesize;
-} machinemap[] = {
-    { "i86pc", LOOKUPSIZE / 4 }, /* BugTraq ID 4102599 */
-    { "sun4c", LOOKUPSIZE / 4 },
-    { "sun4m", LOOKUPSIZE / 2 },
-    { "sun4d", LOOKUPSIZE / 2 },
-    { "sun4u", LOOKUPSIZE / 1 },
-};
-
-#define MACHMAPSIZE     (sizeof(machinemap) / sizeof(machinemap[0]))
-
-int getVirtCubeSize() {
-    struct utsname name;
-    int i, ret;
-
-    ret = uname(&name);
-    if (ret < 0) {
-#ifdef DEBUG
-#include <errno.h>
-        jio_fprintf(stderr, "uname errno = %d, using default cubesize %d\n",
-                    errno, LOOKUPSIZE);
-#endif
-        return LOOKUPSIZE;
-    }
-
-    for (i = 0; i < MACHMAPSIZE; i++) {
-        if (strcmp(name.machine, machinemap[i].machine) == 0) {
-#ifdef DEBUG
-            if (debug_colormap) {
-                jio_fprintf(stderr, "'%s'.cubesize = '%d'\n",
-                            machinemap[i].machine, machinemap[i].cubesize);
-            }
-#endif
-            return machinemap[i].cubesize;
-        }
-    }
-
-#ifdef DEBUG
-    if (debug_colormap) {
-        jio_fprintf(stderr, "unknown machine '%s' using cubesize %d\n",
-                    name.machine, LOOKUPSIZE);
-    }
-#endif
-    return LOOKUPSIZE;
-}
-#else /* __solaris__ */
 #define getVirtCubeSize()       (LOOKUPSIZE)
-#endif /* __solaris__ */
 
 unsigned char img_bwgamma[256];
 uns_ordered_dither_array img_oda_alpha;
@@ -1263,43 +1211,6 @@ jobject awtJNI_GetColorModel(JNIEnv *env, AwtGraphicsConfigDataPtr aData)
 extern jfieldID colorValueID;
 
 #ifndef HEADLESS
-int awtJNI_GetColorForVis (JNIEnv *env,jobject this, AwtGraphicsConfigDataPtr awt_data)
-{
-    int col;
-    jclass SYSCLR_class;
-
-    if (!JNU_IsNull(env,this))
-    {
-        SYSCLR_class = (*env)->FindClass(env, "java/awt/SystemColor");
-        CHECK_NULL_RETURN(SYSCLR_class, 0);
-
-        if ((*env)->IsInstanceOf(env, this, SYSCLR_class)) {
-                /* SECURITY: This is safe, because there is no way
-                 *           for client code to insert an object
-                 *           that is a subclass of SystemColor
-                 */
-                col = (int) JNU_CallMethodByName(env
-                                          ,NULL
-                                          ,this
-                                          ,"getRGB"
-                                          ,"()I").i;
-                JNU_CHECK_EXCEPTION_RETURN(env, 0);
-        } else {
-                col = (int)(*env)->GetIntField(env,this,colorValueID);
-        }
-
-        if (awt_data->awt_cmap == (Colormap) NULL) {
-            awtJNI_CreateColorData (env, awt_data, 1);
-        }
-
-        col = awt_data->AwtColorMatch(red(col), green(col), blue(col),
-                                      awt_data);
-        return col;
-    }
-
-    return 0;
-}
-
 void
 awt_allocate_systemrgbcolors (jint *rgbColors, int num_colors,
                               AwtGraphicsConfigDataPtr awtData) {

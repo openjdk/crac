@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2017, 2019, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2017, 2021, Oracle and/or its affiliates. All rights reserved.
  */
 /*
  * Licensed to the Apache Software Foundation (ASF) under one or more
@@ -31,18 +31,17 @@ import com.sun.org.apache.bcel.internal.Const;
  * attribute and is used only there. It contains a range in which a
  * particular exception handler is active.
  *
- * @version $Id$
  * @see     Code
- * @LastModified: Jun 2019
+ * @LastModified: May 2021
  */
 public final class CodeException implements Cloneable, Node {
 
-    private int start_pc; // Range in the code the exception handler is
-    private int end_pc; // active. start_pc is inclusive, end_pc exclusive
-    private int handler_pc; /* Starting address of exception handler, i.e.,
+    private int startPc; // Range in the code the exception handler is
+    private int endPc; // active. startPc is inclusive, endPc exclusive
+    private int handlerPc; /* Starting address of exception handler, i.e.,
      * an offset from start of code.
      */
-    private int catch_type; /* If this is zero the handler catches any
+    private int catchType; /* If this is zero the handler catches any
      * exception, otherwise it points to the
      * exception class which is to be caught.
      */
@@ -68,20 +67,20 @@ public final class CodeException implements Cloneable, Node {
 
 
     /**
-     * @param start_pc Range in the code the exception handler is active,
-     * start_pc is inclusive while
-     * @param end_pc is exclusive
-     * @param handler_pc Starting address of exception handler, i.e.,
+     * @param startPc Range in the code the exception handler is active,
+     * startPc is inclusive while
+     * @param endPc is exclusive
+     * @param handlerPc Starting address of exception handler, i.e.,
      * an offset from start of code.
-     * @param catch_type If zero the handler catches any
+     * @param catchType If zero the handler catches any
      * exception, otherwise it points to the exception class which is
      * to be caught.
      */
-    public CodeException(final int start_pc, final int end_pc, final int handler_pc, final int catch_type) {
-        this.start_pc = start_pc;
-        this.end_pc = end_pc;
-        this.handler_pc = handler_pc;
-        this.catch_type = catch_type;
+    public CodeException(final int startPc, final int endPc, final int handlerPc, final int catchType) {
+        this.startPc = startPc;
+        this.endPc = endPc;
+        this.handlerPc = handlerPc;
+        this.catchType = catchType;
     }
 
 
@@ -104,11 +103,11 @@ public final class CodeException implements Cloneable, Node {
      * @param file Output file stream
      * @throws IOException
      */
-    public final void dump( final DataOutputStream file ) throws IOException {
-        file.writeShort(start_pc);
-        file.writeShort(end_pc);
-        file.writeShort(handler_pc);
-        file.writeShort(catch_type);
+    public void dump( final DataOutputStream file ) throws IOException {
+        file.writeShort(startPc);
+        file.writeShort(endPc);
+        file.writeShort(handlerPc);
+        file.writeShort(catchType);
     }
 
 
@@ -116,64 +115,64 @@ public final class CodeException implements Cloneable, Node {
      * @return 0, if the handler catches any exception, otherwise it points to
      * the exception class which is to be caught.
      */
-    public final int getCatchType() {
-        return catch_type;
+    public int getCatchType() {
+        return catchType;
     }
 
 
     /**
      * @return Exclusive end index of the region where the handler is active.
      */
-    public final int getEndPC() {
-        return end_pc;
+    public int getEndPC() {
+        return endPc;
     }
 
 
     /**
      * @return Starting address of exception handler, relative to the code.
      */
-    public final int getHandlerPC() {
-        return handler_pc;
+    public int getHandlerPC() {
+        return handlerPc;
     }
 
 
     /**
      * @return Inclusive start index of the region where the handler is active.
      */
-    public final int getStartPC() {
-        return start_pc;
+    public int getStartPC() {
+        return startPc;
     }
 
 
     /**
-     * @param catch_type the type of exception that is caught
+     * @param catchType the type of exception that is caught
      */
-    public final void setCatchType( final int catch_type ) {
-        this.catch_type = catch_type;
+    public void setCatchType( final int catchType ) {
+        this.catchType = catchType;
     }
 
 
     /**
-     * @param end_pc end of handled block
+     * @param endPc end of handled block
      */
-    public final void setEndPC( final int end_pc ) {
-        this.end_pc = end_pc;
+    public void setEndPC( final int endPc ) {
+        this.endPc = endPc;
     }
 
 
     /**
-     * @param handler_pc where the actual code is
+     * @param handlerPc where the actual code is
      */
-    public final void setHandlerPC( final int handler_pc ) { // TODO unused
-        this.handler_pc = handler_pc;
+    public void setHandlerPC( final int handlerPc ) { // TODO unused
+        this.handlerPc = handlerPc;
     }
 
 
     /**
-     * @param start_pc start of handled block
+     * @param startPc start of handled block
      */
-    public final void setStartPC( final int start_pc ) { // TODO unused
-        this.start_pc = start_pc;
+    public void setStartPC( final int startPc ) { // TODO unused
+        this.startPc = startPc;
     }
 
 
@@ -181,28 +180,28 @@ public final class CodeException implements Cloneable, Node {
      * @return String representation.
      */
     @Override
-    public final String toString() {
-        return "CodeException(start_pc = " + start_pc + ", end_pc = " + end_pc + ", handler_pc = "
-                + handler_pc + ", catch_type = " + catch_type + ")";
+    public String toString() {
+        return "CodeException(startPc = " + startPc + ", endPc = " + endPc + ", handlerPc = "
+                + handlerPc + ", catchType = " + catchType + ")";
     }
 
 
     /**
      * @return String representation.
      */
-    public final String toString( final ConstantPool cp, final boolean verbose ) {
+    public String toString( final ConstantPool cp, final boolean verbose ) {
         String str;
-        if (catch_type == 0) {
+        if (catchType == 0) {
             str = "<Any exception>(0)";
         } else {
-            str = Utility.compactClassName(cp.getConstantString(catch_type, Const.CONSTANT_Class), false)
-                    + (verbose ? "(" + catch_type + ")" : "");
+            str = Utility.compactClassName(cp.getConstantString(catchType, Const.CONSTANT_Class), false)
+                    + (verbose ? "(" + catchType + ")" : "");
         }
-        return start_pc + "\t" + end_pc + "\t" + handler_pc + "\t" + str;
+        return startPc + "\t" + endPc + "\t" + handlerPc + "\t" + str;
     }
 
 
-    public final String toString( final ConstantPool cp ) {
+    public String toString( final ConstantPool cp ) {
         return toString(cp, true);
     }
 

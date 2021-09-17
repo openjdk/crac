@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013, 2016, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2013, 2020, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -23,6 +23,7 @@
 
 /*
  * @test
+ * @key randomness
  * @bug 6896617
  * @summary Optimize sun.nio.cs.ISO_8859_1$Encode.encodeArrayLoop() with SSE instructions on x86
  * @library /test/lib
@@ -30,6 +31,7 @@
  *          java.base/sun.nio.cs
  *          java.management
  *
+ * @ignore 8193479
  * @run main/othervm/timeout=1200 -Xbatch -Xmx256m compiler.codegen.Test6896617
  */
 

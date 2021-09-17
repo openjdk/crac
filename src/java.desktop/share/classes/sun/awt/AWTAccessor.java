@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2008, 2018, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2008, 2021, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -25,8 +25,6 @@
 
 package sun.awt;
 
-import jdk.internal.misc.Unsafe;
-
 import javax.accessibility.AccessibleContext;
 import java.awt.*;
 import java.awt.event.FocusEvent.Cause;
@@ -34,7 +32,6 @@ import java.awt.dnd.DragSourceContext;
 import java.awt.dnd.DropTargetContext;
 import java.awt.dnd.peer.DragSourceContextPeer;
 import java.awt.dnd.peer.DropTargetContextPeer;
-import java.awt.event.AWTEventListener;
 import java.awt.event.InputEvent;
 import java.awt.event.InvocationEvent;
 import java.awt.event.KeyEvent;
@@ -44,6 +41,7 @@ import java.awt.image.BufferStrategy;
 import java.awt.peer.ComponentPeer;
 
 import java.awt.peer.MenuComponentPeer;
+import java.lang.invoke.MethodHandles;
 import java.lang.reflect.InvocationTargetException;
 import java.security.AccessControlContext;
 
@@ -60,8 +58,6 @@ import javax.accessibility.AccessibleBundle;
  * for another example.
  */
 public final class AWTAccessor {
-
-    private static final Unsafe unsafe = Unsafe.getUnsafe();
 
     /*
      * We don't need any objects of this class.
@@ -239,6 +235,7 @@ public final class AWTAccessor {
         /*
          * Returns the acc this component was constructed with.
          */
+        @SuppressWarnings("removal")
         AccessControlContext getAccessControlContext(Component comp);
 
         /**
@@ -357,6 +354,7 @@ public final class AWTAccessor {
         /**
          * Returns the acc this event was constructed with.
          */
+        @SuppressWarnings("removal")
         AccessControlContext getAccessControlContext(AWTEvent ev);
 
         /**
@@ -877,7 +875,7 @@ public final class AWTAccessor {
      */
     public static ComponentAccessor getComponentAccessor() {
         if (componentAccessor == null) {
-            unsafe.ensureClassInitialized(Component.class);
+            ensureClassInitialized(Component.class);
         }
 
         return componentAccessor;
@@ -895,7 +893,7 @@ public final class AWTAccessor {
      */
     public static ContainerAccessor getContainerAccessor() {
         if (containerAccessor == null) {
-            unsafe.ensureClassInitialized(Container.class);
+            ensureClassInitialized(Container.class);
         }
 
         return containerAccessor;
@@ -913,7 +911,7 @@ public final class AWTAccessor {
      */
     public static WindowAccessor getWindowAccessor() {
         if (windowAccessor == null) {
-            unsafe.ensureClassInitialized(Window.class);
+            ensureClassInitialized(Window.class);
         }
         return windowAccessor;
     }
@@ -930,7 +928,7 @@ public final class AWTAccessor {
      */
     public static AWTEventAccessor getAWTEventAccessor() {
         if (awtEventAccessor == null) {
-            unsafe.ensureClassInitialized(AWTEvent.class);
+            ensureClassInitialized(AWTEvent.class);
         }
         return awtEventAccessor;
     }
@@ -947,7 +945,7 @@ public final class AWTAccessor {
      */
     public static InputEventAccessor getInputEventAccessor() {
         if (inputEventAccessor == null) {
-            unsafe.ensureClassInitialized(InputEvent.class);
+            ensureClassInitialized(InputEvent.class);
         }
         return inputEventAccessor;
     }
@@ -964,7 +962,7 @@ public final class AWTAccessor {
      */
     public static MouseEventAccessor getMouseEventAccessor() {
         if (mouseEventAccessor == null) {
-            unsafe.ensureClassInitialized(MouseEvent.class);
+            ensureClassInitialized(MouseEvent.class);
         }
         return mouseEventAccessor;
     }
@@ -981,7 +979,7 @@ public final class AWTAccessor {
      */
     public static FrameAccessor getFrameAccessor() {
         if (frameAccessor == null) {
-            unsafe.ensureClassInitialized(Frame.class);
+            ensureClassInitialized(Frame.class);
         }
         return frameAccessor;
     }
@@ -998,7 +996,7 @@ public final class AWTAccessor {
      */
     public static KeyboardFocusManagerAccessor getKeyboardFocusManagerAccessor() {
         if (kfmAccessor == null) {
-            unsafe.ensureClassInitialized(KeyboardFocusManager.class);
+            ensureClassInitialized(KeyboardFocusManager.class);
         }
         return kfmAccessor;
     }
@@ -1015,7 +1013,7 @@ public final class AWTAccessor {
      */
     public static MenuComponentAccessor getMenuComponentAccessor() {
         if (menuComponentAccessor == null) {
-            unsafe.ensureClassInitialized(MenuComponent.class);
+            ensureClassInitialized(MenuComponent.class);
         }
         return menuComponentAccessor;
     }
@@ -1032,7 +1030,7 @@ public final class AWTAccessor {
      */
     public static EventQueueAccessor getEventQueueAccessor() {
         if (eventQueueAccessor == null) {
-            unsafe.ensureClassInitialized(EventQueue.class);
+            ensureClassInitialized(EventQueue.class);
         }
         return eventQueueAccessor;
     }
@@ -1049,7 +1047,7 @@ public final class AWTAccessor {
      */
     public static PopupMenuAccessor getPopupMenuAccessor() {
         if (popupMenuAccessor == null) {
-            unsafe.ensureClassInitialized(PopupMenu.class);
+            ensureClassInitialized(PopupMenu.class);
         }
         return popupMenuAccessor;
     }
@@ -1066,7 +1064,7 @@ public final class AWTAccessor {
      */
     public static FileDialogAccessor getFileDialogAccessor() {
         if (fileDialogAccessor == null) {
-            unsafe.ensureClassInitialized(FileDialog.class);
+            ensureClassInitialized(FileDialog.class);
         }
         return fileDialogAccessor;
     }
@@ -1084,7 +1082,7 @@ public final class AWTAccessor {
      */
     public static ScrollPaneAdjustableAccessor getScrollPaneAdjustableAccessor() {
         if (scrollPaneAdjustableAccessor == null) {
-            unsafe.ensureClassInitialized(ScrollPaneAdjustable.class);
+            ensureClassInitialized(ScrollPaneAdjustable.class);
         }
         return scrollPaneAdjustableAccessor;
     }
@@ -1101,7 +1099,7 @@ public final class AWTAccessor {
      */
     public static CheckboxMenuItemAccessor getCheckboxMenuItemAccessor() {
         if (checkboxMenuItemAccessor == null) {
-            unsafe.ensureClassInitialized(CheckboxMenuItemAccessor.class);
+            ensureClassInitialized(CheckboxMenuItemAccessor.class);
         }
         return checkboxMenuItemAccessor;
     }
@@ -1118,7 +1116,7 @@ public final class AWTAccessor {
      */
     public static CursorAccessor getCursorAccessor() {
         if (cursorAccessor == null) {
-            unsafe.ensureClassInitialized(CursorAccessor.class);
+            ensureClassInitialized(CursorAccessor.class);
         }
         return cursorAccessor;
     }
@@ -1135,7 +1133,7 @@ public final class AWTAccessor {
      */
     public static MenuBarAccessor getMenuBarAccessor() {
         if (menuBarAccessor == null) {
-            unsafe.ensureClassInitialized(MenuBarAccessor.class);
+            ensureClassInitialized(MenuBarAccessor.class);
         }
         return menuBarAccessor;
     }
@@ -1152,7 +1150,7 @@ public final class AWTAccessor {
      */
     public static MenuItemAccessor getMenuItemAccessor() {
         if (menuItemAccessor == null) {
-            unsafe.ensureClassInitialized(MenuItemAccessor.class);
+            ensureClassInitialized(MenuItemAccessor.class);
         }
         return menuItemAccessor;
     }
@@ -1169,7 +1167,7 @@ public final class AWTAccessor {
      */
     public static MenuAccessor getMenuAccessor() {
         if (menuAccessor == null) {
-            unsafe.ensureClassInitialized(MenuAccessor.class);
+            ensureClassInitialized(MenuAccessor.class);
         }
         return menuAccessor;
     }
@@ -1186,7 +1184,7 @@ public final class AWTAccessor {
      */
     public static KeyEventAccessor getKeyEventAccessor() {
         if (keyEventAccessor == null) {
-            unsafe.ensureClassInitialized(KeyEventAccessor.class);
+            ensureClassInitialized(KeyEventAccessor.class);
         }
         return keyEventAccessor;
     }
@@ -1203,7 +1201,7 @@ public final class AWTAccessor {
      */
     public static ClientPropertyKeyAccessor getClientPropertyKeyAccessor() {
         if (clientPropertyKeyAccessor == null) {
-            unsafe.ensureClassInitialized(ClientPropertyKeyAccessor.class);
+            ensureClassInitialized(ClientPropertyKeyAccessor.class);
         }
         return clientPropertyKeyAccessor;
     }
@@ -1220,7 +1218,7 @@ public final class AWTAccessor {
      */
     public static SystemTrayAccessor getSystemTrayAccessor() {
         if (systemTrayAccessor == null) {
-            unsafe.ensureClassInitialized(SystemTrayAccessor.class);
+            ensureClassInitialized(SystemTrayAccessor.class);
         }
         return systemTrayAccessor;
     }
@@ -1237,7 +1235,7 @@ public final class AWTAccessor {
      */
     public static TrayIconAccessor getTrayIconAccessor() {
         if (trayIconAccessor == null) {
-            unsafe.ensureClassInitialized(TrayIconAccessor.class);
+            ensureClassInitialized(TrayIconAccessor.class);
         }
         return trayIconAccessor;
     }
@@ -1254,7 +1252,7 @@ public final class AWTAccessor {
      */
     public static DefaultKeyboardFocusManagerAccessor getDefaultKeyboardFocusManagerAccessor() {
         if (defaultKeyboardFocusManagerAccessor == null) {
-            unsafe.ensureClassInitialized(DefaultKeyboardFocusManagerAccessor.class);
+            ensureClassInitialized(DefaultKeyboardFocusManagerAccessor.class);
         }
         return defaultKeyboardFocusManagerAccessor;
     }
@@ -1271,7 +1269,7 @@ public final class AWTAccessor {
     public static SequencedEventAccessor getSequencedEventAccessor() {
         if (sequencedEventAccessor == null) {
             try {
-                unsafe.ensureClassInitialized(
+                ensureClassInitialized(
                         Class.forName("java.awt.SequencedEvent"));
             } catch (ClassNotFoundException ignore) {
             }
@@ -1291,7 +1289,7 @@ public final class AWTAccessor {
      */
     public static ToolkitAccessor getToolkitAccessor() {
         if (toolkitAccessor == null) {
-            unsafe.ensureClassInitialized(Toolkit.class);
+            ensureClassInitialized(Toolkit.class);
         }
 
         return toolkitAccessor;
@@ -1316,7 +1314,7 @@ public final class AWTAccessor {
      */
     public static SystemColorAccessor getSystemColorAccessor() {
         if (systemColorAccessor == null) {
-            unsafe.ensureClassInitialized(SystemColor.class);
+            ensureClassInitialized(SystemColor.class);
         }
 
         return systemColorAccessor;
@@ -1334,7 +1332,7 @@ public final class AWTAccessor {
      */
     public static AccessibleContextAccessor getAccessibleContextAccessor() {
         if (accessibleContextAccessor == null) {
-            unsafe.ensureClassInitialized(AccessibleContext.class);
+            ensureClassInitialized(AccessibleContext.class);
         }
         return accessibleContextAccessor;
     }
@@ -1351,7 +1349,7 @@ public final class AWTAccessor {
      */
     public static AccessibleBundleAccessor getAccessibleBundleAccessor() {
         if (accessibleBundleAccessor == null) {
-            unsafe.ensureClassInitialized(AccessibleBundle.class);
+            ensureClassInitialized(AccessibleBundle.class);
         }
         return accessibleBundleAccessor;
     }
@@ -1368,7 +1366,7 @@ public final class AWTAccessor {
      */
     public static DragSourceContextAccessor getDragSourceContextAccessor() {
         if (dragSourceContextAccessor == null) {
-            unsafe.ensureClassInitialized(DragSourceContext.class);
+            ensureClassInitialized(DragSourceContext.class);
         }
         return dragSourceContextAccessor;
     }
@@ -1385,7 +1383,7 @@ public final class AWTAccessor {
      */
     public static DropTargetContextAccessor getDropTargetContextAccessor() {
         if (dropTargetContextAccessor == null) {
-            unsafe.ensureClassInitialized(DropTargetContext.class);
+            ensureClassInitialized(DropTargetContext.class);
         }
         return dropTargetContextAccessor;
     }
@@ -1397,4 +1395,9 @@ public final class AWTAccessor {
         AWTAccessor.dropTargetContextAccessor = accessor;
     }
 
+    private static void ensureClassInitialized(Class<?> c) {
+        try {
+            MethodHandles.lookup().ensureInitialized(c);
+        } catch (IllegalAccessException e) {}
+    }
 }

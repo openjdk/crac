@@ -37,7 +37,7 @@ import javax.lang.model.element.VariableElement;
  *  deletion without notice.</b>
  */
 
-public interface EnumConstantWriter {
+public interface EnumConstantWriter extends MemberWriter {
 
     /**
      * Get the enum constants details tree header.
@@ -46,8 +46,8 @@ public interface EnumConstantWriter {
      * @param memberDetailsTree the content tree representing member details
      * @return content tree for the enum constants details header
      */
-    public Content getEnumConstantsDetailsTreeHeader(TypeElement typeElement,
-            Content memberDetailsTree);
+    Content getEnumConstantsDetailsTreeHeader(TypeElement typeElement,
+                                              Content memberDetailsTree);
 
     /**
      * Get the enum constants documentation tree header.
@@ -56,8 +56,8 @@ public interface EnumConstantWriter {
      * @param enumConstantsDetailsTree the content tree representing enum constant details
      * @return content tree for the enum constant documentation header
      */
-    public Content getEnumConstantsTreeHeader(VariableElement enumConstant,
-            Content enumConstantsDetailsTree);
+    Content getEnumConstantsTreeHeader(VariableElement enumConstant,
+                                       Content enumConstantsDetailsTree);
 
     /**
      * Get the signature for the given enum constant.
@@ -65,7 +65,7 @@ public interface EnumConstantWriter {
      * @param enumConstant the enum constant being documented
      * @return content tree for the enum constant signature
      */
-    public Content getSignature(VariableElement enumConstant);
+    Content getSignature(VariableElement enumConstant);
 
     /**
      * Add the deprecated output for the given enum constant.
@@ -73,7 +73,15 @@ public interface EnumConstantWriter {
      * @param enumConstant the enum constant being documented
      * @param enumConstantsTree content tree to which the deprecated information will be added
      */
-    public void addDeprecated(VariableElement enumConstant, Content enumConstantsTree);
+    void addDeprecated(VariableElement enumConstant, Content enumConstantsTree);
+
+    /**
+     * Add the preview output for the given member.
+     *
+     * @param member the member being documented
+     * @param annotationDocTree content tree to which the preview information will be added
+     */
+    void addPreview(VariableElement member, Content contentTree);
 
     /**
      * Add the comments for the given enum constant.
@@ -81,7 +89,7 @@ public interface EnumConstantWriter {
      * @param enumConstant the enum constant being documented
      * @param enumConstantsTree the content tree to which the comments will be added
      */
-    public void addComments(VariableElement enumConstant, Content enumConstantsTree);
+    void addComments(VariableElement enumConstant, Content enumConstantsTree);
 
     /**
      * Add the tags for the given enum constant.
@@ -89,7 +97,7 @@ public interface EnumConstantWriter {
      * @param enumConstant the enum constant being documented
      * @param enumConstantsTree the content tree to which the tags will be added
      */
-    public void addTags(VariableElement enumConstant, Content enumConstantsTree);
+    void addTags(VariableElement enumConstant, Content enumConstantsTree);
 
     /**
      * Get the enum constants details tree.
@@ -97,20 +105,12 @@ public interface EnumConstantWriter {
      * @param memberDetailsTree the content tree representing member details
      * @return content tree for the enum constant details
      */
-    public Content getEnumConstantsDetails(Content memberDetailsTreeHeader, Content memberDetailsTree);
-
-    /**
-     * Get the enum constants documentation.
-     *
-     * @param enumConstantsTree the content tree representing enum constants documentation
-     * @return content tree for the enum constants documentation
-     */
-    public Content getEnumConstants(Content enumConstantsTree);
+    Content getEnumConstantsDetails(Content memberDetailsTreeHeader, Content memberDetailsTree);
 
     /**
      * Gets the member header tree.
      *
      * @return a content tree for the member header
      */
-    public Content getMemberTreeHeader();
+    Content getMemberTreeHeader();
 }

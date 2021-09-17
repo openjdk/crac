@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015, 2019, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2015, 2021, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -104,8 +104,7 @@ public class BuiltinClassLoader
     private final BuiltinClassLoader parent;
 
     // the URL class path, or null if there is no class path
-    private final URLClassPath ucp;
-
+    private @Stable URLClassPath ucp;
 
     /**
      * A module defined/loaded by a built-in class loader.
@@ -156,10 +155,26 @@ public class BuiltinClassLoader
         }
     }
 
-
     // maps package name to loaded module for modules in the boot layer
-    private static final Map<String, LoadedModule> packageToModule
-        = new ConcurrentHashMap<>(1024);
+    private static final Map<String, LoadedModule> packageToModule;
+    static {
+        ArchivedClassLoaders archivedClassLoaders = ArchivedClassLoaders.get();
+        if (archivedClassLoaders != null) {
+            @SuppressWarnings("unchecked")
+            Map<String, LoadedModule> map
+                = (Map<String, LoadedModule>) archivedClassLoaders.packageToModule();
+            packageToModule = map;
+        } else {
+            packageToModule = new ConcurrentHashMap<>(1024);
+        }
+    }
+
+    /**
+     * Invoked by ArchivedClassLoaders to archive the package-to-module map.
+     */
+    static Map<String, ?> packageToModule() {
+        return packageToModule;
+    }
 
     // maps a module name to a module reference
     private final Map<String, ModuleReference> nameToModule;
@@ -186,6 +201,21 @@ public class BuiltinClassLoader
     }
 
     /**
+     * Appends to the given file path to the class path.
+     */
+    void appendClassPath(String path) {
+        // assert ucp != null;
+        ucp.addFile(path);
+    }
+
+    /**
+     * Sets the class path, called to reset the class path during -Xshare:dump
+     */
+    void setClassPath(URLClassPath ucp) {
+        this.ucp = ucp;
+    }
+
+    /**
      * Returns {@code true} if there is a class path associated with this
      * class loader.
      */
@@ -198,22 +228,23 @@ public class BuiltinClassLoader
      * types in the module visible.
      */
     public void loadModule(ModuleReference mref) {
-        String mn = mref.descriptor().name();
+        ModuleDescriptor descriptor = mref.descriptor();
+        String mn = descriptor.name();
         if (nameToModule.putIfAbsent(mn, mref) != null) {
             throw new InternalError(mn + " already defined to this loader");
         }
 
         LoadedModule loadedModule = new LoadedModule(this, mref);
-        for (String pn : mref.descriptor().packages()) {
+        for (String pn : descriptor.packages()) {
             LoadedModule other = packageToModule.putIfAbsent(pn, loadedModule);
             if (other != null) {
                 throw new InternalError(pn + " in modules " + mn + " and "
-                                        + other.mref().descriptor().name());
+                                        + other.name());
             }
         }
 
         // clear resources cache if VM is already initialized
-        if (VM.isModuleSystemInited() && resourceCache != null) {
+        if (resourceCache != null && VM.isModuleSystemInited()) {
             resourceCache = null;
         }
     }
@@ -257,6 +288,7 @@ public class BuiltinClassLoader
      * Returns an input stream to a resource of the given name in a module
      * defined to this class loader.
      */
+    @SuppressWarnings("removal")
     public InputStream findResourceAsStream(String mn, String name)
         throws IOException
     {
@@ -404,12 +436,16 @@ public class BuiltinClassLoader
      *
      * The cache used by this method avoids repeated searching of all modules.
      */
+    @SuppressWarnings("removal")
     private List<URL> findMiscResource(String name) throws IOException {
         SoftReference<Map<String, List<URL>>> ref = this.resourceCache;
         Map<String, List<URL>> map = (ref != null) ? ref.get() : null;
         if (map == null) {
-            map = new ConcurrentHashMap<>();
-            this.resourceCache = new SoftReference<>(map);
+            // only cache resources after VM is fully initialized
+            if (VM.isModuleSystemInited()) {
+                map = new ConcurrentHashMap<>();
+                this.resourceCache = new SoftReference<>(map);
+            }
         } else {
             List<URL> urls = map.get(name);
             if (urls != null)
@@ -444,7 +480,7 @@ public class BuiltinClassLoader
         }
 
         // only cache resources after VM is fully initialized
-        if (VM.isModuleSystemInited()) {
+        if (map != null) {
             map.putIfAbsent(name, urls);
         }
 
@@ -454,6 +490,7 @@ public class BuiltinClassLoader
     /**
      * Returns the URL to a resource in a module or {@code null} if not found.
      */
+    @SuppressWarnings("removal")
     private URL findResource(ModuleReference mref, String name) throws IOException {
         URI u;
         if (System.getSecurityManager() == null) {
@@ -493,6 +530,7 @@ public class BuiltinClassLoader
     /**
      * Returns a URL to a resource on the class path.
      */
+    @SuppressWarnings("removal")
     private URL findResourceOnClassPath(String name) {
         if (hasClassPath()) {
             if (System.getSecurityManager() == null) {
@@ -510,6 +548,7 @@ public class BuiltinClassLoader
     /**
      * Returns the URLs of all resources of the given name on the class path.
      */
+    @SuppressWarnings("removal")
     private Enumeration<URL> findResourcesOnClassPath(String name) {
         if (hasClassPath()) {
             if (System.getSecurityManager() == null) {
@@ -696,6 +735,7 @@ public class BuiltinClassLoader
      *
      * @return the resulting Class or {@code null} if not found
      */
+    @SuppressWarnings("removal")
     private Class<?> findClassInModuleOrNull(LoadedModule loadedModule, String cn) {
         if (System.getSecurityManager() == null) {
             return defineClass(cn, loadedModule);
@@ -710,6 +750,7 @@ public class BuiltinClassLoader
      *
      * @return the resulting Class or {@code null} if not found
      */
+    @SuppressWarnings("removal")
     private Class<?> findClassOnClassPathOrNull(String cn) {
         String path = cn.replace('.', '/').concat(".class");
         if (System.getSecurityManager() == null) {
@@ -1037,5 +1078,10 @@ public class BuiltinClassLoader
      */
     private static URL checkURL(URL url) {
         return URLClassPath.checkURL(url);
+    }
+
+    // Called from VM only, during -Xshare:dump
+    private void resetArchivedStates() {
+        ucp = null;
     }
 }

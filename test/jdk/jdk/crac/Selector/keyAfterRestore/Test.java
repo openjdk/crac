@@ -21,8 +21,9 @@
 
 import java.nio.channels.*;
 import java.io.IOException;
+import jdk.crac.*;
 
-class ChannelResource implements jdk.crac.Resource {
+class ChannelResource implements Resource {
 
     private SocketChannel channel;
     private SelectionKey  key;
@@ -30,7 +31,7 @@ class ChannelResource implements jdk.crac.Resource {
 
     private Object        att = new Integer(123);
 
-    public ChannelResource() { jdk.crac.Core.getGlobalContext().register(this); }
+    public ChannelResource() { Core.getGlobalContext().register(this); }
 
     public void open() throws IOException {
         channel = SocketChannel.open();
@@ -44,7 +45,7 @@ class ChannelResource implements jdk.crac.Resource {
     }
 
     @Override
-    public void beforeCheckpoint() throws IOException {
+    public void beforeCheckpoint(Context<? extends Resource> context) throws IOException {
 
         channel.socket().close(); // close the channel => cancel the key
         check(!channel.isOpen(), "the channel should not be open");
@@ -52,7 +53,7 @@ class ChannelResource implements jdk.crac.Resource {
     }
 
     @Override
-    public void afterRestore() {
+    public void afterRestore(Context<? extends Resource> context) {
 
         check(key.selector().equals(selector), "invalid key.selector()");
         check(key.channel().equals(channel), "invalid key.channel()");
@@ -157,12 +158,9 @@ public class Test {
         ch.register(selector);
 
         try {
-            jdk.crac.Core.checkpointRestore();
-        } catch (jdk.crac.CheckpointException e) {
-            e.printExceptions(System.out);
-            throw e;
-        } catch (jdk.crac.RestoreException e) {
-            e.printExceptions(System.out);
+            Core.checkpointRestore();
+        } catch (CheckpointException | RestoreException e) {
+            e.printStackTrace();
             throw e;
         }
 

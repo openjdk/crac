@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015, 2017 Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2015, 2017, Oracle and/or its affiliates. All rights reserved.
  */
 /*
  * Licensed to the Apache Software Foundation (ASF) under one or more
@@ -438,8 +438,8 @@ public final class HTMLdtd
     private static void defineEntity( String name, char value )
     {
         if ( _byName.get( name ) == null ) {
-            _byName.put( name, new Integer( value ) );
-            _byChar.put( new Integer( value ), name );
+            _byName.put( name, (int) value);
+            _byChar.put( (int) value , name );
         }
     }
 

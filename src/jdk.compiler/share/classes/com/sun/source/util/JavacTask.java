@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2005, 2019, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2005, 2020, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -50,6 +50,10 @@ import com.sun.tools.javac.util.Context;
  * @since 1.6
  */
 public abstract class JavacTask implements CompilationTask {
+    /**
+     * Constructor for subclasses to call.
+     */
+    public JavacTask() {}
 
     /**
      * Returns the {@code JavacTask} for a {@code ProcessingEnvironment}.
@@ -153,14 +157,14 @@ public abstract class JavacTask implements CompilationTask {
      *
      * @implSpec The default implementation of this method does nothing.
      *
-     * @param provider the provider.
+     * @param provider the provider
      * @since 13
      */
     public void setParameterNameProvider(ParameterNameProvider provider) {}
 
     /**
      * Returns a type mirror of the tree node determined by the specified path.
-     * This method has been superceded by methods on
+     * This method has been superseded by methods on
      * {@link com.sun.source.util.Trees Trees}.
      *
      * @param path the path

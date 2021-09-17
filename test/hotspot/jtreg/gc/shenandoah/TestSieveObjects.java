@@ -1,5 +1,6 @@
 /*
  * Copyright (c) 2017, 2018, Red Hat, Inc. All rights reserved.
+ * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 2 only, as
@@ -24,8 +25,9 @@
 /*
  * @test TestSieveObjects
  * @summary Acceptance tests: collector can deal with retained objects
- * @key gc
- * @requires vm.gc.Shenandoah & !vm.graal.enabled
+ * @key randomness
+ * @requires vm.gc.Shenandoah
+ * @library /test/lib
  *
  * @run main/othervm -Xmx1g -Xms1g -XX:+UnlockDiagnosticVMOptions -XX:+UnlockExperimentalVMOptions
  *      -XX:+UseShenandoahGC -XX:ShenandoahGCMode=passive
@@ -51,8 +53,9 @@
 /*
  * @test TestSieveObjects
  * @summary Acceptance tests: collector can deal with retained objects
- * @key gc
- * @requires vm.gc.Shenandoah & !vm.graal.enabled
+ * @key randomness
+ * @requires vm.gc.Shenandoah
+ * @library /test/lib
  *
  * @run main/othervm -Xmx1g -Xms1g -XX:+UnlockDiagnosticVMOptions -XX:+UnlockExperimentalVMOptions
  *      -XX:+UseShenandoahGC -XX:ShenandoahGCHeuristics=aggressive
@@ -67,6 +70,14 @@
  * @run main/othervm -Xmx1g -Xms1g -XX:+UnlockDiagnosticVMOptions -XX:+UnlockExperimentalVMOptions
  *      -XX:+UseShenandoahGC -XX:ShenandoahGCHeuristics=aggressive
  *      TestSieveObjects
+ */
+
+/*
+ * @test TestSieveObjects
+ * @summary Acceptance tests: collector can deal with retained objects
+ * @key randomness
+ * @requires vm.gc.Shenandoah
+ * @library /test/lib
  *
  * @run main/othervm -Xmx1g -Xms1g -XX:+UnlockDiagnosticVMOptions -XX:+UnlockExperimentalVMOptions
  *      -XX:+UseShenandoahGC -XX:ShenandoahGCHeuristics=adaptive
@@ -77,13 +88,38 @@
  *      -XX:+UseShenandoahGC -XX:ShenandoahGCHeuristics=adaptive
  *      TestSieveObjects
  *
+ */
+
+/*
+ * @test TestSieveObjects
+ * @summary Acceptance tests: collector can deal with retained objects
+ * @key randomness
+ * @requires vm.gc.Shenandoah
+ * @library /test/lib
+ *
  * @run main/othervm -Xmx1g -Xms1g -XX:+UnlockDiagnosticVMOptions -XX:+UnlockExperimentalVMOptions
  *      -XX:+UseShenandoahGC -XX:ShenandoahGCHeuristics=static
  *      TestSieveObjects
+ */
+
+/*
+ * @test TestSieveObjects
+ * @summary Acceptance tests: collector can deal with retained objects
+ * @key randomness
+ * @requires vm.gc.Shenandoah
+ * @library /test/lib
  *
  * @run main/othervm -Xmx1g -Xms1g -XX:+UnlockDiagnosticVMOptions -XX:+UnlockExperimentalVMOptions
  *      -XX:+UseShenandoahGC -XX:ShenandoahGCHeuristics=compact
  *      TestSieveObjects
+ */
+
+/*
+ * @test TestSieveObjects
+ * @summary Acceptance tests: collector can deal with retained objects
+ * @key randomness
+ * @requires vm.gc.Shenandoah
+ * @library /test/lib
  *
  * @run main/othervm/timeout=240 -Xmx1g -Xms1g -XX:+UnlockDiagnosticVMOptions -XX:+UnlockExperimentalVMOptions
  *      -XX:+UseShenandoahGC
@@ -94,34 +130,44 @@
 /*
  * @test TestSieveObjects
  * @summary Acceptance tests: collector can deal with retained objects
- * @key gc
- * @requires vm.gc.Shenandoah & !vm.graal.enabled
+ * @key randomness
+ * @requires vm.gc.Shenandoah
+ * @library /test/lib
  *
  * @run main/othervm -Xmx1g -Xms1g -XX:+UnlockDiagnosticVMOptions -XX:+UnlockExperimentalVMOptions
- *      -XX:+UseShenandoahGC -XX:ShenandoahGCMode=traversal -XX:ShenandoahGCHeuristics=aggressive
+ *      -XX:+UseShenandoahGC -XX:ShenandoahGCMode=iu -XX:ShenandoahGCHeuristics=aggressive
  *      -XX:+ShenandoahOOMDuringEvacALot
  *      TestSieveObjects
  *
  * @run main/othervm -Xmx1g -Xms1g -XX:+UnlockDiagnosticVMOptions -XX:+UnlockExperimentalVMOptions
- *      -XX:+UseShenandoahGC -XX:ShenandoahGCMode=traversal -XX:ShenandoahGCHeuristics=aggressive
+ *      -XX:+UseShenandoahGC -XX:ShenandoahGCMode=iu -XX:ShenandoahGCHeuristics=aggressive
  *      -XX:+ShenandoahAllocFailureALot
  *      TestSieveObjects
  *
  * @run main/othervm -Xmx1g -Xms1g -XX:+UnlockDiagnosticVMOptions -XX:+UnlockExperimentalVMOptions
- *      -XX:+UseShenandoahGC -XX:ShenandoahGCMode=traversal -XX:ShenandoahGCHeuristics=aggressive
+ *      -XX:+UseShenandoahGC -XX:ShenandoahGCMode=iu -XX:ShenandoahGCHeuristics=aggressive
  *      TestSieveObjects
+ */
+
+/*
+ * @test TestSieveObjects
+ * @summary Acceptance tests: collector can deal with retained objects
+ * @key randomness
+ * @requires vm.gc.Shenandoah
+ * @library /test/lib
  *
  * @run main/othervm -Xmx1g -Xms1g -XX:+UnlockDiagnosticVMOptions -XX:+UnlockExperimentalVMOptions
- *      -XX:+UseShenandoahGC -XX:ShenandoahGCMode=traversal
+ *      -XX:+UseShenandoahGC -XX:ShenandoahGCMode=iu
  *      -XX:+ShenandoahVerify
  *      TestSieveObjects
  *
  * @run main/othervm -Xmx1g -Xms1g -XX:+UnlockDiagnosticVMOptions -XX:+UnlockExperimentalVMOptions
- *      -XX:+UseShenandoahGC -XX:ShenandoahGCMode=traversal
+ *      -XX:+UseShenandoahGC -XX:ShenandoahGCMode=iu
  *      TestSieveObjects
  */
 
-import java.util.concurrent.ThreadLocalRandom;
+import java.util.Random;
+import jdk.test.lib.Utils;
 
 public class TestSieveObjects {
 
@@ -133,17 +179,18 @@ public class TestSieveObjects {
 
     public static void main(String[] args) throws Exception {
         int rIdx = 0;
+        Random rng = Utils.getRandomInstance();
         for (int c = 0; c < COUNT; c++) {
             MyObject v = arr[rIdx];
             if (v != null) {
                 if (v.x != rIdx) {
                     throw new IllegalStateException("Illegal value at index " + rIdx + ": " + v.x);
                 }
-                if (ThreadLocalRandom.current().nextInt(1000) > 100) {
+                if (rng.nextInt(1000) > 100) {
                     arr[rIdx] = null;
                 }
             } else {
-                if (ThreadLocalRandom.current().nextInt(1000) > 500) {
+                if (rng.nextInt(1000) > 500) {
                     arr[rIdx] = new MyObject(rIdx);
                 }
             }

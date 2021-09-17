@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2001, 2019, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2001, 2020, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -31,13 +31,13 @@ import java.util.List;
 import javax.lang.model.element.Element;
 
 import com.sun.source.doctree.DocTree;
+import com.sun.source.doctree.SeeTree;
+import jdk.javadoc.doclet.Taglet.Location;
 import jdk.javadoc.internal.doclets.toolkit.Content;
 import jdk.javadoc.internal.doclets.toolkit.util.CommentHelper;
 import jdk.javadoc.internal.doclets.toolkit.util.DocFinder;
 import jdk.javadoc.internal.doclets.toolkit.util.DocFinder.Input;
 import jdk.javadoc.internal.doclets.toolkit.util.Utils;
-
-import static com.sun.source.doctree.DocTree.Kind.SEE;
 
 /**
  * A taglet that represents the @see tag.
@@ -50,26 +50,26 @@ import static com.sun.source.doctree.DocTree.Kind.SEE;
 public class SeeTaglet extends BaseTaglet implements InheritableTaglet {
 
     public SeeTaglet() {
-        super(SEE.tagName, false, EnumSet.allOf(Site.class));
+        super(DocTree.Kind.SEE, false, EnumSet.allOf(Location.class));
     }
 
     @Override
     public void inherit(DocFinder.Input input, DocFinder.Output output) {
-        List<? extends DocTree> tags = input.utils.getSeeTrees(input.element);
+        List<? extends SeeTree> tags = input.utils.getSeeTrees(input.element);
         if (!tags.isEmpty()) {
             CommentHelper ch =  input.utils.getCommentHelper(input.element);
             output.holder = input.element;
             output.holderTag = tags.get(0);
             output.inlineTags = input.isFirstSentence
-                    ? ch.getFirstSentenceTrees(input.utils.configuration, output.holderTag)
+                    ? ch.getFirstSentenceTrees(output.holderTag)
                     : ch.getReference(output.holderTag);
         }
     }
 
     @Override
-    public Content getTagletOutput(Element holder, TagletWriter writer) {
+    public Content getAllBlockTagOutput(Element holder, TagletWriter writer) {
         Utils utils = writer.configuration().utils;
-        List<? extends DocTree> tags = utils.getSeeTrees(holder);
+        List<? extends SeeTree> tags = utils.getSeeTrees(holder);
         Element e = holder;
         if (tags.isEmpty() && utils.isExecutableElement(holder)) {
             Input input = new DocFinder.Input(utils, holder, this);

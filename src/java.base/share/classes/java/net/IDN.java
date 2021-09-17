@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2005, 2013, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2005, 2021, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -29,9 +29,9 @@ import java.io.IOException;
 import java.security.AccessController;
 import java.security.PrivilegedAction;
 
-import sun.net.idn.StringPrep;
-import sun.net.idn.Punycode;
-import sun.text.normalizer.UCharacterIterator;
+import jdk.internal.icu.impl.Punycode;
+import jdk.internal.icu.text.StringPrep;
+import jdk.internal.icu.text.UCharacterIterator;
 
 /**
  * Provides methods to convert internationalized domain names (IDNs) between
@@ -72,6 +72,7 @@ import sun.text.normalizer.UCharacterIterator;
  * @since 1.6
  *
  */
+@SuppressWarnings("removal")
 public final class IDN {
     /**
      * Flag to allow processing of unassigned code points
@@ -226,7 +227,7 @@ public final class IDN {
         InputStream stream = null;
 
         try {
-            final String IDN_PROFILE = "uidna.spp";
+            final String IDN_PROFILE = "/sun/net/idn/uidna.spp";
             if (System.getSecurityManager() != null) {
                 stream = AccessController.doPrivileged(new PrivilegedAction<>() {
                     public InputStream run() {

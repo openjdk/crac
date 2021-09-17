@@ -4,9 +4,7 @@
  *
  * This code is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 2 only, as
- * published by the Free Software Foundation.  Oracle designates this
- * particular file as subject to the "Classpath" exception as provided
- * by Oracle in the LICENSE file that accompanied this code.
+ * published by the Free Software Foundation.
  *
  * This code is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
@@ -42,7 +40,7 @@ import jdk.test.lib.jfr.Events;
  * @requires (vm.gc == "Parallel" | vm.gc == null)
  *           & vm.opt.ExplicitGCInvokesConcurrent != true
  * @library /test/lib /test/jdk
- * @run main/othervm -XX:+UnlockExperimentalVMOptions -XX:-UseFastUnorderedTimeStamps -XX:+UseParallelGC -XX:+UseParallelOldGC -XX:ParallelGCThreads=3 -XX:ConcGCThreads=2 -XX:+UseDynamicNumberOfGCThreads -XX:-ExplicitGCInvokesConcurrent -XX:-DisableExplicitGC -XX:MaxGCPauseMillis=800 -XX:GCTimeRatio=19 jdk.jfr.event.gc.configuration.TestGCConfigurationEvent
+ * @run main/othervm -XX:+UnlockExperimentalVMOptions -XX:-UseFastUnorderedTimeStamps -XX:+UseParallelGC -XX:ParallelGCThreads=3 -XX:ConcGCThreads=2 -XX:+UseDynamicNumberOfGCThreads -XX:-ExplicitGCInvokesConcurrent -XX:-DisableExplicitGC -XX:MaxGCPauseMillis=800 -XX:GCTimeRatio=19 jdk.jfr.event.gc.configuration.TestGCConfigurationEvent
  */
 public class TestGCConfigurationEvent {
     public static void main(String[] args) throws Exception {

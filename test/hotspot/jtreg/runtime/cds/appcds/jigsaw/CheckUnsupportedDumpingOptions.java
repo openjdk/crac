@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2016, 2019, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2016, 2021, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -27,13 +27,13 @@
  * @summary Abort dumping if any of the new jigsaw vm options is specified.
  * @requires vm.cds
  * @library /test/lib ..
- * @modules jdk.jartool/sun.tools.jar
  * @compile ../test-classes/Hello.java
  * @run driver CheckUnsupportedDumpingOptions
  */
 
 import jdk.test.lib.compiler.InMemoryJavaCompiler;
 import jdk.test.lib.process.OutputAnalyzer;
+import jdk.test.lib.helpers.ClassFileInstaller;
 
 public class CheckUnsupportedDumpingOptions {
     private static final String[] jigsawOptions = {

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1997, 2018, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 1997, 2021, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -29,7 +29,6 @@ import jdk.internal.access.SharedSecrets;
 import jdk.internal.access.JavaUtilZipFileAccess;
 import sun.security.action.GetPropertyAction;
 import sun.security.util.ManifestEntryVerifier;
-import sun.security.util.SignatureFileVerifier;
 
 import java.io.ByteArrayInputStream;
 import java.io.EOFException;
@@ -146,18 +145,22 @@ import java.util.zip.ZipFile;
  * @since   1.2
  */
 public class JarFile extends ZipFile {
-    private final static Runtime.Version BASE_VERSION;
-    private final static int BASE_VERSION_FEATURE;
-    private final static Runtime.Version RUNTIME_VERSION;
-    private final static boolean MULTI_RELEASE_ENABLED;
-    private final static boolean MULTI_RELEASE_FORCED;
+    private static final Runtime.Version BASE_VERSION;
+    private static final int BASE_VERSION_FEATURE;
+    private static final Runtime.Version RUNTIME_VERSION;
+    private static final boolean MULTI_RELEASE_ENABLED;
+    private static final boolean MULTI_RELEASE_FORCED;
+    private static final ThreadLocal<Boolean> isInitializing = new ThreadLocal<>();
+    // The maximum size of array to allocate. Some VMs reserve some header words in an array.
+    private static final int MAX_ARRAY_SIZE = Integer.MAX_VALUE - 8;
+
     private SoftReference<Manifest> manRef;
     private JarEntry manEntry;
     private JarVerifier jv;
     private boolean jvInitialized;
     private boolean verify;
     private final Runtime.Version version;  // current version
-    private final int versionFeature;         // version.feature()
+    private final int versionFeature;       // version.feature()
     private boolean isMultiRelease;         // is jar multi-release?
 
     // indicates if Class-Path attribute present
@@ -187,19 +190,18 @@ public class JarFile extends ZipFile {
         String enableMultiRelease = GetPropertyAction
                 .privilegedGetProperty("jdk.util.jar.enableMultiRelease", "true");
         switch (enableMultiRelease) {
-            case "true":
-            default:
-                MULTI_RELEASE_ENABLED = true;
-                MULTI_RELEASE_FORCED = false;
-                break;
-            case "false":
+            case "false" -> {
                 MULTI_RELEASE_ENABLED = false;
                 MULTI_RELEASE_FORCED = false;
-                break;
-            case "force":
+            }
+            case "force" -> {
                 MULTI_RELEASE_ENABLED = true;
                 MULTI_RELEASE_FORCED = true;
-                break;
+            }
+            default -> {
+                MULTI_RELEASE_ENABLED = true;
+                MULTI_RELEASE_FORCED = false;
+            }
         }
     }
 
@@ -417,20 +419,24 @@ public class JarFile extends ZipFile {
                 if (verify) {
                     byte[] b = getBytes(manEntry);
                     if (!jvInitialized) {
-                        jv = new JarVerifier(b);
+                        if (JUZFA.getManifestNum(this) == 1) {
+                            jv = new JarVerifier(manEntry.getName(), b);
+                        } else {
+                            if (JarVerifier.debug != null) {
+                                JarVerifier.debug.println("Multiple MANIFEST.MF found. Treat JAR file as unsigned");
+                            }
+                        }
                     }
                     man = new Manifest(jv, new ByteArrayInputStream(b), getName());
                 } else {
-                    man = new Manifest(super.getInputStream(manEntry), getName());
+                    try (InputStream is = super.getInputStream(manEntry)) {
+                        man = new Manifest(is, getName());
+                    }
                 }
                 manRef = new SoftReference<>(man);
             }
         }
         return man;
-    }
-
-    private String[] getMetaInfEntryNames() {
-        return JUZFA.getMetaInfEntryNames((ZipFile)this);
     }
 
     /**
@@ -502,11 +508,15 @@ public class JarFile extends ZipFile {
      * </div>
      */
     public ZipEntry getEntry(String name) {
-        JarFileEntry je = getEntry0(name);
         if (isMultiRelease()) {
-            return getVersionedEntry(name, je);
+            JarEntry je = getVersionedEntry(name, null);
+            if (je == null) {
+                je = (JarEntry)super.getEntry(name);
+            }
+            return je;
+        } else {
+            return super.getEntry(name);
         }
-        return je;
     }
 
     /**
@@ -517,7 +527,7 @@ public class JarFile extends ZipFile {
      *         may be thrown if the jar file has been closed
      */
     public Enumeration<JarEntry> entries() {
-        return JUZFA.entries(this, JarFileEntry::new);
+        return JUZFA.entries(this);
     }
 
     /**
@@ -530,7 +540,7 @@ public class JarFile extends ZipFile {
      * @since 1.8
      */
     public Stream<JarEntry> stream() {
-        return JUZFA.stream(this, JarFileEntry::new);
+        return JUZFA.stream(this);
     }
 
     /**
@@ -561,19 +571,11 @@ public class JarFile extends ZipFile {
         return stream();
     }
 
-    /*
-     * Invokes {@ZipFile}'s getEntry to Return a {@code JarFileEntry} for the
-     * given entry name or {@code null} if not found.
+    /**
+     * Creates a ZipEntry suitable for the given ZipFile.
      */
-    private JarFileEntry getEntry0(String name) {
-        // Not using a lambda/method reference here to optimize startup time
-        Function<String, JarEntry> newJarFileEntryFn = new Function<>() {
-            @Override
-            public JarEntry apply(String name) {
-                return new JarFileEntry(name);
-            }
-        };
-        return (JarFileEntry)JUZFA.getEntry(this, name, newJarFileEntryFn);
+    JarEntry entryFor(String name) {
+        return new JarFileEntry(name);
     }
 
     private String getBasename(String name) {
@@ -596,21 +598,30 @@ public class JarFile extends ZipFile {
         return name;
     }
 
-    private JarEntry getVersionedEntry(String name, JarEntry je) {
-        if (BASE_VERSION_FEATURE < versionFeature) {
-            if (!name.startsWith(META_INF)) {
+    private JarEntry getVersionedEntry(String name, JarEntry defaultEntry) {
+        if (!name.startsWith(META_INF)) {
+            int[] versions = JUZFA.getMetaInfVersions(this);
+            if (BASE_VERSION_FEATURE < versionFeature && versions.length > 0) {
                 // search for versioned entry
-                int v = versionFeature;
-                while (v > BASE_VERSION_FEATURE) {
-                    JarFileEntry vje = getEntry0(META_INF_VERSIONS + v + "/" + name);
+                for (int i = versions.length - 1; i >= 0; i--) {
+                    int version = versions[i];
+                    // skip versions above versionFeature
+                    if (version > versionFeature) {
+                        continue;
+                    }
+                    // skip versions below base version
+                    if (version < BASE_VERSION_FEATURE) {
+                        break;
+                    }
+                    JarFileEntry vje = (JarFileEntry)super.getEntry(
+                            META_INF_VERSIONS + version + "/" + name);
                     if (vje != null) {
                         return vje.withBasename(name);
                     }
-                    v--;
                 }
             }
         }
-        return je;
+        return defaultEntry;
     }
 
     // placeholder for now
@@ -705,21 +716,14 @@ public class JarFile extends ZipFile {
         }
 
         if (verify) {
-            String[] names = getMetaInfEntryNames();
-            if (names != null) {
-                for (String nameLower : names) {
-                    String name = nameLower.toUpperCase(Locale.ENGLISH);
-                    if (name.endsWith(".DSA") ||
-                        name.endsWith(".RSA") ||
-                        name.endsWith(".EC") ||
-                        name.endsWith(".SF")) {
-                        // Assume since we found a signature-related file
-                        // that the jar is signed and that we therefore
-                        // need a JarVerifier and Manifest
-                        getManifest();
-                        return;
-                    }
-                }
+            // Gets the manifest name, but only if there are
+            // signature-related files. If so we can assume
+            // that the jar is signed and that we therefore
+            // need a JarVerifier and Manifest
+            String name = JUZFA.getManifestName(this, true);
+            if (name != null) {
+                getManifest();
+                return;
             }
             // No signature-related files; don't instantiate a
             // verifier
@@ -736,30 +740,29 @@ public class JarFile extends ZipFile {
 
         // Verify "META-INF/" entries...
         try {
-            String[] names = getMetaInfEntryNames();
-            if (names != null) {
-                for (String name : names) {
-                    String uname = name.toUpperCase(Locale.ENGLISH);
-                    if (MANIFEST_NAME.equals(uname)
-                            || SignatureFileVerifier.isBlockOrSF(uname)) {
-                        JarEntry e = getJarEntry(name);
-                        if (e == null) {
-                            throw new JarException("corrupted jar file");
-                        }
-                        if (mev == null) {
-                            mev = new ManifestEntryVerifier
-                                (getManifestFromReference());
-                        }
-                        byte[] b = getBytes(e);
-                        if (b != null && b.length > 0) {
-                            jv.beginEntry(e, mev);
-                            jv.update(b.length, b, 0, b.length, mev);
-                            jv.update(-1, null, 0, 0, mev);
-                        }
-                    }
+            List<String> names = JUZFA.getManifestAndSignatureRelatedFiles(this);
+            for (String name : names) {
+                JarEntry e = getJarEntry(name);
+                byte[] b;
+                if (e == null) {
+                    throw new JarException("corrupted jar file");
+                }
+                if (mev == null) {
+                    mev = new ManifestEntryVerifier
+                        (getManifestFromReference());
+                }
+                if (name.equalsIgnoreCase(MANIFEST_NAME)) {
+                    b = jv.manifestRawBytes;
+                } else {
+                    b = getBytes(e);
+                }
+                if (b != null && b.length > 0) {
+                    jv.beginEntry(e, mev);
+                    jv.update(b.length, b, 0, b.length, mev);
+                    jv.update(-1, null, 0, 0, mev);
                 }
             }
-        } catch (IOException ex) {
+        } catch (IOException | IllegalArgumentException ex) {
             // if we had an error parsing any blocks, just
             // treat the jar file as being unsigned
             jv = null;
@@ -796,7 +799,11 @@ public class JarFile extends ZipFile {
      */
     private byte[] getBytes(ZipEntry ze) throws IOException {
         try (InputStream is = super.getInputStream(ze)) {
-            int len = (int)ze.getSize();
+            long uncompressedSize = ze.getSize();
+            if (uncompressedSize > MAX_ARRAY_SIZE) {
+                throw new OutOfMemoryError("Required array size too large");
+            }
+            int len = (int)uncompressedSize;
             int bytesRead;
             byte[] b;
             // trust specified entry sizes when reasonably small
@@ -925,22 +932,12 @@ public class JarFile extends ZipFile {
 
     private JarEntry getManEntry() {
         if (manEntry == null) {
-            // First look up manifest entry using standard name
-            JarEntry manEntry = getEntry0(MANIFEST_NAME);
-            if (manEntry == null) {
-                // If not found, then iterate through all the "META-INF/"
-                // entries to find a match.
-                String[] names = getMetaInfEntryNames();
-                if (names != null) {
-                    for (String name : names) {
-                        if (MANIFEST_NAME.equals(name.toUpperCase(Locale.ENGLISH))) {
-                            manEntry = getEntry0(name);
-                            break;
-                        }
-                    }
-                }
+            // The manifest entry position is resolved during
+            // initialization
+            String name = JUZFA.getManifestName(this, false);
+            if (name != null) {
+                this.manEntry = (JarEntry)super.getEntry(name);
             }
-            this.manEntry = manEntry;
         }
         return manEntry;
     }
@@ -1014,7 +1011,7 @@ public class JarFile extends ZipFile {
                         byte[] lbuf = new byte[512];
                         Attributes attr = new Attributes();
                         attr.read(new Manifest.FastInputStream(
-                            new ByteArrayInputStream(b)), lbuf);
+                                new ByteArrayInputStream(b)), lbuf);
                         isMultiRelease = Boolean.parseBoolean(
                             attr.getValue(Attributes.Name.MULTI_RELEASE));
                     }
@@ -1031,9 +1028,19 @@ public class JarFile extends ZipFile {
             throw new RuntimeException(e);
         }
         if (jv != null && !jvInitialized) {
-            initializeVerifier();
-            jvInitialized = true;
+            isInitializing.set(Boolean.TRUE);
+            try {
+                initializeVerifier();
+                jvInitialized = true;
+            } finally {
+                isInitializing.set(Boolean.FALSE);
+            }
         }
+    }
+
+    static boolean isInitializing() {
+        Boolean value = isInitializing.get();
+        return (value == null) ? false : value;
     }
 
     /*
@@ -1056,7 +1063,7 @@ public class JarFile extends ZipFile {
      */
     JarEntry newEntry(String name) {
         if (isMultiRelease()) {
-            JarEntry vje = getVersionedEntry(name, (JarEntry)null);
+            JarEntry vje = getVersionedEntry(name, null);
             if (vje != null) {
                 return vje;
             }
@@ -1096,12 +1103,11 @@ public class JarFile extends ZipFile {
     Enumeration<JarEntry> entries2() {
         ensureInitialization();
         if (jv != null) {
-            return jv.entries2(this, JUZFA.entries(JarFile.this,
-                                                   JarFileEntry::new));
+            return jv.entries2(this, JUZFA.entries(JarFile.this));
         }
 
         // screen out entries which are never signed
-        final var unfilteredEntries = JUZFA.entries(JarFile.this, JarFileEntry::new);
+        final var unfilteredEntries = JUZFA.entries(JarFile.this);
 
         return new Enumeration<>() {
 
@@ -1193,7 +1199,7 @@ public class JarFile extends ZipFile {
         ensureInitialization();
         if (jv != null) {
             if (jv.eagerValidation) {
-                CodeSource cs = null;
+                CodeSource cs;
                 JarEntry je = getJarEntry(name);
                 if (je != null) {
                     cs = jv.getCodeSource(url, this, je);

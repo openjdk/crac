@@ -25,8 +25,10 @@
 
 package jdk.javadoc.internal.doclets.toolkit;
 
+import java.util.List;
 import java.util.SortedSet;
 
+import javax.lang.model.element.PackageElement;
 import javax.lang.model.element.TypeElement;
 
 import jdk.javadoc.internal.doclets.toolkit.util.DocFileIOException;
@@ -45,87 +47,37 @@ public interface PackageSummaryWriter {
     /**
      * Get the header for the summary.
      *
-     * @param heading Package name.
      * @return the header to be added to the content tree
      */
-    public abstract Content getPackageHeader(String heading);
+    Content getPackageHeader();
 
     /**
      * Get the header for the package content.
      *
      * @return a content tree for the package content header
      */
-    public abstract Content getContentHeader();
+    Content getContentHeader();
 
     /**
      * Get the header for the package summary.
      *
      * @return a content tree with the package summary header
      */
-    public abstract Content getSummaryHeader();
+    Content getSummariesList();
 
     /**
-     * Adds the table of interfaces to the documentation tree.
+     * Adds the table of related packages to the documentation tree.
      *
-     * @param interfaces the interfaces to document.
      * @param summaryContentTree the content tree to which the summaries will be added
      */
-    public abstract void addInterfaceSummary(SortedSet<TypeElement> interfaces,
-            Content summaryContentTree);
+    void addRelatedPackagesSummary(Content summaryContentTree);
 
     /**
-     * Adds the table of classes to the documentation tree.
+     * Adds the table of all classes and interfaces to the documentation tree.
      *
-     * @param classes the classes to document.
      * @param summaryContentTree the content tree to which the summaries will be added
      */
-    public abstract void addClassSummary(SortedSet<TypeElement> classes,
-            Content summaryContentTree);
-
-    /**
-     * Adds the table of enums to the documentation tree.
-     *
-     * @param enums the enums to document.
-     * @param summaryContentTree the content tree to which the summaries will be added
-     */
-    public abstract void addEnumSummary(SortedSet<TypeElement> enums,
-            Content summaryContentTree);
-
-    /**
-     * Adds the table of records to the documentation tree.
-     *
-     * @param records the records to document.
-     * @param summaryContentTree the content tree to which the summaries will be added
-     */
-    public abstract void addRecordSummary(SortedSet<TypeElement> records,
-                                        Content summaryContentTree);
-
-    /**
-     * Adds the table of exceptions to the documentation tree.
-     *
-     * @param exceptions the exceptions to document.
-     * @param summaryContentTree the content tree to which the summaries will be added
-     */
-    public abstract void addExceptionSummary(SortedSet<TypeElement> exceptions,
-            Content summaryContentTree);
-
-    /**
-     * Adds the table of errors to the documentation tree.
-     *
-     * @param errors the errors to document.
-     * @param summaryContentTree the content tree to which the summaries will be added
-     */
-    public abstract void addErrorSummary(SortedSet<TypeElement> errors,
-            Content summaryContentTree);
-
-    /**
-     * Adds the table of annotation types to the documentation tree.
-     *
-     * @param annoTypes the annotation types to document.
-     * @param summaryContentTree the content tree to which the summaries will be added
-     */
-    public abstract void addAnnotationTypeSummary(SortedSet<TypeElement> annoTypes,
-            Content summaryContentTree);
+    void addAllClassesAndInterfacesSummary(Content summaryContentTree);
 
     /**
      * Adds the package description from the "packages.html" file to the documentation
@@ -134,7 +86,7 @@ public interface PackageSummaryWriter {
      * @param packageContentTree the content tree to which the package description
      *                           will be added
      */
-    public abstract void addPackageDescription(Content packageContentTree);
+    void addPackageDescription(Content packageContentTree);
 
     /**
      * Adds the tag information from the "packages.html" file to the documentation
@@ -143,7 +95,15 @@ public interface PackageSummaryWriter {
      * @param packageContentTree the content tree to which the package tags will
      *                           be added
      */
-    public abstract void addPackageTags(Content packageContentTree);
+    void addPackageTags(Content packageContentTree);
+
+    /**
+     * Adds the package signature.
+     *
+     * @param packageContentTree the content tree to which the package signature
+     *                           will be added
+     */
+    void addPackageSignature(Content packageContentTree);
 
     /**
      * Adds the tag information from the "packages.html" or "package-info.java" file to the
@@ -151,12 +111,12 @@ public interface PackageSummaryWriter {
      *
      * @param packageContentTree the package content tree to be added
      */
-    public abstract void addPackageContent(Content packageContentTree);
+    void addPackageContent(Content packageContentTree);
 
     /**
      * Adds the footer to the documentation tree.
      */
-    public abstract void addPackageFooter();
+    void addPackageFooter();
 
     /**
      * Print the package summary document.
@@ -164,13 +124,12 @@ public interface PackageSummaryWriter {
      * @param contentTree the content tree that will be printed
      * @throws DocFileIOException if there is a problem while writing the document
      */
-    public abstract void printDocument(Content contentTree) throws DocFileIOException;
+    void printDocument(Content contentTree) throws DocFileIOException;
 
     /**
      * Gets the package summary tree.
      * @param summaryContentTree the content tree representing the package summary
      * @return a content tree for the package summary
      */
-    public abstract Content getPackageSummary(Content summaryContentTree);
-
+    Content getPackageSummary(Content summaryContentTree);
 }

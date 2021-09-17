@@ -33,12 +33,11 @@ import com.sun.org.apache.bcel.internal.Const;
  * should appear per classfile.  The intention of this class is that it is
  * instantiated from the <em>Attribute.readAttribute()</em> method.
  *
- * @version $Id$
  * @see     Attribute
  */
 public final class SourceFile extends Attribute {
 
-    private int sourcefile_index;
+    private int sourceFileIndex;
 
 
     /**
@@ -68,18 +67,18 @@ public final class SourceFile extends Attribute {
      * @param name_index Index in constant pool to CONSTANT_Utf8, which
      * should represent the string "SourceFile".
      * @param length Content length in bytes, the value should be 2.
-     * @param constant_pool The constant pool that this attribute is
+     * @param constantPool The constant pool that this attribute is
      * associated with.
-     * @param sourcefile_index Index in constant pool to CONSTANT_Utf8.  This
+     * @param sourceFileIndex Index in constant pool to CONSTANT_Utf8.  This
      * string will be interpreted as the name of the file from which this
      * class was compiled.  It will not be interpreted as indicating the name
      * of the directory contqining the file or an absolute path; this
      * information has to be supplied the consumer of this attribute - in
      * many cases, the JVM.
      */
-    public SourceFile(final int name_index, final int length, final int sourcefile_index, final ConstantPool constant_pool) {
-        super(Const.ATTR_SOURCE_FILE, name_index, length, constant_pool);
-        this.sourcefile_index = sourcefile_index;
+    public SourceFile(final int name_index, final int length, final int sourceFileIndex, final ConstantPool constantPool) {
+        super(Const.ATTR_SOURCE_FILE, name_index, length, constantPool);
+        this.sourceFileIndex = sourceFileIndex;
     }
 
 
@@ -103,33 +102,33 @@ public final class SourceFile extends Attribute {
      * @throws IOException
      */
     @Override
-    public final void dump( final DataOutputStream file ) throws IOException {
+    public void dump( final DataOutputStream file ) throws IOException {
         super.dump(file);
-        file.writeShort(sourcefile_index);
+        file.writeShort(sourceFileIndex);
     }
 
 
     /**
      * @return Index in constant pool of source file name.
      */
-    public final int getSourceFileIndex() {
-        return sourcefile_index;
+    public int getSourceFileIndex() {
+        return sourceFileIndex;
     }
 
 
     /**
-     * @param sourcefile_index
+     * @param sourceFileIndex
      */
-    public final void setSourceFileIndex( final int sourcefile_index ) {
-        this.sourcefile_index = sourcefile_index;
+    public void setSourceFileIndex( final int sourceFileIndex ) {
+        this.sourceFileIndex = sourceFileIndex;
     }
 
 
     /**
      * @return Source file name.
      */
-    public final String getSourceFileName() {
-        final ConstantUtf8 c = (ConstantUtf8) super.getConstantPool().getConstant(sourcefile_index,
+    public String getSourceFileName() {
+        final ConstantUtf8 c = (ConstantUtf8) super.getConstantPool().getConstant(sourceFileIndex,
                 Const.CONSTANT_Utf8);
         return c.getBytes();
     }
@@ -139,7 +138,7 @@ public final class SourceFile extends Attribute {
      * @return String representation
      */
     @Override
-    public final String toString() {
+    public String toString() {
         return "SourceFile: " + getSourceFileName();
     }
 

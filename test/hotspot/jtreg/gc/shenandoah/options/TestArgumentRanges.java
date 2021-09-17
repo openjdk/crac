@@ -1,5 +1,6 @@
 /*
  * Copyright (c) 2016, 2018, Red Hat, Inc. All rights reserved.
+ * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 2 only, as
@@ -24,8 +25,7 @@
 /*
  * @test TestArgumentRanges
  * @summary Test that Shenandoah arguments are checked for ranges where applicable
- * @key gc
- * @requires vm.gc.Shenandoah & !vm.graal.enabled
+ * @requires vm.gc.Shenandoah
  * @library /test/lib
  * @modules java.base/jdk.internal.misc
  *          java.management
@@ -38,7 +38,7 @@ import jdk.test.lib.process.OutputAnalyzer;
 public class TestArgumentRanges {
     public static void main(String[] args) throws Exception {
         testRange("ShenandoahGarbageThreshold", 0, 100);
-        testRange("ShenandoahFreeThreshold", 0, 100);
+        testRange("ShenandoahMinFreeThreshold", 0, 100);
         testRange("ShenandoahAllocationThreshold", 0, 100);
         testHeuristics();
     }
@@ -46,7 +46,9 @@ public class TestArgumentRanges {
     private static void testHeuristics() throws Exception {
 
         {
-            ProcessBuilder pb = ProcessTools.createJavaProcessBuilder("-XX:+UnlockDiagnosticVMOptions",
+            ProcessBuilder pb = ProcessTools.createJavaProcessBuilder(
+                    "-Xmx128m",
+                    "-XX:+UnlockDiagnosticVMOptions",
                     "-XX:+UnlockExperimentalVMOptions",
                     "-XX:+UseShenandoahGC",
                     "-XX:ShenandoahGCHeuristics=aggressive",
@@ -55,7 +57,9 @@ public class TestArgumentRanges {
             output.shouldHaveExitValue(0);
         }
         {
-            ProcessBuilder pb = ProcessTools.createJavaProcessBuilder("-XX:+UnlockDiagnosticVMOptions",
+            ProcessBuilder pb = ProcessTools.createJavaProcessBuilder(
+                    "-Xmx128m",
+                    "-XX:+UnlockDiagnosticVMOptions",
                     "-XX:+UnlockExperimentalVMOptions",
                     "-XX:+UseShenandoahGC",
                     "-XX:ShenandoahGCHeuristics=static",
@@ -64,7 +68,9 @@ public class TestArgumentRanges {
             output.shouldHaveExitValue(0);
         }
         {
-            ProcessBuilder pb = ProcessTools.createJavaProcessBuilder("-XX:+UnlockDiagnosticVMOptions",
+            ProcessBuilder pb = ProcessTools.createJavaProcessBuilder(
+                    "-Xmx128m",
+                    "-XX:+UnlockDiagnosticVMOptions",
                     "-XX:+UnlockExperimentalVMOptions",
                     "-XX:+UseShenandoahGC",
                     "-XX:ShenandoahGCHeuristics=fluff",
@@ -77,7 +83,9 @@ public class TestArgumentRanges {
 
     private static void testRange(String option, int min, int max) throws Exception {
         {
-            ProcessBuilder pb = ProcessTools.createJavaProcessBuilder("-XX:+UnlockDiagnosticVMOptions",
+            ProcessBuilder pb = ProcessTools.createJavaProcessBuilder(
+                    "-Xmx128m",
+                    "-XX:+UnlockDiagnosticVMOptions",
                     "-XX:+UnlockExperimentalVMOptions",
                     "-XX:+UseShenandoahGC",
                     "-XX:" + option + "=" + (max + 1),
@@ -86,7 +94,9 @@ public class TestArgumentRanges {
             output.shouldHaveExitValue(1);
         }
         {
-            ProcessBuilder pb = ProcessTools.createJavaProcessBuilder("-XX:+UnlockDiagnosticVMOptions",
+            ProcessBuilder pb = ProcessTools.createJavaProcessBuilder(
+                    "-Xmx128m",
+                    "-XX:+UnlockDiagnosticVMOptions",
                     "-XX:+UnlockExperimentalVMOptions",
                     "-XX:+UseShenandoahGC",
                     "-XX:" + option + "=" + max,
@@ -95,7 +105,9 @@ public class TestArgumentRanges {
             output.shouldHaveExitValue(0);
         }
         {
-            ProcessBuilder pb = ProcessTools.createJavaProcessBuilder("-XX:+UnlockDiagnosticVMOptions",
+            ProcessBuilder pb = ProcessTools.createJavaProcessBuilder(
+                    "-Xmx128m",
+                    "-XX:+UnlockDiagnosticVMOptions",
                     "-XX:+UnlockExperimentalVMOptions",
                     "-XX:+UseShenandoahGC",
                     "-XX:" + option + "=" + (min - 1),
@@ -104,7 +116,9 @@ public class TestArgumentRanges {
             output.shouldHaveExitValue(1);
         }
         {
-            ProcessBuilder pb = ProcessTools.createJavaProcessBuilder("-XX:+UnlockDiagnosticVMOptions",
+            ProcessBuilder pb = ProcessTools.createJavaProcessBuilder(
+                    "-Xmx128m",
+                    "-XX:+UnlockDiagnosticVMOptions",
                     "-XX:+UnlockExperimentalVMOptions",
                     "-XX:+UseShenandoahGC",
                     "-XX:" + option + "=" + min,

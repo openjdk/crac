@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012, 2017, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2012, 2021, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -50,7 +50,7 @@ import com.sun.tools.javac.util.ListBuffer;
  * Traps writes to certain files, if the content written is identical
  * to the existing file.
  *
- * Can also blind out the filemanager from seeing certain files in the file system.
+ * Can also blind out the file manager from seeing certain files in the file system.
  * Necessary to prevent javac from seeing some sources where the source path points.
  *
  *  <p><b>This is NOT part of any supported API.
@@ -82,9 +82,9 @@ public class SmartFileManager extends ForwardingJavaFileManager<JavaFileManager>
      * Set whether or not to use ct.sym as an alternate to rt.jar.
      */
     public void setSymbolFileEnabled(boolean b) {
-        if (!(fileManager instanceof JavacFileManager))
+        if (!(fileManager instanceof JavacFileManager javacFileManager))
             throw new IllegalStateException();
-        ((JavacFileManager) fileManager).setSymbolFileEnabled(b);
+        javacFileManager.setSymbolFileEnabled(b);
     }
 
     @DefinedBy(Api.COMPILER)
@@ -175,12 +175,9 @@ public class SmartFileManager extends ForwardingJavaFileManager<JavaFileManager>
     }
 
     private boolean isModuleInfo(FileObject fo) {
-        if (fo instanceof JavaFileObject) {
-            JavaFileObject jfo = (JavaFileObject) fo;
-            return jfo.isNameCompatible("module-info", Kind.SOURCE)
-                || jfo.isNameCompatible("module-info", Kind.CLASS);
-        }
-        return false;
+        return (fo instanceof JavaFileObject javaFileObject)
+                && (javaFileObject.isNameCompatible("module-info", Kind.SOURCE)
+                    || javaFileObject.isNameCompatible("module-info", Kind.CLASS));
     }
 
     @Override @DefinedBy(Api.COMPILER)
@@ -243,8 +240,8 @@ public class SmartFileManager extends ForwardingJavaFileManager<JavaFileManager>
     }
 
     private static FileObject locWrap(FileObject fo, Location loc) {
-        if (fo instanceof JavaFileObject)
-            return locWrap((JavaFileObject) fo, loc);
+        if (fo instanceof JavaFileObject javaFileObject)
+            return locWrap(javaFileObject, loc);
         return fo == null ? null : new FileObjectWithLocation<>(fo, loc);
     }
 
@@ -263,16 +260,16 @@ public class SmartFileManager extends ForwardingJavaFileManager<JavaFileManager>
     }
 
     private static FileObject locUnwrap(FileObject fo) {
-        if (fo instanceof FileObjectWithLocation<?>)
-            return ((FileObjectWithLocation<?>) fo).getDelegate();
-        if (fo instanceof JavaFileObjectWithLocation<?>)
-            return ((JavaFileObjectWithLocation<?>) fo).getDelegate();
+        if (fo instanceof FileObjectWithLocation<?> fileObjectWithLocation)
+            return fileObjectWithLocation.getDelegate();
+        if (fo instanceof JavaFileObjectWithLocation<?> javaFileObjectWithLocation)
+            return javaFileObjectWithLocation.getDelegate();
         return fo;
     }
 
     private static JavaFileObject locUnwrap(JavaFileObject fo) {
-        if (fo instanceof JavaFileObjectWithLocation<?>)
-            return ((JavaFileObjectWithLocation<?>) fo).getDelegate();
+        if (fo instanceof JavaFileObjectWithLocation<?> javaFileObjectWithLocation)
+            return javaFileObjectWithLocation.getDelegate();
         return fo;
     }
 }

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2006, 2019, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2006, 2021, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -103,36 +103,14 @@ public enum Option {
 
     XLINT("-Xlint", "opt.Xlint", EXTENDED, BASIC),
 
-    XLINT_CUSTOM("-Xlint:", "opt.arg.Xlint", "opt.Xlint.custom", EXTENDED, BASIC, ANYOF, getXLintChoices()) {
-        private final String LINT_KEY_FORMAT = LARGE_INDENT + "  %-" +
-                (DEFAULT_SYNOPSIS_WIDTH + SMALL_INDENT.length() - LARGE_INDENT.length() - 2) + "s %s";
-        @Override
-        protected void help(Log log) {
-            super.help(log);
-            log.printRawLines(WriterKind.STDOUT,
-                              String.format(LINT_KEY_FORMAT,
-                                            "all",
-                                            log.localize(PrefixKind.JAVAC, "opt.Xlint.all")));
-            for (LintCategory lc : LintCategory.values()) {
-                log.printRawLines(WriterKind.STDOUT,
-                                  String.format(LINT_KEY_FORMAT,
-                                                lc.option,
-                                                log.localize(PrefixKind.JAVAC,
-                                                             "opt.Xlint.desc." + lc.option)));
-            }
-            log.printRawLines(WriterKind.STDOUT,
-                              String.format(LINT_KEY_FORMAT,
-                                            "none",
-                                            log.localize(PrefixKind.JAVAC, "opt.Xlint.none")));
-        }
-    },
+    XLINT_CUSTOM("-Xlint:", "opt.arg.Xlint", "opt.Xlint.custom", EXTENDED, BASIC, ANYOF, getXLintChoices()),
 
     XDOCLINT("-Xdoclint", "opt.Xdoclint", EXTENDED, BASIC),
 
     XDOCLINT_CUSTOM("-Xdoclint:", "opt.Xdoclint.subopts", "opt.Xdoclint.custom", EXTENDED, BASIC) {
         @Override
         public boolean matches(String option) {
-            return DocLint.isValidOption(
+            return DocLint.newDocLint().isValidOption(
                     option.replace(XDOCLINT_CUSTOM.primaryName, DocLint.XMSGS_CUSTOM_PREFIX));
         }
 
@@ -147,7 +125,7 @@ public enum Option {
     XDOCLINT_PACKAGE("-Xdoclint/package:", "opt.Xdoclint.package.args", "opt.Xdoclint.package.desc", EXTENDED, BASIC) {
         @Override
         public boolean matches(String option) {
-            return DocLint.isValidOption(
+            return DocLint.newDocLint().isValidOption(
                     option.replace(XDOCLINT_PACKAGE.primaryName, DocLint.XCHECK_PACKAGE));
         }
 
@@ -158,8 +136,6 @@ public enum Option {
             helper.put(XDOCLINT_PACKAGE.primaryName, next);
         }
     },
-
-    DOCLINT_FORMAT("--doclint-format", "opt.doclint.format", EXTENDED, BASIC, ONEOF, "html5"),
 
     // -nowarn is retained for command-line backward compatibility
     NOWARN("-nowarn", "opt.nowarn", STANDARD, BASIC) {
@@ -184,7 +160,7 @@ public enum Option {
     SOURCE_PATH("--source-path -sourcepath", "opt.arg.path", "opt.sourcepath", STANDARD, FILEMANAGER),
 
     MODULE_SOURCE_PATH("--module-source-path", "opt.arg.mspath", "opt.modulesourcepath", STANDARD, FILEMANAGER) {
-        // The deferred filemanager diagnostics mechanism assumes a single value per option,
+        // The deferred file manager diagnostics mechanism assumes a single value per option,
         // but --module-source-path-module can be used multiple times, once in the old form
         // and once per module in the new form.  Therefore we compose an overall value for the
         // option containing the individual values given on the command line, separated by NULL.
@@ -233,7 +209,7 @@ public enum Option {
     SYSTEM("--system", "opt.arg.jdk", "opt.system", STANDARD, FILEMANAGER),
 
     PATCH_MODULE("--patch-module", "opt.arg.patch", "opt.patch", EXTENDED, FILEMANAGER) {
-        // The deferred filemanager diagnostics mechanism assumes a single value per option,
+        // The deferred file manager diagnostics mechanism assumes a single value per option,
         // but --patch-module can be used multiple times, once per module. Therefore we compose
         // a value for the option containing the last value specified for each module, and separate
         // the module=path pairs by an invalid path character, NULL.
@@ -497,6 +473,32 @@ public enum Option {
             showHelp(log, OptionKind.EXTENDED);
             log.printNewline(WriterKind.STDOUT);
             log.printLines(WriterKind.STDOUT, PrefixKind.JAVAC, "msg.usage.nonstandard.footer");
+            super.process(helper, option);
+        }
+    },
+
+    HELP_LINT("--help-lint", "opt.help.lint", EXTENDED, INFO) {
+        private final String LINT_KEY_FORMAT = SMALL_INDENT + SMALL_INDENT + "%-" +
+                (DEFAULT_SYNOPSIS_WIDTH - LARGE_INDENT.length()) + "s %s";
+        @Override
+        public void process(OptionHelper helper, String option) throws InvalidValueException {
+            Log log = helper.getLog();
+            log.printRawLines(WriterKind.STDOUT, log.localize(PrefixKind.JAVAC, "opt.help.lint.header"));
+            log.printRawLines(WriterKind.STDOUT,
+                              String.format(LINT_KEY_FORMAT,
+                                            "all",
+                                            log.localize(PrefixKind.JAVAC, "opt.Xlint.all")));
+            for (LintCategory lc : LintCategory.values()) {
+                log.printRawLines(WriterKind.STDOUT,
+                                  String.format(LINT_KEY_FORMAT,
+                                                lc.option,
+                                                log.localize(PrefixKind.JAVAC,
+                                                             "opt.Xlint.desc." + lc.option)));
+            }
+            log.printRawLines(WriterKind.STDOUT,
+                              String.format(LINT_KEY_FORMAT,
+                                            "none",
+                                            log.localize(PrefixKind.JAVAC, "opt.Xlint.none")));
             super.process(helper, option);
         }
     },

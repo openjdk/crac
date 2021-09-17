@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2018, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2018, 2020, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -38,7 +38,7 @@ import sun.security.util.HexDumpEncoder;
  */
 final class SSLExtensions {
     private final HandshakeMessage handshakeMessage;
-    private Map<SSLExtension, byte[]> extMap = new LinkedHashMap<>();
+    private final Map<SSLExtension, byte[]> extMap = new LinkedHashMap<>();
     private int encodedLength;
 
     // Extension map for debug logging
@@ -54,14 +54,26 @@ final class SSLExtensions {
             ByteBuffer m, SSLExtension[] extensions) throws IOException {
         this.handshakeMessage = hm;
 
+        if (m.remaining() < 2) {
+            throw hm.handshakeContext.conContext.fatal(
+                    Alert.DECODE_ERROR,
+                    "Incorrect extensions: no length field");
+        }
+
         int len = Record.getInt16(m);
+        if (len > m.remaining()) {
+            throw hm.handshakeContext.conContext.fatal(
+                    Alert.DECODE_ERROR,
+                    "Insufficient extensions data");
+        }
+
         encodedLength = len + 2;        // 2: the length of the extensions.
         while (len > 0) {
             int extId = Record.getInt16(m);
             int extLen = Record.getInt16(m);
             if (extLen > m.remaining()) {
                 throw hm.handshakeContext.conContext.fatal(
-                        Alert.ILLEGAL_PARAMETER,
+                        Alert.DECODE_ERROR,
                         "Error parsing extension (" + extId +
                         "): no sufficient data");
             }
@@ -86,11 +98,14 @@ final class SSLExtensions {
                                 "Received buggy supported_groups extension " +
                                 "in the ServerHello handshake message");
                     }
-                } else {
+                } else if (handshakeType == SSLHandshake.SERVER_HELLO) {
                     throw hm.handshakeContext.conContext.fatal(
-                        Alert.UNSUPPORTED_EXTENSION,
-                        "extension (" + extId +
-                        ") should not be presented in " + handshakeType.name);
+                            Alert.UNSUPPORTED_EXTENSION, "extension (" +
+                                    extId + ") should not be presented in " +
+                                    handshakeType.name);
+                } else {
+                    isSupported = false;
+                    // debug log to ignore unknown extension for handshakeType
                 }
             }
 
@@ -343,7 +358,8 @@ final class SSLExtensions {
                     }
                     if (ext != null) {
                         builder.append(
-                                ext.toString(ByteBuffer.wrap(en.getValue())));
+                            ext.toString(handshakeMessage.handshakeContext,
+                                    ByteBuffer.wrap(en.getValue())));
                     } else {
                         builder.append(toString(en.getKey(), en.getValue()));
                     }
@@ -356,7 +372,8 @@ final class SSLExtensions {
                         builder.append(",\n");
                     }
                     builder.append(
-                        en.getKey().toString(ByteBuffer.wrap(en.getValue())));
+                        en.getKey().toString(handshakeMessage.handshakeContext,
+                                ByteBuffer.wrap(en.getValue())));
                 }
 
                 return builder.toString();
@@ -365,9 +382,10 @@ final class SSLExtensions {
     }
 
     private static String toString(int extId, byte[] extData) {
+        String extName = SSLExtension.nameOf(extId);
         MessageFormat messageFormat = new MessageFormat(
-            "\"unknown extension ({0})\": '{'\n" +
-            "{1}\n" +
+            "\"{0} ({1})\": '{'\n" +
+            "{2}\n" +
             "'}'",
             Locale.ENGLISH);
 
@@ -375,6 +393,7 @@ final class SSLExtensions {
         String encoded = hexEncoder.encodeBuffer(extData);
 
         Object[] messageFields = {
+            extName,
             extId,
             Utilities.indent(encoded)
         };

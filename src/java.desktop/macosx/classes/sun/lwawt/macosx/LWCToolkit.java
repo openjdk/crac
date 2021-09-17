@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2011, 2019, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2011, 2021, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -26,6 +26,7 @@
 package sun.lwawt.macosx;
 
 import java.awt.AWTError;
+import java.awt.AWTException;
 import java.awt.CheckboxMenuItem;
 import java.awt.Color;
 import java.awt.Component;
@@ -49,7 +50,6 @@ import java.awt.MenuItem;
 import java.awt.Point;
 import java.awt.PopupMenu;
 import java.awt.RenderingHints;
-import java.awt.Robot;
 import java.awt.SystemTray;
 import java.awt.Taskbar;
 import java.awt.Toolkit;
@@ -102,13 +102,14 @@ import javax.swing.UIManager;
 import com.apple.laf.AquaMenuBarUI;
 import sun.awt.AWTAccessor;
 import sun.awt.AppContext;
-import sun.awt.CGraphicsConfig;
 import sun.awt.CGraphicsDevice;
 import sun.awt.LightweightFrame;
 import sun.awt.PlatformGraphicsInfo;
 import sun.awt.SunToolkit;
 import sun.awt.datatransfer.DataTransferer;
+import sun.awt.dnd.SunDragSourceContextPeer;
 import sun.awt.util.ThreadGroupUtils;
+import sun.java2d.metal.MTLRenderQueue;
 import sun.java2d.opengl.OGLRenderQueue;
 import sun.lwawt.LWComponentPeer;
 import sun.lwawt.LWCursorManager;
@@ -119,7 +120,6 @@ import sun.lwawt.PlatformComponent;
 import sun.lwawt.PlatformDropTarget;
 import sun.lwawt.PlatformWindow;
 import sun.lwawt.SecurityWarningWindow;
-import sun.security.action.GetBooleanAction;
 
 @SuppressWarnings("serial") // JDK implementation class
 final class NamedCursor extends Cursor {
@@ -131,6 +131,7 @@ final class NamedCursor extends Cursor {
 /**
  * Mac OS X Cocoa-based AWT Toolkit.
  */
+@SuppressWarnings("removal")
 public final class LWCToolkit extends LWToolkit {
     // While it is possible to enumerate all mouse devices
     // and query them for the number of buttons, the code
@@ -205,14 +206,16 @@ public final class LWCToolkit extends LWToolkit {
     /*
      * System colors with default initial values, overwritten by toolkit if system values differ and are available.
      */
-    private static final int NUM_APPLE_COLORS = 3;
+    private static final int NUM_APPLE_COLORS = 4;
     public static final int KEYBOARD_FOCUS_COLOR = 0;
     public static final int INACTIVE_SELECTION_BACKGROUND_COLOR = 1;
     public static final int INACTIVE_SELECTION_FOREGROUND_COLOR = 2;
+    public static final int SELECTED_CONTROL_TEXT_COLOR = 3;
     private static int[] appleColors = {
         0xFF808080, // keyboardFocusColor = Color.gray;
         0xFFC0C0C0, // secondarySelectedControlColor
         0xFF303030, // controlDarkShadowColor
+        0xFFFFFFFF, // controlTextColor
     };
 
     private native void loadNativeColors(final int[] systemColors, final int[] appleColors);
@@ -465,6 +468,16 @@ public final class LWCToolkit extends LWToolkit {
 
     @Override
     protected boolean syncNativeQueue(long timeout) {
+        if (timeout <= 0) {
+            return false;
+        }
+        if (SunDragSourceContextPeer.isDragDropInProgress()
+                || EventQueue.isDispatchThread()) {
+            // The java code started the DnD, but the native drag may still not
+            // start, the last attempt to flush the native events,
+            // also do not block EDT for a long time
+            timeout = 50;
+        }
         return nativeSyncQueue(timeout);
     }
 
@@ -480,21 +493,32 @@ public final class LWCToolkit extends LWToolkit {
 
     @Override
     public Insets getScreenInsets(final GraphicsConfiguration gc) {
-        return ((CGraphicsConfig) gc).getDevice().getScreenInsets();
+        GraphicsDevice gd = gc.getDevice();
+        if (!(gd instanceof CGraphicsDevice)) {
+            return super.getScreenInsets(gc);
+        }
+        return ((CGraphicsDevice)gd).getScreenInsets();
     }
 
     @Override
     public void sync() {
-        // flush the OGL pipeline (this is a no-op if OGL is not enabled)
-        OGLRenderQueue.sync();
+        // flush the rendering pipeline
+        if (CGraphicsDevice.usingMetalPipeline()) {
+            MTLRenderQueue.sync();
+        } else {
+            OGLRenderQueue.sync();
+        }
         // setNeedsDisplay() selector was sent to the appropriate CALayer so now
         // we have to flush the native selectors queue.
         flushNativeSelectors();
     }
 
     @Override
-    public RobotPeer createRobot(Robot target, GraphicsDevice screen) {
-        return new CRobot(target, (CGraphicsDevice)screen);
+    public RobotPeer createRobot(GraphicsDevice screen) throws AWTException {
+        if (screen instanceof CGraphicsDevice) {
+            return new CRobot((CGraphicsDevice) screen);
+        }
+        return super.createRobot(screen);
     }
 
     private native boolean isCapsLockOn();
@@ -803,6 +827,23 @@ public final class LWCToolkit extends LWToolkit {
         return locale;
     }
 
+    public static boolean isLocaleUSInternationalPC(Locale locale) {
+        return (locale != null ?
+            locale.toString().equals("_US_UserDefined_15000") : false);
+    }
+
+    public static boolean isCharModifierKeyInUSInternationalPC(char ch) {
+        // 5 characters: APOSTROPHE, QUOTATION MARK, ACCENT GRAVE, SMALL TILDE,
+        // CIRCUMFLEX ACCENT
+        final char[] modifierKeys = {'\'', '"', '`', '\u02DC', '\u02C6'};
+        for (char modKey : modifierKeys) {
+            if (modKey == ch) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     @Override
     public InputMethodDescriptor getInputMethodAdapterDescriptor() {
         if (sInputMethodDescriptor == null)
@@ -851,20 +892,6 @@ public final class LWCToolkit extends LWToolkit {
     @Override
     public boolean canPopupOverlapTaskBar() {
         return false;
-    }
-
-    private static Boolean sunAwtDisableCALayers = null;
-
-    /**
-     * Returns the value of "sun.awt.disableCALayers" property. Default
-     * value is {@code false}.
-     */
-    public static synchronized boolean getSunAwtDisableCALayers() {
-        if (sunAwtDisableCALayers == null) {
-            sunAwtDisableCALayers = AccessController.doPrivileged(
-                new GetBooleanAction("sun.awt.disableCALayers"));
-        }
-        return sunAwtDisableCALayers;
     }
 
     /*

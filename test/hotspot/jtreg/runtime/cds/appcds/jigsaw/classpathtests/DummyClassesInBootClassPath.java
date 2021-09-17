@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015, 2019, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2015, 2021, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -27,12 +27,11 @@
  * @summary Ensure that classes found in jimage takes precedence over classes found in -Xbootclasspath/a.
  * @requires vm.cds
  * @library /test/lib /test/hotspot/jtreg/runtime/cds/appcds
- * @modules jdk.jartool/sun.tools.jar
  * @compile ../../test-classes/DummyClassHelper.java
  * @compile ../../test-classes/java/net/HttpCookie.jasm
  * @compile ../../../javax/annotation/processing/FilerException.jasm
  * @build sun.hotspot.WhiteBox
- * @run driver ClassFileInstaller sun.hotspot.WhiteBox
+ * @run driver jdk.test.lib.helpers.ClassFileInstaller sun.hotspot.WhiteBox
  * @run driver DummyClassesInBootClassPath
  */
 

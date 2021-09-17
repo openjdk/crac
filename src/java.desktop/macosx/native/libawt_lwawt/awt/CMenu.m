@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2011, 2016, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2011, 2019, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -23,13 +23,13 @@
  * questions.
  */
 
-#import <JavaNativeFoundation/JavaNativeFoundation.h>
 #import <JavaRuntimeSupport/JavaRuntimeSupport.h>
 
 
 #import "CMenu.h"
 #import "CMenuBar.h"
 #import "ThreadUtilities.h"
+#import "JNIUtilities.h"
 
 #import "sun_lwawt_macosx_CMenu.h"
 
@@ -84,10 +84,6 @@ AWT_ASSERT_APPKIT_THREAD;
         NSMenuItem *menuItem = [parent itemAtIndex:index];
         [menuItem setTitle:title];
     }
-}
-
-- (void)addSeparator {
-    // Nothing calls this, which is good because we need a CMenuItem here.
 }
 
 - (void)deleteJavaItem:(jint)index {
@@ -159,7 +155,7 @@ Java_sun_lwawt_macosx_CMenu_nativeCreateSubMenu
 (JNIEnv *env, jobject peer, jlong parentMenu)
 {
     CMenu *aCMenu = nil;
-JNF_COCOA_ENTER(env);
+JNI_COCOA_ENTER(env);
 
     jobject cPeerObjGlobal = (*env)->NewGlobalRef(env, peer);
 
@@ -168,7 +164,7 @@ JNF_COCOA_ENTER(env);
     // Add it to the parent menu
     [((CMenu *)jlong_to_ptr(parentMenu)) addJavaSubmenu: aCMenu];
 
-JNF_COCOA_EXIT(env);
+JNI_COCOA_EXIT(env);
 
     return ptr_to_jlong(aCMenu);
 }
@@ -187,7 +183,7 @@ Java_sun_lwawt_macosx_CMenu_nativeCreateMenu
 {
     CMenu *aCMenu = nil;
     CMenuBar *parent = (CMenuBar *)jlong_to_ptr(parentMenuBar);
-JNF_COCOA_ENTER(env);
+JNI_COCOA_ENTER(env);
 
     jobject cPeerObjGlobal = (*env)->NewGlobalRef(env, peer);
 
@@ -203,7 +199,7 @@ JNF_COCOA_ENTER(env);
         [parent javaSetHelpMenu: aCMenu];
     }
 
-JNF_COCOA_EXIT(env);
+JNI_COCOA_EXIT(env);
     return ptr_to_jlong(aCMenu);
 }
 
@@ -217,25 +213,10 @@ JNIEXPORT void JNICALL
 Java_sun_lwawt_macosx_CMenu_nativeSetMenuTitle
 (JNIEnv *env, jobject peer, jlong menuObject, jstring label)
 {
-JNF_COCOA_ENTER(env);
+JNI_COCOA_ENTER(env);
     // Set the menu's title.
-    [((CMenu *)jlong_to_ptr(menuObject)) setJavaMenuTitle:JNFJavaToNSString(env, label)];
-JNF_COCOA_EXIT(env);
-}
-
-/*
- * Class:     sun_lwawt_macosx_CMenu
- * Method:    nativeAddSeparator
- * Signature: (J)V
- */
-JNIEXPORT void JNICALL
-Java_sun_lwawt_macosx_CMenu_nativeAddSeparator
-(JNIEnv *env, jobject peer, jlong menuObject)
-{
-JNF_COCOA_ENTER(env);
-    // Add a separator item.
-    [((CMenu *)jlong_to_ptr(menuObject))addSeparator];
-JNF_COCOA_EXIT(env);
+    [((CMenu *)jlong_to_ptr(menuObject)) setJavaMenuTitle:JavaStringToNSString(env, label)];
+JNI_COCOA_EXIT(env);
 }
 
 /*
@@ -247,10 +228,10 @@ JNIEXPORT void JNICALL
 Java_sun_lwawt_macosx_CMenu_nativeDeleteItem
 (JNIEnv *env, jobject peer, jlong menuObject, jint index)
 {
-JNF_COCOA_ENTER(env);
+JNI_COCOA_ENTER(env);
     // Remove the specified item.
     [((CMenu *)jlong_to_ptr(menuObject)) deleteJavaItem: index];
-JNF_COCOA_EXIT(env);
+JNI_COCOA_EXIT(env);
 }
 
 /*
@@ -264,10 +245,10 @@ Java_sun_lwawt_macosx_CMenu_nativeGetNSMenu
 {
     NSMenu* nsMenu = NULL;
 
-JNF_COCOA_ENTER(env);
+JNI_COCOA_ENTER(env);
     // Strong retain this menu; it'll get released in Java_apple_laf_ScreenMenu_addMenuListeners
     nsMenu = [[((CMenu *)jlong_to_ptr(menuObject)) menu] retain];
-JNF_COCOA_EXIT(env);
+JNI_COCOA_EXIT(env);
 
     return ptr_to_jlong(nsMenu);
 }

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2011, 2019, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2011, 2021, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -53,8 +53,6 @@ import java.awt.event.MouseEvent;
 import java.awt.event.MouseWheelEvent;
 import java.awt.event.PaintEvent;
 import java.awt.image.ColorModel;
-import java.awt.image.ImageObserver;
-import java.awt.image.ImageProducer;
 import java.awt.image.VolatileImage;
 import java.awt.peer.ComponentPeer;
 import java.awt.peer.ContainerPeer;
@@ -70,15 +68,17 @@ import javax.swing.SwingUtilities;
 
 import com.sun.java.swing.SwingUtilities3;
 import sun.awt.AWTAccessor;
+import sun.awt.CGraphicsDevice;
 import sun.awt.PaintEventDispatcher;
 import sun.awt.RepaintArea;
 import sun.awt.SunToolkit;
 import sun.awt.event.IgnorePaintEvent;
 import sun.awt.image.SunVolatileImage;
-import sun.awt.image.ToolkitImage;
 import sun.java2d.SunGraphics2D;
+import sun.java2d.metal.MTLRenderQueue;
 import sun.java2d.opengl.OGLRenderQueue;
 import sun.java2d.pipe.Region;
+import sun.java2d.pipe.RenderQueue;
 import sun.util.logging.PlatformLogger;
 
 public abstract class LWComponentPeer<T extends Component, D extends JComponent>
@@ -260,6 +260,7 @@ public abstract class LWComponentPeer<T extends Component, D extends JComponent>
      * This method must be called under Toolkit.getDefaultToolkit() lock
      * and followed by setToolkitAWTEventListener()
      */
+    @SuppressWarnings("removal")
     protected final AWTEventListener getToolkitAWTEventListener() {
         return AccessController.doPrivileged(new PrivilegedAction<AWTEventListener>() {
             public AWTEventListener run() {
@@ -275,6 +276,7 @@ public abstract class LWComponentPeer<T extends Component, D extends JComponent>
         });
     }
 
+    @SuppressWarnings("removal")
     protected final void setToolkitAWTEventListener(final AWTEventListener listener) {
         AccessController.doPrivileged(new PrivilegedAction<Void>() {
             public Void run() {
@@ -994,11 +996,6 @@ public abstract class LWComponentPeer<T extends Component, D extends JComponent>
     }
 
     @Override
-    public final Image createImage(final ImageProducer producer) {
-        return new ToolkitImage(producer);
-    }
-
-    @Override
     public final Image createImage(final int width, final int height) {
         return getLWGC().createAcceleratedImage(getTarget(), width, height);
     }
@@ -1006,18 +1003,6 @@ public abstract class LWComponentPeer<T extends Component, D extends JComponent>
     @Override
     public final VolatileImage createVolatileImage(final int w, final int h) {
         return new SunVolatileImage(getTarget(), w, h);
-    }
-
-    @Override
-    public boolean prepareImage(Image img, int w, int h, ImageObserver o) {
-        // TODO: is it a right/complete implementation?
-        return Toolkit.getDefaultToolkit().prepareImage(img, w, h, o);
-    }
-
-    @Override
-    public int checkImage(Image img, int w, int h, ImageObserver o) {
-        // TODO: is it a right/complete implementation?
-        return Toolkit.getDefaultToolkit().checkImage(img, w, h, o);
     }
 
     @Override
@@ -1434,7 +1419,8 @@ public abstract class LWComponentPeer<T extends Component, D extends JComponent>
     }
 
     protected static final void flushOnscreenGraphics(){
-        final OGLRenderQueue rq = OGLRenderQueue.getInstance();
+        RenderQueue rq =  CGraphicsDevice.usingMetalPipeline() ?
+                MTLRenderQueue.getInstance() : OGLRenderQueue.getInstance();
         rq.lock();
         try {
             rq.flushNow();

@@ -1,5 +1,6 @@
 /*
  * Copyright (c) 2016, 2018, Red Hat, Inc. All rights reserved.
+ * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 2 only, as
@@ -24,8 +25,7 @@
 /*
  * @test TestThreadCounts
  * @summary Test that Shenandoah GC thread counts are handled well
- * @key gc
- * @requires vm.gc.Shenandoah & !vm.graal.enabled
+ * @requires vm.gc.Shenandoah
  * @library /test/lib
  * @modules java.base/jdk.internal.misc
  *          java.management
@@ -45,7 +45,9 @@ public class TestThreadCounts {
     }
 
     private static void testWith(int conc, int par) throws Exception {
-        ProcessBuilder pb = ProcessTools.createJavaProcessBuilder("-XX:+UnlockDiagnosticVMOptions",
+        ProcessBuilder pb = ProcessTools.createJavaProcessBuilder(
+                "-Xmx128m",
+                "-XX:+UnlockDiagnosticVMOptions",
                 "-XX:+UnlockExperimentalVMOptions",
                 "-XX:+UseShenandoahGC",
                 "-XX:ConcGCThreads=" + conc,

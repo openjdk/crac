@@ -1,5 +1,6 @@
 /*
  * Copyright (c) 2019, Red Hat, Inc. All rights reserved.
+ * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 2 only, as
@@ -24,9 +25,8 @@
 /*
  * @test TestObjIterWithHeapDump
  * @summary Test heap dump triggered heap object iteration
- * @key gc
  * @bug 8225014
- * @requires vm.gc.Shenandoah & !vm.graal.enabled
+ * @requires vm.gc.Shenandoah
  * @library /test/lib
  * @run driver TestObjItrWithHeapDump
  */
@@ -56,9 +56,9 @@ public class TestObjItrWithHeapDump {
         }
 
         String[][][] modeHeuristics = new String[][][] {
-             {{"normal"},    {"adaptive", "compact", "static", "aggressive"}},
-             {{"traversal"}, {"adaptive", "aggressive"}},
-             {{"passive"},   {"passive"}}
+             {{"satb"},    {"adaptive", "compact", "static", "aggressive"}},
+             {{"iu"},      {"adaptive", "aggressive"}},
+             {{"passive"}, {"passive"}}
         };
 
         for (String[][] mh : modeHeuristics) {

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2000, 2019, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2000, 2020, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -33,6 +33,7 @@ import java.net.SocketAddress;
 import java.nio.ByteBuffer;
 import java.nio.channels.spi.AbstractSelectableChannel;
 import java.nio.channels.spi.SelectorProvider;
+import static java.util.Objects.requireNonNull;
 
 /**
  * A selectable channel for datagram-oriented sockets.
@@ -149,6 +150,9 @@ public abstract class DatagramChannel
      *
      * @throws  IOException
      *          If an I/O error occurs
+     *
+     * @see     <a href="../../net/doc-files/net-properties.html#Ipv4IPv6">
+     *          java.net.preferIPv4Stack</a> system property
      */
     public static DatagramChannel open() throws IOException {
         return SelectorProvider.provider().openDatagramChannel();
@@ -168,6 +172,9 @@ public abstract class DatagramChannel
      * java.nio.channels.spi.SelectorProvider} object.  The channel will not be
      * connected.
      *
+     * @apiNote {@linkplain java.net.StandardProtocolFamily#UNIX Unix domain}
+     *          sockets are not supported.
+     *
      * @param   family
      *          The protocol family
      *
@@ -181,10 +188,13 @@ public abstract class DatagramChannel
      * @throws  IOException
      *          If an I/O error occurs
      *
+     * @see     <a href="../../net/doc-files/net-properties.html#Ipv4IPv6">
+     *          java.net.preferIPv4Stack</a> system property
+     *
      * @since   1.7
      */
     public static DatagramChannel open(ProtocolFamily family) throws IOException {
-        return SelectorProvider.provider().openDatagramChannel(family);
+        return SelectorProvider.provider().openDatagramChannel(requireNonNull(family));
     }
 
     /**
@@ -233,9 +243,6 @@ public abstract class DatagramChannel
 
     /**
      * Retrieves a datagram socket associated with this channel.
-     *
-     * <p> The returned object will not declare any public methods that are not
-     * declared in the {@link java.net.DatagramSocket} class.  </p>
      *
      * @return  A datagram socket associated with this channel
      */
@@ -631,5 +638,4 @@ public abstract class DatagramChannel
      */
     @Override
     public abstract SocketAddress getLocalAddress() throws IOException;
-
 }

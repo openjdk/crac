@@ -1,5 +1,6 @@
 /*
  * Copyright (c) 2019, Red Hat, Inc. All rights reserved.
+ * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 2 only, as
@@ -90,7 +91,7 @@ void ThreadStackTracker::delete_thread_stack(void* base, size_t size) {
     if (MemTracker::tracking_level() == NMT_detail) {
       ThreadCritical tc;
       assert(_simple_thread_stacks != NULL, "Must be initialized");
-      SimpleThreadStackSite site((address)base, size);
+      SimpleThreadStackSite site((address)base, size, NativeCallStack::empty_stack()); // Fake object just to serve as compare target for delete
       bool removed = _simple_thread_stacks->remove(site);
       assert(removed, "Must exist");
     }

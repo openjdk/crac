@@ -1,5 +1,6 @@
 /*
  * Copyright (c) 2018, Red Hat, Inc. All rights reserved.
+ * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 2 only, as
@@ -24,8 +25,7 @@
 /*
  * @test TestPauseNotifications
  * @summary Check that MX notifications are reported for all cycles
- * @key gc
- * @requires vm.gc.Shenandoah & !vm.graal.enabled
+ * @requires vm.gc.Shenandoah
  *
  * @run main/othervm -Xmx128m -XX:+UnlockDiagnosticVMOptions -XX:+UnlockExperimentalVMOptions
  *      -XX:+UseShenandoahGC -XX:ShenandoahGCMode=passive
@@ -41,20 +41,37 @@
 /*
  * @test TestPauseNotifications
  * @summary Check that MX notifications are reported for all cycles
- * @key gc
- * @requires vm.gc.Shenandoah & !vm.graal.enabled
+ * @requires vm.gc.Shenandoah
  *
  * @run main/othervm -Xmx128m -XX:+UnlockDiagnosticVMOptions -XX:+UnlockExperimentalVMOptions
  *      -XX:+UseShenandoahGC -XX:ShenandoahGCHeuristics=aggressive
  *      TestPauseNotifications
+ */
+
+/*
+ * @test TestPauseNotifications
+ * @summary Check that MX notifications are reported for all cycles
+ * @requires vm.gc.Shenandoah
  *
  * @run main/othervm -Xmx128m -XX:+UnlockDiagnosticVMOptions -XX:+UnlockExperimentalVMOptions
  *      -XX:+UseShenandoahGC -XX:ShenandoahGCHeuristics=adaptive
  *      TestPauseNotifications
+ */
+
+/*
+ * @test TestPauseNotifications
+ * @summary Check that MX notifications are reported for all cycles
+ * @requires vm.gc.Shenandoah
  *
  * @run main/othervm -Xmx128m -XX:+UnlockDiagnosticVMOptions -XX:+UnlockExperimentalVMOptions
  *      -XX:+UseShenandoahGC -XX:ShenandoahGCHeuristics=static
  *      TestPauseNotifications
+ */
+
+/*
+ * @test TestPauseNotifications
+ * @summary Check that MX notifications are reported for all cycles
+ * @requires vm.gc.Shenandoah
  *
  * @run main/othervm -Xmx128m -XX:+UnlockDiagnosticVMOptions -XX:+UnlockExperimentalVMOptions
  *      -XX:+UseShenandoahGC -XX:ShenandoahGCHeuristics=compact
@@ -64,15 +81,14 @@
 /*
  * @test TestPauseNotifications
  * @summary Check that MX notifications are reported for all cycles
- * @key gc
- * @requires vm.gc.Shenandoah & !vm.graal.enabled
+ * @requires vm.gc.Shenandoah
  *
  * @run main/othervm -Xmx128m -XX:+UnlockDiagnosticVMOptions -XX:+UnlockExperimentalVMOptions
- *      -XX:+UseShenandoahGC -XX:ShenandoahGCMode=traversal -XX:ShenandoahGCHeuristics=aggressive
+ *      -XX:+UseShenandoahGC -XX:ShenandoahGCMode=iu -XX:ShenandoahGCHeuristics=aggressive
  *      TestPauseNotifications
  *
  * @run main/othervm -Xmx128m -XX:+UnlockDiagnosticVMOptions -XX:+UnlockExperimentalVMOptions
- *      -XX:+UseShenandoahGC -XX:ShenandoahGCMode=traversal
+ *      -XX:+UseShenandoahGC -XX:ShenandoahGCMode=iu
  *      TestPauseNotifications
  */
 
@@ -87,7 +103,7 @@ import com.sun.management.GarbageCollectionNotificationInfo;
 public class TestPauseNotifications {
 
     static final long HEAP_MB = 128;                           // adjust for test configuration above
-    static final long TARGET_MB = Long.getLong("target", 8_000); // 8 Gb allocation
+    static final long TARGET_MB = Long.getLong("target", 2_000); // 2 Gb allocation
 
     static volatile Object sink;
 
@@ -132,7 +148,12 @@ public class TestPauseNotifications {
             sink = new int[size];
         }
 
-        Thread.sleep(1000);
+        // Wait until notifications start arriving, and then wait some more
+        // to catch the ones arriving late.
+        while (pausesDuration.get() == 0) {
+            Thread.sleep(1000);
+        }
+        Thread.sleep(5000);
 
         long pausesActual = pausesDuration.get();
         long cyclesActual = cyclesDuration.get();
@@ -142,7 +163,7 @@ public class TestPauseNotifications {
 
         {
             String msg = "Pauses expected = [" + minExpected + "; " + maxExpected + "], actual = " + pausesActual;
-            if (minExpected < pausesActual && pausesActual < maxExpected) {
+            if (minExpected <= pausesActual && pausesActual <= maxExpected) {
                 System.out.println(msg);
             } else {
                 throw new IllegalStateException(msg);
@@ -151,7 +172,7 @@ public class TestPauseNotifications {
 
         {
             String msg = "Cycles expected = [" + minExpected + "; " + maxExpected + "], actual = " + cyclesActual;
-            if (minExpected < cyclesActual && cyclesActual < maxExpected) {
+            if (minExpected <= cyclesActual && cyclesActual <= maxExpected) {
                 System.out.println(msg);
             } else {
                 throw new IllegalStateException(msg);
@@ -160,7 +181,7 @@ public class TestPauseNotifications {
 
         {
             String msg = "Cycle duration (" + cyclesActual + "), pause duration (" + pausesActual + ")";
-            if (pausesActual < cyclesActual) {
+            if (pausesActual <= cyclesActual) {
                 System.out.println(msg);
             } else {
                 throw new IllegalStateException(msg);

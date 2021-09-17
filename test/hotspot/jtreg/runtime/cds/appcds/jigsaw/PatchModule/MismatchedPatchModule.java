@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2016, 2019, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2016, 2021, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -31,13 +31,13 @@
  * @library ../..
  * @library /test/hotspot/jtreg/testlibrary
  * @library /test/lib
- * @modules jdk.jartool/sun.tools.jar
  * @build PatchMain
  * @run driver MismatchedPatchModule
  */
 
 import jdk.test.lib.compiler.InMemoryJavaCompiler;
 import jdk.test.lib.process.OutputAnalyzer;
+import jdk.test.lib.helpers.ClassFileInstaller;
 
 public class MismatchedPatchModule {
     private static String moduleJar;

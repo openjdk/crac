@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2003, 2019, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2003, 2021, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -23,8 +23,8 @@
  */
 
 #include "precompiled.hpp"
+#include "classfile/javaClasses.hpp"
 #include "classfile/symbolTable.hpp"
-#include "classfile/systemDictionary.hpp"
 #include "code/nmethod.hpp"
 #include "interpreter/interpreter.hpp"
 #include "interpreter/oopMapCache.hpp"
@@ -34,7 +34,9 @@
 #include "memory/allocation.inline.hpp"
 #include "memory/resourceArea.hpp"
 #include "oops/instanceKlass.hpp"
+#include "oops/klass.inline.hpp"
 #include "oops/oop.inline.hpp"
+#include "oops/oopHandle.inline.hpp"
 #include "prims/jvmtiAgentThread.hpp"
 #include "prims/jvmtiEventController.inline.hpp"
 #include "prims/jvmtiImpl.hpp"
@@ -44,6 +46,7 @@
 #include "runtime/handles.inline.hpp"
 #include "runtime/interfaceSupport.inline.hpp"
 #include "runtime/javaCalls.hpp"
+#include "runtime/jniHandles.hpp"
 #include "runtime/os.hpp"
 #include "runtime/serviceThread.hpp"
 #include "runtime/signature.hpp"
@@ -73,7 +76,6 @@ JvmtiAgentThread::start_function_wrapper(JavaThread *thread, TRAPS) {
     // It is expected that any Agent threads will be created as
     // Java Threads.  If this is the case, notification of the creation
     // of the thread is given in JavaThread::thread_main().
-    assert(thread->is_Java_thread(), "debugger thread should be a Java Thread");
     assert(thread == JavaThread::current(), "sanity check");
 
     JvmtiAgentThread *dthread = (JvmtiAgentThread *)thread;
@@ -144,7 +146,7 @@ GrowableCache::~GrowableCache() {
 void GrowableCache::initialize(void *this_obj, void listener_fun(void *, address*) ) {
   _this_obj       = this_obj;
   _listener_fun   = listener_fun;
-  _elements       = new (ResourceObj::C_HEAP, mtInternal) GrowableArray<GrowableElement*>(5,true);
+  _elements       = new (ResourceObj::C_HEAP, mtServiceability) GrowableArray<GrowableElement*>(5, mtServiceability);
   recache();
 }
 
@@ -171,24 +173,6 @@ void GrowableCache::append(GrowableElement* e) {
   recache();
 }
 
-// insert a copy of the element using lessthan()
-void GrowableCache::insert(GrowableElement* e) {
-  GrowableElement *new_e = e->clone();
-  _elements->append(new_e);
-
-  int n = length()-2;
-  for (int i=n; i>=0; i--) {
-    GrowableElement *e1 = _elements->at(i);
-    GrowableElement *e2 = _elements->at(i+1);
-    if (e2->lessThan(e1)) {
-      _elements->at_put(i+1, e1);
-      _elements->at_put(i,   e2);
-    }
-  }
-
-  recache();
-}
-
 // remove the element at index
 void GrowableCache::remove (int index) {
   GrowableElement *e = _elements->at(index);
@@ -209,69 +193,33 @@ void GrowableCache::clear() {
   recache();
 }
 
-void GrowableCache::oops_do(OopClosure* f) {
-  int len = _elements->length();
-  for (int i=0; i<len; i++) {
-    GrowableElement *e = _elements->at(i);
-    e->oops_do(f);
-  }
-}
-
-void GrowableCache::metadata_do(void f(Metadata*)) {
-  int len = _elements->length();
-  for (int i=0; i<len; i++) {
-    GrowableElement *e = _elements->at(i);
-    e->metadata_do(f);
-  }
-}
-
 //
 // class JvmtiBreakpoint
 //
 
-JvmtiBreakpoint::JvmtiBreakpoint() {
-  _method = NULL;
-  _bci    = 0;
-  _class_holder = NULL;
+JvmtiBreakpoint::JvmtiBreakpoint(Method* m_method, jlocation location)
+    : _method(m_method), _bci((int)location) {
+  assert(_method != NULL, "No method for breakpoint.");
+  assert(_bci >= 0, "Negative bci for breakpoint.");
+  oop class_holder_oop  = _method->method_holder()->klass_holder();
+  _class_holder = OopHandle(JvmtiExport::jvmti_oop_storage(), class_holder_oop);
 }
 
-JvmtiBreakpoint::JvmtiBreakpoint(Method* m_method, jlocation location) {
-  _method        = m_method;
-  _class_holder  = _method->method_holder()->klass_holder();
-#ifdef CHECK_UNHANDLED_OOPS
-  // _class_holder can't be wrapped in a Handle, because JvmtiBreakpoints are
-  // sometimes allocated on the heap.
-  //
-  // The code handling JvmtiBreakpoints allocated on the stack can't be
-  // interrupted by a GC until _class_holder is reachable by the GC via the
-  // oops_do method.
-  Thread::current()->allow_unhandled_oop(&_class_holder);
-#endif // CHECK_UNHANDLED_OOPS
-  assert(_method != NULL, "_method != NULL");
-  _bci           = (int) location;
-  assert(_bci >= 0, "_bci >= 0");
+JvmtiBreakpoint::~JvmtiBreakpoint() {
+  if (_class_holder.peek() != NULL) {
+    _class_holder.release(JvmtiExport::jvmti_oop_storage());
+  }
 }
 
 void JvmtiBreakpoint::copy(JvmtiBreakpoint& bp) {
   _method   = bp._method;
   _bci      = bp._bci;
-  _class_holder = bp._class_holder;
-}
-
-bool JvmtiBreakpoint::lessThan(JvmtiBreakpoint& bp) {
-  Unimplemented();
-  return false;
+  _class_holder = OopHandle(JvmtiExport::jvmti_oop_storage(), bp._class_holder.resolve());
 }
 
 bool JvmtiBreakpoint::equals(JvmtiBreakpoint& bp) {
   return _method   == bp._method
     &&   _bci      == bp._bci;
-}
-
-bool JvmtiBreakpoint::is_valid() {
-  // class loader can be NULL
-  return _method != NULL &&
-         _bci >= 0;
 }
 
 address JvmtiBreakpoint::getBcp() const {
@@ -295,8 +243,17 @@ void JvmtiBreakpoint::each_method_version_do(method_action meth_act) {
 
     for (int i = methods->length() - 1; i >= 0; i--) {
       Method* method = methods->at(i);
-      // Only set breakpoints in running EMCP methods.
-      if (method->is_running_emcp() &&
+      // Only set breakpoints in EMCP methods.
+      // EMCP methods are old but not obsolete. Equivalent
+      // Modulo Constant Pool means the method is equivalent except
+      // the constant pool and instructions that access the constant
+      // pool might be different.
+      // If a breakpoint is set in a redefined method, its EMCP methods
+      // must have a breakpoint also.
+      // None of the methods are deleted until none are running.
+      // This code could set a breakpoint in a method that
+      // is never reached, but this won't be noticeable to the programmer.
+      if (!method->is_obsolete() &&
           method->name() == m_name &&
           method->signature() == m_signature) {
         ResourceMark rm;
@@ -347,21 +304,6 @@ void VM_ChangeBreakpoints::doit() {
   }
 }
 
-void VM_ChangeBreakpoints::oops_do(OopClosure* f) {
-  // The JvmtiBreakpoints in _breakpoints will be visited via
-  // JvmtiExport::oops_do.
-  if (_bp != NULL) {
-    _bp->oops_do(f);
-  }
-}
-
-void VM_ChangeBreakpoints::metadata_do(void f(Metadata*)) {
-  // Walk metadata in breakpoints to keep from being deallocated with RedefineClasses
-  if (_bp != NULL) {
-    _bp->metadata_do(f);
-  }
-}
-
 //
 // class JvmtiBreakpoints
 //
@@ -373,14 +315,6 @@ JvmtiBreakpoints::JvmtiBreakpoints(void listener_fun(void *,address *)) {
 }
 
 JvmtiBreakpoints:: ~JvmtiBreakpoints() {}
-
-void  JvmtiBreakpoints::oops_do(OopClosure* f) {
-  _bps.oops_do(f);
-}
-
-void  JvmtiBreakpoints::metadata_do(void f(Metadata*)) {
-  _bps.metadata_do(f);
-}
 
 void JvmtiBreakpoints::print() {
 #ifndef PRODUCT
@@ -490,19 +424,6 @@ void  JvmtiCurrentBreakpoints::listener_fun(void *this_obj, address *cache) {
   set_breakpoint_list(cache);
 }
 
-
-void JvmtiCurrentBreakpoints::oops_do(OopClosure* f) {
-  if (_jvmti_breakpoints != NULL) {
-    _jvmti_breakpoints->oops_do(f);
-  }
-}
-
-void JvmtiCurrentBreakpoints::metadata_do(void f(Metadata*)) {
-  if (_jvmti_breakpoints != NULL) {
-    _jvmti_breakpoints->metadata_do(f);
-  }
-}
-
 ///////////////////////////////////////////////////////////////
 //
 // class VM_GetOrSetLocal
@@ -517,6 +438,7 @@ VM_GetOrSetLocal::VM_GetOrSetLocal(JavaThread* thread, jint depth, jint index, B
   , _type(type)
   , _jvf(NULL)
   , _set(false)
+  , _eb(false, NULL, NULL)
   , _result(JVMTI_ERROR_NONE)
 {
 }
@@ -531,6 +453,7 @@ VM_GetOrSetLocal::VM_GetOrSetLocal(JavaThread* thread, jint depth, jint index, B
   , _value(value)
   , _jvf(NULL)
   , _set(true)
+  , _eb(type == T_OBJECT, JavaThread::current(), thread)
   , _result(JVMTI_ERROR_NONE)
 {
 }
@@ -544,6 +467,7 @@ VM_GetOrSetLocal::VM_GetOrSetLocal(JavaThread* thread, JavaThread* calling_threa
   , _type(T_OBJECT)
   , _jvf(NULL)
   , _set(false)
+  , _eb(true, calling_thread, thread)
   , _result(JVMTI_ERROR_NONE)
 {
 }
@@ -621,15 +545,15 @@ bool VM_GetOrSetLocal::is_assignable(const char* ty_sign, Klass* klass, Thread* 
 // Returns: 'true' - everything is Ok, 'false' - error code
 
 bool VM_GetOrSetLocal::check_slot_type_lvt(javaVFrame* jvf) {
-  Method* method_oop = jvf->method();
-  jint num_entries = method_oop->localvariable_table_length();
+  Method* method = jvf->method();
+  jint num_entries = method->localvariable_table_length();
   if (num_entries == 0) {
     _result = JVMTI_ERROR_INVALID_SLOT;
     return false;       // There are no slots
   }
   int signature_idx = -1;
   int vf_bci = jvf->bci();
-  LocalVariableTableElement* table = method_oop->localvariable_table_start();
+  LocalVariableTableElement* table = method->localvariable_table_start();
   for (int i = 0; i < num_entries; i++) {
     int start_bci = table[i].start_bci;
     int end_bci = start_bci + table[i].length;
@@ -645,9 +569,8 @@ bool VM_GetOrSetLocal::check_slot_type_lvt(javaVFrame* jvf) {
     _result = JVMTI_ERROR_INVALID_SLOT;
     return false;       // Incorrect slot index
   }
-  Symbol*   sign_sym  = method_oop->constants()->symbol_at(signature_idx);
-  const char* signature = (const char *) sign_sym->as_utf8();
-  BasicType slot_type = char2type(signature[0]);
+  Symbol*   sign_sym  = method->constants()->symbol_at(signature_idx);
+  BasicType slot_type = Signature::basic_type(sign_sym);
 
   switch (slot_type) {
   case T_BYTE:
@@ -670,15 +593,13 @@ bool VM_GetOrSetLocal::check_slot_type_lvt(javaVFrame* jvf) {
   jobject jobj = _value.l;
   if (_set && slot_type == T_OBJECT && jobj != NULL) { // NULL reference is allowed
     // Check that the jobject class matches the return type signature.
-    JavaThread* cur_thread = JavaThread::current();
-    HandleMark hm(cur_thread);
-
-    Handle obj(cur_thread, JNIHandles::resolve_external_guard(jobj));
+    oop obj = JNIHandles::resolve_external_guard(jobj);
     NULL_CHECK(obj, (_result = JVMTI_ERROR_INVALID_OBJECT, false));
     Klass* ob_k = obj->klass();
     NULL_CHECK(ob_k, (_result = JVMTI_ERROR_INVALID_OBJECT, false));
 
-    if (!is_assignable(signature, ob_k, cur_thread)) {
+    const char* signature = (const char *) sign_sym->as_utf8();
+    if (!is_assignable(signature, ob_k, VMThread::vm_thread())) {
       _result = JVMTI_ERROR_TYPE_MISMATCH;
       return false;
     }
@@ -687,10 +608,10 @@ bool VM_GetOrSetLocal::check_slot_type_lvt(javaVFrame* jvf) {
 }
 
 bool VM_GetOrSetLocal::check_slot_type_no_lvt(javaVFrame* jvf) {
-  Method* method_oop = jvf->method();
+  Method* method = jvf->method();
   jint extra_slot = (_type == T_LONG || _type == T_DOUBLE) ? 1 : 0;
 
-  if (_index < 0 || _index + extra_slot >= method_oop->max_locals()) {
+  if (_index < 0 || _index + extra_slot >= method->max_locals()) {
     _result = JVMTI_ERROR_INVALID_SLOT;
     return false;
   }
@@ -720,33 +641,42 @@ static bool can_be_deoptimized(vframe* vf) {
 }
 
 bool VM_GetOrSetLocal::doit_prologue() {
-  _jvf = get_java_vframe();
-  NULL_CHECK(_jvf, false);
-
-  Method* method_oop = _jvf->method();
-  if (getting_receiver()) {
-    if (method_oop->is_static()) {
-      _result = JVMTI_ERROR_INVALID_SLOT;
-      return false;
-    }
-    return true;
-  }
-
-  if (method_oop->is_native()) {
-    _result = JVMTI_ERROR_OPAQUE_FRAME;
+  if (!_eb.deoptimize_objects(_depth, _depth)) {
+    // The target frame is affected by a reallocation failure.
+    _result = JVMTI_ERROR_OUT_OF_MEMORY;
     return false;
   }
 
-  if (!check_slot_type_no_lvt(_jvf)) {
-    return false;
-  }
-  if (method_oop->has_localvariable_table()) {
-    return check_slot_type_lvt(_jvf);
-  }
   return true;
 }
 
 void VM_GetOrSetLocal::doit() {
+  _jvf = _jvf == NULL ? get_java_vframe() : _jvf;
+  if (_jvf == NULL) {
+    return;
+  };
+
+  Method* method = _jvf->method();
+  if (getting_receiver()) {
+    if (method->is_static()) {
+      _result = JVMTI_ERROR_INVALID_SLOT;
+      return;
+    }
+  } else {
+    if (method->is_native()) {
+      _result = JVMTI_ERROR_OPAQUE_FRAME;
+      return;
+    }
+
+    if (!check_slot_type_no_lvt(_jvf)) {
+      return;
+    }
+    if (method->has_localvariable_table() &&
+        !check_slot_type_lvt(_jvf)) {
+      return;
+    }
+  }
+
   InterpreterOopMap oop_mask;
   _jvf->method()->mask_for(_jvf->bci(), &oop_mask);
   if (oop_mask.is_dead(_index)) {
@@ -776,7 +706,7 @@ void VM_GetOrSetLocal::doit() {
       // happens. The oop stored in the deferred local will be
       // gc'd on its own.
       if (_type == T_OBJECT) {
-        _value.l = (jobject) (JNIHandles::resolve_external_guard(_value.l));
+        _value.l = cast_from_oop<jobject>(JNIHandles::resolve_external_guard(_value.l));
       }
       // Re-read the vframe so we can see that it is deoptimized
       // [ Only need because of assert in update_local() ]
@@ -785,7 +715,8 @@ void VM_GetOrSetLocal::doit() {
       return;
     }
     StackValueCollection *locals = _jvf->locals();
-    HandleMark hm;
+    Thread* current_thread = VMThread::vm_thread();
+    HandleMark hm(current_thread);
 
     switch (_type) {
       case T_INT:    locals->set_int_at   (_index, _value.i); break;
@@ -793,7 +724,7 @@ void VM_GetOrSetLocal::doit() {
       case T_FLOAT:  locals->set_float_at (_index, _value.f); break;
       case T_DOUBLE: locals->set_double_at(_index, _value.d); break;
       case T_OBJECT: {
-        Handle ob_h(Thread::current(), JNIHandles::resolve_external_guard(_value.l));
+        Handle ob_h(current_thread, JNIHandles::resolve_external_guard(_value.l));
         locals->set_obj_at (_index, ob_h);
         break;
       }
@@ -843,46 +774,12 @@ VM_GetReceiver::VM_GetReceiver(
 //
 
 bool JvmtiSuspendControl::suspend(JavaThread *java_thread) {
-  // external suspend should have caught suspending a thread twice
-
-  // Immediate suspension required for JPDA back-end so JVMTI agent threads do
-  // not deadlock due to later suspension on transitions while holding
-  // raw monitors.  Passing true causes the immediate suspension.
-  // java_suspend() will catch threads in the process of exiting
-  // and will ignore them.
-  java_thread->java_suspend();
-
-  // It would be nice to have the following assertion in all the time,
-  // but it is possible for a racing resume request to have resumed
-  // this thread right after we suspended it. Temporarily enable this
-  // assertion if you are chasing a different kind of bug.
-  //
-  // assert(java_lang_Thread::thread(java_thread->threadObj()) == NULL ||
-  //   java_thread->is_being_ext_suspended(), "thread is not suspended");
-
-  if (java_lang_Thread::thread(java_thread->threadObj()) == NULL) {
-    // check again because we can get delayed in java_suspend():
-    // the thread is in process of exiting.
-    return false;
-  }
-
-  return true;
+  return java_thread->java_suspend();
 }
 
 bool JvmtiSuspendControl::resume(JavaThread *java_thread) {
-  // external suspend should have caught resuming a thread twice
-  assert(java_thread->is_being_ext_suspended(), "thread should be suspended");
-
-  // resume thread
-  {
-    // must always grab Threads_lock, see JVM_SuspendThread
-    MutexLocker ml(Threads_lock);
-    java_thread->java_resume();
-  }
-
-  return true;
+  return java_thread->java_resume();
 }
-
 
 void JvmtiSuspendControl::print() {
 #ifndef PRODUCT
@@ -895,7 +792,7 @@ void JvmtiSuspendControl::print() {
 #else
     const char *name   = "";
 #endif /*JVMTI_TRACE */
-    log_stream.print("%s(%c ", name, thread->is_being_ext_suspended() ? 'S' : '_');
+    log_stream.print("%s(%c ", name, thread->is_suspended() ? 'S' : '_');
     if (!thread->has_last_Java_frame()) {
       log_stream.print("no stack");
     }

@@ -1,5 +1,6 @@
 /*
  * Copyright (c) 2019, Red Hat, Inc. All rights reserved.
+ * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 2 only, as
@@ -22,7 +23,7 @@
  */
 
 #include "precompiled.hpp"
-#include "gc/shenandoah/shenandoahHeap.hpp"
+#include "gc/shenandoah/shenandoahHeap.inline.hpp"
 #include "gc/shenandoah/shenandoahHeapRegion.hpp"
 #include "gc/shenandoah/shenandoahJfrSupport.hpp"
 #include "jfr/jfrEvents.hpp"
@@ -56,7 +57,7 @@ class ShenandoahDumpHeapRegionInfoClosure : public ShenandoahHeapRegionClosure {
 public:
   virtual void heap_region_do(ShenandoahHeapRegion* r) {
     EventShenandoahHeapRegionInformation evt;
-    evt.set_index((unsigned)r->region_number());
+    evt.set_index((unsigned) r->index());
     evt.set_state((u8)r->state());
     evt.set_start((uintptr_t)r->bottom());
     evt.set_used(r->used());

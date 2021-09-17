@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2016, 2019, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2016, 2021, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -31,7 +31,6 @@
  *          profiler.
  * @requires vm.hasJFR & vm.cds
  * @library /test/lib /test/hotspot/jtreg/runtime/cds/appcds
- * @modules jdk.jartool/sun.tools.jar
  * @compile test-classes/MyThread.java
  * @compile test-classes/TestWithProfilerHelper.java
  * @run driver TestWithProfiler
@@ -50,8 +49,7 @@ public class TestWithProfiler {
         output = TestCommon.exec(appJar,
             "-XX:+UnlockDiagnosticVMOptions",
             "-Xint",
-            "-XX:+FlightRecorder",
-            "-XX:StartFlightRecording=duration=15s,filename=myrecording.jfr,settings=profile,dumponexit=true",
+            "-XX:StartFlightRecording:duration=15s,filename=myrecording.jfr,settings=profile,dumponexit=true",
             "TestWithProfilerHelper");
         TestCommon.checkExec(output);
     }

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013, 2018, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2013, 2020, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -61,7 +61,7 @@ public class CDSJDITest {
             // pass them as JVM arguments to the debuggee process it creates.
             "-Xbootclasspath/a:" + appJar,
             "-XX:+UnlockDiagnosticVMOptions",
-            "-XX:+TraceClassPaths",
+            "-Xlog:class+path=info",
             "-XX:SharedArchiveFile=./SharedArchiveFile.jsa",
             "-Xshare:on",
             "-showversion"
@@ -72,7 +72,7 @@ public class CDSJDITest {
             "-Xbootclasspath/a:" + appJar,
             "-XX:+UnlockDiagnosticVMOptions", "-XX:SharedArchiveFile=./SharedArchiveFile.jsa",
             "-XX:ExtraSharedClassListFile=" + jarClasslistFile.getPath(),
-            "-Xshare:dump");
+            "-Xshare:dump", "-Xlog:cds");
         OutputAnalyzer outputDump = executeAndLog(pb, "exec");
         for (String jarClass : jarClasses) {
             outputDump.shouldNotContain("Cannot find " + jarClass);
@@ -81,7 +81,7 @@ public class CDSJDITest {
         outputDump.shouldHaveExitValue(0);
 
         // Run the test specified JDI test
-        pb = ProcessTools.createJavaProcessBuilder(true, testArgs);
+        pb = ProcessTools.createTestJvm(testArgs);
         OutputAnalyzer outputRun = executeAndLog(pb, "exec");
         try {
             outputRun.shouldContain("sharing");

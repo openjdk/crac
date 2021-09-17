@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2017, 2019, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2017, 2021, Oracle and/or its affiliates. All rights reserved.
  */
 /*
  * Licensed to the Apache Software Foundation (ASF) under one or more
@@ -25,8 +25,7 @@ package com.sun.org.apache.bcel.internal.generic;
  *
  * <PRE>Stack: ... -&gt; ..., item.word1, item.word2</PRE>
  *
- * @version $Id$
- * @LastModified: Jun 2019
+ * @LastModified: May 2021
  */
 public class LDC2_W extends CPInstruction implements PushInstruction {
 
@@ -51,7 +50,7 @@ public class LDC2_W extends CPInstruction implements PushInstruction {
             case com.sun.org.apache.bcel.internal.Const.CONSTANT_Double:
                 return Type.DOUBLE;
             default: // Never reached
-                throw new RuntimeException("Unknown constant type " + super.getOpcode());
+                throw new IllegalArgumentException("Unknown constant type " + super.getOpcode());
         }
     }
 
@@ -64,7 +63,7 @@ public class LDC2_W extends CPInstruction implements PushInstruction {
             case com.sun.org.apache.bcel.internal.Const.CONSTANT_Double:
                 return ((com.sun.org.apache.bcel.internal.classfile.ConstantDouble) c).getBytes();
             default: // Never reached
-                throw new RuntimeException("Unknown or invalid constant type at " + super.getIndex());
+                throw new IllegalArgumentException("Unknown or invalid constant type at " + super.getIndex());
         }
     }
 

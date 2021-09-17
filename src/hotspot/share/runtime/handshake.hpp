@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2017, 2019, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2017, 2021, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -28,67 +28,140 @@
 #include "memory/allocation.hpp"
 #include "memory/iterator.hpp"
 #include "runtime/flags/flagSetting.hpp"
-#include "runtime/semaphore.hpp"
+#include "runtime/mutex.hpp"
+#include "runtime/orderAccess.hpp"
+#include "utilities/filterQueue.hpp"
 
+class HandshakeOperation;
 class JavaThread;
+class SuspendThreadHandshake;
+class ThreadSelfSuspensionHandshake;
 
-// A handshake closure is a callback that is executed for each JavaThread
-// while that thread is in a safepoint safe state. The callback is executed
-// either by the thread itself or by the VM thread while keeping the thread
-// in a blocked state. A handshake can be performed with a single
-// JavaThread as well.
-class HandshakeClosure : public ThreadClosure {
+// A handshake closure is a callback that is executed for a JavaThread
+// while it is in a safepoint/handshake-safe state. Depending on the
+// nature of the closure, the callback may be executed by the initiating
+// thread, the target thread, or the VMThread. If the callback is not executed
+// by the target thread it will remain in a blocked state until the callback completes.
+class HandshakeClosure : public ThreadClosure, public CHeapObj<mtThread> {
   const char* const _name;
  public:
   HandshakeClosure(const char* name) : _name(name) {}
-  const char* name() const {
-    return _name;
-  }
+  virtual ~HandshakeClosure()                      {}
+  const char* name() const                         { return _name; }
+  virtual bool is_async()                          { return false; }
+  virtual bool is_suspend()                        { return false; }
   virtual void do_thread(Thread* thread) = 0;
+};
+
+class AsyncHandshakeClosure : public HandshakeClosure {
+ public:
+   AsyncHandshakeClosure(const char* name) : HandshakeClosure(name) {}
+   virtual ~AsyncHandshakeClosure() {}
+   virtual bool is_async()          { return true; }
 };
 
 class Handshake : public AllStatic {
  public:
   // Execution of handshake operation
-  static void execute(HandshakeClosure* hs_cl);
-  static bool execute(HandshakeClosure* hs_cl, JavaThread* target);
+  static void execute(HandshakeClosure*       hs_cl);
+  static void execute(HandshakeClosure*       hs_cl, JavaThread* target);
+  static void execute(AsyncHandshakeClosure*  hs_cl, JavaThread* target);
 };
 
-class HandshakeOperation;
+class JvmtiRawMonitor;
 
-// The HandshakeState keep tracks of an ongoing handshake for one JavaThread.
-// VM thread and JavaThread are serialized with the semaphore making sure
-// the operation is only done by either VM thread on behalf of the JavaThread
-// or the JavaThread itself.
+// The HandshakeState keeps track of an ongoing handshake for this JavaThread.
+// VMThread/Handshaker and JavaThread are serialized with _lock making sure the
+// operation is only done by either VMThread/Handshaker on behalf of the
+// JavaThread or by the target JavaThread itself.
 class HandshakeState {
-  HandshakeOperation* volatile _operation;
+  friend ThreadSelfSuspensionHandshake;
+  friend SuspendThreadHandshake;
+  friend JavaThread;
+  // This a back reference to the JavaThread,
+  // the target for all operation in the queue.
+  JavaThread* _handshakee;
+  // The queue containing handshake operations to be performed on _handshakee.
+  FilterQueue<HandshakeOperation*> _queue;
+  // Provides mutual exclusion to this state and queue. Also used for
+  // JavaThread suspend/resume operations.
+  Monitor _lock;
+  // Set to the thread executing the handshake operation.
+  Thread* volatile _active_handshaker;
 
-  Semaphore _semaphore;
-  bool _thread_in_process_handshake;
+  bool claim_handshake();
+  bool possibly_can_process_handshake();
+  bool can_process_handshake();
 
-  bool claim_handshake_for_vmthread();
-  bool vmthread_can_process_handshake(JavaThread* target);
+  bool have_non_self_executable_operation();
+  HandshakeOperation* get_op_for_self(bool allow_suspend);
+  HandshakeOperation* get_op();
+  void remove_op(HandshakeOperation* op);
 
-  void clear_handshake(JavaThread* thread);
+  void set_active_handshaker(Thread* thread) { Atomic::store(&_active_handshaker, thread); }
 
-  void process_self_inner(JavaThread* thread);
-public:
-  HandshakeState();
-
-  void set_operation(JavaThread* thread, HandshakeOperation* op);
-
-  bool has_operation() const {
-    return _operation != NULL;
-  }
-
-  void process_by_self(JavaThread* thread) {
-    if (!_thread_in_process_handshake) {
-      FlagSetting fs(_thread_in_process_handshake, true);
-      process_self_inner(thread);
+  class MatchOp {
+    HandshakeOperation* _op;
+   public:
+    MatchOp(HandshakeOperation* op) : _op(op) {}
+    bool operator()(HandshakeOperation* op) {
+      return op == _op;
     }
-  }
+  };
 
-  bool try_process_by_vmThread(JavaThread* target);
+ public:
+  HandshakeState(JavaThread* thread);
+
+  void add_operation(HandshakeOperation* op);
+
+  bool has_operation() {
+    return !_queue.is_empty();
+  }
+  bool has_a_non_suspend_operation();
+
+  bool operation_pending(HandshakeOperation* op);
+
+  // If the method returns true we need to check for a possible safepoint.
+  // This is due to a suspension handshake which put the JavaThread in blocked
+  // state so a safepoint may be in-progress.
+  bool process_by_self(bool allow_suspend);
+
+  enum ProcessResult {
+    _no_operation = 0,
+    _not_safe,
+    _claim_failed,
+    _processed,
+    _succeeded,
+    _number_states
+  };
+  ProcessResult try_process(HandshakeOperation* match_op);
+
+  Thread* active_handshaker() const { return Atomic::load(&_active_handshaker); }
+
+  // Suspend/resume support
+ private:
+  // This flag is true when the thread owning this
+  // HandshakeState (the _handshakee) is suspended.
+  volatile bool _suspended;
+  // This flag is true while there is async handshake (trap)
+  // on queue. Since we do only need one, we can reuse it if
+  // thread gets suspended again (after a resume)
+  // and we have not yet processed it.
+  bool _async_suspend_handshake;
+
+  // Called from the suspend handshake.
+  bool suspend_with_handshake();
+  // Called from the async handshake (the trap)
+  // to stop a thread from continuing execution when suspended.
+  void do_self_suspend();
+
+  bool is_suspended()                       { return Atomic::load(&_suspended); }
+  void set_suspended(bool to)               { return Atomic::store(&_suspended, to); }
+  bool has_async_suspend_handshake()        { return _async_suspend_handshake; }
+  void set_async_suspend_handshake(bool to) { _async_suspend_handshake = to; }
+
+  bool suspend();
+  bool resume();
 };
 
 #endif // SHARE_RUNTIME_HANDSHAKE_HPP

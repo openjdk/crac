@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1997, 2019, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 1997, 2021, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -25,176 +25,12 @@
 #ifndef SHARE_RUNTIME_VMOPERATIONS_HPP
 #define SHARE_RUNTIME_VMOPERATIONS_HPP
 
-#include "classfile/javaClasses.hpp"
-#include "memory/allocation.hpp"
 #include "oops/oop.hpp"
+#include "runtime/vmOperation.hpp"
 #include "runtime/thread.hpp"
 #include "runtime/threadSMR.hpp"
-#include "code/codeCache.hpp"
 
-// The following classes are used for operations
-// initiated by a Java thread but that must
-// take place in the VMThread.
-
-#define VM_OP_ENUM(type)   VMOp_##type,
-
-// Note: When new VM_XXX comes up, add 'XXX' to the template table.
-#define VM_OPS_DO(template)                       \
-  template(None)                                  \
-  template(Cleanup)                               \
-  template(ThreadStop)                            \
-  template(ThreadDump)                            \
-  template(PrintThreads)                          \
-  template(FindDeadlocks)                         \
-  template(ClearICs)                              \
-  template(ForceSafepoint)                        \
-  template(ForceAsyncSafepoint)                   \
-  template(DeoptimizeFrame)                       \
-  template(DeoptimizeAll)                         \
-  template(ZombieAll)                             \
-  template(Verify)                                \
-  template(PrintJNI)                              \
-  template(HeapDumper)                            \
-  template(DeoptimizeTheWorld)                    \
-  template(CollectForMetadataAllocation)          \
-  template(GC_HeapInspection)                     \
-  template(GenCollectFull)                        \
-  template(GenCollectFullConcurrent)              \
-  template(GenCollectForAllocation)               \
-  template(ParallelGCFailedAllocation)            \
-  template(ParallelGCSystemGC)                    \
-  template(G1CollectForAllocation)                \
-  template(G1CollectFull)                         \
-  template(G1Concurrent)                          \
-  template(G1TryInitiateConcMark)                 \
-  template(ZMarkStart)                            \
-  template(ZMarkEnd)                              \
-  template(ZRelocateStart)                        \
-  template(ZVerify)                               \
-  template(HandshakeOneThread)                    \
-  template(HandshakeAllThreads)                   \
-  template(HandshakeFallback)                     \
-  template(EnableBiasedLocking)                   \
-  template(BulkRevokeBias)                        \
-  template(PopulateDumpSharedSpace)               \
-  template(JNIFunctionTableCopier)                \
-  template(RedefineClasses)                       \
-  template(UpdateForPopTopFrame)                  \
-  template(SetFramePop)                           \
-  template(GetOwnedMonitorInfo)                   \
-  template(GetObjectMonitorUsage)                 \
-  template(GetCurrentContendedMonitor)            \
-  template(GetStackTrace)                         \
-  template(GetMultipleStackTraces)                \
-  template(GetAllStackTraces)                     \
-  template(GetThreadListStackTraces)              \
-  template(GetFrameCount)                         \
-  template(GetFrameLocation)                      \
-  template(ChangeBreakpoints)                     \
-  template(GetOrSetLocal)                         \
-  template(GetCurrentLocation)                    \
-  template(EnterInterpOnlyMode)                   \
-  template(ChangeSingleStep)                      \
-  template(HeapWalkOperation)                     \
-  template(HeapIterateOperation)                  \
-  template(ReportJavaOutOfMemory)                 \
-  template(JFRCheckpoint)                         \
-  template(ShenandoahFullGC)                      \
-  template(ShenandoahInitMark)                    \
-  template(ShenandoahFinalMarkStartEvac)          \
-  template(ShenandoahFinalEvac)                   \
-  template(ShenandoahInitTraversalGC)             \
-  template(ShenandoahFinalTraversalGC)            \
-  template(ShenandoahInitUpdateRefs)              \
-  template(ShenandoahFinalUpdateRefs)             \
-  template(ShenandoahDegeneratedGC)               \
-  template(Exit)                                  \
-  template(LinuxDllLoad)                          \
-  template(RotateGCLog)                           \
-  template(WhiteBoxOperation)                     \
-  template(JVMCIResizeCounters)                   \
-  template(ClassLoaderStatsOperation)             \
-  template(ClassLoaderHierarchyOperation)         \
-  template(DumpHashtable)                         \
-  template(DumpTouchedMethods)                    \
-  template(MarkActiveNMethods)                    \
-  template(PrintCompileQueue)                     \
-  template(PrintClassHierarchy)                   \
-  template(ThreadSuspend)                         \
-  template(ThreadsSuspendJVMTI)                   \
-  template(ICBufferFull)                          \
-  template(ScavengeMonitors)                      \
-  template(PrintMetadata)                         \
-  template(GTestExecuteAtSafepoint)               \
-  template(JFROldObject)                          \
-  template(VM_Crac)                               \
-
-class VM_Operation : public StackObj {
- public:
-  enum VMOp_Type {
-    VM_OPS_DO(VM_OP_ENUM)
-    VMOp_Terminating
-  };
-
- private:
-  Thread*         _calling_thread;
-  long            _timestamp;
-  VM_Operation*   _next;
-  VM_Operation*   _prev;
-
-  // The VM operation name array
-  static const char* _names[];
-
- public:
-  VM_Operation() : _calling_thread(NULL), _timestamp(0),  _next(NULL), _prev(NULL) {}
-
-  // VM operation support (used by VM thread)
-  Thread* calling_thread() const                 { return _calling_thread; }
-  void set_calling_thread(Thread* thread);
-
-  long timestamp() const              { return _timestamp; }
-  void set_timestamp(long timestamp)  { _timestamp = timestamp; }
-
-  // Called by VM thread - does in turn invoke doit(). Do not override this
-  void evaluate();
-
-  // evaluate() is called by the VMThread and in turn calls doit().
-  // If the thread invoking VMThread::execute((VM_Operation*) is a JavaThread,
-  // doit_prologue() is called in that thread before transferring control to
-  // the VMThread.
-  // If doit_prologue() returns true the VM operation will proceed, and
-  // doit_epilogue() will be called by the JavaThread once the VM operation
-  // completes. If doit_prologue() returns false the VM operation is cancelled.
-  virtual void doit()                            = 0;
-  virtual bool doit_prologue()                   { return true; };
-  virtual void doit_epilogue()                   {};
-
-  // Linking
-  VM_Operation *next() const                     { return _next; }
-  VM_Operation *prev() const                     { return _prev; }
-  void set_next(VM_Operation *next)              { _next = next; }
-  void set_prev(VM_Operation *prev)              { _prev = prev; }
-
-  // Configuration. Override these appropriately in subclasses.
-  virtual VMOp_Type type() const = 0;
-  virtual bool allow_nested_vm_operations() const { return false; }
-  virtual void oops_do(OopClosure* f)              { /* do nothing */ };
-
-  // An operation can either be done inside a safepoint
-  // or concurrently with Java threads running.
-  virtual bool evaluate_at_safepoint() const { return true; }
-
-  // Debugging
-  virtual void print_on_error(outputStream* st) const;
-  virtual const char* name() const  { return _names[type()]; }
-  static const char* name(int type) {
-    assert(type >= 0 && type < VMOp_Terminating, "invalid VM operation type");
-    return _names[type];
-  }
-#ifndef PRODUCT
-  void print_on(outputStream* st) const { print_on_error(st); }
-#endif
-};
+// A hodge podge of commonly used VM Operations
 
 class VM_None: public VM_Operation {
   const char* _reason;
@@ -209,30 +45,6 @@ class VM_Cleanup: public VM_Operation {
  public:
   VMOp_Type type() const { return VMOp_Cleanup; }
   void doit() {};
-};
-
-class VM_ThreadStop: public VM_Operation {
- private:
-  oop     _thread;        // The Thread that the Throwable is thrown against
-  oop     _throwable;     // The Throwable thrown at the target Thread
- public:
-  // All oops are passed as JNI handles, since there is no guarantee that a GC might happen before the
-  // VM operation is executed.
-  VM_ThreadStop(oop thread, oop throwable) {
-    _thread    = thread;
-    _throwable = throwable;
-  }
-  VMOp_Type type() const                         { return VMOp_ThreadStop; }
-  oop target_thread() const                      { return _thread; }
-  oop throwable() const                          { return _throwable;}
-  void doit();
-  // We deoptimize if top-most frame is compiled - this might require a C2I adapter to be generated
-  bool allow_nested_vm_operations() const        { return true; }
-
-  // GC support
-  void oops_do(OopClosure* f) {
-    f->do_oop(&_thread); f->do_oop(&_throwable);
-  }
 };
 
 class VM_ClearICs: public VM_Operation {
@@ -267,6 +79,7 @@ class VM_ThreadsSuspendJVMTI: public VM_ForceSafepoint {
 class VM_ICBufferFull: public VM_ForceSafepoint {
  public:
   VMOp_Type type() const { return VMOp_ICBufferFull; }
+  virtual bool skip_thread_oop_barriers() const { return true; }
 };
 
 // Base class for invoking parts of a gtest in a safepoint.
@@ -280,12 +93,11 @@ class VM_GTestExecuteAtSafepoint: public VM_Operation {
   VM_GTestExecuteAtSafepoint() {}
 };
 
-class VM_MarkActiveNMethods: public VM_Operation {
+class VM_CleanClassLoaderDataMetaspaces : public VM_Operation {
  public:
-  VM_MarkActiveNMethods() {}
-  VMOp_Type type() const                         { return VMOp_MarkActiveNMethods; }
+  VM_CleanClassLoaderDataMetaspaces() {}
+  VMOp_Type type() const                         { return VMOp_CleanClassLoaderDataMetaspaces; }
   void doit();
-  bool allow_nested_vm_operations() const        { return true; }
 };
 
 // Deopt helper that can deoptimize frames in threads other than the
@@ -325,13 +137,6 @@ class VM_ZombieAll: public VM_Operation {
   bool allow_nested_vm_operations() const        { return true; }
 };
 #endif // PRODUCT
-
-class VM_Verify: public VM_Operation {
- public:
-  VMOp_Type type() const { return VMOp_Verify; }
-  void doit();
-};
-
 
 class VM_PrintThreads: public VM_Operation {
  private:

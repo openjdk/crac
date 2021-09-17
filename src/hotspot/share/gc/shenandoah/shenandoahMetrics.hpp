@@ -1,5 +1,6 @@
 /*
  * Copyright (c) 2018, 2019, Red Hat, Inc. All rights reserved.
+ * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 2 only, as
@@ -25,15 +26,6 @@
 #define SHARE_GC_SHENANDOAH_SHENANDOAHMETRICS_HPP
 
 #include "gc/shenandoah/shenandoahHeap.hpp"
-
-class ShenandoahMetrics {
-private:
-  ShenandoahMetrics() {}
-
-public:
-  static double internal_fragmentation();
-  static double external_fragmentation();
-};
 
 class ShenandoahMetricsSnapshot : public StackObj {
 private:

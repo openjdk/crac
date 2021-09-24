@@ -1,0 +1,84 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - '*-crac+*'
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+
+    - name: Compute parameters
+      id: compute
+      run: |
+        TAG=${GITHUB_REF##refs/tags/}
+        BUNDLENAME=jdk${TAG}
+        BUILDNUMBER=${TAG##*-crac+}
+        for i in TAG BUNDLENAME BUILDNUMBER; do
+          echo "::set-output name=${i}::${!i}"
+        done
+
+    - uses: actions/checkout@v2
+
+    - name: Start build container
+      run: echo ${GITHUB_TOKEN} | docker login -u ${GITHUB_ACTOR} --password-stdin docker.pkg.github.com;
+        docker run -d --name build
+        -w $PWD
+        -v /home/runner:/home/runner
+        -u $(id -u):$(id -g)
+        --entrypoint tail
+        docker.pkg.github.com/crac/docker-build/image:latest
+        -f /dev/null
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+    - run: bash ./configure
+        --disable-warnings-as-errors
+        --with-version-pre=crac
+        --with-version-build=${{ steps.compute.outputs.BUILDNUMBER }}
+        --with-version-opt=${{ github.run_number }}
+        --with-native-debug-symbols=none
+      shell: docker exec build bash -e {0}
+
+    - run: |
+        make images docs
+      shell: docker exec build bash -e {0}
+
+    - name: Bundle
+      run: |
+        id=$(curl https://api.github.com/repos/crac/criu/releases/tags/release-crac | jq .assets[0].id)
+        curl https://api.github.com/repos/crac/criu/releases/assets/$id -LJOH 'Accept: application/octet-stream'
+        tar axf criu-dist.tar.gz
+        BUNDLENAME=${{ steps.compute.outputs.BUNDLENAME }}
+        mv build/linux-x86_64-server-release/images/jdk $BUNDLENAME
+        mv build/linux-x86_64-server-release/images/docs $BUNDLENAME-docs
+        cp criu-dist/sbin/criu $BUNDLENAME/lib/criu
+        sudo chown root:root $BUNDLENAME/lib/criu
+        sudo chmod u+s $BUNDLENAME/lib/criu
+        tar -zcf $BUNDLENAME.tar.gz $BUNDLENAME
+        tar -zcf $BUNDLENAME-docs.tar.gz $BUNDLENAME-docs
+
+    - name: Release
+      uses: softprops/action-gh-release@v1
+      with:
+        files: |
+          ${{ steps.compute.outputs.BUNDLENAME }}.tar.gz
+          ${{ steps.compute.outputs.BUNDLENAME }}-docs.tar.gz
+
+    - name: Checkout gh-pages
+      uses: actions/checkout@v2
+      with:
+        ref: 'gh-pages'
+        path: 'gh-pages'
+
+    - name: Upload Javadoc to Github Pages
+      run: |
+        rsync --delete -r ${{ steps.compute.outputs.BUNDLENAME }}-docs/ gh-pages/javadoc/
+        git config --global user.email "bot@crac.github.com"
+        git config --global user.name "GitHub Actions"
+        git -C gh-pages add .
+        git -C gh-pages commit -m "${{ steps.compute.outputs.TAG }}"
+        git -C gh-pages push origin gh-pages
+

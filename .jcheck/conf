@@ -1,0 +1,10 @@
+[general]
+project=crac
+jbs=JDK
+
+[checks]
+error=whitespace
+
+[checks "reviewers"]
+committers=1
+ignore=duke

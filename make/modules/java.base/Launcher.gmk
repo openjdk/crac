@@ -90,27 +90,27 @@ endif
 ################################################################################
 
 ifeq ($(OPENJDK_TARGET_OS), linux)
-  $(eval $(call SetupJdkExecutable, BUILD_RESTORE_SCRIPT, \
-      NAME := action-script, \
-      SRC := $(TOPDIR)/src/$(MODULE)/unix/native/action-script, \
-      INCLUDE_FILES := action-script.c, \
+  $(eval $(call SetupJdkExecutable, BUILD_CRIUENGINE, \
+      NAME := criuengine, \
+      SRC := $(TOPDIR)/src/$(MODULE)/unix/native/criuengine, \
+      INCLUDE_FILES := criuengine.c, \
       OPTIMIZATION := HIGH, \
       CFLAGS := $(CFLAGS_JDKEXE), \
       LDFLAGS := $(LDFLAGS_JDKEXE), \
       OUTPUT_DIR := $(SUPPORT_OUTPUTDIR)/modules_libs/$(MODULE), \
   ))
-  TARGETS += $(BUILD_RESTORE_SCRIPT)
+  TARGETS += $(BUILD_CRIUENGINE)
 
-  $(eval $(call SetupJdkExecutable, BUILD_WAIT, \
-      NAME := wait, \
-      SRC := $(TOPDIR)/src/$(MODULE)/unix/native/wait, \
-      INCLUDE_FILES := wait.c, \
+  $(eval $(call SetupJdkExecutable, BUILD_PAUSEENGINE, \
+      NAME := pauseengine, \
+      SRC := $(TOPDIR)/src/$(MODULE)/unix/native/pauseengine, \
+      INCLUDE_FILES := pauseengine.c, \
       OPTIMIZATION := LOW, \
       CFLAGS := $(CFLAGS_JDKEXE), \
       LDFLAGS := $(LDFLAGS_JDKEXE), \
       OUTPUT_DIR := $(SUPPORT_OUTPUTDIR)/modules_libs/$(MODULE), \
   ))
-  TARGETS += $(BUILD_WAIT)
+  TARGETS += $(BUILD_PAUSEENGINE)
 
   $(eval $(call SetupJdkExecutable, BUILD_CRIU_WRAPPER, \
       NAME := criu, \

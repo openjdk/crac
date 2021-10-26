@@ -43,6 +43,8 @@
 
 #define ARRAY_SIZE(x) (sizeof(x) / sizeof(x[0]))
 
+static int create_cppath(const char *imagedir);
+
 static int g_pid;
 
 static int kickjvm(pid_t jvm, int code) {
@@ -98,7 +100,6 @@ static int checkpoint(pid_t jvm,
             "dump",
             "-t", jvmpidchar,
             "-D", imagedir,
-            "--action-script", self,
             "--shell-job",
             "-v4", "-o", "dump4.log", // -D without -W makes criu cd to image dir for logs
             NULL
@@ -112,6 +113,8 @@ static int checkpoint(pid_t jvm,
     if (child != wait(&status) || !WIFEXITED(status) || WEXITSTATUS(status)) {
         kickjvm(jvm, -1);
     }
+
+    create_cppath(imagedir);
     exit(0);
 }
 
@@ -196,17 +199,11 @@ static int post_resume(void) {
     return 0;
 }
 
-static int post_dump(void) {
+static int create_cppath(const char *imagedir) {
     char realdir[PATH_MAX];
 
-    char *imgdir = getenv("CRTOOLS_IMAGE_DIR");
-    if (!imgdir) {
-        fprintf(stderr, MSGPREFIX "cannot find CRTOOLS_IMAGE_DIR env\n");
-        return 1;
-    }
-
-    if (!realpath(imgdir, realdir)) {
-        fprintf(stderr, MSGPREFIX "cannot canonicalize %s: %s\n", imgdir, strerror(errno));
+    if (!realpath(imagedir, realdir)) {
+        fprintf(stderr, MSGPREFIX "cannot canonicalize %s: %s\n", imagedir, strerror(errno));
         return 1;
     }
 
@@ -319,8 +316,6 @@ int main(int argc, char *argv[]) {
     } else if ((action = getenv("CRTOOLS_SCRIPT_ACTION"))) { // called by CRIU --action-script
         if (!strcmp(action, "post-resume")) {
             return post_resume();
-        } else if (!strcmp(action, "post-dump")) {
-            return post_dump();
         } else {
             // ignore other notifications
             return 0;

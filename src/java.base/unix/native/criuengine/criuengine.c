@@ -1,4 +1,30 @@
+/*
+ * Copyright (c) 2017, 2021, Azul Systems, Inc. All rights reserved.
+ * Copyright (c) 2021, Oracle and/or its affiliates. All rights reserved.
+ * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
+ *
+ * This code is free software; you can redistribute it and/or modify it
+ * under the terms of the GNU General Public License version 2 only, as
+ * published by the Free Software Foundation.  Oracle designates this
+ * particular file as subject to the "Classpath" exception as provided
+ * by Oracle in the LICENSE file that accompanied this code.
+ *
+ * This code is distributed in the hope that it will be useful, but WITHOUT
+ * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+ * FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
+ * version 2 for more details (a copy is included in the LICENSE file that
+ * accompanied this code).
+ *
+ * You should have received a copy of the GNU General Public License version
+ * 2 along with this work; if not, write to the Free Software Foundation,
+ * Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301 USA.
+ *
+ * Please contact Oracle, 500 Oracle Parkway, Redwood Shores, CA 94065 USA
+ * or visit www.oracle.com if you need additional information or have any
+ * questions.
+ */
 
+#include <assert.h>
 #include <string.h>
 #include <stdio.h>
 #include <libgen.h>
@@ -7,126 +33,148 @@
 #include <errno.h>
 #include <unistd.h>
 #include <fcntl.h>
-#include <sys/wait.h>
 #include <signal.h>
+#include <sys/wait.h>
+#include <sys/stat.h>
 
 #define RESTORE_SIGNAL   (SIGRTMIN + 2)
 
 #define PERFDATA_NAME "perfdata"
 
+#define ARRAY_SIZE(x) (sizeof(x) / sizeof(x[0]))
+
 static int g_pid;
 
 static int kickjvm(pid_t jvm, int code) {
-	union sigval sv = { .sival_int = code };
-	if (-1 == sigqueue(jvm, RESTORE_SIGNAL, sv)) {
-		perror("sigqueue");
-		return 1;
-	}
-	return 0;
+    union sigval sv = { .sival_int = code };
+    if (-1 == sigqueue(jvm, RESTORE_SIGNAL, sv)) {
+        perror("sigqueue");
+        return 1;
+    }
+    return 0;
 }
 
-static int checkpoint(pid_t jvm, const char *basedir, const char *self, const char *criu, const char *imagedir) {
-	if (fork()) {
-		// main process
-		wait(NULL);
-		return 0;
-	}
+static int checkpoint(pid_t jvm,
+        const char *basedir,
+        const char *self,
+        const char *criu,
+        const char *imagedir) {
 
-	pid_t parent_before = getpid();
+    if (fork()) {
+        // main process
+        wait(NULL);
+        return 0;
+    }
 
-	// child
-	if (fork()) {
-		exit(0);
-	}
+    pid_t parent_before = getpid();
 
-	// grand-child
-	pid_t parent = getppid();
-	int tries = 300;
-	while (parent != 1 && 0 < tries--) {
-		usleep(10);
-		parent = getppid();
-	}
+    // child
+    if (fork()) {
+        exit(0);
+    }
 
-	if (parent == parent_before) {
-		fprintf(stderr, "can't move out of JVM process hierarchy");
-		kickjvm(jvm, -1);
-		exit(0);
-	}
+    // grand-child
+    pid_t parent = getppid();
+    int tries = 300;
+    while (parent != 1 && 0 < tries--) {
+        usleep(10);
+        parent = getppid();
+    }
+
+    if (parent == parent_before) {
+        fprintf(stderr, "can't move out of JVM process hierarchy");
+        kickjvm(jvm, -1);
+        exit(0);
+    }
 
 
-	char jvmpidchar[32];
-	snprintf(jvmpidchar, sizeof(jvmpidchar), "%d", jvm);
-	
-	pid_t child = fork();
-	if (!child) {
-		execl(criu, criu, "dump",
-				"-t", jvmpidchar,
-				"-D", imagedir,
-				"--action-script", self, 
-				"--shell-job",
-				"-v4", "-o", "dump4.log", // -D without -W makes criu cd to image dir for logs
-				NULL);
-		perror("exec criu");
-		exit(1);
-	}
+    char jvmpidchar[32];
+    snprintf(jvmpidchar, sizeof(jvmpidchar), "%d", jvm);
 
-	int status;
-	if (child != wait(&status) || !WIFEXITED(status) || WEXITSTATUS(status)) {
+    pid_t child = fork();
+    if (!child) {
+        const char* args[] = {
+            criu,
+            "dump",
+            "-t", jvmpidchar,
+            "-D", imagedir,
+            "--action-script", self,
+            "--shell-job",
+            "-v4", "-o", "dump4.log", // -D without -W makes criu cd to image dir for logs
+            NULL
+        };
+        execv(criu, (char**)args);
+        perror("criu dump");
+        exit(1);
+    }
 
-		kickjvm(jvm, -1);
-	}
-	exit(0);
+    int status;
+    if (child != wait(&status) || !WIFEXITED(status) || WEXITSTATUS(status)) {
+        kickjvm(jvm, -1);
+    }
+    exit(0);
 }
 
-static int restore(const char *basedir, const char *self, const char *criu, const char *imagedir) {
-	char *cppathpath;
-	if (-1 == asprintf(&cppathpath, "%s/cppath", imagedir)) {
-		return 1;
-	}
+static int restore(const char *basedir,
+        const char *self,
+        const char *criu,
+        const char *imagedir) {
+    char *cppathpath;
+    if (-1 == asprintf(&cppathpath, "%s/cppath", imagedir)) {
+        return 1;
+    }
 
-	char cppath[PATH_MAX];
-	cppath[0] = '\0';
-	FILE *cppathfile = fopen(cppathpath, "r");
-	if (!cppathfile) {
-		perror("open cppath");
-		return 1;
-	}
+    char cppath[PATH_MAX];
+    cppath[0] = '\0';
+    FILE *cppathfile = fopen(cppathpath, "r");
+    if (!cppathfile) {
+        perror("open cppath");
+        return 1;
+    }
 
-	if (fgets(cppath, sizeof(cppath), cppathfile)) {
-		return 1;
-	}
-	fclose(cppathfile);
+    if (!fgets(cppath, sizeof(cppath), cppathfile)) {
+        fprintf(stderr, "fgets error\n");
+        return 1;
+    }
+    fclose(cppathfile);
 
-	char *inherit_perfdata = NULL;
-	char *perfdatapath;
-	if (-1 == asprintf(&perfdatapath, "%s/" PERFDATA_NAME, imagedir)) {
-		return 1;
-	}
-	int perfdatafd = open(perfdatapath, O_RDWR);
-	if (0 < perfdatafd) {
-		if (-1 == asprintf(&inherit_perfdata, "fd[%d]:%s/" PERFDATA_NAME,
-				perfdatafd,
-				cppath[0] == '/' ? cppath + 1 : cppath)) {
-			return 1;
-		}
-	}
+    char *inherit_perfdata = NULL;
+    char *perfdatapath;
+    if (-1 == asprintf(&perfdatapath, "%s/" PERFDATA_NAME, imagedir)) {
+        return 1;
+    }
+    int perfdatafd = open(perfdatapath, O_RDWR);
+    if (0 < perfdatafd) {
+        if (-1 == asprintf(&inherit_perfdata, "fd[%d]:%s/" PERFDATA_NAME,
+                    perfdatafd,
+                    cppath[0] == '/' ? cppath + 1 : cppath)) {
+            return 1;
+        }
+    }
 
-#define CRIU_HEAD (char*)criu, "restore"
-#define CRIU_TAIL "-W", ".", \
-		"--shell-job", \
-		"--action-script", self, \
-		"-D", imagedir, \
-		"-v1", \
-		"--exec-cmd", "--", self, "restorewait", \
-		NULL
+    const char* args[32] = { criu, "restore" };
+    const char** arg = args + 2;
+    if (inherit_perfdata) {
+        *arg++ = "--inherit-fd";
+        *arg++ = inherit_perfdata;
+    }
+    const char* tail[] = {
+        "-W", ".",
+        "--shell-job",
+        "--action-script", self,
+        "-D", imagedir,
+        "-v1",
+        "--exec-cmd", "--", self, "restorewait",
+        NULL
+    };
+    static_assert(ARRAY_SIZE(args) >= 2 + ARRAY_SIZE(tail),
+            "all possible arguments should fit");
 
-	if (inherit_perfdata) {
-		execl(criu, CRIU_HEAD, "--inherit-fd", inherit_perfdata, CRIU_TAIL);
-	} else {
-		execl(criu, CRIU_HEAD, CRIU_TAIL);
-	}
-	perror("exec criu");
-	return 1;
+    memcpy(arg, tail, sizeof(tail));
+
+    execv(criu, (char**)args);
+    perror("exec criu");
+    return 1;
 }
 
 #define MSGPREFIX ""
@@ -234,38 +282,52 @@ static int restorewait(void) {
 }
 
 int main(int argc, char *argv[]) {
-	char* action;
-	if ((action = argv[1])) {
-		char* imagedir = argv[2];
+    char* action;
+    if ((action = argv[1])) {
+        char* imagedir = argv[2];
 
-		char *basedir = dirname(strdup(argv[0]));
-		char *criu;
-		if (-1 == asprintf(&criu, "%s/criu", basedir)) {
-			return 1;
-		}
-		if (!strcmp(action, "checkpoint")) {
-			pid_t jvm = getppid();
-			return checkpoint(jvm, basedir, argv[0], criu, imagedir);
-		} else if (!strcmp(action, "restore")) {
-			return restore(basedir, argv[0], criu, imagedir);
-		} else if (!strcmp(action, "restorewait")) { // called by CRIU --exec-cmd
-			return restorewait();
-		} else {
-			fprintf(stderr, "unknown command-line action: %s\n", action);
-			return 1;
-		}
-	} else if ((action = getenv("CRTOOLS_SCRIPT_ACTION"))) { // called by CRIU --action-script
-		if (!strcmp(action, "post-resume")) {
-			return post_resume();
-		} else if (!strcmp(action, "post-dump")) {
-			return post_dump();
-		} else {
-			// ignore other notifications
-			return 0;
-		}
-	} else {
-		fprintf(stderr, "unknown context\n");
-	}
-		
-	return 1;
+        char *basedir = dirname(strdup(argv[0]));
+
+        char *criu = getenv("CRAC_CRIU_PATH");
+        if (!criu) {
+            if (-1 == asprintf(&criu, "%s/criu", basedir)) {
+                return 1;
+            }
+            struct stat st;
+            if (stat(criu, &st)) {
+                /* some problem with the bundled criu */
+                criu = "/usr/sbin/criu";
+                if (stat(criu, &st)) {
+                    fprintf(stderr, "cannot find CRIU to use\n");
+                    return 1;
+                }
+            }
+        }
+
+
+        if (!strcmp(action, "checkpoint")) {
+            pid_t jvm = getppid();
+            return checkpoint(jvm, basedir, argv[0], criu, imagedir);
+        } else if (!strcmp(action, "restore")) {
+            return restore(basedir, argv[0], criu, imagedir);
+        } else if (!strcmp(action, "restorewait")) { // called by CRIU --exec-cmd
+            return restorewait();
+        } else {
+            fprintf(stderr, "unknown command-line action: %s\n", action);
+            return 1;
+        }
+    } else if ((action = getenv("CRTOOLS_SCRIPT_ACTION"))) { // called by CRIU --action-script
+        if (!strcmp(action, "post-resume")) {
+            return post_resume();
+        } else if (!strcmp(action, "post-dump")) {
+            return post_dump();
+        } else {
+            // ignore other notifications
+            return 0;
+        }
+    } else {
+        fprintf(stderr, "unknown context\n");
+    }
+
+    return 1;
 }

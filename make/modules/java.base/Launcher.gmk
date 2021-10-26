@@ -112,27 +112,17 @@ ifeq ($(OPENJDK_TARGET_OS), linux)
   ))
   TARGETS += $(BUILD_PAUSEENGINE)
 
-  $(eval $(call SetupJdkExecutable, BUILD_CRIU_WRAPPER, \
-      NAME := criu, \
-      SRC := $(TOPDIR)/src/$(MODULE)/unix/native/criu, \
-      INCLUDE_FILES := criu.c, \
+  $(eval $(call SetupJdkExecutable, BUILD_SIMENGINE, \
+      NAME := simengine, \
+      SRC := $(TOPDIR)/src/$(MODULE)/unix/native/simengine, \
+      INCLUDE_FILES := simengine.c, \
       OPTIMIZATION := LOW, \
       CFLAGS := $(CFLAGS_JDKEXE), \
       LDFLAGS := $(LDFLAGS_JDKEXE), \
       OUTPUT_DIR := $(SUPPORT_OUTPUTDIR)/modules_libs/$(MODULE), \
   ))
-  TARGETS += $(BUILD_CRIU_WRAPPER)
+  TARGETS += $(BUILD_SIMENGINE)
 
-  $(eval $(call SetupJdkExecutable, BUILD_JAVA_TIME, \
-      NAME := javatime, \
-      SRC := $(TOPDIR)/src/$(MODULE)/unix/native/javatime, \
-      INCLUDE_FILES := javatime.c, \
-      OPTIMIZATION := LOW, \
-      CFLAGS := $(CFLAGS_JDKEXE), \
-      LDFLAGS := $(LDFLAGS_JDKEXE), \
-      OUTPUT_DIR := $(SUPPORT_OUTPUTDIR)/modules_libs/$(MODULE), \
-  ))
-  TARGETS += $(BUILD_JAVA_TIME)
 endif
 
 ################################################################################

@@ -5787,55 +5787,45 @@ static void mark_persistent(FdsInfo *fds) {
   _persistent_resources = NULL;
 }
 
-static void cr_util_path(char* path, int len) {
+static int cr_util_path(char* path, int len) {
   os::jvm_path(path, len);
   // path is ".../lib/server/libjvm.so"
+  char *after_elem;
   for (int i = 0; i < 2; ++i) {
-    char *after_elem = strrchr(path, '/');
+    after_elem = strrchr(path, '/');
     *after_elem = '\0';
   }
+  return after_elem - path;
 }
 
-static const char* compute_crengine(const char *util_path) {
-
-  if (CREngine) {
-    return CREngine;
+static bool compute_crengine() {
+  if (!CREngine) {
+    return true;
   }
 
-  if (_crengine) {
-    return _crengine;
+  if (CREngine[0] == '/') {
+    _crengine = CREngine;
+    return true;
   }
 
-#define SUF "crengine"
-  const size_t crenginelen = strlen(util_path) + 1 + sizeof(SUF);
-  char *crengine = NEW_C_HEAP_ARRAY(char, crenginelen, mtInternal);
-  assert(crengine != NULL, "JVM should fail");
-  int r = jio_snprintf(crengine, crenginelen, "%s/" SUF, util_path);
-#undef SUF
-  assert(r < (int)crenginelen, "len miscalc");
+  char path[JVM_MAXPATHLEN];
+  int pathlen = cr_util_path(path, sizeof(path));
+  strcat(path + pathlen, "/");
+  strcat(path + pathlen, CREngine);
 
-  struct stat dummy;
-  if (0 == stat(crengine, &dummy)) {
-    _crengine = crengine;
-  } else {
-    warning("Could not find %s: %s", crengine, strerror(errno));
-    FREE_C_HEAP_ARRAY(char, crengine);
-    return NULL;
+  struct stat st;
+  if (0 != stat(path, &st)) {
+    warning("Could not find %s: %s", path, strerror(errno));
+    return false;
   }
-  return _crengine;
+
+  _crengine = os::strdup(path);
+  return true;
 }
 
 static int call_crengine() {
-  char util_path[JVM_MAXPATHLEN];
-  cr_util_path(util_path, sizeof(util_path));
-
-  const char* crengine = compute_crengine(util_path);
-  if (!crengine) {
-    return -1;
-  }
-
-  if (!fork()) {
-    execl(crengine, crengine, "checkpoint", CRaCCheckpointTo, NULL);
+  if (_crengine && !fork()) {
+    execl(_crengine, _crengine, "checkpoint", CRaCCheckpointTo, NULL);
     perror("execl");
     exit(1);
   }
@@ -6145,6 +6135,10 @@ bool os::Linux::prepare_checkpoint() {
     }
   }
 
+  if (!compute_crengine()) {
+    return false;
+  }
+
   return true;
 }
 
@@ -6208,13 +6202,12 @@ Handle os::Linux::checkpoint(TRAPS) {
 void os::Linux::restore() {
   struct stat st;
 
-  char util_path[JVM_MAXPATHLEN];
-  cr_util_path(util_path, sizeof(util_path));
+  compute_crengine();
 
-  const char *crengine = compute_crengine(util_path);
-
-  execl(crengine, crengine, "restore", CRaCRestoreFrom, NULL);
-  warning("cannot execute \"%s restore ...\" (%s)", crengine, strerror(errno));
+  if (_crengine) {
+    execl(_crengine, _crengine, "restore", CRaCRestoreFrom, NULL);
+    warning("cannot execute \"%s restore ...\" (%s)", _crengine, strerror(errno));
+  }
 }
 
 void os::print_memory_mappings(char* addr, size_t bytes, outputStream* st) {

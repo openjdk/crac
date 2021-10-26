@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2017, 2021, Azul Systems, Inc. All rights reserved.
+ * Copyright (c) 2021, Azul Systems, Inc. All rights reserved.
  * Copyright (c) 2021, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
@@ -26,15 +26,62 @@
 
 #include <string.h>
 #include <stdio.h>
-#include <stdlib.h>
 #include <unistd.h>
+#include <signal.h>
+
+#define RESTORE_SIGNAL   (SIGRTMIN + 2)
+
+static int kickjvm(pid_t jvm, int code) {
+    union sigval sv = { .sival_int = code };
+    if (-1 == sigqueue(jvm, RESTORE_SIGNAL, sv)) {
+        perror("sigqueue");
+        return 1;
+    }
+    return 0;
+}
 
 int main(int argc, char *argv[]) {
-    char** newargv = malloc((argc + 2) * sizeof(char*));
-    newargv[0] = "sudo";
-    newargv[1] = "criu";
-    memcpy(newargv + 2, argv + 1, argc * sizeof(char*));
-    execvp("/usr/bin/sudo", newargv);
-    perror("sudo criu");
-    return 1;
+    char* action = argv[1];
+    char* imagedir = argv[2];
+
+    char *pidpath;
+    if (-1 == asprintf(&pidpath, "%s/pid", imagedir)) {
+        return 1;
+    }
+
+    if (!strcmp(action, "checkpoint")) {
+        pid_t jvm = getppid();
+
+        FILE *pidfile = fopen(pidpath, "w");
+        if (!pidfile) {
+            perror("fopen pidfile");
+            kickjvm(jvm, -1);
+            return 1;
+        }
+
+        fprintf(pidfile, "%d\n", jvm);
+
+    } else if (!strcmp(action, "restore")) {
+        FILE *pidfile = fopen(pidpath, "r");
+        if (!pidfile) {
+            perror("fopen pidfile");
+            return 1;
+        }
+
+        pid_t jvm;
+        if (1 != fscanf(pidfile, "%d", &jvm)) {
+            fprintf(stderr, "cannot read pid\n");
+            return 1;
+        }
+
+        if (kickjvm(jvm, 0)) {
+            return 1;
+        }
+
+    } else {
+        fprintf(stderr, "unknown action: %s\n", action);
+        return 1;
+    }
+
+    return 0;
 }

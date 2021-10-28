@@ -5790,7 +5790,7 @@ static void mark_persistent(FdsInfo *fds) {
 static int cr_util_path(char* path, int len) {
   os::jvm_path(path, len);
   // path is ".../lib/server/libjvm.so"
-  char *after_elem;
+  char *after_elem = NULL;
   for (int i = 0; i < 2; ++i) {
     after_elem = strrchr(path, '/');
     *after_elem = '\0';

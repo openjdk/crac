@@ -60,6 +60,7 @@ int main(int argc, char *argv[]) {
         }
 
         fprintf(pidfile, "%d\n", jvm);
+        fclose(pidfile);
 
     } else if (!strcmp(action, "restore")) {
         FILE *pidfile = fopen(pidpath, "r");
@@ -70,9 +71,11 @@ int main(int argc, char *argv[]) {
 
         pid_t jvm;
         if (1 != fscanf(pidfile, "%d", &jvm)) {
+            fclose(pidfile);
             fprintf(stderr, "cannot read pid\n");
             return 1;
         }
+        fclose(pidfile);
 
         if (kickjvm(jvm, 0)) {
             return 1;

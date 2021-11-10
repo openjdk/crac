@@ -324,7 +324,7 @@ os::Linux::mallinfo_func_t os::Linux::_mallinfo = NULL;
 os::Linux::mallinfo2_func_t os::Linux::_mallinfo2 = NULL;
 #endif // __GLIBC__
 
-static const char* _criu = NULL;
+static const char* _crengine = NULL;
 
 static jlong initial_time_count=0;
 
@@ -5787,96 +5787,50 @@ static void mark_persistent(FdsInfo *fds) {
   _persistent_resources = NULL;
 }
 
-static void cr_util_path(char* path, int len) {
+static int cr_util_path(char* path, int len) {
   os::jvm_path(path, len);
   // path is ".../lib/server/libjvm.so"
+  char *after_elem = NULL;
   for (int i = 0; i < 2; ++i) {
-    char *after_elem = strrchr(path, '/');
+    after_elem = strrchr(path, '/');
     *after_elem = '\0';
   }
+  return after_elem - path;
 }
 
-static const char* compute_criu(const char *util_path) {
-  if (_criu) {
-    return _criu;
+static bool compute_crengine() {
+  if (!CREngine) {
+    return true;
   }
 
-#define SUF "criu"
-  const size_t criulen = strlen(util_path) + 1 + sizeof(SUF);
-  char *criu = NEW_C_HEAP_ARRAY(char, criulen, mtInternal);
-  assert(criu != NULL, "JVM should fail");
-  int r = jio_snprintf(criu, criulen, "%s/" SUF, util_path);
-#undef SUF
-  assert(r < (int)criulen, "len miscalc");
-
-  struct stat dummy;
-  if (0 == stat(criu, &dummy)) {
-    _criu = criu;
-  } else {
-    FREE_C_HEAP_ARRAY(char, criu);
-    warning("Could not find %s: %s", criu, strerror(errno));
-    // use system one
-    _criu = "criu";
+  if (CREngine[0] == '/') {
+    _crengine = CREngine;
+    return true;
   }
-  return _criu;
+
+  char path[JVM_MAXPATHLEN];
+  int pathlen = cr_util_path(path, sizeof(path));
+  strcat(path + pathlen, "/");
+  strcat(path + pathlen, CREngine);
+
+  struct stat st;
+  if (0 != stat(path, &st)) {
+    warning("Could not find %s: %s", path, strerror(errno));
+    return false;
+  }
+
+  _crengine = os::strdup(path);
+  return true;
 }
 
-static int call_criu() {
-  char util_path[JVM_MAXPATHLEN];
-  cr_util_path(util_path, sizeof(util_path));
-
-  const char* criu = compute_criu(util_path);
-
-  pid_t jvm = getpid();
-
-  char cmd[3 * JVM_MAXPATHLEN];
-  if ((int)sizeof(cmd) <= snprintf(cmd, sizeof(cmd),
-        "%s dump"
-        " -t %d"
-        " -D %s"
-        " --action-script %s/action-script"
-        " --shell-job"
-        " -v4 -o dump4.log", // -D without -W makes criu cd to image dir for logs
-        criu, jvm, CRaCCheckpointTo, util_path)) {
-    trace_cr("can't fit CRIU cmd");
-    return -1;
+static int call_crengine() {
+  if (_crengine && !fork()) {
+    execl(_crengine, _crengine, "checkpoint", CRaCCheckpointTo, NULL);
+    perror("execl");
+    exit(1);
   }
 
-  if (fork()) {
-    // main JVM
-    ::wait(NULL);
-    return 0;
-  }
-
-  pid_t parent_before = getpid();
-
-  // child
-  if (fork()) {
-    exit(0);
-  }
-  // grand-child
-  pid_t parent = getppid();
-  int tries = 300;
-  while (parent != 1 && 0 < tries--) {
-    ::usleep(10);
-    parent = getppid();
-  }
-
-  if (parent == parent_before) {
-    trace_cr("can't move out of JVM process hierarchy");
-    union sigval sv = { .sival_int = -1 };
-    sigqueue(jvm, RESTORE_SIGNAL, sv);
-    exit(0);
-  }
-
-  int cmdres = system(cmd);
-  if (cmdres < 0 || !WIFEXITED(cmdres) || WEXITSTATUS(cmdres)) {
-    trace_cr("%s call failed", criu);
-    union sigval sv = { .sival_int = -1 };
-    sigqueue(jvm, RESTORE_SIGNAL, sv);
-    exit(0);
-  }
-  exit(0);
+  return 0;
 }
 
 static int checkpoint_restore(FdsInfo* fds) {
@@ -5888,8 +5842,8 @@ static int checkpoint_restore(FdsInfo* fds) {
 
   trace_cr("Checkpoint ...");
 
-  int criu_res = call_criu();
-  if (criu_res < 0) {
+  int cres = call_crengine();
+  if (cres < 0) {
     return JVM_CHECKPOINT_ERROR;
   }
 
@@ -6181,6 +6135,10 @@ bool os::Linux::prepare_checkpoint() {
     }
   }
 
+  if (!compute_crengine()) {
+    return false;
+  }
+
   return true;
 }
 
@@ -6241,103 +6199,15 @@ Handle os::Linux::checkpoint(TRAPS) {
   return ret_cr(JVM_CHECKPOINT_ERROR, codes, msgs, THREAD);
 }
 
-static char* add_arg(char** begin_p, char* end, const char *fmt, ...) {
-  char* begin = *begin_p;
-
-  va_list va;
-  va_start(va, fmt);
-
-  int len = vsnprintf(begin, end - begin, fmt, va);
-  if (end <= begin + len) {
-    return NULL;
-  }
-  *begin_p = begin + len + 1;
-  return begin;
-}
-
 void os::Linux::restore() {
   struct stat st;
 
-  char util_path[JVM_MAXPATHLEN];
-  cr_util_path(util_path, sizeof(util_path));
+  compute_crengine();
 
-  const char *criu = compute_criu(util_path);
-
-  char tempbuf[4 * JVM_MAXPATHLEN];
-  char* end = tempbuf + sizeof(tempbuf);
-  char* bufp = tempbuf;
-
-  snprintf(bufp, end - bufp, "%s/cppath", CRaCRestoreFrom);
-  int fd_cppath = ::open(bufp, O_RDONLY);
-  if (fd_cppath < 0) {
-    trace_cr("no valid image to restore: %s", CRaCRestoreFrom);
-    return;
+  if (_crengine) {
+    execl(_crengine, _crengine, "restore", CRaCRestoreFrom, NULL);
+    warning("cannot execute \"%s restore ...\" (%s)", _crengine, strerror(errno));
   }
-  int cppathlen = read(fd_cppath, bufp, end - bufp);
-  close(fd_cppath);
-
-  char *cppath = bufp;
-  if (cppathlen < 0) {
-    warning("cannot read image: %s", strerror(errno));
-    return;
-  }
-  if (cppathlen == end - bufp) {
-    warning("invalid image: content too long");
-    return;
-  }
-  bufp[cppathlen] = '\0';
-  bufp += cppathlen + 1;
-
-  char* restore_script = add_arg(&bufp, end, "%s/action-script", util_path);
-  if (!restore_script) {
-    warning("cannot format restore_script path");
-    return;
-  }
-
-  char* wait = add_arg(&bufp, end, "%s/wait", util_path);
-  if (!wait) {
-    warning("cannot format action-script path");
-    return;
-  }
-
-  snprintf(bufp, end - bufp, "%s/%s", CRaCRestoreFrom, PerfMemoryLinux::perfdata_name());
-  int fd_perfdata = ::open(bufp, O_RDWR);
-  char* inherit_perfdata = NULL;
-  if (0 < fd_perfdata) {
-    inherit_perfdata = add_arg(&bufp, end, "fd[%d]:%s/%s",
-        fd_perfdata,
-        cppath[0] == '/' ? cppath + 1 : cppath,
-        PerfMemoryLinux::perfdata_name());
-  }
-
-  if (CRTraceStartupTime) {
-    tty->print_cr("STARTUPTIME " JLONG_FORMAT " criu-call", os::javaTimeNanos());
-  }
-
-  const char* args[32];
-  const char** argp = args;
-  *argp++ = criu;
-  *argp++ = "restore";
-  *argp++ = "-W";
-  *argp++ = ".";
-  if (inherit_perfdata) {
-    *argp++ = "--inherit-fd";
-    *argp++ = inherit_perfdata;
-  }
-  *argp++ = "--shell-job";
-  *argp++ = "--action-script";
-  *argp++ = restore_script;
-  *argp++ = "-D";
-  *argp++ = CRaCRestoreFrom;
-  *argp++ = "-v1";
-  *argp++ = "--exec-cmd";
-  *argp++ = "--";
-  *argp++ = wait;
-  *argp++ = NULL;
-  guarantee(argp - args < (int)ARRAY_SIZE(args), "args overflow");
-
-  execvp(criu, (char**)args);
-  warning("cannot execute \"%s restore ...\" (%s)", criu, strerror(errno));
 }
 
 void os::print_memory_mappings(char* addr, size_t bytes, outputStream* st) {

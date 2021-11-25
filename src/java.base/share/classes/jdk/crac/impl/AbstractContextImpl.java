@@ -23,6 +23,7 @@
 package jdk.crac.impl;
 
 import jdk.crac.CheckpointException;
+import jdk.crac.CheckpointLock;
 import jdk.crac.Context;
 import jdk.crac.Resource;
 import jdk.crac.RestoreException;
@@ -44,6 +45,9 @@ public abstract class AbstractContextImpl<R extends Resource, P> extends Context
     private WeakHashMap<R, P> checkpointQ = new WeakHashMap<>();
     private List<R> restoreQ = null;
     private Comparator<Map.Entry<R, P>> comparator;
+    private List<CheckpointLock> lockQ = new LinkedList<CheckpointLock>();
+    private Object enterCriticalSectionLock = new Object();
+    private Object exitCriticalSectionLock = new Object();
 
     protected AbstractContextImpl(Comparator<Map.Entry<R, P>> comparator) {
         this.comparator = comparator;
@@ -55,32 +59,44 @@ public abstract class AbstractContextImpl<R extends Resource, P> extends Context
 
     @Override
     public synchronized void beforeCheckpoint(Context<? extends Resource> context) throws CheckpointException {
-        List<R> resources = checkpointQ.entrySet().stream()
-            .sorted(comparator)
-            .map(Map.Entry::getKey)
-            .collect(Collectors.toList());
-
-        CheckpointException exception = new CheckpointException();
-        for (Resource r : resources) {
-            if (DEBUG) {
-                System.err.println("jdk.crac beforeCheckpoint " + r.toString());
-            }
-            try {
-                r.beforeCheckpoint(this);
-            } catch (CheckpointException e) {
-                for (Throwable t : e.getSuppressed()) {
-                    exception.addSuppressed(t);
+        synchronized (enterCriticalSectionLock) {
+            synchronized (exitCriticalSectionLock) {
+                while (!lockQ.isEmpty()) {
+                    try {
+                        exitCriticalSectionLock.wait();
+                    } catch (InterruptedException iex) {
+                        // just skip
+                    }
                 }
-            } catch (Exception e) {
-                exception.addSuppressed(e);
             }
-        }
 
-        Collections.reverse(resources);
-        restoreQ = resources;
+            List<R> resources = checkpointQ.entrySet().stream()
+                    .sorted(comparator)
+                    .map(Map.Entry::getKey)
+                    .collect(Collectors.toList());
 
-        if (0 < exception.getSuppressed().length) {
-            throw exception;
+            CheckpointException exception = new CheckpointException();
+            for (Resource r : resources) {
+                if (DEBUG) {
+                    System.err.println("jdk.crac beforeCheckpoint " + r.toString());
+                }
+                try {
+                    r.beforeCheckpoint(this);
+                } catch (CheckpointException e) {
+                    for (Throwable t : e.getSuppressed()) {
+                        exception.addSuppressed(t);
+                    }
+                } catch (Exception e) {
+                    exception.addSuppressed(e);
+                }
+            }
+
+            Collections.reverse(resources);
+            restoreQ = resources;
+
+            if (0 < exception.getSuppressed().length) {
+                throw exception;
+            }
         }
     }
 
@@ -105,6 +121,23 @@ public abstract class AbstractContextImpl<R extends Resource, P> extends Context
 
         if (0 < exception.getSuppressed().length) {
             throw exception;
+        }
+    }
+
+
+    public void addLock(CheckpointLock lock) {
+        synchronized(enterCriticalSectionLock) {
+            synchronized (lockQ) {
+                lockQ.add(lock);
+            }
+        }
+    }
+    public void removeLock(CheckpointLock lock) {
+        synchronized(exitCriticalSectionLock) {
+            synchronized (lockQ) {
+                lockQ.remove(lock);
+            }
+            exitCriticalSectionLock.notify();
         }
     }
 }

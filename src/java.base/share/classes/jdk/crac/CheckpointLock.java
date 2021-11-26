@@ -35,11 +35,11 @@ public class CheckpointLock implements AutoCloseable {
      * Creates a {@code CheckpointLock}.
      */
     public CheckpointLock() {
-        jdk.internal.crac.Core.getJDKContext().addLock(this);
+        Core.addLock(this);
     }
 
     @Override
     public void close() {
-        jdk.internal.crac.Core.getJDKContext().removeLock(this);
+        Core.removeLock(this);
     }
 }

@@ -32,6 +32,8 @@ import jdk.crac.impl.CheckpointOpenSocketException;
 import jdk.crac.impl.OrderedContext;
 import java.security.AccessController;
 import java.security.PrivilegedAction;
+import java.util.LinkedList;
+import java.util.List;
 
 /**
  * The coordination service.
@@ -49,6 +51,9 @@ public class Core {
     private static native Object[] checkpointRestore0();
 
     private static boolean traceStartupTime;
+
+    private static final List<CheckpointLock> lockQ = new LinkedList<CheckpointLock>();
+    private static final Object criticalSectionsLock = new Object();
 
     private static final Context<Resource> globalContext = new OrderedContext();
     static {
@@ -107,8 +112,29 @@ public class Core {
     private static void checkpointRestore1() throws
             CheckpointException,
             RestoreException {
+        final int retCode;
+        final int[] codes;
+        final String[] messages;
+
         try {
-            globalContext.beforeCheckpoint(null);
+            // preventing the opening of new critical sections
+            synchronized (criticalSectionsLock) {
+                synchronized (lockQ) {
+                    // waiting to complete all already opened critical sections
+                    while (!lockQ.isEmpty()) {
+                        try {
+                            lockQ.wait();
+                        } catch (InterruptedException iex) {
+                            // just skip
+                        }
+                    }
+                }
+                globalContext.beforeCheckpoint(null);
+                final Object[] bundle = checkpointRestore0();
+                retCode = (Integer) bundle[0];
+                codes = (int[]) bundle[1];
+                messages = (String[]) bundle[2];
+            }
         } catch (CheckpointException ce) {
             // TODO make dry-run
             try {
@@ -125,11 +151,6 @@ public class Core {
             }
             throw ce;
         }
-
-        final Object[] bundle = checkpointRestore0();
-        final int retCode = (Integer)bundle[0];
-        final int[] codes = (int[])bundle[1];
-        final String[] messages = (String[])bundle[2];
 
         if (traceStartupTime) {
             System.out.println("STARTUPTIME " + System.nanoTime() + " restore");
@@ -206,4 +227,20 @@ public class Core {
         thread.setDaemon(true);
         thread.start();
     }
+
+    static void addLock(CheckpointLock lock) {
+        synchronized(criticalSectionsLock) {
+            synchronized (lockQ) {
+                lockQ.add(lock);
+            }
+        }
+    }
+
+    static void removeLock(CheckpointLock lock) {
+        synchronized (lockQ) {
+            lockQ.remove(lock);
+            lockQ.notify();
+        }
+    }
+
 }

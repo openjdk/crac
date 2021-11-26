@@ -25,10 +25,6 @@
 
 package sun.security.provider;
 
-import jdk.crac.CheckpointLock;
-import jdk.crac.Context;
-import jdk.crac.Resource;
-
 import java.io.IOException;
 import java.security.MessageDigest;
 import java.security.SecureRandomSpi;
@@ -57,7 +53,7 @@ import java.security.NoSuchProviderException;
  */
 
 public final class SecureRandom extends SecureRandomSpi
-implements java.io.Serializable, jdk.internal.crac.JDKResource {
+implements java.io.Serializable {
 
     @java.io.Serial
     private static final long serialVersionUID = 3581829991155417889L;
@@ -67,8 +63,6 @@ implements java.io.Serializable, jdk.internal.crac.JDKResource {
     private byte[] state;
     private byte[] remainder;
     private int remCount;
-    private boolean clearStateOnCheckpoint = true;
-    private boolean reseedAfterRestore = false;
 
     /**
      * An empty constructor that creates an unseeded SecureRandom object.
@@ -125,7 +119,6 @@ implements java.io.Serializable, jdk.internal.crac.JDKResource {
         if (seed != null) {
            engineSetSeed(seed);
         }
-        jdk.internal.crac.Core.getJDKContext().register(this);
     }
 
     /**
@@ -161,19 +154,15 @@ implements java.io.Serializable, jdk.internal.crac.JDKResource {
      * @param seed the seed.
      */
     @Override
-    @SuppressWarnings("try")
     public synchronized void engineSetSeed(byte[] seed) {
-        try (CheckpointLock lock = new CheckpointLock() ) {
-            if (state != null) {
-                digest.update(state);
-                for (int i = 0; i < state.length; i++) {
-                    state[i] = 0;
-                }
+        if (state != null) {
+            digest.update(state);
+            for (int i = 0; i < state.length; i++) {
+                state[i] = 0;
             }
-            state = digest.digest(seed);
-            remCount = 0;
-            clearStateOnCheckpoint = false;
         }
+        state = digest.digest(seed);
+        remCount = 0;
     }
 
     private static void updateState(byte[] state, byte[] output) {
@@ -201,39 +190,6 @@ implements java.io.Serializable, jdk.internal.crac.JDKResource {
         }
     }
 
-    @Override
-    public void beforeCheckpoint(Context<? extends Resource> context) throws Exception {
-        if (clearStateOnCheckpoint) {
-            if (state != null) {
-                for (int i = 0; i < state.length; i++) {
-                    state[i] = 0;
-                }
-            }
-            state = null;
-            if (remainder != null) {
-                for (int i = 0; i < remainder.length; i++) {
-                    remainder[i] = 0;
-                }
-            }
-            remainder = null;
-            remCount = 0;
-        }
-    }
-
-    @Override
-    public void afterRestore(Context<? extends Resource> context) throws Exception {
-        if (reseedAfterRestore) {
-            byte[] b = new byte[DIGEST_SIZE];
-            SeedGenerator.generateSeed(b);
-            engineSetSeed(b);
-        }
-    }
-
-    @Override
-    public int getPriority() {
-        return 0;
-    }
-
     /**
      * This static object will be seeded by SeedGenerator, and used
      * to seed future instances of SHA1PRNG SecureRandoms.
@@ -250,13 +206,10 @@ implements java.io.Serializable, jdk.internal.crac.JDKResource {
              * seed material (likely from the Native implementation).
              */
             seeder = new SecureRandom(SeedGenerator.getSystemEntropy());
-            seeder.reseedAfterRestore = true;
-            byte[] b = new byte[DIGEST_SIZE];
+            byte [] b = new byte[DIGEST_SIZE];
             SeedGenerator.generateSeed(b);
             seeder.engineSetSeed(b);
-            seeder.clearStateOnCheckpoint = true;
         }
-
     }
 
     /**
@@ -265,55 +218,53 @@ implements java.io.Serializable, jdk.internal.crac.JDKResource {
      * @param result the array to be filled in with random bytes.
      */
     @Override
-    @SuppressWarnings("try")
     public synchronized void engineNextBytes(byte[] result) {
-        byte[] cstate = state;
         int index = 0;
         int todo;
         byte[] output = remainder;
-        if (cstate == null) {
+
+        if (state == null) {
             byte[] seed = new byte[DIGEST_SIZE];
             SeederHolder.seeder.engineNextBytes(seed);
-            cstate = digest.digest(seed);
+            state = digest.digest(seed);
         }
-        try (CheckpointLock lock = new CheckpointLock()) {
-            state = cstate;
-            // Use remainder from last time
-            int r = remCount;
-            if (r > 0) {
-                // How many bytes?
-                todo = (result.length - index) < (DIGEST_SIZE - r) ?
+
+        // Use remainder from last time
+        int r = remCount;
+        if (r > 0) {
+            // How many bytes?
+            todo = (result.length - index) < (DIGEST_SIZE - r) ?
                         (result.length - index) : (DIGEST_SIZE - r);
-                // Copy the bytes, zero the buffer
-                for (int i = 0; i < todo; i++) {
-                    result[i] = output[r];
-                    output[r++] = 0;
-                }
-                remCount += todo;
-                index += todo;
+            // Copy the bytes, zero the buffer
+            for (int i = 0; i < todo; i++) {
+                result[i] = output[r];
+                output[r++] = 0;
             }
-
-            // If we need more bytes, make them.
-            while (index < result.length) {
-                // Step the state
-                digest.update(state);
-                output = digest.digest();
-                updateState(state, output);
-                // How many bytes?
-                todo = (result.length - index) > DIGEST_SIZE ?
-                        DIGEST_SIZE : result.length - index;
-                // Copy the bytes, zero the buffer
-                for (int i = 0; i < todo; i++) {
-                    result[index++] = output[i];
-                    output[i] = 0;
-                }
-                remCount += todo;
-            }
-
-            // Store remainder for next time
-            remainder = output;
-            remCount %= DIGEST_SIZE;
+            remCount += todo;
+            index += todo;
         }
+
+        // If we need more bytes, make them.
+        while (index < result.length) {
+            // Step the state
+            digest.update(state);
+            output = digest.digest();
+            updateState(state, output);
+
+            // How many bytes?
+            todo = (result.length - index) > DIGEST_SIZE ?
+                DIGEST_SIZE : result.length - index;
+            // Copy the bytes, zero the buffer
+            for (int i = 0; i < todo; i++) {
+                result[index++] = output[i];
+                output[i] = 0;
+            }
+            remCount += todo;
+        }
+
+        // Store remainder for next time
+        remainder = output;
+        remCount %= DIGEST_SIZE;
     }
 
     /*

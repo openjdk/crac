@@ -36,12 +36,10 @@ public class Test implements Resource {
         private long timeout;
 
         TestThread(long timeout) {
-            System.out.println("TestThread " + timeout);
             this.timeout = timeout;
         }
 
         @Override
-        @SuppressWarnings("try")
         public void run() {
             while (!stop) {
                 try (CheckpointLock lock = new CheckpointLock()) {

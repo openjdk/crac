@@ -32,7 +32,7 @@ import jdk.crac.impl.CheckpointOpenSocketException;
 import jdk.crac.impl.OrderedContext;
 import java.security.AccessController;
 import java.security.PrivilegedAction;
-import java.util.LinkedList;
+import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -52,8 +52,8 @@ public class Core {
 
     private static boolean traceStartupTime;
 
-    private static final List<CheckpointLock> lockQ = new LinkedList<CheckpointLock>();
-    private static final Object criticalSectionsLock = new Object();
+    private static final List<CheckpointLock> lockQ = new ArrayList<CheckpointLock>();
+    private static final Object checkpointRestoreLock = new Object();
 
     private static final Context<Resource> globalContext = new OrderedContext();
     static {
@@ -117,24 +117,21 @@ public class Core {
         final String[] messages;
 
         try {
-            // preventing the opening of new critical sections
-            synchronized (criticalSectionsLock) {
-                synchronized (lockQ) {
-                    // waiting to complete all already opened critical sections
-                    while (!lockQ.isEmpty()) {
-                        try {
-                            lockQ.wait();
-                        } catch (InterruptedException iex) {
-                            // just skip
-                        }
+            synchronized (lockQ) {
+                // waiting to complete all already opened critical sections
+                while (!lockQ.isEmpty()) {
+                    try {
+                        lockQ.wait();
+                    } catch (InterruptedException iex) {
+                        // just skip
                     }
                 }
-                globalContext.beforeCheckpoint(null);
-                final Object[] bundle = checkpointRestore0();
-                retCode = (Integer) bundle[0];
-                codes = (int[]) bundle[1];
-                messages = (String[]) bundle[2];
             }
+            globalContext.beforeCheckpoint(null);
+            final Object[] bundle = checkpointRestore0();
+            retCode = (Integer) bundle[0];
+            codes = (int[]) bundle[1];
+            messages = (String[]) bundle[2];
         } catch (CheckpointException ce) {
             // TODO make dry-run
             try {
@@ -199,11 +196,13 @@ public class Core {
     public static void checkpointRestore() throws
             CheckpointException,
             RestoreException {
-        try {
-            checkpointRestore1();
-        } finally {
-            if (traceStartupTime) {
-                System.out.println("STARTUPTIME " + System.nanoTime() + " restore-finish");
+        synchronized (checkpointRestoreLock) {
+            try {
+                checkpointRestore1();
+            } finally {
+                if (traceStartupTime) {
+                    System.out.println("STARTUPTIME " + System.nanoTime() + " restore-finish");
+                }
             }
         }
     }
@@ -229,7 +228,7 @@ public class Core {
     }
 
     static void addLock(CheckpointLock lock) {
-        synchronized(criticalSectionsLock) {
+        synchronized(checkpointRestoreLock) {
             synchronized (lockQ) {
                 lockQ.add(lock);
             }
@@ -239,7 +238,8 @@ public class Core {
     static void removeLock(CheckpointLock lock) {
         synchronized (lockQ) {
             lockQ.remove(lock);
-            lockQ.notify();
+            if(lockQ.isEmpty())
+                lockQ.notify();
         }
     }
 

@@ -8,3 +8,7 @@ error=whitespace
 [checks "reviewers"]
 committers=1
 ignore=duke
+
+[census]
+version=0
+domain=openjdk.org

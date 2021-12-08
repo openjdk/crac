@@ -43,7 +43,7 @@ public class CheckpointException extends Exception {
      * Constructs a {@code CheckpointException} with the specified
      * detail message.
      *
-     * @param   message   the detail message.
+     * @param message the detail message.
      */
     public CheckpointException(String message) {
         super(message);

@@ -181,7 +181,12 @@ public class Core {
     public static void checkpointRestore() throws
             CheckpointException,
             RestoreException {
+        // checkpointRestore protects against the simultaneous
+        // call of checkpointRestore from different threads.
         synchronized (checkpointRestoreLock) {
+            // checkpointInProgress protects against recursive
+            // checkpointRestore from resource's
+            // beforeCheckpoint/afterRestore methods
             if (!checkpointInProgress) {
                 try {
                     checkpointInProgress = true;
@@ -193,7 +198,6 @@ public class Core {
                     checkpointInProgress = false;
                 }
             } else {
-                // Recursive checkpoint/restore is not allowed
                 throw new CheckpointException("Recursive checkpoint is not allowed");
             }
         }

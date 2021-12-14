@@ -343,7 +343,7 @@ JVM_ENTRY(jobjectArray, JVM_GetProperties(JNIEnv *env))
         result_h->obj_at_put(ndx * 2,  key_str());
         result_h->obj_at_put(ndx * 2 + 1, value_str());
         ndx++;
-    } 
+    }
     p = p->next();
   }
 

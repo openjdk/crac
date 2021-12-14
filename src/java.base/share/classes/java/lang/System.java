@@ -2065,6 +2065,8 @@ public final class System {
                 case "sun.java.launcher.diag":
                     // used by jdk.internal.loader.ClassLoaders
                 case "jdk.boot.class.path.append":
+                    // used by jdk.crac.Core
+                case "jdk.crac.checkpoint":
                     break;
                 default:
                     properties.put(prop, entry.getValue());

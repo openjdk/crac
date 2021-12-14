@@ -22,7 +22,6 @@
 import jdk.crac.*;
 import java.util.Random;
 import java.util.concurrent.atomic.AtomicLong;
-import java.util.stream.LongStream;
 
 
 public class Test implements Resource {
@@ -42,15 +41,17 @@ public class Test implements Resource {
         @Override
         public void run() {
             while (!stop) {
-                try (CheckpointLock lock = new CheckpointLock()) {
-                    if (stop)
-                        return;
-                    counter.incrementAndGet();
-                    Thread.sleep(timeout);
-                    counter.decrementAndGet();
-                } catch (InterruptedException ie) {
-                    throw new RuntimeException(ie);
-                }
+                Core.criticalSection( () -> {
+                    try {
+                        if (stop)
+                            return;
+                        counter.incrementAndGet();
+                        Thread.sleep(timeout);
+                        counter.decrementAndGet();
+                    } catch (InterruptedException ie) {
+                        throw new RuntimeException(ie);
+                    }
+                });
             }
         }
     };

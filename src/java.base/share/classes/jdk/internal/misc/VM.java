@@ -195,6 +195,20 @@ public class VM {
     }
 
     /**
+     * True if "java" is launched with "-XX:CRaCCheckpointTo=<path>".
+     *
+     * The initial value of this field is false;
+     */
+    private static boolean isCheckpoint = false;
+
+    /**
+     * Returns true if checkpoint is configured from command line
+     */
+    public static boolean isCheckpointConfigured() {
+        return isCheckpoint;
+    }
+
+    /**
      * Returns the system property of the specified key saved at
      * system initialization time.  This method should only be used
      * for the system properties that are not changed during runtime.
@@ -268,6 +282,12 @@ public class VM {
             classFileMinorVersion = Integer.valueOf(s.substring(index+1, s.length()));
         } catch (NumberFormatException e) {
             throw new InternalError(e);
+        }
+
+        s = props.get("jdk.crac.checkpoint");
+        if (s != null && !s.isEmpty()) {
+            // -XX:CRaCCheckpointTo is specified
+            isCheckpoint = true;
         }
     }
 

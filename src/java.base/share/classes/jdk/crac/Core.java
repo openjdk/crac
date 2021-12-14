@@ -30,6 +30,8 @@ import jdk.crac.impl.CheckpointOpenFileException;
 import jdk.crac.impl.CheckpointOpenResourceException;
 import jdk.crac.impl.CheckpointOpenSocketException;
 import jdk.crac.impl.OrderedContext;
+import jdk.internal.misc.VM;
+
 import java.security.AccessController;
 import java.security.PrivilegedAction;
 import java.util.ArrayList;
@@ -52,8 +54,9 @@ public class Core {
 
     private static boolean traceStartupTime;
 
-    private static final List<CheckpointLock> lockQ = new ArrayList<CheckpointLock>();
+    private static final List<Object> lockQ = new ArrayList<Object>();
     private static final Object checkpointRestoreLock = new Object();
+    private static final boolean isCheckpointConfigured = VM.isCheckpointConfigured();
 
     private static final Context<Resource> globalContext = new OrderedContext();
     static {
@@ -112,9 +115,6 @@ public class Core {
     private static void checkpointRestore1() throws
             CheckpointException,
             RestoreException {
-        final int retCode;
-        final int[] codes;
-        final String[] messages;
 
         try {
             synchronized (lockQ) {
@@ -128,10 +128,6 @@ public class Core {
                 }
             }
             globalContext.beforeCheckpoint(null);
-            final Object[] bundle = checkpointRestore0();
-            retCode = (Integer) bundle[0];
-            codes = (int[]) bundle[1];
-            messages = (String[]) bundle[2];
         } catch (CheckpointException ce) {
             // TODO make dry-run
             try {
@@ -148,6 +144,10 @@ public class Core {
             }
             throw ce;
         }
+        final Object[] bundle = checkpointRestore0();
+        final int retCode = (Integer) bundle[0];
+        final int[] codes = (int[]) bundle[1];
+        final String[] messages = (String[]) bundle[2];
 
         if (traceStartupTime) {
             System.out.println("STARTUPTIME " + System.nanoTime() + " restore");
@@ -227,7 +227,21 @@ public class Core {
         thread.start();
     }
 
-    static void addLock(CheckpointLock lock) {
+    public static void criticalSection(Runnable action) {
+        if (isCheckpointConfigured) {
+            Object lock = new Object();
+            addLock(lock);
+            try {
+                action.run();
+            } finally {
+                removeLock(lock);
+            }
+        } else {
+            action.run();
+        }
+    }
+
+    private static void addLock(Object lock) {
         synchronized(checkpointRestoreLock) {
             synchronized (lockQ) {
                 lockQ.add(lock);
@@ -235,12 +249,11 @@ public class Core {
         }
     }
 
-    static void removeLock(CheckpointLock lock) {
+    private static void removeLock(Object lock) {
         synchronized (lockQ) {
             lockQ.remove(lock);
             if(lockQ.isEmpty())
                 lockQ.notify();
         }
     }
-
 }

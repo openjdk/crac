@@ -343,7 +343,7 @@ JVM_ENTRY(jobjectArray, JVM_GetProperties(JNIEnv *env))
         result_h->obj_at_put(ndx * 2,  key_str());
         result_h->obj_at_put(ndx * 2 + 1, value_str());
         ndx++;
-    }
+    } 
     p = p->next();
   }
 
@@ -394,6 +394,19 @@ JVM_ENTRY(jobjectArray, JVM_GetProperties(JNIEnv *env))
       result_h->obj_at_put(ndx * 2 + 1, value_str());
       ndx++;
     }
+  }
+
+  // Convert the -XX:CRacCheckpointTo= command line flag
+  // to the jdk.crac.checkpoint property.
+  // Do this after setting user properties to prevent people
+  // from setting the value with a -D option, as requested.
+  // Leave empty if not supplied
+  if (!FLAG_IS_DEFAULT(CRaCCheckpointTo)) {
+    Handle key_str = java_lang_String::create_from_platform_dependent_str("jdk.crac.checkpoint", CHECK_NULL);
+    Handle value_str  = java_lang_String::create_from_platform_dependent_str("true", CHECK_NULL);
+    result_h->obj_at_put(ndx * 2,  key_str());
+    result_h->obj_at_put(ndx * 2 + 1, value_str());
+    ndx++;
   }
 
   return (jobjectArray) JNIHandles::make_local(THREAD, result_h());

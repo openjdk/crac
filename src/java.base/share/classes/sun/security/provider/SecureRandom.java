@@ -25,11 +25,15 @@
 
 package sun.security.provider;
 
+import jdk.crac.Context;
+import jdk.crac.Resource;
+
 import java.io.IOException;
 import java.security.MessageDigest;
 import java.security.SecureRandomSpi;
 import java.security.NoSuchAlgorithmException;
 import java.security.NoSuchProviderException;
+import java.util.concurrent.locks.ReentrantLock;
 
 /**
  * <p>This class provides a crytpographically strong pseudo-random number
@@ -53,7 +57,7 @@ import java.security.NoSuchProviderException;
  */
 
 public final class SecureRandom extends SecureRandomSpi
-implements java.io.Serializable {
+implements java.io.Serializable, jdk.internal.crac.JDKResource {
 
     @java.io.Serial
     private static final long serialVersionUID = 3581829991155417889L;
@@ -63,6 +67,9 @@ implements java.io.Serializable {
     private byte[] state;
     private byte[] remainder;
     private int remCount;
+    private boolean clearStateOnCheckpoint = true;
+    private boolean isSeedGenerator = false;
+    private ReentrantLock objLock = new ReentrantLock();
 
     /**
      * An empty constructor that creates an unseeded SecureRandom object.
@@ -119,6 +126,7 @@ implements java.io.Serializable {
         if (seed != null) {
            engineSetSeed(seed);
         }
+        jdk.internal.crac.Core.getJDKContext().register(this);
     }
 
     /**
@@ -154,15 +162,21 @@ implements java.io.Serializable {
      * @param seed the seed.
      */
     @Override
-    public synchronized void engineSetSeed(byte[] seed) {
-        if (state != null) {
-            digest.update(state);
-            for (int i = 0; i < state.length; i++) {
-                state[i] = 0;
+    public void engineSetSeed(byte[] seed) {
+        objLock.lock();
+        try {
+            if (state != null) {
+                digest.update(state);
+                for (int i = 0; i < state.length; i++) {
+                    state[i] = 0;
+                }
             }
+            state = digest.digest(seed);
+            remCount = 0;
+            clearStateOnCheckpoint = false;
+        } finally {
+            objLock.unlock();
         }
-        state = digest.digest(seed);
-        remCount = 0;
     }
 
     private static void updateState(byte[] state, byte[] output) {
@@ -190,6 +204,46 @@ implements java.io.Serializable {
         }
     }
 
+    @Override
+    public void beforeCheckpoint(Context<? extends Resource> context) throws Exception {
+        objLock.lock();
+        if (clearStateOnCheckpoint) {
+            if (state != null) {
+                for (int i = 0; i < state.length; i++) {
+                    state[i] = 0;
+                }
+            }
+            state = null;
+            if (remainder != null) {
+                for (int i = 0; i < remainder.length; i++) {
+                    remainder[i] = 0;
+                }
+            }
+            remainder = null;
+            remCount = 0;
+        }
+    }
+
+    @Override
+    public void afterRestore(Context<? extends Resource> context) throws Exception {
+        try {
+            if (isSeedGenerator) {
+                byte[] b = new byte[DIGEST_SIZE];
+                SeedGenerator.generateSeed(b);
+                engineSetSeed(b);
+            }
+        } finally {
+            objLock.unlock();
+        }
+    }
+
+    @Override
+    public int getPriority() {
+        if (isSeedGenerator)
+            return -12;
+        return -11;
+    }
+
     /**
      * This static object will be seeded by SeedGenerator, and used
      * to seed future instances of SHA1PRNG SecureRandoms.
@@ -206,9 +260,11 @@ implements java.io.Serializable {
              * seed material (likely from the Native implementation).
              */
             seeder = new SecureRandom(SeedGenerator.getSystemEntropy());
-            byte [] b = new byte[DIGEST_SIZE];
+            seeder.isSeedGenerator = true;
+            byte[] b = new byte[DIGEST_SIZE];
             SeedGenerator.generateSeed(b);
             seeder.engineSetSeed(b);
+            seeder.clearStateOnCheckpoint = true;
         }
     }
 
@@ -218,53 +274,56 @@ implements java.io.Serializable {
      * @param result the array to be filled in with random bytes.
      */
     @Override
-    public synchronized void engineNextBytes(byte[] result) {
-        int index = 0;
-        int todo;
-        byte[] output = remainder;
+    public void engineNextBytes(byte[] result) {
+        objLock.lock();
+        try {
+            int index = 0;
+            int todo;
+            byte[] output = remainder;
 
-        if (state == null) {
-            byte[] seed = new byte[DIGEST_SIZE];
-            SeederHolder.seeder.engineNextBytes(seed);
-            state = digest.digest(seed);
-        }
-
-        // Use remainder from last time
-        int r = remCount;
-        if (r > 0) {
-            // How many bytes?
-            todo = (result.length - index) < (DIGEST_SIZE - r) ?
+            if (state == null) {
+                byte[] seed = new byte[DIGEST_SIZE];
+                SeederHolder.seeder.engineNextBytes(seed);
+                state = digest.digest(seed);
+            }
+            // Use remainder from last time
+            int r = remCount;
+            if (r > 0) {
+                // How many bytes?
+                todo = (result.length - index) < (DIGEST_SIZE - r) ?
                         (result.length - index) : (DIGEST_SIZE - r);
-            // Copy the bytes, zero the buffer
-            for (int i = 0; i < todo; i++) {
-                result[i] = output[r];
-                output[r++] = 0;
+                // Copy the bytes, zero the buffer
+                for (int i = 0; i < todo; i++) {
+                    result[i] = output[r];
+                    output[r++] = 0;
+                }
+                remCount += todo;
+                index += todo;
             }
-            remCount += todo;
-            index += todo;
-        }
 
-        // If we need more bytes, make them.
-        while (index < result.length) {
-            // Step the state
-            digest.update(state);
-            output = digest.digest();
-            updateState(state, output);
-
-            // How many bytes?
-            todo = (result.length - index) > DIGEST_SIZE ?
-                DIGEST_SIZE : result.length - index;
-            // Copy the bytes, zero the buffer
-            for (int i = 0; i < todo; i++) {
-                result[index++] = output[i];
-                output[i] = 0;
+            // If we need more bytes, make them.
+            while (index < result.length) {
+                // Step the state
+                digest.update(state);
+                output = digest.digest();
+                updateState(state, output);
+                // How many bytes?
+                todo = (result.length - index) > DIGEST_SIZE ?
+                        DIGEST_SIZE : result.length - index;
+                // Copy the bytes, zero the buffer
+                for (int i = 0; i < todo; i++) {
+                    result[index++] = output[i];
+                    output[i] = 0;
+                }
+                remCount += todo;
             }
-            remCount += todo;
-        }
 
-        // Store remainder for next time
-        remainder = output;
-        remCount %= DIGEST_SIZE;
+            // Store remainder for next time
+            remainder = output;
+            remCount %= DIGEST_SIZE;
+        } finally {
+            objLock.unlock();
+        }
     }
 
     /*

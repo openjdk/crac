@@ -29,5 +29,23 @@ package jdk.internal.crac;
 import jdk.crac.Resource;
 
 public interface JDKResource extends Resource {
-    int getPriority();
+    /**
+     * JDK Resource priorities.
+     * Most resources should use NORMAL.
+     * Other priorities define sequence of
+     * checkpoint notification for dependent resources
+     */
+    enum Priority {
+        /**
+         * Priority of the
+         * sun.nio.ch.EPollSelectorImpl resource
+         */
+        EPOLLSELECTOR,
+        /**
+         * Most resources should use this option.
+         */
+        NORMAL
+    };
+
+    Priority getPriority();
 }

@@ -31,9 +31,18 @@ import jdk.crac.Resource;
 public interface JDKResource extends Resource {
     /**
      * JDK Resource priorities.
-     * Most resources should use NORMAL.
-     * Other priorities define sequence of
-     * checkpoint notification for dependent resources
+     * Most resources should use priority NORMAL.
+     * Other priorities define sequence of checkpoint notification
+     * for dependent resources.
+     * If priority A is specified early in the enumeration than priority B,
+     * a JDK resource with priority A will be notified about checkpoint
+     * later than JDK resource with priority B. When restoring, the order
+     * is reversed: JDK resource with priority A will be notified about
+     * restore early than JDK resource with priority B.
+     * JDK resources with the same priority will be notified about checkpoint
+     * in the reverse order of registration.
+     * JDK resources with the same priority will be notified about restore
+     * in the direct order of registration.
      */
     enum Priority {
         /**

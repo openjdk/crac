@@ -30,7 +30,7 @@
 
 set -x
 
-AlgNames = "SHA1PRNG NativePRNGBlocking NativePRNGNonBlocking NativePRNG"
+AlgNames="SHA1PRNG NativePRNGBlocking NativePRNGNonBlocking NativePRNG"
 for alg in $AlgNames; do
 set +e
 ${TESTJAVA}/bin/java -cp ${TESTCLASSPATH} -XX:CRaCCheckpointTo=cr Test $alg 100

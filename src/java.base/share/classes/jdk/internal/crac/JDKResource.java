@@ -31,14 +31,14 @@ import jdk.crac.Resource;
 public interface JDKResource extends Resource {
     /**
      * JDK Resource priorities.
-     * Most resources should use priority NORMAL.
+     * Priorities are defined in the order from lowest to highest.
+     * Most resources should use priority NORMAL (the lowest priority).
      * Other priorities define sequence of checkpoint notification
      * for dependent resources.
-     * If priority A is specified early in the enumeration than priority B,
-     * a JDK resource with priority A will be notified about checkpoint
-     * later than JDK resource with priority B. When restoring, the order
-     * is reversed: JDK resource with priority A will be notified about
-     * restore early than JDK resource with priority B.
+     * Checkpoint notification will be processed in the order from the lowest
+     * to the highest priorities.
+     * Restore notification will be processed in the revers order:
+     * from the highest to the lowest priorities.
      * JDK resources with the same priority will be notified about checkpoint
      * in the reverse order of registration.
      * JDK resources with the same priority will be notified about restore
@@ -46,14 +46,14 @@ public interface JDKResource extends Resource {
      */
     enum Priority {
         /**
+         * Most resources should use this option.
+         */
+        NORMAL,
+        /**
          * Priority of the
          * sun.nio.ch.EPollSelectorImpl resource
          */
-        EPOLLSELECTOR,
-        /**
-         * Most resources should use this option.
-         */
-        NORMAL
+        EPOLLSELECTOR
     };
 
     Priority getPriority();

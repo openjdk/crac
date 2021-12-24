@@ -33,6 +33,7 @@ import java.security.MessageDigest;
 import java.security.SecureRandomSpi;
 import java.security.NoSuchAlgorithmException;
 import java.security.NoSuchProviderException;
+import java.util.Arrays;
 import java.util.concurrent.locks.ReentrantLock;
 
 /**
@@ -68,7 +69,6 @@ implements java.io.Serializable, jdk.internal.crac.JDKResource {
     private byte[] remainder;
     private int remCount;
     private boolean clearStateOnCheckpoint = true;
-    private boolean isSeedGenerator = false;
     private ReentrantLock objLock = new ReentrantLock();
 
     /**
@@ -204,43 +204,33 @@ implements java.io.Serializable, jdk.internal.crac.JDKResource {
         }
     }
 
+    private void invalidate() {
+        if (state != null) {
+            Arrays.fill(state, (byte)0);
+        }
+        state = null;
+        if (remainder != null) {
+            Arrays.fill(remainder, (byte)0);
+        }
+        remainder = null;
+        remCount = 0;
+    }
+
     @Override
     public void beforeCheckpoint(Context<? extends Resource> context) throws Exception {
         objLock.lock();
         if (clearStateOnCheckpoint) {
-            if (state != null) {
-                for (int i = 0; i < state.length; i++) {
-                    state[i] = 0;
-                }
-            }
-            state = null;
-            if (remainder != null) {
-                for (int i = 0; i < remainder.length; i++) {
-                    remainder[i] = 0;
-                }
-            }
-            remainder = null;
-            remCount = 0;
+            invalidate();
         }
     }
 
     @Override
     public void afterRestore(Context<? extends Resource> context) throws Exception {
-        try {
-            if (isSeedGenerator) {
-                byte[] b = new byte[DIGEST_SIZE];
-                SeedGenerator.generateSeed(b);
-                engineSetSeed(b);
-            }
-        } finally {
-            objLock.unlock();
-        }
+        objLock.unlock();
     }
 
     @Override
     public int getPriority() {
-        if (isSeedGenerator)
-            return -12;
         return -11;
     }
 
@@ -250,9 +240,9 @@ implements java.io.Serializable, jdk.internal.crac.JDKResource {
      *
      * Bloch, Effective Java Second Edition: Item 71
      */
-    private static class SeederHolder {
-
+    private static class SeederHolder implements jdk.internal.crac.JDKResource {
         private static final SecureRandom seeder;
+        private ReentrantLock objLock = new ReentrantLock();
 
         static {
             /*
@@ -260,11 +250,32 @@ implements java.io.Serializable, jdk.internal.crac.JDKResource {
              * seed material (likely from the Native implementation).
              */
             seeder = new SecureRandom(SeedGenerator.getSystemEntropy());
-            seeder.isSeedGenerator = true;
             byte[] b = new byte[DIGEST_SIZE];
             SeedGenerator.generateSeed(b);
             seeder.engineSetSeed(b);
-            seeder.clearStateOnCheckpoint = true;
+            jdk.internal.crac.Core.getJDKContext().register(new SeederHolder());
+        }
+
+        @Override
+        public void beforeCheckpoint(Context<? extends Resource> context) throws Exception {
+            objLock.lock();
+            seeder.invalidate();
+        }
+
+        @Override
+        public void afterRestore(Context<? extends Resource> context) throws Exception {
+            try {
+                byte[] b = new byte[DIGEST_SIZE];
+                SeedGenerator.generateSeed(b);
+                seeder.engineSetSeed(b);
+            } finally {
+                objLock.unlock();
+            }
+        }
+
+        @Override
+        public int getPriority() {
+            return -12;
         }
     }
 

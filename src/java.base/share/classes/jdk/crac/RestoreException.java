@@ -38,4 +38,14 @@ public class RestoreException extends Exception {
     public RestoreException() {
         super();
     }
+
+    /**
+     * Constructs a {@code RestoreException} with the specified
+     * detail message.
+     *
+     * @param message the detail message.
+     */
+    public RestoreException(String message) {
+        super(message);
+    }
 }

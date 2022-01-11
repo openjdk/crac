@@ -49,6 +49,9 @@ public class Core {
     private static native Object[] checkpointRestore0();
 
     private static boolean traceStartupTime;
+    private static final Object checkpointRestoreLock = new Object();
+    private static boolean checkpointInProgress = false;
+
 
     private static final Context<Resource> globalContext = new OrderedContext();
     static {
@@ -178,11 +181,24 @@ public class Core {
     public static void checkpointRestore() throws
             CheckpointException,
             RestoreException {
-        try {
-            checkpointRestore1();
-        } finally {
-            if (traceStartupTime) {
-                System.out.println("STARTUPTIME " + System.nanoTime() + " restore-finish");
+        // checkpointRestore protects against the simultaneous
+        // call of checkpointRestore from different threads.
+        synchronized (checkpointRestoreLock) {
+            // checkpointInProgress protects against recursive
+            // checkpointRestore from resource's
+            // beforeCheckpoint/afterRestore methods
+            if (!checkpointInProgress) {
+                try {
+                    checkpointInProgress = true;
+                    checkpointRestore1();
+                } finally {
+                    if (traceStartupTime) {
+                        System.out.println("STARTUPTIME " + System.nanoTime() + " restore-finish");
+                    }
+                    checkpointInProgress = false;
+                }
+            } else {
+                throw new CheckpointException("Recursive checkpoint is not allowed");
             }
         }
     }

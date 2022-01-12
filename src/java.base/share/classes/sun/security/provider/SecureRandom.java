@@ -230,8 +230,8 @@ implements java.io.Serializable, jdk.internal.crac.JDKResource {
     }
 
     @Override
-    public int getPriority() {
-        return -11;
+    public Priority getPriority() {
+        return Priority.SECURE_RANDOM;
     }
 
     /**
@@ -274,8 +274,8 @@ implements java.io.Serializable, jdk.internal.crac.JDKResource {
         }
 
         @Override
-        public int getPriority() {
-            return -12;
+        public Priority getPriority() {
+            return Priority.SEEDER_HOLDER;
         }
     }
 

@@ -53,7 +53,17 @@ public interface JDKResource extends Resource {
          * Priority of the
          * sun.nio.ch.EPollSelectorImpl resource
          */
-        EPOLLSELECTOR
+        EPOLLSELECTOR,
+        /**
+         * Priority of the
+         * sun.security.provider.SecureRandom resource
+         */
+        SECURE_RANDOM,
+        /**
+         * Priority of the
+         * sun.security.provider.SecureRandom.SeederHolder resource
+         */
+        SEEDER_HOLDER
     };
 
     Priority getPriority();

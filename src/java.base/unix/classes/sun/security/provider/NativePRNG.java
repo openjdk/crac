@@ -31,6 +31,7 @@ import java.security.*;
 import java.util.Arrays;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 
+import jdk.crac.CheckpointException;
 import jdk.crac.Context;
 import jdk.crac.Resource;
 import jdk.internal.crac.JDKResource;
@@ -485,6 +486,9 @@ public final class NativePRNG extends SecureRandomSpi {
                 }
                 crLock.readLock().lock();
                 try {
+                    if(crLock.getWriteHoldCount() != 0) {
+                        throw new CheckpointException("PRNG object is invalidated");
+                    }
                     getMixRandom().engineSetSeed(seed);
                 } finally {
                     crLock.readLock().unlock();
@@ -548,6 +552,9 @@ public final class NativePRNG extends SecureRandomSpi {
         private void implNextBytes(byte[] data) {
             crLock.readLock().lock();
                 try {
+                    if(crLock.getWriteHoldCount() != 0) {
+                        throw new CheckpointException("PRNG object is invalidated");
+                    }
                     getMixRandom().engineNextBytes(data);
                     int data_len = data.length;
                     int ofs = 0;
@@ -600,8 +607,8 @@ public final class NativePRNG extends SecureRandomSpi {
         }
 
         @Override
-        public int getPriority() {
-            return 0;
+        public Priority getPriority() {
+            return Priority.NATIVE_PRNG;
         }
 
     }

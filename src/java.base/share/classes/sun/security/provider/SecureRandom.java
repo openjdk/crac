@@ -25,6 +25,7 @@
 
 package sun.security.provider;
 
+import jdk.crac.CheckpointException;
 import jdk.crac.Context;
 import jdk.crac.Resource;
 
@@ -165,18 +166,26 @@ implements java.io.Serializable, jdk.internal.crac.JDKResource {
     public void engineSetSeed(byte[] seed) {
         objLock.lock();
         try {
-            if (state != null) {
-                digest.update(state);
-                for (int i = 0; i < state.length; i++) {
-                    state[i] = 0;
-                }
+            // verify if objLock is already acquired in beforeCheckpoint
+            if(objLock.getHoldCount() > 1) {
+                throw new CheckpointException("SHA1PRNG object is invalidated");
             }
-            state = digest.digest(seed);
-            remCount = 0;
-            clearStateOnCheckpoint = false;
+            setSeedImpl(seed);
         } finally {
             objLock.unlock();
         }
+    }
+
+    private void setSeedImpl(byte[] seed) {
+        if (state != null) {
+            digest.update(state);
+            for (int i = 0; i < state.length; i++) {
+                state[i] = 0;
+            }
+        }
+        state = digest.digest(seed);
+        remCount = 0;
+        clearStateOnCheckpoint = false;
     }
 
     private static void updateState(byte[] state, byte[] output) {
@@ -241,10 +250,10 @@ implements java.io.Serializable, jdk.internal.crac.JDKResource {
      * Bloch, Effective Java Second Edition: Item 71
      */
     private static class SeederHolder implements jdk.internal.crac.JDKResource {
-        private static final SecureRandom seeder;
-        private ReentrantLock objLock = new ReentrantLock();
+        private static final SeederHolder seederHolder = new SeederHolder();
+        private final SecureRandom seeder;
 
-        static {
+        private SeederHolder() {
             /*
              * Call to SeedGenerator.generateSeed() to add additional
              * seed material (likely from the Native implementation).
@@ -253,24 +262,23 @@ implements java.io.Serializable, jdk.internal.crac.JDKResource {
             byte[] b = new byte[DIGEST_SIZE];
             SeedGenerator.generateSeed(b);
             seeder.engineSetSeed(b);
-            jdk.internal.crac.Core.getJDKContext().register(new SeederHolder());
+            jdk.internal.crac.Core.getJDKContext().register(this);
+        }
+
+        public static SecureRandom getSeeder() {
+            return seederHolder.seeder;
         }
 
         @Override
         public void beforeCheckpoint(Context<? extends Resource> context) throws Exception {
-            objLock.lock();
             seeder.invalidate();
         }
 
         @Override
         public void afterRestore(Context<? extends Resource> context) throws Exception {
-            try {
-                byte[] b = new byte[DIGEST_SIZE];
-                SeedGenerator.generateSeed(b);
-                seeder.engineSetSeed(b);
-            } finally {
-                objLock.unlock();
-            }
+            byte[] b = new byte[DIGEST_SIZE];
+            SeedGenerator.generateSeed(b);
+            seeder.setSeedImpl(b);
         }
 
         @Override
@@ -288,13 +296,17 @@ implements java.io.Serializable, jdk.internal.crac.JDKResource {
     public void engineNextBytes(byte[] result) {
         objLock.lock();
         try {
+            // verify if objLock is already acquired in beforeCheckpoint
+            if(objLock.getHoldCount() > 1) {
+                throw new CheckpointException("SHA1PRNG object is invalidated");
+            }
             int index = 0;
             int todo;
             byte[] output = remainder;
 
             if (state == null) {
                 byte[] seed = new byte[DIGEST_SIZE];
-                SeederHolder.seeder.engineNextBytes(seed);
+                SeederHolder.getSeeder().engineNextBytes(seed);
                 state = digest.digest(seed);
             }
             // Use remainder from last time

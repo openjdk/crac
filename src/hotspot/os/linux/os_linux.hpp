@@ -173,7 +173,7 @@ class Linux {
 
   static void vm_create_start();
   static bool prepare_checkpoint();
-  static Handle checkpoint(TRAPS);
+  static Handle checkpoint(TRAPS, jlong st);
   static void restore();
   static void register_persistent_fd(int fd, int st_dev, int st_ino);
   static void deregister_persistent_fd(int fd, int st_dev, int st_ino);

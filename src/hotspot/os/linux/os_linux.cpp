@@ -295,6 +295,7 @@ class VM_Crac: public VM_Operation {
     delete _failures;
   }
 
+  outputStream* ostream;
   GrowableArray<CracFailDep>* failures() { return _failures; }
 
   bool ok() { return _ok; }
@@ -5978,7 +5979,9 @@ void VM_Crac::doit() {
   do_classpaths(mark_classpath_entry, &fds, Arguments::get_appclasspath());
   do_classpaths(mark_all_in, &fds, Arguments::get_ext_dirs());
   mark_persistent(&fds);
-
+  
+  tty = ostream;
+  
   bool ok = true;
   for (int i = 0; i < fds.len(); ++i) {
     if (fds.get_state(i) == FdsInfo::CLOSED) {
@@ -6027,7 +6030,7 @@ void VM_Crac::doit() {
     }
 
     if (CRPrintResourcesOnCheckpoint) {
-      tty->print("BAD: opened by application");
+      tty->print_cr("BAD: opened by application");
     }
     ok = false;
 
@@ -6159,7 +6162,7 @@ static Handle ret_cr(int ret, TRAPS) {
 
 /** Checkpoint main entry.
  */
-Handle os::Linux::checkpoint(TRAPS) {
+Handle os::Linux::checkpoint(TRAPS, jlong stream) {
   if (!CRaCCheckpointTo) {
     return ret_cr(JVM_CHECKPOINT_NONE, THREAD);
   }
@@ -6175,6 +6178,7 @@ Handle os::Linux::checkpoint(TRAPS) {
 
   VM_Crac cr;
   {
+    cr.ostream = (outputStream*) stream; 
     MutexLocker ml(Heap_lock);
     VMThread::execute(&cr);
   }

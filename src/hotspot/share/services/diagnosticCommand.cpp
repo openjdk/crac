@@ -1040,9 +1040,22 @@ void DebugOnCmdStartDCmd::execute(DCmdSource source, TRAPS) {
 void CheckpointDCmd::execute(DCmdSource source, TRAPS) {
   Klass* k = SystemDictionary::resolve_or_fail(vmSymbols::jdk_crac_Core(),
                                                  true, CHECK);
-  JavaValue result(T_VOID);
+  JavaValue result(T_OBJECT);
+  output()->print_cr("JDK.checkpoint command start processing");
+  JavaCallArguments args;
+  args.push_long((jlong )output());
   JavaCalls::call_static(&result, k,
                          vmSymbols::checkpointRestoreInternal_name(),
-                         vmSymbols::void_method_signature(), CHECK);
+                         vmSymbols::checkpointRestereInternal_signature(), &args, CHECK);
+    
+  jvalue* jv = (jvalue*) result.get_value_addr();
+  oop str = cast_to_oop(jv->l);
+  if (str != NULL) {
+      char* out = java_lang_String::as_utf8_string(str);
+      if (out) {
+          output()->print_cr("An exception durinng checkpoint operation: ");
+          output()->print_cr("%s", out);
+      }
+  }
+  output()->print_cr("JDK.checkpoint command processing finished");
 }
-

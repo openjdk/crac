@@ -35,9 +35,9 @@
 #include "jdk_internal_crac_Core.h"
 
 JNIEXPORT jobjectArray JNICALL
-Java_jdk_crac_Core_checkpointRestore0(JNIEnv *env, jclass ignore)
+Java_jdk_crac_Core_checkpointRestore0(JNIEnv *env, jclass ignore, jlong stream)
 {
-    return JVM_Checkpoint(env);
+    return JVM_Checkpoint(env, stream);
 }
 
 JNIEXPORT void JNICALL Java_jdk_internal_crac_Core_registerPersistent0

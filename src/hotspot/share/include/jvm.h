@@ -1143,7 +1143,7 @@ enum cr_fail_type {
 };
 
 JNIEXPORT jobjectArray JNICALL
-JVM_Checkpoint(JNIEnv *env);
+JVM_Checkpoint(JNIEnv *env, jlong stream);
 
 JNIEXPORT void JNICALL
 JVM_RegisterPersistent(int fd, int st_dev, int st_ino);

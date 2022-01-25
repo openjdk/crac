@@ -30,6 +30,8 @@ import jdk.crac.impl.CheckpointOpenFileException;
 import jdk.crac.impl.CheckpointOpenResourceException;
 import jdk.crac.impl.CheckpointOpenSocketException;
 import jdk.crac.impl.OrderedContext;
+import java.io.StringWriter;
+import java.io.PrintWriter;
 import java.security.AccessController;
 import java.security.PrivilegedAction;
 
@@ -46,7 +48,8 @@ public class Core {
     private static final int JVM_CR_FAIL_SOCK = 2;
     private static final int JVM_CR_FAIL_PIPE = 3;
 
-    private static native Object[] checkpointRestore0();
+    private static native Object[] checkpointRestore0(long stream);
+    private static long outputStream_p;
 
     private static boolean traceStartupTime;
 
@@ -125,8 +128,7 @@ public class Core {
             }
             throw ce;
         }
-
-        final Object[] bundle = checkpointRestore0();
+        final Object[] bundle = checkpointRestore0(outputStream_p);
         final int retCode = (Integer)bundle[0];
         final int[] codes = (int[])bundle[1];
         final String[] messages = (String[])bundle[2];
@@ -188,22 +190,17 @@ public class Core {
     }
 
     /* called by VM */
-    private static void checkpointRestoreInternal() {
-        Thread thread = new Thread(() -> {
-            try {
-                Thread.sleep(100);
-            } catch (InterruptedException e) {
+    private static String checkpointRestoreInternal(long st){
+        outputStream_p = st;
+        StringWriter sw = new StringWriter();
+        PrintWriter pw = new PrintWriter(sw);
+        try {
+            checkpointRestore();
+        } catch (CheckpointException | RestoreException e) {
+            for (Throwable t : e.getSuppressed()) {
+                t.printStackTrace(pw);
             }
-
-            try {
-                checkpointRestore();
-            } catch (CheckpointException | RestoreException e) {
-                for (Throwable t : e.getSuppressed()) {
-                    t.printStackTrace();
-                }
-            }
-        });
-        thread.setDaemon(true);
-        thread.start();
+        }
+        return sw.toString();
     }
 }

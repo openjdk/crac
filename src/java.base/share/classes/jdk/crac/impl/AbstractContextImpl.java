@@ -26,20 +26,17 @@ import jdk.crac.CheckpointException;
 import jdk.crac.Context;
 import jdk.crac.Resource;
 import jdk.crac.RestoreException;
+import sun.security.action.GetBooleanAction;
 
-import java.security.AccessController;
-import java.security.PrivilegedAction;
 import java.util.*;
 import java.util.stream.Collectors;
 
 public abstract class AbstractContextImpl<R extends Resource, P> extends Context<R> {
-    @SuppressWarnings("removal")
-    private static final boolean DEBUG = AccessController.doPrivileged(
-            new PrivilegedAction<Boolean>() {
-                public Boolean run() {
-                    return Boolean.parseBoolean(
-                            System.getProperty("jdk.crac.debug"));
-                }});
+
+    private static class FlagsHolder {
+        public static final boolean DEBUG =
+            GetBooleanAction.privilegedGetProperty("jdk.crac.debug");
+    }
 
     private WeakHashMap<R, P> checkpointQ = new WeakHashMap<>();
     private List<R> restoreQ = null;
@@ -62,7 +59,7 @@ public abstract class AbstractContextImpl<R extends Resource, P> extends Context
 
         CheckpointException exception = new CheckpointException();
         for (Resource r : resources) {
-            if (DEBUG) {
+            if (FlagsHolder.DEBUG) {
                 System.err.println("jdk.crac beforeCheckpoint " + r.toString());
             }
             try {
@@ -88,7 +85,7 @@ public abstract class AbstractContextImpl<R extends Resource, P> extends Context
     public synchronized void afterRestore(Context<? extends Resource> context) throws RestoreException {
         RestoreException exception = new RestoreException();
         for (Resource r : restoreQ) {
-            if (DEBUG) {
+            if (FlagsHolder.DEBUG) {
                 System.err.println("jdk.crac afterRestore " + r.toString());
             }
             try {

@@ -25,7 +25,6 @@
 
 package sun.security.provider;
 
-import jdk.crac.CheckpointException;
 import jdk.crac.Context;
 import jdk.crac.Resource;
 

@@ -56,6 +56,11 @@ public interface JDKResource extends Resource {
         EPOLLSELECTOR,
         /**
          * Priority of the
+         * sun.security.provider.NativePRNG resource
+         */
+        NATIVE_PRNG,
+        /**
+         * Priority of the
          * sun.security.provider.SecureRandom resource
          */
         SECURE_RANDOM,

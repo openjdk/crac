@@ -31,6 +31,7 @@ public class Test implements Resource {
     private static final long MIN_TIMEOUT = 100;
     private static final long MAX_TIMEOUT = 1000;
     private static SecureRandom sr;
+    private static String algName = null;
 
     private static class TestThread1 extends Thread {
         private long timeout;
@@ -60,7 +61,7 @@ public class Test implements Resource {
 
         TestThread2(long timeout) throws Exception {
             this.timeout = timeout;
-            sr = SecureRandom.getInstance("SHA1PRNG");
+            sr = SecureRandom.getInstance(algName);
             Core.getGlobalContext().register(this);
         }
 
@@ -106,15 +107,17 @@ public class Test implements Resource {
     }
 
     public static void main(String args[]) throws Exception {
-        if (args.length < 1) { throw new RuntimeException("number of threads is missing"); }
+        if (args.length < 1) { throw new RuntimeException("Alg name is not provided"); }
+        if (args.length < 2) { throw new RuntimeException("number of threads is missing"); }
+        algName = args[0];
         int numThreads;
         try{
-            numThreads = Integer.parseInt(args[0]);
+            numThreads = Integer.parseInt(args[1]);
         } catch (NumberFormatException ex){
             throw new RuntimeException("invalid number of threads");
         }
         Test test = new Test();
-        test.sr = SecureRandom.getInstance("SHA1PRNG");
+        test.sr = SecureRandom.getInstance(algName);
         Core.getGlobalContext().register(test);
 
         Random random = new Random();

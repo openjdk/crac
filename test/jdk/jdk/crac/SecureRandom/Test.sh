@@ -30,13 +30,16 @@
 
 set -x
 
+AlgNames="SHA1PRNG NativePRNGBlocking NativePRNGNonBlocking NativePRNG"
+for alg in $AlgNames; do
 set +e
-${TESTJAVA}/bin/java -cp ${TESTCLASSPATH} -XX:CRaCCheckpointTo=cr Test 100
+${TESTJAVA}/bin/java -cp ${TESTCLASSPATH} -XX:CRaCCheckpointTo=cr Test $alg 100
 e=$?
 
 set -e
 [ $e -eq 137 ]
 
-${TESTJAVA}/bin/java -cp ${TESTCLASSPATH} -XX:CRaCRestoreFrom=cr Test 100
+${TESTJAVA}/bin/java -cp ${TESTCLASSPATH} -XX:CRaCRestoreFrom=cr Test $alg 100
 
 echo PASSED
+done

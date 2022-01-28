@@ -168,7 +168,7 @@ implements java.io.Serializable, jdk.internal.crac.JDKResource {
         try {
             // check if objLock has not been already acquired in beforeCheckpoint
             if(objLock.getHoldCount() > 1) {
-                throw new CheckpointException("SHA1PRNG object is invalidated");
+                throw new IllegalStateException("SHA1PRNG object is invalidated");
             }
             setSeedImpl(seed);
         } finally {
@@ -299,7 +299,7 @@ implements java.io.Serializable, jdk.internal.crac.JDKResource {
         try {
             // verify if objLock is already acquired in beforeCheckpoint
             if(objLock.getHoldCount() > 1) {
-                throw new CheckpointException("SHA1PRNG object is invalidated");
+                throw new IllegalStateException("SHA1PRNG object is invalidated");
             }
             int index = 0;
             int todo;

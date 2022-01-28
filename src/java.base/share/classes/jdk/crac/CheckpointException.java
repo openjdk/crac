@@ -29,7 +29,7 @@ package jdk.crac;
 /**
  * Suppresses exceptions thrown during checkpoint notification.
  */
-public class CheckpointException extends RuntimeException {
+public class CheckpointException extends Exception {
     private static final long serialVersionUID = 8879167591426115859L;
 
     /**

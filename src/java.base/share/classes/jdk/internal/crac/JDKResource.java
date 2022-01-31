@@ -58,7 +58,17 @@ public interface JDKResource extends Resource {
          * Priority of the
          * sun.security.provider.NativePRNG resource
          */
-        NATIVE_PRNG
+        NATIVE_PRNG,
+        /**
+         * Priority of the
+         * sun.security.provider.SecureRandom resource
+         */
+        SECURE_RANDOM,
+        /**
+         * Priority of the
+         * sun.security.provider.SecureRandom.SeederHolder resource
+         */
+        SEEDER_HOLDER
     };
 
     Priority getPriority();

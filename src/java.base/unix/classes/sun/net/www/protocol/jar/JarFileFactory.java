@@ -31,6 +31,7 @@ import java.net.URL;
 import java.net.URLConnection;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.WeakHashMap;
 import java.util.jar.JarFile;
 import java.security.Permission;
 
@@ -252,11 +253,22 @@ class JarFileFactory implements URLJarFile.URLJarFileCloseController, jdk.intern
 
     @Override
     public void beforeCheckpoint(Context<? extends Resource> context) throws Exception {
+        // Need to clear cached entries that are held by the factory only (e.g.
+        // after JarURLInputStream.close with useCaches == true).  Creating a
+        // temporary weak cache and triggering GC to get know JARs really in
+        // use.
         synchronized (instance) {
-            for (Map.Entry<JarFile, URL> entry : urlCache.entrySet()) {
-                fileCache.remove(urlKey(entry.getValue()));
-            }
+            WeakHashMap<JarFile, URL> weakMap = new WeakHashMap<>(urlCache);
+            fileCache.clear();
             urlCache.clear();
+
+            System.gc();
+
+            weakMap.forEach((JarFile jarFile, URL url) -> {
+                String key = urlKey(url);
+                urlCache.put(jarFile, url);
+                fileCache.put(key, jarFile);
+            });
         }
     }
 

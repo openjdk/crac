@@ -45,7 +45,7 @@ public class Core {
     private static final int JVM_CR_FAIL_SOCK = 2;
     private static final int JVM_CR_FAIL_PIPE = 3;
 
-    private static native Object[] checkpointRestore0();
+    private static native Object[] checkpointRestore0(boolean dryRun);
 
     private static final Object checkpointRestoreLock = new Object();
     private static boolean checkpointInProgress = false;
@@ -66,24 +66,24 @@ public class Core {
     }
 
     private static void translateJVMExceptions(int[] codes, String[] messages,
-                                               CheckpointException newException) {
+                                               CheckpointException exception) {
         assert codes.length == messages.length;
         final int length = codes.length;
 
         for (int i = 0; i < length; ++i) {
             switch(codes[i]) {
                 case JVM_CR_FAIL_FILE:
-                    newException.addSuppressed(
+                    exception.addSuppressed(
                             new CheckpointOpenFileException(messages[i]));
                     break;
                 case JVM_CR_FAIL_SOCK:
-                    newException.addSuppressed(
+                    exception.addSuppressed(
                             new CheckpointOpenSocketException(messages[i]));
                     break;
                 case JVM_CR_FAIL_PIPE:
                     // FALLTHROUGH
                 default:
-                    newException.addSuppressed(
+                    exception.addSuppressed(
                             new CheckpointOpenResourceException(messages[i]));
                     break;
             }
@@ -102,26 +102,18 @@ public class Core {
     private static void checkpointRestore1() throws
             CheckpointException,
             RestoreException {
+        CheckpointException checkpointException = null;
+
         try {
             globalContext.beforeCheckpoint(null);
         } catch (CheckpointException ce) {
-            // TODO make dry-run
-            try {
-                globalContext.afterRestore(null);
-            } catch (RestoreException re) {
-                CheckpointException newException = new CheckpointException();
-                for (Throwable t : ce.getSuppressed()) {
-                    newException.addSuppressed(t);
-                }
-                for (Throwable t : re.getSuppressed()) {
-                    newException.addSuppressed(t);
-                }
-                throw newException;
+            checkpointException = new CheckpointException();
+            for (Throwable t : ce.getSuppressed()) {
+                checkpointException.addSuppressed(t);
             }
-            throw ce;
         }
 
-        final Object[] bundle = checkpointRestore0();
+        final Object[] bundle = checkpointRestore0(checkpointException != null);
         final int retCode = (Integer)bundle[0];
         final int[] codes = (int[])bundle[1];
         final String[] messages = (String[])bundle[2];
@@ -131,31 +123,36 @@ public class Core {
         }
 
         if (retCode != JVM_CHECKPOINT_OK) {
-            CheckpointException newException = new CheckpointException();
+            if (checkpointException == null) {
+                checkpointException = new CheckpointException();
+            }
             switch (retCode) {
                 case JVM_CHECKPOINT_ERROR:
-                    translateJVMExceptions(codes, messages, newException);
+                    translateJVMExceptions(codes, messages, checkpointException);
                     break;
                 case JVM_CHECKPOINT_NONE:
-                    newException.addSuppressed(
+                    checkpointException.addSuppressed(
                             new RuntimeException("C/R is not configured"));
                     break;
                 default:
-                    newException.addSuppressed(
+                    checkpointException.addSuppressed(
                             new RuntimeException("Unknown C/R result: " + retCode));
             }
-
-            try {
-                globalContext.afterRestore(null);
-            } catch (RestoreException re) {
-                for (Throwable t : re.getSuppressed()) {
-                    newException.addSuppressed(t);
-                }
-            }
-            throw newException;
         }
 
-        globalContext.afterRestore(null);
+        try {
+            globalContext.afterRestore(null);
+        } catch (RestoreException re) {
+            if (checkpointException == null) {
+                throw re;
+            }
+            for (Throwable t : re.getSuppressed()) {
+                checkpointException.addSuppressed(t);
+            }
+        }
+        if (checkpointException != null) {
+            throw checkpointException;
+        }
     }
 
     /**

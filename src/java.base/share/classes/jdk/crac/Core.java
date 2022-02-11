@@ -32,6 +32,8 @@ import jdk.crac.impl.CheckpointOpenSocketException;
 import jdk.crac.impl.OrderedContext;
 import sun.security.action.GetBooleanAction;
 
+import java.util.Arrays;
+
 /**
  * The coordination service.
  */
@@ -49,6 +51,8 @@ public class Core {
 
     private static final Object checkpointRestoreLock = new Object();
     private static boolean checkpointInProgress = false;
+
+    private static String[] newArgs = {};
 
     private static class FlagsHolder {
         public static final boolean TRACE_STARTUP_TIME =
@@ -123,8 +127,9 @@ public class Core {
 
         final Object[] bundle = checkpointRestore0();
         final int retCode = (Integer)bundle[0];
-        final int[] codes = (int[])bundle[1];
-        final String[] messages = (String[])bundle[2];
+        final String newArgs = (String)bundle[1];
+        final int[] codes = (int[])bundle[2];
+        final String[] messages = (String[])bundle[3];
 
         if (FlagsHolder.TRACE_STARTUP_TIME) {
             System.out.println("STARTUPTIME " + System.nanoTime() + " restore");
@@ -154,6 +159,8 @@ public class Core {
             }
             throw newException;
         }
+
+        Core.newArgs = newArgs != null ? newArgs.split(" ") : new String[0];
 
         globalContext.afterRestore(null);
     }
@@ -193,6 +200,10 @@ public class Core {
                 throw new CheckpointException("Recursive checkpoint is not allowed");
             }
         }
+    }
+
+    public static String[] newArgs() {
+        return Arrays.copyOf(newArgs, newArgs.length);
     }
 
     /* called by VM */

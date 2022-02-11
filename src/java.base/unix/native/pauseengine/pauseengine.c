@@ -26,6 +26,7 @@
 
 #include <string.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <unistd.h>
 #include <signal.h>
 
@@ -77,7 +78,8 @@ int main(int argc, char *argv[]) {
         }
         fclose(pidfile);
 
-        if (kickjvm(jvm, 0)) {
+        char *strid = getenv("CRAC_NEW_ARGS_ID");
+        if (kickjvm(jvm, atoi(strid))) {
             return 1;
         }
 

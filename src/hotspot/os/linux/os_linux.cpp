@@ -283,11 +283,13 @@ struct CracFailDep {
 };
 
 class VM_Crac: public VM_Operation {
+  const bool _dry_run;
   bool _ok;
   GrowableArray<CracFailDep>* _failures;
   char* _new_args;
  public:
-  VM_Crac() :
+  VM_Crac(bool dry_run) :
+    _dry_run(dry_run),
     _ok(false),
     _failures(new (ResourceObj::C_HEAP, mtInternal) GrowableArray<CracFailDep>(0, mtInternal)),
     _new_args(NULL)
@@ -5896,7 +5898,7 @@ static char* get_new_args(int id) {
     return args;
 }
 
-static int checkpoint_restore(FdsInfo* fds, char** argp) {
+static int checkpoint_restore(char** argp) {
 
   if (CRAllowToSkipCheckpoint) {
     trace_cr("Skip Checkpoint");
@@ -6046,7 +6048,9 @@ void VM_Crac::doit() {
   do_classpaths(mark_all_in, &fds, Arguments::get_ext_dirs());
   mark_persistent(&fds);
 
-  bool ok = true;
+  // dry-run fails checkpoint
+  bool ok = !_dry_run;
+
   for (int i = 0; i < fds.len(); ++i) {
     if (fds.get_state(i) == FdsInfo::CLOSED) {
       continue;
@@ -6125,7 +6129,7 @@ void VM_Crac::doit() {
     return;
   }
 
-  int ret = checkpoint_restore(&fds, &_new_args);
+  int ret = checkpoint_restore(&_new_args);
   if (ret == JVM_CHECKPOINT_ERROR) {
     PerfMemoryLinux::checkpoint_fail();
     return;
@@ -6223,7 +6227,7 @@ static Handle ret_cr(int ret, Handle new_args, Handle err_codes, Handle err_msgs
 
 /** Checkpoint main entry.
  */
-Handle os::Linux::checkpoint(TRAPS) {
+Handle os::Linux::checkpoint(bool dry_run, TRAPS) {
   if (!CRaCCheckpointTo) {
     return ret_cr(JVM_CHECKPOINT_NONE, Handle(), Handle(), Handle(), THREAD);
   }
@@ -6237,7 +6241,7 @@ Handle os::Linux::checkpoint(TRAPS) {
   Universe::heap()->collect(GCCause::_full_gc_alot);
   Universe::heap()->set_cleanup_unused(false);
 
-  VM_Crac cr;
+  VM_Crac cr(dry_run);
   {
     MutexLocker ml(Heap_lock);
     VMThread::execute(&cr);

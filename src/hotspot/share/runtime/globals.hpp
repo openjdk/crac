@@ -2093,6 +2093,9 @@ const intx ObjectAlignmentInBytes = 8;
   product(ccstr, CRaCRestoreFrom, NULL, "Path to image for restore, "       \
       "replaces the initializing VM on success")                            \
                                                                             \
+  product(ccstr, CREngine, "criuengine", "Path or name of a program "       \
+      "implementing checkpoint/restore")                                    \
+                                                                            \
   product(bool, CRaCIgnoreRestoreIfUnavailable, false, "Ignore "            \
       "-XX:CRaCRestoreFrom and continue initialization if restore is "      \
       "unavailable")                                                        \

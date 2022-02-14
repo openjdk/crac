@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2017, 2021, Azul Systems, Inc. All rights reserved.
+ * Copyright (c) 2021, Azul Systems, Inc. All rights reserved.
  * Copyright (c) 2021, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
@@ -24,50 +24,34 @@
  * questions.
  */
 
-#include <stdlib.h>
-#include <unistd.h>
-#include <stdio.h>
 #include <string.h>
-#include <inttypes.h>
-#include <time.h>
-#include <sys/time.h>
+#include <stdio.h>
+#include <unistd.h>
+#include <signal.h>
 
-uint64_t nanos(void) {
-  struct timespec tp;
-  if (0 != clock_gettime(CLOCK_MONOTONIC, &tp)) {
-    perror("clock_gettime");
-    exit(1);
-  }
-  return ((uint64_t)tp.tv_sec) * (1000 * 1000 * 1000) + (uint64_t)tp.tv_nsec;
-}
+#define RESTORE_SIGNAL   (SIGRTMIN + 2)
 
-uint64_t millis(void) {
-  struct timeval time;
-  if (0 != gettimeofday(&time, NULL)) {
-    perror("gettimeofday");
-    exit(1);
-  }
-  return ((uint64_t)time.tv_sec) * 1000 + ((uint64_t)time.tv_usec)/1000;
+static int kickjvm(pid_t jvm, int code) {
+    union sigval sv = { .sival_int = code };
+    if (-1 == sigqueue(jvm, RESTORE_SIGNAL, sv)) {
+        perror("sigqueue");
+        return 1;
+    }
+    return 0;
 }
 
 int main(int argc, char *argv[]) {
-  int opt;
-  uint64_t (*fn)(void) = nanos;
-  while ((opt = getopt(argc, argv, "mn")) != -1) {
-  switch (opt) {
-    case 'n':
-      fn = nanos;
-      break;
-    case 'm':
-      fn = millis;
-      break;
-    default:
-      break;
-    }
-  }
+    char* action = argv[1];
 
-  uint64_t time = fn();
-  char *msg = optind < argc ? argv[optind] : "prestart";
-  printf("STARTUPTIME %" PRIu64 " %s\n", time, msg);
-  return 0;
+    if (!strcmp(action, "checkpoint")) {
+        pid_t jvm = getppid();
+        kickjvm(jvm, 0);
+    } else if (!strcmp(action, "restore")) {
+        /* should not be called and nothing to do */
+    } else {
+        fprintf(stderr, "unknown action: %s\n", action);
+        return 1;
+    }
+
+    return 0;
 }

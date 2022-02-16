@@ -25,6 +25,11 @@
 
 package sun.awt.X11;
 
+import jdk.crac.Context;
+import jdk.crac.Resource;
+import jdk.internal.crac.JDKResource;
+
+
 /**
  * This class represents AWT application root window functionality.
  * Object of this class is singleton, all window reference it to have
@@ -32,7 +37,30 @@ package sun.awt.X11;
  */
 class XRootWindow extends XBaseWindow {
     private static class LazyHolder {
-        private static final XRootWindow xawtRootWindow;
+        private static XRootWindow xawtRootWindow;
+
+        static JDKResource jdkResource = new JDKResource() {
+            @Override
+            public Priority getPriority() {
+                return Priority.ROOT_WINDOW;
+            }
+
+            @Override
+            public void beforeCheckpoint(Context<? extends Resource> context) throws Exception {
+                xawtRootWindow = null;
+            }
+
+            @Override
+            public void afterRestore(Context<? extends Resource> context) throws Exception {
+                XToolkit.awtLock();
+                try {
+                    xawtRootWindow = new XRootWindow();
+                    xawtRootWindow.init(xawtRootWindow.getDelayedParams().delete(DELAYED));
+                } finally {
+                    XToolkit.awtUnlock();
+                }
+            }
+        };
 
         static {
             XToolkit.awtLock();
@@ -42,6 +70,8 @@ class XRootWindow extends XBaseWindow {
             } finally {
                 XToolkit.awtUnlock();
             }
+
+            jdk.internal.crac.Core.getJDKContext().register(jdkResource);
         }
 
     }

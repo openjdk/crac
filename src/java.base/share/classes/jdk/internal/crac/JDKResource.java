@@ -31,24 +31,44 @@ import jdk.crac.Resource;
 public interface JDKResource extends Resource {
     /**
      * JDK Resource priorities.
-     * Priorities are defined in the order from lowest to highest.
+     *
      * Most resources should use priority NORMAL (the lowest priority).
      * Other priorities define sequence of checkpoint notification
      * for dependent resources.
+     *
+     * Priorities are defined in the order from lowest to highest.
      * Checkpoint notification will be processed in the order from the lowest
      * to the highest priorities.
      * Restore notification will be processed in the revers order:
      * from the highest to the lowest priorities.
+     *
      * JDK resources with the same priority will be notified about checkpoint
      * in the reverse order of registration.
      * JDK resources with the same priority will be notified about restore
      * in the direct order of registration.
      */
     enum Priority {
+        /* Keep this priorities first to collect X11 objects
+         * by GC before its dispoding from queue. */
+
+        /**
+         * Priority of the
+         * sun.awt.X11.XRootWindow static resource
+         */
+        ROOT_WINDOW,
+        /**
+         * Priority of the
+         * sun.awt.X11.XToolKit resource
+         */
+        XTOOLKIT,
+
+        /* Use this priority in most cases. */
+
         /**
          * Most resources should use this option.
          */
         NORMAL,
+
         /**
          * Priority of the
          * sun.nio.ch.EPollSelectorImpl resource
@@ -80,9 +100,23 @@ public interface JDKResource extends Resource {
         REFERENCE_HANDLER,
         /**
          * Priority of the
+         * sun.java2d.Disposer resource
+         */
+        DISPOSER,
+        /**
+         * Priority of the
          * jdk.internal.ref.CleanerImpl resources
          */
         CLEANERS,
+
+        /* Keep this priority last to close X11 connection
+        * after dispoding objects from queue. */
+
+        /**
+         * Priority of the
+         * sun.awt.X11GraphicsEnvironment resource
+         */
+        X11GE,
     };
 
     Priority getPriority();

@@ -123,7 +123,8 @@ extern void awt_output_flush();
 #define AWT_NOTIFY_ALL()     AWT_NOTIFY_ALL_IMPL()
 
 #if !defined(HEADLESS) && !defined(MACOSX)
-extern Display         *awt_display; /* awt_GraphicsEnv.c */
+extern Display         *get_awt_display(void); /* awt_GraphicsEnv.c */
+#define awt_display 	get_awt_display()
 extern Boolean          awt_ModLockIsShiftLock; /* XToolkit.c */
 #endif /* !HEADLESS && !MACOSX */
 

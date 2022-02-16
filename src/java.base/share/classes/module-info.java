@@ -132,6 +132,8 @@ module java.base {
     exports javax.crac;
 
     exports jdk.crac;
+    exports jdk.crac.impl;
+    exports jdk.internal.crac;
 
     // additional qualified exports may be inserted at build time
     // see make/gensrc/GenModuleInfo.gmk

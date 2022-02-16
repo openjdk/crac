@@ -150,6 +150,10 @@ import sun.security.action.GetBooleanAction;
 import sun.security.action.GetPropertyAction;
 import sun.util.logging.PlatformLogger;
 
+import jdk.crac.Context;
+import jdk.crac.Resource;
+import jdk.internal.crac.JDKResource;
+
 import static sun.awt.X11.XlibUtil.scaleDown;
 
 public final class XToolkit extends UNIXToolkit implements Runnable {
@@ -200,9 +204,11 @@ public final class XToolkit extends UNIXToolkit implements Runnable {
     static UIDefaults uidefaults;
     static final X11GraphicsEnvironment localEnv;
     private static final X11GraphicsDevice device;
-    private static final long display;
+    private static long display;
     static int awt_multiclick_time;
     static boolean securityWarningEnabled;
+
+    private static int state = 0;
 
     /**
      * Dimensions of default virtual screen in pixels. These values are used to
@@ -212,6 +218,33 @@ public final class XToolkit extends UNIXToolkit implements Runnable {
     private static volatile int maxWindowHeightInPixels = -1;
 
     private static XMouseInfoPeer xPeer;
+
+    static final JDKResource jdkResource = (new JDKResource() {
+        @Override
+        public Priority getPriority() {
+            return Priority.XTOOLKIT;
+        }
+
+        @Override
+        public void beforeCheckpoint(Context<? extends Resource> context) throws Exception {
+            awtLock();
+            state = 1;
+            while (state != 2) {
+                awtLockWait(10);
+            }
+            awtUnlock();
+        }
+
+        @Override
+        public void afterRestore(Context<? extends Resource> context) throws Exception {
+            display = device.getDisplay();
+
+            awtLock();
+            state = 0;
+            awtLockNotifyAll();
+            awtUnlock();
+        }
+    });
 
     static {
         initSecurityWarning();
@@ -228,6 +261,8 @@ public final class XToolkit extends UNIXToolkit implements Runnable {
             initIDs();
             setBackingStoreType();
         }
+
+        jdk.internal.crac.Core.getJDKContext().register(jdkResource);
     }
 
     /*
@@ -681,6 +716,13 @@ public final class XToolkit extends UNIXToolkit implements Runnable {
                            (XlibWrapper.XEventsQueued(getDisplay(), XConstants.QueuedAfterFlush) == 0)) {
                         callTimeoutTasks();
                         waitForEvents(getNextTaskTime());
+                        if (state == 1) {
+                            state = 2;
+                            awtLockNotifyAll();
+                            while (state == 2) {
+                                awtLockWait();
+                            }
+                        }
                     }
                     XlibWrapper.XNextEvent(getDisplay(),ev.pData);
                 }

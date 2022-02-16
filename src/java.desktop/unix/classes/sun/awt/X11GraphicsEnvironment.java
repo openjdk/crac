@@ -40,9 +40,10 @@ import java.util.ListIterator;
 import java.util.Map;
 
 import sun.awt.X11.XToolkit;
-import sun.java2d.SunGraphicsEnvironment;
-import sun.java2d.SurfaceManagerFactory;
-import sun.java2d.UnixSurfaceManagerFactory;
+import jdk.crac.Context;
+import jdk.crac.Resource;
+import jdk.internal.crac.JDKResource;
+import sun.java2d.*;
 import sun.java2d.xr.XRSurfaceData;
 
 /**
@@ -55,6 +56,22 @@ import sun.java2d.xr.XRSurfaceData;
  */
 @SuppressWarnings("removal")
 public final class X11GraphicsEnvironment extends SunGraphicsEnvironment {
+    static JDKResource jdkResource = new JDKResource() {
+        @Override
+        public Priority getPriority() {
+            return Priority.X11GE;
+        }
+
+        @Override
+        public void beforeCheckpoint(Context<? extends Resource> context) throws Exception {
+            beforeCheckpoint0();
+        }
+
+        @Override
+        public void afterRestore(Context<? extends Resource> context) throws Exception {
+            afterRestore0();
+        }
+    };
 
     static {
         java.security.AccessController.doPrivileged(
@@ -131,6 +148,7 @@ public final class X11GraphicsEnvironment extends SunGraphicsEnvironment {
         // Install the correct surface manager factory.
         SurfaceManagerFactory.setInstance(new UnixSurfaceManagerFactory());
 
+        jdk.internal.crac.Core.getJDKContext().register(jdkResource);
     }
 
 
@@ -187,6 +205,9 @@ public final class X11GraphicsEnvironment extends SunGraphicsEnvironment {
      * the synchronized keyword.
      */
     private static native void initDisplay(boolean glxRequested);
+
+    private static native void beforeCheckpoint0();
+    private static native void afterRestore0();
 
     protected native int getNumScreens();
 

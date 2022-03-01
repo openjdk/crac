@@ -56,9 +56,10 @@ public interface JDKResource extends Resource {
          * sun.awt.X11.XRootWindow static resource
          */
         ROOT_WINDOW,
+
         /**
          * Priority of the
-         * sun.awt.X11.XToolKit resource
+         * sun.awt.X11.XToolkit resource
          */
         XTOOLKIT,
 
@@ -108,9 +109,15 @@ public interface JDKResource extends Resource {
          * jdk.internal.ref.CleanerImpl resources
          */
         CLEANERS,
+        /**
+         * Priority of the
+         * java.lang.invoke.MethodType.ConcurrentWeakInternSet
+         * static resource
+         */
+        CONCURRENT_SET,
 
         /* Keep this priority last to close X11 connection
-        * after dispoding objects from queue. */
+        * after disposing objects from queue. */
 
         /**
          * Priority of the

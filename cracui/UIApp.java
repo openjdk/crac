@@ -33,5 +33,7 @@ public class UIApp {
 				(new JFrame("test")).setVisible(true);
 			}
 		});
+
+		System.out.println("Exit");
 	}
 }

@@ -52,7 +52,7 @@ public class Core {
     private static final Object checkpointRestoreLock = new Object();
     private static boolean checkpointInProgress = false;
 
-    private static String[] newArgs = {};
+    private static String[] newArguments = {};
 
     private static class FlagsHolder {
         public static final boolean TRACE_STARTUP_TIME =
@@ -119,7 +119,7 @@ public class Core {
 
         final Object[] bundle = checkpointRestore0(checkpointException != null);
         final int retCode = (Integer)bundle[0];
-        final String newArgs = (String)bundle[1];
+        final String newArguments = (String)bundle[1];
         final int[] codes = (int[])bundle[2];
         final String[] messages = (String[])bundle[3];
 
@@ -146,7 +146,7 @@ public class Core {
         }
 
         if (checkpointException == null) {
-            Core.newArgs = newArgs != null ? newArgs.split(" ") : new String[0];
+            Core.newArguments = newArguments != null ? newArguments.split(" ") : new String[0];
         }
 
         try {
@@ -201,8 +201,13 @@ public class Core {
         }
     }
 
-    public static String[] newArgs() {
-        return Arrays.copyOf(newArgs, newArgs.length);
+    /**
+     * Gets new arguments provided after restore.
+     *
+     * @return new arguments
+     */
+    public static String[] newArguments() {
+        return Arrays.copyOf(newArguments, newArguments.length);
     }
 
     /* called by VM */

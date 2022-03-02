@@ -23,6 +23,12 @@
 DISPLAY=:1 ./jdk/bin/java -XX:+UnlockDiagnosticVMOptions -XX:+CRAllowToSkipCheckpoint -XX:CRaCCheckpointTo=./checkpoints -Djdk.crac.debug=true ./cracui/UIApp.java 1000 1000 1 1
 ```
 
+* x11trace: каждое сообщение на отдельной строке.
+По умолчанию завершается по отключению клиентов (аналог `scope -t` ) -- позволяет разделять логи для разных подключений:
+```
+for i in 1 2; do x11trace -D 1 > x11trace.$i.log; done
+```
+
 * xtruss: https://www.chiark.greenend.org.uk/~sgtatham/xtruss/
 * xmon
 * xtrace

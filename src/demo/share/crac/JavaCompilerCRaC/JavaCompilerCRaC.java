@@ -25,8 +25,5 @@ public class JavaCompilerCRaC {
         }
 
         Core.checkpointRestore();
-
-        String[] newArgs = Core.newArguments();
-        runJavac(Arrays.copyOfRange(newArgs, 1, newArgs.length));
     }
 }

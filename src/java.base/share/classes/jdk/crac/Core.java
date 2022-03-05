@@ -30,8 +30,11 @@ import jdk.crac.impl.CheckpointOpenFileException;
 import jdk.crac.impl.CheckpointOpenResourceException;
 import jdk.crac.impl.CheckpointOpenSocketException;
 import jdk.crac.impl.OrderedContext;
+import jdk.internal.reflect.CallerSensitive;
+import jdk.internal.reflect.Reflection;
 import sun.security.action.GetBooleanAction;
 
+import java.lang.reflect.Method;
 import java.util.Arrays;
 
 /**
@@ -51,8 +54,6 @@ public class Core {
 
     private static final Object checkpointRestoreLock = new Object();
     private static boolean checkpointInProgress = false;
-
-    private static String[] newArguments = {};
 
     private static class FlagsHolder {
         public static final boolean TRACE_STARTUP_TIME =
@@ -103,7 +104,7 @@ public class Core {
         return globalContext;
     }
 
-    private static void checkpointRestore1() throws
+    private static void checkpointRestore1(Class<?> callerClass) throws
             CheckpointException,
             RestoreException {
         CheckpointException checkpointException = null;
@@ -145,22 +146,45 @@ public class Core {
             }
         }
 
-        if (checkpointException == null) {
-            Core.newArguments = newArguments != null ? newArguments.split(" ") : new String[0];
-        }
-
+        RestoreException restoreException = null;
         try {
             globalContext.afterRestore(null);
         } catch (RestoreException re) {
             if (checkpointException == null) {
-                throw re;
-            }
-            for (Throwable t : re.getSuppressed()) {
-                checkpointException.addSuppressed(t);
+                restoreException = re;
+            } else {
+                for (Throwable t : re.getSuppressed()) {
+                    checkpointException.addSuppressed(t);
+                }
             }
         }
+
+        if (newArguments != null && newArguments.length() > 0) {
+            String[] args = newArguments.split(" ");
+            if (args.length > 0) {
+                try {
+                    Class<?> newMainClass = Class.forName(args[0], false,
+                        callerClass.getClassLoader());
+                    Method newMain = newMainClass.getDeclaredMethod("main",
+                        String[].class);
+                    newMain.invoke(null,
+                        (Object)Arrays.copyOfRange(args, 1, args.length));
+                } catch (Throwable e) {
+                    assert checkpointException == null :
+                        "should not have new arguments";
+                    if (restoreException == null) {
+                        restoreException = new RestoreException();
+                    }
+                    restoreException.addSuppressed(e);
+                }
+            }
+        }
+
+        assert checkpointException == null || restoreException == null;
         if (checkpointException != null) {
             throw checkpointException;
+        } else if (restoreException != null) {
+            throw restoreException;
         }
     }
 
@@ -176,6 +200,7 @@ public class Core {
      * supported, no notification performed and the execution continues in
      * the original Java instance.
      */
+    @CallerSensitive
     public static void checkpointRestore() throws
             CheckpointException,
             RestoreException {
@@ -188,7 +213,7 @@ public class Core {
             if (!checkpointInProgress) {
                 try {
                     checkpointInProgress = true;
-                    checkpointRestore1();
+                    checkpointRestore1(Reflection.getCallerClass());
                 } finally {
                     if (FlagsHolder.TRACE_STARTUP_TIME) {
                         System.out.println("STARTUPTIME " + System.nanoTime() + " restore-finish");
@@ -199,15 +224,6 @@ public class Core {
                 throw new CheckpointException("Recursive checkpoint is not allowed");
             }
         }
-    }
-
-    /**
-     * Gets new arguments provided after restore.
-     *
-     * @return new arguments
-     */
-    public static String[] newArguments() {
-        return Arrays.copyOf(newArguments, newArguments.length);
     }
 
     /* called by VM */

@@ -82,13 +82,4 @@ public class Core {
             throw newException;
         }
     }
-
-    /**
-     * Gets new arguments provided after restore.
-     *
-     * @return new arguments
-     */
-    public static String[] newArguments() {
-        return jdk.crac.Core.newArguments();
-    }
 }

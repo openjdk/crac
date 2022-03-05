@@ -5843,7 +5843,11 @@ static int call_crengine() {
 
 static int set_new_args(int id, const char *args) {
     char shmpath[128];
-    snprintf(shmpath, sizeof(shmpath), "/crac_%d", id);
+    int shmpathlen = snprintf(shmpath, sizeof(shmpath), "/crac_%d", id);
+    if (shmpathlen < 0 || sizeof(shmpath) <= (size_t)shmpathlen) {
+      fprintf(stderr, "shmpath is too long: %d\n", shmpathlen);
+      return -1;
+    }
 
     int shmfd = shm_open(shmpath, O_RDWR | O_CREAT, 0600);
     if (-1 == shmfd) {
@@ -5860,6 +5864,7 @@ static int set_new_args(int id, const char *args) {
             fprintf(stderr, "write shm truncated");
         }
         close(shmfd);
+        shm_unlink(shmpath);
         return -1;
     }
 

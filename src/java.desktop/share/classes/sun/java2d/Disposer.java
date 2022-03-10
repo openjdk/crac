@@ -112,7 +112,7 @@ public class Disposer implements Runnable, JDKResource {
 
     @Override
     public void afterRestore(Context<? extends Resource> context) throws Exception {
-
+        queue.waitForWaiters(1);
     }
 
     /**

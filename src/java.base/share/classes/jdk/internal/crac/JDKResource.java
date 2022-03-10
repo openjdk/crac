@@ -114,7 +114,7 @@ public interface JDKResource extends Resource {
          * java.lang.invoke.MethodType.ConcurrentWeakInternSet
          * static resource
          */
-        CONCURRENT_SET,
+        WEAK_INTERN_SET,
 
         /* Keep this priority last to close X11 connection
         * after disposing objects from queue. */

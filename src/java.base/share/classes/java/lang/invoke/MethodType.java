@@ -42,14 +42,15 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.stream.Stream;
 
-import jdk.crac.Context;
-import jdk.crac.Resource;
-import jdk.internal.crac.JDKResource;
 import jdk.internal.vm.annotation.Stable;
 import sun.invoke.util.BytecodeDescriptor;
 import sun.invoke.util.VerifyType;
 import sun.invoke.util.Wrapper;
 import sun.security.util.SecurityConstants;
+
+import jdk.crac.Context;
+import jdk.crac.Resource;
+import jdk.internal.crac.JDKResource;
 
 import static java.lang.invoke.MethodHandleStatics.UNSAFE;
 import static java.lang.invoke.MethodHandleStatics.newIllegalArgumentException;
@@ -1415,7 +1416,7 @@ s.writeObject(this.parameterArray());
 
         @Override
         public Priority getPriority() {
-            return Priority.CONCURRENT_SET;
+            return Priority.WEAK_INTERN_SET;
         }
 
         @Override

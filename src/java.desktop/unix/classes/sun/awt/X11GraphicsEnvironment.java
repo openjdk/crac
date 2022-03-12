@@ -56,7 +56,7 @@ import sun.java2d.xr.XRSurfaceData;
  */
 @SuppressWarnings("removal")
 public final class X11GraphicsEnvironment extends SunGraphicsEnvironment {
-    static JDKResource jdkResource = new JDKResource() {
+    private static final JDKResource x11GEResource = new JDKResource() {
         @Override
         public Priority getPriority() {
             return Priority.X11GE;
@@ -148,7 +148,7 @@ public final class X11GraphicsEnvironment extends SunGraphicsEnvironment {
         // Install the correct surface manager factory.
         SurfaceManagerFactory.setInstance(new UnixSurfaceManagerFactory());
 
-        jdk.internal.crac.Core.getJDKContext().register(jdkResource);
+        jdk.internal.crac.Core.getJDKContext().register(x11GEResource);
     }
 
 

@@ -219,7 +219,7 @@ public final class XToolkit extends UNIXToolkit implements Runnable {
 
     private static XMouseInfoPeer xPeer;
 
-    static final JDKResource jdkResource = (new JDKResource() {
+    private static final JDKResource xToolkitResource = new JDKResource() {
         @Override
         public Priority getPriority() {
             return Priority.XTOOLKIT;
@@ -244,7 +244,7 @@ public final class XToolkit extends UNIXToolkit implements Runnable {
             awtLockNotifyAll();
             awtUnlock();
         }
-    });
+    };
 
     static {
         initSecurityWarning();
@@ -262,7 +262,7 @@ public final class XToolkit extends UNIXToolkit implements Runnable {
             setBackingStoreType();
         }
 
-        jdk.internal.crac.Core.getJDKContext().register(jdkResource);
+        jdk.internal.crac.Core.getJDKContext().register(xToolkitResource);
     }
 
     /*

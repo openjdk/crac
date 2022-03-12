@@ -144,7 +144,7 @@ public final class XAtom {
     static HashMap<Long, XAtom> atomToAtom = new HashMap<Long, XAtom>();
     static HashMap<String, XAtom> nameToAtom = new HashMap<String, XAtom>();
 
-    static JDKResource xAtomResource = new JDKResource() {
+    private static final JDKResource xAtomResource = new JDKResource() {
         @Override
         public Priority getPriority () {
             return Priority.XATOM;

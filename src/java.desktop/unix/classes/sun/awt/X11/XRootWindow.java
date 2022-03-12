@@ -39,7 +39,17 @@ class XRootWindow extends XBaseWindow {
     private static class LazyHolder {
         private static XRootWindow xawtRootWindow;
 
-        static JDKResource jdkResource = new JDKResource() {
+        private static void init() {
+            XToolkit.awtLock();
+            try {
+                xawtRootWindow = new XRootWindow();
+                xawtRootWindow.init(xawtRootWindow.getDelayedParams().delete(DELAYED));
+            } finally {
+                XToolkit.awtUnlock();
+            }
+        }
+
+        private static final JDKResource xRootWindowResource = new JDKResource() {
             @Override
             public Priority getPriority() {
                 return Priority.XROOTWINDOW;
@@ -52,26 +62,14 @@ class XRootWindow extends XBaseWindow {
 
             @Override
             public void afterRestore(Context<? extends Resource> context) throws Exception {
-                XToolkit.awtLock();
-                try {
-                    xawtRootWindow = new XRootWindow();
-                    xawtRootWindow.init(xawtRootWindow.getDelayedParams().delete(DELAYED));
-                } finally {
-                    XToolkit.awtUnlock();
-                }
+                init();
             }
         };
 
         static {
-            XToolkit.awtLock();
-            try {
-                xawtRootWindow = new XRootWindow();
-                xawtRootWindow.init(xawtRootWindow.getDelayedParams().delete(DELAYED));
-            } finally {
-                XToolkit.awtUnlock();
-            }
+            init();
 
-            jdk.internal.crac.Core.getJDKContext().register(jdkResource);
+            jdk.internal.crac.Core.getJDKContext().register(xRootWindowResource);
         }
 
     }

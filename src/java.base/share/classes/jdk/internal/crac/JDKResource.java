@@ -62,6 +62,11 @@ public interface JDKResource extends Resource {
          * sun.awt.X11.XToolkit resource
          */
         XTOOLKIT,
+        /**
+         * Priority of the
+         * sun.awt.X11.XAtom static resource
+         */
+        XATOM,
 
         /* Use this priority in most cases. */
 

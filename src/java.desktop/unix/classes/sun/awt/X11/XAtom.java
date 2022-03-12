@@ -61,8 +61,11 @@ package sun.awt.X11;
 import jdk.internal.misc.Unsafe;
 import java.util.HashMap;
 
-public final class XAtom {
+import jdk.crac.Context;
+import jdk.crac.Resource;
+import jdk.internal.crac.JDKResource;
 
+public final class XAtom {
     // Order of lock:  XAWTLock -> XAtom.class
 
     /* Predefined Atoms - automatically extracted from XAtom.h */
@@ -140,6 +143,29 @@ public final class XAtom {
     public static final long XA_LAST_PREDEFINED=68;
     static HashMap<Long, XAtom> atomToAtom = new HashMap<Long, XAtom>();
     static HashMap<String, XAtom> nameToAtom = new HashMap<String, XAtom>();
+
+    static {
+        JDKResource xAtomResource = new JDKResource() {
+            @Override
+            public Priority getPriority () {
+                return Priority.XATOM;
+            }
+
+            @Override
+            public void beforeCheckpoint (Context < ? extends Resource > context) throws Exception {
+                atomToAtom.clear();
+                nameToAtom.clear();
+            }
+
+            @Override
+            public void afterRestore (Context < ? extends Resource > context) throws Exception {
+
+            }
+        };
+
+        jdk.internal.crac.Core.getJDKContext().register(xAtomResource);
+    }
+
     static void register(XAtom at) {
         if (at == null) {
             return;

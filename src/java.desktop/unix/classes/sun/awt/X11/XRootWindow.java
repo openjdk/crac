@@ -42,7 +42,7 @@ class XRootWindow extends XBaseWindow {
         static JDKResource jdkResource = new JDKResource() {
             @Override
             public Priority getPriority() {
-                return Priority.ROOT_WINDOW;
+                return Priority.XROOTWINDOW;
             }
 
             @Override

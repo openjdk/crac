@@ -144,25 +144,25 @@ public final class XAtom {
     static HashMap<Long, XAtom> atomToAtom = new HashMap<Long, XAtom>();
     static HashMap<String, XAtom> nameToAtom = new HashMap<String, XAtom>();
 
+    static JDKResource xAtomResource = new JDKResource() {
+        @Override
+        public Priority getPriority () {
+            return Priority.XATOM;
+        }
+
+        @Override
+        public void beforeCheckpoint (Context < ? extends Resource > context) throws Exception {
+            atomToAtom.clear();
+            nameToAtom.clear();
+        }
+
+        @Override
+        public void afterRestore (Context < ? extends Resource > context) throws Exception {
+
+        }
+    };
+
     static {
-        JDKResource xAtomResource = new JDKResource() {
-            @Override
-            public Priority getPriority () {
-                return Priority.XATOM;
-            }
-
-            @Override
-            public void beforeCheckpoint (Context < ? extends Resource > context) throws Exception {
-                atomToAtom.clear();
-                nameToAtom.clear();
-            }
-
-            @Override
-            public void afterRestore (Context < ? extends Resource > context) throws Exception {
-
-            }
-        };
-
         jdk.internal.crac.Core.getJDKContext().register(xAtomResource);
     }
 

@@ -40,11 +40,12 @@ import java.util.ListIterator;
 import java.util.Map;
 
 import sun.awt.X11.XToolkit;
+import sun.java2d.*;
+import sun.java2d.xr.XRSurfaceData;
+
 import jdk.crac.Context;
 import jdk.crac.Resource;
 import jdk.internal.crac.JDKResource;
-import sun.java2d.*;
-import sun.java2d.xr.XRSurfaceData;
 
 /**
  * This is an implementation of a GraphicsEnvironment object for the

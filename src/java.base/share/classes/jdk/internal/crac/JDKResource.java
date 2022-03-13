@@ -56,12 +56,27 @@ public interface JDKResource extends Resource {
          * sun.awt.X11.XRootWindow static resource
          */
         XROOTWINDOW,
+        /**
+         * Priority of the
+         * sun.awt.X11.XWindow static resource
+         */
+        XWINDOW,
+        /**
+         * Priority of the
+         * sun.awt.X11.XBaseWindow static resource
+         */
+        XBASEWINDOW,
 
         /**
          * Priority of the
-         * sun.awt.X11.XToolkit resource
+         * sun.awt.X11.XToolkit static resource
          */
         XTOOLKIT,
+        /**
+         * Priority of the
+         * sun.awt.X11.XWM static resource
+         */
+        XWM,
         /**
          * Priority of the
          * sun.awt.X11.XAtom static resource
@@ -117,7 +132,7 @@ public interface JDKResource extends Resource {
         /**
          * Priority of the
          * java.lang.invoke.MethodType.ConcurrentWeakInternSet
-         * static resource
+         * resource
          */
         WEAK_INTERN_SET,
 
@@ -126,7 +141,7 @@ public interface JDKResource extends Resource {
 
         /**
          * Priority of the
-         * sun.awt.X11GraphicsEnvironment resource
+         * sun.awt.X11GraphicsEnvironment static resource
          */
         X11GE,
     };

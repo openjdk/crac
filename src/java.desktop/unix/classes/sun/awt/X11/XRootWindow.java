@@ -29,7 +29,6 @@ import jdk.crac.Context;
 import jdk.crac.Resource;
 import jdk.internal.crac.JDKResource;
 
-
 /**
  * This class represents AWT application root window functionality.
  * Object of this class is singleton, all window reference it to have

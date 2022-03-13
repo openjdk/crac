@@ -26,9 +26,14 @@
 package sun.awt.X11;
 
 import java.awt.*;
+
 import sun.awt.*;
 import java.util.*;
 import sun.util.logging.PlatformLogger;
+
+import jdk.crac.Context;
+import jdk.crac.Resource;
+import jdk.internal.crac.JDKResource;
 
 public class XBaseWindow {
     private static final PlatformLogger log = PlatformLogger.getLogger("sun.awt.X11.XBaseWindow");
@@ -36,6 +41,27 @@ public class XBaseWindow {
     private static final PlatformLogger eventLog = PlatformLogger.getLogger("sun.awt.X11.event.XBaseWindow");
     private static final PlatformLogger focusLog = PlatformLogger.getLogger("sun.awt.X11.focus.XBaseWindow");
     private static final PlatformLogger grabLog = PlatformLogger.getLogger("sun.awt.X11.grab.XBaseWindow");
+
+    private static final JDKResource xBaseWindowResource = new JDKResource() {
+        @Override
+        public Priority getPriority() {
+            return Priority.XBASEWINDOW;
+        }
+
+        @Override
+        public void beforeCheckpoint(Context<? extends Resource> context) throws Exception {
+            wm_client_leader = null;
+        }
+
+        @Override
+        public void afterRestore(Context<? extends Resource> context) throws Exception {
+
+        }
+    };
+
+    static {
+        jdk.internal.crac.Core.getJDKContext().register(xBaseWindowResource);
+    }
 
     public static final String
         PARENT_WINDOW = "parent window", // parent window, Long
@@ -163,7 +189,7 @@ public class XBaseWindow {
         updateWMName();
 
         // Set WM_CLIENT_LEADER property
-        initClientLeader();
+        initClientLeader(this);
     }
 
     /**
@@ -410,13 +436,13 @@ public class XBaseWindow {
         return XToolkit.getCorrectXIDString(getClass().getName());
     }
 
-    protected void initClientLeader() {
+    protected static void initClientLeader(XBaseWindow window) {
         XToolkit.awtLock();
         try {
             if (wm_client_leader == null) {
                 wm_client_leader = XAtom.get("WM_CLIENT_LEADER");
             }
-            wm_client_leader.setWindowProperty(this, getXAWTRootWindow());
+            wm_client_leader.setWindowProperty(window, getXAWTRootWindow());
         } finally {
             XToolkit.awtUnlock();
         }

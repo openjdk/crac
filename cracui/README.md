@@ -4,8 +4,20 @@
 
 Запускать из корня проекта **cracui**.
 
+
 ```
-./jdk/bin/java -XX:+UnlockDiagnosticVMOptions -XX:+CRAllowToSkipCheckpoint -XX:CRaCCheckpointTo=./checkpoints -Djdk.crac.debug=true ./cracui/UIApp.java 1000 1000 1 1
+DISPLAY=:1 ./jdk/bin/java -XX:+UnlockDiagnosticVMOptions \
+  -XX:+CRAllowToSkipCheckpoint \
+  -XX:CRaCCheckpointTo=./checkpoints \
+  -Djdk.crac.debug=true \
+  ./cracui/UIApp.java 1000 1000 1 1
+```
+
+Лучше запускать на виртуальном X сервере, чтобы в случае проблем легко перезапустить сервер
+```
+Xvnc -SecurityTypes None :1 &
+DISPLAY=:1 i3 & # запустить какой-нибудь WM
+DISPLAY=:1 java ...
 ```
 
 ## Отладка

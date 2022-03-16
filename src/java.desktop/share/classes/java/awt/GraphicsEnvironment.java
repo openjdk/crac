@@ -31,6 +31,9 @@ import java.security.AccessController;
 import java.security.PrivilegedAction;
 import java.util.Locale;
 
+import jdk.crac.Context;
+import jdk.crac.Resource;
+import jdk.internal.crac.JDKResource;
 import sun.awt.PlatformGraphicsInfo;
 import sun.font.FontManager;
 import sun.font.FontManagerFactory;
@@ -78,10 +81,31 @@ public abstract class GraphicsEnvironment {
      */
     private static final class LocalGE {
 
+        static final JDKResource localGEResource = new JDKResource() {
+            @Override
+            public Priority getPriority() {
+                return Priority.GE;
+            }
+
+            @Override
+            public void beforeCheckpoint(Context<? extends Resource> context) throws Exception {
+                INSTANCE = null;
+            }
+
+            @Override
+            public void afterRestore(Context<? extends Resource> context) throws Exception {
+                INSTANCE = createGE();
+            }
+        };
+
+        static {
+            jdk.internal.crac.Core.getJDKContext().register(localGEResource);
+        }
+
         /**
          * The instance of the local {@code GraphicsEnvironment}.
          */
-        static final GraphicsEnvironment INSTANCE = createGE();
+        static GraphicsEnvironment INSTANCE = createGE();
 
         /**
          * Creates and returns the GraphicsEnvironment, according to the

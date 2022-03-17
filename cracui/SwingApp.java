@@ -12,9 +12,10 @@ public class SwingApp {
 		System.out.println("Window 1 created");
 		Thread.sleep(sleep1);
 
-		jframe.removeNotify();
-		System.out.println("Window 1 deleted");
-		Thread.sleep(sleep1);
+		// Uncomment following lines to have correct exit
+//		jframe.removeNotify();
+//		System.out.println("Window 1 deleted");
+//		Thread.sleep(sleep1);
 
 		System.out.println("Try to make a checkpoint and then restore...");
 		try {
@@ -29,6 +30,11 @@ public class SwingApp {
 		jframe.setVisible(true);
 		System.out.println("Window 2 created");
 		Thread.sleep(sleep2);
+
+		// Uncomment following lines to have correct exit
+//		jframe.removeNotify();
+//		System.out.println("Window 2 deleted");
+//		Thread.sleep(sleep2);
 
 		System.out.println("Exit");
 	}

@@ -34,6 +34,7 @@ import jdk.internal.reflect.CallerSensitive;
 import jdk.internal.reflect.Reflection;
 import sun.security.action.GetBooleanAction;
 
+import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.util.Arrays;
 
@@ -169,7 +170,10 @@ public class Core {
                         String[].class);
                     newMain.invoke(null,
                         (Object)Arrays.copyOfRange(args, 1, args.length));
-                } catch (Throwable e) {
+                } catch (ClassNotFoundException    |
+                         InvocationTargetException |
+                         NoSuchMethodException     |
+                         IllegalAccessException e) {
                     assert checkpointException == null :
                         "should not have new arguments";
                     if (restoreException == null) {

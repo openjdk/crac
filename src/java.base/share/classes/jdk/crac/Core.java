@@ -105,7 +105,7 @@ public class Core {
         return globalContext;
     }
 
-    private static void checkpointRestore1(Class<?> callerClass) throws
+    private static void checkpointRestore1() throws
             CheckpointException,
             RestoreException {
         CheckpointException checkpointException = null;
@@ -165,9 +165,10 @@ public class Core {
             if (args.length > 0) {
                 try {
                     Class<?> newMainClass = Class.forName(args[0], false,
-                        callerClass.getClassLoader());
+                        ClassLoader.getSystemClassLoader());
                     Method newMain = newMainClass.getDeclaredMethod("main",
                         String[].class);
+                    newMain.setAccessible(true);
                     newMain.invoke(null,
                         (Object)Arrays.copyOfRange(args, 1, args.length));
                 } catch (ClassNotFoundException    |
@@ -204,7 +205,6 @@ public class Core {
      * supported, no notification performed and the execution continues in
      * the original Java instance.
      */
-    @CallerSensitive
     public static void checkpointRestore() throws
             CheckpointException,
             RestoreException {
@@ -217,7 +217,7 @@ public class Core {
             if (!checkpointInProgress) {
                 try {
                     checkpointInProgress = true;
-                    checkpointRestore1(Reflection.getCallerClass());
+                    checkpointRestore1();
                 } finally {
                     if (FlagsHolder.TRACE_STARTUP_TIME) {
                         System.out.println("STARTUPTIME " + System.nanoTime() + " restore-finish");

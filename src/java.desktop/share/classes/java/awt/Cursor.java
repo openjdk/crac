@@ -31,12 +31,17 @@ import java.io.Serial;
 import java.security.AccessController;
 import java.security.PrivilegedAction;
 import java.security.PrivilegedExceptionAction;
+import java.util.Arrays;
 import java.util.Hashtable;
 import java.util.Properties;
 import java.util.StringTokenizer;
 
 import sun.awt.AWTAccessor;
 import sun.util.logging.PlatformLogger;
+
+import jdk.crac.Context;
+import jdk.crac.Resource;
+import jdk.internal.crac.JDKResource;
 
 /**
  * A class to encapsulate the bitmap representation of the mouse cursor.
@@ -45,6 +50,24 @@ import sun.util.logging.PlatformLogger;
  * @author      Amy Fowler
  */
 public class Cursor implements java.io.Serializable {
+
+    private static final JDKResource cursorResource = new JDKResource() {
+        @Override
+        public Priority getPriority() {
+            return Priority.CURSOR;
+        }
+
+        @Override
+        public void beforeCheckpoint(Context<? extends Resource> context) throws Exception {
+            Arrays.fill(predefinedPrivate, null);
+            Arrays.fill(predefined, null);
+        }
+
+        @Override
+        public void afterRestore(Context<? extends Resource> context) throws Exception {
+
+        }
+    };
 
     /**
      * The default cursor type (gets set if no cursor is defined).
@@ -204,6 +227,8 @@ public class Cursor implements java.io.Serializable {
                     return cursor.type;
                 }
             });
+
+        jdk.internal.crac.Core.getJDKContext().register(cursorResource);
     }
 
     /**

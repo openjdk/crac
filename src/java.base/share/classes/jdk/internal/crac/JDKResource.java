@@ -48,8 +48,8 @@ public interface JDKResource extends Resource {
      * in the direct order of registration.
      */
     enum Priority {
-        /* Keep this priorities first to collect X11 objects
-         * by GC before its dispoding from queue. */
+        /* Keep next priorities first to clear
+        and reinitialize X11 resources correctly */
 
         /**
          * Priority of the
@@ -66,7 +66,6 @@ public interface JDKResource extends Resource {
          * sun.awt.X11.XBaseWindow static resource
          */
         XBASEWINDOW,
-
         /**
          * Priority of the
          * sun.awt.X11.XToolkit static resource
@@ -82,6 +81,12 @@ public interface JDKResource extends Resource {
          * sun.awt.X11.XAtom static resource
          */
         XATOM,
+        /**
+         * Priority of the
+         * sun.awt.Cursor static resource
+         */
+        CURSOR,
+
 
         /* Use this priority in most cases. */
 
@@ -89,6 +94,8 @@ public interface JDKResource extends Resource {
          * Most resources should use this option.
          */
         NORMAL,
+
+
 
         /**
          * Priority of the
@@ -111,7 +118,8 @@ public interface JDKResource extends Resource {
          */
         SEEDER_HOLDER,
 
-        /* Keep next priorities last to ensure handling of pending References
+
+        /* Keep next priorities here to ensure handling of pending References
          * appeared on earlier priorities. */
 
         /**
@@ -136,8 +144,9 @@ public interface JDKResource extends Resource {
          */
         WEAK_INTERN_SET,
 
-        /* Keep this priority last to close X11 connection
-        * after disposing objects from queue. */
+
+        /* Keep next priorities last to close
+        and open X11 connection correctly */
 
         /**
          * Priority of the

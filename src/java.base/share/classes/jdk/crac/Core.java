@@ -30,12 +30,13 @@ import jdk.crac.impl.CheckpointOpenFileException;
 import jdk.crac.impl.CheckpointOpenResourceException;
 import jdk.crac.impl.CheckpointOpenSocketException;
 import jdk.crac.impl.OrderedContext;
-import jdk.internal.reflect.CallerSensitive;
-import jdk.internal.reflect.Reflection;
 import sun.security.action.GetBooleanAction;
 
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
+import java.security.AccessController;
+import java.security.PrivilegedActionException;
+import java.security.PrivilegedExceptionAction;
 import java.util.Arrays;
 
 /**
@@ -105,6 +106,7 @@ public class Core {
         return globalContext;
     }
 
+    @SuppressWarnings("removal")
     private static void checkpointRestore1() throws
             CheckpointException,
             RestoreException {
@@ -164,16 +166,21 @@ public class Core {
             String[] args = newArguments.split(" ");
             if (args.length > 0) {
                 try {
-                    Class<?> newMainClass = Class.forName(args[0], false,
-                        ClassLoader.getSystemClassLoader());
-                    Method newMain = newMainClass.getDeclaredMethod("main",
-                        String[].class);
-                    newMain.setAccessible(true);
+                    Method newMain = AccessController.doPrivileged(new PrivilegedExceptionAction<Method>() {
+                       @Override
+                       public Method run() throws Exception {
+                           Class < ?> newMainClass = Class.forName(args[0], false,
+                               ClassLoader.getSystemClassLoader());
+                           Method newMain = newMainClass.getDeclaredMethod("main",
+                               String[].class);
+                           newMain.setAccessible(true);
+                           return newMain;
+                       }
+                    });
                     newMain.invoke(null,
                         (Object)Arrays.copyOfRange(args, 1, args.length));
-                } catch (ClassNotFoundException    |
+                } catch (PrivilegedActionException |
                          InvocationTargetException |
-                         NoSuchMethodException     |
                          IllegalAccessException e) {
                     assert checkpointException == null :
                         "should not have new arguments";

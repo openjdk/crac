@@ -8,14 +8,11 @@ public class SwingApp {
 		boolean snd = 0 != Integer.parseInt(args[3]);
 
 		JFrame jframe = new JFrame("SwingApp");
+		jframe.setDefaultCloseOperation(WindowConstants.EXIT_ON_CLOSE);
+		jframe.setSize(800, 600);
 		jframe.setVisible(true);
 		System.out.println("Window 1 created");
 		Thread.sleep(sleep1);
-
-		// Uncomment following lines to have correct exit
-//		jframe.removeNotify();
-//		System.out.println("Window 1 deleted");
-//		Thread.sleep(sleep1);
 
 		System.out.println("Try to make a checkpoint and then restore...");
 		try {
@@ -24,18 +21,15 @@ public class SwingApp {
 			e.printStackTrace();
 		}
 		System.out.println("Checkpoint restored");
-		Thread.sleep(sleep2);
 
 		jframe = new JFrame("SwingApp");
+		jframe.setDefaultCloseOperation(WindowConstants.EXIT_ON_CLOSE);
+		jframe.setSize(800, 600);
 		jframe.setVisible(true);
 		System.out.println("Window 2 created");
 		Thread.sleep(sleep2);
 
-		// Uncomment following lines to have correct exit
-//		jframe.removeNotify();
-//		System.out.println("Window 2 deleted");
-//		Thread.sleep(sleep2);
-
 		System.out.println("Exit");
+		System.exit(0);
 	}
 }

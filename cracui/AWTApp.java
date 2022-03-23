@@ -1,4 +1,6 @@
 import java.awt.*;
+import java.awt.event.WindowAdapter;
+import java.awt.event.WindowEvent;
 
 public class AWTApp {
 	public static void main(String[] args) throws Exception {
@@ -8,14 +10,16 @@ public class AWTApp {
 		boolean snd = 0 != Integer.parseInt(args[3]);
 
 		Frame frame = new Frame("AWTApp");
+		frame.addWindowListener(new WindowAdapter() {
+			@Override
+			public void windowClosing(WindowEvent e) {
+				System.exit(0);
+			}
+		});
+		frame.setSize(800, 600);
 		frame.setVisible(true);
 		System.out.println("Window 1 created");
 		Thread.sleep(sleep1);
-
-		// Uncomment following lines to have correct exit
-//		frame.removeNotify();
-//		System.out.println("Window 1 deleted");
-//		Thread.sleep(sleep1);
 
 		System.out.println("Try to make a checkpoint and then restore...");
 		try {
@@ -24,18 +28,20 @@ public class AWTApp {
 			e.printStackTrace();
 		}
 		System.out.println("Checkpoint restored");
-		Thread.sleep(sleep2);
 
-		frame = new Frame();
+		frame = new Frame("AWTApp");
+		frame.addWindowListener(new WindowAdapter() {
+			@Override
+			public void windowClosing(WindowEvent e) {
+				System.exit(0);
+			}
+		});
+		frame.setSize(800, 600);
 		frame.setVisible(true);
 		System.out.println("Window 2 created");
 		Thread.sleep(sleep2);
 
-		// Uncomment following lines to have correct exit
-//		frame.removeNotify();
-//		System.out.println("Window 2 deleted");
-//		Thread.sleep(sleep2);
-
 		System.out.println("Exit");
+		System.exit(0);
 	}
 }

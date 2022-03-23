@@ -68,11 +68,6 @@ public interface JDKResource extends Resource {
         XBASEWINDOW,
         /**
          * Priority of the
-         * sun.awt.X11.XToolkit static resource
-         */
-        XTOOLKIT,
-        /**
-         * Priority of the
          * sun.awt.X11.XWM static resource
          */
         XWM,
@@ -81,6 +76,11 @@ public interface JDKResource extends Resource {
          * sun.awt.X11.XAtom static resource
          */
         XATOM,
+        /**
+         * Priority of the
+         * sun.awt.X11.XToolkit static resource
+         */
+        XTOOLKIT,
         /**
          * Priority of the
          * sun.awt.Cursor static resource

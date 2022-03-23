@@ -202,8 +202,8 @@ public final class XToolkit extends UNIXToolkit implements Runnable {
     static HashMap<Object, Object> specialPeerMap = new HashMap<>();
     static HashMap<Long, Collection<XEventDispatcher>> winToDispatcher = new HashMap<>();
     static UIDefaults uidefaults;
-    static final X11GraphicsEnvironment localEnv;
-    private static final X11GraphicsDevice device;
+    static X11GraphicsEnvironment localEnv;
+    private static X11GraphicsDevice device;
     private static long display;
     static int awt_multiclick_time;
     static boolean securityWarningEnabled;
@@ -233,11 +233,15 @@ public final class XToolkit extends UNIXToolkit implements Runnable {
                 awtLockWait(10);
             }
             awtUnlock();
+
+            localEnv = null;
+            device = null;
+            display = 0;
         }
 
         @Override
         public void afterRestore(Context<? extends Resource> context) throws Exception {
-            display = device.getDisplay();
+            initStatic();
 
             awtLock();
             state = 0;
@@ -246,7 +250,7 @@ public final class XToolkit extends UNIXToolkit implements Runnable {
         }
     };
 
-    static {
+    private static void initStatic() {
         initSecurityWarning();
         if (GraphicsEnvironment.isHeadless()) {
             localEnv = null;
@@ -254,13 +258,17 @@ public final class XToolkit extends UNIXToolkit implements Runnable {
             display = 0;
         } else {
             localEnv = (X11GraphicsEnvironment) GraphicsEnvironment
-                .getLocalGraphicsEnvironment();
+                    .getLocalGraphicsEnvironment();
             device = (X11GraphicsDevice) localEnv.getDefaultScreenDevice();
             display = device.getDisplay();
             setupModifierMap();
             initIDs();
             setBackingStoreType();
         }
+    }
+
+    static {
+        initStatic();
 
         jdk.internal.crac.Core.getJDKContext().register(xToolkitResource);
     }

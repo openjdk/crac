@@ -64,6 +64,7 @@ final class XWM
 
         @Override
         public void beforeCheckpoint(Context<? extends Resource> context) throws Exception {
+            awt_wmgr = XWM.UNDETERMINED_WM;
             wm = null;
             g_net_protocol = null;
             g_win_protocol = null;

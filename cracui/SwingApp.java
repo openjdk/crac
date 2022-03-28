@@ -30,6 +30,6 @@ public class SwingApp {
 		Thread.sleep(sleep2);
 
 		System.out.println("Exit");
-		System.exit(0);
+//		System.exit(0);
 	}
 }

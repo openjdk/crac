@@ -64,7 +64,12 @@ final class XWM
 
         @Override
         public void beforeCheckpoint(Context<? extends Resource> context) throws Exception {
+            awtWMNonReparenting = -1;
+            awtWMStaticGravity = -1;
+
+            winmgr_running = false;
             awt_wmgr = XWM.UNDETERMINED_WM;
+
             wm = null;
             g_net_protocol = null;
             g_win_protocol = null;
@@ -73,6 +78,28 @@ final class XWM
 
         @Override
         public void afterRestore(Context<? extends Resource> context) throws Exception {
+            XA_MWM_HINTS = new XAtom();
+            XA_WM_STATE = new XAtom();
+            XA_E_FRAME_SIZE = new XAtom();
+            XA_KDE_NET_WM_FRAME_STRUT = new XAtom();
+            XA_KWM_WIN_ICONIFIED = new XAtom();
+            XA_KWM_WIN_MAXIMIZED = new XAtom();
+            XA_OL_DECOR_DEL = new XAtom();
+            XA_OL_DECOR_HEADER = new XAtom();
+            XA_OL_DECOR_RESIZE = new XAtom();
+            XA_OL_DECOR_PIN = new XAtom();
+            XA_OL_DECOR_CLOSE = new XAtom();
+            XA_NET_FRAME_EXTENTS = new XAtom();
+            XA_NET_REQUEST_FRAME_EXTENTS = new XAtom();
+
+            XA_ENLIGHTENMENT_COMMS = new XAtom("ENLIGHTENMENT_COMMS", false);
+            XA_DT_SM_WINDOW_INFO = new XAtom("_DT_SM_WINDOW_INFO", false);
+            XA_DT_SM_STATE_INFO = new XAtom("_DT_SM_STATE_INFO", false);
+            XA_MOTIF_WM_INFO = new XAtom("_MOTIF_WM_INFO", false);
+            XA_DT_WORKSPACE_CURRENT = new XAtom("_DT_WORKSPACE_CURRENT", false);
+            XA_ICEWM_WINOPTHINT = new XAtom("_ICEWM_WINOPTHINT", false);
+            XA_SUN_WM_PROTOCOLS = new XAtom("_SUN_WM_PROTOCOLS", false);
+
             init();
         }
     };
@@ -81,7 +108,7 @@ final class XWM
         jdk.internal.crac.Core.getJDKContext().register(xWMResource);
     }
 
-    static final XAtom XA_MWM_HINTS = new XAtom();
+    static XAtom XA_MWM_HINTS = new XAtom();
 
     private static Unsafe unsafe = XlibWrapper.unsafe;
 
@@ -96,25 +123,25 @@ final class XWM
     static final int AWT_NET_N_KNOWN_STATES=2;
 
 /* Enlightenment */
-    static final XAtom XA_E_FRAME_SIZE = new XAtom();
+    static XAtom XA_E_FRAME_SIZE = new XAtom();
 
 /* KWin (KDE2) */
-    static final XAtom XA_KDE_NET_WM_FRAME_STRUT = new XAtom();
+    static XAtom XA_KDE_NET_WM_FRAME_STRUT = new XAtom();
 
 /* KWM (KDE 1.x) OBSOLETE??? */
-    static final XAtom XA_KWM_WIN_ICONIFIED = new XAtom();
-    static final XAtom XA_KWM_WIN_MAXIMIZED = new XAtom();
+    static XAtom XA_KWM_WIN_ICONIFIED = new XAtom();
+    static XAtom XA_KWM_WIN_MAXIMIZED = new XAtom();
 
 /* OpenLook */
-    static final XAtom XA_OL_DECOR_DEL = new XAtom();
-    static final XAtom XA_OL_DECOR_HEADER = new XAtom();
-    static final XAtom XA_OL_DECOR_RESIZE = new XAtom();
-    static final XAtom XA_OL_DECOR_PIN = new XAtom();
-    static final XAtom XA_OL_DECOR_CLOSE = new XAtom();
+    static XAtom XA_OL_DECOR_DEL = new XAtom();
+    static XAtom XA_OL_DECOR_HEADER = new XAtom();
+    static XAtom XA_OL_DECOR_RESIZE = new XAtom();
+    static XAtom XA_OL_DECOR_PIN = new XAtom();
+    static XAtom XA_OL_DECOR_CLOSE = new XAtom();
 
 /* EWMH */
-    static final XAtom XA_NET_FRAME_EXTENTS = new XAtom();
-    static final XAtom XA_NET_REQUEST_FRAME_EXTENTS = new XAtom();
+    static XAtom XA_NET_FRAME_EXTENTS = new XAtom();
+    static XAtom XA_NET_REQUEST_FRAME_EXTENTS = new XAtom();
 
     static final int
         UNDETERMINED_WM = 1,
@@ -443,8 +470,8 @@ final class XWM
      *
      * XXX: Any header that defines this structures???
      */
-    static final XAtom XA_DT_SM_WINDOW_INFO = new XAtom("_DT_SM_WINDOW_INFO", false);
-    static final XAtom XA_DT_SM_STATE_INFO = new XAtom("_DT_SM_STATE_INFO", false);
+    static XAtom XA_DT_SM_WINDOW_INFO = new XAtom("_DT_SM_WINDOW_INFO", false);
+    static XAtom XA_DT_SM_STATE_INFO = new XAtom("_DT_SM_STATE_INFO", false);
     static boolean isCDE() {
 
         if (!XA_DT_SM_WINDOW_INFO.isInterned()) {
@@ -520,8 +547,8 @@ final class XWM
      * second element of the property and check for presence of
      * _DT_SM_STATE_INFO(_DT_SM_STATE_INFO) on that window.
      */
-    static final XAtom XA_MOTIF_WM_INFO = new XAtom("_MOTIF_WM_INFO", false);
-    static final XAtom XA_DT_WORKSPACE_CURRENT = new XAtom("_DT_WORKSPACE_CURRENT", false);
+    static XAtom XA_MOTIF_WM_INFO = new XAtom("_MOTIF_WM_INFO", false);
+    static XAtom XA_DT_WORKSPACE_CURRENT = new XAtom("_DT_WORKSPACE_CURRENT", false);
     static boolean isMotif() {
 
         if (!(XA_MOTIF_WM_INFO.isInterned()/* && XA_DT_WORKSPACE_CURRENT.isInterned()*/) ) {
@@ -651,7 +678,7 @@ final class XWM
      *
      * Gaa, dirty dances...
      */
-    static final XAtom XA_ICEWM_WINOPTHINT = new XAtom("_ICEWM_WINOPTHINT", false);
+    static XAtom XA_ICEWM_WINOPTHINT = new XAtom("_ICEWM_WINOPTHINT", false);
     static final char[] opt = {
         'A','W','T','_','I','C','E','W','M','_','T','E','S','T','\0',
         'a','l','l','W','o','r','k','s','p','a','c','e','s','\0',
@@ -728,7 +755,7 @@ final class XWM
      * This one is pretty lame, but the only property peculiar to OLWM is
      * _SUN_WM_PROTOCOLS(ATOM[]).  Fortunately, olwm deletes it on exit.
      */
-    static final XAtom XA_SUN_WM_PROTOCOLS = new XAtom("_SUN_WM_PROTOCOLS", false);
+    static XAtom XA_SUN_WM_PROTOCOLS = new XAtom("_SUN_WM_PROTOCOLS", false);
     static boolean isOpenLook() {
         if (!XA_SUN_WM_PROTOCOLS.isInterned()) {
             return false;

@@ -48,10 +48,6 @@ import sun.invoke.util.VerifyType;
 import sun.invoke.util.Wrapper;
 import sun.security.util.SecurityConstants;
 
-import jdk.crac.Context;
-import jdk.crac.Resource;
-import jdk.internal.crac.JDKResource;
-
 import static java.lang.invoke.MethodHandleStatics.UNSAFE;
 import static java.lang.invoke.MethodHandleStatics.newIllegalArgumentException;
 import static java.lang.invoke.MethodType.fromDescriptor;
@@ -1348,7 +1344,7 @@ s.writeObject(this.parameterArray());
      *
      * @param <T> interned type
      */
-    private static class ConcurrentWeakInternSet<T> implements JDKResource {
+    private static class ConcurrentWeakInternSet<T> {
 
         private final ConcurrentMap<WeakEntry<T>, WeakEntry<T>> map;
         private final ReferenceQueue<T> stale;
@@ -1356,8 +1352,6 @@ s.writeObject(this.parameterArray());
         public ConcurrentWeakInternSet() {
             this.map = new ConcurrentHashMap<>(512);
             this.stale = new ReferenceQueue<>();
-
-            jdk.internal.crac.Core.getJDKContext().register(this);
         }
 
         /**
@@ -1412,21 +1406,6 @@ s.writeObject(this.parameterArray());
             while ((reference = stale.poll()) != null) {
                 map.remove(reference);
             }
-        }
-
-        @Override
-        public Priority getPriority() {
-            return Priority.WEAK_INTERN_SET;
-        }
-
-        @Override
-        public void beforeCheckpoint(Context<? extends Resource> context) throws Exception {
-            expungeStaleElements();
-        }
-
-        @Override
-        public void afterRestore(Context<? extends Resource> context) throws Exception {
-            expungeStaleElements();
         }
 
         private static class WeakEntry<T> extends WeakReference<T> {

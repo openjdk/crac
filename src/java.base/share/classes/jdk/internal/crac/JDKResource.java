@@ -149,12 +149,6 @@ public interface JDKResource extends Resource {
          * jdk.internal.ref.CleanerImpl resources
          */
         CLEANERS,
-        /**
-         * Priority of the
-         * java.lang.invoke.MethodType.ConcurrentWeakInternSet
-         * resource
-         */
-        WEAK_INTERN_SET,
 
 
         /* Keep next priorities last to close

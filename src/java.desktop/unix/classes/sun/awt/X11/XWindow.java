@@ -81,6 +81,13 @@ class XWindow extends XBaseWindow implements X11ComponentPeer {
 
         @Override
         public void beforeCheckpoint(Context<? extends Resource> context) throws Exception {
+            lastX = 0;
+            lastY = 0;
+            lastTime = 0;
+            lastButton = 0;
+            lastWindowRef = null;
+            clickCount = 0;
+
             wm_protocols = null;
             wm_delete_window = null;
             wm_take_focus = null;

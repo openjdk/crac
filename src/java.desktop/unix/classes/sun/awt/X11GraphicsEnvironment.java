@@ -57,6 +57,7 @@ import jdk.internal.crac.JDKResource;
  */
 @SuppressWarnings("removal")
 public final class X11GraphicsEnvironment extends SunGraphicsEnvironment {
+
     private static final JDKResource x11GEResource = new JDKResource() {
         @Override
         public Priority getPriority() {

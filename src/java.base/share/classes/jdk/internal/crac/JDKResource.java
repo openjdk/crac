@@ -53,6 +53,12 @@ public interface JDKResource extends Resource {
 
         /**
          * Priority of the
+         * sun.awt.Window static resource
+         */
+        WINDOW,
+
+        /**
+         * Priority of the
          * sun.awt.X11.XRootWindow static resource
          */
         XROOTWINDOW,

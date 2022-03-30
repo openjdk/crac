@@ -74,6 +74,10 @@ import sun.java2d.pipe.Region;
 import sun.security.action.GetPropertyAction;
 import sun.util.logging.PlatformLogger;
 
+import jdk.crac.Context;
+import jdk.crac.Resource;
+import jdk.internal.crac.JDKResource;
+
 /**
  * A {@code Window} object is a top-level window with no borders and no
  * menubar.
@@ -165,6 +169,25 @@ import sun.util.logging.PlatformLogger;
  * @since       1.0
  */
 public class Window extends Container implements Accessible {
+
+    private static final JDKResource windowResource = new JDKResource() {
+        @Override
+        public Priority getPriority() {
+            return Priority.WINDOW;
+        }
+
+        @Override
+        public void beforeCheckpoint(Context<? extends Resource> context) throws Exception {
+            for (Window window : allWindows) {
+                window.dispose();
+            }
+        }
+
+        @Override
+        public void afterRestore(Context<? extends Resource> context) throws Exception {
+
+        }
+    };
 
     /**
      * Enumeration of available <i>window types</i>.
@@ -422,6 +445,8 @@ public class Window extends Container implements Accessible {
         String s2 = java.security.AccessController.doPrivileged(
             new GetPropertyAction("java.awt.Window.locationByPlatform"));
         locationByPlatformProp = (s2 != null && s2.equals("true"));
+
+        jdk.internal.crac.Core.getJDKContext().register(windowResource);
     }
 
     /**

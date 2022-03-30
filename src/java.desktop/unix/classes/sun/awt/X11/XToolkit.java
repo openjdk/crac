@@ -234,6 +234,43 @@ public final class XToolkit extends UNIXToolkit implements Runnable {
             }
             awtUnlock();
 
+            synchronized (winMap) {
+                for(XBaseWindow window : winMap.values()) {
+                    window.destroy();
+                }
+                winMap.clear();
+            }
+
+            for(Object peer : specialPeerMap.values()) {
+                if (peer instanceof XComponentPeer)
+                    ((XComponentPeer)peer).dispose();
+            }
+            specialPeerMap.clear();
+
+            synchronized (winToDispatcher) {
+                winToDispatcher.clear();
+            }
+
+            initialized = false;
+            timeStampUpdated = false;
+            timeStamp = 0;
+            _XA_JAVA_TIME_PROPERTY_ATOM = null;
+
+            maxWindowWidthInPixels = -1;
+            maxWindowHeightInPixels = -1;
+            dynamicLayoutSetting = false;
+
+            arrowCursor = 0;
+            awt_multiclick_time = 0;
+            awt_IsXsunKPBehavior = 0;
+            xPeer = null;
+
+            altMask = 0;
+            metaMask = 0;
+            numLockMask = 0;
+            modeSwitchMask = 0;
+            modLockIsShiftLock = 0;
+
             localEnv = null;
             device = null;
             display = 0;
@@ -242,6 +279,8 @@ public final class XToolkit extends UNIXToolkit implements Runnable {
         @Override
         public void afterRestore(Context<? extends Resource> context) throws Exception {
             initStatic();
+            resetKeyboardSniffer();
+            initStaticInternal();
 
             awtLock();
             state = 0;
@@ -251,6 +290,12 @@ public final class XToolkit extends UNIXToolkit implements Runnable {
     };
 
     private static void initStatic() {
+        GraphicsEnvironment ge = GraphicsEnvironment.getLocalGraphicsEnvironment();
+        if (ge instanceof SunGraphicsEnvironment) {
+            ((SunGraphicsEnvironment) ge).addDisplayChangedListener(
+                    displayChangedHandler);
+        }
+
         initSecurityWarning();
         if (GraphicsEnvironment.isHeadless()) {
             localEnv = null;
@@ -369,7 +414,7 @@ public final class XToolkit extends UNIXToolkit implements Runnable {
     }
 
     @SuppressWarnings("removal")
-    void init() {
+    static void initStaticInternal() {
         awtLock();
         try {
             XlibWrapper.XSupportsLocale();
@@ -407,6 +452,12 @@ public final class XToolkit extends UNIXToolkit implements Runnable {
         } finally {
             awtUnlock();
         }
+    }
+
+    @SuppressWarnings("removal")
+    void init() {
+        initStaticInternal();
+
         PrivilegedAction<Void> a = () -> {
             Runnable r = () -> {
                 XSystemTrayPeer peer = XSystemTrayPeer.getPeerInstance();
@@ -807,14 +858,6 @@ public final class XToolkit extends UNIXToolkit implements Runnable {
                 public void paletteChanged() {
                 }
             };
-
-    static {
-        GraphicsEnvironment ge = GraphicsEnvironment.getLocalGraphicsEnvironment();
-        if (ge instanceof SunGraphicsEnvironment) {
-            ((SunGraphicsEnvironment) ge).addDisplayChangedListener(
-                    displayChangedHandler);
-        }
-    }
 
     private static void initScreenSize() {
         if (maxWindowWidthInPixels == -1 || maxWindowHeightInPixels == -1) {

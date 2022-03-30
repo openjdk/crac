@@ -56,6 +56,7 @@ class XRootWindow extends XBaseWindow {
 
             @Override
             public void beforeCheckpoint(Context<? extends Resource> context) throws Exception {
+                xawtRootWindow.destroy();
                 xawtRootWindow = null;
             }
 

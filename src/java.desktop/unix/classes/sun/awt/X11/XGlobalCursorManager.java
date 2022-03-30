@@ -33,7 +33,32 @@ import sun.awt.AWTAccessor;
 import sun.awt.GlobalCursorManager;
 import sun.awt.SunToolkit;
 
+import jdk.crac.Context;
+import jdk.crac.Resource;
+import jdk.internal.crac.JDKResource;
+
 public final class XGlobalCursorManager extends GlobalCursorManager {
+
+    private static final JDKResource xGlobalCursorManagerResource = new JDKResource() {
+        @Override
+        public Priority getPriority() {
+            return Priority.XCURSORMANAGER;
+        }
+
+        @Override
+        public void beforeCheckpoint(Context<? extends Resource> context) throws Exception {
+            manager = null;
+        }
+
+        @Override
+        public void afterRestore(Context<? extends Resource> context) throws Exception {
+
+        }
+    };
+
+    static {
+        jdk.internal.crac.Core.getJDKContext().register(xGlobalCursorManagerResource);
+    }
 
     // cached nativeContainer
     private WeakReference<Component> nativeContainer;

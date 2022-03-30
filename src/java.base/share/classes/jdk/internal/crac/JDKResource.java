@@ -83,6 +83,12 @@ public interface JDKResource extends Resource {
         XTOOLKIT,
         /**
          * Priority of the
+         * sun.awt.X11.XGlobalCursorManager
+         * static resource
+         */
+        XCURSORMANAGER,
+        /**
+         * Priority of the
          * sun.awt.Cursor static resource
          */
         CURSOR,

@@ -64,11 +64,11 @@ final class XWM
 
         @Override
         public void beforeCheckpoint(Context<? extends Resource> context) throws Exception {
-            awtWMNonReparenting = -1;
-            awtWMStaticGravity = -1;
-
             winmgr_running = false;
             awt_wmgr = XWM.UNDETERMINED_WM;
+
+            awtWMNonReparenting = -1;
+            awtWMStaticGravity = -1;
 
             wm = null;
             g_net_protocol = null;
@@ -78,6 +78,7 @@ final class XWM
 
         @Override
         public void afterRestore(Context<? extends Resource> context) throws Exception {
+            // Re-register the cleared XWM atoms
             XA_MWM_HINTS = new XAtom();
             XA_WM_STATE = new XAtom();
             XA_E_FRAME_SIZE = new XAtom();

@@ -66,6 +66,7 @@ import jdk.crac.Resource;
 import jdk.internal.crac.JDKResource;
 
 public final class XAtom {
+
     // Order of lock:  XAWTLock -> XAtom.class
 
     /* Predefined Atoms - automatically extracted from XAtom.h */

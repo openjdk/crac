@@ -26,7 +26,6 @@
 package sun.awt.X11;
 
 import java.awt.*;
-
 import sun.awt.*;
 import java.util.*;
 import sun.util.logging.PlatformLogger;
@@ -189,7 +188,7 @@ public class XBaseWindow {
         updateWMName();
 
         // Set WM_CLIENT_LEADER property
-        initClientLeader(this);
+        initClientLeader();
     }
 
     /**
@@ -436,13 +435,13 @@ public class XBaseWindow {
         return XToolkit.getCorrectXIDString(getClass().getName());
     }
 
-    protected static void initClientLeader(XBaseWindow window) {
+    protected void initClientLeader() {
         XToolkit.awtLock();
         try {
             if (wm_client_leader == null) {
                 wm_client_leader = XAtom.get("WM_CLIENT_LEADER");
             }
-            wm_client_leader.setWindowProperty(window, getXAWTRootWindow());
+            wm_client_leader.setWindowProperty(this, getXAWTRootWindow());
         } finally {
             XToolkit.awtUnlock();
         }

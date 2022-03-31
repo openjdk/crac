@@ -208,8 +208,6 @@ public final class XToolkit extends UNIXToolkit implements Runnable {
     static int awt_multiclick_time;
     static boolean securityWarningEnabled;
 
-    private static int state = 0;
-
     /**
      * Dimensions of default virtual screen in pixels. These values are used to
      * limit the maximum size of the window.
@@ -218,6 +216,8 @@ public final class XToolkit extends UNIXToolkit implements Runnable {
     private static volatile int maxWindowHeightInPixels = -1;
 
     private static XMouseInfoPeer xPeer;
+
+    private static int state = 0;
 
     private static final JDKResource xToolkitResource = new JDKResource() {
         @Override
@@ -303,7 +303,7 @@ public final class XToolkit extends UNIXToolkit implements Runnable {
             display = 0;
         } else {
             localEnv = (X11GraphicsEnvironment) GraphicsEnvironment
-                    .getLocalGraphicsEnvironment();
+                .getLocalGraphicsEnvironment();
             device = (X11GraphicsDevice) localEnv.getDefaultScreenDevice();
             display = device.getDisplay();
             setupModifierMap();

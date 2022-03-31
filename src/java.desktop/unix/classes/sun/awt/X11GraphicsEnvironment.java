@@ -40,7 +40,9 @@ import java.util.ListIterator;
 import java.util.Map;
 
 import sun.awt.X11.XToolkit;
-import sun.java2d.*;
+import sun.java2d.SunGraphicsEnvironment;
+import sun.java2d.SurfaceManagerFactory;
+import sun.java2d.UnixSurfaceManagerFactory;
 import sun.java2d.xr.XRSurfaceData;
 
 import jdk.crac.Context;

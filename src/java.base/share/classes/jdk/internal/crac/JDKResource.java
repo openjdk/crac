@@ -31,12 +31,11 @@ import jdk.crac.Resource;
 public interface JDKResource extends Resource {
     /**
      * JDK Resource priorities.
-     *
+     * Priorities are defined in the order from lowest to highest.
      * Most resources should use priority NORMAL (the lowest priority).
      * Other priorities define sequence of checkpoint notification
      * for dependent resources.
      *
-     * Priorities are defined in the order from lowest to highest.
      * Checkpoint notification will be processed in the order from the lowest
      * to the highest priorities.
      * Restore notification will be processed in the revers order:

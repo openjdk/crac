@@ -34,11 +34,10 @@ import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Function;
 
-import jdk.internal.misc.InnocuousThread;
-
 import jdk.crac.Context;
 import jdk.crac.Resource;
 import jdk.internal.crac.JDKResource;
+import jdk.internal.misc.InnocuousThread;
 
 /**
  * CleanerImpl manages a set of object references and corresponding cleaning actions.
@@ -165,7 +164,6 @@ public final class CleanerImpl implements Runnable, JDKResource {
 
     @Override
     public void afterRestore(Context<? extends Resource> context) throws Exception {
-        queue.waitForWaiters(1);
     }
 
     /**

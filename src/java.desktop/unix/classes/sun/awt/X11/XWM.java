@@ -52,6 +52,7 @@ import jdk.internal.crac.JDKResource;
  */
 final class XWM
 {
+
     private static final PlatformLogger log = PlatformLogger.getLogger("sun.awt.X11.XWM");
     private static final PlatformLogger insLog = PlatformLogger.getLogger("sun.awt.X11.insets.XWM");
     private static final PlatformLogger stateLog = PlatformLogger.getLogger("sun.awt.X11.states.XWM");

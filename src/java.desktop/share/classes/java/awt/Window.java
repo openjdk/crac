@@ -183,7 +183,7 @@ public class Window extends Container implements Accessible {
                 // AppContext before sun.java2d.Disposer disposed it
                 window.disposerRecord.dispose();
 
-                // Note: When the last displayable window within the
+                // When the last displayable window within the
                 // Java virtual machine (VM) is disposed of, the VM may terminate
                 window.dispose();
                 window = null;

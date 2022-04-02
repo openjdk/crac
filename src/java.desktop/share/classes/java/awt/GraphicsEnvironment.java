@@ -82,7 +82,7 @@ public abstract class GraphicsEnvironment {
      */
     private static final class LocalGE {
 
-        static final JDKResource localGEResource = new JDKResource() {
+        private static final JDKResource localGEResource = new JDKResource() {
             @Override
             public Priority getPriority() {
                 return Priority.GE;

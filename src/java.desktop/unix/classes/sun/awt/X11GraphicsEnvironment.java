@@ -68,11 +68,13 @@ public final class X11GraphicsEnvironment extends SunGraphicsEnvironment {
 
         @Override
         public void beforeCheckpoint(Context<? extends Resource> context) throws Exception {
+            // XCloseDisplay
             beforeCheckpoint0();
         }
 
         @Override
         public void afterRestore(Context<? extends Resource> context) throws Exception {
+            // XOpenDisplay
             afterRestore0();
         }
     };

@@ -140,9 +140,9 @@ public interface JDKResource extends Resource {
         REFERENCE_HANDLER,
         /**
          * Priority of the
-         * sun.java2d.Disposer resource
+         * sun.java2d.Disposer resources
          */
-        DISPOSER,
+        DISPOSERS,
         /**
          * Priority of the
          * jdk.internal.ref.CleanerImpl resources

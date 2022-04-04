@@ -178,7 +178,9 @@ public class Window extends Container implements Accessible {
 
         @Override
         public void beforeCheckpoint(Context<? extends Resource> context) throws Exception {
-            for (Window window : allWindows) {
+            for (int i = 0; i < allWindows.size(); i++) {
+                Window window = allWindows.get(i);
+
                 // Ensure that the window is removed from the
                 // AppContext before sun.java2d.Disposer disposed it
                 window.disposerRecord.dispose();

@@ -63,7 +63,6 @@ import java.util.HashMap;
 
 import jdk.crac.Context;
 import jdk.crac.Resource;
-import jdk.internal.crac.JDKResource;
 
 public final class XAtom {
 
@@ -145,12 +144,10 @@ public final class XAtom {
     static HashMap<Long, XAtom> atomToAtom = new HashMap<Long, XAtom>();
     static HashMap<String, XAtom> nameToAtom = new HashMap<String, XAtom>();
 
-    private static final JDKResource xAtomResource = new JDKResource() {
-        @Override
-        public Priority getPriority () {
-            return Priority.XATOM;
-        }
-
+    /**
+     * Resource nested in {@code X11AWTJDKResource}.
+     */
+    public static final Resource resource = new Resource() {
         @Override
         public void beforeCheckpoint (Context < ? extends Resource > context) throws Exception {
             atomToAtom.clear();
@@ -162,10 +159,6 @@ public final class XAtom {
 
         }
     };
-
-    static {
-        jdk.internal.crac.Core.getJDKContext().register(xAtomResource);
-    }
 
     static void register(XAtom at) {
         if (at == null) {

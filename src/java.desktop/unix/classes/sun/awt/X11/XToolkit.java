@@ -152,7 +152,6 @@ import sun.util.logging.PlatformLogger;
 
 import jdk.crac.Context;
 import jdk.crac.Resource;
-import jdk.internal.crac.JDKResource;
 
 import static sun.awt.X11.XlibUtil.scaleDown;
 
@@ -219,12 +218,10 @@ public final class XToolkit extends UNIXToolkit implements Runnable {
 
     private static int state = 0;
 
-    private static final JDKResource xToolkitResource = new JDKResource() {
-        @Override
-        public Priority getPriority() {
-            return Priority.XTOOLKIT;
-        }
-
+    /**
+     * Resource nested in {@code X11AWTJDKResource}.
+     */
+    public static final Resource resource = new Resource() {
         @Override
         public void beforeCheckpoint(Context<? extends Resource> context) throws Exception {
             awtLock();
@@ -314,8 +311,6 @@ public final class XToolkit extends UNIXToolkit implements Runnable {
 
     static {
         initStatic();
-
-        jdk.internal.crac.Core.getJDKContext().register(xToolkitResource);
     }
 
     /*

@@ -44,25 +44,22 @@ import sun.util.logging.PlatformLogger;
 
 import jdk.crac.Context;
 import jdk.crac.Resource;
-import jdk.internal.crac.JDKResource;
 
 /**
  * Class incapsulating knowledge about window managers in general
  * Descendants should provide some information about specific window manager.
  */
-final class XWM
+public final class XWM
 {
 
     private static final PlatformLogger log = PlatformLogger.getLogger("sun.awt.X11.XWM");
     private static final PlatformLogger insLog = PlatformLogger.getLogger("sun.awt.X11.insets.XWM");
     private static final PlatformLogger stateLog = PlatformLogger.getLogger("sun.awt.X11.states.XWM");
 
-    private static final JDKResource xWMResource = new JDKResource() {
-        @Override
-        public Priority getPriority() {
-            return Priority.XWM;
-        }
-
+    /**
+     * Resource nested in {@code X11AWTJDKResource}.
+     */
+    public static final Resource resource = new Resource() {
         @Override
         public void beforeCheckpoint(Context<? extends Resource> context) throws Exception {
             winmgr_running = false;
@@ -105,10 +102,6 @@ final class XWM
             init();
         }
     };
-
-    static {
-        jdk.internal.crac.Core.getJDKContext().register(xWMResource);
-    }
 
     static XAtom XA_MWM_HINTS = new XAtom();
 

@@ -76,7 +76,6 @@ import sun.util.logging.PlatformLogger;
 
 import jdk.crac.Context;
 import jdk.crac.Resource;
-import jdk.internal.crac.JDKResource;
 
 /**
  * A {@code Window} object is a top-level window with no borders and no
@@ -170,12 +169,10 @@ import jdk.internal.crac.JDKResource;
  */
 public class Window extends Container implements Accessible {
 
-    private static final JDKResource windowResource = new JDKResource() {
-        @Override
-        public Priority getPriority() {
-            return Priority.WINDOW;
-        }
-
+    /**
+     * Resource nested in {@code X11AWTJDKResource}.
+     */
+    public static final Resource resource = new Resource() {
         @Override
         public void beforeCheckpoint(Context<? extends Resource> context) throws Exception {
             for (int i = 0; i < allWindows.size(); i++) {
@@ -188,6 +185,8 @@ public class Window extends Container implements Accessible {
                 // When the last displayable window within the
                 // Java virtual machine (VM) is disposed of, the VM may terminate
                 window.dispose();
+
+                // Let the GC collect this window
                 window = null;
             }
 
@@ -456,8 +455,6 @@ public class Window extends Container implements Accessible {
         String s2 = java.security.AccessController.doPrivileged(
             new GetPropertyAction("java.awt.Window.locationByPlatform"));
         locationByPlatformProp = (s2 != null && s2.equals("true"));
-
-        jdk.internal.crac.Core.getJDKContext().register(windowResource);
     }
 
     /**

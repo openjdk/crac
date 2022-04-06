@@ -47,56 +47,14 @@ public interface JDKResource extends Resource {
      * in the direct order of registration.
      */
     enum Priority {
-        /* Keep next priorities first to clear
-        and reinitialize X11 resources correctly */
+        /* Keep this priority first to clear and
+        reinitialize X11 and AWT resources correctly */
 
         /**
          * Priority of the
-         * sun.awt.Window static resource
+         * sun.awt.X11AWTJDKResource resource
          */
-        WINDOW,
-
-        /**
-         * Priority of the
-         * sun.awt.X11.XRootWindow static resource
-         */
-        XROOTWINDOW,
-        /**
-         * Priority of the
-         * sun.awt.X11.XWindow static resource
-         */
-        XWINDOW,
-        /**
-         * Priority of the
-         * sun.awt.X11.XBaseWindow static resource
-         */
-        XBASEWINDOW,
-        /**
-         * Priority of the
-         * sun.awt.X11.XWM static resource
-         */
-        XWM,
-        /**
-         * Priority of the
-         * sun.awt.X11.XAtom static resource
-         */
-        XATOM,
-        /**
-         * Priority of the
-         * sun.awt.X11.XToolkit static resource
-         */
-        XTOOLKIT,
-        /**
-         * Priority of the
-         * sun.awt.X11.XGlobalCursorManager
-         * static resource
-         */
-        XCURSORMANAGER,
-        /**
-         * Priority of the
-         * sun.awt.Cursor static resource
-         */
-        CURSOR,
+        X11AWT,
 
 
         /* Use this priority in most cases. */
@@ -150,17 +108,12 @@ public interface JDKResource extends Resource {
         CLEANERS,
 
 
-        /* Keep next priorities last to close
-        and open X11 connection correctly */
+        /* Keep next priority last to reinitialize
+         X11 connection correctly */
 
         /**
          * Priority of the
-         * sun.awt.GraphicsEnvironment static resource
-         */
-        GE,
-        /**
-         * Priority of the
-         * sun.awt.X11GraphicsEnvironment static resource
+         * sun.awt.X11GEJDKResource resource
          */
         X11GE,
     };

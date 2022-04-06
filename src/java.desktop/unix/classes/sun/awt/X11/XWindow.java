@@ -64,20 +64,18 @@ import sun.util.logging.PlatformLogger;
 
 import jdk.crac.Context;
 import jdk.crac.Resource;
-import jdk.internal.crac.JDKResource;
 
-class XWindow extends XBaseWindow implements X11ComponentPeer {
+public class XWindow extends XBaseWindow implements X11ComponentPeer {
     private static PlatformLogger log = PlatformLogger.getLogger("sun.awt.X11.XWindow");
     private static PlatformLogger insLog = PlatformLogger.getLogger("sun.awt.X11.insets.XWindow");
     private static PlatformLogger eventLog = PlatformLogger.getLogger("sun.awt.X11.event.XWindow");
     private static final PlatformLogger focusLog = PlatformLogger.getLogger("sun.awt.X11.focus.XWindow");
     private static PlatformLogger keyEventLog = PlatformLogger.getLogger("sun.awt.X11.kye.XWindow");
 
-    private static final JDKResource xWindowResource = new JDKResource() {
-        @Override
-        public Priority getPriority() {
-            return Priority.XWINDOW;
-        }
+    /**
+     * Resource nested in {@code X11AWTJDKResource}.
+     */
+    public static final Resource resource = new Resource() {
 
         @Override
         public void beforeCheckpoint(Context<? extends Resource> context) throws Exception {
@@ -172,8 +170,6 @@ class XWindow extends XBaseWindow implements X11ComponentPeer {
 
     static {
         initIDs();
-
-        jdk.internal.crac.Core.getJDKContext().register(xWindowResource);
     }
 
     XWindow(XCreateWindowParams params) {

@@ -40,7 +40,6 @@ import sun.security.action.GetPropertyAction;
 
 import jdk.crac.Context;
 import jdk.crac.Resource;
-import jdk.internal.crac.JDKResource;
 
 /**
  *
@@ -82,27 +81,6 @@ public abstract class GraphicsEnvironment {
      */
     private static final class LocalGE {
 
-        private static final JDKResource localGEResource = new JDKResource() {
-            @Override
-            public Priority getPriority() {
-                return Priority.GE;
-            }
-
-            @Override
-            public void beforeCheckpoint(Context<? extends Resource> context) throws Exception {
-                INSTANCE = null;
-            }
-
-            @Override
-            public void afterRestore(Context<? extends Resource> context) throws Exception {
-                INSTANCE = createGE();
-            }
-        };
-
-        static {
-            jdk.internal.crac.Core.getJDKContext().register(localGEResource);
-        }
-
         /**
          * The instance of the local {@code GraphicsEnvironment}.
          */
@@ -122,6 +100,21 @@ public abstract class GraphicsEnvironment {
             return ge;
         }
     }
+
+    /**
+     * Resource nested in {@code X11GEJDKResource}.
+     */
+    public static final Resource resource = new Resource() {
+        @Override
+        public void beforeCheckpoint(Context<? extends Resource> context) throws Exception {
+            LocalGE.INSTANCE = null;
+        }
+
+        @Override
+        public void afterRestore(Context<? extends Resource> context) throws Exception {
+            LocalGE.INSTANCE = LocalGE.createGE();
+        }
+    };
 
     /**
      * Returns the local {@code GraphicsEnvironment}.

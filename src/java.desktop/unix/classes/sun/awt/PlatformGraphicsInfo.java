@@ -33,10 +33,12 @@ import java.security.PrivilegedAction;
 public class PlatformGraphicsInfo {
 
     public static GraphicsEnvironment createGE() {
+        jdk.internal.crac.Core.getJDKContext().register(new X11GEJDKResource());
         return new X11GraphicsEnvironment();
     }
 
     public static Toolkit createToolkit() {
+        jdk.internal.crac.Core.getJDKContext().register(new X11AWTJDKResource());
         return new sun.awt.X11.XToolkit();
     }
 

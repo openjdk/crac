@@ -35,16 +35,13 @@ import sun.awt.SunToolkit;
 
 import jdk.crac.Context;
 import jdk.crac.Resource;
-import jdk.internal.crac.JDKResource;
 
 public final class XGlobalCursorManager extends GlobalCursorManager {
 
-    private static final JDKResource xGlobalCursorManagerResource = new JDKResource() {
-        @Override
-        public Priority getPriority() {
-            return Priority.XCURSORMANAGER;
-        }
-
+    /**
+     * Resource nested in {@code X11AWTJDKResource}.
+     */
+    public static final Resource resource = new Resource() {
         @Override
         public void beforeCheckpoint(Context<? extends Resource> context) throws Exception {
             manager = null;
@@ -55,10 +52,6 @@ public final class XGlobalCursorManager extends GlobalCursorManager {
 
         }
     };
-
-    static {
-        jdk.internal.crac.Core.getJDKContext().register(xGlobalCursorManagerResource);
-    }
 
     // cached nativeContainer
     private WeakReference<Component> nativeContainer;

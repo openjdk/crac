@@ -32,7 +32,6 @@ import sun.util.logging.PlatformLogger;
 
 import jdk.crac.Context;
 import jdk.crac.Resource;
-import jdk.internal.crac.JDKResource;
 
 public class XBaseWindow {
     private static final PlatformLogger log = PlatformLogger.getLogger("sun.awt.X11.XBaseWindow");
@@ -41,12 +40,10 @@ public class XBaseWindow {
     private static final PlatformLogger focusLog = PlatformLogger.getLogger("sun.awt.X11.focus.XBaseWindow");
     private static final PlatformLogger grabLog = PlatformLogger.getLogger("sun.awt.X11.grab.XBaseWindow");
 
-    private static final JDKResource xBaseWindowResource = new JDKResource() {
-        @Override
-        public Priority getPriority() {
-            return Priority.XBASEWINDOW;
-        }
-
+    /**
+     * Resource nested in {@code X11AWTJDKResource}.
+     */
+    public static final Resource resource = new Resource() {
         @Override
         public void beforeCheckpoint(Context<? extends Resource> context) throws Exception {
             wm_client_leader = null;
@@ -57,10 +54,6 @@ public class XBaseWindow {
 
         }
     };
-
-    static {
-        jdk.internal.crac.Core.getJDKContext().register(xBaseWindowResource);
-    }
 
     public static final String
         PARENT_WINDOW = "parent window", // parent window, Long

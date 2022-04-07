@@ -53,7 +53,7 @@ public class XRootWindow extends XBaseWindow {
     }
 
     /**
-     * Resource nested in {@code X11AWTJDKResource}.
+     * Resource nested in {@code X11ToolkitJDKResource}.
      */
     public static final Resource resource = new Resource() {
         @Override

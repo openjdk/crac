@@ -170,7 +170,7 @@ import jdk.crac.Resource;
 public class Window extends Container implements Accessible {
 
     /**
-     * Resource nested in {@code X11AWTJDKResource}.
+     * Resource nested in {@code X11ToolkitJDKResource}.
      */
     public static final Resource resource = new Resource() {
         @Override

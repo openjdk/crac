@@ -16,11 +16,11 @@ import jdk.crac.Resource;
 import jdk.internal.crac.JDKResource;
 
 
-public class X11AWTJDKResource implements JDKResource {
+public class X11ToolkitJDKResource implements JDKResource {
 
     @Override
     public Priority getPriority() {
-        return Priority.X11AWT;
+        return Priority.X11TOOLKIT;
     }
 
     @Override

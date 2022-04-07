@@ -73,7 +73,7 @@ public class XWindow extends XBaseWindow implements X11ComponentPeer {
     private static PlatformLogger keyEventLog = PlatformLogger.getLogger("sun.awt.X11.kye.XWindow");
 
     /**
-     * Resource nested in {@code X11AWTJDKResource}.
+     * Resource nested in {@code X11ToolkitJDKResource}.
      */
     public static final Resource resource = new Resource() {
 

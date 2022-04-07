@@ -145,7 +145,7 @@ public final class XAtom {
     static HashMap<String, XAtom> nameToAtom = new HashMap<String, XAtom>();
 
     /**
-     * Resource nested in {@code X11AWTJDKResource}.
+     * Resource nested in {@code X11ToolkitJDKResource}.
      */
     public static final Resource resource = new Resource() {
         @Override

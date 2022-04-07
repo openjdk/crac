@@ -39,7 +39,7 @@ import jdk.crac.Resource;
 public final class XGlobalCursorManager extends GlobalCursorManager {
 
     /**
-     * Resource nested in {@code X11AWTJDKResource}.
+     * Resource nested in {@code X11ToolkitJDKResource}.
      */
     public static final Resource resource = new Resource() {
         @Override

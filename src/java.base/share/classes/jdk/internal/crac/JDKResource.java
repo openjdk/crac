@@ -52,9 +52,9 @@ public interface JDKResource extends Resource {
 
         /**
          * Priority of the
-         * sun.awt.X11AWTJDKResource resource
+         * sun.awt.X11ToolkitJDKResource resource
          */
-        X11AWT,
+        X11TOOLKIT,
 
 
         /* Use this priority in most cases. */
@@ -63,7 +63,6 @@ public interface JDKResource extends Resource {
          * Most resources should use this option.
          */
         NORMAL,
-
 
 
         /**

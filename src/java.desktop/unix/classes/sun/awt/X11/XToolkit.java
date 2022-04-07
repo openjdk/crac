@@ -219,7 +219,7 @@ public final class XToolkit extends UNIXToolkit implements Runnable {
     private static int state = 0;
 
     /**
-     * Resource nested in {@code X11AWTJDKResource}.
+     * Resource nested in {@code X11ToolkitJDKResource}.
      */
     public static final Resource resource = new Resource() {
         @Override

@@ -51,7 +51,7 @@ import jdk.crac.Resource;
 public class Cursor implements java.io.Serializable {
 
     /**
-     * Resource nested in {@code X11AWTJDKResource}.
+     * Resource nested in {@code X11ToolkitJDKResource}.
      */
     public static final Resource resource = new Resource() {
         @Override

@@ -132,8 +132,6 @@ module java.base {
     exports javax.crac;
 
     exports jdk.crac;
-    exports jdk.crac.impl;
-    exports jdk.internal.crac;
 
     // additional qualified exports may be inserted at build time
     // see make/gensrc/GenModuleInfo.gmk
@@ -366,6 +364,8 @@ module java.base {
         jdk.localedata;
     exports jdk.internal.invoke to
         jdk.incubator.foreign;
+    exports jdk.internal.crac to
+        java.desktop;
 
     // the service types defined by the APIs in this module
 

@@ -57,7 +57,7 @@ public final class XWM
     private static final PlatformLogger stateLog = PlatformLogger.getLogger("sun.awt.X11.states.XWM");
 
     /**
-     * Resource nested in {@code X11AWTJDKResource}.
+     * Resource nested in {@code X11ToolkitJDKResource}.
      */
     public static final Resource resource = new Resource() {
         @Override

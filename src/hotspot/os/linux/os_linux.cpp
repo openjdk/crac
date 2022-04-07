@@ -5826,13 +5826,27 @@ static bool compute_crengine() {
 }
 
 static int call_crengine() {
-  if (_crengine && !fork()) {
+  if (!_crengine) {
+    return -1;
+  }
+
+  pid_t pid = fork();
+  if (!pid) {
     execl(_crengine, _crengine, "checkpoint", CRaCCheckpointTo, NULL);
     perror("execl");
     exit(1);
   }
 
-  return 0;
+  int status;
+  int ret;
+  do {
+    ret = waitpid(pid, &status, 0);
+  } while (ret == -1 && errno == EINTR);
+
+  if (ret == -1 || !WIFEXITED(status)) {
+    return -1;
+  }
+  return WEXITSTATUS(status) == 0 ? 0 : -1;
 }
 
 static int checkpoint_restore() {

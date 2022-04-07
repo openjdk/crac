@@ -27,42 +27,17 @@ package sun.awt.X11;
 
 import jdk.crac.Context;
 import jdk.crac.Resource;
-import jdk.internal.crac.JDKResource;
-
 
 /**
  * This class represents AWT application root window functionality.
  * Object of this class is singleton, all window reference it to have
  * common logical ancestor
  */
-class XRootWindow extends XBaseWindow {
+public class XRootWindow extends XBaseWindow {
     private static class LazyHolder {
         private static XRootWindow xawtRootWindow;
 
-        static JDKResource jdkResource = new JDKResource() {
-            @Override
-            public Priority getPriority() {
-                return Priority.ROOT_WINDOW;
-            }
-
-            @Override
-            public void beforeCheckpoint(Context<? extends Resource> context) throws Exception {
-                xawtRootWindow = null;
-            }
-
-            @Override
-            public void afterRestore(Context<? extends Resource> context) throws Exception {
-                XToolkit.awtLock();
-                try {
-                    xawtRootWindow = new XRootWindow();
-                    xawtRootWindow.init(xawtRootWindow.getDelayedParams().delete(DELAYED));
-                } finally {
-                    XToolkit.awtUnlock();
-                }
-            }
-        };
-
-        static {
+        private static void init() {
             XToolkit.awtLock();
             try {
                 xawtRootWindow = new XRootWindow();
@@ -70,11 +45,29 @@ class XRootWindow extends XBaseWindow {
             } finally {
                 XToolkit.awtUnlock();
             }
-
-            jdk.internal.crac.Core.getJDKContext().register(jdkResource);
         }
 
+        static {
+            init();
+        }
     }
+
+    /**
+     * Resource nested in {@code X11AWTJDKResource}.
+     */
+    public static final Resource resource = new Resource() {
+        @Override
+        public void beforeCheckpoint(Context<? extends Resource> context) throws Exception {
+            LazyHolder.xawtRootWindow.destroy();
+            LazyHolder.xawtRootWindow = null;
+        }
+
+        @Override
+        public void afterRestore(Context<? extends Resource> context) throws Exception {
+            LazyHolder.init();
+        }
+    };
+
     static XRootWindow getInstance() {
         return LazyHolder.xawtRootWindow;
     }

@@ -31,12 +31,11 @@ import jdk.crac.Resource;
 public interface JDKResource extends Resource {
     /**
      * JDK Resource priorities.
-     *
+     * Priorities are defined in the order from lowest to highest.
      * Most resources should use priority NORMAL (the lowest priority).
      * Other priorities define sequence of checkpoint notification
      * for dependent resources.
      *
-     * Priorities are defined in the order from lowest to highest.
      * Checkpoint notification will be processed in the order from the lowest
      * to the highest priorities.
      * Restore notification will be processed in the revers order:
@@ -48,19 +47,15 @@ public interface JDKResource extends Resource {
      * in the direct order of registration.
      */
     enum Priority {
-        /* Keep this priorities first to collect X11 objects
-         * by GC before its dispoding from queue. */
+        /* Keep this priority first to clear and
+        reinitialize X11 and AWT resources correctly */
 
         /**
          * Priority of the
-         * sun.awt.X11.XRootWindow static resource
+         * sun.awt.X11AWTJDKResource resource
          */
-        ROOT_WINDOW,
-        /**
-         * Priority of the
-         * sun.awt.X11.XToolKit resource
-         */
-        XTOOLKIT,
+        X11AWT,
+
 
         /* Use this priority in most cases. */
 
@@ -68,6 +63,8 @@ public interface JDKResource extends Resource {
          * Most resources should use this option.
          */
         NORMAL,
+
+
 
         /**
          * Priority of the
@@ -90,7 +87,8 @@ public interface JDKResource extends Resource {
          */
         SEEDER_HOLDER,
 
-        /* Keep next priorities last to ensure handling of pending References
+
+        /* Keep next priorities here to ensure handling of pending References
          * appeared on earlier priorities. */
 
         /**
@@ -100,21 +98,22 @@ public interface JDKResource extends Resource {
         REFERENCE_HANDLER,
         /**
          * Priority of the
-         * sun.java2d.Disposer resource
+         * sun.java2d.Disposer resources
          */
-        DISPOSER,
+        DISPOSERS,
         /**
          * Priority of the
          * jdk.internal.ref.CleanerImpl resources
          */
         CLEANERS,
 
-        /* Keep this priority last to close X11 connection
-        * after dispoding objects from queue. */
+
+        /* Keep next priority last to reinitialize
+         X11 connection correctly */
 
         /**
          * Priority of the
-         * sun.awt.X11GraphicsEnvironment resource
+         * sun.awt.X11GEJDKResource resource
          */
         X11GE,
     };

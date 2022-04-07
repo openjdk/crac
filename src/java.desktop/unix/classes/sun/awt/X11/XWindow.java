@@ -62,12 +62,41 @@ import sun.java2d.SunGraphics2D;
 import sun.java2d.SurfaceData;
 import sun.util.logging.PlatformLogger;
 
-class XWindow extends XBaseWindow implements X11ComponentPeer {
+import jdk.crac.Context;
+import jdk.crac.Resource;
+
+public class XWindow extends XBaseWindow implements X11ComponentPeer {
     private static PlatformLogger log = PlatformLogger.getLogger("sun.awt.X11.XWindow");
     private static PlatformLogger insLog = PlatformLogger.getLogger("sun.awt.X11.insets.XWindow");
     private static PlatformLogger eventLog = PlatformLogger.getLogger("sun.awt.X11.event.XWindow");
     private static final PlatformLogger focusLog = PlatformLogger.getLogger("sun.awt.X11.focus.XWindow");
     private static PlatformLogger keyEventLog = PlatformLogger.getLogger("sun.awt.X11.kye.XWindow");
+
+    /**
+     * Resource nested in {@code X11AWTJDKResource}.
+     */
+    public static final Resource resource = new Resource() {
+
+        @Override
+        public void beforeCheckpoint(Context<? extends Resource> context) throws Exception {
+            lastX = 0;
+            lastY = 0;
+            lastTime = 0;
+            lastButton = 0;
+            lastWindowRef = null;
+            clickCount = 0;
+
+            wm_protocols = null;
+            wm_delete_window = null;
+            wm_take_focus = null;
+        }
+
+        @Override
+        public void afterRestore(Context<? extends Resource> context) throws Exception {
+
+        }
+    };
+
   /* If a motion comes in while a multi-click is pending,
    * allow a smudge factor so that moving the mouse by a small
    * amount does not wipe out the multi-click state variables.

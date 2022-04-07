@@ -102,7 +102,7 @@ public class Disposer implements Runnable, JDKResource {
 
     @Override
     public Priority getPriority() {
-        return Priority.DISPOSER;
+        return Priority.DISPOSERS;
     }
 
     @Override
@@ -112,7 +112,6 @@ public class Disposer implements Runnable, JDKResource {
 
     @Override
     public void afterRestore(Context<? extends Resource> context) throws Exception {
-
     }
 
     /**

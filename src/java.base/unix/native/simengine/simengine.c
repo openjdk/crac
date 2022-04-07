@@ -50,7 +50,8 @@ int main(int argc, char *argv[]) {
         pid_t jvm = getppid();
         kickjvm(jvm, argsid);
     } else if (!strcmp(action, "restore")) {
-        printf("SIM_CRAC_NEW_ARGS_ID=%s\n", getenv("CRAC_NEW_ARGS_ID"));
+        char *strid = getenv("CRAC_NEW_ARGS_ID");
+        printf("SIM_CRAC_NEW_ARGS_ID=%s\n", strid ? strid : "0");
     } else {
         fprintf(stderr, "unknown action: %s\n", action);
         return 1;

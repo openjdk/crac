@@ -191,7 +191,7 @@ static int post_resume(void) {
     int pid = atoi(pidstr);
 
     char *strid = getenv("CRAC_NEW_ARGS_ID");
-    return kickjvm(pid, atoi(strid));
+    return kickjvm(pid, strid ? atoi(strid) : 0);
 }
 
 static int create_cppath(const char *imagedir) {

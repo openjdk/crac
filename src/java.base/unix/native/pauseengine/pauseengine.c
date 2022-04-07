@@ -79,7 +79,7 @@ int main(int argc, char *argv[]) {
         fclose(pidfile);
 
         char *strid = getenv("CRAC_NEW_ARGS_ID");
-        if (kickjvm(jvm, atoi(strid))) {
+        if (kickjvm(jvm, strid ? atoi(strid) : 0)) {
             return 1;
         }
 

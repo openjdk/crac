@@ -75,11 +75,6 @@ public interface JDKResource extends Resource {
 
         /**
          * Priority of the
-         * java.lan.ref.Reference static resource
-         */
-        REFERENCE_HANDLER,
-        /**
-         * Priority of the
          * jdk.internal.ref.CleanerImpl resources
          */
         CLEANERS,

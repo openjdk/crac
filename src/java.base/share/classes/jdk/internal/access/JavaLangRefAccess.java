@@ -25,6 +25,8 @@
 
 package jdk.internal.access;
 
+import java.lang.ref.ReferenceQueue;
+
 public interface JavaLangRefAccess {
 
     /**
@@ -43,4 +45,12 @@ public interface JavaLangRefAccess {
      * Invoked by Runtime.runFinalization()
      */
     void runFinalization();
+
+    /**
+     * See {@link jdk.crac.Misc#waitForQueueProcessed(ReferenceQueue, int, long)}.
+     */
+    boolean waitForQueueProcessed(ReferenceQueue<?> queue,
+                                  int nThreads,
+                                  long timeout)
+        throws InterruptedException;
 }

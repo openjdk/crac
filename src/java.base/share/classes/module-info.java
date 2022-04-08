@@ -364,6 +364,8 @@ module java.base {
         jdk.localedata;
     exports jdk.internal.invoke to
         jdk.incubator.foreign;
+    exports jdk.internal.crac to
+        java.desktop;
 
     // the service types defined by the APIs in this module
 

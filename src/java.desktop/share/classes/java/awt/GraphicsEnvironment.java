@@ -38,6 +38,9 @@ import sun.java2d.HeadlessGraphicsEnvironment;
 import sun.java2d.SunGraphicsEnvironment;
 import sun.security.action.GetPropertyAction;
 
+import jdk.crac.Context;
+import jdk.crac.Resource;
+
 /**
  *
  * The {@code GraphicsEnvironment} class describes the collection
@@ -81,7 +84,7 @@ public abstract class GraphicsEnvironment {
         /**
          * The instance of the local {@code GraphicsEnvironment}.
          */
-        static final GraphicsEnvironment INSTANCE = createGE();
+        static GraphicsEnvironment INSTANCE = createGE();
 
         /**
          * Creates and returns the GraphicsEnvironment, according to the
@@ -97,6 +100,21 @@ public abstract class GraphicsEnvironment {
             return ge;
         }
     }
+
+    /**
+     * Resource nested in {@code X11GEJDKResource}.
+     */
+    public static final Resource resource = new Resource() {
+        @Override
+        public void beforeCheckpoint(Context<? extends Resource> context) throws Exception {
+            LocalGE.INSTANCE = null;
+        }
+
+        @Override
+        public void afterRestore(Context<? extends Resource> context) throws Exception {
+            LocalGE.INSTANCE = LocalGE.createGE();
+        }
+    };
 
     /**
      * Returns the local {@code GraphicsEnvironment}.

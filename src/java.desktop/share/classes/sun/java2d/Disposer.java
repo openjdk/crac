@@ -36,6 +36,10 @@ import java.security.PrivilegedAction;
 import java.util.ArrayList;
 import java.util.Hashtable;
 
+import jdk.crac.Context;
+import jdk.crac.Resource;
+import jdk.internal.crac.JDKResource;
+
 /**
  * This class is used for registering and disposing the native
  * data associated with java objects.
@@ -51,7 +55,7 @@ import java.util.Hashtable;
  * @see DisposerRecord
  */
 @SuppressWarnings("removal")
-public class Disposer implements Runnable {
+public class Disposer implements Runnable, JDKResource {
     private static final ReferenceQueue<Object> queue = new ReferenceQueue<>();
     private static final Hashtable<java.lang.ref.Reference<Object>, DisposerRecord> records =
         new Hashtable<>();
@@ -92,6 +96,22 @@ public class Disposer implements Runnable {
             t.start();
             return null;
         });
+
+        jdk.internal.crac.Core.getJDKContext().register(disposerInstance);
+    }
+
+    @Override
+    public Priority getPriority() {
+        return Priority.DISPOSERS;
+    }
+
+    @Override
+    public void beforeCheckpoint(Context<? extends Resource> context) throws Exception {
+        queue.waitForWaiters(1);
+    }
+
+    @Override
+    public void afterRestore(Context<? extends Resource> context) throws Exception {
     }
 
     /**

@@ -30,12 +30,30 @@ import sun.awt.*;
 import java.util.*;
 import sun.util.logging.PlatformLogger;
 
+import jdk.crac.Context;
+import jdk.crac.Resource;
+
 public class XBaseWindow {
     private static final PlatformLogger log = PlatformLogger.getLogger("sun.awt.X11.XBaseWindow");
     private static final PlatformLogger insLog = PlatformLogger.getLogger("sun.awt.X11.insets.XBaseWindow");
     private static final PlatformLogger eventLog = PlatformLogger.getLogger("sun.awt.X11.event.XBaseWindow");
     private static final PlatformLogger focusLog = PlatformLogger.getLogger("sun.awt.X11.focus.XBaseWindow");
     private static final PlatformLogger grabLog = PlatformLogger.getLogger("sun.awt.X11.grab.XBaseWindow");
+
+    /**
+     * Resource nested in {@code X11ToolkitJDKResource}.
+     */
+    public static final Resource resource = new Resource() {
+        @Override
+        public void beforeCheckpoint(Context<? extends Resource> context) throws Exception {
+            wm_client_leader = null;
+        }
+
+        @Override
+        public void afterRestore(Context<? extends Resource> context) throws Exception {
+
+        }
+    };
 
     public static final String
         PARENT_WINDOW = "parent window", // parent window, Long

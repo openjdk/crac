@@ -124,7 +124,7 @@ extern void awt_output_flush();
 
 #if !defined(HEADLESS) && !defined(MACOSX)
 extern Display         *get_awt_display(void); /* awt_GraphicsEnv.c */
-#define awt_display 	get_awt_display()
+#define awt_display     get_awt_display()
 extern Boolean          awt_ModLockIsShiftLock; /* XToolkit.c */
 #endif /* !HEADLESS && !MACOSX */
 

@@ -150,6 +150,9 @@ import sun.security.action.GetBooleanAction;
 import sun.security.action.GetPropertyAction;
 import sun.util.logging.PlatformLogger;
 
+import jdk.crac.Context;
+import jdk.crac.Resource;
+
 import static sun.awt.X11.XlibUtil.scaleDown;
 
 public final class XToolkit extends UNIXToolkit implements Runnable {
@@ -198,9 +201,9 @@ public final class XToolkit extends UNIXToolkit implements Runnable {
     static HashMap<Object, Object> specialPeerMap = new HashMap<>();
     static HashMap<Long, Collection<XEventDispatcher>> winToDispatcher = new HashMap<>();
     static UIDefaults uidefaults;
-    static final X11GraphicsEnvironment localEnv;
-    private static final X11GraphicsDevice device;
-    private static final long display;
+    static X11GraphicsEnvironment localEnv;
+    private static X11GraphicsDevice device;
+    private static long display;
     static int awt_multiclick_time;
     static boolean securityWarningEnabled;
 
@@ -213,7 +216,83 @@ public final class XToolkit extends UNIXToolkit implements Runnable {
 
     private static XMouseInfoPeer xPeer;
 
-    static {
+    private static int state = 0;
+
+    /**
+     * Resource nested in {@code X11ToolkitJDKResource}.
+     */
+    public static final Resource resource = new Resource() {
+        @Override
+        public void beforeCheckpoint(Context<? extends Resource> context) throws Exception {
+            awtLock();
+            state = 1;
+            while (state != 2) {
+                awtLockWait(10);
+            }
+            awtUnlock();
+
+            synchronized (winMap) {
+                for(XBaseWindow window : winMap.values()) {
+                    window.destroy();
+                }
+                winMap.clear();
+            }
+
+            for(Object peer : specialPeerMap.values()) {
+                if (peer instanceof XComponentPeer)
+                    ((XComponentPeer)peer).dispose();
+            }
+            specialPeerMap.clear();
+
+            synchronized (winToDispatcher) {
+                winToDispatcher.clear();
+            }
+
+            initialized = false;
+            timeStampUpdated = false;
+            timeStamp = 0;
+            _XA_JAVA_TIME_PROPERTY_ATOM = null;
+
+            maxWindowWidthInPixels = -1;
+            maxWindowHeightInPixels = -1;
+            dynamicLayoutSetting = false;
+
+            arrowCursor = 0;
+            awt_multiclick_time = 0;
+            awt_IsXsunKPBehavior = 0;
+            xPeer = null;
+
+            altMask = 0;
+            metaMask = 0;
+            numLockMask = 0;
+            modeSwitchMask = 0;
+            modLockIsShiftLock = 0;
+
+            localEnv = null;
+            device = null;
+            display = 0;
+        }
+
+        @Override
+        public void afterRestore(Context<? extends Resource> context) throws Exception {
+            initStatic();
+            resetKeyboardSniffer();
+            initStaticInternal();
+
+            awtLock();
+            state = 0;
+            awtLockNotifyAll();
+            awtUnlock();
+        }
+    };
+
+    private static void initStatic() {
+        GraphicsEnvironment ge = GraphicsEnvironment.getLocalGraphicsEnvironment();
+        if (ge instanceof SunGraphicsEnvironment) {
+            ((SunGraphicsEnvironment) ge).addDisplayChangedListener(
+                    displayChangedHandler);
+        }
+
         initSecurityWarning();
         if (GraphicsEnvironment.isHeadless()) {
             localEnv = null;
@@ -228,6 +307,10 @@ public final class XToolkit extends UNIXToolkit implements Runnable {
             initIDs();
             setBackingStoreType();
         }
+    }
+
+    static {
+        initStatic();
     }
 
     /*
@@ -326,7 +409,7 @@ public final class XToolkit extends UNIXToolkit implements Runnable {
     }
 
     @SuppressWarnings("removal")
-    void init() {
+    static void initStaticInternal() {
         awtLock();
         try {
             XlibWrapper.XSupportsLocale();
@@ -364,6 +447,12 @@ public final class XToolkit extends UNIXToolkit implements Runnable {
         } finally {
             awtUnlock();
         }
+    }
+
+    @SuppressWarnings("removal")
+    void init() {
+        initStaticInternal();
+
         PrivilegedAction<Void> a = () -> {
             Runnable r = () -> {
                 XSystemTrayPeer peer = XSystemTrayPeer.getPeerInstance();
@@ -681,6 +770,13 @@ public final class XToolkit extends UNIXToolkit implements Runnable {
                            (XlibWrapper.XEventsQueued(getDisplay(), XConstants.QueuedAfterFlush) == 0)) {
                         callTimeoutTasks();
                         waitForEvents(getNextTaskTime());
+                        if (state == 1) {
+                            state = 2;
+                            awtLockNotifyAll();
+                            while (state == 2) {
+                                awtLockWait();
+                            }
+                        }
                     }
                     XlibWrapper.XNextEvent(getDisplay(),ev.pData);
                 }
@@ -757,14 +853,6 @@ public final class XToolkit extends UNIXToolkit implements Runnable {
                 public void paletteChanged() {
                 }
             };
-
-    static {
-        GraphicsEnvironment ge = GraphicsEnvironment.getLocalGraphicsEnvironment();
-        if (ge instanceof SunGraphicsEnvironment) {
-            ((SunGraphicsEnvironment) ge).addDisplayChangedListener(
-                    displayChangedHandler);
-        }
-    }
 
     private static void initScreenSize() {
         if (maxWindowWidthInPixels == -1 || maxWindowHeightInPixels == -1) {

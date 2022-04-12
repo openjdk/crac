@@ -93,6 +93,7 @@ class SystemProperty : public PathString {
   SystemProperty* _next;
   bool            _internal;
   bool            _writeable;
+  bool            _modifiable_on_restore;
   bool writeable() { return _writeable; }
 
  public:
@@ -100,6 +101,7 @@ class SystemProperty : public PathString {
   char* value() const                 { return PathString::value(); }
   const char* key() const             { return _key; }
   bool internal() const               { return _internal; }
+  bool modifiable_on_restore()        { return _modifiable_on_restore; }
   SystemProperty* next() const        { return _next; }
   void set_next(SystemProperty* next) { _next = next; }
 
@@ -127,7 +129,7 @@ class SystemProperty : public PathString {
   }
 
   // Constructor
-  SystemProperty(const char* key, const char* value, bool writeable, bool internal = false);
+  SystemProperty(const char* key, const char* value, bool writeable, bool internal = false, bool modifiable = false);
 };
 
 
@@ -261,6 +263,11 @@ class Arguments : AllStatic {
     ExternalProperty
   };
 
+  enum PropertyModifiableOnRestore {
+    ModifiableProperty,
+    UnmodifiableProperty
+  };
+
  private:
 
   // a pointer to the flags file name if it is specified
@@ -276,6 +283,9 @@ class Arguments : AllStatic {
 
   // Property list
   static SystemProperty* _system_properties;
+
+  // Property list when restoring from checkpoint
+  static SystemProperty* _system_properties_for_restore;
 
   // Quick accessor to System properties in the list:
   static SystemProperty *_sun_boot_library_path;
@@ -376,9 +386,9 @@ class Arguments : AllStatic {
   static exit_hook_t      _exit_hook;
   static vfprintf_hook_t  _vfprintf_hook;
 
-  // System properties
-  static bool add_property(const char* prop, PropertyWriteable writeable=WriteableProperty,
-                           PropertyInternal internal=ExternalProperty);
+  // prop points to a string of the form key=value
+  // Parse the string to extract key and the value
+  static void get_key_value(const char* prop, const char** key, const char** value);
 
   // Used for module system related properties: converted from command-line flags.
   // Basic properties are writeable as they operate as "last one wins" and will get overwritten.
@@ -468,6 +478,12 @@ class Arguments : AllStatic {
                                          char** base_archive_path,
                                          char** top_archive_path) NOT_CDS_RETURN;
 
+  // restore feature
+  static bool add_property_for_restore(const char* prop,
+                                       PropertyWriteable writeable=WriteableProperty,
+                                       PropertyInternal internal=ExternalProperty);
+  static bool is_restore_option_set(const JavaVMInitArgs* args);
+
  public:
   // Parses the arguments, first phase
   static jint parse(const JavaVMInitArgs* args);
@@ -521,6 +537,14 @@ class Arguments : AllStatic {
   static SystemProperty*  system_properties()   { return _system_properties; }
   static const char*    get_property(const char* key);
 
+  // System properties
+  static bool add_property(const char* prop,
+                           PropertyModifiableOnRestore modifiable_on_restore=ModifiableProperty,
+                           PropertyWriteable writeable=WriteableProperty,
+                           PropertyInternal internal=ExternalProperty);
+
+  static bool add_or_modify_property(const char* prop);
+
   // -Djava.vendor.url.bug
   static const char* java_vendor_url_bug()  { return _java_vendor_url_bug; }
 
@@ -567,14 +591,16 @@ class Arguments : AllStatic {
   // Property List manipulation
   static void PropertyList_add(SystemProperty *element);
   static void PropertyList_add(SystemProperty** plist, SystemProperty *element);
-  static void PropertyList_add(SystemProperty** plist, const char* k, const char* v, bool writeable, bool internal);
+  static void PropertyList_add(SystemProperty** plist, const char* k, const char* v, bool writeable, bool internal, bool modifiable_on_restore);
 
   static void PropertyList_unique_add(SystemProperty** plist, const char* k, const char* v,
                                       PropertyAppendable append, PropertyWriteable writeable,
-                                      PropertyInternal internal);
+                                      PropertyInternal internal, PropertyModifiableOnRestore modifiable);
+  static void PropertyList_modifiable_add(SystemProperty** plist, const char* k, const char* v);
   static const char* PropertyList_get_value(SystemProperty* plist, const char* key);
   static const char* PropertyList_get_readable_value(SystemProperty* plist, const char* key);
   static int  PropertyList_count(SystemProperty* pl);
+  static int  PropertyList_modifiable_count(SystemProperty* pl);
   static int  PropertyList_readable_count(SystemProperty* pl);
   static const char* PropertyList_get_key_at(SystemProperty* pl,int index);
   static char* PropertyList_get_value_at(SystemProperty* pl,int index);
@@ -623,6 +649,9 @@ class Arguments : AllStatic {
   // preview features
   static void set_enable_preview() { _enable_preview = true; }
   static bool enable_preview() { return _enable_preview; }
+
+  // restore feature
+  static SystemProperty* system_properties_for_restore() { return _system_properties_for_restore; }
 
   // Utility: copies src into buf, replacing "%%" with "%" and "%p" with pid.
   static bool copy_expand_pid(const char* src, size_t srclen, char* buf, size_t buflen);

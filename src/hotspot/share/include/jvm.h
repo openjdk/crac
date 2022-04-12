@@ -101,6 +101,12 @@ JVM_ArrayCopy(JNIEnv *env, jclass ignored, jobject src, jint src_pos,
               jobject dst, jint dst_pos, jint length);
 
 /*
+ * Return an array of all modifiable properties as alternating name and value pairs.
+ */
+JNIEXPORT jobjectArray JNICALL
+JVM_GetModifiableProperties(JNIEnv *env);
+
+/*
  * Return an array of all properties as alternating name and value pairs.
  */
 JNIEXPORT jobjectArray JNICALL

@@ -117,6 +117,7 @@ JVM_GetMethodIxNameUTF
 JVM_GetMethodIxSignatureUTF
 JVM_GetMethodParameters
 JVM_GetMethodTypeAnnotations
+JVM_GetModifiableProperties
 JVM_GetNanoTimeAdjustment
 JVM_GetNestHost
 JVM_GetNestMembers

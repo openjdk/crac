@@ -83,6 +83,14 @@ public interface JDKResource extends Resource {
          * jdk.internal.ref.CleanerImpl resources
          */
         CLEANERS,
+
+        /**
+         * Priority of the
+         * java.lang.System resources
+         * Keep this at the last as the j.l.System resources should be the first
+         * to be handled on restore.
+         */
+        JLSYSTEM,
     };
 
     Priority getPriority();

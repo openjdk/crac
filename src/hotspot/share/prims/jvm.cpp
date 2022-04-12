@@ -317,6 +317,40 @@ static void set_property(Handle props, const char* key, const char* value, TRAPS
 
 /*
  * Return all of the system properties in a Java String array with alternating
+ * names and values from the jvm SystemProperty which are modifiable on restore.
+ */
+JVM_ENTRY(jobjectArray, JVM_GetModifiableProperties(JNIEnv *env))
+  ResourceMark rm(THREAD);
+  HandleMark hm(THREAD);
+  int ndx = 0;
+
+  SystemProperty* p = Arguments::system_properties();
+  int count = Arguments::PropertyList_modifiable_count(p);
+
+  // Allocate result String array
+  InstanceKlass* ik = vmClasses::String_klass();
+  objArrayOop r = oopFactory::new_objArray(ik, count * 2, CHECK_NULL);
+  objArrayHandle result_h(THREAD, r);
+
+  while (p != NULL) {
+    const char * key = p->key();
+    if (p->modifiable_on_restore() &&
+       (strcmp(key, "sun.nio.MaxDirectMemorySize") != 0)) {
+        const char * value = p->value();
+        Handle key_str    = java_lang_String::create_from_platform_dependent_str(key, CHECK_NULL);
+        Handle value_str  = java_lang_String::create_from_platform_dependent_str((value != NULL ? value : ""), CHECK_NULL);
+        result_h->obj_at_put(ndx * 2,  key_str());
+        result_h->obj_at_put(ndx * 2 + 1, value_str());
+        ndx++;
+    }
+    p = p->next();
+  }
+
+  return (jobjectArray) JNIHandles::make_local(THREAD, result_h());
+JVM_END
+
+/*
+ * Return all of the system properties in a Java String array with alternating
  * names and values from the jvm SystemProperty.
  * Which includes some internal and all commandline -D defined properties.
  */

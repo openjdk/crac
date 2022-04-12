@@ -5841,35 +5841,50 @@ static int call_crengine() {
   return 0;
 }
 
-static int set_new_args(int id, const char *args) {
-    char shmpath[128];
-    int shmpathlen = snprintf(shmpath, sizeof(shmpath), "/crac_%d", id);
-    if (shmpathlen < 0 || sizeof(shmpath) <= (size_t)shmpathlen) {
-      fprintf(stderr, "shmpath is too long: %d\n", shmpathlen);
+static int set_new_args(int id, const int props_count, const SystemProperty *props, const char *args) {
+  char shmpath[128];
+  int shmpathlen = snprintf(shmpath, sizeof(shmpath), "/crac_%d", id);
+  if (shmpathlen < 0 || sizeof(shmpath) <= (size_t)shmpathlen) {
+    fprintf(stderr, "shmpath is too long: %d\n", shmpathlen);
+    return -1;
+  }
+
+  int shmfd = shm_open(shmpath, O_RDWR | O_CREAT, 0600);
+  if (-1 == shmfd) {
+      perror("shm_open");
       return -1;
-    }
+  }
 
-    int shmfd = shm_open(shmpath, O_RDWR | O_CREAT, 0600);
-    if (-1 == shmfd) {
-        perror("shm_open");
-        return -1;
+  write(shmfd, (void *)&props_count, sizeof(props_count));
+  if (props != NULL) {
+    const SystemProperty *p = props;
+    while (p != NULL) {
+      const char *key_value_seperator = "=";
+      const char *key = p->key();
+      const char *value = p->value();
+      write(shmfd, key, strlen(key));
+      write(shmfd, key_value_seperator, strlen(key_value_seperator));
+      write(shmfd, value, strlen(value)+1); // +1 for the null character
+      p = p->next();
     }
+  }
 
-    int argslen = strlen(args);
-    int wret = write(shmfd, args, argslen);
-    if (argslen != wret) {
-        if (wret < 0) {
-            perror("write shm");
-        } else {
-            fprintf(stderr, "write shm truncated");
-        }
-        close(shmfd);
-        shm_unlink(shmpath);
-        return -1;
+  int argslen = strlen(args) + 1; // +1 for the null character
+  int wret = write(shmfd, args, argslen);
+  if (argslen != wret) {
+    if (wret < 0) {
+      perror("write shm");
+    } else {
+      fprintf(stderr, "write shm truncated");
     }
-
     close(shmfd);
-    return 0;
+    shm_unlink(shmpath);
+    return -1;
+  }
+
+  close(shmfd);
+
+  return 0;
 }
 
 static char* get_new_args(int id) {
@@ -5891,15 +5906,28 @@ static char* get_new_args(int id) {
       return NULL;
     }
 
-    char *args = NEW_C_HEAP_ARRAY(char, st.st_size + 1, mtInternal);
-    if (read(shmfd, args, st.st_size) < 0) {
+    char *contents = NEW_C_HEAP_ARRAY(char, st.st_size, mtInternal);
+    if (read(shmfd, contents, st.st_size) < 0) {
       perror("read (ignoring new args)");
       close(shmfd);
-      FREE_C_HEAP_ARRAY(char, args);
+      FREE_C_HEAP_ARRAY(char, contents);
       return NULL;
     }
 
-    args[st.st_size] = '\0';
+    // parse the contents to read new system properties and arguments
+    int num_props = *(int *)contents;
+
+    char *props = contents + sizeof(num_props);
+    while (num_props > 0) {
+      assert((props + strlen(props) <= contents + st.st_size), "property length exceeds shared memory size");
+      Arguments::add_or_modify_property(props);
+      num_props -= 1;
+      props = props + strlen(props) + 1;
+    }
+
+    char *args = NEW_C_HEAP_ARRAY(char, strlen(props) + 1, mtInternal);
+    memcpy(args, props, strlen(props) + 1);
+    FREE_C_HEAP_ARRAY(char, contents);
     return args;
 }
 
@@ -6282,8 +6310,10 @@ void os::Linux::restore() {
   compute_crengine();
 
   int id = getpid();
+  SystemProperty* props = Arguments::system_properties_for_restore();
+  int props_count = Arguments::PropertyList_count(props);
   const char* args = Arguments::java_command() ? Arguments::java_command() : "";
-  if (set_new_args(id, args)) {
+  if (set_new_args(id, props_count, props, args)) {
     id = 0;
   }
 

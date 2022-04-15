@@ -32,6 +32,13 @@ import jdk.crac.impl.CheckpointOpenSocketException;
 import jdk.crac.impl.OrderedContext;
 import sun.security.action.GetBooleanAction;
 
+import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Method;
+import java.security.AccessController;
+import java.security.PrivilegedActionException;
+import java.security.PrivilegedExceptionAction;
+import java.util.Arrays;
+
 /**
  * The coordination service.
  */
@@ -99,6 +106,7 @@ public class Core {
         return globalContext;
     }
 
+    @SuppressWarnings("removal")
     private static void checkpointRestore1() throws
             CheckpointException,
             RestoreException {
@@ -115,8 +123,9 @@ public class Core {
 
         final Object[] bundle = checkpointRestore0(checkpointException != null);
         final int retCode = (Integer)bundle[0];
-        final int[] codes = (int[])bundle[1];
-        final String[] messages = (String[])bundle[2];
+        final String newArguments = (String)bundle[1];
+        final int[] codes = (int[])bundle[2];
+        final String[] messages = (String[])bundle[3];
 
         if (FlagsHolder.TRACE_STARTUP_TIME) {
             System.out.println("STARTUPTIME " + System.nanoTime() + " restore");
@@ -140,18 +149,54 @@ public class Core {
             }
         }
 
+        RestoreException restoreException = null;
         try {
             globalContext.afterRestore(null);
         } catch (RestoreException re) {
             if (checkpointException == null) {
-                throw re;
-            }
-            for (Throwable t : re.getSuppressed()) {
-                checkpointException.addSuppressed(t);
+                restoreException = re;
+            } else {
+                for (Throwable t : re.getSuppressed()) {
+                    checkpointException.addSuppressed(t);
+                }
             }
         }
+
+        if (newArguments != null && newArguments.length() > 0) {
+            String[] args = newArguments.split(" ");
+            if (args.length > 0) {
+                try {
+                    Method newMain = AccessController.doPrivileged(new PrivilegedExceptionAction<Method>() {
+                       @Override
+                       public Method run() throws Exception {
+                           Class < ?> newMainClass = Class.forName(args[0], false,
+                               ClassLoader.getSystemClassLoader());
+                           Method newMain = newMainClass.getDeclaredMethod("main",
+                               String[].class);
+                           newMain.setAccessible(true);
+                           return newMain;
+                       }
+                    });
+                    newMain.invoke(null,
+                        (Object)Arrays.copyOfRange(args, 1, args.length));
+                } catch (PrivilegedActionException |
+                         InvocationTargetException |
+                         IllegalAccessException e) {
+                    assert checkpointException == null :
+                        "should not have new arguments";
+                    if (restoreException == null) {
+                        restoreException = new RestoreException();
+                    }
+                    restoreException.addSuppressed(e);
+                }
+            }
+        }
+
+        assert checkpointException == null || restoreException == null;
         if (checkpointException != null) {
             throw checkpointException;
+        } else if (restoreException != null) {
+            throw restoreException;
         }
     }
 

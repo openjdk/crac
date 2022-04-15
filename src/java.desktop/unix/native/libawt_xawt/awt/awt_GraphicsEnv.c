@@ -811,7 +811,7 @@ JNIEXPORT void JNICALL
 Java_sun_awt_X11GraphicsEnvironment_beforeCheckpoint0(JNIEnv *env, jclass this)
 {
     pthread_mutex_lock(&lock);
-	XCloseDisplay(awt_display_storage);
+    XCloseDisplay(awt_display_storage);
 }
 
 JNIEXPORT void JNICALL

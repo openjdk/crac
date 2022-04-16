@@ -40,6 +40,7 @@ import sun.security.action.GetPropertyAction;
 
 import jdk.crac.Context;
 import jdk.crac.Resource;
+import jdk.internal.crac.JDKResource;
 
 /**
  *
@@ -102,19 +103,40 @@ public abstract class GraphicsEnvironment {
     }
 
     /**
-     * Resource nested in {@code X11GEJDKResource}.
+     * Reinitialization of the local {@code GraphicsEnvironment}.
+     * Supposed that it is an instance of {@code X11GraphicsEnvironment}.
+     *
+     * @see jdk.internal.crac.JDKResource
      */
-    public static final Resource resource = new Resource() {
+    private static final JDKResource x11GEJDKResource = new JDKResource() {
+        @Override
+        public JDKResource.Priority getPriority() {
+            return Priority.X11GE;
+        }
+
         @Override
         public void beforeCheckpoint(Context<? extends Resource> context) throws Exception {
             LocalGE.INSTANCE = null;
+
+            // XCloseDisplay
+            beforeCheckpoint0();
         }
 
         @Override
         public void afterRestore(Context<? extends Resource> context) throws Exception {
+            // XOpenDisplay
+            afterRestore0();
+
             LocalGE.INSTANCE = LocalGE.createGE();
         }
     };
+
+    private static native void beforeCheckpoint0();
+    private static native void afterRestore0();
+
+    static {
+        jdk.internal.crac.Core.getJDKContext().register(x11GEJDKResource);
+    }
 
     /**
      * Returns the local {@code GraphicsEnvironment}.

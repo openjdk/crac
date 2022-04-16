@@ -108,11 +108,11 @@ public interface JDKResource extends Resource {
 
 
         /* Keep next priority last to reinitialize
-         X11 connection correctly */
+         X11 connection properly */
 
         /**
          * Priority of the
-         * sun.awt.X11GEJDKResource resource
+         * java.awt.GraphicsEnvironment resource
          */
         X11GE,
     };

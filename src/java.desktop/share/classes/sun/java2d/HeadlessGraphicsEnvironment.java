@@ -35,6 +35,8 @@ import java.awt.Rectangle;
 import java.awt.image.BufferedImage;
 import java.util.Locale;
 
+import jdk.crac.Resource;
+
 /**
  * Headless decorator implementation of a SunGraphicsEnvironment
  */
@@ -44,6 +46,13 @@ public final class HeadlessGraphicsEnvironment extends GraphicsEnvironment {
 
     public HeadlessGraphicsEnvironment(GraphicsEnvironment ge) {
         this.ge = ge;
+    }
+
+    @Override
+    public Resource getResource() throws UnsupportedOperationException {
+        throw new UnsupportedOperationException(
+                "HeadlessGraphicsEnvironment does not have an associated Resource"
+        );
     }
 
     @Override

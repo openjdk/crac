@@ -104,11 +104,12 @@ public abstract class GraphicsEnvironment {
 
     /**
      * Reinitialization of the local {@code GraphicsEnvironment}.
-     * Supposed that it is an instance of {@code X11GraphicsEnvironment}.
+     * It depends on resources associated with extending classes.
      *
+     * @see sun.awt.X11GraphicsEnvironment
      * @see jdk.internal.crac.JDKResource
      */
-    private static final JDKResource x11GEJDKResource = new JDKResource() {
+    private static final JDKResource jdkResource = new JDKResource() {
         @Override
         public JDKResource.Priority getPriority() {
             return Priority.X11GE;
@@ -116,26 +117,23 @@ public abstract class GraphicsEnvironment {
 
         @Override
         public void beforeCheckpoint(Context<? extends Resource> context) throws Exception {
-            LocalGE.INSTANCE = null;
-
-            // XCloseDisplay
-            beforeCheckpoint0();
+            LocalGE.INSTANCE.getResource().beforeCheckpoint(context);
         }
 
         @Override
         public void afterRestore(Context<? extends Resource> context) throws Exception {
-            // XOpenDisplay
-            afterRestore0();
-
+            LocalGE.INSTANCE.getResource().afterRestore(context);
             LocalGE.INSTANCE = LocalGE.createGE();
         }
     };
 
-    private static native void beforeCheckpoint0();
-    private static native void afterRestore0();
+    /**
+     * @return {@code Resource} associated with an instance of extending class
+     */
+    public abstract Resource getResource();
 
     static {
-        jdk.internal.crac.Core.getJDKContext().register(x11GEJDKResource);
+        jdk.internal.crac.Core.getJDKContext().register(jdkResource);
     }
 
     /**

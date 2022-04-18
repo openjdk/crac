@@ -45,6 +45,9 @@ import sun.java2d.SurfaceManagerFactory;
 import sun.java2d.UnixSurfaceManagerFactory;
 import sun.java2d.xr.XRSurfaceData;
 
+import jdk.crac.Context;
+import jdk.crac.Resource;
+
 /**
  * This is an implementation of a GraphicsEnvironment object for the
  * default local GraphicsEnvironment used by the Java Runtime Environment
@@ -55,6 +58,27 @@ import sun.java2d.xr.XRSurfaceData;
  */
 @SuppressWarnings("removal")
 public final class X11GraphicsEnvironment extends SunGraphicsEnvironment {
+
+    private static final Resource resource = new Resource() {
+        @Override
+        public void beforeCheckpoint (Context < ? extends Resource > context) throws Exception {
+            // XCloseDisplay
+            beforeCheckpoint0();
+        }
+
+        @Override
+        public void afterRestore (Context < ? extends Resource > context) throws Exception {
+            // XOpenDisplay
+            afterRestore0();
+        }
+    };
+
+    private static native void beforeCheckpoint0();
+    private static native void afterRestore0();
+
+    public Resource getResource() {
+        return resource;
+    }
 
     static {
         java.security.AccessController.doPrivileged(

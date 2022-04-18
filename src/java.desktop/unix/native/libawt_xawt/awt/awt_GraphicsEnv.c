@@ -808,14 +808,14 @@ Java_sun_awt_X11GraphicsEnvironment_initDisplay(JNIEnv *env, jobject this,
 }
 
 JNIEXPORT void JNICALL
-Java_awt_GraphicsEnvironment_beforeCheckpoint0(JNIEnv *env, jclass this)
+Java_sun_awt_X11GraphicsEnvironment_beforeCheckpoint0(JNIEnv *env, jclass this)
 {
     pthread_mutex_lock(&lock);
     XCloseDisplay(awt_display_storage);
 }
 
 JNIEXPORT void JNICALL
-Java_awt_GraphicsEnvironment_afterRestore0(JNIEnv *env, jclass this)
+Java_sun_awt_X11GraphicsEnvironment_afterRestore0(JNIEnv *env, jclass this)
 {
     awt_display_storage = XOpenDisplay(NULL);
     pthread_mutex_unlock(&lock);

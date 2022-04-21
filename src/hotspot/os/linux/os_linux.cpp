@@ -5837,7 +5837,11 @@ static int call_crengine() {
   }
 
   pid_t pid = fork();
-  if (!pid) {
+  if (pid == -1) {
+    perror("cannot fork for crengine");
+    return -1;
+  }
+  if (pid == 0) {
     execl(_crengine, _crengine, "checkpoint", CRaCCheckpointTo, NULL);
     perror("execl");
     exit(1);

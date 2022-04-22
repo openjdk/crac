@@ -190,13 +190,8 @@ static int post_resume(void) {
     }
     int pid = atoi(pidstr);
 
-    union sigval sv = { .sival_int = 0 };
-    if (-1 == sigqueue(pid, RESTORE_SIGNAL, sv)) {
-        perror(MSGPREFIX "sigqueue");
-        return 1;
-    }
-
-    return 0;
+    char *strid = getenv("CRAC_NEW_ARGS_ID");
+    return kickjvm(pid, strid ? atoi(strid) : 0);
 }
 
 static int create_cppath(const char *imagedir) {

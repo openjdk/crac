@@ -39,9 +39,6 @@ import java.util.StringTokenizer;
 import sun.awt.AWTAccessor;
 import sun.util.logging.PlatformLogger;
 
-import jdk.crac.Context;
-import jdk.crac.Resource;
-
 /**
  * A class to encapsulate the bitmap representation of the mouse cursor.
  *
@@ -51,20 +48,16 @@ import jdk.crac.Resource;
 public class Cursor implements java.io.Serializable {
 
     /**
-     * Resource nested in {@code X11ToolkitJDKResource}.
+     * Setting to {@code null} predefined cursors to reinitialize
+     * {@code XToolkit} properly.
+     * {@code Window} depends on this method.
+     *
+     * @see java.awt.Window
      */
-    public static final Resource resource = new Resource() {
-        @Override
-        public void beforeCheckpoint(Context<? extends Resource> context) throws Exception {
-            Arrays.fill(predefinedPrivate, null);
-            Arrays.fill(predefined, null);
-        }
-
-        @Override
-        public void afterRestore(Context<? extends Resource> context) throws Exception {
-
-        }
-    };
+    public static void beforeCheckpoint() {
+        Arrays.fill(predefinedPrivate, null);
+        Arrays.fill(predefined, null);
+    }
 
     /**
      * The default cursor type (gets set if no cursor is defined).

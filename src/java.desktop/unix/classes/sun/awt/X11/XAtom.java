@@ -61,9 +61,6 @@ package sun.awt.X11;
 import jdk.internal.misc.Unsafe;
 import java.util.HashMap;
 
-import jdk.crac.Context;
-import jdk.crac.Resource;
-
 public final class XAtom {
 
     // Order of lock:  XAWTLock -> XAtom.class
@@ -144,21 +141,10 @@ public final class XAtom {
     static HashMap<Long, XAtom> atomToAtom = new HashMap<Long, XAtom>();
     static HashMap<String, XAtom> nameToAtom = new HashMap<String, XAtom>();
 
-    /**
-     * Resource nested in {@code X11ToolkitJDKResource}.
-     */
-    public static final Resource resource = new Resource() {
-        @Override
-        public void beforeCheckpoint (Context < ? extends Resource > context) throws Exception {
-            atomToAtom.clear();
-            nameToAtom.clear();
-        }
-
-        @Override
-        public void afterRestore (Context < ? extends Resource > context) throws Exception {
-
-        }
-    };
+    public static void beforeCheckpoint() throws Exception {
+        atomToAtom.clear();
+        nameToAtom.clear();
+    }
 
     static void register(XAtom at) {
         if (at == null) {

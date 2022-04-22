@@ -152,6 +152,7 @@ import sun.util.logging.PlatformLogger;
 
 import jdk.crac.Context;
 import jdk.crac.Resource;
+import jdk.internal.crac.JDKResource;
 
 import static sun.awt.X11.XlibUtil.scaleDown;
 
@@ -219,34 +220,46 @@ public final class XToolkit extends UNIXToolkit implements Runnable {
     private static int state = 0;
 
     /**
-     * Resource nested in {@code X11ToolkitJDKResource}.
+     * Reinitialization of the {@code XToolkit} for proper
+     * reinitialization of {@code GraphicsEnvironment}.
+     * This must be done before GC, because it may
+     * cause some objects to be unreachable.
+     *
+     * @see jdk.internal.crac.JDKResource
      */
-    public static final Resource resource = new Resource() {
+    private static final JDKResource jdkResource = new JDKResource() {
+        public Priority getPriority() {
+            return Priority.NORMAL;
+        }
+
         @Override
         public void beforeCheckpoint(Context<? extends Resource> context) throws Exception {
-            awtLock();
-            state = 1;
-            while (state != 2) {
-                awtLockWait(10);
-            }
-            awtUnlock();
+            // AWT
+            Window.beforeCheckpoint();
+
+            // X11
+            XRootWindow.beforeCheckpoint();
+            XWM.beforeCheckpoint();
 
             synchronized (winMap) {
-                for(XBaseWindow window : winMap.values()) {
+                for (XBaseWindow window : winMap.values()) {
                     window.destroy();
                 }
                 winMap.clear();
             }
 
-            for(Object peer : specialPeerMap.values()) {
-                if (peer instanceof XComponentPeer)
-                    ((XComponentPeer)peer).dispose();
-            }
-            specialPeerMap.clear();
-
             synchronized (winToDispatcher) {
                 winToDispatcher.clear();
             }
+
+            for (Object peer : specialPeerMap.values()) {
+                if (peer instanceof XComponentPeer) {
+                    ((XComponentPeer) peer).dispose();
+                }
+            }
+            specialPeerMap.clear();
+
+            loopLock();
 
             initialized = false;
             timeStampUpdated = false;
@@ -275,14 +288,21 @@ public final class XToolkit extends UNIXToolkit implements Runnable {
 
         @Override
         public void afterRestore(Context<? extends Resource> context) throws Exception {
+            // X11
             initStatic();
             resetKeyboardSniffer();
             initStaticInternal();
 
-            awtLock();
-            state = 0;
-            awtLockNotifyAll();
-            awtUnlock();
+            loopUnlock();
+
+            XWM.afterRestore();
+            XRootWindow.afterRestore();
+
+            // AWT
+            /*
+             TODO: AWT and Swing components reinitialization
+              for the original state
+            */
         }
     };
 
@@ -311,6 +331,8 @@ public final class XToolkit extends UNIXToolkit implements Runnable {
 
     static {
         initStatic();
+
+        jdk.internal.crac.Core.getJDKContext().register(jdkResource);
     }
 
     /*
@@ -835,6 +857,27 @@ public final class XToolkit extends UNIXToolkit implements Runnable {
                 awtUnlock();
             }
         }
+    }
+
+    private static void loopLock() {
+        try {
+            awtLock();
+            state = 1;
+            while (state != 2) {
+                awtLockWait(10);
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+        } finally {
+            awtUnlock();
+        }
+    }
+
+    private static void loopUnlock() {
+        awtLock();
+        state = 0;
+        awtLockNotifyAll();
+        awtUnlock();
     }
 
     /**

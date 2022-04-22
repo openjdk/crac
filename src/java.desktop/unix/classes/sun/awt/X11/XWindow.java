@@ -62,9 +62,6 @@ import sun.java2d.SunGraphics2D;
 import sun.java2d.SurfaceData;
 import sun.util.logging.PlatformLogger;
 
-import jdk.crac.Context;
-import jdk.crac.Resource;
-
 public class XWindow extends XBaseWindow implements X11ComponentPeer {
     private static PlatformLogger log = PlatformLogger.getLogger("sun.awt.X11.XWindow");
     private static PlatformLogger insLog = PlatformLogger.getLogger("sun.awt.X11.insets.XWindow");
@@ -72,30 +69,25 @@ public class XWindow extends XBaseWindow implements X11ComponentPeer {
     private static final PlatformLogger focusLog = PlatformLogger.getLogger("sun.awt.X11.focus.XWindow");
     private static PlatformLogger keyEventLog = PlatformLogger.getLogger("sun.awt.X11.kye.XWindow");
 
-    /**
-     * Resource nested in {@code X11ToolkitJDKResource}.
-     */
-    public static final Resource resource = new Resource() {
+    public static void beforeCheckpoint() throws Exception {
+        lastX = 0;
+        lastY = 0;
+        lastTime = 0;
+        lastButton = 0;
+        lastWindowRef = null;
+        clickCount = 0;
 
-        @Override
-        public void beforeCheckpoint(Context<? extends Resource> context) throws Exception {
-            lastX = 0;
-            lastY = 0;
-            lastTime = 0;
-            lastButton = 0;
-            lastWindowRef = null;
-            clickCount = 0;
+        wm_protocols = null;
+        wm_delete_window = null;
+        wm_take_focus = null;
 
-            wm_protocols = null;
-            wm_delete_window = null;
-            wm_take_focus = null;
-        }
+        XBaseWindow.beforeCheckpoint();
+        XGlobalCursorManager.beforeCheckpoint();
+    }
 
-        @Override
-        public void afterRestore(Context<? extends Resource> context) throws Exception {
-
-        }
-    };
+    public static void afterRestore() throws Exception {
+        XGlobalCursorManager.afterRestore();
+    }
 
   /* If a motion comes in while a multi-click is pending,
    * allow a smudge factor so that moving the mouse by a small

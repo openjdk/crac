@@ -47,20 +47,10 @@ public interface JDKResource extends Resource {
      * in the direct order of registration.
      */
     enum Priority {
-        /* Keep this priority first to clear and
-        reinitialize X11 and AWT resources correctly */
-
-        /**
-         * Priority of the
-         * sun.awt.X11ToolkitJDKResource resource
-         */
-        X11TOOLKIT,
-
-
-        /* Use this priority in most cases. */
-
         /**
          * Most resources should use this option.
+         *
+         * @see sun.awt.X11.XToolkit
          */
         NORMAL,
 
@@ -108,13 +98,13 @@ public interface JDKResource extends Resource {
 
 
         /* Keep next priority last to reinitialize
-         X11 connection properly */
+        GraphicsEnvironment connection properly */
 
         /**
          * Priority of the
          * java.awt.GraphicsEnvironment resource
          */
-        X11GE,
+        GRAPHICS_ENVIRONMENT,
     };
 
     Priority getPriority();

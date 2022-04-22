@@ -104,7 +104,9 @@ public abstract class GraphicsEnvironment {
 
     /**
      * Reinitialization of the local {@code GraphicsEnvironment}.
-     * It depends on resources associated with extending classes.
+     * This must be done after GC, because some objects require
+     * connection to be disposed.
+     * It depends on {@code GraphicsEnvironment} extending classes.
      *
      * @see sun.awt.X11GraphicsEnvironment
      * @see jdk.internal.crac.JDKResource
@@ -112,25 +114,42 @@ public abstract class GraphicsEnvironment {
     private static final JDKResource jdkResource = new JDKResource() {
         @Override
         public JDKResource.Priority getPriority() {
-            return Priority.X11GE;
+            return Priority.GRAPHICS_ENVIRONMENT;
         }
 
         @Override
         public void beforeCheckpoint(Context<? extends Resource> context) throws Exception {
-            LocalGE.INSTANCE.getResource().beforeCheckpoint(context);
+            LocalGE.INSTANCE.beforeCheckpoint();
         }
 
         @Override
         public void afterRestore(Context<? extends Resource> context) throws Exception {
-            LocalGE.INSTANCE.getResource().afterRestore(context);
+            LocalGE.INSTANCE.afterRestore();
             LocalGE.INSTANCE = LocalGE.createGE();
         }
     };
 
     /**
-     * @return {@code Resource} associated with an instance of extending class
+     * {@code beforeCheckpoint()} operation for
+     * {@code GraphicsEnvironment} extending classes.
+     * Should be overridden for proper reinitialization
+     * of the local {@code GraphicsEnvironment}.
+     *
+     * @see sun.awt.X11GraphicsEnvironment
      */
-    public abstract Resource getResource();
+    protected void beforeCheckpoint() {
+    }
+
+    /**
+     * {@code afterRestore()} operation for
+     * {@code GraphicsEnvironment} extending classes.
+     * Should be overridden for proper reinitialization
+     * of the local {@code GraphicsEnvironment}.
+     *
+     * @see sun.awt.X11GraphicsEnvironment
+     */
+    protected void afterRestore() {
+    }
 
     static {
         jdk.internal.crac.Core.getJDKContext().register(jdkResource);

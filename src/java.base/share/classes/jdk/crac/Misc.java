@@ -7,7 +7,7 @@ import java.lang.ref.ReferenceQueue;
 /**
  * Additional utilities.
  */
-public class Misc {
+public final class Misc {
 
     private Misc() {
     }

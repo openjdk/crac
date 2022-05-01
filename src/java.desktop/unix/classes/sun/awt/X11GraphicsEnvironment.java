@@ -63,6 +63,7 @@ public final class X11GraphicsEnvironment extends SunGraphicsEnvironment {
 
     protected void afterRestore() {
         // XOpenDisplay
+        initStatic();
         afterRestore0();
     }
 

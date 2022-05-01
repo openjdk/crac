@@ -125,7 +125,6 @@ public abstract class GraphicsEnvironment {
         @Override
         public void afterRestore(Context<? extends Resource> context) throws Exception {
             LocalGE.INSTANCE.afterRestore();
-            LocalGE.INSTANCE = LocalGE.createGE();
         }
     };
 

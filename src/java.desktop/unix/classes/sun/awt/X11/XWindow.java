@@ -69,7 +69,7 @@ public class XWindow extends XBaseWindow implements X11ComponentPeer {
     private static final PlatformLogger focusLog = PlatformLogger.getLogger("sun.awt.X11.focus.XWindow");
     private static PlatformLogger keyEventLog = PlatformLogger.getLogger("sun.awt.X11.kye.XWindow");
 
-    public static void beforeCheckpoint() throws Exception {
+    public static void beforeCheckpoint() {
         lastX = 0;
         lastY = 0;
         lastTime = 0;
@@ -85,8 +85,9 @@ public class XWindow extends XBaseWindow implements X11ComponentPeer {
         XGlobalCursorManager.beforeCheckpoint();
     }
 
-    public static void afterRestore() throws Exception {
+    public static void afterRestore() {
         XGlobalCursorManager.afterRestore();
+        XBaseWindow.afterRestore();
     }
 
   /* If a motion comes in while a multi-click is pending,

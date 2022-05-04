@@ -141,9 +141,13 @@ public final class XAtom {
     static HashMap<Long, XAtom> atomToAtom = new HashMap<Long, XAtom>();
     static HashMap<String, XAtom> nameToAtom = new HashMap<String, XAtom>();
 
-    public static void beforeCheckpoint() throws Exception {
+    public static void beforeCheckpoint() {
         atomToAtom.clear();
         nameToAtom.clear();
+    }
+
+    public static void afterRestore() {
+
     }
 
     static void register(XAtom at) {

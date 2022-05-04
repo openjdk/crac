@@ -299,10 +299,7 @@ public final class XToolkit extends UNIXToolkit implements Runnable {
             XRootWindow.afterRestore();
 
             // AWT
-            /*
-             TODO: AWT and Swing components reinitialization
-              for the original state
-            */
+            Window.afterRestore();
         }
     };
 

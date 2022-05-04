@@ -48,7 +48,7 @@ import sun.util.logging.PlatformLogger;
 public class Cursor implements java.io.Serializable {
 
     /**
-     * Setting to {@code null} predefined cursors to reinitialize
+     * Setting to {@code null} predefined {@code Cursor} to reinitialize
      * {@code XToolkit} properly.
      * {@code Window} depends on this method.
      *
@@ -57,6 +57,16 @@ public class Cursor implements java.io.Serializable {
     public static void beforeCheckpoint() {
         Arrays.fill(predefinedPrivate, null);
         Arrays.fill(predefined, null);
+    }
+
+    /**
+     * {@code Cursor} restoring to reinitialize {@code XToolkit} properly.
+     * {@code Window} depends on this method.
+     *
+     * @see java.awt.Window
+     */
+    public static void afterRestore() {
+
     }
 
     /**

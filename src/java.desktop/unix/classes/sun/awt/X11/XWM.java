@@ -54,7 +54,7 @@ public final class XWM
     private static final PlatformLogger insLog = PlatformLogger.getLogger("sun.awt.X11.insets.XWM");
     private static final PlatformLogger stateLog = PlatformLogger.getLogger("sun.awt.X11.states.XWM");
 
-    public static void beforeCheckpoint() throws Exception {
+    public static void beforeCheckpoint() {
         winmgr_running = false;
         awt_wmgr = XWM.UNDETERMINED_WM;
 
@@ -70,7 +70,9 @@ public final class XWM
         XAtom.beforeCheckpoint();
     }
 
-    public static void afterRestore() throws Exception {
+    public static void afterRestore() {
+        XAtom.afterRestore();
+
         // Initialize the cleared XWM atoms
         XA_MWM_HINTS = new XAtom();
         XA_WM_STATE = new XAtom();

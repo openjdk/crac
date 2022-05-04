@@ -55,13 +55,13 @@ public class XRootWindow extends XBaseWindow {
     }
 
 
-    public static void beforeCheckpoint() throws Exception {
+    public static void beforeCheckpoint() {
         LazyHolder.deinit();
 
         XWindow.beforeCheckpoint();
     }
 
-    public static void afterRestore() throws Exception {
+    public static void afterRestore() {
         XWindow.afterRestore();
 
         LazyHolder.init();

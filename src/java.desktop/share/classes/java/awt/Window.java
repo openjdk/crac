@@ -167,7 +167,7 @@ import sun.util.logging.PlatformLogger;
 public class Window extends Container implements Accessible {
 
     /**
-     * Disposing of AWT windows to reinitialize {@code XToolkit} properly.
+     * {@code window} disposing to reinitialize {@code XToolkit} properly.
      * {@code XToolkit} depends on this method.
      *
      * @see sun.awt.X11.XToolkit
@@ -196,6 +196,18 @@ public class Window extends Container implements Accessible {
         nameCounter = 0;
 
         Cursor.beforeCheckpoint();
+    }
+
+    /**
+     * {@code window} restoring to reinitialize {@code XToolkit} properly.
+     * {@code XToolkit} depends on this method.
+     *
+     * TODO: AWT components reinitialization to the original state
+     *
+     * @see sun.awt.X11.XToolkit
+     */
+    public static void afterRestore() {
+        Cursor.afterRestore();
     }
 
     /**

@@ -35,11 +35,11 @@ import sun.awt.SunToolkit;
 
 public final class XGlobalCursorManager extends GlobalCursorManager {
 
-    public static void beforeCheckpoint() throws Exception {
+    public static void beforeCheckpoint() {
         manager = null;
     }
 
-    public static void afterRestore() throws Exception {
+    public static void afterRestore() {
         getCursorManager();
     }
 

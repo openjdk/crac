@@ -227,25 +227,6 @@ Java_jdk_internal_util_SystemProps_00024Raw_platformProperties(JNIEnv *env, jcla
 }
 
 /*
- * Gather the modifiable VM and command line properties and return as a String[].
- * The array indices are alternating key/value pairs
- * supplied by the VM including those defined on the command line
- * using -Dkey=value that may override the platform defined value.
- *
- * Note: The platform encoding must have been set.
- *
- * Class:     jdk_internal_util_SystemProps_Raw
- * Method:    vmPropertiesOnRestore
- * Signature: ()[Ljava/lang/String;
- */
-JNIEXPORT jobjectArray JNICALL
-Java_jdk_internal_util_SystemProps_00024Raw_vmPropertiesOnRestore(JNIEnv *env, jclass cla)
-{
-    jobjectArray cmdProps = JVM_GetModifiableProperties(env);
-    return cmdProps;
-}
-
-/*
  * Gather the VM and command line properties and return as a String[].
  * The array indices are alternating key/value pairs
  * supplied by the VM including those defined on the command line

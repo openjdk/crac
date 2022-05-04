@@ -113,11 +113,6 @@ public final class SystemProps {
         return props;
     }
 
-    public static Map<String, String> getPropertiesOnRestore() {
-        return new Raw().cmdPropertiesOnRestore();
-    }
-
-
     /**
      * Puts the property if it is non-null
      * @param props the Properties
@@ -248,15 +243,16 @@ public final class SystemProps {
             return platformProps[index];
         }
 
-        private HashMap<String, String> convertToMap(String[] props) {
+        private HashMap<String, String> cmdProperties() {
+            String[] vmProps = vmProperties();
             // While optimal initialCapacity here would be the exact number of properties
             // divided by LOAD_FACTOR, a large portion of the properties in Raw are
             // usually not set, so for typical cases the chosen capacity avoids resizing
-            var cmdProps = new HashMap<String, String>((props.length / 2) + Raw.FIXED_LENGTH);
-            for (int i = 0; i < props.length;) {
-                String k = props[i++];
+            var cmdProps = new HashMap<String, String>((vmProps.length / 2) + Raw.FIXED_LENGTH);
+            for (int i = 0; i < vmProps.length;) {
+                String k = vmProps[i++];
                 if (k != null) {
-                    String v = props[i++];
+                    String v = vmProps[i++];
                     cmdProps.put(k, v != null ? v : "");
                 } else {
                     // no more key/value pairs
@@ -264,33 +260,6 @@ public final class SystemProps {
                 }
             }
             return cmdProps;
-        }
-
-        /**
-         * Return a Properties instance of the command line and VM options
-         * defined by name and value.
-         * The Properties instance is sized to include the fixed properties.
-         *
-         * @return return a Properties instance of the command line and VM options
-         */
-        private HashMap<String, String> cmdProperties() {
-            String[] vmProps = vmProperties();
-            return convertToMap(vmProps);
-        }
-
-        /**
-         * Return a HashMap instance of the new command line and VM options
-         * defined by name and value on restore.
-         * If no new properties are available, returns an empty map.
-         *
-         * @return return a HashMap instance of the command line and VM options
-         */
-        private HashMap<String, String> cmdPropertiesOnRestore() {
-            String[] vmProps = vmPropertiesOnRestore();//vmPropertiesOnRestore();
-            if (vmProps != null && vmProps.length > 0) {
-                return convertToMap(vmProps);
-            }
-            return new HashMap<String, String>();
         }
 
         /**
@@ -303,8 +272,6 @@ public final class SystemProps {
          *      The first null key indicates there are no more key, value pairs.
          */
         private static native String[] vmProperties();
-
-        private static native String[] vmPropertiesOnRestore();// { return null; }
 
         /**
          * Returns the platform specific property values identified

@@ -66,9 +66,6 @@ import java.util.WeakHashMap;
 import java.util.function.Supplier;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Stream;
-import jdk.crac.Context;
-import jdk.crac.Resource;
-import jdk.internal.crac.JDKResource;
 import jdk.internal.misc.Unsafe;
 import jdk.internal.util.StaticProperty;
 import jdk.internal.module.ModuleBootstrap;
@@ -115,10 +112,6 @@ public final class System {
     /** Don't let anyone instantiate this class */
     private System() {
     }
-
-    private static final String CHECKPOINT_ARG = "-XX:CRaCCheckpointTo";
-
-    private static boolean canCheckpoint = false;
 
     /**
      * The "standard" input stream. This stream is already
@@ -2080,36 +2073,6 @@ public final class System {
         return properties;
     }
 
-    static class CRaCResource implements JDKResource {
-        public void beforeCheckpoint(Context<? extends Resource> context) {
-            /* Nothing to do here */
-        }
-
-        public void afterRestore(Context<? extends Resource> context) {
-            Map<String, String> propMap = SystemProps.getPropertiesOnRestore();
-            // Should VM::savedProps be updated as well?
-            // It can be avoided as it is mainly used to get JVMCI or jdk specific properties
-            // which are mostly likely "unmodifiable" on restore.
-            // If this changes, then deal with updating VM::savedProps here.
-
-            // call createProperties to mask out system properties not for public access
-            Properties tempProps = createProperties(propMap);
-            if (props != null) {
-                props.putAll(tempProps);
-            } else {
-                props = tempProps;
-            }
-        }
-
-        public Priority getPriority() {
-            return Priority.JLSYSTEM;
-        }
-    }
-
-    private static void registerCRaCResource() {
-        jdk.internal.crac.Core.getJDKContext().register(new CRaCResource());
-    }
-
     /**
      * Initialize the system class.  Called after thread initialization.
      */
@@ -2167,17 +2130,6 @@ public final class System {
         Thread current = Thread.currentThread();
         current.getThreadGroup().add(current);
 
-
-        // Check runtime args for the checkpoint argument
-        String[] vmArgs = VM.getRuntimeArguments();
-        if (vmArgs != null) {
-            for (String arg : vmArgs) {
-                if (arg != null && arg.contains(CHECKPOINT_ARG)) {
-                    canCheckpoint = true;
-                    break;
-                }
-            }
-        }
 
         // Subsystems that are invoked during initialization can invoke
         // VM.isBooted() in order to avoid doing things that should
@@ -2295,10 +2247,6 @@ public final class System {
 
         // set TCCL
         Thread.currentThread().setContextClassLoader(scl);
-
-        if (canCheckpoint) {
-            registerCRaCResource();
-        }
 
         // system is fully initialized
         VM.initLevel(4);

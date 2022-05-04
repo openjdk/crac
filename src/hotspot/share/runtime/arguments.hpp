@@ -596,7 +596,7 @@ class Arguments : AllStatic {
   static void PropertyList_unique_add(SystemProperty** plist, const char* k, const char* v,
                                       PropertyAppendable append, PropertyWriteable writeable,
                                       PropertyInternal internal, PropertyModifiableOnRestore modifiable);
-  static void PropertyList_modifiable_add(SystemProperty** plist, const char* k, const char* v);
+  static bool PropertyList_modifiable_add(SystemProperty** plist, const char* k, const char* v);
   static const char* PropertyList_get_value(SystemProperty* plist, const char* key);
   static const char* PropertyList_get_readable_value(SystemProperty* plist, const char* key);
   static int  PropertyList_count(SystemProperty* pl);

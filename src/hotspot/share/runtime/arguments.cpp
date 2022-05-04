@@ -1357,15 +1357,14 @@ bool Arguments::add_or_modify_property(const char* prop) {
 
   get_key_value(prop, &key, &value);
 
-  PropertyList_modifiable_add(&_system_properties, key, value);
+  bool rc = PropertyList_modifiable_add(&_system_properties, key, value);
 
   if (key != prop) {
     // SystemProperty copy passed value, thus free previously allocated
     // memory
     FreeHeap((void *)key);
   }
-
-  return true;
+  return rc;
 }
 
 bool Arguments::add_property(const char* prop, PropertyModifiableOnRestore modifiable_on_restore, PropertyWriteable writeable, PropertyInternal internal) {
@@ -4361,9 +4360,9 @@ void Arguments::PropertyList_unique_add(SystemProperty** plist, const char* k, c
   PropertyList_add(plist, k, v, writeable == WriteableProperty, internal == InternalProperty, modifiable_on_restore == ModifiableProperty);
 }
 
-void Arguments::PropertyList_modifiable_add(SystemProperty** plist, const char* k, const char* v) {
+bool Arguments::PropertyList_modifiable_add(SystemProperty** plist, const char* k, const char* v) {
   if (plist == NULL)
-    return;
+    return false;
 
   // If property key exists and is modifiable, then update with the new value.
   // If property key does not exist, add it to the list.
@@ -4373,12 +4372,14 @@ void Arguments::PropertyList_modifiable_add(SystemProperty** plist, const char* 
     if (strcmp(k, prop->key()) == 0) {
       if (prop->modifiable_on_restore()) {
         prop->set_value(v);
+	return true;
       }
-      return;
+      return false;
     }
   }
 
   PropertyList_add(plist, k, v, true, false, true);
+  return true;
 }
 
 // Copies src into buf, replacing "%%" with "%" and "%p" with pid

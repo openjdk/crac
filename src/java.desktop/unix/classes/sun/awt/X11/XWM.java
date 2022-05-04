@@ -74,20 +74,6 @@ public final class XWM
         XAtom.afterRestore();
 
         // Initialize the cleared XWM atoms
-        XA_MWM_HINTS = new XAtom();
-        XA_WM_STATE = new XAtom();
-        XA_E_FRAME_SIZE = new XAtom();
-        XA_KDE_NET_WM_FRAME_STRUT = new XAtom();
-        XA_KWM_WIN_ICONIFIED = new XAtom();
-        XA_KWM_WIN_MAXIMIZED = new XAtom();
-        XA_OL_DECOR_DEL = new XAtom();
-        XA_OL_DECOR_HEADER = new XAtom();
-        XA_OL_DECOR_RESIZE = new XAtom();
-        XA_OL_DECOR_PIN = new XAtom();
-        XA_OL_DECOR_CLOSE = new XAtom();
-        XA_NET_FRAME_EXTENTS = new XAtom();
-        XA_NET_REQUEST_FRAME_EXTENTS = new XAtom();
-
         XA_ENLIGHTENMENT_COMMS = new XAtom("ENLIGHTENMENT_COMMS", false);
         XA_DT_SM_WINDOW_INFO = new XAtom("_DT_SM_WINDOW_INFO", false);
         XA_DT_SM_STATE_INFO = new XAtom("_DT_SM_STATE_INFO", false);
@@ -99,7 +85,7 @@ public final class XWM
         init();
     }
 
-    static XAtom XA_MWM_HINTS = new XAtom();
+    static final XAtom XA_MWM_HINTS = new XAtom();
 
     private static Unsafe unsafe = XlibWrapper.unsafe;
 
@@ -114,25 +100,25 @@ public final class XWM
     static final int AWT_NET_N_KNOWN_STATES=2;
 
 /* Enlightenment */
-    static XAtom XA_E_FRAME_SIZE = new XAtom();
+    static final XAtom XA_E_FRAME_SIZE = new XAtom();
 
 /* KWin (KDE2) */
-    static XAtom XA_KDE_NET_WM_FRAME_STRUT = new XAtom();
+    static final XAtom XA_KDE_NET_WM_FRAME_STRUT = new XAtom();
 
 /* KWM (KDE 1.x) OBSOLETE??? */
-    static XAtom XA_KWM_WIN_ICONIFIED = new XAtom();
-    static XAtom XA_KWM_WIN_MAXIMIZED = new XAtom();
+    static final XAtom XA_KWM_WIN_ICONIFIED = new XAtom();
+    static final XAtom XA_KWM_WIN_MAXIMIZED = new XAtom();
 
 /* OpenLook */
-    static XAtom XA_OL_DECOR_DEL = new XAtom();
-    static XAtom XA_OL_DECOR_HEADER = new XAtom();
-    static XAtom XA_OL_DECOR_RESIZE = new XAtom();
-    static XAtom XA_OL_DECOR_PIN = new XAtom();
-    static XAtom XA_OL_DECOR_CLOSE = new XAtom();
+    static final XAtom XA_OL_DECOR_DEL = new XAtom();
+    static final XAtom XA_OL_DECOR_HEADER = new XAtom();
+    static final XAtom XA_OL_DECOR_RESIZE = new XAtom();
+    static final XAtom XA_OL_DECOR_PIN = new XAtom();
+    static final XAtom XA_OL_DECOR_CLOSE = new XAtom();
 
 /* EWMH */
-    static XAtom XA_NET_FRAME_EXTENTS = new XAtom();
-    static XAtom XA_NET_REQUEST_FRAME_EXTENTS = new XAtom();
+    static final XAtom XA_NET_FRAME_EXTENTS = new XAtom();
+    static final XAtom XA_NET_REQUEST_FRAME_EXTENTS = new XAtom();
 
     static final int
         UNDETERMINED_WM = 1,

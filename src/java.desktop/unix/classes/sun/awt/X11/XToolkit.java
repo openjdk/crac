@@ -241,25 +241,23 @@ public final class XToolkit extends UNIXToolkit implements Runnable {
             XRootWindow.beforeCheckpoint();
             XWM.beforeCheckpoint();
 
+            loopLock();
+
             synchronized (winMap) {
                 for (XBaseWindow window : winMap.values()) {
                     window.destroy();
                 }
                 winMap.clear();
             }
-
             synchronized (winToDispatcher) {
                 winToDispatcher.clear();
             }
-
             for (Object peer : specialPeerMap.values()) {
                 if (peer instanceof XComponentPeer) {
                     ((XComponentPeer) peer).dispose();
                 }
             }
             specialPeerMap.clear();
-
-            loopLock();
 
             initialized = false;
             timeStampUpdated = false;

@@ -817,8 +817,8 @@ Java_sun_awt_X11GraphicsEnvironment_beforeCheckpoint0(JNIEnv *env, jclass this)
 JNIEXPORT void JNICALL
 Java_sun_awt_X11GraphicsEnvironment_afterRestore0(JNIEnv *env, jclass this)
 {
+    awt_display_storage = XOpenDisplay(NULL);
     pthread_mutex_unlock(&lock);
-    pthread_mutex_destroy(&lock);
 }
 
 /*

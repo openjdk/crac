@@ -301,35 +301,6 @@ public final class XToolkit extends UNIXToolkit implements Runnable {
         }
     };
 
-    private static void initStatic() {
-        GraphicsEnvironment ge = GraphicsEnvironment.getLocalGraphicsEnvironment();
-        if (ge instanceof SunGraphicsEnvironment) {
-            ((SunGraphicsEnvironment) ge).addDisplayChangedListener(
-                    displayChangedHandler);
-        }
-
-        initSecurityWarning();
-        if (GraphicsEnvironment.isHeadless()) {
-            localEnv = null;
-            device = null;
-            display = 0;
-        } else {
-            localEnv = (X11GraphicsEnvironment) GraphicsEnvironment
-                .getLocalGraphicsEnvironment();
-            device = (X11GraphicsDevice) localEnv.getDefaultScreenDevice();
-            display = device.getDisplay();
-            setupModifierMap();
-            initIDs();
-            setBackingStoreType();
-        }
-    }
-
-    static {
-        initStatic();
-
-        jdk.internal.crac.Core.getJDKContext().register(jdkResource);
-    }
-
     /*
      * Return (potentially) platform specific display timeout for the
      * tray icon
@@ -891,6 +862,35 @@ public final class XToolkit extends UNIXToolkit implements Runnable {
                 public void paletteChanged() {
                 }
             };
+
+    static {
+        initStatic();
+
+        jdk.internal.crac.Core.getJDKContext().register(jdkResource);
+    }
+
+    private static void initStatic() {
+        GraphicsEnvironment ge = GraphicsEnvironment.getLocalGraphicsEnvironment();
+        if (ge instanceof SunGraphicsEnvironment) {
+            ((SunGraphicsEnvironment) ge).addDisplayChangedListener(
+                    displayChangedHandler);
+        }
+
+        initSecurityWarning();
+        if (GraphicsEnvironment.isHeadless()) {
+            localEnv = null;
+            device = null;
+            display = 0;
+        } else {
+            localEnv = (X11GraphicsEnvironment) GraphicsEnvironment
+                    .getLocalGraphicsEnvironment();
+            device = (X11GraphicsDevice) localEnv.getDefaultScreenDevice();
+            display = device.getDisplay();
+            setupModifierMap();
+            initIDs();
+            setBackingStoreType();
+        }
+    }
 
     private static void initScreenSize() {
         if (maxWindowWidthInPixels == -1 || maxWindowHeightInPixels == -1) {

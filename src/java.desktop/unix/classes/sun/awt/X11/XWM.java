@@ -81,6 +81,7 @@ public final class XWM
         XA_DT_WORKSPACE_CURRENT = new XAtom("_DT_WORKSPACE_CURRENT", false);
         XA_ICEWM_WINOPTHINT = new XAtom("_ICEWM_WINOPTHINT", false);
         XA_SUN_WM_PROTOCOLS = new XAtom("_SUN_WM_PROTOCOLS", false);
+        // TODO: Atom as resource
 
         init();
     }

@@ -63,8 +63,9 @@ public final class X11GraphicsEnvironment extends SunGraphicsEnvironment {
 
     protected void afterRestore() {
         // XOpenDisplay
-        initStatic();
         afterRestore0();
+
+        init();
     }
 
     private static native void beforeCheckpoint0();
@@ -78,6 +79,7 @@ public final class X11GraphicsEnvironment extends SunGraphicsEnvironment {
     }
 
     private static void initStatic() {
+        // TODO: choice the pieces
         java.security.AccessController.doPrivileged(
                           new java.security.PrivilegedAction<Object>() {
             public Object run() {
@@ -209,6 +211,10 @@ public final class X11GraphicsEnvironment extends SunGraphicsEnvironment {
     private native int getDefaultScreenNum();
 
     public X11GraphicsEnvironment() {
+        init();
+    }
+
+    private void init() {
         if (isHeadless()) {
             return;
         }

@@ -167,7 +167,7 @@ import sun.util.logging.PlatformLogger;
 public class Window extends Container implements Accessible {
 
     /**
-     * {@code window} disposing to reinitialize {@code XToolkit} properly.
+     * {@code Window} disposing to reinitialize {@code XToolkit} properly.
      * {@code XToolkit} depends on this method.
      *
      * @see sun.awt.X11.XToolkit
@@ -199,7 +199,7 @@ public class Window extends Container implements Accessible {
     }
 
     /**
-     * {@code window} restoring to reinitialize {@code XToolkit} properly.
+     * {@code Window} restoring to reinitialize {@code XToolkit} properly.
      * {@code XToolkit} depends on this method.
      *
      * TODO: AWT components reinitialization to the original state

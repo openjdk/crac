@@ -34,7 +34,6 @@ public class Core {
     private static native void registerPersistent0(FileDescriptor fd);
 
     private Core() {
-
     }
 
     static {

@@ -42,7 +42,6 @@ public class XBaseWindow {
     }
 
     public static void afterRestore() {
-
     }
 
     public static final String

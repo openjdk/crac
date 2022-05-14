@@ -147,7 +147,6 @@ public final class XAtom {
     }
 
     public static void afterRestore() {
-
     }
 
     static void register(XAtom at) {

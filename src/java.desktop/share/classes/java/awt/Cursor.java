@@ -66,7 +66,6 @@ public class Cursor implements java.io.Serializable {
      * @see java.awt.Window
      */
     public static void afterRestore() {
-
     }
 
     /**

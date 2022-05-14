@@ -240,6 +240,7 @@ public final class XToolkit extends UNIXToolkit implements Runnable {
             // X11
             XRootWindow.beforeCheckpoint();
             XWM.beforeCheckpoint();
+            XErrorHandlerUtil.beforeCheckpoint();
 
             loopLock();
 
@@ -293,6 +294,7 @@ public final class XToolkit extends UNIXToolkit implements Runnable {
 
             loopUnlock();
 
+            XErrorHandlerUtil.afterRestore();
             XWM.afterRestore();
             XRootWindow.afterRestore();
 

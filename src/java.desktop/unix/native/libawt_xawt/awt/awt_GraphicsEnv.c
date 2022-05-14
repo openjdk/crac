@@ -69,7 +69,8 @@ AwtScreenDataPtr x11Screens; // should be guarded by AWT_LOCK()/AWT_UNLOCK()
 static jboolean glxRequested = JNI_FALSE;
 
 Display *awt_display_storage;
-pthread_mutex_t lock;
+pthread_mutex_t lock = PTHREAD_MUTEX_INITIALIZER;
+Bool crac_lock = False;
 
 Display *get_awt_display(void) {
     pthread_mutex_lock(&lock);
@@ -721,13 +722,10 @@ awt_init_Display(JNIEnv *env, jobject this)
     jclass klass;
     Display *dpy;
     char errmsg[128];
-    int i;
 
-    if (awt_display) {
+    if (!crac_lock && awt_display) {
         return awt_display;
     }
-
-    pthread_mutex_init(&lock, NULL);
 
     /* Load AWT lock-related methods in SunToolkit */
     klass = (*env)->FindClass(env, "sun/awt/SunToolkit");
@@ -748,6 +746,10 @@ awt_init_Display(JNIEnv *env, jobject this)
     }
 
     dpy = awt_display_storage = XOpenDisplay(NULL);
+    if (crac_lock) {
+        pthread_mutex_unlock(&lock);
+        crac_lock = False;
+    }
     if (!dpy) {
         jio_snprintf(errmsg,
                      sizeof(errmsg),
@@ -811,14 +813,13 @@ JNIEXPORT void JNICALL
 Java_sun_awt_X11GraphicsEnvironment_beforeCheckpoint0(JNIEnv *env, jclass this)
 {
     pthread_mutex_lock(&lock);
+    crac_lock = True;
     XCloseDisplay(awt_display_storage);
 }
 
 JNIEXPORT void JNICALL
 Java_sun_awt_X11GraphicsEnvironment_afterRestore0(JNIEnv *env, jclass this)
 {
-    awt_display_storage = XOpenDisplay(NULL);
-    pthread_mutex_unlock(&lock);
 }
 
 /*

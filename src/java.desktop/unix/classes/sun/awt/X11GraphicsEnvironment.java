@@ -62,9 +62,10 @@ public final class X11GraphicsEnvironment extends SunGraphicsEnvironment {
     }
 
     protected void afterRestore() {
-        // XOpenDisplay
         afterRestore0();
-
+        // XOpenDisplay
+        initStatic();
+        // Reinitialize X11GE
         init();
     }
 
@@ -79,7 +80,6 @@ public final class X11GraphicsEnvironment extends SunGraphicsEnvironment {
     }
 
     private static void initStatic() {
-        // TODO: choice the pieces
         java.security.AccessController.doPrivileged(
                           new java.security.PrivilegedAction<Object>() {
             public Object run() {

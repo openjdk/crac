@@ -151,6 +151,14 @@ public class Core {
             }
         }
 
+        if (newProperties != null && newProperties.length > 0) {
+            Arrays.stream(newProperties).map(propStr -> propStr.split("=", 2)).forEach(pair -> {
+                AccessController.doPrivileged(
+                    (PrivilegedAction<String>)() ->
+                        System.setProperty(pair[0], pair.length == 2 ? pair[1] : ""));
+            });
+        }
+
         RestoreException restoreException = null;
         try {
             globalContext.afterRestore(null);
@@ -192,14 +200,6 @@ public class Core {
                     restoreException.addSuppressed(e);
                 }
             }
-        }
-
-        if (newProperties != null && newProperties.length > 0) {
-            Arrays.stream(newProperties).map(propStr -> propStr.split("=")).forEach(pair -> {
-		AccessController.doPrivileged(
-                    (PrivilegedAction<String>)() ->
-                        System.setProperty(pair[0], pair.length == 2 ? pair[1] : ""));
-            });
         }
 
         assert checkpointException == null || restoreException == null;

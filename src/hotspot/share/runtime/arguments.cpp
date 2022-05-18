@@ -73,7 +73,6 @@ char** Arguments::_jvm_args_array               = NULL;
 int    Arguments::_num_jvm_args                 = 0;
 char*  Arguments::_java_command                 = NULL;
 SystemProperty* Arguments::_system_properties   = NULL;
-SystemProperty* Arguments::_system_properties_for_restore = NULL;
 const char*  Arguments::_gc_log_filename        = NULL;
 size_t Arguments::_conservative_max_heap_alignment = 0;
 Arguments::Mode Arguments::_mode                = _mixed;
@@ -193,7 +192,7 @@ ModulePatchPath::~ModulePatchPath() {
   }
 }
 
-SystemProperty::SystemProperty(const char* key, const char* value, bool writeable, bool internal, bool modifiable_on_restore) : PathString(value) {
+SystemProperty::SystemProperty(const char* key, const char* value, bool writeable, bool internal) : PathString(value) {
   if (key == NULL) {
     _key = NULL;
   } else {
@@ -203,7 +202,6 @@ SystemProperty::SystemProperty(const char* key, const char* value, bool writeabl
   _next = NULL;
   _internal = internal;
   _writeable = writeable;
-  _modifiable_on_restore = modifiable_on_restore;
 }
 
 AgentLibrary::AgentLibrary(const char* name, const char* options,
@@ -1331,43 +1329,7 @@ void Arguments::get_key_value(const char* prop, const char** key, const char** v
   }
 }
 
-bool Arguments::add_property_for_restore(const char* prop, PropertyWriteable writeable, PropertyInternal internal) {
-  const char* key = NULL;
-  const char* value = NULL;
-
-  get_key_value(prop, &key, &value);
-
-  /* Only interested in key and value pair, other property attributes don't matter.
-   * These properties are only used for passing on to the JVM being restored.
-   */
-  PropertyList_unique_add(&_system_properties_for_restore, key, value, AddProperty, writeable, internal, ModifiableProperty);
-
-  if (key != prop) {
-    // SystemProperty copy passed value, thus free previously allocated
-    // memory
-    FreeHeap((void *)key);
-  }
-
-  return true;
-}
-
-bool Arguments::add_or_modify_property(const char* prop) {
-  const char* key = NULL;
-  const char* value = NULL;
-
-  get_key_value(prop, &key, &value);
-
-  bool rc = PropertyList_modifiable_add(&_system_properties, key, value);
-
-  if (key != prop) {
-    // SystemProperty copy passed value, thus free previously allocated
-    // memory
-    FreeHeap((void *)key);
-  }
-  return rc;
-}
-
-bool Arguments::add_property(const char* prop, PropertyModifiableOnRestore modifiable_on_restore, PropertyWriteable writeable, PropertyInternal internal) {
+bool Arguments::add_property(const char* prop, PropertyWriteable writeable, PropertyInternal internal) {
   const char* key = NULL;
   const char* value = NULL;
 
@@ -1397,7 +1359,7 @@ bool Arguments::add_property(const char* prop, PropertyModifiableOnRestore modif
   } else if (strcmp(key, "sun.boot.library.path") == 0) {
     // append is true, writable is true, internal is false
     PropertyList_unique_add(&_system_properties, key, value, AppendProperty,
-                            WriteableProperty, ExternalProperty, UnmodifiableProperty);
+                            WriteableProperty, ExternalProperty);
   } else {
     if (strcmp(key, "sun.java.command") == 0) {
       char *old_java_command = _java_command;
@@ -1405,7 +1367,6 @@ bool Arguments::add_property(const char* prop, PropertyModifiableOnRestore modif
       if (old_java_command != NULL) {
         os::free(old_java_command);
       }
-      modifiable_on_restore = UnmodifiableProperty;
     } else if (strcmp(key, "java.vendor.url.bug") == 0) {
       // If this property is set on the command line then its value will be
       // displayed in VM error logs as the URL at which to submit such logs.
@@ -1419,13 +1380,10 @@ bool Arguments::add_property(const char* prop, PropertyModifiableOnRestore modif
       if (old_java_vendor_url_bug != NULL) {
         os::free((void *)old_java_vendor_url_bug);
       }
-      modifiable_on_restore = UnmodifiableProperty;
-    } else if (strcmp(key, "sun.java.launcher") == 0) {
-      modifiable_on_restore = UnmodifiableProperty;
     }
 
     // Create new property and add at the end of the list
-    PropertyList_unique_add(&_system_properties, key, value, AddProperty, writeable, internal, modifiable_on_restore);
+    PropertyList_unique_add(&_system_properties, key, value, AddProperty, writeable, internal);
   }
 
   if (key != prop) {
@@ -1502,7 +1460,7 @@ void Arguments::set_mode_flags(Mode mode) {
   // Ensure Agent_OnLoad has the correct initial values.
   // This may not be the final mode; mode may change later in onload phase.
   PropertyList_unique_add(&_system_properties, "java.vm.info",
-                          VM_Version::vm_info_string(), AddProperty, UnwriteableProperty, ExternalProperty, UnmodifiableProperty);
+                          VM_Version::vm_info_string(), AddProperty, UnwriteableProperty, ExternalProperty);
 
   UseInterpreter             = true;
   UseCompiler                = true;
@@ -1976,7 +1934,7 @@ jint Arguments::set_aggressive_opts_flags() {
     // Feed the cache size setting into the JDK
     char buffer[1024];
     jio_snprintf(buffer, 1024, "java.lang.Integer.IntegerCache.high=" INTX_FORMAT, AutoBoxCacheMax);
-    if (!add_property(buffer, UnmodifiableProperty)) {
+    if (!add_property(buffer)) {
       return JNI_ENOMEM;
     }
   }
@@ -2051,7 +2009,7 @@ bool Arguments::check_vm_args_consistency() {
 #if INCLUDE_JVMCI
   if (status && EnableJVMCI) {
     PropertyList_unique_add(&_system_properties, "jdk.internal.vm.ci.enabled", "true",
-        AddProperty, UnwriteableProperty, InternalProperty, UnmodifiableProperty);
+        AddProperty, UnwriteableProperty, InternalProperty);
     if (!create_numbered_module_property("jdk.module.addmods", "jdk.internal.vm.ci", addmods_count++)) {
       return false;
     }
@@ -2128,7 +2086,7 @@ bool Arguments::create_module_property(const char* prop_name, const char* prop_v
   // that multiple occurrences of the associated flag just causes the existing property value to be
   // replaced ("last option wins"). Otherwise we would need to keep track of the flags and only convert
   // to a property after we have finished flag processing.
-  bool added = add_property(property, UnmodifiableProperty, WriteableProperty, internal);
+  bool added = add_property(property, WriteableProperty, internal);
   FreeHeap(property);
   return added;
 }
@@ -2149,7 +2107,7 @@ bool Arguments::create_numbered_module_property(const char* prop_base_name, cons
       jio_fprintf(defaultStream::error_stream(), "Failed to create property %s.%d=%s\n", prop_base_name, count, prop_value);
       return false;
     }
-    bool added = add_property(property, UnmodifiableProperty, UnwriteableProperty, InternalProperty);
+    bool added = add_property(property, UnwriteableProperty, InternalProperty);
     FreeHeap(property);
     return added;
   }
@@ -2368,10 +2326,47 @@ bool Arguments::is_restore_option_set(const JavaVMInitArgs* args) {
   return false;
 }
 
+bool Arguments::parse_options_for_restore(const JavaVMInitArgs* args) {
+  const char *tail = NULL;
+
+  // iterate over arguments
+  for (int index = 0; index < args->nOptions; index++) {
+    bool is_absolute_path = false;  // for -agentpath vs -agentlib
+
+    const JavaVMOption* option = args->options + index;
+
+    if (!match_option(option, "-Djava.class.path", &tail) &&
+        !match_option(option, "-Dsun.java.launcher", &tail)) {
+      if (match_option(option, "-D", &tail)) {
+        const char* key = NULL;
+        const char* value = NULL;
+
+        get_key_value(tail, &key, &value);
+
+        if (strcmp(key, "sun.java.command") == 0) {
+          char *old_java_command = _java_command;
+          _java_command = os::strdup_check_oom(value, mtArguments);
+          if (old_java_command != NULL) {
+            os::free(old_java_command);
+          }
+        } else {
+          add_property(tail);
+        }
+      } else if (match_option(option, "-XX:", &tail)) { // -XX:xxxx
+        // Skip -XX:Flags= and -XX:VMOptionsFile= since those cases have
+        // already been handled
+        if (!process_argument(tail, args->ignoreUnrecognized, JVMFlagOrigin::COMMAND_LINE)) {
+          return false;
+        }
+      }
+    }
+  }
+  return true;
+}
+
 jint Arguments::parse_each_vm_init_arg(const JavaVMInitArgs* args, bool* patch_mod_javabase, JVMFlagOrigin origin) {
   // For match_option to return remaining or value part of option string
   const char* tail;
-  bool is_restoring = false;
 
   // iterate over arguments
   for (int index = 0; index < args->nOptions; index++) {
@@ -2712,13 +2707,8 @@ jint Arguments::parse_each_vm_init_arg(const JavaVMInitArgs* args, bool* patch_m
         needs_module_property_warning = true;
         continue;
       }
-      is_restoring = (is_restoring || is_restore_option_set(args));
-      if (is_restoring) {
-        add_property_for_restore(tail);
-      } else {
-        if (!add_property(tail)) {
-          return JNI_ENOMEM;
-        }
+      if (!add_property(tail)) {
+        return JNI_ENOMEM;
       }
       // Out of the box management support
       if (match_option(option, "-Dcom.sun.management", &tail)) {
@@ -3002,9 +2992,6 @@ jint Arguments::parse_each_vm_init_arg(const JavaVMInitArgs* args, bool* patch_m
       // already been handled
       if ((strncmp(tail, "Flags=", strlen("Flags=")) != 0) &&
           (strncmp(tail, "VMOptionsFile=", strlen("VMOptionsFile=")) != 0)) {
-        if (!strncmp(tail, "CRaCRestoreFrom", strlen("CRaCRestoreFrom"))) {
-          is_restoring = true;
-        }
         if (!process_argument(tail, args->ignoreUnrecognized, origin)) {
           return JNI_EINVAL;
         }
@@ -3223,15 +3210,6 @@ jint Arguments::finalize_vm_init_args(bool patch_mod_javabase) {
 #ifndef CAN_SHOW_REGISTERS_ON_ASSERT
   UNSUPPORTED_OPTION(ShowRegistersOnAssert);
 #endif // CAN_SHOW_REGISTERS_ON_ASSERT
-
-  if (CRaCRestoreFrom) {
-    os::Linux::restore();
-    if (!CRaCIgnoreRestoreIfUnavailable) {
-      // FIXME switch to unified hotspot logging
-      warning("cannot restore");
-      return JNI_ERR;
-    }
-  }
 
   if (CRaCCheckpointTo && !os::Linux::prepare_checkpoint()) {
     return JNI_ERR;
@@ -4225,18 +4203,6 @@ int Arguments::PropertyList_count(SystemProperty* pl) {
   return count;
 }
 
-// Return the number of modifiable properties.
-int Arguments::PropertyList_modifiable_count(SystemProperty* pl) {
-  int count = 0;
-  while(pl != NULL) {
-    if (pl->modifiable_on_restore()) {
-      count++;
-    }
-    pl = pl->next();
-  }
-  return count;
-}
-
 // Return the number of readable properties.
 int Arguments::PropertyList_readable_count(SystemProperty* pl) {
   int count = 0;
@@ -4324,11 +4290,11 @@ void Arguments::PropertyList_add(SystemProperty** plist, SystemProperty *new_p) 
 }
 
 void Arguments::PropertyList_add(SystemProperty** plist, const char* k, const char* v,
-                                 bool writeable, bool internal, bool modifiable_on_restore) {
+                                 bool writeable, bool internal) {
   if (plist == NULL)
     return;
 
-  SystemProperty* new_p = new SystemProperty(k, v, writeable, internal, modifiable_on_restore);
+  SystemProperty* new_p = new SystemProperty(k, v, writeable, internal);
   PropertyList_add(plist, new_p);
 }
 
@@ -4339,7 +4305,7 @@ void Arguments::PropertyList_add(SystemProperty *element) {
 // This add maintains unique property key in the list.
 void Arguments::PropertyList_unique_add(SystemProperty** plist, const char* k, const char* v,
                                         PropertyAppendable append, PropertyWriteable writeable,
-                                        PropertyInternal internal, PropertyModifiableOnRestore modifiable_on_restore) {
+                                        PropertyInternal internal) {
   if (plist == NULL)
     return;
 
@@ -4357,29 +4323,7 @@ void Arguments::PropertyList_unique_add(SystemProperty** plist, const char* k, c
     }
   }
 
-  PropertyList_add(plist, k, v, writeable == WriteableProperty, internal == InternalProperty, modifiable_on_restore == ModifiableProperty);
-}
-
-bool Arguments::PropertyList_modifiable_add(SystemProperty** plist, const char* k, const char* v) {
-  if (plist == NULL)
-    return false;
-
-  // If property key exists and is modifiable, then update with the new value.
-  // If property key does not exist, add it to the list.
-  // If property key exists and is not modifiable, it is silently ignored.
-  SystemProperty* prop;
-  for (prop = *plist; prop != NULL; prop = prop->next()) {
-    if (strcmp(k, prop->key()) == 0) {
-      if (prop->modifiable_on_restore()) {
-        prop->set_value(v);
-	return true;
-      }
-      return false;
-    }
-  }
-
-  PropertyList_add(plist, k, v, true, false, true);
-  return true;
+  PropertyList_add(plist, k, v, writeable == WriteableProperty, internal == InternalProperty);
 }
 
 // Copies src into buf, replacing "%%" with "%" and "%p" with pid

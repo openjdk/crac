@@ -243,6 +243,13 @@ public final class SystemProps {
             return platformProps[index];
         }
 
+        /**
+         * Return a Properties instance of the command line and VM options
+         * defined by name and value.
+         * The Properties instance is sized to include the fixed properties.
+         *
+         * @return return a Properties instance of the command line and VM options
+         */
         private HashMap<String, String> cmdProperties() {
             String[] vmProps = vmProperties();
             // While optimal initialCapacity here would be the exact number of properties

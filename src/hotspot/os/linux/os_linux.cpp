@@ -378,17 +378,7 @@ class VM_CracRestoreParameters : public CHeapObj<mtInternal> {
       char *prop = NEW_C_HEAP_ARRAY(char, prop_len, mtInternal);
       strncpy(prop, cursor, prop_len);
 
-      if (Arguments::add_or_modify_property(prop)) {
-        properties->append(prop);
-      } else {
-        char *eq = strchr(prop, '=');
-	if (eq != NULL) {
-          *eq = '\0';
-	}
-        tty->print_cr("Property %s is not modifiable, it will be ignored", prop);
-	*eq = '=';
-	FREE_C_HEAP_ARRAY(char, prop);
-      }
+      properties->append(prop);
       cursor = cursor + prop_len;
     }
 
@@ -6393,7 +6383,7 @@ void os::Linux::restore() {
   compute_crengine();
 
   int id = getpid();
-  SystemProperty* props = Arguments::system_properties_for_restore();
+  SystemProperty* props = Arguments::system_properties();
   const char* args = Arguments::java_command() ? Arguments::java_command() : "";
   VM_CracRestoreParameters restore_parameters(props, args);
   if (setup_shared_memory(id, restore_parameters)) {

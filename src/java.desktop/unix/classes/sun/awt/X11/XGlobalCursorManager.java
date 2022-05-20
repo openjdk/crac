@@ -40,7 +40,6 @@ public final class XGlobalCursorManager extends GlobalCursorManager {
     }
 
     public static void afterRestore() {
-        getCursorManager();
     }
 
     // cached nativeContainer

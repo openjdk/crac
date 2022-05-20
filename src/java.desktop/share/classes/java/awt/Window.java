@@ -180,19 +180,15 @@ public class Window extends Container implements Accessible {
     public static void beforeCheckpoint() {
         for (int i = 0; i < allWindows.size(); i++) {
             Window window = allWindows.get(i);
-
             // Ensure that the window is removed from the
             // AppContext before sun.java2d.Disposer disposed it
             window.disposerRecord.dispose();
-
             // When the last displayable window within the
             // Java virtual machine (VM) is disposed of, the VM may terminate
             window.dispose();
-
             // Let the GC collect this window
             window = null;
         }
-
         nameCounter = 0;
 
         Cursor.beforeCheckpoint();

@@ -272,6 +272,7 @@ public final class XToolkit extends UNIXToolkit implements Runnable {
             arrowCursor = 0;
             awt_multiclick_time = 0;
             awt_IsXsunKPBehavior = 0;
+            resetKeyboardSniffer();
             xPeer = null;
 
             altMask = 0;
@@ -289,7 +290,6 @@ public final class XToolkit extends UNIXToolkit implements Runnable {
         public void afterRestore(Context<? extends Resource> context) throws Exception {
             // X11
             initStatic();
-            resetKeyboardSniffer();
             initStaticInternal();
 
             loopUnlock();

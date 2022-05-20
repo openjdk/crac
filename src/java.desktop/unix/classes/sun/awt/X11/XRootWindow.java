@@ -54,7 +54,6 @@ public class XRootWindow extends XBaseWindow {
         }
     }
 
-
     public static void beforeCheckpoint() {
         LazyHolder.deinit();
 

@@ -85,7 +85,7 @@ public abstract class GraphicsEnvironment {
         /**
          * The instance of the local {@code GraphicsEnvironment}.
          */
-        static GraphicsEnvironment INSTANCE = createGE();
+        static final GraphicsEnvironment INSTANCE = createGE();
 
         /**
          * Creates and returns the GraphicsEnvironment, according to the

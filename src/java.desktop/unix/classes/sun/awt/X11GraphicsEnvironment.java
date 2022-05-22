@@ -58,19 +58,19 @@ public final class X11GraphicsEnvironment extends SunGraphicsEnvironment {
 
     protected void beforeCheckpoint() {
         // XCloseDisplay
-        beforeCheckpoint0();
+        beforeCheckpointNative();
     }
 
     protected void afterRestore() {
-        afterRestore0();
+        afterRestoreNative();
         // XOpenDisplay
         initStatic();
         // Reinitialize X11GE
         init();
     }
 
-    private static native void beforeCheckpoint0();
-    private static native void afterRestore0();
+    private static native void beforeCheckpointNative();
+    private static native void afterRestoreNative();
 
     static {
         initStatic();

@@ -810,7 +810,7 @@ Java_sun_awt_X11GraphicsEnvironment_initDisplay(JNIEnv *env, jobject this,
 }
 
 JNIEXPORT void JNICALL
-Java_sun_awt_X11GraphicsEnvironment_beforeCheckpoint0(JNIEnv *env, jclass this)
+Java_sun_awt_X11GraphicsEnvironment_beforeCheckpointNative(JNIEnv *env, jclass this)
 {
     pthread_mutex_lock(&lock);
     crac_lock = True;
@@ -818,7 +818,7 @@ Java_sun_awt_X11GraphicsEnvironment_beforeCheckpoint0(JNIEnv *env, jclass this)
 }
 
 JNIEXPORT void JNICALL
-Java_sun_awt_X11GraphicsEnvironment_afterRestore0(JNIEnv *env, jclass this)
+Java_sun_awt_X11GraphicsEnvironment_afterRestoreNative(JNIEnv *env, jclass this)
 {
 }
 

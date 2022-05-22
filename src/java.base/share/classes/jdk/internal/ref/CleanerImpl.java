@@ -154,7 +154,7 @@ public final class CleanerImpl implements Runnable, JDKResource {
 
     @Override
     public Priority getPriority() {
-        return Priority.CLEANERS;
+        return Priority.REFERENCE_QUEUES;
     }
 
     @Override

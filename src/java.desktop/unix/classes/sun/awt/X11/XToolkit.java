@@ -152,6 +152,7 @@ import sun.util.logging.PlatformLogger;
 
 import jdk.crac.Context;
 import jdk.crac.Resource;
+import jdk.internal.crac.JDKResource;
 
 import static sun.awt.X11.XlibUtil.scaleDown;
 
@@ -219,34 +220,45 @@ public final class XToolkit extends UNIXToolkit implements Runnable {
     private static int state = 0;
 
     /**
-     * Resource nested in {@code X11ToolkitJDKResource}.
+     * Reinitialization of the {@code XToolkit} for proper
+     * reinitialization of {@code GraphicsEnvironment}.
+     * This must be done before GC, because it may
+     * cause some objects to be unreachable.
+     *
+     * @see jdk.internal.crac.JDKResource
      */
-    public static final Resource resource = new Resource() {
+    private static final JDKResource jdkResource = new JDKResource() {
+        public Priority getPriority() {
+            return Priority.NORMAL;
+        }
+
         @Override
         public void beforeCheckpoint(Context<? extends Resource> context) throws Exception {
-            awtLock();
-            state = 1;
-            while (state != 2) {
-                awtLockWait(10);
-            }
-            awtUnlock();
+            // AWT
+            Window.beforeCheckpoint();
+
+            // X11
+            XRootWindow.beforeCheckpoint();
+            XWM.beforeCheckpoint();
+            XErrorHandlerUtil.beforeCheckpoint();
+
+            loopLock();
 
             synchronized (winMap) {
-                for(XBaseWindow window : winMap.values()) {
+                for (XBaseWindow window : winMap.values()) {
                     window.destroy();
                 }
                 winMap.clear();
             }
-
-            for(Object peer : specialPeerMap.values()) {
-                if (peer instanceof XComponentPeer)
-                    ((XComponentPeer)peer).dispose();
-            }
-            specialPeerMap.clear();
-
             synchronized (winToDispatcher) {
                 winToDispatcher.clear();
             }
+            for (Object peer : specialPeerMap.values()) {
+                if (peer instanceof XComponentPeer) {
+                    ((XComponentPeer) peer).dispose();
+                }
+            }
+            specialPeerMap.clear();
 
             initialized = false;
             timeStampUpdated = false;
@@ -260,6 +272,7 @@ public final class XToolkit extends UNIXToolkit implements Runnable {
             arrowCursor = 0;
             awt_multiclick_time = 0;
             awt_IsXsunKPBehavior = 0;
+            resetKeyboardSniffer();
             xPeer = null;
 
             altMask = 0;
@@ -275,43 +288,20 @@ public final class XToolkit extends UNIXToolkit implements Runnable {
 
         @Override
         public void afterRestore(Context<? extends Resource> context) throws Exception {
+            // X11
             initStatic();
-            resetKeyboardSniffer();
             initStaticInternal();
 
-            awtLock();
-            state = 0;
-            awtLockNotifyAll();
-            awtUnlock();
+            loopUnlock();
+
+            XErrorHandlerUtil.afterRestore();
+            XWM.afterRestore();
+            XRootWindow.afterRestore();
+
+            // AWT
+            Window.afterRestore();
         }
     };
-
-    private static void initStatic() {
-        GraphicsEnvironment ge = GraphicsEnvironment.getLocalGraphicsEnvironment();
-        if (ge instanceof SunGraphicsEnvironment) {
-            ((SunGraphicsEnvironment) ge).addDisplayChangedListener(
-                    displayChangedHandler);
-        }
-
-        initSecurityWarning();
-        if (GraphicsEnvironment.isHeadless()) {
-            localEnv = null;
-            device = null;
-            display = 0;
-        } else {
-            localEnv = (X11GraphicsEnvironment) GraphicsEnvironment
-                .getLocalGraphicsEnvironment();
-            device = (X11GraphicsDevice) localEnv.getDefaultScreenDevice();
-            display = device.getDisplay();
-            setupModifierMap();
-            initIDs();
-            setBackingStoreType();
-        }
-    }
-
-    static {
-        initStatic();
-    }
 
     /*
      * Return (potentially) platform specific display timeout for the
@@ -837,6 +827,27 @@ public final class XToolkit extends UNIXToolkit implements Runnable {
         }
     }
 
+    private static void loopLock() {
+        try {
+            awtLock();
+            state = 1;
+            while (state != 2) {
+                awtLockWait(10);
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+        } finally {
+            awtUnlock();
+        }
+    }
+
+    private static void loopUnlock() {
+        awtLock();
+        state = 0;
+        awtLockNotifyAll();
+        awtUnlock();
+    }
+
     /**
      * Listener installed to detect display changes.
      */
@@ -853,6 +864,35 @@ public final class XToolkit extends UNIXToolkit implements Runnable {
                 public void paletteChanged() {
                 }
             };
+
+    static {
+        initStatic();
+
+        jdk.internal.crac.Core.getJDKContext().register(jdkResource);
+    }
+
+    private static void initStatic() {
+        GraphicsEnvironment ge = GraphicsEnvironment.getLocalGraphicsEnvironment();
+        if (ge instanceof SunGraphicsEnvironment) {
+            ((SunGraphicsEnvironment) ge).addDisplayChangedListener(
+                    displayChangedHandler);
+        }
+
+        initSecurityWarning();
+        if (GraphicsEnvironment.isHeadless()) {
+            localEnv = null;
+            device = null;
+            display = 0;
+        } else {
+            localEnv = (X11GraphicsEnvironment) GraphicsEnvironment
+                    .getLocalGraphicsEnvironment();
+            device = (X11GraphicsDevice) localEnv.getDefaultScreenDevice();
+            display = device.getDisplay();
+            setupModifierMap();
+            initIDs();
+            setBackingStoreType();
+        }
+    }
 
     private static void initScreenSize() {
         if (maxWindowWidthInPixels == -1 || maxWindowHeightInPixels == -1) {

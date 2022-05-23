@@ -40,6 +40,7 @@ import sun.security.action.GetPropertyAction;
 
 import jdk.crac.Context;
 import jdk.crac.Resource;
+import jdk.internal.crac.JDKResource;
 
 /**
  *
@@ -84,7 +85,7 @@ public abstract class GraphicsEnvironment {
         /**
          * The instance of the local {@code GraphicsEnvironment}.
          */
-        static GraphicsEnvironment INSTANCE = createGE();
+        static final GraphicsEnvironment INSTANCE = createGE();
 
         /**
          * Creates and returns the GraphicsEnvironment, according to the
@@ -102,19 +103,56 @@ public abstract class GraphicsEnvironment {
     }
 
     /**
-     * Resource nested in {@code X11GEJDKResource}.
+     * Reinitialization of the local {@code GraphicsEnvironment}.
+     * This must be done after GC, because some objects require
+     * connection to be disposed.
+     * It depends on {@code GraphicsEnvironment} extending classes.
+     *
+     * @see sun.awt.X11GraphicsEnvironment
+     * @see jdk.internal.crac.JDKResource
      */
-    public static final Resource resource = new Resource() {
+    private static final JDKResource jdkResource = new JDKResource() {
+        @Override
+        public JDKResource.Priority getPriority() {
+            return Priority.GRAPHICS_ENVIRONMENT;
+        }
+
         @Override
         public void beforeCheckpoint(Context<? extends Resource> context) throws Exception {
-            LocalGE.INSTANCE = null;
+            LocalGE.INSTANCE.beforeCheckpoint();
         }
 
         @Override
         public void afterRestore(Context<? extends Resource> context) throws Exception {
-            LocalGE.INSTANCE = LocalGE.createGE();
+            LocalGE.INSTANCE.afterRestore();
         }
     };
+
+    /**
+     * {@code beforeCheckpoint()} operation for
+     * {@code GraphicsEnvironment} extending classes.
+     * Should be overridden for proper reinitialization
+     * of the local {@code GraphicsEnvironment}.
+     *
+     * @see sun.awt.X11GraphicsEnvironment
+     */
+    protected void beforeCheckpoint() {
+    }
+
+    /**
+     * {@code afterRestore()} operation for
+     * {@code GraphicsEnvironment} extending classes.
+     * Should be overridden for proper reinitialization
+     * of the local {@code GraphicsEnvironment}.
+     *
+     * @see sun.awt.X11GraphicsEnvironment
+     */
+    protected void afterRestore() {
+    }
+
+    static {
+        jdk.internal.crac.Core.getJDKContext().register(jdkResource);
+    }
 
     /**
      * Returns the local {@code GraphicsEnvironment}.

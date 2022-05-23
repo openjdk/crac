@@ -47,20 +47,10 @@ public interface JDKResource extends Resource {
      * in the direct order of registration.
      */
     enum Priority {
-        /* Keep this priority first to clear and
-        reinitialize X11 and AWT resources correctly */
-
-        /**
-         * Priority of the
-         * sun.awt.X11ToolkitJDKResource resource
-         */
-        X11TOOLKIT,
-
-
-        /* Use this priority in most cases. */
-
         /**
          * Most resources should use this option.
+         *
+         * @see sun.awt.X11.XToolkit
          */
         NORMAL,
 
@@ -97,24 +87,20 @@ public interface JDKResource extends Resource {
         REFERENCE_HANDLER,
         /**
          * Priority of the
-         * sun.java2d.Disposer resources
+         * jdk.internal.ref.CleanerImpl resource,
+         * sun.java2d.Disposer resource
          */
-        DISPOSERS,
-        /**
-         * Priority of the
-         * jdk.internal.ref.CleanerImpl resources
-         */
-        CLEANERS,
+        REFERENCE_QUEUES,
 
 
         /* Keep next priority last to reinitialize
-         X11 connection correctly */
+        GraphicsEnvironment connection properly */
 
         /**
          * Priority of the
-         * sun.awt.X11GEJDKResource resource
+         * java.awt.GraphicsEnvironment resource
          */
-        X11GE,
+        GRAPHICS_ENVIRONMENT,
     };
 
     Priority getPriority();

@@ -42,8 +42,6 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import sun.util.logging.PlatformLogger;
 
-import jdk.crac.Context;
-import jdk.crac.Resource;
 
 /**
  * Class incapsulating knowledge about window managers in general
@@ -56,54 +54,38 @@ public final class XWM
     private static final PlatformLogger insLog = PlatformLogger.getLogger("sun.awt.X11.insets.XWM");
     private static final PlatformLogger stateLog = PlatformLogger.getLogger("sun.awt.X11.states.XWM");
 
-    /**
-     * Resource nested in {@code X11ToolkitJDKResource}.
-     */
-    public static final Resource resource = new Resource() {
-        @Override
-        public void beforeCheckpoint(Context<? extends Resource> context) throws Exception {
-            winmgr_running = false;
-            awt_wmgr = XWM.UNDETERMINED_WM;
+    public static void beforeCheckpoint() {
+        winmgr_running = false;
+        awt_wmgr = XWM.UNDETERMINED_WM;
 
-            awtWMNonReparenting = -1;
-            awtWMStaticGravity = -1;
+        awtWMNonReparenting = -1;
+        awtWMStaticGravity = -1;
 
-            wm = null;
-            g_net_protocol = null;
-            g_win_protocol = null;
-            inited = false;
-        }
+        inited = false;
+        wm = null;
+        g_net_protocol = null;
+        g_win_protocol = null;
 
-        @Override
-        public void afterRestore(Context<? extends Resource> context) throws Exception {
-            // Re-register the cleared XWM atoms
-            XA_MWM_HINTS = new XAtom();
-            XA_WM_STATE = new XAtom();
-            XA_E_FRAME_SIZE = new XAtom();
-            XA_KDE_NET_WM_FRAME_STRUT = new XAtom();
-            XA_KWM_WIN_ICONIFIED = new XAtom();
-            XA_KWM_WIN_MAXIMIZED = new XAtom();
-            XA_OL_DECOR_DEL = new XAtom();
-            XA_OL_DECOR_HEADER = new XAtom();
-            XA_OL_DECOR_RESIZE = new XAtom();
-            XA_OL_DECOR_PIN = new XAtom();
-            XA_OL_DECOR_CLOSE = new XAtom();
-            XA_NET_FRAME_EXTENTS = new XAtom();
-            XA_NET_REQUEST_FRAME_EXTENTS = new XAtom();
+        // Clear registered XAtoms
+        XAtom.beforeCheckpoint();
+    }
 
-            XA_ENLIGHTENMENT_COMMS = new XAtom("ENLIGHTENMENT_COMMS", false);
-            XA_DT_SM_WINDOW_INFO = new XAtom("_DT_SM_WINDOW_INFO", false);
-            XA_DT_SM_STATE_INFO = new XAtom("_DT_SM_STATE_INFO", false);
-            XA_MOTIF_WM_INFO = new XAtom("_MOTIF_WM_INFO", false);
-            XA_DT_WORKSPACE_CURRENT = new XAtom("_DT_WORKSPACE_CURRENT", false);
-            XA_ICEWM_WINOPTHINT = new XAtom("_ICEWM_WINOPTHINT", false);
-            XA_SUN_WM_PROTOCOLS = new XAtom("_SUN_WM_PROTOCOLS", false);
+    public static void afterRestore() {
+        XAtom.afterRestore();
 
-            init();
-        }
-    };
+        // Initialize the cleared XWM atoms
+        XA_ENLIGHTENMENT_COMMS = new XAtom("ENLIGHTENMENT_COMMS", false);
+        XA_DT_SM_WINDOW_INFO = new XAtom("_DT_SM_WINDOW_INFO", false);
+        XA_DT_SM_STATE_INFO = new XAtom("_DT_SM_STATE_INFO", false);
+        XA_MOTIF_WM_INFO = new XAtom("_MOTIF_WM_INFO", false);
+        XA_DT_WORKSPACE_CURRENT = new XAtom("_DT_WORKSPACE_CURRENT", false);
+        XA_ICEWM_WINOPTHINT = new XAtom("_ICEWM_WINOPTHINT", false);
+        XA_SUN_WM_PROTOCOLS = new XAtom("_SUN_WM_PROTOCOLS", false);
 
-    static XAtom XA_MWM_HINTS = new XAtom();
+        init();
+    }
+
+    static final XAtom XA_MWM_HINTS = new XAtom();
 
     private static Unsafe unsafe = XlibWrapper.unsafe;
 
@@ -118,25 +100,25 @@ public final class XWM
     static final int AWT_NET_N_KNOWN_STATES=2;
 
 /* Enlightenment */
-    static XAtom XA_E_FRAME_SIZE = new XAtom();
+    static final XAtom XA_E_FRAME_SIZE = new XAtom();
 
 /* KWin (KDE2) */
-    static XAtom XA_KDE_NET_WM_FRAME_STRUT = new XAtom();
+    static final XAtom XA_KDE_NET_WM_FRAME_STRUT = new XAtom();
 
 /* KWM (KDE 1.x) OBSOLETE??? */
-    static XAtom XA_KWM_WIN_ICONIFIED = new XAtom();
-    static XAtom XA_KWM_WIN_MAXIMIZED = new XAtom();
+    static final XAtom XA_KWM_WIN_ICONIFIED = new XAtom();
+    static final XAtom XA_KWM_WIN_MAXIMIZED = new XAtom();
 
 /* OpenLook */
-    static XAtom XA_OL_DECOR_DEL = new XAtom();
-    static XAtom XA_OL_DECOR_HEADER = new XAtom();
-    static XAtom XA_OL_DECOR_RESIZE = new XAtom();
-    static XAtom XA_OL_DECOR_PIN = new XAtom();
-    static XAtom XA_OL_DECOR_CLOSE = new XAtom();
+    static final XAtom XA_OL_DECOR_DEL = new XAtom();
+    static final XAtom XA_OL_DECOR_HEADER = new XAtom();
+    static final XAtom XA_OL_DECOR_RESIZE = new XAtom();
+    static final XAtom XA_OL_DECOR_PIN = new XAtom();
+    static final XAtom XA_OL_DECOR_CLOSE = new XAtom();
 
 /* EWMH */
-    static XAtom XA_NET_FRAME_EXTENTS = new XAtom();
-    static XAtom XA_NET_REQUEST_FRAME_EXTENTS = new XAtom();
+    static final XAtom XA_NET_FRAME_EXTENTS = new XAtom();
+    static final XAtom XA_NET_REQUEST_FRAME_EXTENTS = new XAtom();
 
     static final int
         UNDETERMINED_WM = 1,

@@ -33,25 +33,14 @@ import sun.awt.AWTAccessor;
 import sun.awt.GlobalCursorManager;
 import sun.awt.SunToolkit;
 
-import jdk.crac.Context;
-import jdk.crac.Resource;
-
 public final class XGlobalCursorManager extends GlobalCursorManager {
 
-    /**
-     * Resource nested in {@code X11ToolkitJDKResource}.
-     */
-    public static final Resource resource = new Resource() {
-        @Override
-        public void beforeCheckpoint(Context<? extends Resource> context) throws Exception {
-            manager = null;
-        }
+    public static void beforeCheckpoint() {
+        manager = null;
+    }
 
-        @Override
-        public void afterRestore(Context<? extends Resource> context) throws Exception {
-
-        }
-    };
+    public static void afterRestore() {
+    }
 
     // cached nativeContainer
     private WeakReference<Component> nativeContainer;

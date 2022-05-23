@@ -94,6 +94,30 @@ public final class XErrorHandlerUtil {
     }
 
     /**
+     * Setting {@code XErrorHandlerUtil} fields to default values to reinitialize
+     * {@code XToolkit} properly.
+     * {@code XToolkit} depends on this method.
+     *
+     * @see sun.awt.X11.XToolkit
+     */
+    public static void beforeCheckpoint() {
+        display = 0;
+        saved_error_handler = 0;
+        saved_error = null;
+        current_error_handler = null;
+        initPassed = false;
+    }
+
+    /**
+     * {@code XErrorHandlerUtil} restoring to reinitialize {@code XToolkit} properly.
+     * {@code XToolkit} depends on this method.
+     *
+     * @see sun.awt.X11.XToolkit
+     */
+    public static void afterRestore() {
+    }
+
+    /**
      * Sets a synthetic error handler. Must be called with the acquired AWT lock.
      * @param handler the synthetic error handler to set
      */

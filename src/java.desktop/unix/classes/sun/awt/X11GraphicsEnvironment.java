@@ -45,9 +45,6 @@ import sun.java2d.SurfaceManagerFactory;
 import sun.java2d.UnixSurfaceManagerFactory;
 import sun.java2d.xr.XRSurfaceData;
 
-import jdk.crac.Context;
-import jdk.crac.Resource;
-
 /**
  * This is an implementation of a GraphicsEnvironment object for the
  * default local GraphicsEnvironment used by the Java Runtime Environment
@@ -59,24 +56,30 @@ import jdk.crac.Resource;
 @SuppressWarnings("removal")
 public final class X11GraphicsEnvironment extends SunGraphicsEnvironment {
 
-    /**
-     * Resource nested in {@code X11GEJDKResource}.
-     */
-    public static final Resource resource = new Resource() {
-        @Override
-        public void beforeCheckpoint(Context<? extends Resource> context) throws Exception {
-            // XCloseDisplay
-            beforeCheckpoint0();
-        }
+    protected void beforeCheckpoint() {
+        // XCloseDisplay
+        beforeCheckpointNative();
+    }
 
-        @Override
-        public void afterRestore(Context<? extends Resource> context) throws Exception {
-            // XOpenDisplay
-            afterRestore0();
-        }
-    };
+    protected void afterRestore() {
+        afterRestoreNative();
+        // XOpenDisplay
+        initStatic();
+        // Reinitialize X11GE
+        init();
+    }
+
+    private static native void beforeCheckpointNative();
+    private static native void afterRestoreNative();
 
     static {
+        initStatic();
+
+        // Install the correct surface manager factory.
+        SurfaceManagerFactory.setInstance(new UnixSurfaceManagerFactory());
+    }
+
+    private static void initStatic() {
         java.security.AccessController.doPrivileged(
                           new java.security.PrivilegedAction<Object>() {
             public Object run() {
@@ -147,12 +150,7 @@ public final class X11GraphicsEnvironment extends SunGraphicsEnvironment {
                 return null;
             }
          });
-
-        // Install the correct surface manager factory.
-        SurfaceManagerFactory.setInstance(new UnixSurfaceManagerFactory());
-
     }
-
 
     private static boolean glxAvailable;
     private static boolean glxVerbose;
@@ -208,14 +206,15 @@ public final class X11GraphicsEnvironment extends SunGraphicsEnvironment {
      */
     private static native void initDisplay(boolean glxRequested);
 
-    private static native void beforeCheckpoint0();
-    private static native void afterRestore0();
-
     protected native int getNumScreens();
 
     private native int getDefaultScreenNum();
 
     public X11GraphicsEnvironment() {
+        init();
+    }
+
+    private void init() {
         if (isHeadless()) {
             return;
         }

@@ -282,7 +282,7 @@ struct CracFailDep {
   { }
 };
 
-class VM_CracRestoreParameters : public CHeapObj<mtInternal> {
+class CracRestoreParameters : public CHeapObj<mtInternal> {
  private:
   int _nprops;
   GrowableArray<const char *>* _properties;
@@ -302,7 +302,7 @@ class VM_CracRestoreParameters : public CHeapObj<mtInternal> {
   }
 
  public:
-  VM_CracRestoreParameters(const SystemProperty* props, const char *args) :
+  CracRestoreParameters(const SystemProperty* props, const char *args) :
     _nprops(0),
     _properties(new (ResourceObj::C_HEAP, mtInternal) GrowableArray<const char *>(0, mtInternal)),
     _args(args)
@@ -321,7 +321,7 @@ class VM_CracRestoreParameters : public CHeapObj<mtInternal> {
     }
   }
 
-  VM_CracRestoreParameters(int nprops, GrowableArray<const char *>* properties, char *args) :
+  CracRestoreParameters(int nprops, GrowableArray<const char *>* properties, char *args) :
     _nprops(nprops),
     _properties(properties),
     _args(args)
@@ -330,7 +330,7 @@ class VM_CracRestoreParameters : public CHeapObj<mtInternal> {
   const char *args() const { return _args; }
   GrowableArray<const char *>* properties() const { return _properties; }
 
-  ~VM_CracRestoreParameters() {
+  ~CracRestoreParameters() {
     for (int i = 0; i < _properties->length(); i++) {
       FREE_C_HEAP_ARRAY(char, _properties->at(i));
     }
@@ -352,7 +352,7 @@ class VM_CracRestoreParameters : public CHeapObj<mtInternal> {
     return wret;
   }
 
-  static VM_CracRestoreParameters* read_from(int fd) {
+  static CracRestoreParameters* read_from(int fd) {
     struct stat st;
     if (fstat(fd, &st)) {
       perror("fstat (ignoring restore parameters)");
@@ -386,7 +386,7 @@ class VM_CracRestoreParameters : public CHeapObj<mtInternal> {
     char *args = NEW_C_HEAP_ARRAY(char, argslen, mtInternal);
     strncpy(args, cursor, argslen);
     FREE_C_HEAP_ARRAY(char, contents);
-    return new VM_CracRestoreParameters(nprops, properties, args);
+    return new CracRestoreParameters(nprops, properties, args);
   }
 };
 
@@ -394,7 +394,7 @@ class VM_Crac: public VM_Operation {
   const bool _dry_run;
   bool _ok;
   GrowableArray<CracFailDep>* _failures;
-  VM_CracRestoreParameters *_restore_parameters;
+  CracRestoreParameters *_restore_parameters;
  public:
   VM_Crac(bool dry_run) :
     _dry_run(dry_run),
@@ -5950,7 +5950,7 @@ static int call_crengine() {
   return 0;
 }
 
-static int setup_shared_memory(int id, VM_CracRestoreParameters& parameters) {
+static int setup_shared_memory(int id, CracRestoreParameters& parameters) {
   char shmpath[128];
   int shmpathlen = snprintf(shmpath, sizeof(shmpath), "/crac_%d", id);
   if (shmpathlen < 0 || sizeof(shmpath) <= (size_t)shmpathlen) {
@@ -6126,7 +6126,7 @@ void VM_Crac::read_shm(int shmid) {
 
     shm_unlink(shmpath);
 
-    _restore_parameters = VM_CracRestoreParameters::read_from(shmfd);
+    _restore_parameters = CracRestoreParameters::read_from(shmfd);
 
     close(shmfd);
     return;
@@ -6385,7 +6385,7 @@ void os::Linux::restore() {
   int id = getpid();
   SystemProperty* props = Arguments::system_properties();
   const char* args = Arguments::java_command() ? Arguments::java_command() : "";
-  VM_CracRestoreParameters restore_parameters(props, args);
+  CracRestoreParameters restore_parameters(props, args);
   if (setup_shared_memory(id, restore_parameters)) {
     id = 0;
   }

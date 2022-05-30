@@ -376,6 +376,10 @@ class Arguments : AllStatic {
   static exit_hook_t      _exit_hook;
   static vfprintf_hook_t  _vfprintf_hook;
 
+  // prop points to a string of the form key=value
+  // Parse the string to extract key and the value
+  static void get_key_value(const char* prop, const char** key, const char** value);
+
   // System properties
   static bool add_property(const char* prop, PropertyWriteable writeable=WriteableProperty,
                            PropertyInternal internal=ExternalProperty);
@@ -640,6 +644,10 @@ class Arguments : AllStatic {
   static void assert_is_dumping_archive() {
     assert(Arguments::is_dumping_archive(), "dump time only");
   }
+
+  static bool is_restore_option_set(const JavaVMInitArgs* args);
+
+  static bool parse_options_for_restore(const JavaVMInitArgs* args);
 
   DEBUG_ONLY(static bool verify_special_jvm_flags(bool check_globals);)
 };

@@ -35,6 +35,7 @@ import sun.security.action.GetBooleanAction;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.security.AccessController;
+import java.security.PrivilegedAction;
 import java.security.PrivilegedActionException;
 import java.security.PrivilegedExceptionAction;
 import java.util.Arrays;
@@ -124,8 +125,9 @@ public class Core {
         final Object[] bundle = checkpointRestore0(checkpointException != null);
         final int retCode = (Integer)bundle[0];
         final String newArguments = (String)bundle[1];
-        final int[] codes = (int[])bundle[2];
-        final String[] messages = (String[])bundle[3];
+        final String[] newProperties = (String[])bundle[2];
+        final int[] codes = (int[])bundle[3];
+        final String[] messages = (String[])bundle[4];
 
         if (FlagsHolder.TRACE_STARTUP_TIME) {
             System.out.println("STARTUPTIME " + System.nanoTime() + " restore");
@@ -147,6 +149,14 @@ public class Core {
                     checkpointException.addSuppressed(
                             new RuntimeException("Unknown C/R result: " + retCode));
             }
+        }
+
+        if (newProperties != null && newProperties.length > 0) {
+            Arrays.stream(newProperties).map(propStr -> propStr.split("=", 2)).forEach(pair -> {
+                AccessController.doPrivileged(
+                    (PrivilegedAction<String>)() ->
+                        System.setProperty(pair[0], pair.length == 2 ? pair[1] : ""));
+            });
         }
 
         RestoreException restoreException = null;

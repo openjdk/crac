@@ -6142,8 +6142,11 @@ void VM_Crac::read_shm(int shmid) {
 
     shm_unlink(shmpath);
 
-    delete _restore_parameters;
-    _restore_parameters = CracRestoreParameters::read_from(shmfd);
+    CracRestoreParameters* new_parameters = CracRestoreParameters::read_from(shmfd);
+    if (new_parameters) {
+      delete _restore_parameters;
+      _restore_parameters = new_parameters;
+    }
 
     close(shmfd);
     return;

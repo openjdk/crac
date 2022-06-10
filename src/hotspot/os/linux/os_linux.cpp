@@ -400,14 +400,12 @@ class VM_Crac: public VM_Operation {
     _dry_run(dry_run),
     _ok(false),
     _failures(new (ResourceObj::C_HEAP, mtInternal) GrowableArray<CracFailDep>(0, mtInternal)),
-    _restore_parameters(NULL)
+    _restore_parameters(new CracRestoreParameters(NULL, NULL))
   { }
 
   ~VM_Crac() {
     delete _failures;
-    if (_restore_parameters) {
-      delete _restore_parameters;
-    }
+    delete _restore_parameters;
   }
 
   GrowableArray<CracFailDep>* failures() { return _failures; }
@@ -6144,7 +6142,11 @@ void VM_Crac::read_shm(int shmid) {
 
     shm_unlink(shmpath);
 
-    _restore_parameters = CracRestoreParameters::read_from(shmfd);
+    CracRestoreParameters* new_parameters = CracRestoreParameters::read_from(shmfd);
+    if (new_parameters) {
+      delete _restore_parameters;
+      _restore_parameters = new_parameters;
+    }
 
     close(shmfd);
     return;

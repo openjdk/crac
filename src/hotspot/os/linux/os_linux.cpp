@@ -117,6 +117,8 @@
 # include <sys/ioctl.h>
 # include <libgen.h>
 # include <linux/elf-em.h>
+#include <typeinfo>
+#include <sys/socket.h>
 #ifdef __GLIBC__
 # include <malloc.h>
 #endif
@@ -5592,12 +5594,12 @@ bool os::supports_map_sync() {
   return true;
 }
 
-static void trace_cr(const char* msg, ...) {
+static void trace_cr(outputStream * ostream, const char* msg, ... ) {
   if (CRTrace) {
     va_list ap;
     va_start(ap, msg);
-    tty->print("CR: ");
-    tty->vprint_cr(msg, ap);
+    ostream->print("CR: ");
+    ostream->vprint_cr(msg, ap);
     va_end(ap);
   }
 }
@@ -5834,14 +5836,14 @@ static int call_crengine() {
   return 0;
 }
 
-static int checkpoint_restore(FdsInfo* fds) {
+static int checkpoint_restore(FdsInfo* fds, outputStream * ostream) {
 
   if (CRAllowToSkipCheckpoint) {
-    trace_cr("Skip Checkpoint");
+    trace_cr(ostream, "Skip Checkpoint");
     return JVM_CHECKPOINT_OK;
   }
 
-  trace_cr("Checkpoint ...");
+  trace_cr(ostream, "Checkpoint ...");
 
   int cres = call_crengine();
   if (cres < 0) {
@@ -5970,6 +5972,148 @@ static const char* sock_details(const char* details, char* buf, size_t sz) {
 }
 
 
+#define PATH_PROC	   "/proc"
+// #define PATH_FD_SUFF	"fd"
+#define PATH_NET_UNIX_SUFF	"net/unix"
+// #define PATH_FD_SUFFl       strlen(PATH_FD_SUFF)
+// #define PATH_PROC_X_FD      PATH_PROC "/%s/" PATH_FD_SUFF
+#define PATH_PROC_X_NET_UNIX PATH_PROC "/%s/" PATH_NET_UNIX_SUFF
+#define PATH_CMDLINE	"cmdline"
+#define PATH_CMDLINEl       strlen(PATH_CMDLINE)
+
+#define PRG_INODE	 "inode"
+#define PRG_SOCKET_PFX    "socket:["
+#define PRG_SOCKET_PFXl (strlen(PRG_SOCKET_PFX))
+#define PRG_SOCKET_PFX2   "[0000]:"
+#define PRG_SOCKET_PFX2l  (strlen(PRG_SOCKET_PFX2))
+
+static int is_process_jcmd(char * fd) {
+	char link[128];
+	char str1[] = "/jcmd";
+	char * p;
+	char fdpath[64];
+	size_t len = sizeof(link);
+	int d = atoi(fd);
+	snprintf(fdpath, sizeof(fdpath), "/proc/%d/exe", d);
+	int ret = readlink(fdpath, link, len);
+	if (ret == -1) {
+		return 0;
+	}
+	link[(unsigned)ret < len ? ret : len - 1] = '\0';
+	p = strrchr(link, '/');
+  if (!strcmp(str1, p)) 
+		return 1; 
+	else
+  	return 0;
+}
+
+static int extract_type_1_socket_inode(const char lname[], unsigned long * inode_p) {
+
+    /* If lname is of the form "socket:[12345]", extract the "12345"
+       as *inode_p.  Otherwise, return -1 as *inode_p.
+       */
+
+    if (strlen(lname) < PRG_SOCKET_PFXl+3) return(-1);
+    
+    if (memcmp(lname, PRG_SOCKET_PFX, PRG_SOCKET_PFXl)) return(-1);
+    if (lname[strlen(lname)-1] != ']') return(-1);
+
+    {
+        char inode_str[strlen(lname + 1)];  /* e.g. "12345" */
+        const int inode_str_len = strlen(lname) - PRG_SOCKET_PFXl - 1;
+        char *serr;
+
+        strncpy(inode_str, lname+PRG_SOCKET_PFXl, inode_str_len);
+        inode_str[inode_str_len] = '\0';
+        *inode_p = strtol(inode_str,&serr,0);
+        if (!serr || *serr )
+            return(-1);
+    }
+    return(0);
+}
+
+static int extract_type_2_socket_inode(const char lname[], unsigned long * inode_p) {
+
+    /* If lname is of the form "[0000]:12345", extract the "12345"
+       as *inode_p.  Otherwise, return -1 as *inode_p.
+       */
+
+    if (strlen(lname) < PRG_SOCKET_PFX2l+1) return(-1);
+    if (memcmp(lname, PRG_SOCKET_PFX2, PRG_SOCKET_PFX2l)) return(-1);
+
+    {
+        char *serr;
+        *inode_p=strtol(lname + PRG_SOCKET_PFX2l,&serr,0);
+        if (!serr || *serr ) 
+            return(-1);
+    }
+    return(0);
+}
+
+static int is_socket_from_jcmd(unsigned long parm_inode){
+
+  char line[4096];
+  char *token_word;
+  char *eptr;
+  ssize_t rread;
+  int procfdlen;
+  size_t len = 0;
+  unsigned long inode;
+  const char *cs;
+  char *pline;
+  FILE * fp;
+  DIR *dirproc=NULL;
+  struct dirent *direproc;
+  int rc;
+  if (!(dirproc=opendir(PATH_PROC))) 
+  	return 1;
+
+  while (errno=0,direproc=readdir(dirproc)) {
+	  for (cs=direproc->d_name;*cs;cs++)
+	    if (!isdigit(*cs)) 
+	      break;
+	  if (*cs) 
+	    continue;
+
+	  if (!is_process_jcmd(direproc->d_name))
+	  	continue;
+
+	  // this is preparing the filelist, dont need for regular proc
+    procfdlen=snprintf(line, sizeof(line), PATH_PROC_X_NET_UNIX, direproc->d_name);
+	  if (procfdlen<=0 || procfdlen>=sizeof(line)-5) 
+	    continue;
+	  errno=0;
+
+    fp = fopen(line, "r");
+    if (fp == NULL){
+      tty->print("is_socket_from_jcmd read errno: %d %s \n", errno, os::strerror(errno));
+      closedir(dirproc);
+      fclose(fp);
+      return 0;
+    }
+
+    while ((rread = getline(&pline, &len, fp)) != -1) {
+      int count =0;
+      token_word = strtok(pline, " ");
+      while(token_word != NULL){
+        if (count == 6){
+          inode = atoi(token_word);
+          if (inode == parm_inode){
+            closedir(dirproc);
+            fclose(fp);
+            return 1;
+          }
+        }
+        token_word = strtok(NULL," ");
+        count++;
+      }
+    }  
+  }
+  closedir(dirproc);
+  fclose(fp);
+  return 0;
+}
+
 void VM_Crac::doit() {
 
   AttachListener::abort();
@@ -5980,8 +6124,11 @@ void VM_Crac::doit() {
   do_classpaths(mark_all_in, &fds, Arguments::get_ext_dirs());
   mark_persistent(&fds);
   
-  tty = ostream;
-  
+  //tty->print_cr(typeid(ostream).name());
+  // P12outputStream
+  // 14bufferedStream
+  //tty->print_cr(typeid(*ostream).name());
+
   bool ok = true;
   for (int i = 0; i < fds.len(); ++i) {
     if (fds.get_state(i) == FdsInfo::CLOSED) {
@@ -5992,13 +6139,13 @@ void VM_Crac::doit() {
     int linkret = readfdlink(i, detailsbuf, sizeof(detailsbuf));
     const char* details = 0 < linkret ? detailsbuf : "";
     if (CRPrintResourcesOnCheckpoint) {
-      tty->print("JVM: FD fd=%d type=%s: details1=\"%s\" ",
+      ostream->print("JVM: FD fd=%d type=%s: details1=\"%s\" ",
           i, stat2strtype(fds.get_stat(i)->st_mode), details);
     }
 
     if (_vm_inited_fds.get_state(i, FdsInfo::CLOSED) != FdsInfo::CLOSED) {
       if (CRPrintResourcesOnCheckpoint) {
-        tty->print_cr("OK: inherited from process env");
+        ostream->print_cr("OK: inherited from process env");
       }
       continue;
     }
@@ -6009,7 +6156,7 @@ void VM_Crac::doit() {
       const int mnr = minor(st->st_rdev);
       if (mjr == 1 && (mnr == 8 || mnr == 9)) {
         if (CRPrintResourcesOnCheckpoint) {
-          tty->print_cr("OK: always available, random or urandom");
+          ostream->print_cr("OK: always available, random or urandom");
         }
         continue;
       }
@@ -6017,36 +6164,70 @@ void VM_Crac::doit() {
 
     if (fds.check(i, FdsInfo::M_CLASSPATH) && !fds.check(i, FdsInfo::M_CANT_RESTORE)) {
       if (CRPrintResourcesOnCheckpoint) {
-        tty->print_cr("OK: in classpath");
+        ostream->print_cr("OK: in classpath");
       }
       continue;
     }
 
     if (fds.check(i, FdsInfo::M_PERSISTENT)) {
       if (CRPrintResourcesOnCheckpoint) {
-        tty->print_cr("OK: assured persistent");
+        ostream->print_cr("OK: assured persistent");
       }
       continue;
     }
 
-    if (CRPrintResourcesOnCheckpoint) {
-      tty->print_cr("BAD: opened by application");
-    }
-    ok = false;
 
     if (S_ISSOCK(st->st_mode)) {
       details = sock_details(details, detailsbuf, sizeof(detailsbuf));
-      if (CRPrintResourcesOnCheckpoint) {
-        tty->print(" details2=\"%s\" ", details);
+      if (CRPrintResourcesOnCheckpoint)
+        ostream->print("issock, details2=\"%s\" ", details);
+
+      typedef union {
+          struct sockaddr     sa;
+          struct sockaddr_in  sa4;
+          struct sockaddr_in6 sa6;
+      } SOCKETADDRESS;
+
+      SOCKETADDRESS sa;
+      socklen_t len = sizeof(SOCKETADDRESS);
+      int sock_family;
+      if (getsockname(i, &sa.sa, &len) == 0) {
+        sock_family = sa.sa.sa_family;
+      } else {
+        if (CRPrintResourcesOnCheckpoint)
+          ostream->print("getsockname  errno: %d %s \n", errno, os::strerror(errno));
+      }
+
+      // socket should be 'unix' type, it's mean this is pipe
+      if (sock_family != AF_UNIX)
+        ok = false;
+
+      unsigned long inod; 
+      if (extract_type_1_socket_inode(details, &inod) < 0){
+        if (extract_type_2_socket_inode(details, &inod) < 0)
+          ok = false;
+      }
+
+      if (ok){
+        if (is_socket_from_jcmd(inod)){
+          ostream->print_cr("OK: jcmd socket");
+          continue;
+        }
       }
     }
-
+    
     if (CRPrintResourcesOnCheckpoint) {
-      tty->cr();
+      ostream->print_cr("BAD: opened by application");
     }
+      ok = false;
+
     char* msg = NEW_C_HEAP_ARRAY(char, strlen(details) + 1, mtInternal);
     strcpy(msg, details);
     _failures->append(CracFailDep(stat2stfail(st->st_mode & S_IFMT), msg));
+  }
+
+  if (CRPrintResourcesOnCheckpoint) {
+    ostream->cr();
   }
 
   if (!ok && CRHeapDumpOnCheckpointException) {
@@ -6061,7 +6242,7 @@ void VM_Crac::doit() {
     return;
   }
 
-  int ret = checkpoint_restore(&fds);
+  int ret = checkpoint_restore(&fds, ostream);
   if (ret == JVM_CHECKPOINT_ERROR) {
     PerfMemoryLinux::checkpoint_fail();
     return;

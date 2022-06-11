@@ -5965,39 +5965,36 @@ static const char* sock_details(const char* details, char* buf, size_t sz) {
 }
 
 
-#define PATH_PROC	   "/proc"
-// #define PATH_FD_SUFF	"fd"
-#define PATH_NET_UNIX_SUFF	"net/unix"
-// #define PATH_FD_SUFFl       strlen(PATH_FD_SUFF)
-// #define PATH_PROC_X_FD      PATH_PROC "/%s/" PATH_FD_SUFF
+#define PATH_PROC     "/proc"
+#define PATH_NET_UNIX_SUFF  "net/unix"
 #define PATH_PROC_X_NET_UNIX PATH_PROC "/%s/" PATH_NET_UNIX_SUFF
-#define PATH_CMDLINE	"cmdline"
+#define PATH_CMDLINE  "cmdline"
 #define PATH_CMDLINEl       strlen(PATH_CMDLINE)
 
-#define PRG_INODE	 "inode"
+#define PRG_INODE   "inode"
 #define PRG_SOCKET_PFX    "socket:["
 #define PRG_SOCKET_PFXl (strlen(PRG_SOCKET_PFX))
 #define PRG_SOCKET_PFX2   "[0000]:"
 #define PRG_SOCKET_PFX2l  (strlen(PRG_SOCKET_PFX2))
 
 static int is_process_jcmd(char * fd) {
-	char link[128];
-	char str1[] = "/jcmd";
-	char * p;
-	char fdpath[64];
-	size_t len = sizeof(link);
-	int d = atoi(fd);
-	snprintf(fdpath, sizeof(fdpath), "/proc/%d/exe", d);
-	int ret = readlink(fdpath, link, len);
-	if (ret == -1) {
-		return 0;
-	}
-	link[(unsigned)ret < len ? ret : len - 1] = '\0';
-	p = strrchr(link, '/');
-  if (!strcmp(str1, p)) 
-		return 1; 
-	else
-  	return 0;
+  char link[128];
+  char str1[] = "/jcmd";
+  char * p;
+  char fdpath[64];
+  size_t len = sizeof(link);
+  int d = atoi(fd);
+  snprintf(fdpath, sizeof(fdpath), "/proc/%d/exe", d);
+  int ret = readlink(fdpath, link, len);
+  if (ret == -1) {
+    return 0;
+  }
+  link[(unsigned)ret < len ? ret : len - 1] = '\0';
+  p = strrchr(link, '/');
+  if (!strcmp(str1, p))
+    return 1;
+  else
+    return 0;
 }
 
 static int extract_type_1_socket_inode(const char lname[], unsigned long * inode_p) {
@@ -6007,7 +6004,7 @@ static int extract_type_1_socket_inode(const char lname[], unsigned long * inode
        */
 
     if (strlen(lname) < PRG_SOCKET_PFXl+3) return(-1);
-    
+
     if (memcmp(lname, PRG_SOCKET_PFX, PRG_SOCKET_PFXl)) return(-1);
     if (lname[strlen(lname)-1] != ']') return(-1);
 
@@ -6037,7 +6034,7 @@ static int extract_type_2_socket_inode(const char lname[], unsigned long * inode
     {
         char *serr;
         *inode_p=strtol(lname + PRG_SOCKET_PFX2l,&serr,0);
-        if (!serr || *serr ) 
+        if (!serr || *serr )
             return(-1);
     }
     return(0);
@@ -6058,24 +6055,24 @@ static int is_socket_from_jcmd(unsigned long parm_inode){
   DIR *dirproc=NULL;
   struct dirent *direproc;
   int rc;
-  if (!(dirproc=opendir(PATH_PROC))) 
-  	return 1;
+  if (!(dirproc=opendir(PATH_PROC)))
+    return 1;
 
   while (errno=0,direproc=readdir(dirproc)) {
-	  for (cs=direproc->d_name;*cs;cs++)
-	    if (!isdigit(*cs)) 
-	      break;
-	  if (*cs) 
-	    continue;
+    for (cs=direproc->d_name;*cs;cs++)
+      if (!isdigit(*cs))
+        break;
+    if (*cs)
+      continue;
 
-	  if (!is_process_jcmd(direproc->d_name))
-	  	continue;
+    if (!is_process_jcmd(direproc->d_name))
+      continue;
 
-	  // this is preparing the filelist, dont need for regular proc
+    // this is preparing the filelist, dont need for regular proc
     procfdlen=snprintf(line, sizeof(line), PATH_PROC_X_NET_UNIX, direproc->d_name);
-	  if (procfdlen<=0 || procfdlen>=(int)sizeof(line)-5) 
-	    continue;
-	  errno=0;
+    if (procfdlen<=0 || procfdlen>=(int)sizeof(line)-5)
+      continue;
+    errno=0;
 
     fp = fopen(line, "r");
     if (fp == NULL){
@@ -6100,7 +6097,7 @@ static int is_socket_from_jcmd(unsigned long parm_inode){
         token_word = strtok(NULL," ");
         count++;
       }
-    }  
+    }
   }
   closedir(dirproc);
   fclose(fp);
@@ -6117,7 +6114,7 @@ void VM_Crac::doit() {
   do_classpaths(mark_classpath_entry, &fds, Arguments::get_appclasspath());
   do_classpaths(mark_all_in, &fds, Arguments::get_ext_dirs());
   mark_persistent(&fds);
-  
+
   bool ok = true;
   for (int i = 0; i < fds.len(); ++i) {
     if (fds.get_state(i) == FdsInfo::CLOSED) {
@@ -6191,7 +6188,7 @@ void VM_Crac::doit() {
       if (sock_family != AF_UNIX)
         ok = false;
 
-      unsigned long inod; 
+      unsigned long inod;
       if (extract_type_1_socket_inode(details, &inod) < 0){
         if (extract_type_2_socket_inode(details, &inod) < 0)
           ok = false;
@@ -6205,7 +6202,7 @@ void VM_Crac::doit() {
         }
       }
     }
-    
+
     if (CRPrintResourcesOnCheckpoint) {
       ostream->print_cr("BAD: opened by application");
     }
@@ -6239,12 +6236,12 @@ void VM_Crac::doit() {
   } else {
     trace_cr(ostream, "Checkpoint ...");
     bufferedStream * buf = static_cast<bufferedStream*>(ostream);
-    // say to jcmd peer that all ok, and send the ostream buffer  
+    // say to jcmd peer that all ok, and send the ostream buffer
     char msg[5];
     int k;
     sprintf(msg, "%d\n", JNI_OK);
-    k = write(unixsockdf, msg, strlen(msg)); 
-    k = write(unixsockdf, buf->as_string(), buf->size()); 
+    k = write(unixsockdf, msg, strlen(msg));
+    k = write(unixsockdf, buf->as_string(), buf->size());
 
     shutdown(unixsockdf, SHUT_RDWR);
     close(unixsockdf);

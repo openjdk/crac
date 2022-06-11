@@ -1047,7 +1047,6 @@ void CheckpointDCmd::execute(DCmdSource source, TRAPS) {
   JavaCalls::call_static(&result, k,
                          vmSymbols::checkpointRestoreInternal_name(),
                          vmSymbols::checkpointRestereInternal_signature(), &args, CHECK);
-    
   jvalue* jv = (jvalue*) result.get_value_addr();
   oop str = cast_to_oop(jv->l);
   if (str != NULL) {

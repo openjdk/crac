@@ -5836,14 +5836,7 @@ static int call_crengine() {
   return 0;
 }
 
-static int checkpoint_restore(FdsInfo* fds, outputStream * ostream) {
-
-  if (CRAllowToSkipCheckpoint) {
-    trace_cr(ostream, "Skip Checkpoint");
-    return JVM_CHECKPOINT_OK;
-  }
-
-  trace_cr(ostream, "Checkpoint ...");
+static int checkpoint_restore(FdsInfo* fds) {
 
   int cres = call_crengine();
   if (cres < 0) {
@@ -5866,7 +5859,7 @@ static int checkpoint_restore(FdsInfo* fds, outputStream * ostream) {
   }
 
   if (info.si_code != SI_QUEUE || info.si_int < 0) {
-    tty->print_cr("JVM: invalid info for restore provided (may be failed checkpoint)");
+    tty->print_cr("JVM: invalid info for restore provided (may be failed checkpoint) si_code %d si_int %d", info.si_code,  info.si_int);
     return JVM_CHECKPOINT_ERROR;
   }
 
@@ -6080,7 +6073,7 @@ static int is_socket_from_jcmd(unsigned long parm_inode){
 
 	  // this is preparing the filelist, dont need for regular proc
     procfdlen=snprintf(line, sizeof(line), PATH_PROC_X_NET_UNIX, direproc->d_name);
-	  if (procfdlen<=0 || procfdlen>=sizeof(line)-5) 
+	  if (procfdlen<=0 || procfdlen>=(int)sizeof(line)-5) 
 	    continue;
 	  errno=0;
 
@@ -6119,16 +6112,12 @@ void VM_Crac::doit() {
   AttachListener::abort();
 
   FdsInfo fds;
+  int unixsockdf;
   do_classpaths(mark_classpath_entry, &fds, Arguments::get_sysclasspath());
   do_classpaths(mark_classpath_entry, &fds, Arguments::get_appclasspath());
   do_classpaths(mark_all_in, &fds, Arguments::get_ext_dirs());
   mark_persistent(&fds);
   
-  //tty->print_cr(typeid(ostream).name());
-  // P12outputStream
-  // 14bufferedStream
-  //tty->print_cr(typeid(*ostream).name());
-
   bool ok = true;
   for (int i = 0; i < fds.len(); ++i) {
     if (fds.get_state(i) == FdsInfo::CLOSED) {
@@ -6211,6 +6200,7 @@ void VM_Crac::doit() {
       if (ok){
         if (is_socket_from_jcmd(inod)){
           ostream->print_cr("OK: jcmd socket");
+          unixsockdf = i;
           continue;
         }
       }
@@ -6226,9 +6216,11 @@ void VM_Crac::doit() {
     _failures->append(CracFailDep(stat2stfail(st->st_mode & S_IFMT), msg));
   }
 
-  if (CRPrintResourcesOnCheckpoint) {
-    ostream->cr();
+  if (!ok){
+    trace_cr(ostream, "Checkpoint aborted: resources opened by application");
+    return;
   }
+
 
   if (!ok && CRHeapDumpOnCheckpointException) {
     HeapDumper::dump_heap();
@@ -6242,10 +6234,25 @@ void VM_Crac::doit() {
     return;
   }
 
-  int ret = checkpoint_restore(&fds, ostream);
-  if (ret == JVM_CHECKPOINT_ERROR) {
-    PerfMemoryLinux::checkpoint_fail();
-    return;
+  if (CRAllowToSkipCheckpoint) {
+    trace_cr(ostream, "Skip Checkpoint");
+  } else {
+    trace_cr(ostream, "Checkpoint ...");
+    bufferedStream * buf = static_cast<bufferedStream*>(ostream);
+    // say to jcmd peer that all ok, and send the ostream buffer  
+    char msg[5];
+    int k;
+    sprintf(msg, "%d\n", JNI_OK);
+    k = write(unixsockdf, msg, strlen(msg)); 
+    k = write(unixsockdf, buf->as_string(), buf->size()); 
+
+    shutdown(unixsockdf, SHUT_RDWR);
+    close(unixsockdf);
+    int ret = checkpoint_restore(&fds);
+    if (ret == JVM_CHECKPOINT_ERROR) {
+      PerfMemoryLinux::checkpoint_fail();
+      return;
+    }
   }
 
   PerfMemoryLinux::restore();
@@ -6359,7 +6366,7 @@ Handle os::Linux::checkpoint(TRAPS, jlong stream) {
 
   VM_Crac cr;
   {
-    cr.ostream = (outputStream*) stream; 
+    cr.ostream = (outputStream*) stream;
     MutexLocker ml(Heap_lock);
     VMThread::execute(&cr);
   }

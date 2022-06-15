@@ -6182,7 +6182,7 @@ void VM_Crac::doit() {
     {
       if ((strcmp("regular", stat2strtype(fds.get_stat(i)->st_mode))) == 0){
         if (CRPrintResourcesOnCheckpoint) {
-          ostream->print_cr("Closing the redirected std stream ");
+          tty->print_cr("Closing the redirected std stream ");
         }
         close(i);
         continue;

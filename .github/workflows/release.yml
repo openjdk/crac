@@ -40,12 +40,14 @@ jobs:
           -v /home/runner:/home/runner
           -u $(id -u):$(id -g)
           --entrypoint tail
-          docker.pkg.github.com/crac/docker-build/image:latest
+          docker.pkg.github.com/crac/docker-build/image:ubuntu-16.04
           -f /dev/null
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - run: bash ./configure
+      - run:
+          CC=gcc-7 CXX=g++-7
+          bash ./configure
           --disable-warnings-as-errors
           --with-version-pre=crac
           --with-version-build=${{ steps.compute.outputs.BUILDNUMBER }}

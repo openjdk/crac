@@ -6178,6 +6178,17 @@ void VM_Crac::doit() {
           i, stat2strtype(fds.get_stat(i)->st_mode), details);
     }
 
+    if (i < 3) // close stdin std err if they are "redirected" to file ... 
+    {
+      if ((strcmp("regular", stat2strtype(fds.get_stat(i)->st_mode))) == 0){
+        if (CRPrintResourcesOnCheckpoint) {
+          ostream->print_cr("Closing the redirected std stream ");
+        }
+        close(i);
+        continue;
+      }
+    }
+
     if (_vm_inited_fds.get_state(i, FdsInfo::CLOSED) != FdsInfo::CLOSED) {
       if (CRPrintResourcesOnCheckpoint) {
         tty->print_cr("OK: inherited from process env");

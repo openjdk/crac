@@ -6180,7 +6180,7 @@ void VM_Crac::doit() {
 
     if (i < 3) // close stdin std err if they are "redirected" to file ... 
     {
-      if ((strcmp("regular", stat2strtype(fds.get_stat(i)->st_mode))) == 0){
+      if (strcmp("regular", stat2strtype(fds.get_stat(i)->st_mode)) == 0){
         if (CRPrintResourcesOnCheckpoint) {
           tty->print_cr("Closing the redirected std stream ");
         }

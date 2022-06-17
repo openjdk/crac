@@ -6178,7 +6178,7 @@ void VM_Crac::doit() {
           i, stat2strtype(fds.get_stat(i)->st_mode), details);
     }
 
-    if (i < 3) // close stdin std err if they are "redirected" to file ... 
+    if (i < 3) // close stdin std err if they are "redirected" to file
     {
       if (strcmp("regular", stat2strtype(fds.get_stat(i)->st_mode)) == 0){
         if (CRPrintResourcesOnCheckpoint) {

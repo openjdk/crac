@@ -6,8 +6,6 @@ public class AWTApp {
 	public static void main(String[] args) throws Exception {
 		int sleep1 = Integer.parseInt(args[0]);
 		int sleep2 = Integer.parseInt(args[1]);
-		boolean fst = 0 != Integer.parseInt(args[2]);
-		boolean snd = 0 != Integer.parseInt(args[3]);
 
 		Frame frame = new Frame("AWTApp");
 		frame.addWindowListener(new WindowAdapter() {

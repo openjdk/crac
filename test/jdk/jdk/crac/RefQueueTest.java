@@ -23,6 +23,9 @@
 
 import java.io.*;
 import java.lang.ref.Cleaner;
+import java.lang.ref.Reference;
+import java.lang.ref.ReferenceQueue;
+import java.lang.ref.WeakReference;
 
 import jdk.crac.*;
 
@@ -33,6 +36,42 @@ import jdk.crac.*;
 public class RefQueueTest {
     private static final Cleaner cleaner = Cleaner.create();
 
+    static class Tuple {
+        private Object object = new Object();
+        private ReferenceQueue<WeakReference> queue = new ReferenceQueue<>();
+        private Reference ref = new WeakReference(object, queue);
+        private Thread thread;
+
+        Tuple(Runnable r) {
+            thread = new Thread(() -> {
+                while (true) {
+                    try {
+                        queue.remove();
+                        if (r != null) {
+                            r.run();
+                        }
+                    } catch (InterruptedException e) {
+                        e.printStackTrace();
+                    }
+                }
+            });
+            thread.setDaemon(true);
+            thread.start();
+        }
+
+        Object getObject() {
+            return object;
+        }
+
+        void clearObject() {
+            object = null;
+        }
+
+        void waitProcessed() throws InterruptedException {
+            Misc.waitForQueueProcessed(queue, 1, 0);
+        }
+    }
+
     static public void main(String[] args) throws Exception {
 
         File badFile = File.createTempFile("jtreg-RefQueueTest", null);
@@ -40,14 +79,55 @@ public class RefQueueTest {
         badStream.write('j');
         badFile.delete();
 
-        // the cleaner would be able to run right away
-        cleaner.register(new Object(), () -> {
+        Tuple[] tuples = new Tuple[10];
+        for (int i = 0; i < tuples.length - 1; ++i) {
+            int ii = i;
+            tuples[i] = new Tuple(() -> {
+                System.out.println("WOKE " + ii);
+                tuples[ii + 1].clearObject();
+            });
+        }
+        tuples[tuples.length - 1] = new Tuple(() -> {
+            System.out.println("WOKE " + (tuples.length - 1));
+        });
+
+        // the cleaner should run only after user reference processing complete
+        cleaner.register(tuples[tuples.length - 1].getObject(), () -> {
+            System.out.println("CLEANER");
             try {
                 badStream.close();
             } catch (IOException e) {
                 throw new RuntimeException(e);
             }
         });
+
+        Resource testResource = new Resource() {
+            @Override
+            public void beforeCheckpoint(Context<? extends Resource> context)
+                throws Exception
+            {
+                tuples[0].clearObject();
+
+                // should return quickly: no references yet. But the
+                // call is valid.
+                System.out.println("ATTEMPT 1");
+                tuples[tuples.length - 1].waitProcessed();
+
+                // Now make sure that all necessary processing has happened.
+                // We do this in a way that is specific to this app.
+                System.out.println("ATTEMPT " + tuples.length);
+                for (int i = 0; i < tuples.length; ++i) {
+                    tuples[i].waitProcessed();
+                }
+                System.out.println("ATTEMPT done");
+            }
+
+            @Override
+            public void afterRestore(Context<? extends Resource> context) throws Exception {
+
+            }
+        };
+        jdk.crac.Core.getGlobalContext().register(testResource);
 
         // should close the file and only then go to the native checkpoint
         Core.checkpointRestore();

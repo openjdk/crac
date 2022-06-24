@@ -82,16 +82,14 @@ public interface JDKResource extends Resource {
 
         /**
          * Priority of the
-         * java.lan.ref.Reference static resource
+         * jdk.internal.ref.CleanerImpl resources
          */
-        REFERENCE_HANDLER,
+        CLEANERS,
         /**
          * Priority of the
-         * jdk.internal.ref.CleanerImpl resource,
-         * sun.java2d.Disposer resource
+         * sun.java2d.Disposer resources
          */
-        REFERENCE_QUEUES,
-
+        DISPOSERS,
 
         /* Keep next priority last to reinitialize
         GraphicsEnvironment connection properly */

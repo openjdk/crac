@@ -102,12 +102,19 @@ public class Disposer implements Runnable, JDKResource {
 
     @Override
     public Priority getPriority() {
-        return Priority.REFERENCE_QUEUES;
+        return Priority.DISPOSERS;
     }
 
     @Override
     public void beforeCheckpoint(Context<? extends Resource> context) throws Exception {
-        queue.waitForWaiters(1);
+        final long timeout = 1_000; // reasonable for ref.clear() and rec.dispose() to finish
+        while (!records.isEmpty() &&
+                !jdk.crac.Misc.waitForQueueProcessed(queue, 1, timeout)) {
+            // This loop reflects the loop in the disposer handler thread,
+            // that allows a race between reference disposing from the records
+            // and waiting for the queue. So we need to wait for the queue
+            // to be processed with the timeout as well.
+        }
     }
 
     @Override

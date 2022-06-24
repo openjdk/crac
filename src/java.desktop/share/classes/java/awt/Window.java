@@ -186,8 +186,6 @@ public class Window extends Container implements Accessible {
             // When the last displayable window within the
             // Java virtual machine (VM) is disposed of, the VM may terminate
             window.dispose();
-            // Let the GC collect this window
-            window = null;
         }
         nameCounter = 0;
 

@@ -81,6 +81,7 @@ public class SharedSecrets {
     private static JavaSecuritySpecAccess javaSecuritySpecAccess;
     private static JavaxCryptoSealedObjectAccess javaxCryptoSealedObjectAccess;
     private static JavaxCryptoSpecAccess javaxCryptoSpecAccess;
+    private static SunJava2DDisposerAccess sunJava2DDisposerAccess;
 
     public static void setJavaUtilCollectionAccess(JavaUtilCollectionAccess juca) {
         javaUtilCollectionAccess = juca;
@@ -435,6 +436,14 @@ public class SharedSecrets {
             access = javaxCryptoSealedObjectAccess;
         }
         return access;
+    }
+
+    public static void setSunJava2DDisposerAccess(SunJava2DDisposerAccess sjda) {
+        sunJava2DDisposerAccess = sjda;
+    }
+
+    public static SunJava2DDisposerAccess getSunJava2DDisposerAccess() {
+        return sunJava2DDisposerAccess;
     }
 
     private static void ensureClassInitialized(Class<?> c) {

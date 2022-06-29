@@ -77,14 +77,9 @@ public interface JDKResource extends Resource {
         SEEDER_HOLDER,
 
 
-        /* Keep next priorities here to ensure handling of pending References
+        /* Keep next priority here to ensure handling of pending References
          * appeared on earlier priorities. */
 
-        /**
-         * Priority of the
-         * sun.java2d.Disposer resources
-         */
-        DISPOSERS,
         /**
          * Priority of the
          * jdk.internal.ref.CleanerImpl resources

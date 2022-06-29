@@ -36,9 +36,8 @@ import java.security.PrivilegedAction;
 import java.util.ArrayList;
 import java.util.Hashtable;
 
-import jdk.crac.Context;
-import jdk.crac.Resource;
-import jdk.internal.crac.JDKResource;
+import jdk.internal.access.SharedSecrets;
+import jdk.internal.access.SunJava2DDisposerAccess;
 
 /**
  * This class is used for registering and disposing the native
@@ -55,7 +54,7 @@ import jdk.internal.crac.JDKResource;
  * @see DisposerRecord
  */
 @SuppressWarnings("removal")
-public class Disposer implements Runnable, JDKResource {
+public class Disposer implements Runnable {
     private static final ReferenceQueue<Object> queue = new ReferenceQueue<>();
     private static final Hashtable<java.lang.ref.Reference<Object>, DisposerRecord> records =
         new Hashtable<>();
@@ -97,28 +96,23 @@ public class Disposer implements Runnable, JDKResource {
             return null;
         });
 
-        jdk.internal.crac.Core.getJDKContext().register(disposerInstance);
-    }
+        SharedSecrets.setSunJava2DDisposerAccess(new SunJava2DDisposerAccess() {
+            @Override
+            public void beforeCheckpoint() throws Exception {
+                final long timeout = 1_000; // reasonable for ref.clear() and rec.dispose() to finish
+                while (!records.isEmpty() &&
+                        !jdk.crac.Misc.waitForQueueProcessed(queue, 1, timeout)) {
+                    // This loop reflects the loop in the disposer handler thread,
+                    // that allows a race between reference disposing from the records
+                    // and waiting for the queue. So we need to wait for the queue
+                    // to be processed with the timeout as well.
+                }
+            }
 
-    @Override
-    public Priority getPriority() {
-        return Priority.DISPOSERS;
-    }
-
-    @Override
-    public void beforeCheckpoint(Context<? extends Resource> context) throws Exception {
-        final long timeout = 1_000; // reasonable for ref.clear() and rec.dispose() to finish
-        while (!records.isEmpty() &&
-                !jdk.crac.Misc.waitForQueueProcessed(queue, 1, timeout)) {
-            // This loop reflects the loop in the disposer handler thread,
-            // that allows a race between reference disposing from the records
-            // and waiting for the queue. So we need to wait for the queue
-            // to be processed with the timeout as well.
-        }
-    }
-
-    @Override
-    public void afterRestore(Context<? extends Resource> context) throws Exception {
+            @Override
+            public void afterRestore() throws Exception {
+            }
+        });
     }
 
     /**

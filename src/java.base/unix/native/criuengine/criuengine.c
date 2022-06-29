@@ -95,15 +95,26 @@ static int checkpoint(pid_t jvm,
 
     pid_t child = fork();
     if (!child) {
-        const char* args[] = {
+        const char* args[32] = {
             criu,
             "dump",
             "-t", jvmpidchar,
             "-D", imagedir,
             "--shell-job",
             "-v4", "-o", "dump4.log", // -D without -W makes criu cd to image dir for logs
-            NULL
         };
+        const char** arg = args + 10;
+        char *criuopts = getenv("CRAC_CRIU_OPTS");
+        if (criuopts) {
+            char* criuopt = strtok(criuopts, " ");
+            while (criuopt) {
+                *arg++ = criuopt;
+                criuopt = strtok(NULL, " ");
+            }
+        }
+        *arg++ = NULL;
+        assert(ARRAY_SIZE(args) >= (size_t)(arg - args));
+
         execv(criu, (char**)args);
         perror("criu dump");
         exit(1);
@@ -155,23 +166,33 @@ static int restore(const char *basedir,
         }
     }
 
-    const char* args[32] = { criu, "restore" };
-    const char** arg = args + 2;
-    if (inherit_perfdata) {
-        *arg++ = "--inherit-fd";
-        *arg++ = inherit_perfdata;
-    }
-    const char* tail[] = {
+    const char* args[32] = {
+        criu,
+        "restore",
         "-W", ".",
         "--shell-job",
         "--action-script", self,
         "-D", imagedir,
-        "-v1",
+        "-v1"
+    };
+    const char** arg = args + 10;
+    if (inherit_perfdata) {
+        *arg++ = "--inherit-fd";
+        *arg++ = inherit_perfdata;
+    }
+    char *criuopts = getenv("CRAC_CRIU_OPTS");
+    if (criuopts) {
+        char* criuopt = strtok(criuopts, " ");
+        while (criuopt) {
+            *arg++ = criuopt;
+            criuopt = strtok(NULL, " ");
+        }
+    }
+    const char* tail[] = {
         "--exec-cmd", "--", self, "restorewait",
         NULL
     };
-    static_assert(ARRAY_SIZE(args) >= 2 + ARRAY_SIZE(tail),
-            "all possible arguments should fit");
+    assert(ARRAY_SIZE(args) >= (size_t)(arg - args + ARRAY_SIZE(tail)));
 
     memcpy(arg, tail, sizeof(tail));
 

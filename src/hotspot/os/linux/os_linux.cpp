@@ -6247,7 +6247,7 @@ void VM_Crac::doit() {
   int shmid = 0;
   int ret = checkpoint_restore(&shmid);
   if (ret == JVM_CHECKPOINT_ERROR) {
-    PerfMemoryLinux::checkpoint_fail();
+    PerfMemoryLinux::restore();
     return;
   }
 

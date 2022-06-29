@@ -20,6 +20,7 @@ public class AWTApp {
 		Thread.sleep(sleep1);
 
 		System.out.println("Try to make a checkpoint and then restore...");
+		frame = null;
 		try {
 			jdk.crac.Core.checkpointRestore();
 		} catch (jdk.crac.CheckpointException | jdk.crac.RestoreException e) {

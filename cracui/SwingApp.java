@@ -13,6 +13,7 @@ public class SwingApp {
 		Thread.sleep(sleep1);
 
 		System.out.println("Try to make a checkpoint and then restore...");
+		jframe = null;
 		try {
 			jdk.crac.Core.checkpointRestore();
 		} catch (jdk.crac.CheckpointException | jdk.crac.RestoreException e) {

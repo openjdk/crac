@@ -107,13 +107,15 @@ static int checkpoint(pid_t jvm,
         char *criuopts = getenv("CRAC_CRIU_OPTS");
         if (criuopts) {
             char* criuopt = strtok(criuopts, " ");
-            while (criuopt) {
+            while (criuopt && ARRAY_SIZE(args) >= (size_t)(arg - args) + 1/* account for trailing NULL */) {
                 *arg++ = criuopt;
                 criuopt = strtok(NULL, " ");
             }
+            if (criuopt) {
+                fprintf(stderr, "Warning: too many arguments in CRAC_CRIU_OPTS (dropped from '%s')\n", criuopt);
+            }
         }
         *arg++ = NULL;
-        assert(ARRAY_SIZE(args) >= (size_t)(arg - args));
 
         execv(criu, (char**)args);
         perror("criu dump");
@@ -180,19 +182,21 @@ static int restore(const char *basedir,
         *arg++ = "--inherit-fd";
         *arg++ = inherit_perfdata;
     }
-    char *criuopts = getenv("CRAC_CRIU_OPTS");
-    if (criuopts) {
-        char* criuopt = strtok(criuopts, " ");
-        while (criuopt) {
-            *arg++ = criuopt;
-            criuopt = strtok(NULL, " ");
-        }
-    }
     const char* tail[] = {
         "--exec-cmd", "--", self, "restorewait",
         NULL
     };
-    assert(ARRAY_SIZE(args) >= (size_t)(arg - args + ARRAY_SIZE(tail)));
+    char *criuopts = getenv("CRAC_CRIU_OPTS");
+    if (criuopts) {
+        char* criuopt = strtok(criuopts, " ");
+        while (criuopt && ARRAY_SIZE(args) >= (size_t)(arg - args + ARRAY_SIZE(tail))) {
+            *arg++ = criuopt;
+            criuopt = strtok(NULL, " ");
+        }
+        if (criuopt) {
+            fprintf(stderr, "Warning: too many arguments in CRAC_CRIU_OPTS (dropped from '%s')\n", criuopt);
+        }
+    }
 
     memcpy(arg, tail, sizeof(tail));
 

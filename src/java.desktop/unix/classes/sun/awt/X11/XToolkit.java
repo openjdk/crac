@@ -153,7 +153,6 @@ import sun.util.logging.PlatformLogger;
 import jdk.crac.Context;
 import jdk.crac.Resource;
 import jdk.internal.crac.JDKResource;
-import jdk.internal.access.SharedSecrets;
 
 import static sun.awt.X11.XlibUtil.scaleDown;
 
@@ -287,12 +286,12 @@ public final class XToolkit extends UNIXToolkit implements Runnable {
             display = 0;
 
             // Ensure handling of pending disposal references
-            SharedSecrets.getSunJava2DDisposerAccess().beforeCheckpoint();
+            AWTAccessor.getDisposerAccessor().beforeCheckpoint();
         }
 
         @Override
         public void afterRestore(Context<? extends Resource> context) throws Exception {
-            SharedSecrets.getSunJava2DDisposerAccess().afterRestore();
+            AWTAccessor.getDisposerAccessor().afterRestore();
 
             // X11
             initStatic();

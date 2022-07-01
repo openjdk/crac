@@ -40,6 +40,8 @@ import java.awt.geom.Point2D;
 import java.awt.image.BufferStrategy;
 import java.awt.peer.ComponentPeer;
 
+import sun.java2d.Disposer;
+
 import java.awt.peer.MenuComponentPeer;
 import java.lang.invoke.MethodHandles;
 import java.lang.reflect.InvocationTargetException;
@@ -827,6 +829,14 @@ public final class AWTAccessor {
                                       DropTargetContextPeer dtcp);
     }
 
+    /**
+     * An accessor object for the Java2D Disposer class
+     */
+    public interface DisposerAccessor {
+        void beforeCheckpoint() throws Exception;
+        void afterRestore() throws Exception;
+    }
+
     /*
      * Accessor instances are initialized in the static initializers of
      * corresponding AWT classes by using setters defined below.
@@ -862,6 +872,7 @@ public final class AWTAccessor {
     private static AccessibleBundleAccessor accessibleBundleAccessor;
     private static DragSourceContextAccessor dragSourceContextAccessor;
     private static DropTargetContextAccessor dropTargetContextAccessor;
+    private static DisposerAccessor disposerAccessor;
 
     /*
      * Set an accessor object for the java.awt.Component class.
@@ -1393,6 +1404,23 @@ public final class AWTAccessor {
      */
     public static void setDropTargetContextAccessor(DropTargetContextAccessor accessor) {
         AWTAccessor.dropTargetContextAccessor = accessor;
+    }
+
+    /*
+     * Get the accessor object for the sun.java2d.Disposer class.
+     */
+    public static DisposerAccessor getDisposerAccessor() {
+        if (disposerAccessor == null) {
+            ensureClassInitialized(Disposer.class);
+        }
+        return disposerAccessor;
+    }
+
+    /*
+     * Set the accessor object for the sun.java2d.Disposer class.
+     */
+    public static void setDisposerAccessor(DisposerAccessor accessor) {
+        disposerAccessor = accessor;
     }
 
     private static void ensureClassInitialized(Class<?> c) {

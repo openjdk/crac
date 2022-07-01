@@ -36,8 +36,8 @@ import java.security.PrivilegedAction;
 import java.util.ArrayList;
 import java.util.Hashtable;
 
-import jdk.internal.access.SharedSecrets;
-import jdk.internal.access.SunJava2DDisposerAccess;
+import sun.awt.AWTAccessor;
+import sun.awt.AWTAccessor.DisposerAccessor;
 
 /**
  * This class is used for registering and disposing the native
@@ -96,7 +96,7 @@ public class Disposer implements Runnable {
             return null;
         });
 
-        SharedSecrets.setSunJava2DDisposerAccess(new SunJava2DDisposerAccess() {
+        AWTAccessor.setDisposerAccessor(new DisposerAccessor() {
             @Override
             public void beforeCheckpoint() throws Exception {
                 final long timeout = 1_000; // reasonable for ref.clear() and rec.dispose() to finish

@@ -288,7 +288,7 @@ public final class AWTAccessor {
     /*
      * An interface of accessor for java.awt.Window class.
      */
-    public interface WindowAccessor {
+    public interface WindowAccessor extends CheckpointRestoreAccessor {
         /*
          * Update the image of a non-opaque (translucent) window.
          */
@@ -607,7 +607,7 @@ public final class AWTAccessor {
     /**
      * An accessor for the Cursor class
      */
-    public interface CursorAccessor {
+    public interface CursorAccessor extends CheckpointRestoreAccessor {
         /**
          * Returns pData of the Cursor class
          */
@@ -830,11 +830,18 @@ public final class AWTAccessor {
     }
 
     /**
-     * An accessor object for the Java2D Disposer class
+     * An accessor object for the reinitialized
+     * by CRaC AWT classes.
      */
-    public interface DisposerAccessor {
+    private interface CheckpointRestoreAccessor {
         void beforeCheckpoint() throws Exception;
         void afterRestore() throws Exception;
+    }
+
+    /**
+     * An accessor object for the Java2D Disposer class.
+     */
+    public interface DisposerAccessor extends CheckpointRestoreAccessor {
     }
 
     /*

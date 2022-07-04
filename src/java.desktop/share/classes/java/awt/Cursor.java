@@ -48,27 +48,6 @@ import sun.util.logging.PlatformLogger;
 public class Cursor implements java.io.Serializable {
 
     /**
-     * Setting to {@code null} predefined {@code Cursor} to reinitialize
-     * {@code XToolkit} properly.
-     * {@code Window} depends on this method.
-     *
-     * @see java.awt.Window
-     */
-    public static void beforeCheckpoint() {
-        Arrays.fill(predefinedPrivate, null);
-        Arrays.fill(predefined, null);
-    }
-
-    /**
-     * {@code Cursor} restoring to reinitialize {@code XToolkit} properly.
-     * {@code Window} depends on this method.
-     *
-     * @see java.awt.Window
-     */
-    public static void afterRestore() {
-    }
-
-    /**
      * The default cursor type (gets set if no cursor is defined).
      */
     public static final int     DEFAULT_CURSOR                  = 0;
@@ -224,6 +203,27 @@ public class Cursor implements java.io.Serializable {
 
                 public int getType(Cursor cursor) {
                     return cursor.type;
+                }
+
+                /**
+                 * Setting to {@code null} predefined {@code Cursor} to reinitialize
+                 * {@code XToolkit} properly.
+                 * {@code Window} depends on this method.
+                 *
+                 * @see java.awt.Window
+                 */
+                public void beforeCheckpoint() throws Exception {
+                    Arrays.fill(predefinedPrivate, null);
+                    Arrays.fill(predefined, null);
+                }
+
+                /**
+                 * {@code Cursor} restoring to reinitialize {@code XToolkit} properly.
+                 * {@code Window} depends on this method.
+                 *
+                 * @see java.awt.Window
+                 */
+                public void afterRestore() throws Exception {
                 }
             });
     }

@@ -221,9 +221,9 @@ public final class XToolkit extends UNIXToolkit implements Runnable {
 
     /**
      * Reinitialization of the {@code XToolkit} for proper
-     * reinitialization of {@code GraphicsEnvironment}.
-     * This must be done before GC, because it may
-     * cause some objects to be unreachable.
+     * reinitialization of {@code X11GraphicsEnvironment}.
+     * This must be done before GC and reference handling,
+     * because it may cause some objects to be unreachable.
      *
      * @see jdk.internal.crac.JDKResource
      */
@@ -235,7 +235,7 @@ public final class XToolkit extends UNIXToolkit implements Runnable {
         @Override
         public void beforeCheckpoint(Context<? extends Resource> context) throws Exception {
             // AWT
-            Window.beforeCheckpoint();
+            AWTAccessor.getWindowAccessor().beforeCheckpoint();
 
             // X11
             XRootWindow.beforeCheckpoint();
@@ -295,7 +295,7 @@ public final class XToolkit extends UNIXToolkit implements Runnable {
 
             // X11
             initStatic();
-            initStaticInternal();
+            initInternal();
 
             loopUnlock();
 
@@ -304,7 +304,7 @@ public final class XToolkit extends UNIXToolkit implements Runnable {
             XRootWindow.afterRestore();
 
             // AWT
-            Window.afterRestore();
+            AWTAccessor.getWindowAccessor().afterRestore();
         }
     };
 
@@ -404,7 +404,7 @@ public final class XToolkit extends UNIXToolkit implements Runnable {
     }
 
     @SuppressWarnings("removal")
-    static void initStaticInternal() {
+    static void initInternal() {
         awtLock();
         try {
             XlibWrapper.XSupportsLocale();
@@ -446,7 +446,7 @@ public final class XToolkit extends UNIXToolkit implements Runnable {
 
     @SuppressWarnings("removal")
     void init() {
-        initStaticInternal();
+        initInternal();
 
         PrivilegedAction<Void> a = () -> {
             Runnable r = () -> {

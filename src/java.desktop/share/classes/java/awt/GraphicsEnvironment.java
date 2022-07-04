@@ -104,8 +104,8 @@ public abstract class GraphicsEnvironment {
 
     /**
      * Reinitialization of the local {@code GraphicsEnvironment}.
-     * This must be done after GC, because some objects require
-     * connection to be disposed.
+     * This must be done after GC and reference handling,
+     * because some objects require connection to be disposed.
      * It depends on {@code GraphicsEnvironment} extending classes.
      *
      * @see sun.awt.X11GraphicsEnvironment

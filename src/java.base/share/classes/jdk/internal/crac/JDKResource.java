@@ -53,8 +53,6 @@ public interface JDKResource extends Resource {
          * @see sun.awt.X11.XToolkit
          */
         NORMAL,
-
-
         /**
          * Priority of the
          * sun.nio.ch.EPollSelectorImpl resource
@@ -76,7 +74,6 @@ public interface JDKResource extends Resource {
          */
         SEEDER_HOLDER,
 
-
         /* Keep next priority here to ensure handling of pending References
          * appeared on earlier priorities. */
 
@@ -85,7 +82,6 @@ public interface JDKResource extends Resource {
          * jdk.internal.ref.CleanerImpl resources
          */
         CLEANERS,
-
 
         /* Keep next priority last to reinitialize
         GraphicsEnvironment connection properly */

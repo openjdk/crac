@@ -26,6 +26,8 @@
 package sun.java2d;
 
 import sun.awt.util.ThreadGroupUtils;
+import sun.awt.AWTAccessor;
+import sun.awt.AWTAccessor.DisposerAccessor;
 
 import java.lang.ref.Reference;
 import java.lang.ref.ReferenceQueue;
@@ -35,9 +37,6 @@ import java.security.AccessController;
 import java.security.PrivilegedAction;
 import java.util.ArrayList;
 import java.util.Hashtable;
-
-import sun.awt.AWTAccessor;
-import sun.awt.AWTAccessor.DisposerAccessor;
 
 /**
  * This class is used for registering and disposing the native
@@ -97,7 +96,6 @@ public class Disposer implements Runnable {
         });
 
         AWTAccessor.setDisposerAccessor(new DisposerAccessor() {
-            @Override
             public void beforeCheckpoint() throws Exception {
                 final long timeout = 1_000; // reasonable for ref.clear() and rec.dispose() to finish
                 while (!records.isEmpty() &&
@@ -109,7 +107,6 @@ public class Disposer implements Runnable {
                 }
             }
 
-            @Override
             public void afterRestore() throws Exception {
             }
         });

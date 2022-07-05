@@ -41,6 +41,7 @@ import javax.crypto.SecretKey;
 import javax.crypto.spec.IvParameterSpec;
 import javax.crypto.spec.SecretKeySpec;
 import javax.net.ssl.SSLPeerUnverifiedException;
+import javax.security.auth.DestroyFailedException;
 
 import jdk.internal.event.EventHelper;
 import jdk.internal.event.TLSHandshakeEvent;
@@ -260,12 +261,20 @@ final class Finished {
                 KeyGenerator kg = KeyGenerator.getInstance(prfAlg);
                 kg.init(spec);
                 SecretKey prfKey = kg.generateKey();
-                if (!"RAW".equals(prfKey.getFormat())) {
-                    throw new ProviderException(
-                        "Invalid PRF output, format must be RAW. " +
-                        "Format received: " + prfKey.getFormat());
+                try {
+                    if (!"RAW".equals(prfKey.getFormat())) {
+                        throw new ProviderException(
+                                "Invalid PRF output, format must be RAW. " +
+                                        "Format received: " + prfKey.getFormat());
+                    }
+                    return prfKey.getEncoded();
+                } finally {
+                    try {
+                        prfKey.destroy();
+                    }catch(DestroyFailedException dfEx) {
+                        throw new IOException("Failed to destroy key");
+                    }
                 }
-                return prfKey.getEncoded();
             } catch (GeneralSecurityException e) {
                 throw new RuntimeException("PRF failed", e);
             }
@@ -311,13 +320,21 @@ final class Finished {
                 KeyGenerator kg = KeyGenerator.getInstance(prfAlg);
                 kg.init(spec);
                 SecretKey prfKey = kg.generateKey();
-                if (!"RAW".equals(prfKey.getFormat())) {
-                    throw new ProviderException(
-                        "Invalid PRF output, format must be RAW. " +
-                        "Format received: " + prfKey.getFormat());
+                try {
+                    if (!"RAW".equals(prfKey.getFormat())) {
+                        throw new ProviderException(
+                            "Invalid PRF output, format must be RAW. " +
+                            "Format received: " + prfKey.getFormat());
+                    }
+                    return prfKey.getEncoded();
+                } finally {
+                    try {
+                        prfKey.destroy();
+                    }catch(DestroyFailedException dfEx) {
+                        throw new IOException("Failed to destroy key");
+                    }
                 }
-                return prfKey.getEncoded();
-            } catch (GeneralSecurityException e) {
+        } catch (GeneralSecurityException e) {
                 throw new RuntimeException("PRF failed", e);
             }
         }

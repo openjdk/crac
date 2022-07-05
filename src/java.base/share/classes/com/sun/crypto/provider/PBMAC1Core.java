@@ -33,6 +33,7 @@ import javax.crypto.SecretKey;
 import javax.crypto.spec.SecretKeySpec;
 import javax.crypto.spec.PBEKeySpec;
 import javax.crypto.spec.PBEParameterSpec;
+import javax.security.auth.DestroyFailedException;
 import java.security.*;
 import java.security.spec.*;
 
@@ -191,10 +192,18 @@ abstract class PBMAC1Core extends HmacCore {
                 s.clearPassword();
             }
         }
-        SecretKey cipherKey = new SecretKeySpec(derivedKey, kdfAlgo);
-        Arrays.fill(derivedKey, (byte)0);
 
-        super.engineInit(cipherKey, null);
+        SecretKey cipherKey = new SecretKeySpec(derivedKey, kdfAlgo);
+        try {
+            Arrays.fill(derivedKey, (byte) 0);
+            super.engineInit(cipherKey, null);
+        } finally {
+            try {
+                cipherKey.destroy();
+            }catch(DestroyFailedException dfEx) {
+                throw new InvalidKeyException("Failed to destroy cipherKey");
+            }
+        }
     }
 
     public static final class HmacSHA1 extends PBMAC1Core {

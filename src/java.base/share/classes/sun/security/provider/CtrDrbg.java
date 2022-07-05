@@ -207,7 +207,12 @@ public class CtrDrbg extends AbstractDrbg {
                 // Step 2.1. Increment
                 addOne(v, ctrLen);
                 // Step 2.2. Block_Encrypt
-                cipher.init(Cipher.ENCRYPT_MODE, new SecretKeySpec(k, keyAlg));
+                SecretKeySpec keySpec = new SecretKeySpec(k, keyAlg);
+                try {
+                    cipher.init(Cipher.ENCRYPT_MODE, keySpec);
+                } finally {
+                    keySpec.destroy();
+                }
                 // Step 2.3. Encrypt into right position, no need to cat
                 cipher.doFinal(v, 0, blockLen, temp, i * blockLen);
             }
@@ -326,7 +331,12 @@ public class CtrDrbg extends AbstractDrbg {
 
         for (int i = 0; i * blockLen < seedLen; i++) {
             try {
-                cipher.init(Cipher.ENCRYPT_MODE, new SecretKeySpec(k, keyAlg));
+                SecretKeySpec keySpec = new SecretKeySpec(k, keyAlg);
+                try {
+                    cipher.init(Cipher.ENCRYPT_MODE, keySpec);
+                } finally {
+                    keySpec.destroy();
+                }
                 int tailLen = temp.length - blockLen*i;
                 // 14. requested_bits = leftmost(temp, nuumber_of_bits_to_return)
                 if (tailLen > blockLen) {
@@ -375,7 +385,12 @@ public class CtrDrbg extends AbstractDrbg {
                 break;
             }
             try {
-                cipher.init(Cipher.ENCRYPT_MODE, new SecretKeySpec(k, keyAlg));
+                SecretKeySpec keySpec = new SecretKeySpec(k, keyAlg);
+                try {
+                    cipher.init(Cipher.ENCRYPT_MODE, keySpec);
+                } finally {
+                    keySpec.destroy();
+                }
                 chain = cipher.doFinal(chain);
             } catch (GeneralSecurityException e) {
                 throw new InternalError(e);
@@ -495,7 +510,12 @@ public class CtrDrbg extends AbstractDrbg {
             // Step 4.1. Increment
             addOne(v, ctrLen);
             try {
-                cipher.init(Cipher.ENCRYPT_MODE, new SecretKeySpec(k, keyAlg));
+                SecretKeySpec keySpec = new SecretKeySpec(k, keyAlg);
+                try {
+                    cipher.init(Cipher.ENCRYPT_MODE, keySpec);
+                } finally {
+                    keySpec.destroy();
+                }
                 // Step 4.2. Encrypt
                 // Step 4.3 and 5. Cat bytes and leftmost
                 if (len > blockLen) {

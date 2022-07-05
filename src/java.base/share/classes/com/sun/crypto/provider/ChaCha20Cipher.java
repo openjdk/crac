@@ -39,6 +39,7 @@ import javax.crypto.*;
 import javax.crypto.spec.ChaCha20ParameterSpec;
 import javax.crypto.spec.IvParameterSpec;
 import javax.crypto.spec.SecretKeySpec;
+
 import sun.security.util.DerValue;
 
 /**
@@ -1069,9 +1070,13 @@ abstract class ChaCha20Cipher extends CipherSpi {
         // Derive the Poly1305 key from the starting state
         byte[] serializedKey = new byte[KEYSTREAM_SIZE];
         chaCha20Block(startState, 0, serializedKey);
-
-        authenticator.engineInit(new SecretKeySpec(serializedKey, 0, 32,
-                authAlgName), null);
+        SecretKeySpec keySpec = new SecretKeySpec(serializedKey, 0, 32,
+                authAlgName);
+        try {
+            authenticator.engineInit(keySpec, null);
+        } finally {
+            keySpec.destroy();
+        }
         aadLen = 0;
         dataLen = 0;
     }

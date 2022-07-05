@@ -60,9 +60,11 @@ public class HmacDrbg extends AbstractHashDrbg {
 
     // 800-90Ar1 10.1.2.2: HMAC_DRBG Update Process
     private void update(List<byte[]> inputs) {
+        SecretKeySpec keySpec = new SecretKeySpec(k, macAlg);
         try {
             // Step 1. K = HMAC (K, V || 0x00 || provided_data).
-            mac.init(new SecretKeySpec(k, macAlg));
+            mac.init(keySpec);
+            keySpec.destroy();
             mac.update(v);
             mac.update((byte) 0);
             for (byte[] input: inputs) {
@@ -70,8 +72,10 @@ public class HmacDrbg extends AbstractHashDrbg {
             }
             k = mac.doFinal();
 
+            keySpec = new SecretKeySpec(k, macAlg);
             // Step 2. V = HMAC (K, V).
-            mac.init(new SecretKeySpec(k, macAlg));
+            mac.init(keySpec);
+            keySpec.destroy();
             v = mac.doFinal(v);
 
             if (!inputs.isEmpty()) {
@@ -84,13 +88,17 @@ public class HmacDrbg extends AbstractHashDrbg {
                 k = mac.doFinal();
 
                 // Step 5. V=HMAC(K,V).
+                keySpec = new SecretKeySpec(k, macAlg);
                 mac.init(new SecretKeySpec(k, macAlg));
+                keySpec.destroy();
                 v = mac.doFinal(v);
             } // else Step 3
 
             // Step 6. Return
         } catch (InvalidKeyException e) {
             throw new InternalError(e);
+        } finally {
+            keySpec.destroy();
         }
     }
 
@@ -169,10 +177,13 @@ public class HmacDrbg extends AbstractHashDrbg {
         // Step 4. Loop
         while (len > 0) {
             // Step 4.1 V = HMAC (Key, V).
+            SecretKeySpec keySpec = new SecretKeySpec(k, macAlg);
             try {
-                mac.init(new SecretKeySpec(k, macAlg));
+                mac.init(keySpec);
             } catch (InvalidKeyException e) {
                 throw new InternalError(e);
+            } finally {
+                keySpec.destroy();
             }
             v = mac.doFinal(v);
             // Step 4.2 temp = temp || V.

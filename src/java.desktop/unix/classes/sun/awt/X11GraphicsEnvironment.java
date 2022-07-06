@@ -56,17 +56,28 @@ import sun.java2d.xr.XRSurfaceData;
 @SuppressWarnings("removal")
 public final class X11GraphicsEnvironment extends SunGraphicsEnvironment {
 
-    protected void beforeCheckpoint() {
-        // XCloseDisplay
+    protected void beforeCheckpoint() throws Exception {
+        // Deinitialize AWT and X11
+        AWTAccessor.getXToolkitAccessor().beforeCheckpoint();
+
+        // Ensure handling of pending disposal references
+        AWTAccessor.getDisposerAccessor().beforeCheckpoint();
+
+        // XCloseDisplay - disconnect from X11 server
         beforeCheckpointNative();
     }
 
-    protected void afterRestore() {
+    protected void afterRestore() throws Exception {
         afterRestoreNative();
-        // XOpenDisplay
+        // XOpenDisplay - connect to X11 server
         initStatic();
-        // Reinitialize X11GE
+        // Reinitialize X11GraphicsEnvironment
         init();
+
+        AWTAccessor.getDisposerAccessor().afterRestore();
+
+        // Initialize X11 and AWT
+        AWTAccessor.getXToolkitAccessor().afterRestore();
     }
 
     private static native void beforeCheckpointNative();

@@ -41,6 +41,7 @@ import java.awt.image.BufferStrategy;
 import java.awt.peer.ComponentPeer;
 
 import sun.java2d.Disposer;
+import sun.awt.X11.XToolkit;
 
 import java.awt.peer.MenuComponentPeer;
 import java.lang.invoke.MethodHandles;
@@ -844,6 +845,12 @@ public final class AWTAccessor {
     public interface DisposerAccessor extends CheckpointRestoreAccessor {
     }
 
+    /**
+     * An accessor object for the X11 XToolkit class.
+     */
+    public interface XToolkitAccessor extends CheckpointRestoreAccessor {
+    }
+
     /*
      * Accessor instances are initialized in the static initializers of
      * corresponding AWT classes by using setters defined below.
@@ -880,6 +887,7 @@ public final class AWTAccessor {
     private static DragSourceContextAccessor dragSourceContextAccessor;
     private static DropTargetContextAccessor dropTargetContextAccessor;
     private static DisposerAccessor disposerAccessor;
+    private static XToolkitAccessor xToolkitAccessor;
 
     /*
      * Set an accessor object for the java.awt.Component class.
@@ -1428,6 +1436,23 @@ public final class AWTAccessor {
      */
     public static void setDisposerAccessor(DisposerAccessor accessor) {
         disposerAccessor = accessor;
+    }
+
+    /*
+     * Get the accessor object for the sun.awt.X11.XToolkit class.
+     */
+    public static XToolkitAccessor getXToolkitAccessor() {
+        if (xToolkitAccessor == null) {
+            ensureClassInitialized(XToolkit.class);
+        }
+        return xToolkitAccessor;
+    }
+
+    /*
+     * Set the accessor object for the sun.awt.X11.XToolkit class.
+     */
+    public static void setXToolkitAccessor(XToolkitAccessor accessor) {
+        xToolkitAccessor = accessor;
     }
 
     private static void ensureClassInitialized(Class<?> c) {

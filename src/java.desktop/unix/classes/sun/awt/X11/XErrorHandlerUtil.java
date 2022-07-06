@@ -100,7 +100,7 @@ public final class XErrorHandlerUtil {
      *
      * @see sun.awt.X11.XToolkit
      */
-    public static void beforeCheckpoint() {
+    static void beforeCheckpoint() throws Exception {
         display = 0;
         saved_error_handler = 0;
         saved_error = null;
@@ -114,7 +114,7 @@ public final class XErrorHandlerUtil {
      *
      * @see sun.awt.X11.XToolkit
      */
-    public static void afterRestore() {
+    static void afterRestore() throws Exception {
     }
 
     /**

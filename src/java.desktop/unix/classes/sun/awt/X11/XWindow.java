@@ -62,14 +62,14 @@ import sun.java2d.SunGraphics2D;
 import sun.java2d.SurfaceData;
 import sun.util.logging.PlatformLogger;
 
-public class XWindow extends XBaseWindow implements X11ComponentPeer {
+class XWindow extends XBaseWindow implements X11ComponentPeer {
     private static PlatformLogger log = PlatformLogger.getLogger("sun.awt.X11.XWindow");
     private static PlatformLogger insLog = PlatformLogger.getLogger("sun.awt.X11.insets.XWindow");
     private static PlatformLogger eventLog = PlatformLogger.getLogger("sun.awt.X11.event.XWindow");
     private static final PlatformLogger focusLog = PlatformLogger.getLogger("sun.awt.X11.focus.XWindow");
     private static PlatformLogger keyEventLog = PlatformLogger.getLogger("sun.awt.X11.kye.XWindow");
 
-    public static void beforeCheckpoint() {
+    static void beforeCheckpoint() throws Exception {
         lastX = 0;
         lastY = 0;
         lastTime = 0;
@@ -85,7 +85,7 @@ public class XWindow extends XBaseWindow implements X11ComponentPeer {
         XGlobalCursorManager.beforeCheckpoint();
     }
 
-    public static void afterRestore() {
+    static void afterRestore() throws Exception {
         XGlobalCursorManager.afterRestore();
         XBaseWindow.afterRestore();
     }

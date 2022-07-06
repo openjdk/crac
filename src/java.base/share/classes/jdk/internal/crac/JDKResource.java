@@ -50,7 +50,7 @@ public interface JDKResource extends Resource {
         /**
          * Most resources should use this option.
          *
-         * @see sun.awt.X11.XToolkit
+         * @see sun.awt.X11.X11GraphicsEnvironment
          */
         NORMAL,
         /**
@@ -74,7 +74,7 @@ public interface JDKResource extends Resource {
          */
         SEEDER_HOLDER,
 
-        /* Keep next priority here to ensure handling of pending References
+        /* Keep next priorities last to ensure handling of pending References
          * appeared on earlier priorities. */
 
         /**
@@ -82,15 +82,6 @@ public interface JDKResource extends Resource {
          * jdk.internal.ref.CleanerImpl resources
          */
         CLEANERS,
-
-        /* Keep next priority last to reinitialize
-        GraphicsEnvironment connection properly */
-
-        /**
-         * Priority of the
-         * java.awt.GraphicsEnvironment resource
-         */
-        GRAPHICS_ENVIRONMENT,
     };
 
     Priority getPriority();

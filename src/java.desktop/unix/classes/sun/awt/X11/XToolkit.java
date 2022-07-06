@@ -130,6 +130,7 @@ import javax.swing.LookAndFeel;
 import javax.swing.UIDefaults;
 
 import sun.awt.AWTAccessor;
+import sun.awt.AWTAccessor.XToolkitAccessor;
 import sun.awt.AWTPermissions;
 import sun.awt.AppContext;
 import sun.awt.DisplayChangedListener;
@@ -149,10 +150,6 @@ import sun.print.PrintJob2D;
 import sun.security.action.GetBooleanAction;
 import sun.security.action.GetPropertyAction;
 import sun.util.logging.PlatformLogger;
-
-import jdk.crac.Context;
-import jdk.crac.Resource;
-import jdk.internal.crac.JDKResource;
 
 import static sun.awt.X11.XlibUtil.scaleDown;
 
@@ -218,95 +215,6 @@ public final class XToolkit extends UNIXToolkit implements Runnable {
     private static XMouseInfoPeer xPeer;
 
     private static int state = 0;
-
-    /**
-     * Reinitialization of the {@code XToolkit} for proper
-     * reinitialization of {@code X11GraphicsEnvironment}.
-     * This must be done before GC and reference handling,
-     * because it may cause some objects to be unreachable.
-     *
-     * @see jdk.internal.crac.JDKResource
-     */
-    private static final JDKResource jdkResource = new JDKResource() {
-        public Priority getPriority() {
-            return Priority.NORMAL;
-        }
-
-        @Override
-        public void beforeCheckpoint(Context<? extends Resource> context) throws Exception {
-            // AWT
-            AWTAccessor.getWindowAccessor().beforeCheckpoint();
-
-            // X11
-            XRootWindow.beforeCheckpoint();
-            XWM.beforeCheckpoint();
-            XErrorHandlerUtil.beforeCheckpoint();
-
-            loopLock();
-
-            synchronized (winMap) {
-                for (XBaseWindow window : winMap.values()) {
-                    window.destroy();
-                }
-                winMap.clear();
-            }
-            synchronized (winToDispatcher) {
-                winToDispatcher.clear();
-            }
-            for (Object peer : specialPeerMap.values()) {
-                if (peer instanceof XComponentPeer) {
-                    ((XComponentPeer) peer).dispose();
-                }
-            }
-            specialPeerMap.clear();
-
-            initialized = false;
-            timeStampUpdated = false;
-            timeStamp = 0;
-            _XA_JAVA_TIME_PROPERTY_ATOM = null;
-
-            maxWindowWidthInPixels = -1;
-            maxWindowHeightInPixels = -1;
-            dynamicLayoutSetting = false;
-
-            arrowCursor = 0;
-            awt_multiclick_time = 0;
-            awt_IsXsunKPBehavior = 0;
-            resetKeyboardSniffer();
-            xPeer = null;
-
-            altMask = 0;
-            metaMask = 0;
-            numLockMask = 0;
-            modeSwitchMask = 0;
-            modLockIsShiftLock = 0;
-
-            localEnv = null;
-            device = null;
-            display = 0;
-
-            // Ensure handling of pending disposal references
-            AWTAccessor.getDisposerAccessor().beforeCheckpoint();
-        }
-
-        @Override
-        public void afterRestore(Context<? extends Resource> context) throws Exception {
-            AWTAccessor.getDisposerAccessor().afterRestore();
-
-            // X11
-            initStatic();
-            initInternal();
-
-            loopUnlock();
-
-            XErrorHandlerUtil.afterRestore();
-            XWM.afterRestore();
-            XRootWindow.afterRestore();
-
-            // AWT
-            AWTAccessor.getWindowAccessor().afterRestore();
-        }
-    };
 
     /*
      * Return (potentially) platform specific display timeout for the
@@ -873,7 +781,93 @@ public final class XToolkit extends UNIXToolkit implements Runnable {
     static {
         initStatic();
 
-        jdk.internal.crac.Core.getJDKContext().register(jdkResource);
+        AWTAccessor.setXToolkitAccessor(new XToolkitAccessor() {
+            /**
+             * Deinitialization of the {@code XToolkit} for proper
+             * reinitialization of {@code X11GraphicsEnvironment}.
+             *
+             * This must be done before GC and reference handling,
+             * because it may cause some objects to be unreachable.
+             * Some of disposed objects may require a connection.
+             * {@code X11GraphicsEnvironment} depends on this method.
+             *
+             * @see sun.awt.X11GraphicsEnvironment
+             */
+            public void beforeCheckpoint() throws Exception {
+                // AWT
+                AWTAccessor.getWindowAccessor().beforeCheckpoint();
+
+                // X11
+                XRootWindow.beforeCheckpoint();
+                XWM.beforeCheckpoint();
+                XErrorHandlerUtil.beforeCheckpoint();
+
+                loopLock();
+
+                synchronized (winMap) {
+                    for (XBaseWindow window : winMap.values()) {
+                        window.destroy();
+                    }
+                    winMap.clear();
+                }
+                synchronized (winToDispatcher) {
+                    winToDispatcher.clear();
+                }
+                for (Object peer : specialPeerMap.values()) {
+                    if (peer instanceof XComponentPeer) {
+                        ((XComponentPeer) peer).dispose();
+                    }
+                }
+                specialPeerMap.clear();
+
+                initialized = false;
+                timeStampUpdated = false;
+                timeStamp = 0;
+                _XA_JAVA_TIME_PROPERTY_ATOM = null;
+
+                maxWindowWidthInPixels = -1;
+                maxWindowHeightInPixels = -1;
+                dynamicLayoutSetting = false;
+
+                arrowCursor = 0;
+                awt_multiclick_time = 0;
+                awt_IsXsunKPBehavior = 0;
+                resetKeyboardSniffer();
+                xPeer = null;
+
+                altMask = 0;
+                metaMask = 0;
+                numLockMask = 0;
+                modeSwitchMask = 0;
+                modLockIsShiftLock = 0;
+
+                localEnv = null;
+                device = null;
+                display = 0;
+            }
+
+            /**
+             * Initialization of the {@code XToolkit} for proper
+             * reinitialization of {@code X11GraphicsEnvironment}.
+             * {@code X11GraphicsEnvironment} depends on this method.
+             *
+             * @see sun.awt.X11GraphicsEnvironment
+             */
+            public void afterRestore() throws Exception {
+                // X11
+                initStatic();
+                initInternal();
+
+                loopUnlock();
+
+                XErrorHandlerUtil.afterRestore();
+                XWM.afterRestore();
+                XRootWindow.afterRestore();
+
+                // AWT
+                AWTAccessor.getWindowAccessor().afterRestore();
+            }
+        });
     }
 
     private static void initStatic() {

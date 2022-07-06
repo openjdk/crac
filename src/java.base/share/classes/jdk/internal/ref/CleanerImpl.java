@@ -28,8 +28,6 @@ package jdk.internal.ref;
 import java.lang.ref.Cleaner;
 import java.lang.ref.Cleaner.Cleanable;
 import java.lang.ref.ReferenceQueue;
-import java.security.AccessController;
-import java.security.PrivilegedAction;
 import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Function;
@@ -158,8 +156,17 @@ public final class CleanerImpl implements Runnable, JDKResource {
     }
 
     @Override
-    public void beforeCheckpoint(Context<? extends Resource> context) throws Exception {
-        queue.waitForWaiters(1);
+    public void beforeCheckpoint(Context<? extends Resource> context)
+        throws Exception
+    {
+        final long timeout = 1_000; // reasonable for ref.clean() to finish
+        while (!phantomCleanableList.isListEmpty() &&
+               !jdk.crac.Misc.waitForQueueProcessed(queue, 1, timeout)) {
+            // This loop reflects the loop in the cleaner handler thread,
+            // that allows a race between reference clearing from the list
+            // and waiting for the queue. So we need to wait for the queue
+            // to be processed with the timeout as well.
+        }
     }
 
     @Override

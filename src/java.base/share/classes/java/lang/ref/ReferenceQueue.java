@@ -26,6 +26,9 @@
 package java.lang.ref;
 
 import java.util.function.Consumer;
+
+import jdk.internal.access.JavaLangRefAccess;
+import jdk.internal.access.SharedSecrets;
 import jdk.internal.misc.VM;
 
 /**
@@ -56,7 +59,7 @@ public class ReferenceQueue<T> {
     private final Lock lock = new Lock();
     private volatile Reference<? extends T> head;
     private long queueLength = 0;
-    private int nWaiters = 0;
+    private int nBlocked = 0;
 
     boolean enqueue(Reference<? extends T> r) { /* Called only by Reference class */
         synchronized (lock) {
@@ -153,10 +156,10 @@ public class ReferenceQueue<T> {
             if (r != null) return r;
             long start = (timeout == 0) ? 0 : System.nanoTime();
             for (;;) {
-                ++nWaiters;
+                ++nBlocked;
                 lock.notifyAll();
                 lock.wait(timeout);
-                --nWaiters;
+                --nBlocked;
                 r = reallyPoll();
                 if (r != null) return r;
                 if (timeout != 0) {
@@ -210,15 +213,55 @@ public class ReferenceQueue<T> {
     }
 
     /**
-     * Blocks calling thread until the specified number of threads are blocked with no reference available.
-     * @param nWaiters number of threads to wait
-     * @throws InterruptedException If the wait is interrupted
+     * See {@link jdk.crac.Misc#waitForQueueProcessed(ReferenceQueue, int, long)}.
      */
-    public void waitForWaiters(int nWaiters) throws InterruptedException {
-        synchronized (lock) {
-            while (head != null || this.nWaiters < nWaiters) {
-                lock.wait();
+    boolean waitForQueueProcessed(int nThreads, long timeout)
+        throws InterruptedException
+    {
+        JavaLangRefAccess refAccess = SharedSecrets.getJavaLangRefAccess();
+        long start = (timeout > 0) ? System.nanoTime() : 0;
+
+        // Back-to-back calls of this function are not optimized
+        // intentionally.  It's possible to check if the previous call
+        // has queued no reference and conclude that there is no need
+        // to call GC and wait for reference processing.  But with such
+        // optimization we may lose references that were queued because
+        // some other code, beside another reference queue processing,
+        // caused a referent be unreachable.
+
+        System.gc();
+        // TODO ensure GC done processing all References
+
+        // should wait for the completion, otherwise the queue may appear
+        // empty, although a ref to be about to be enqueued.
+        while (refAccess.waitForReferenceProcessing());
+
+        if (timeout > 0) {
+            timeout -= (System.nanoTime() - start) / 1_000_000;
+            if (timeout <= 0) {
+                // give a chance to detect blocked threads
+                timeout = -1;
             }
         }
+
+        if (timeout < 0) {
+            synchronized (lock) {
+                return head == null && nThreads <= nBlocked;
+            }
+        }
+
+        synchronized (lock) {
+            while (head != null || nBlocked < nThreads) {
+                lock.wait(timeout);
+                if (timeout != 0) {
+                    long end = System.nanoTime();
+                    timeout -= (end - start) / 1000_000;
+                    if (timeout <= 0)
+                        return false;
+                    start = end;
+                }
+            }
+        }
+        return true;
     }
 }

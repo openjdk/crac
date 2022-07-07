@@ -30,6 +30,7 @@ import java.util.Arrays;
 import javax.crypto.SecretKey;
 import javax.crypto.spec.SecretKeySpec;
 import javax.crypto.spec.PBEParameterSpec;
+import javax.security.auth.DestroyFailedException;
 import java.security.*;
 import java.security.spec.*;
 
@@ -183,6 +184,14 @@ abstract class HmacPKCS12PBECore extends HmacCore {
             Arrays.fill(passwdChars, '\0');
         }
         SecretKey cipherKey = new SecretKeySpec(derivedKey, "HmacSHA1");
-        super.engineInit(cipherKey, null);
+        try {
+            super.engineInit(cipherKey, null);
+        } finally {
+            try {
+                cipherKey.destroy();
+            } catch (DestroyFailedException dfEx) {
+                throw new InvalidKeyException("Failed to destroy");
+            }
+        }
     }
 }

@@ -362,7 +362,11 @@ class NTLM {
         try {
             SecretKeySpec skey =
                     new SecretKeySpec(Arrays.copyOf(key, 16), "HmacMD5");
-            hmac.init(skey);
+            try {
+                hmac.init(skey);
+            } finally {
+                skey.destroy();
+            }
             return hmac.doFinal(text);
         } catch (InvalidKeyException ex) {
             assert false;

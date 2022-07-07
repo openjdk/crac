@@ -61,7 +61,7 @@ public class SecretKeySpec implements KeySpec, SecretKey {
      *
      * @serial
      */
-    private byte[] key;
+    private final byte[] key;
 
     /**
      * The name of the algorithm associated with this key.
@@ -256,4 +256,13 @@ public class SecretKeySpec implements KeySpec, SecretKey {
     void clear() {
         Arrays.fill(key, (byte)0);
     }
-}
+
+    /**
+     * Destroy this {@code Object}.
+     */
+    @Override
+    public void destroy() {
+        clear();
+    }
+
+ }

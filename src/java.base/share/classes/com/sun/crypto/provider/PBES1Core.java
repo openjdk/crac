@@ -258,8 +258,12 @@ final class PBES1Core {
         IvParameterSpec ivSpec = new IvParameterSpec(derivedKey,
                                                      derivedKey.length-8,
                                                      8);
-        // initialize the underlying cipher
-        cipher.init(opmode, cipherKey, ivSpec, random);
+        try {
+            // initialize the underlying cipher
+            cipher.init(opmode, cipherKey, ivSpec, random);
+        } finally {
+            cipherKey.destroy();
+        }
     }
 
     private byte[] deriveCipherKey(byte[] passwdBytes) {

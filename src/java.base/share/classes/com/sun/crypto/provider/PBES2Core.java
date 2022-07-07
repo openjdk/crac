@@ -290,8 +290,12 @@ abstract class PBES2Core extends CipherSpi {
         s.clearPassword();
         SecretKeySpec cipherKey = new SecretKeySpec(derivedKey, cipherAlgo);
 
-        // initialize the underlying cipher
-        cipher.init(opmode, cipherKey, ivSpec, random);
+        try {
+            // initialize the underlying cipher
+            cipher.init(opmode, cipherKey, ivSpec, random);
+        } finally {
+            cipherKey.destroy();
+        }
     }
 
     protected void engineInit(int opmode, Key key, AlgorithmParameters params,

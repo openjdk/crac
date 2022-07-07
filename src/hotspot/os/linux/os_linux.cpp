@@ -6236,15 +6236,9 @@ void VM_Crac::doit() {
   } else {
     trace_cr(ostream, "Checkpoint ...");
     bufferedStream * buf = static_cast<bufferedStream*>(ostream);
-    // say to jcmd peer that all ok, and send the ostream buffer
-    char msg[5];
-    int k;
-    sprintf(msg, "%d\n", JNI_OK);
-    k = write(unixsockdf, msg, strlen(msg));
-    k = write(unixsockdf, buf->as_string(), buf->size());
-
-    shutdown(unixsockdf, SHUT_RDWR);
-    close(unixsockdf);
+    AttachOperation * op = AttachListener::get_CurrentOperation();
+    // Send a result to jcmd
+    op->effectivley_complete(JNI_OK, buf);
     int ret = checkpoint_restore(&fds);
     if (ret == JVM_CHECKPOINT_ERROR) {
       PerfMemoryLinux::checkpoint_fail();

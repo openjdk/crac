@@ -80,8 +80,10 @@ class AttachListener: AllStatic {
   static bool is_attach_supported()             { return false; }
 #else
 
+
  private:
   static volatile AttachListenerState _state;
+  static AttachOperation* _currentOperation;
 
  public:
   static void set_state(AttachListenerState new_state) {
@@ -90,6 +92,13 @@ class AttachListener: AllStatic {
 
   static AttachListenerState get_state() {
     return Atomic::load(&_state);
+  }
+
+  static AttachOperation* get_CurrentOperation() {
+    return Atomic::load(&AttachListener::_currentOperation);
+  }
+  static void set_CurrentOperation(AttachOperation* s) {
+    Atomic::store(&AttachListener::_currentOperation, s); 
   }
 
   static AttachListenerState transit_state(AttachListenerState new_state,
@@ -188,6 +197,8 @@ class AttachOperation: public CHeapObj<mtInternal> {
 
   // complete operation by sending result code and any result data to the client
   virtual void complete(jint result, bufferedStream* result_stream) = 0;
+  virtual void effectivley_complete(jint result, bufferedStream* result_stream) = 0;
+
 };
 #endif // INCLUDE_SERVICES
 

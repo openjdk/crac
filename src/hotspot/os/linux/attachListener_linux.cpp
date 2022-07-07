@@ -112,9 +112,11 @@ class LinuxAttachOperation: public AttachOperation {
  private:
   // the connection to the client
   int _socket;
+  bool _effectively_completed;
 
  public:
   void complete(jint res, bufferedStream* st);
+  void effectivley_complete(jint res, bufferedStream* st);
 
   void set_socket(int s)                                { _socket = s; }
   int socket() const                                    { return _socket; }
@@ -397,6 +399,16 @@ int LinuxAttachListener::write_fully(int s, char* buf, int len) {
   return 0;
 }
 
+// An operation completeon is splitted on two parts.
+// For proper handling the jcmd connection at CRaC checkpoint action.
+// An effectively_complete is called in checkpoint processing, before criu engine calls, for properly closing the socket.
+// The complete() gets called after restore for proper deletion the leftover object.
+
+void LinuxAttachOperation::complete(jint result, bufferedStream* st) {
+  LinuxAttachOperation::effectivley_complete(result, st);
+  delete this;
+}
+
 // Complete an operation by sending the operation result and any result
 // output to the client. At this time the socket is in blocking mode so
 // potentially we can block if there is a lot of data and the client is
@@ -405,7 +417,12 @@ int LinuxAttachListener::write_fully(int s, char* buf, int len) {
 // if there are operations that involves a very big reply then it the
 // socket could be made non-blocking and a timeout could be used.
 
-void LinuxAttachOperation::complete(jint result, bufferedStream* st) {
+void LinuxAttachOperation::effectivley_complete(jint result, bufferedStream* st) {
+  
+  if (_effectively_completed) {
+    return;
+  }
+
   JavaThread* thread = JavaThread::current();
   ThreadBlockInVM tbivm(thread);
 
@@ -422,8 +439,8 @@ void LinuxAttachOperation::complete(jint result, bufferedStream* st) {
 
   // done
   ::close(this->socket());
+  _effectively_completed = true;
 
-  delete this;
 }
 
 

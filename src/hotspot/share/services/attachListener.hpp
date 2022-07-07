@@ -98,7 +98,7 @@ class AttachListener: AllStatic {
     return Atomic::load(&AttachListener::_currentOperation);
   }
   static void set_CurrentOperation(AttachOperation* s) {
-    Atomic::store(&AttachListener::_currentOperation, s); 
+    Atomic::store(&AttachListener::_currentOperation, s);
   }
 
   static AttachListenerState transit_state(AttachListenerState new_state,

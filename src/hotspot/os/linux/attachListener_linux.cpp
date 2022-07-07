@@ -418,7 +418,7 @@ void LinuxAttachOperation::complete(jint result, bufferedStream* st) {
 // socket could be made non-blocking and a timeout could be used.
 
 void LinuxAttachOperation::effectivley_complete(jint result, bufferedStream* st) {
-  
+
   if (_effectively_completed) {
     return;
   }

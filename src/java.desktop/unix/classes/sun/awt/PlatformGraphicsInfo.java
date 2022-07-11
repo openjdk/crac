@@ -31,12 +31,20 @@ import java.security.AccessController;
 import java.security.PrivilegedAction;
 
 public class PlatformGraphicsInfo {
+    private static X11GEJDKResource x11GEJDKResource;
+    private static X11ToolkitJDKResource x11ToolkitJDKResource;
 
     public static GraphicsEnvironment createGE() {
+        x11GEJDKResource = new X11GEJDKResource();
+        jdk.internal.crac.Core.getJDKContext().register(x11GEJDKResource);
+
         return new X11GraphicsEnvironment();
     }
 
     public static Toolkit createToolkit() {
+        x11ToolkitJDKResource = new X11ToolkitJDKResource();
+        jdk.internal.crac.Core.getJDKContext().register(x11ToolkitJDKResource);
+
         return new sun.awt.X11.XToolkit();
     }
 

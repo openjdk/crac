@@ -74,6 +74,9 @@ import sun.java2d.pipe.Region;
 import sun.security.action.GetPropertyAction;
 import sun.util.logging.PlatformLogger;
 
+import jdk.crac.Context;
+import jdk.crac.Resource;
+
 /**
  * A {@code Window} object is a top-level window with no borders and no
  * menubar.
@@ -165,6 +168,36 @@ import sun.util.logging.PlatformLogger;
  * @since       1.0
  */
 public class Window extends Container implements Accessible {
+
+    /**
+     * Resource nested in {@code X11ToolkitJDKResource}.
+     */
+    public static final Resource resource = new Resource() {
+        @Override
+        public void beforeCheckpoint(Context<? extends Resource> context) throws Exception {
+            for (int i = 0; i < allWindows.size(); i++) {
+                Window window = allWindows.get(i);
+
+                // Ensure that the window is removed from the
+                // AppContext before sun.java2d.Disposer disposed it
+                window.disposerRecord.dispose();
+
+                // When the last displayable window within the
+                // Java virtual machine (VM) is disposed of, the VM may terminate
+                window.dispose();
+
+                // Let the GC collect this window
+                window = null;
+            }
+
+            nameCounter = 0;
+        }
+
+        @Override
+        public void afterRestore(Context<? extends Resource> context) throws Exception {
+
+        }
+    };
 
     /**
      * Enumeration of available <i>window types</i>.

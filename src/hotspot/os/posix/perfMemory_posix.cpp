@@ -1373,29 +1373,6 @@ bool PerfMemoryLinux::checkpoint(const char* checkpoint_path) {
   return true;
 }
 
-bool PerfMemoryLinux::checkpoint_fail() {
-  if (checkpoint_fd < 0) {
-    return true;
-  }
-
-  int fd;
-  RESTARTABLE(::open(backing_store_file_name, O_RDWR|O_CREAT|O_NOFOLLOW, S_IRUSR|S_IWUSR), fd);
-  if (fd == OS_ERR) {
-    tty->print_cr("cannot open original perfdata file: %s", os::strerror(errno));
-    return false;
-  }
-
-  void* mmapret = ::mmap(PerfMemory::start(), PerfMemory::capacity(),
-      PROT_READ|PROT_WRITE, MAP_FIXED|MAP_SHARED, fd, 0);
-  if (MAP_FAILED == mmapret) {
-    tty->print_cr("cannot mmap old perfdata file: %s", os::strerror(errno));
-    ::close(fd);
-    return false;
-  }
-
-  return true;
-}
-
 bool PerfMemoryLinux::restore() {
   if (checkpoint_fd < 0) {
     return true;

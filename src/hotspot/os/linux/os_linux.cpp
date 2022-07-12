@@ -284,26 +284,141 @@ struct CracFailDep {
   { }
 };
 
+class CracRestoreParameters : public CHeapObj<mtInternal> {
+ private:
+  int _nprops;
+  GrowableArray<const char *>* _properties;
+  const char* _args;
+
+  int write_check_error(int fd, const void *buf, int count) {
+    int wret = write(fd, buf, count);
+    if (wret != count) {
+      if (wret < 0) {
+        perror("shm error");
+      } else {
+        fprintf(stderr, "write shm truncated");
+      }
+      return wret;
+    }
+    return 0;
+  }
+
+ public:
+  CracRestoreParameters(const SystemProperty* props, const char *args) :
+    _nprops(0),
+    _properties(new (ResourceObj::C_HEAP, mtInternal) GrowableArray<const char *>(0, mtInternal)),
+    _args(args)
+  {
+    const SystemProperty *p = props;
+    while (p != NULL) {
+      const char *eq = "=";
+      int prop_len = strlen(p->key()) + strlen(p->value()) + strlen(eq) + 1; // +1 for null char
+      char *prop = NEW_C_HEAP_ARRAY(char, prop_len, mtInternal);
+      strcpy(prop, p->key());
+      strcat(prop, eq);
+      strcat(prop, p->value());
+      _properties->append(prop);
+      p = p->next();
+      _nprops += 1;
+    }
+  }
+
+  CracRestoreParameters(int nprops, GrowableArray<const char *>* properties, char *args) :
+    _nprops(nprops),
+    _properties(properties),
+    _args(args)
+  {}
+
+  const char *args() const { return _args; }
+  GrowableArray<const char *>* properties() const { return _properties; }
+
+  ~CracRestoreParameters() {
+    for (int i = 0; i < _properties->length(); i++) {
+      FREE_C_HEAP_ARRAY(char, _properties->at(i));
+    }
+    if (_args) {
+      FREE_C_HEAP_ARRAY(char, _args);
+    }
+    delete _properties;
+  }
+
+  int write_to(int fd) {
+    int wret = write_check_error(fd, (void *)&_nprops, sizeof(_nprops));
+
+    for (int i = 0; i < _properties->length(); i++) {
+      const char *prop = _properties->at(i);
+      write_check_error(fd, prop, strlen(prop)+1);
+    }
+
+    wret |= write_check_error(fd, _args, strlen(_args) + 1); // +1 for null char
+    return wret;
+  }
+
+  static CracRestoreParameters* read_from(int fd) {
+    struct stat st;
+    if (fstat(fd, &st)) {
+      perror("fstat (ignoring restore parameters)");
+      return NULL;
+    }
+
+    char *contents = NEW_C_HEAP_ARRAY(char, st.st_size, mtInternal);
+    if (read(fd, contents, st.st_size) < 0) {
+      perror("read (ignoring restore parameters)");
+      FREE_C_HEAP_ARRAY(char, contents);
+      return NULL;
+    }
+
+    // parse the contents to read new system properties and arguments
+    int nprops = *(int *)contents;
+    GrowableArray<const char *>* properties = new (ResourceObj::C_HEAP, mtInternal) GrowableArray<const char *>(nprops, mtInternal);
+
+    char *cursor = contents + sizeof(_nprops);
+    for (int i = 0; i < nprops; i++) {
+      assert((cursor + strlen(cursor) <= contents + st.st_size), "property length exceeds shared memory size");
+
+      int prop_len = strlen(cursor) + 1;
+      char *prop = NEW_C_HEAP_ARRAY(char, prop_len, mtInternal);
+      strncpy(prop, cursor, prop_len);
+
+      properties->append(prop);
+      cursor = cursor + prop_len;
+    }
+
+    int argslen = strlen(cursor) + 1;
+    char *args = NEW_C_HEAP_ARRAY(char, argslen, mtInternal);
+    strncpy(args, cursor, argslen);
+    FREE_C_HEAP_ARRAY(char, contents);
+    return new CracRestoreParameters(nprops, properties, args);
+  }
+};
+
 class VM_Crac: public VM_Operation {
+  const bool _dry_run;
   bool _ok;
   GrowableArray<CracFailDep>* _failures;
+  CracRestoreParameters *_restore_parameters;
  public:
-  VM_Crac() :
+  VM_Crac(bool dry_run) :
+    _dry_run(dry_run),
     _ok(false),
-    _failures(new (ResourceObj::C_HEAP, mtInternal) GrowableArray<CracFailDep>(0, mtInternal))
+    _failures(new (ResourceObj::C_HEAP, mtInternal) GrowableArray<CracFailDep>(0, mtInternal)),
+    _restore_parameters(new CracRestoreParameters(NULL, NULL))
   { }
 
   ~VM_Crac() {
     delete _failures;
+    delete _restore_parameters;
   }
 
   outputStream* ostream;
   GrowableArray<CracFailDep>* failures() { return _failures; }
-
   bool ok() { return _ok; }
+  const char* new_args() { return _restore_parameters->args(); }
+  GrowableArray<const char *>* new_properties() { return _restore_parameters->properties(); }
   virtual bool allow_nested_vm_operations() const  { return true; }
   VMOp_Type type() const { return VMOp_VM_Crac; }
   void doit();
+  void read_shm(int shmid);
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -5827,16 +5942,59 @@ static bool compute_crengine() {
 }
 
 static int call_crengine() {
-  if (_crengine && !fork()) {
+  if (!_crengine) {
+    return -1;
+  }
+
+  pid_t pid = fork();
+  if (pid == -1) {
+    perror("cannot fork for crengine");
+    return -1;
+  }
+  if (pid == 0) {
     execl(_crengine, _crengine, "checkpoint", CRaCCheckpointTo, NULL);
     perror("execl");
     exit(1);
   }
 
+  int status;
+  int ret;
+  do {
+    ret = waitpid(pid, &status, 0);
+  } while (ret == -1 && errno == EINTR);
+
+  if (ret == -1 || !WIFEXITED(status)) {
+    return -1;
+  }
+  return WEXITSTATUS(status) == 0 ? 0 : -1;
+}
+
+static int setup_shared_memory(int id, CracRestoreParameters& parameters) {
+  char shmpath[128];
+  int shmpathlen = snprintf(shmpath, sizeof(shmpath), "/crac_%d", id);
+  if (shmpathlen < 0 || sizeof(shmpath) <= (size_t)shmpathlen) {
+    fprintf(stderr, "shmpath is too long: %d\n", shmpathlen);
+    return -1;
+  }
+
+  int shmfd = shm_open(shmpath, O_RDWR | O_CREAT, 0600);
+  if (-1 == shmfd) {
+      perror("shm_open");
+      return -1;
+  }
+
+  int rc = parameters.write_to(shmfd);
+  close(shmfd);
+
+  if (rc != 0) {
+    fprintf(stderr, "write to shared memory failed");
+    return -1;
+  }
+
   return 0;
 }
 
-static int checkpoint_restore(FdsInfo* fds) {
+static int checkpoint_restore(int *shmid) {
 
   int cres = call_crengine();
   if (cres < 0) {
@@ -5863,7 +6021,11 @@ static int checkpoint_restore(FdsInfo* fds) {
     return JVM_CHECKPOINT_ERROR;
   }
 
-  return info.si_int;
+  if (0 < info.si_int) {
+    *shmid = info.si_int;
+  }
+
+  return JVM_CHECKPOINT_OK;
 }
 
 static const char* stat2strtype(mode_t mode) {
@@ -5964,6 +6126,27 @@ static const char* sock_details(const char* details, char* buf, size_t sz) {
   return details;
 }
 
+void VM_Crac::read_shm(int shmid) {
+    char shmpath[128];
+    snprintf(shmpath, sizeof(shmpath), "/crac_%d", shmid);
+
+    int shmfd = shm_open(shmpath, O_RDONLY, 0600);
+    if (-1 == shmfd) {
+      perror("shm_open (ignoring new args)");
+      return;
+    }
+
+    shm_unlink(shmpath);
+
+    CracRestoreParameters* new_parameters = CracRestoreParameters::read_from(shmfd);
+    if (new_parameters) {
+      delete _restore_parameters;
+      _restore_parameters = new_parameters;
+    }
+
+    close(shmfd);
+    return;
+}
 
 #define PATH_PROC     "/proc"
 #define PATH_NET_UNIX_SUFF  "net/unix"
@@ -6115,7 +6298,9 @@ void VM_Crac::doit() {
   do_classpaths(mark_all_in, &fds, Arguments::get_ext_dirs());
   mark_persistent(&fds);
 
-  bool ok = true;
+  // dry-run fails checkpoint
+  bool ok = !_dry_run;
+
   for (int i = 0; i < fds.len(); ++i) {
     if (fds.get_state(i) == FdsInfo::CLOSED) {
       continue;
@@ -6231,6 +6416,7 @@ void VM_Crac::doit() {
     return;
   }
 
+  int shmid = 0;
   if (CRAllowToSkipCheckpoint) {
     trace_cr(ostream, "Skip Checkpoint");
   } else {
@@ -6239,13 +6425,13 @@ void VM_Crac::doit() {
     AttachOperation * op = AttachListener::get_CurrentOperation();
     // Send a result to jcmd
     op->effectivley_complete(JNI_OK, buf);
-    int ret = checkpoint_restore(&fds);
+    int ret = checkpoint_restore(&shmid);
     if (ret == JVM_CHECKPOINT_ERROR) {
       PerfMemoryLinux::checkpoint_fail();
       return;
     }
-  }
 
+  read_shm(shmid);
   PerfMemoryLinux::restore();
 
   _ok = true;
@@ -6324,45 +6510,55 @@ bool os::Linux::prepare_checkpoint() {
   return true;
 }
 
-static Handle ret_cr(int ret, Handle codes, Handle msgs, TRAPS) {
-  objArrayOop bundleObj = oopFactory::new_objectArray(3, CHECK_NH);
+static Handle ret_cr(int ret, Handle new_args, Handle new_props, Handle err_codes, Handle err_msgs, TRAPS) {
+  objArrayOop bundleObj = oopFactory::new_objectArray(5, CHECK_NH);
   objArrayHandle bundle(THREAD, bundleObj);
   jvalue jval = { .i = ret };
   oop retObj = java_lang_boxing_object::create(T_INT, &jval, CHECK_NH);
   bundle->obj_at_put(0, retObj);
-  bundle->obj_at_put(1, codes());
-  bundle->obj_at_put(2, msgs());
+  bundle->obj_at_put(1, new_args());
+  bundle->obj_at_put(2, new_props());
+  bundle->obj_at_put(3, err_codes());
+  bundle->obj_at_put(4, err_msgs());
   return bundle;
-}
-
-static Handle ret_cr(int ret, TRAPS) {
-  return ret_cr(ret, Handle(), Handle(), THREAD);
 }
 
 /** Checkpoint main entry.
  */
-Handle os::Linux::checkpoint(TRAPS, jlong stream) {
+Handle os::Linux::checkpoint(bool dry_run, jlong stream, TRAPS) {
   if (!CRaCCheckpointTo) {
-    return ret_cr(JVM_CHECKPOINT_NONE, THREAD);
+    return ret_cr(JVM_CHECKPOINT_NONE, Handle(), Handle(), Handle(), Handle(), THREAD);
   }
 
   if (-1 == mkdir(CRaCCheckpointTo, 0700) && errno != EEXIST) {
     warning("cannot create %s: %s", CRaCCheckpointTo, strerror(errno));
-    return ret_cr(JVM_CHECKPOINT_NONE, THREAD);
+    return ret_cr(JVM_CHECKPOINT_NONE, Handle(), Handle(), Handle(), Handle(), THREAD);
   }
 
   Universe::heap()->set_cleanup_unused(true);
   Universe::heap()->collect(GCCause::_full_gc_alot);
   Universe::heap()->set_cleanup_unused(false);
 
-  VM_Crac cr;
+  VM_Crac cr(dry_run);
   {
     cr.ostream = (outputStream*) stream;
     MutexLocker ml(Heap_lock);
     VMThread::execute(&cr);
   }
   if (cr.ok()) {
-    return ret_cr(JVM_CHECKPOINT_OK, THREAD);
+    oop new_args = NULL;
+    if (cr.new_args()) {
+      new_args = java_lang_String::create_oop_from_str(cr.new_args(), CHECK_NH);
+    }
+    GrowableArray<const char *>* new_properties = cr.new_properties();
+    objArrayOop propsObj = oopFactory::new_objArray(vmClasses::String_klass(), new_properties->length(), CHECK_NH);
+    objArrayHandle props(THREAD, propsObj);
+
+    for (int i = 0; i < new_properties->length(); i++) {
+      oop propObj = java_lang_String::create_oop_from_str(new_properties->at(i), CHECK_NH);
+      props->obj_at_put(i, propObj);
+    }
+    return ret_cr(JVM_CHECKPOINT_OK, Handle(THREAD, new_args), props, Handle(), Handle(), THREAD);
   }
 
   GrowableArray<CracFailDep>* failures = cr.failures();
@@ -6379,13 +6575,25 @@ Handle os::Linux::checkpoint(TRAPS, jlong stream) {
     msgs->obj_at_put(i, msgObj);
   }
 
-  return ret_cr(JVM_CHECKPOINT_ERROR, codes, msgs, THREAD);
+  return ret_cr(JVM_CHECKPOINT_ERROR, Handle(), Handle(), codes, msgs, THREAD);
 }
 
 void os::Linux::restore() {
   struct stat st;
 
   compute_crengine();
+
+  int id = getpid();
+  SystemProperty* props = Arguments::system_properties();
+  const char* args = Arguments::java_command() ? Arguments::java_command() : "";
+  CracRestoreParameters restore_parameters(props, args);
+  if (setup_shared_memory(id, restore_parameters)) {
+    id = 0;
+  }
+
+  char strid[32];
+  snprintf(strid, sizeof(strid), "%d", id);
+  setenv("CRAC_NEW_ARGS_ID", strid, true);
 
   if (_crengine) {
     execl(_crengine, _crengine, "restore", CRaCRestoreFrom, NULL);

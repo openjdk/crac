@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020, Azul Systems, Inc. All rights reserved.
+ * Copyright (c) 2022, Azul Systems, Inc. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -19,23 +19,37 @@
  * Please contact Oracle, 500 Oracle Parkway, Redwood Shores, CA 94065 USA
  * or visit www.oracle.com if you need additional information or have any
  * questions.
- *
  */
 
-#ifndef OS_LINUX_PERFMEMORY_LINUX_HPP
-#define OS_LINUX_PERFMEMORY_LINUX_HPP
+import java.io.*;
+import java.lang.ref.Cleaner;
 
-#include "memory/allocation.hpp"
+import jdk.crac.*;
 
-class PerfMemoryLinux : AllStatic {
+/**
+ * @test
+ * @run main/othervm -XX:CREngine=simengine -XX:CRaCCheckpointTo=./cr RefQueueTest
+ */
+public class RefQueueTest {
+    private static final Cleaner cleaner = Cleaner.create();
 
-public:
-  static inline const char* perfdata_name() {
-    return "perfdata";
-  }
+    static public void main(String[] args) throws Exception {
 
-  static bool checkpoint(const char* checkpoint_path);
-  static bool restore();
-};
+        File badFile = File.createTempFile("jtreg-RefQueueTest", null);
+        OutputStream badStream = new FileOutputStream(badFile);
+        badStream.write('j');
+        badFile.delete();
 
-#endif // OS_LINUX_PERFMEMORY_LINUX_HPP
+        // the cleaner would be able to run right away
+        cleaner.register(new Object(), () -> {
+            try {
+                badStream.close();
+            } catch (IOException e) {
+                throw new RuntimeException(e);
+            }
+        });
+
+        // should close the file and only then go to the native checkpoint
+        Core.checkpointRestore();
+    }
+}

@@ -54,7 +54,7 @@ public class Core {
     private static final int JVM_CR_FAIL_FILE = 1;
     private static final int JVM_CR_FAIL_SOCK = 2;
     private static final int JVM_CR_FAIL_PIPE = 3;
-    
+
     private static native Object[] checkpointRestore0(boolean dryRun, long stream);
     private static long outputStream_p;
     private static final Object checkpointRestoreLock = new Object();

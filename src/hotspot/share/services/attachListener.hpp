@@ -197,7 +197,7 @@ class AttachOperation: public CHeapObj<mtInternal> {
 
   // complete operation by sending result code and any result data to the client
   virtual void complete(jint result, bufferedStream* result_stream) = 0;
-  virtual void effectivley_complete(jint result, bufferedStream* result_stream) = 0;
+  virtual void effectiveley_complete(jint result, bufferedStream* result_stream) = 0;
 
 };
 #endif // INCLUDE_SERVICES

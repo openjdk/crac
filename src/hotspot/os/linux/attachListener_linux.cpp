@@ -116,7 +116,7 @@ class LinuxAttachOperation: public AttachOperation {
 
  public:
   void complete(jint res, bufferedStream* st);
-  void effectivley_complete(jint res, bufferedStream* st);
+  void effectiveley_complete(jint res, bufferedStream* st);
 
   void set_socket(int s)                                { _socket = s; }
   int socket() const                                    { return _socket; }
@@ -405,7 +405,7 @@ int LinuxAttachListener::write_fully(int s, char* buf, int len) {
 // The complete() gets called after restore for proper deletion the leftover object.
 
 void LinuxAttachOperation::complete(jint result, bufferedStream* st) {
-  LinuxAttachOperation::effectivley_complete(result, st);
+  LinuxAttachOperation::effectiveley_complete(result, st);
   delete this;
 }
 
@@ -417,7 +417,7 @@ void LinuxAttachOperation::complete(jint result, bufferedStream* st) {
 // if there are operations that involves a very big reply then it the
 // socket could be made non-blocking and a timeout could be used.
 
-void LinuxAttachOperation::effectivley_complete(jint result, bufferedStream* st) {
+void LinuxAttachOperation::effectiveley_complete(jint result, bufferedStream* st) {
 
   if (_effectively_completed) {
     return;

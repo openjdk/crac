@@ -6424,7 +6424,7 @@ void VM_Crac::doit() {
     bufferedStream * buf = static_cast<bufferedStream*>(ostream);
     AttachOperation * op = AttachListener::get_CurrentOperation();
     // Send a result to jcmd
-    op->effectivley_complete(JNI_OK, buf);
+    op->effectiveley_complete(JNI_OK, buf);
     int ret = checkpoint_restore(&shmid);
     if (ret == JVM_CHECKPOINT_ERROR) {
       PerfMemoryLinux::restore();

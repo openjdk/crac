@@ -71,6 +71,7 @@
 #include "services/heapDumper.hpp"
 #include "services/memTracker.hpp"
 #include "services/runtimeService.hpp"
+#include "services/linuxAttachOperation.hpp"
 #include "utilities/align.hpp"
 #include "utilities/decoder.hpp"
 #include "utilities/defaultStream.hpp"
@@ -5710,10 +5711,19 @@ bool os::supports_map_sync() {
 }
 
 static void trace_cr(outputStream * ostream, const char* msg, ... ) {
-  if (CRTrace) {
+  if ((CRTrace) && (ostream != NULL)){
     va_list ap;
     va_start(ap, msg);
     ostream->print("CR: ");
+    ostream->vprint_cr(msg, ap);
+    va_end(ap);
+  }
+}
+
+static void print_resources(outputStream * ostream, const char* msg, ... ) {
+  if ((CRPrintResourcesOnCheckpoint) && (ostream != NULL)) {
+    va_list ap;
+    va_start(ap, msg);
     ostream->vprint_cr(msg, ap);
     va_end(ap);
   }
@@ -6292,7 +6302,6 @@ void VM_Crac::doit() {
   AttachListener::abort();
 
   FdsInfo fds;
-  int unixsockdf;
   do_classpaths(mark_classpath_entry, &fds, Arguments::get_sysclasspath());
   do_classpaths(mark_classpath_entry, &fds, Arguments::get_appclasspath());
   do_classpaths(mark_all_in, &fds, Arguments::get_ext_dirs());
@@ -6300,6 +6309,7 @@ void VM_Crac::doit() {
 
   // dry-run fails checkpoint
   bool ok = !_dry_run;
+  LinuxAttachOperation * op = (LinuxAttachOperation* )AttachListener::get_CurrentOperation();
 
   for (int i = 0; i < fds.len(); ++i) {
     if (fds.get_state(i) == FdsInfo::CLOSED) {
@@ -6309,15 +6319,12 @@ void VM_Crac::doit() {
     char detailsbuf[128];
     int linkret = readfdlink(i, detailsbuf, sizeof(detailsbuf));
     const char* details = 0 < linkret ? detailsbuf : "";
-    if (CRPrintResourcesOnCheckpoint) {
-      ostream->print("JVM: FD fd=%d type=%s: details1=\"%s\" ",
-          i, stat2strtype(fds.get_stat(i)->st_mode), details);
-    }
+    print_resources(ostream, "JVM: FD fd=%d type=%s: details1=\"%s\" ",
+        i, stat2strtype(fds.get_stat(i)->st_mode), details);
+
 
     if (_vm_inited_fds.get_state(i, FdsInfo::CLOSED) != FdsInfo::CLOSED) {
-      if (CRPrintResourcesOnCheckpoint) {
-        ostream->print_cr("OK: inherited from process env");
-      }
+      print_resources(ostream, "OK: inherited from process env");
       continue;
     }
 
@@ -6326,32 +6333,25 @@ void VM_Crac::doit() {
       const int mjr = major(st->st_rdev);
       const int mnr = minor(st->st_rdev);
       if (mjr == 1 && (mnr == 8 || mnr == 9)) {
-        if (CRPrintResourcesOnCheckpoint) {
-          ostream->print_cr("OK: always available, random or urandom");
-        }
+        print_resources(ostream, "OK: always available, random or urandom");
         continue;
       }
     }
 
     if (fds.check(i, FdsInfo::M_CLASSPATH) && !fds.check(i, FdsInfo::M_CANT_RESTORE)) {
-      if (CRPrintResourcesOnCheckpoint) {
-        ostream->print_cr("OK: in classpath");
-      }
+      print_resources(ostream, "OK: in classpath");
       continue;
     }
 
     if (fds.check(i, FdsInfo::M_PERSISTENT)) {
-      if (CRPrintResourcesOnCheckpoint) {
-        ostream->print_cr("OK: assured persistent");
-      }
+      print_resources(ostream, "OK: assured persistent");
       continue;
     }
 
 
     if (S_ISSOCK(st->st_mode)) {
       details = sock_details(details, detailsbuf, sizeof(detailsbuf));
-      if (CRPrintResourcesOnCheckpoint)
-        ostream->print("issock, details2=\"%s\" ", details);
+      print_resources(ostream, "issock, details2=\"%s\" ", details);
 
       typedef union {
           struct sockaddr     sa;
@@ -6365,8 +6365,7 @@ void VM_Crac::doit() {
       if (getsockname(i, &sa.sa, &len) == 0) {
         sock_family = sa.sa.sa_family;
       } else {
-        if (CRPrintResourcesOnCheckpoint)
-          ostream->print("getsockname  errno: %d %s \n", errno, os::strerror(errno));
+        print_resources(ostream, "getsockname  errno: %d %s \n", errno, os::strerror(errno));
       }
 
       // socket should be 'unix' type, it's mean this is pipe
@@ -6381,17 +6380,17 @@ void VM_Crac::doit() {
 
       if (ok){
         if (is_socket_from_jcmd(inod)){
-          ostream->print_cr("OK: jcmd socket");
-          unixsockdf = i;
+          print_resources(ostream, "OK: jcmd socket");
+          // and sock fd from listener
+          int sock_fd = op->socket();
+          print_resources(ostream, " sock_fd %d i %d",sock_fd, i);
           continue;
         }
       }
     }
 
-    if (CRPrintResourcesOnCheckpoint) {
-      ostream->print_cr("BAD: opened by application");
-    }
-      ok = false;
+    print_resources(ostream, "BAD: opened by application");
+    ok = false;
 
     char* msg = NEW_C_HEAP_ARRAY(char, strlen(details) + 1, mtInternal);
     strcpy(msg, details);
@@ -6422,7 +6421,6 @@ void VM_Crac::doit() {
   } else {
     trace_cr(ostream, "Checkpoint ...");
     bufferedStream * buf = static_cast<bufferedStream*>(ostream);
-    AttachOperation * op = AttachListener::get_CurrentOperation();
     // Send a result to jcmd
     op->effectiveley_complete(JNI_OK, buf);
     int ret = checkpoint_restore(&shmid);

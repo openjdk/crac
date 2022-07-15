@@ -48,7 +48,6 @@
 #include "utilities/formatBuffer.hpp"
 
 volatile AttachListenerState AttachListener::_state = AL_NOT_INITIALIZED;
-AttachOperation* AttachListener::_currentOperation = NULL;
 // Implementation of "properties" command.
 //
 // Invokes VMSupport.serializePropertiesToByteArray to serialize
@@ -405,7 +404,6 @@ static void attach_listener_thread_entry(JavaThread* thread, TRAPS) {
                "Use -XX:+EnableDynamicAgentLoading to launch target VM.");
       res = JNI_ERR;
     } else {
-      AttachListener::set_CurrentOperation(op);
       // find the function to dispatch too
       AttachOperationFunctionInfo* info = NULL;
       for (int i=0; funcs[i].name != NULL; i++) {

@@ -56,7 +56,6 @@ public class Core {
     private static final int JVM_CR_FAIL_PIPE = 3;
 
     private static native Object[] checkpointRestore0(boolean dryRun, long stream);
-    private static long outputStream_p;
     private static final Object checkpointRestoreLock = new Object();
     private static boolean checkpointInProgress = false;
 
@@ -110,7 +109,7 @@ public class Core {
     }
 
     @SuppressWarnings("removal")
-    private static void checkpointRestore1() throws
+    private static void checkpointRestore1(long... outputStream_p) throws
             CheckpointException,
             RestoreException {
         CheckpointException checkpointException = null;
@@ -124,7 +123,7 @@ public class Core {
             }
         }
 
-        final Object[] bundle = checkpointRestore0(checkpointException != null, outputStream_p);
+        final Object[] bundle = checkpointRestore0(checkpointException != null, outputStream_p[0]);
         final int retCode = (Integer)bundle[0];
         final String newArguments = (String)bundle[1];
         final String[] newProperties = (String[])bundle[2];
@@ -224,7 +223,7 @@ public class Core {
      * supported, no notification performed and the execution continues in
      * the original Java instance.
      */
-    public static void checkpointRestore() throws
+    public static void checkpointRestore(long ...outputStream_p) throws
             CheckpointException,
             RestoreException {
         // checkpointRestore protects against the simultaneous
@@ -236,7 +235,7 @@ public class Core {
             if (!checkpointInProgress) {
                 try {
                     checkpointInProgress = true;
-                    checkpointRestore1();
+                        checkpointRestore1(outputStream_p); 
                 } finally {
                     if (FlagsHolder.TRACE_STARTUP_TIME) {
                         System.out.println("STARTUPTIME " + System.nanoTime() + " restore-finish");
@@ -250,12 +249,11 @@ public class Core {
     }
 
     /* called by VM */
-    private static String checkpointRestoreInternal(long st){
-        outputStream_p = st;
+    private static String checkpointRestoreInternal(long outputStream_p){
         StringWriter sw = new StringWriter();
         PrintWriter pw = new PrintWriter(sw);
         try {
-            checkpointRestore();
+            checkpointRestore(outputStream_p);
         } catch (CheckpointException | RestoreException e) {
             for (Throwable t : e.getSuppressed()) {
                 t.printStackTrace(pw);

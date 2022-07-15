@@ -29,6 +29,7 @@
 #include "runtime/os.inline.hpp"
 #include "services/attachListener.hpp"
 #include "services/dtraceAttacher.hpp"
+#include "services/linuxAttachOperation.hpp"
 
 #include <unistd.h>
 #include <signal.h>
@@ -58,7 +59,7 @@
 //    of the client matches this process.
 
 // forward reference
-class LinuxAttachOperation;
+//class LinuxAttachOperation;
 
 class LinuxAttachListener: AllStatic {
  private:
@@ -75,6 +76,7 @@ class LinuxAttachListener: AllStatic {
   static LinuxAttachOperation* read_request(int s);
 
  public:
+  static AttachOperation* _currentOperation;
   enum {
     ATTACH_PROTOCOL_VER = 1                     // protocol version
   };
@@ -108,29 +110,12 @@ class LinuxAttachListener: AllStatic {
   static LinuxAttachOperation* dequeue();
 };
 
-class LinuxAttachOperation: public AttachOperation {
- private:
-  // the connection to the client
-  int _socket;
-  bool _effectively_completed;
-
- public:
-  void complete(jint res, bufferedStream* st);
-  void effectiveley_complete(jint res, bufferedStream* st);
-
-  void set_socket(int s)                                { _socket = s; }
-  int socket() const                                    { return _socket; }
-
-  LinuxAttachOperation(char* name) : AttachOperation(name) {
-    set_socket(-1);
-  }
-};
-
 // statics
 char LinuxAttachListener::_path[UNIX_PATH_MAX];
 bool LinuxAttachListener::_has_path;
 volatile int LinuxAttachListener::_listener = -1;
 bool LinuxAttachListener::_atexit_registered = false;
+AttachOperation* LinuxAttachListener::_currentOperation = NULL;
 
 // Supporting class to help split a buffer into individual components
 class ArgumentIterator : public StackObj {
@@ -399,13 +384,14 @@ int LinuxAttachListener::write_fully(int s, char* buf, int len) {
   return 0;
 }
 
-// An operation completeon is splitted on two parts.
+// An operation completion is splitted into two parts.
 // For proper handling the jcmd connection at CRaC checkpoint action.
 // An effectively_complete is called in checkpoint processing, before criu engine calls, for properly closing the socket.
 // The complete() gets called after restore for proper deletion the leftover object.
 
 void LinuxAttachOperation::complete(jint result, bufferedStream* st) {
   LinuxAttachOperation::effectiveley_complete(result, st);
+  AttachListener::set_CurrentOperation(NULL);
   delete this;
 }
 
@@ -444,14 +430,28 @@ void LinuxAttachOperation::effectiveley_complete(jint result, bufferedStream* st
 }
 
 
+int LinuxAttachOperation::get_unix_socket_fd(){
+  return this->socket();
+}
+
 // AttachListener functions
+
+AttachOperation* AttachListener::get_CurrentOperation() {
+  return Atomic::load(&LinuxAttachListener::_currentOperation);
+}
+
+void AttachListener::set_CurrentOperation(AttachOperation* s) {
+  const char assertion_listener_thread[] = "Attach Listener";
+  assert(strcmp(assertion_listener_thread, Thread::current()->name()) == 0, "should gets called from Attach Listener thread");
+  Atomic::store(&LinuxAttachListener::_currentOperation, s);
+}
 
 AttachOperation* AttachListener::dequeue() {
   JavaThread* thread = JavaThread::current();
   ThreadBlockInVM tbivm(thread);
 
   AttachOperation* op = LinuxAttachListener::dequeue();
-
+  AttachListener::set_CurrentOperation(op);
   return op;
 }
 

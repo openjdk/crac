@@ -83,7 +83,6 @@ class AttachListener: AllStatic {
 
  private:
   static volatile AttachListenerState _state;
-  static AttachOperation* _currentOperation;
 
  public:
   static void set_state(AttachListenerState new_state) {
@@ -92,13 +91,6 @@ class AttachListener: AllStatic {
 
   static AttachListenerState get_state() {
     return Atomic::load(&_state);
-  }
-
-  static AttachOperation* get_CurrentOperation() {
-    return Atomic::load(&AttachListener::_currentOperation);
-  }
-  static void set_CurrentOperation(AttachOperation* s) {
-    Atomic::store(&AttachListener::_currentOperation, s);
   }
 
   static AttachListenerState transit_state(AttachListenerState new_state,
@@ -113,6 +105,12 @@ class AttachListener: AllStatic {
   static void set_initialized() {
     Atomic::store(&_state, AL_INITIALIZED);
   }
+
+
+  // save jcmd operation for proper Checkpoint
+  static AttachOperation* get_CurrentOperation();
+  static void set_CurrentOperation(AttachOperation* op);
+
 
   // indicates if this VM supports attach-on-demand
   static bool is_attach_supported()             { return !DisableAttachMechanism; }
@@ -198,6 +196,11 @@ class AttachOperation: public CHeapObj<mtInternal> {
   // complete operation by sending result code and any result data to the client
   virtual void complete(jint result, bufferedStream* result_stream) = 0;
   virtual void effectiveley_complete(jint result, bufferedStream* result_stream) = 0;
+  
+  // the file descriptor for the listening socket
+  // static int _unix_socket_fd;
+  // virtual int get_unix_socket_fd();
+  // void set_unix_socket_fd(int fd);
 
 };
 #endif // INCLUDE_SERVICES

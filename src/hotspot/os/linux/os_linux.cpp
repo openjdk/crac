@@ -6170,133 +6170,6 @@ void VM_Crac::read_shm(int shmid) {
 #define PRG_SOCKET_PFX2   "[0000]:"
 #define PRG_SOCKET_PFX2l  (strlen(PRG_SOCKET_PFX2))
 
-static int is_process_jcmd(char * fd) {
-  char link[128];
-  char str1[] = "/jcmd";
-  char * p;
-  char fdpath[64];
-  size_t len = sizeof(link);
-  int d = atoi(fd);
-  snprintf(fdpath, sizeof(fdpath), "/proc/%d/exe", d);
-  int ret = readlink(fdpath, link, len);
-  if (ret == -1) {
-    return 0;
-  }
-  link[(unsigned)ret < len ? ret : len - 1] = '\0';
-  p = strrchr(link, '/');
-  if (!strcmp(str1, p))
-    return 1;
-  else
-    return 0;
-}
-
-static int extract_type_1_socket_inode(const char lname[], unsigned long * inode_p) {
-
-    /* If lname is of the form "socket:[12345]", extract the "12345"
-       as *inode_p.  Otherwise, return -1 as *inode_p.
-       */
-
-    if (strlen(lname) < PRG_SOCKET_PFXl+3) return(-1);
-
-    if (memcmp(lname, PRG_SOCKET_PFX, PRG_SOCKET_PFXl)) return(-1);
-    if (lname[strlen(lname)-1] != ']') return(-1);
-
-    {
-        char inode_str[strlen(lname + 1)];  /* e.g. "12345" */
-        const int inode_str_len = strlen(lname) - PRG_SOCKET_PFXl - 1;
-        char *serr;
-
-        strncpy(inode_str, lname+PRG_SOCKET_PFXl, inode_str_len);
-        inode_str[inode_str_len] = '\0';
-        *inode_p = strtol(inode_str,&serr,0);
-        if (!serr || *serr )
-            return(-1);
-    }
-    return(0);
-}
-
-static int extract_type_2_socket_inode(const char lname[], unsigned long * inode_p) {
-
-    /* If lname is of the form "[0000]:12345", extract the "12345"
-       as *inode_p.  Otherwise, return -1 as *inode_p.
-       */
-
-    if (strlen(lname) < PRG_SOCKET_PFX2l+1) return(-1);
-    if (memcmp(lname, PRG_SOCKET_PFX2, PRG_SOCKET_PFX2l)) return(-1);
-
-    {
-        char *serr;
-        *inode_p=strtol(lname + PRG_SOCKET_PFX2l,&serr,0);
-        if (!serr || *serr )
-            return(-1);
-    }
-    return(0);
-}
-
-static int is_socket_from_jcmd(unsigned long parm_inode){
-
-  char line[4096];
-  char *token_word;
-  char *eptr;
-  ssize_t rread;
-  int procfdlen;
-  size_t len = 0;
-  unsigned long inode;
-  const char *cs;
-  char *pline;
-  FILE * fp;
-  DIR *dirproc=NULL;
-  struct dirent *direproc;
-  int rc;
-  if (!(dirproc=opendir(PATH_PROC)))
-    return 1;
-
-  while (errno=0,direproc=readdir(dirproc)) {
-    for (cs=direproc->d_name;*cs;cs++)
-      if (!isdigit(*cs))
-        break;
-    if (*cs)
-      continue;
-
-    if (!is_process_jcmd(direproc->d_name))
-      continue;
-
-    // this is preparing the filelist, dont need for regular proc
-    procfdlen=snprintf(line, sizeof(line), PATH_PROC_X_NET_UNIX, direproc->d_name);
-    if (procfdlen<=0 || procfdlen>=(int)sizeof(line)-5)
-      continue;
-    errno=0;
-
-    fp = fopen(line, "r");
-    if (fp == NULL){
-      tty->print("is_socket_from_jcmd read errno: %d %s \n", errno, os::strerror(errno));
-      closedir(dirproc);
-      fclose(fp);
-      return 0;
-    }
-
-    while ((rread = getline(&pline, &len, fp)) != -1) {
-      int count =0;
-      token_word = strtok(pline, " ");
-      while(token_word != NULL){
-        if (count == 6){
-          inode = atoi(token_word);
-          if (inode == parm_inode){
-            closedir(dirproc);
-            fclose(fp);
-            return 1;
-          }
-        }
-        token_word = strtok(NULL," ");
-        count++;
-      }
-    }
-  }
-  closedir(dirproc);
-  fclose(fp);
-  return 0;
-}
-
 void VM_Crac::doit() {
 
   AttachListener::abort();
@@ -6353,39 +6226,12 @@ void VM_Crac::doit() {
       details = sock_details(details, detailsbuf, sizeof(detailsbuf));
       print_resources(ostream, "issock, details2=\"%s\" ", details);
 
-      typedef union {
-          struct sockaddr     sa;
-          struct sockaddr_in  sa4;
-          struct sockaddr_in6 sa6;
-      } SOCKETADDRESS;
-
-      SOCKETADDRESS sa;
-      socklen_t len = sizeof(SOCKETADDRESS);
-      int sock_family;
-      if (getsockname(i, &sa.sa, &len) == 0) {
-        sock_family = sa.sa.sa_family;
-      } else {
-        print_resources(ostream, "getsockname  errno: %d %s \n", errno, os::strerror(errno));
-      }
-
-      // socket should be 'unix' type, it's mean this is pipe
-      if (sock_family != AF_UNIX)
-        ok = false;
-
-      unsigned long inod;
-      if (extract_type_1_socket_inode(details, &inod) < 0){
-        if (extract_type_2_socket_inode(details, &inod) < 0)
-          ok = false;
-      }
-
-      if (ok){
-        if (is_socket_from_jcmd(inod)){
-          print_resources(ostream, "OK: jcmd socket");
-          // and sock fd from listener
-          int sock_fd = op->socket();
-          print_resources(ostream, " sock_fd %d i %d",sock_fd, i);
-          continue;
-        }
+      // and sock fd from listener      
+      int sock_fd = op->socket();
+      if ( i == sock_fd){
+        print_resources(ostream, "OK: jcmd socket");  
+        ok = true;
+        continue;
       }
     }
 

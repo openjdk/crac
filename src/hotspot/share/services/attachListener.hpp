@@ -80,7 +80,6 @@ class AttachListener: AllStatic {
   static bool is_attach_supported()             { return false; }
 #else
 
-
  private:
   static volatile AttachListenerState _state;
 

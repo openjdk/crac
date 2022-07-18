@@ -118,8 +118,6 @@
 # include <sys/ioctl.h>
 # include <libgen.h>
 # include <linux/elf-em.h>
-#include <typeinfo>
-#include <sys/socket.h>
 #ifdef __GLIBC__
 # include <malloc.h>
 #endif

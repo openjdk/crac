@@ -48,6 +48,7 @@
 #include "utilities/formatBuffer.hpp"
 
 volatile AttachListenerState AttachListener::_state = AL_NOT_INITIALIZED;
+
 // Implementation of "properties" command.
 //
 // Invokes VMSupport.serializePropertiesToByteArray to serialize

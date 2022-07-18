@@ -235,7 +235,7 @@ public class Core {
             if (!checkpointInProgress) {
                 try {
                     checkpointInProgress = true;
-                        checkpointRestore1(outputStream_p); 
+                    checkpointRestore1(outputStream_p); 
                 } finally {
                     if (FlagsHolder.TRACE_STARTUP_TIME) {
                         System.out.println("STARTUPTIME " + System.nanoTime() + " restore-finish");

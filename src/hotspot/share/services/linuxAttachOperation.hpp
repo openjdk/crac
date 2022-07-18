@@ -6,8 +6,7 @@ class LinuxAttachOperation: public AttachOperation {
 
  public:
   void complete(jint res, bufferedStream* st);
-  void effectiveley_complete(jint res, bufferedStream* st);
-  int get_unix_socket_fd();
+  void effectively_complete(jint res, bufferedStream* st);
 
   void set_socket(int s)                                { _socket = s; }
   int socket() const                                    { return _socket; }

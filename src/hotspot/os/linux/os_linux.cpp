@@ -6158,18 +6158,6 @@ void VM_Crac::read_shm(int shmid) {
     return;
 }
 
-#define PATH_PROC     "/proc"
-#define PATH_NET_UNIX_SUFF  "net/unix"
-#define PATH_PROC_X_NET_UNIX PATH_PROC "/%s/" PATH_NET_UNIX_SUFF
-#define PATH_CMDLINE  "cmdline"
-#define PATH_CMDLINEl       strlen(PATH_CMDLINE)
-
-#define PRG_INODE   "inode"
-#define PRG_SOCKET_PFX    "socket:["
-#define PRG_SOCKET_PFXl (strlen(PRG_SOCKET_PFX))
-#define PRG_SOCKET_PFX2   "[0000]:"
-#define PRG_SOCKET_PFX2l  (strlen(PRG_SOCKET_PFX2))
-
 void VM_Crac::doit() {
 
   AttachListener::abort();
@@ -6226,10 +6214,10 @@ void VM_Crac::doit() {
       details = sock_details(details, detailsbuf, sizeof(detailsbuf));
       print_resources(ostream, "issock, details2=\"%s\" ", details);
 
-      // and sock fd from listener      
+      // and sock fd from listener
       int sock_fd = op->socket();
       if ( i == sock_fd){
-        print_resources(ostream, "OK: jcmd socket");  
+        print_resources(ostream, "OK: jcmd socket");
         ok = true;
         continue;
       }
@@ -6243,7 +6231,7 @@ void VM_Crac::doit() {
     _failures->append(CracFailDep(stat2stfail(st->st_mode & S_IFMT), msg));
   }
 
-  if (!ok){
+  if (!ok) {
     trace_cr(ostream, "Checkpoint aborted: resources opened by application");
     return;
   }
@@ -6268,7 +6256,7 @@ void VM_Crac::doit() {
     trace_cr(ostream, "Checkpoint ...");
     bufferedStream * buf = static_cast<bufferedStream*>(ostream);
     // Send a result to jcmd
-    op->effectiveley_complete(JNI_OK, buf);
+    op->effectively_complete(JNI_OK, buf);
     int ret = checkpoint_restore(&shmid);
     if (ret == JVM_CHECKPOINT_ERROR) {
       PerfMemoryLinux::restore();

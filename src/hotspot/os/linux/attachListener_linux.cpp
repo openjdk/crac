@@ -390,7 +390,7 @@ int LinuxAttachListener::write_fully(int s, char* buf, int len) {
 // The complete() gets called after restore for proper deletion the leftover object.
 
 void LinuxAttachOperation::complete(jint result, bufferedStream* st) {
-  LinuxAttachOperation::effectiveley_complete(result, st);
+  LinuxAttachOperation::effectively_complete(result, st);
   AttachListener::set_CurrentOperation(NULL);
   delete this;
 }
@@ -403,7 +403,7 @@ void LinuxAttachOperation::complete(jint result, bufferedStream* st) {
 // if there are operations that involves a very big reply then it the
 // socket could be made non-blocking and a timeout could be used.
 
-void LinuxAttachOperation::effectiveley_complete(jint result, bufferedStream* st) {
+void LinuxAttachOperation::effectively_complete(jint result, bufferedStream* st) {
 
   if (_effectively_completed) {
     return;
@@ -429,10 +429,6 @@ void LinuxAttachOperation::effectiveley_complete(jint result, bufferedStream* st
 
 }
 
-
-int LinuxAttachOperation::get_unix_socket_fd(){
-  return this->socket();
-}
 
 // AttachListener functions
 

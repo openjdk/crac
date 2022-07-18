@@ -195,12 +195,6 @@ class AttachOperation: public CHeapObj<mtInternal> {
 
   // complete operation by sending result code and any result data to the client
   virtual void complete(jint result, bufferedStream* result_stream) = 0;
-  virtual void effectiveley_complete(jint result, bufferedStream* result_stream) = 0;
-  
-  // the file descriptor for the listening socket
-  // static int _unix_socket_fd;
-  // virtual int get_unix_socket_fd();
-  // void set_unix_socket_fd(int fd);
 
 };
 #endif // INCLUDE_SERVICES

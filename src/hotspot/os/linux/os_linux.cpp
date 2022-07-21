@@ -5725,7 +5725,7 @@ static void trace_cr(outputStream * ostream, const char* msg, ... ) {
 }
 
 static void print_resources(outputStream * ostream, const char* msg, ... ) {
-outputStream * ou = (ostream == NULL) ? tty : ostream;
+  outputStream * ou = (ostream == NULL) ? tty : ostream;
   if (CRPrintResourcesOnCheckpoint) {
     va_list ap;
     va_start(ap, msg);
@@ -6033,9 +6033,9 @@ static int checkpoint_restore(int *shmid) {
 
   if (info.si_code != SI_QUEUE || info.si_int < 0) {
     tty->print("JVM: invalid info for restore provided: %s", info.si_code == SI_QUEUE ? "queued" : "not queued");
-  if (info.si_code == SI_QUEUE) {
-    tty->print(" code %d", info.si_int);
-  }
+    if (info.si_code == SI_QUEUE) {
+      tty->print(" code %d", info.si_int);
+    }
     tty->cr();
     return JVM_CHECKPOINT_ERROR;
   }
@@ -6167,7 +6167,7 @@ void VM_Crac::read_shm(int shmid) {
     return;
 }
 
-// The checkpoint could be called with an API, so jcmd operation and io stream doesnt exist.
+// If checkpoint is called throught the API, jcmd operation anf jcmd output doesn't exist.
 int VM_Crac::is_socket_from_jcmd (int sock){
   if (jcmd_operation == 0)
     return 0;

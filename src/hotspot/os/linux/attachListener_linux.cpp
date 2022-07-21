@@ -58,8 +58,6 @@
 //    obtain the credentials of client. We check that the effective uid
 //    of the client matches this process.
 
-// forward reference
-//class LinuxAttachOperation;
 
 class LinuxAttachListener: AllStatic {
  private:

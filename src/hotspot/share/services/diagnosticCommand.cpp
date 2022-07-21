@@ -1043,7 +1043,6 @@ void CheckpointDCmd::execute(DCmdSource source, TRAPS) {
   Klass* k = SystemDictionary::resolve_or_fail(vmSymbols::jdk_crac_Core(),
                                                  true, CHECK);
   JavaValue result(T_OBJECT);
-  output()->print_cr("JDK.checkpoint command start processing");
   JavaCallArguments args;
   args.push_long((jlong )output());
   args.push_long((jlong )AttachListener::get_jcmdOperation());
@@ -1059,5 +1058,4 @@ void CheckpointDCmd::execute(DCmdSource source, TRAPS) {
           output()->print_cr("%s", out);
       }
   }
-  output()->print_cr("JDK.checkpoint command processing finished");
 }

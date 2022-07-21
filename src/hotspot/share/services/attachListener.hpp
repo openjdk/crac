@@ -106,7 +106,7 @@ class AttachListener: AllStatic {
   }
 
 
-  // save jcmd operation for proper Checkpoint
+  // save jcmd operation, and use it further on checkpoint reporting
   static AttachOperation* get_jcmdOperation();
   static void set_jcmdOperation(AttachOperation* op);
 
@@ -193,7 +193,6 @@ class AttachOperation: public CHeapObj<mtInternal> {
 
   // complete operation by sending result code and any result data to the client
   virtual void complete(jint result, bufferedStream* result_stream) = 0;
-
 };
 #endif // INCLUDE_SERVICES
 

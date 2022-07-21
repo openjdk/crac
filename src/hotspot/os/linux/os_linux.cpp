@@ -410,6 +410,7 @@ class VM_Crac: public VM_Operation {
   }
 
   outputStream* ostream;
+  LinuxAttachOperation* jcmd_operation;
   GrowableArray<CracFailDep>* failures() { return _failures; }
   bool ok() { return _ok; }
   const char* new_args() { return _restore_parameters->args(); }
@@ -418,6 +419,10 @@ class VM_Crac: public VM_Operation {
   VMOp_Type type() const { return VMOp_VM_Crac; }
   void doit();
   void read_shm(int shmid);
+  private:
+  int is_socket_from_jcmd (int sock_fd);
+  void report_ok_to_jcmd ();
+
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -5709,20 +5714,22 @@ bool os::supports_map_sync() {
 }
 
 static void trace_cr(outputStream * ostream, const char* msg, ... ) {
-  if ((CRTrace) && (ostream != NULL)){
+  outputStream * ou = (ostream == NULL) ? tty : ostream;
+  if (CRTrace){
     va_list ap;
     va_start(ap, msg);
-    ostream->print("CR: ");
-    ostream->vprint_cr(msg, ap);
+    ou->print("CR: ");
+    ou->vprint_cr(msg, ap);
     va_end(ap);
   }
 }
 
 static void print_resources(outputStream * ostream, const char* msg, ... ) {
-  if ((CRPrintResourcesOnCheckpoint) && (ostream != NULL)) {
+outputStream * ou = (ostream == NULL) ? tty : ostream;
+  if (CRPrintResourcesOnCheckpoint) {
     va_list ap;
     va_start(ap, msg);
-    ostream->vprint_cr(msg, ap);
+    ou->vprint_cr(msg, ap);
     va_end(ap);
   }
 }
@@ -6025,7 +6032,11 @@ static int checkpoint_restore(int *shmid) {
   }
 
   if (info.si_code != SI_QUEUE || info.si_int < 0) {
-    tty->print_cr("JVM: invalid info for restore provided (may be failed checkpoint) si_code %d si_int %d", info.si_code,  info.si_int);
+    tty->print("JVM: invalid info for restore provided: %s", info.si_code == SI_QUEUE ? "queued" : "not queued");
+  if (info.si_code == SI_QUEUE) {
+    tty->print(" code %d", info.si_int);
+  }
+    tty->cr();
     return JVM_CHECKPOINT_ERROR;
   }
 
@@ -6156,6 +6167,21 @@ void VM_Crac::read_shm(int shmid) {
     return;
 }
 
+// The checkpoint could be called with an API, so jcmd operation and io stream doesnt exist. 
+int VM_Crac::is_socket_from_jcmd (int sock){
+  if (jcmd_operation == 0)
+    return 0;
+  int sock_fd = jcmd_operation->socket();
+  return sock == sock_fd;
+}
+
+void VM_Crac::report_ok_to_jcmd (){
+  if (jcmd_operation == 0)
+    return;
+  bufferedStream * buf = static_cast<bufferedStream*>(ostream);
+  jcmd_operation->effectively_complete(JNI_OK, buf);
+}
+
 void VM_Crac::doit() {
 
   AttachListener::abort();
@@ -6168,7 +6194,6 @@ void VM_Crac::doit() {
 
   // dry-run fails checkpoint
   bool ok = !_dry_run;
-  LinuxAttachOperation * op = (LinuxAttachOperation* )AttachListener::get_CurrentOperation();
 
   for (int i = 0; i < fds.len(); ++i) {
     if (fds.get_state(i) == FdsInfo::CLOSED) {
@@ -6180,7 +6205,6 @@ void VM_Crac::doit() {
     const char* details = 0 < linkret ? detailsbuf : "";
     print_resources(ostream, "JVM: FD fd=%d type=%s: details1=\"%s\" ",
         i, stat2strtype(fds.get_stat(i)->st_mode), details);
-
 
     if (_vm_inited_fds.get_state(i, FdsInfo::CLOSED) != FdsInfo::CLOSED) {
       print_resources(ostream, "OK: inherited from process env");
@@ -6207,18 +6231,14 @@ void VM_Crac::doit() {
       continue;
     }
 
-
     if (S_ISSOCK(st->st_mode)) {
-      details = sock_details(details, detailsbuf, sizeof(detailsbuf));
-      print_resources(ostream, "issock, details2=\"%s\" ", details);
-
-      // and sock fd from listener
-      int sock_fd = op->socket();
-      if ( i == sock_fd){
+      if (is_socket_from_jcmd(i)){
         print_resources(ostream, "OK: jcmd socket");
         ok = true;
         continue;
       }
+      details = sock_details(details, detailsbuf, sizeof(detailsbuf));
+      print_resources(ostream, "issock, details2=\"%s\" ", details);
     }
 
     print_resources(ostream, "BAD: opened by application");
@@ -6230,16 +6250,9 @@ void VM_Crac::doit() {
   }
 
   if (!ok) {
-    trace_cr(ostream, "Checkpoint aborted: resources opened by application");
-    return;
-  }
-
-
-  if (!ok && CRHeapDumpOnCheckpointException) {
-    HeapDumper::dump_heap();
-  }
-
-  if (!ok && CRDoThrowCheckpointException) {
+    if (CRHeapDumpOnCheckpointException){
+      HeapDumper::dump_heap();
+    }
     return;
   }
 
@@ -6252,9 +6265,8 @@ void VM_Crac::doit() {
     trace_cr(ostream, "Skip Checkpoint");
   } else {
     trace_cr(ostream, "Checkpoint ...");
-    bufferedStream * buf = static_cast<bufferedStream*>(ostream);
-    // Send a result to jcmd
-    op->effectively_complete(JNI_OK, buf);
+    // If execution comes here, assumme that further all be ok.
+    report_ok_to_jcmd();
     int ret = checkpoint_restore(&shmid);
     if (ret == JVM_CHECKPOINT_ERROR) {
       PerfMemoryLinux::restore();
@@ -6355,7 +6367,7 @@ static Handle ret_cr(int ret, Handle new_args, Handle new_props, Handle err_code
 
 /** Checkpoint main entry.
  */
-Handle os::Linux::checkpoint(bool dry_run, jlong stream, TRAPS) {
+Handle os::Linux::checkpoint(bool dry_run, jlong stream, jlong op, TRAPS) {
   if (!CRaCCheckpointTo) {
     return ret_cr(JVM_CHECKPOINT_NONE, Handle(), Handle(), Handle(), Handle(), THREAD);
   }
@@ -6371,7 +6383,8 @@ Handle os::Linux::checkpoint(bool dry_run, jlong stream, TRAPS) {
 
   VM_Crac cr(dry_run);
   {
-    cr.ostream = (outputStream*) stream;
+    cr.jcmd_operation = (LinuxAttachOperation *) op;
+    cr.ostream = (outputStream *) stream;
     MutexLocker ml(Heap_lock);
     VMThread::execute(&cr);
   }

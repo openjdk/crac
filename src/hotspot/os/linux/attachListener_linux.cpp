@@ -76,7 +76,7 @@ class LinuxAttachListener: AllStatic {
   static LinuxAttachOperation* read_request(int s);
 
  public:
-  static AttachOperation* _currentOperation;
+  static AttachOperation* _jcmdOperation;
   enum {
     ATTACH_PROTOCOL_VER = 1                     // protocol version
   };
@@ -115,7 +115,7 @@ char LinuxAttachListener::_path[UNIX_PATH_MAX];
 bool LinuxAttachListener::_has_path;
 volatile int LinuxAttachListener::_listener = -1;
 bool LinuxAttachListener::_atexit_registered = false;
-AttachOperation* LinuxAttachListener::_currentOperation = NULL;
+AttachOperation* LinuxAttachListener::_jcmdOperation = NULL;
 
 // Supporting class to help split a buffer into individual components
 class ArgumentIterator : public StackObj {
@@ -391,7 +391,7 @@ int LinuxAttachListener::write_fully(int s, char* buf, int len) {
 
 void LinuxAttachOperation::complete(jint result, bufferedStream* st) {
   LinuxAttachOperation::effectively_complete(result, st);
-  AttachListener::set_CurrentOperation(NULL);
+  AttachListener::set_jcmdOperation(NULL);
   delete this;
 }
 
@@ -432,14 +432,16 @@ void LinuxAttachOperation::effectively_complete(jint result, bufferedStream* st)
 
 // AttachListener functions
 
-AttachOperation* AttachListener::get_CurrentOperation() {
-  return Atomic::load(&LinuxAttachListener::_currentOperation);
-}
-
-void AttachListener::set_CurrentOperation(AttachOperation* s) {
+AttachOperation* AttachListener::get_jcmdOperation() {
   const char assertion_listener_thread[] = "Attach Listener";
   assert(strcmp(assertion_listener_thread, Thread::current()->name()) == 0, "should gets called from Attach Listener thread");
-  Atomic::store(&LinuxAttachListener::_currentOperation, s);
+  return LinuxAttachListener::_jcmdOperation;
+}
+
+void AttachListener::set_jcmdOperation(AttachOperation* s) {
+  const char assertion_listener_thread[] = "Attach Listener";
+  assert(strcmp(assertion_listener_thread, Thread::current()->name()) == 0, "should gets called from Attach Listener thread");
+  LinuxAttachListener::_jcmdOperation = s;
 }
 
 AttachOperation* AttachListener::dequeue() {
@@ -447,7 +449,7 @@ AttachOperation* AttachListener::dequeue() {
   ThreadBlockInVM tbivm(thread);
 
   AttachOperation* op = LinuxAttachListener::dequeue();
-  AttachListener::set_CurrentOperation(op);
+  AttachListener::set_jcmdOperation(op);
   return op;
 }
 

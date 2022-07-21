@@ -107,9 +107,8 @@ class AttachListener: AllStatic {
 
 
   // save jcmd operation for proper Checkpoint
-  static AttachOperation* get_CurrentOperation();
-  static void set_CurrentOperation(AttachOperation* op);
-
+  static AttachOperation* get_jcmdOperation();
+  static void set_jcmdOperation(AttachOperation* op);
 
   // indicates if this VM supports attach-on-demand
   static bool is_attach_supported()             { return !DisableAttachMechanism; }

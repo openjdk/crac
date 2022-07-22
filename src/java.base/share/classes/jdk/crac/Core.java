@@ -248,25 +248,29 @@ public class Core {
         }
     }
 
-    private static void checkpointResore2(long outputStream_p, long jcmd_p) throws 
+    private static void checkpointRestore2(long outputStream_p, long jcmd_p) throws
             CheckpointException,
             RestoreException {
-        synchronized (checkpointRestoreLock) { 
+        synchronized (checkpointRestoreLock) {
             // idkn, it worth to protect from multy-thread checkpointing ?  - doesn't have sence for jcmd checkpointing, only for
-            // jcmd + comebody through an api ... 
+            // jcmd + comebody through an api ...
             if (!checkpointInProgress) {
                 checkpointInProgress = true;
-                checkpointRestore1(outputStream_p, jcmd_p);
+                try {
+                    checkpointRestore1(outputStream_p, jcmd_p);
+                } finally {
+                    checkpointInProgress = false;
+                }
             }
         }
-    } 
+    }
 
     /* called by VM */
     private static String checkpointRestoreInternal(long outputStream_p, long jcmd_p){
         StringWriter sw = new StringWriter();
         PrintWriter pw = new PrintWriter(sw);
         try {
-            checkpointResore2(outputStream_p, jcmd_p);
+            checkpointRestore2(outputStream_p, jcmd_p);
         } catch (CheckpointException | RestoreException e) {
             for (Throwable t : e.getSuppressed()) {
                 t.printStackTrace(pw);

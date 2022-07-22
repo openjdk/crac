@@ -55,7 +55,6 @@
 #include "services/management.hpp"
 #include "services/writeableFlags.hpp"
 #include "services/attachListener.hpp"
-#include "services/linuxAttachOperation.hpp"
 #include "utilities/debug.hpp"
 #include "utilities/events.hpp"
 #include "utilities/formatBuffer.hpp"

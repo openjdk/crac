@@ -1054,7 +1054,7 @@ void CheckpointDCmd::execute(DCmdSource source, TRAPS) {
   if (str != NULL) {
       char* out = java_lang_String::as_utf8_string(str);
       if (out) {
-          output()->print_cr("An exception durinng checkpoint operation: ");
+          output()->print_cr("An exception during a checkpoint operation: ");
           output()->print_cr("%s", out);
       }
   }

@@ -6167,7 +6167,7 @@ void VM_Crac::read_shm(int shmid) {
     return;
 }
 
-// If checkpoint is called throught the API, jcmd operation anf jcmd output doesn't exist.
+// If checkpoint is called throught the API, jcmd operation and jcmd output doesn't exist.
 int VM_Crac::is_socket_from_jcmd (int sock){
   if (jcmd_operation == 0)
     return 0;

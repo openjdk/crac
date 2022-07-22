@@ -55,9 +55,6 @@ public class Core {
     private static final int JVM_CR_FAIL_SOCK = 2;
     private static final int JVM_CR_FAIL_PIPE = 3;
 
-    private static long jcmd = 0;
-    private static long ostream = 0;
-
     private static native Object[] checkpointRestore0(boolean dryRun, long stream, long op);
     private static final Object checkpointRestoreLock = new Object();
     private static boolean checkpointInProgress = false;
@@ -112,7 +109,7 @@ public class Core {
     }
 
     @SuppressWarnings("removal")
-    private static void checkpointRestore1() throws
+    private static void checkpointRestore1(long ostream, long jcmd) throws
             CheckpointException,
             RestoreException {
         CheckpointException checkpointException = null;
@@ -238,7 +235,7 @@ public class Core {
             if (!checkpointInProgress) {
                 try {
                     checkpointInProgress = true;
-                    checkpointRestore1();
+                    checkpointRestore1(0, 0);
                 } finally {
                     if (FlagsHolder.TRACE_STARTUP_TIME) {
                         System.out.println("STARTUPTIME " + System.nanoTime() + " restore-finish");
@@ -251,14 +248,25 @@ public class Core {
         }
     }
 
+    private static void checkpointResore2(long outputStream_p, long jcmd_p) throws 
+            CheckpointException,
+            RestoreException {
+        synchronized (checkpointRestoreLock) { 
+            // idkn, it worth to protect from multy-thread checkpointing ?  - doesn't have sence for jcmd checkpointing, only for
+            // jcmd + comebody through an api ... 
+            if (!checkpointInProgress) {
+                checkpointInProgress = true;
+                checkpointRestore1(outputStream_p, jcmd_p);
+            }
+        }
+    } 
+
     /* called by VM */
     private static String checkpointRestoreInternal(long outputStream_p, long jcmd_p){
-        jcmd = jcmd_p;
-        ostream = outputStream_p;
         StringWriter sw = new StringWriter();
         PrintWriter pw = new PrintWriter(sw);
         try {
-            checkpointRestore();
+            checkpointResore2(outputStream_p, jcmd_p);
         } catch (CheckpointException | RestoreException e) {
             for (Throwable t : e.getSuppressed()) {
                 t.printStackTrace(pw);

@@ -55,6 +55,9 @@ public class Core {
     private static final int JVM_CR_FAIL_SOCK = 2;
     private static final int JVM_CR_FAIL_PIPE = 3;
 
+    private static final long JCMD_OPERATION_NULL = 0;
+    private static final long JCMD_STREAM_NULL = 0;
+
     private static native Object[] checkpointRestore0(boolean dryRun, long stream, long op);
     private static final Object checkpointRestoreLock = new Object();
     private static boolean checkpointInProgress = false;
@@ -235,7 +238,7 @@ public class Core {
             if (!checkpointInProgress) {
                 try {
                     checkpointInProgress = true;
-                    checkpointRestore1(0, 0);
+                    checkpointRestore1(JCMD_STREAM_NULL, JCMD_OPERATION_NULL);
                 } finally {
                     if (FlagsHolder.TRACE_STARTUP_TIME) {
                         System.out.println("STARTUPTIME " + System.nanoTime() + " restore-finish");

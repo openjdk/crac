@@ -256,7 +256,7 @@ public class Core {
             RestoreException {
         synchronized (checkpointRestoreLock) {
             // idkn, it worth to protect from multy-thread checkpointing ?  - doesn't have sence for jcmd checkpointing, only for
-            // jcmd + comebody through an api ...
+            // jcmd + somebody through an api ...
             if (!checkpointInProgress) {
                 checkpointInProgress = true;
                 try {

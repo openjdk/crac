@@ -22,8 +22,8 @@
  * questions.
  *
  */
-#ifndef SHARE_SERVICES_LINUXATTACHOPERATION_HPP
-#define SHARE_SERVICES_LINUXATTACHOPERATION_HPP
+#ifndef OS_LINUX_LINUXATTACHOPERATION_HPP
+#define OS_LINUX_LINUXATTACHOPERATION_HPP
 #include "services/attachListener.hpp"
 
 class LinuxAttachOperation: public AttachOperation {
@@ -44,4 +44,4 @@ class LinuxAttachOperation: public AttachOperation {
     _effectively_completed = false;
   }
 };
-#endif // SHARE_SERVICES_LINUXATTACHOPERATION_HPP
+#endif // OS_LINUX_LINUXATTACHOPERATION_HPP

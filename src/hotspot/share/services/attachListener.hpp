@@ -105,8 +105,6 @@ class AttachListener: AllStatic {
     Atomic::store(&_state, AL_INITIALIZED);
   }
 
-
-
   // indicates if this VM supports attach-on-demand
   static bool is_attach_supported()             { return !DisableAttachMechanism; }
 

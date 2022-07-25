@@ -419,10 +419,10 @@ class VM_Crac: public VM_Operation {
   VMOp_Type type() const { return VMOp_VM_Crac; }
   void doit();
   void read_shm(int shmid);
+
   private:
   int is_socket_from_jcmd (int sock_fd);
   void report_ok_to_jcmd ();
-
 };
 
 ////////////////////////////////////////////////////////////////////////////////

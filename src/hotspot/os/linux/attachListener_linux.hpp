@@ -23,8 +23,8 @@
  *
  */
 
-#ifndef SHARE_SERVICES_ATTACHLISTENERLINUX_HPP
-#define SHARE_SERVICES_ATTACHLISTENERLINUX_HPP
+#ifndef OS_LINUX_ATTACHLISTENER_LINUX_HPP
+#define OS_LINUX_ATTACHLISTENER_LINUX_HPP
 
 #include "linuxAttachOperation.hpp"
 #include "services/attachListener.hpp"
@@ -46,13 +46,14 @@ class LinuxAttachListener: AllStatic {
 
   static bool _atexit_registered;
 
+  // this is for proper reporting JDK.Chekpoint processing to jcmd peer 
   static AttachOperation* _jcmdOperation;
 
   // reads a request from the given connected socket
   static LinuxAttachOperation* read_request(int s);
 
  public:
-  
+
   enum {
     ATTACH_PROTOCOL_VER = 1                     // protocol version
   };
@@ -88,4 +89,4 @@ class LinuxAttachListener: AllStatic {
   static AttachOperation* get_jcmdOperation();
 };
 
-#endif // SHARE_SERVICES_ATTACHLISTENERLINUX_HPP
+#endif // OS_LINUX_ATTACHLISTENERLINUX_HPP

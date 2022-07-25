@@ -54,7 +54,7 @@
 #include "services/heapDumper.hpp"
 #include "services/management.hpp"
 #include "services/writeableFlags.hpp"
-#include "services/attachListener.hpp"
+#include "attachListener_linux.hpp"
 #include "utilities/debug.hpp"
 #include "utilities/events.hpp"
 #include "utilities/formatBuffer.hpp"
@@ -1044,7 +1044,7 @@ void CheckpointDCmd::execute(DCmdSource source, TRAPS) {
   JavaValue result(T_OBJECT);
   JavaCallArguments args;
   args.push_long((jlong )output());
-  args.push_long((jlong )AttachListener::get_jcmdOperation());
+  args.push_long((jlong )LinuxAttachListener::get_jcmdOperation());
   JavaCalls::call_static(&result, k,
                          vmSymbols::checkpointRestoreInternal_name(),
                          vmSymbols::checkpointRestereInternal_signature(), &args, CHECK);

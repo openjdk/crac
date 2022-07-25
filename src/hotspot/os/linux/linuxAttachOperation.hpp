@@ -24,6 +24,7 @@
  */
 #ifndef SHARE_SERVICES_LINUXATTACHOPERATION_HPP
 #define SHARE_SERVICES_LINUXATTACHOPERATION_HPP
+#include "services/attachListener.hpp"
 
 class LinuxAttachOperation: public AttachOperation {
  private:

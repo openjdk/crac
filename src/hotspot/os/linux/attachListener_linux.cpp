@@ -28,8 +28,9 @@
 #include "runtime/interfaceSupport.inline.hpp"
 #include "runtime/os.inline.hpp"
 #include "services/attachListener.hpp"
+#include "attachListener_linux.hpp"
 #include "services/dtraceAttacher.hpp"
-#include "services/linuxAttachOperation.hpp"
+#include "linuxAttachOperation.hpp"
 
 #include <unistd.h>
 #include <signal.h>
@@ -38,9 +39,7 @@
 #include <sys/un.h>
 #include <sys/stat.h>
 
-#ifndef UNIX_PATH_MAX
-#define UNIX_PATH_MAX   sizeof(((struct sockaddr_un *)0)->sun_path)
-#endif
+
 
 // The attach mechanism on Linux uses a UNIX domain socket. An attach listener
 // thread is created at startup or is created on-demand via a signal from
@@ -59,54 +58,7 @@
 //    of the client matches this process.
 
 
-class LinuxAttachListener: AllStatic {
- private:
-  // the path to which we bind the UNIX domain socket
-  static char _path[UNIX_PATH_MAX];
-  static bool _has_path;
 
-  // the file descriptor for the listening socket
-  static volatile int _listener;
-
-  static bool _atexit_registered;
-
-  // reads a request from the given connected socket
-  static LinuxAttachOperation* read_request(int s);
-
- public:
-  static AttachOperation* _jcmdOperation;
-  enum {
-    ATTACH_PROTOCOL_VER = 1                     // protocol version
-  };
-  enum {
-    ATTACH_ERROR_BADVERSION     = 101           // error codes
-  };
-
-  static void set_path(char* path) {
-    if (path == NULL) {
-      _path[0] = '\0';
-      _has_path = false;
-    } else {
-      strncpy(_path, path, UNIX_PATH_MAX);
-      _path[UNIX_PATH_MAX-1] = '\0';
-      _has_path = true;
-    }
-  }
-
-  static void set_listener(int s)               { _listener = s; }
-
-  // initialize the listener, returns 0 if okay
-  static int init();
-
-  static char* path()                   { return _path; }
-  static bool has_path()                { return _has_path; }
-  static int listener()                 { return _listener; }
-
-  // write the given buffer to a socket
-  static int write_fully(int s, char* buf, int len);
-
-  static LinuxAttachOperation* dequeue();
-};
 
 // statics
 char LinuxAttachListener::_path[UNIX_PATH_MAX];
@@ -389,7 +341,7 @@ int LinuxAttachListener::write_fully(int s, char* buf, int len) {
 
 void LinuxAttachOperation::complete(jint result, bufferedStream* st) {
   LinuxAttachOperation::effectively_complete(result, st);
-  AttachListener::set_jcmdOperation(NULL);
+  LinuxAttachListener::set_jcmdOperation(NULL);
   delete this;
 }
 
@@ -427,27 +379,26 @@ void LinuxAttachOperation::effectively_complete(jint result, bufferedStream* st)
 
 }
 
-
-// AttachListener functions
-
-AttachOperation* AttachListener::get_jcmdOperation() {
+AttachOperation* LinuxAttachListener::get_jcmdOperation() {
   const char assertion_listener_thread[] = "Attach Listener";
   assert(strcmp(assertion_listener_thread, Thread::current()->name()) == 0, "should gets called from Attach Listener thread");
   return LinuxAttachListener::_jcmdOperation;
 }
 
-void AttachListener::set_jcmdOperation(AttachOperation* s) {
+void LinuxAttachListener::set_jcmdOperation(AttachOperation* s) {
   const char assertion_listener_thread[] = "Attach Listener";
   assert(strcmp(assertion_listener_thread, Thread::current()->name()) == 0, "should gets called from Attach Listener thread");
   LinuxAttachListener::_jcmdOperation = s;
 }
+
+// AttachListener functions
 
 AttachOperation* AttachListener::dequeue() {
   JavaThread* thread = JavaThread::current();
   ThreadBlockInVM tbivm(thread);
 
   AttachOperation* op = LinuxAttachListener::dequeue();
-  AttachListener::set_jcmdOperation(op);
+  LinuxAttachListener::set_jcmdOperation(op);
   return op;
 }
 

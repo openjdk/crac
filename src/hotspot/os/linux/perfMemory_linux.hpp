@@ -35,9 +35,7 @@ public:
   }
 
   static bool checkpoint(const char* checkpoint_path);
-  static bool checkpoint_fail();
   static bool restore();
 };
 
 #endif // OS_LINUX_PERFMEMORY_LINUX_HPP
-

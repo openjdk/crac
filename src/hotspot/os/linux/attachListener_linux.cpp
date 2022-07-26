@@ -379,15 +379,19 @@ void LinuxAttachOperation::effectively_complete(jint result, bufferedStream* st)
 
 }
 
-AttachOperation* LinuxAttachListener::get_jcmdOperation() {
+void assert_listener_thread () {
+  ResourceMark rm; // For retrieving the thread names
   const char assertion_listener_thread[] = "Attach Listener";
   assert(strcmp(assertion_listener_thread, Thread::current()->name()) == 0, "should gets called from Attach Listener thread");
+}
+
+AttachOperation* LinuxAttachListener::get_jcmdOperation() {
+  assert_listener_thread();
   return LinuxAttachListener::_jcmdOperation;
 }
 
 void LinuxAttachListener::set_jcmdOperation(AttachOperation* s) {
-  const char assertion_listener_thread[] = "Attach Listener";
-  assert(strcmp(assertion_listener_thread, Thread::current()->name()) == 0, "should gets called from Attach Listener thread");
+  assert_listener_thread();
   LinuxAttachListener::_jcmdOperation = s;
 }
 

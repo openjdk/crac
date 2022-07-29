@@ -397,8 +397,10 @@ class VM_Crac: public VM_Operation {
   GrowableArray<CracFailDep>* _failures;
   CracRestoreParameters *_restore_parameters;
  public:
-  VM_Crac(bool dry_run) :
+  VM_Crac(bool dry_run, outputStream* output_stream, LinuxAttachOperation* jcmd_operation) :
     _dry_run(dry_run),
+    ostream(output_stream),
+    jcmd_operation(jcmd_operation),
     _ok(false),
     _failures(new (ResourceObj::C_HEAP, mtInternal) GrowableArray<CracFailDep>(0, mtInternal)),
     _restore_parameters(new CracRestoreParameters(NULL, NULL))
@@ -6234,7 +6236,6 @@ void VM_Crac::doit() {
     if (S_ISSOCK(st->st_mode)) {
       if (is_socket_from_jcmd(i)){
         print_resources(ostream, "OK: jcmd socket");
-        ok = true;
         continue;
       }
       details = sock_details(details, detailsbuf, sizeof(detailsbuf));
@@ -6249,10 +6250,11 @@ void VM_Crac::doit() {
     _failures->append(CracFailDep(stat2stfail(st->st_mode & S_IFMT), msg));
   }
 
-  if (!ok) {
-    if (CRHeapDumpOnCheckpointException){
-      HeapDumper::dump_heap();
-    }
+  if (!ok && CRHeapDumpOnCheckpointException) {
+    HeapDumper::dump_heap();
+  }
+
+  if (!ok && CRDoThrowCheckpointException) {
     return;
   }
 
@@ -6381,10 +6383,8 @@ Handle os::Linux::checkpoint(bool dry_run, jlong stream, jlong op, TRAPS) {
   Universe::heap()->collect(GCCause::_full_gc_alot);
   Universe::heap()->set_cleanup_unused(false);
 
-  VM_Crac cr(dry_run);
+  VM_Crac cr(dry_run, stream, op);
   {
-    cr.jcmd_operation = (LinuxAttachOperation *) op;
-    cr.ostream = (outputStream *) stream;
     MutexLocker ml(Heap_lock);
     VMThread::execute(&cr);
   }

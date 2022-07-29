@@ -2113,6 +2113,9 @@ const intx ObjectAlignmentInBytes = 8;
   product(bool, CRTraceStartupTime, false, DIAGNOSTIC,                      \
       "Trace startup time")                                                 \
                                                                             \
+  product(bool, CRDoThrowCheckpointException, true, EXPERIMENTAL,           \
+      "Throw CheckpointException if uncheckpointable resource handle found")\
+                                                                            \
   product(bool, CRTrace, true, "Minimal C/R tracing")                       \
 
 // end of RUNTIME_FLAGS

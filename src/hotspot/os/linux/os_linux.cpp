@@ -396,14 +396,16 @@ class VM_Crac: public VM_Operation {
   bool _ok;
   GrowableArray<CracFailDep>* _failures;
   CracRestoreParameters *_restore_parameters;
+  outputStream* ostream;
+  LinuxAttachOperation* jcmd_operation;
  public:
   VM_Crac(bool dry_run, outputStream* output_stream, LinuxAttachOperation* jcmd_operation) :
     _dry_run(dry_run),
-    ostream(output_stream),
-    jcmd_operation(jcmd_operation),
     _ok(false),
     _failures(new (ResourceObj::C_HEAP, mtInternal) GrowableArray<CracFailDep>(0, mtInternal)),
-    _restore_parameters(new CracRestoreParameters(NULL, NULL))
+    _restore_parameters(new CracRestoreParameters(NULL, NULL)),
+    ostream(output_stream),
+    jcmd_operation(jcmd_operation)
   { }
 
   ~VM_Crac() {
@@ -411,8 +413,7 @@ class VM_Crac: public VM_Operation {
     delete _restore_parameters;
   }
 
-  outputStream* ostream;
-  LinuxAttachOperation* jcmd_operation;
+
   GrowableArray<CracFailDep>* failures() { return _failures; }
   bool ok() { return _ok; }
   const char* new_args() { return _restore_parameters->args(); }
@@ -6181,7 +6182,7 @@ void VM_Crac::report_ok_to_jcmd (){
   if (jcmd_operation == 0)
     return;
   bufferedStream * buf = static_cast<bufferedStream*>(ostream);
-  jcmd_operation->effectively_complete(JNI_OK, buf);
+  jcmd_operation->effectively_complete(JNI_OK, buf, true);
 }
 
 void VM_Crac::doit() {
@@ -6383,7 +6384,7 @@ Handle os::Linux::checkpoint(bool dry_run, jlong stream, jlong op, TRAPS) {
   Universe::heap()->collect(GCCause::_full_gc_alot);
   Universe::heap()->set_cleanup_unused(false);
 
-  VM_Crac cr(dry_run, stream, op);
+  VM_Crac cr(dry_run, (outputStream*) stream, (LinuxAttachOperation*) op);
   {
     MutexLocker ml(Heap_lock);
     VMThread::execute(&cr);

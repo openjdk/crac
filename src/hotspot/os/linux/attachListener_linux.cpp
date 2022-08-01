@@ -340,7 +340,7 @@ int LinuxAttachListener::write_fully(int s, char* buf, int len) {
 // The complete() gets called after restore for proper deletion the leftover object.
 
 void LinuxAttachOperation::complete(jint result, bufferedStream* st) {
-  LinuxAttachOperation::effectively_complete(result, st);
+  LinuxAttachOperation::effectively_complete(result, st, false);
   LinuxAttachListener::set_jcmdOperation(NULL);
   delete this;
 }
@@ -353,15 +353,16 @@ void LinuxAttachOperation::complete(jint result, bufferedStream* st) {
 // if there are operations that involves a very big reply then it the
 // socket could be made non-blocking and a timeout could be used.
 
-void LinuxAttachOperation::effectively_complete(jint result, bufferedStream* st) {
+void LinuxAttachOperation::effectively_complete(jint result, bufferedStream* st, bool cr_call = false) {
 
   if (_effectively_completed) {
     return;
   }
 
-  JavaThread* thread = JavaThread::current();
-  ThreadBlockInVM tbivm(thread);
-
+  if (!cr_call){
+    JavaThread* thread = JavaThread::current();
+    ThreadBlockInVM tbivm(thread);
+  }
   // write operation result
   char msg[32];
   sprintf(msg, "%d\n", result);

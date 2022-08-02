@@ -31,10 +31,11 @@ class LinuxAttachOperation: public AttachOperation {
   // the connection to the client
   int _socket;
   bool _effectively_completed;
+  void write_operation_result(jint result, bufferedStream* st);
 
  public:
   void complete(jint res, bufferedStream* st);
-  void effectively_complete(jint res, bufferedStream* st, bool cr_call);
+  void effectively_complete_raw(jint res, bufferedStream* st);
 
   void set_socket(int s)                                { _socket = s; }
   int socket() const                                    { return _socket; }

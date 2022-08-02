@@ -336,11 +336,11 @@ int LinuxAttachListener::write_fully(int s, char* buf, int len) {
 
 // An operation completion is splitted into two parts.
 // For proper handling the jcmd connection at CRaC checkpoint action.
-// An effectively_complete is called in checkpoint processing, before criu engine calls, for properly closing the socket.
+// An effectively_complete_raw is called in checkpoint processing, before criu engine calls, for properly closing the socket.
 // The complete() gets called after restore for proper deletion the leftover object.
 
 void LinuxAttachOperation::complete(jint result, bufferedStream* st) {
-  LinuxAttachOperation::effectively_complete(result, st, false);
+  LinuxAttachOperation::effectively_complete_raw(result, st);
   LinuxAttachListener::set_jcmdOperation(NULL);
   delete this;
 }
@@ -353,17 +353,23 @@ void LinuxAttachOperation::complete(jint result, bufferedStream* st) {
 // if there are operations that involves a very big reply then it the
 // socket could be made non-blocking and a timeout could be used.
 
-void LinuxAttachOperation::effectively_complete(jint result, bufferedStream* st, bool cr_call = false) {
+void LinuxAttachOperation::effectively_complete_raw(jint result, bufferedStream* st) {
 
   if (_effectively_completed) {
     return;
   }
 
-  if (!cr_call){
-    JavaThread* thread = JavaThread::current();
-    ThreadBlockInVM tbivm(thread);
+  Thread* thread = Thread::current();
+  if (thread->is_Java_thread()) {
+    ThreadBlockInVM((JavaThread* )thread);
+    write_operation_result(result, st);
+  } else {
+    write_operation_result(result, st);
   }
-  // write operation result
+  _effectively_completed = true;
+}
+
+void LinuxAttachOperation::write_operation_result(jint result, bufferedStream* st) {
   char msg[32];
   sprintf(msg, "%d\n", result);
   int rc = LinuxAttachListener::write_fully(this->socket(), msg, strlen(msg));
@@ -376,8 +382,6 @@ void LinuxAttachOperation::effectively_complete(jint result, bufferedStream* st,
 
   // done
   ::close(this->socket());
-  _effectively_completed = true;
-
 }
 
 void assert_listener_thread () {

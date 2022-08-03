@@ -6182,7 +6182,7 @@ void VM_Crac::report_ok_to_jcmd (){
   if (jcmd_operation == 0)
     return;
   bufferedStream * buf = static_cast<bufferedStream*>(ostream);
-  jcmd_operation->effectively_complete(JNI_OK, buf);
+  jcmd_operation->effectively_complete_raw(JNI_OK, buf);
 }
 
 void VM_Crac::doit() {

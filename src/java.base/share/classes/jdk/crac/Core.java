@@ -115,6 +115,16 @@ public class Core {
     private static void checkpointRestore1(long ostream, long jcmd) throws
             CheckpointException,
             RestoreException {
+    // checkpointRestore protects against the simultaneous
+    // call of checkpointRestore from different threads.
+        synchronized (checkpointRestoreLock) {
+            // checkpointInProgress protects against recursive
+            // checkpointRestore from resource's
+            // beforeCheckpoint/afterRestore methods
+        if (checkpointInProgress) {
+            throw new CheckpointException("Recursive checkpoint is not allowed");
+        }
+        checkpointInProgress = true;
         CheckpointException checkpointException = null;
 
         try {
@@ -206,12 +216,18 @@ public class Core {
             }
         }
 
+        checkpointInProgress = false;
+        if (FlagsHolder.TRACE_STARTUP_TIME) {
+            System.out.println("STARTUPTIME " + System.nanoTime() + " restore-finish");
+        }
+
         assert checkpointException == null || restoreException == null;
         if (checkpointException != null) {
             throw checkpointException;
         } else if (restoreException != null) {
             throw restoreException;
         }
+    }
     }
 
     /**
@@ -229,43 +245,7 @@ public class Core {
     public static void checkpointRestore() throws
             CheckpointException,
             RestoreException {
-        // checkpointRestore protects against the simultaneous
-        // call of checkpointRestore from different threads.
-        synchronized (checkpointRestoreLock) {
-            // checkpointInProgress protects against recursive
-            // checkpointRestore from resource's
-            // beforeCheckpoint/afterRestore methods
-            if (!checkpointInProgress) {
-                try {
-                    checkpointInProgress = true;
-                    checkpointRestore1(JCMD_STREAM_NULL, JCMD_OPERATION_NULL);
-                } finally {
-                    if (FlagsHolder.TRACE_STARTUP_TIME) {
-                        System.out.println("STARTUPTIME " + System.nanoTime() + " restore-finish");
-                    }
-                    checkpointInProgress = false;
-                }
-            } else {
-                throw new CheckpointException("Recursive checkpoint is not allowed");
-            }
-        }
-    }
-
-    private static void checkpointRestore2(long outputStream_p, long jcmd_p) throws
-            CheckpointException,
-            RestoreException {
-        synchronized (checkpointRestoreLock) {
-            // idkn, it worth to protect from multy-thread checkpointing ?  - doesn't have sence for jcmd checkpointing, only for
-            // jcmd + somebody through an api ...
-            if (!checkpointInProgress) {
-                checkpointInProgress = true;
-                try {
-                    checkpointRestore1(outputStream_p, jcmd_p);
-                } finally {
-                    checkpointInProgress = false;
-                }
-            }
-        }
+        checkpointRestore1(JCMD_STREAM_NULL, JCMD_OPERATION_NULL);
     }
 
     /* called by VM */
@@ -273,7 +253,7 @@ public class Core {
         StringWriter sw = new StringWriter();
         PrintWriter pw = new PrintWriter(sw);
         try {
-            checkpointRestore2(outputStream_p, jcmd_p);
+            checkpointRestore1(outputStream_p, jcmd_p);
         } catch (CheckpointException | RestoreException e) {
             for (Throwable t : e.getSuppressed()) {
                 t.printStackTrace(pw);

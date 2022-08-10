@@ -424,8 +424,8 @@ class VM_Crac: public VM_Operation {
   void read_shm(int shmid);
 
   private:
-  int is_socket_from_jcmd (int sock_fd);
-  void report_ok_to_jcmd ();
+  int is_socket_from_jcmd(int sock_fd);
+  void report_ok_to_jcmd();
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -5717,8 +5717,8 @@ bool os::supports_map_sync() {
 }
 
 static void trace_cr(outputStream * ostream, const char* msg, ... ) {
-  outputStream * ou = (ostream == NULL) ? tty : ostream;
-  if (CRTrace){
+  outputStream* ou = (ostream == NULL) ? tty : ostream;
+  if (CRTrace) {
     va_list ap;
     va_start(ap, msg);
     ou->print("CR: ");
@@ -5728,7 +5728,7 @@ static void trace_cr(outputStream * ostream, const char* msg, ... ) {
 }
 
 static void print_resources(outputStream * ostream, const char* msg, ... ) {
-  outputStream * ou = (ostream == NULL) ? tty : ostream;
+  outputStream* ou = (ostream == NULL) ? tty : ostream;
   if (CRPrintResourcesOnCheckpoint) {
     va_list ap;
     va_start(ap, msg);
@@ -6171,7 +6171,7 @@ void VM_Crac::read_shm(int shmid) {
 }
 
 // If checkpoint is called throught the API, jcmd operation and jcmd output doesn't exist.
-int VM_Crac::is_socket_from_jcmd (int sock){
+int VM_Crac::is_socket_from_jcmd(int sock) {
   if (jcmd_operation == 0)
     return 0;
   int sock_fd = jcmd_operation->socket();
@@ -6181,7 +6181,7 @@ int VM_Crac::is_socket_from_jcmd (int sock){
 void VM_Crac::report_ok_to_jcmd (){
   if (jcmd_operation == 0)
     return;
-  bufferedStream * buf = static_cast<bufferedStream*>(ostream);
+  bufferedStream* buf = static_cast<bufferedStream*>(ostream);
   jcmd_operation->effectively_complete_raw(JNI_OK, buf);
 }
 
@@ -6384,7 +6384,7 @@ Handle os::Linux::checkpoint(bool dry_run, jlong stream, jlong op, TRAPS) {
   Universe::heap()->collect(GCCause::_full_gc_alot);
   Universe::heap()->set_cleanup_unused(false);
 
-  VM_Crac cr(dry_run, (outputStream*) stream, (LinuxAttachOperation*) op);
+  VM_Crac cr(dry_run, (outputStream*)stream, (LinuxAttachOperation*)op);
   {
     MutexLocker ml(Heap_lock);
     VMThread::execute(&cr);

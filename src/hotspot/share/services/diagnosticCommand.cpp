@@ -792,7 +792,7 @@ void JMXStatusDCmd::execute(DCmdSource source, TRAPS) {
   JavaValue result(T_OBJECT);
   JavaCalls::call_static(&result, k, vmSymbols::getAgentStatus_name(), vmSymbols::void_string_signature(), CHECK);
 
-  jvalue* jv = (jvalue*) result.get_value_addr();
+  jvalue*jv = (jvalue*)result.get_value_addr();
   oop str = cast_to_oop(jv->l);
   if (str != NULL) {
       char* out = java_lang_String::as_utf8_string(str);
@@ -1043,12 +1043,12 @@ void CheckpointDCmd::execute(DCmdSource source, TRAPS) {
                                                  true, CHECK);
   JavaValue result(T_OBJECT);
   JavaCallArguments args;
-  args.push_long((jlong )output());
-  args.push_long((jlong )LinuxAttachListener::get_jcmdOperation());
+  args.push_long((jlong)output());
+  args.push_long((jlong)LinuxAttachListener::get_jcmdOperation());
   JavaCalls::call_static(&result, k,
                          vmSymbols::checkpointRestoreInternal_name(),
                          vmSymbols::checkpointRestereInternal_signature(), &args, CHECK);
-  jvalue* jv = (jvalue*) result.get_value_addr();
+  jvalue*jv = (jvalue*)result.get_value_addr();
   oop str = cast_to_oop(jv->l);
   if (str != NULL) {
       char* out = java_lang_String::as_utf8_string(str);

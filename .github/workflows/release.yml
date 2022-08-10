@@ -62,7 +62,7 @@ jobs:
         run: |
           BUNDLENAME=${{ steps.compute.outputs.BUNDLENAME }}
           CRIU_REPO=CRaC/criu
-          CRIU_RELEASE=release-1.2
+          CRIU_RELEASE=release-1.3
 
           id=$(curl https://api.github.com/repos/$CRIU_REPO/releases/tags/$CRIU_RELEASE | jq .assets[0].id)
           curl https://api.github.com/repos/$CRIU_REPO/releases/assets/$id -LJOH 'Accept: application/octet-stream'

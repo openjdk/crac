@@ -175,8 +175,8 @@ class Linux {
   static bool prepare_checkpoint();
   static Handle checkpoint(bool dry_run, jlong jcmd_stream, TRAPS);
   static void restore();
-  static void register_persistent_fd(int fd, int st_dev, int st_ino);
-  static void deregister_persistent_fd(int fd, int st_dev, int st_ino);
+  static bool claim_fd(jobject obj, jlong fd);
+  static bool unclaim_fd(jobject obj, jlong fd);
 
   static jlong restore_start_time();
   static jlong uptime_since_restore();

@@ -1146,10 +1146,10 @@ JNIEXPORT jobjectArray JNICALL
 JVM_Checkpoint(JNIEnv *env, jboolean dry_run, jlong jcmd_stream);
 
 JNIEXPORT void JNICALL
-JVM_RegisterPersistent(int fd, int st_dev, int st_ino);
+JVM_ClaimFd(jobject obj, jlong fd);
 
 JNIEXPORT void JNICALL
-JVM_DeregisterPersistent(int fd, int st_dev, int st_ino);
+JVM_UnclaimFd(jobject obj, jlong fd);
 
 #ifdef __cplusplus
 } /* extern "C" */

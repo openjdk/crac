@@ -32,6 +32,7 @@ public class Core {
     private static JDKContext JDKContext;
 
     private static native void registerPersistent0(FileDescriptor fd);
+    private static native void unregisterPersistent0(FileDescriptor fd);
 
     static {
         JDKContext = new JDKContext();
@@ -44,5 +45,9 @@ public class Core {
 
     public static void registerPersistent(FileDescriptor fd) {
         registerPersistent0(fd);
+    }
+
+    public static void unregisterPersistent(FileDescriptor fd) {
+        unregisterPersistent0(fd);
     }
 }

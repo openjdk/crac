@@ -29,8 +29,12 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 
+import jdk.crac.Context;
+import jdk.crac.Resource;
 import jdk.internal.access.JavaIOFileDescriptorAccess;
 import jdk.internal.access.SharedSecrets;
+import jdk.internal.crac.Core;
+import jdk.internal.crac.JDKResource;
 import jdk.internal.ref.PhantomCleanable;
 
 /**
@@ -54,6 +58,25 @@ public final class FileDescriptor {
     private Closeable parent;
     private List<Closeable> otherParents;
     private boolean closed;
+
+    class Resource implements jdk.crac.Resource {
+        Resource() {
+            jdk.crac.Core.getGlobalContext().register(this);
+        }
+
+        @Override
+        public void beforeCheckpoint(Context<? extends jdk.crac.Resource> context) throws Exception {
+            FileDescriptor.this.beforeCheckpoint();
+
+        }
+
+        @Override
+        public void afterRestore(Context<? extends jdk.crac.Resource> context) throws Exception {
+            FileDescriptor.this.afterRestore();
+        }
+    }
+
+    Resource resource = new Resource();
 
     /**
      * true, if file is opened for appending.
@@ -138,6 +161,7 @@ public final class FileDescriptor {
         this.fd = fd;
         this.handle = getHandle(fd);
         this.append = getAppend(fd);
+        jdk.internal.crac.Core.registerPersistent(this);
     }
 
     /**
@@ -234,6 +258,7 @@ public final class FileDescriptor {
             cleanup = null;
         }
         this.fd = fd;
+        jdk.internal.crac.Core.registerPersistent(this);
     }
 
     /**
@@ -265,6 +290,7 @@ public final class FileDescriptor {
             cleanup.clear();
         }
         cleanup = cleanable;
+        Core.registerPersistent(this);
     }
 
     /**
@@ -282,6 +308,7 @@ public final class FileDescriptor {
             cleanup.clear();
         }
         cleanup = null;
+        Core.unregisterPersistent(this);
     }
 
     /**
@@ -295,7 +322,19 @@ public final class FileDescriptor {
     synchronized void close() throws IOException {
         unregisterCleanup();
         close0();
+        Core.unregisterPersistent(this);
     }
+
+    private synchronized void beforeCheckpoint() {
+        if (cleanup != null) {
+            System.out.println("WARNING: " + this);
+        }
+    }
+
+    private synchronized void afterRestore() {
+
+    }
+
 
     /*
      * Close the raw file descriptor or handle, if it has not already been closed

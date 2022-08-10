@@ -256,17 +256,16 @@ public:
   }
 };
 
-struct PersistentResourceDesc {
+struct ClaimedFd {
   int _fd;
-  dev_t _st_dev;
-  ino_t _st_ino;
-  PersistentResourceDesc(int fd, int st_dev, int st_ino) :
+  OopHandle _handle;
+
+  ClaimedFd(int fd, oop obj) :
     _fd(fd),
-    _st_dev((dev_t)st_dev),
-    _st_ino((ino_t)st_ino)
+    _handle(Universe::vm_global(), obj)
   {}
 
-  PersistentResourceDesc() :
+  ClaimedFd() :
     _fd(INT_MAX)
   {}
 };
@@ -462,6 +461,10 @@ static GrowableArray<PersistentResourceDesc>* _persistent_resources = NULL;
 static bool suppress_primordial_thread_resolution = false;
 
 // utility functions
+
+FdsInfo _vm_inited_fds(false);
+
+static GrowableArrayCHeap<ClaimedFd, mtInternal>* _claimed_fd = NULL;
 
 julong os::available_memory() {
   return Linux::available_memory();
@@ -5909,27 +5912,26 @@ static void mark_all_in(FdsInfo *fds, char* dirpath) {
 }
 
 static void mark_persistent(FdsInfo *fds) {
-  if (!_persistent_resources) {
+  if (!_claimed_fd) {
     return;
   }
 
-  for (int i = 0; i < _persistent_resources->length(); ++i) {
-    PersistentResourceDesc* pr = _persistent_resources->adr_at(i);
-    int fd = pr->_fd;
+  for (int i = 0; i < _claimed_fd->length(); ++i) {
+    ClaimedFd *cfd = _claimed_fd->adr_at(i);
+    int fd = cfd->_fd;
     if (fds->len() <= fd) {
       break;
     }
     if (fds->get_state(fd) != FdsInfo::ROOT) {
       continue;
     }
+#if 0
     struct stat* st = fds->get_stat(fd);
     if (st->st_dev == pr->_st_dev && st->st_ino == pr->_st_ino) {
       fds->mark(fd, FdsInfo::M_PERSISTENT);
     }
+#endif
   }
-
-  delete _persistent_resources;
-  _persistent_resources = NULL;
 }
 
 static int cr_util_path(char* path, int len) {
@@ -6284,51 +6286,41 @@ void VM_Crac::doit() {
   _ok = true;
 }
 
-void os::Linux::register_persistent_fd(int fd, int st_dev, int st_ino) {
+bool os::Linux::claim_fd(jobject obj, jlong fd) {
   if (!CRaCCheckpointTo) {
     return;
   }
-  if (!_persistent_resources) {
-    _persistent_resources = new (ResourceObj::C_HEAP, mtInternal)
-      GrowableArray<PersistentResourceDesc>(0, mtInternal);
-  }
-  int dup = -1;
-  int i = 0;
-  while (i < _persistent_resources->length()) {
-    int pfd = _persistent_resources->adr_at(i)->_fd;
-    if (pfd == fd) {
-      dup = i;
-      break;
-    } else if (fd < pfd) {
-      break;
-    }
-    ++i;
+  if (!_claimed_fd) {
+    _claimed_fd = new GrowableArrayCHeap<OopHandle, mtInternal>(1);
   }
 
-  if (0 <= dup) {
-    _persistent_resources->at_put(dup, PersistentResourceDesc(fd, st_dev, st_ino));
-  } else {
-    _persistent_resources->insert_before(i, PersistentResourceDesc(fd, st_dev, st_ino));
+  for (int i = 0; i < _claimed_fd->length(); ++i) {
+    ClaimedFd *cfd = _claimed_fd->adr_at(i);
+    if (cfd->_fd == fd) {
+      return false;
+    }
   }
+
+  _claimed_fd->append(ClaimedFd(obj, fd));
+  return true;
 }
 
-void os::Linux::deregister_persistent_fd(int fd, int st_dev, int st_ino) {
+bool os::Linux::unclaim_fd(jobject obj, jlong fd) {
   if (!CRaCCheckpointTo) {
     return;
   }
-  if (!_persistent_resources) {
+  if (!_claimed_fd) {
     return;
   }
-  int i = 0;
-  while (i < _persistent_resources->length()) {
-    PersistentResourceDesc* pr = _persistent_resources->adr_at(i);
-    if (pr->_fd == fd && pr->_st_dev == (dev_t)st_dev && pr->_st_ino == (ino_t)st_ino) {
-      break;
+
+  for (int i = 0; i < _claimed_fd->length(); ++i) {
+    ClaimedFd *cfd = _claimed_fd->adr_at(i);
+    if (cfd->_fd == fd && cfd->_handle->peek() == obj) {
+      _claimed_fd->remove_at(i);
+      return true;
     }
   }
-  if (i < _persistent_resources->length()) {
-    _persistent_resources->remove_at(i);
-  }
+  return false;
 }
 
 bool os::Linux::prepare_checkpoint() {

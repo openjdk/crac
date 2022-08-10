@@ -53,3 +53,16 @@ JNIEXPORT void JNICALL Java_jdk_internal_crac_Core_registerPersistent0
 
     JVM_RegisterPersistent(fd, st.st_dev, st.st_ino);
 }
+
+JNIEXPORT void JNICALL Java_jdk_internal_crac_Core_unregisterPersistent0
+  (JNIEnv *env, jclass ignore, jobject fileDesc)
+{
+    jint fd = THIS_FD(fileDesc);
+
+    struct stat st;
+    if (-1 == fstat(fd, &st)) {
+        return;
+    }
+
+    JVM_DeregisterPersistent(fd, st.st_dev, st.st_ino);
+}

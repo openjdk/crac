@@ -3854,10 +3854,10 @@ JVM_ENTRY(jobjectArray, JVM_Checkpoint(JNIEnv *env, jboolean dry_run, jlong jcmd
   return (jobjectArray) JNIHandles::make_local(THREAD, ret());
 JVM_END
 
-JVM_LEAF(void, JVM_RegisterPersistent(int fd, int st_dev, int st_ino))
-  os::Linux::register_persistent_fd(fd, st_dev, st_ino);
+JVM_LEAF(void, JVM_ClaimFd(jobject obj, jlong fd))
+  os::Linux::claim_fd(obj, fd);
 JVM_END
 
-JVM_LEAF(void, JVM_DeregisterPersistent(int fd, int st_dev, int st_ino))
-  os::Linux::deregister_persistent_fd(fd, st_dev, st_ino);
+JVM_LEAF(void, JVM_UnclaimFd(jobject obj, jlong fd))
+  os::Linux::unclaim_fd(obj, fd);
 JVM_END

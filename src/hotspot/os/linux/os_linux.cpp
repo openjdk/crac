@@ -81,6 +81,7 @@
 #include "utilities/macros.hpp"
 #include "utilities/powerOfTwo.hpp"
 #include "utilities/vmError.hpp"
+#include "attachListener_linux.hpp"
 
 // put OS-includes here
 # include <arpa/inet.h>
@@ -397,16 +398,16 @@ class VM_Crac: public VM_Operation {
   GrowableArray<CracFailDep>* _failures;
   CracRestoreParameters *_restore_parameters;
   outputStream* ostream;
-  LinuxAttachOperation* jcmd_operation;
+  LinuxAttachOperation* attached_operation;
  public:
-  VM_Crac(bool dry_run, outputStream* output_stream, LinuxAttachOperation* jcmd_operation) :
+  VM_Crac(bool dry_run, outputStream* output_stream) :
     _dry_run(dry_run),
     _ok(false),
     _failures(new (ResourceObj::C_HEAP, mtInternal) GrowableArray<CracFailDep>(0, mtInternal)),
-    _restore_parameters(new CracRestoreParameters(NULL, NULL)),
-    ostream(output_stream),
-    jcmd_operation(jcmd_operation)
-  { }
+    _restore_parameters(new CracRestoreParameters(NULL, NULL)) {
+    attached_operation = (LinuxAttachOperation*)LinuxAttachListener::get_attach_op();
+    ostream = (output_stream == NULL) ? tty : output_stream;
+  }
 
   ~VM_Crac() {
     delete _failures;
@@ -426,6 +427,8 @@ class VM_Crac: public VM_Operation {
   private:
   int is_socket_from_jcmd(int sock_fd);
   void report_ok_to_jcmd();
+  void print_resources(const char* msg, ... );
+  void trace_cr(const char* msg, ... );
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -5716,23 +5719,21 @@ bool os::supports_map_sync() {
   return true;
 }
 
-static void trace_cr(outputStream * ostream, const char* msg, ... ) {
-  outputStream* ou = (ostream == NULL) ? tty : ostream;
+void VM_Crac::trace_cr(const char* msg, ... ) {
   if (CRTrace) {
     va_list ap;
     va_start(ap, msg);
-    ou->print("CR: ");
-    ou->vprint_cr(msg, ap);
+    ostream->print("CR: ");
+    ostream->vprint_cr(msg, ap);
     va_end(ap);
   }
 }
 
-static void print_resources(outputStream * ostream, const char* msg, ... ) {
-  outputStream* ou = (ostream == NULL) ? tty : ostream;
+void VM_Crac::print_resources(const char* msg, ... ) {
   if (CRPrintResourcesOnCheckpoint) {
     va_list ap;
     va_start(ap, msg);
-    ou->vprint_cr(msg, ap);
+    ostream->vprint(msg, ap);
     va_end(ap);
   }
 }
@@ -6172,17 +6173,17 @@ void VM_Crac::read_shm(int shmid) {
 
 // If checkpoint is called throught the API, jcmd operation and jcmd output doesn't exist.
 int VM_Crac::is_socket_from_jcmd(int sock) {
-  if (jcmd_operation == 0)
+  if (attached_operation == 0)
     return 0;
-  int sock_fd = jcmd_operation->socket();
+  int sock_fd = attached_operation->socket();
   return sock == sock_fd;
 }
 
 void VM_Crac::report_ok_to_jcmd (){
-  if (jcmd_operation == 0)
+  if (attached_operation == 0)
     return;
   bufferedStream* buf = static_cast<bufferedStream*>(ostream);
-  jcmd_operation->effectively_complete_raw(JNI_OK, buf);
+  attached_operation->effectively_complete_raw(JNI_OK, buf);
 }
 
 void VM_Crac::doit() {
@@ -6206,11 +6207,11 @@ void VM_Crac::doit() {
     char detailsbuf[128];
     int linkret = readfdlink(i, detailsbuf, sizeof(detailsbuf));
     const char* details = 0 < linkret ? detailsbuf : "";
-    print_resources(ostream, "JVM: FD fd=%d type=%s: details1=\"%s\" ",
+    print_resources("JVM: FD fd=%d type=%s: details1=\"%s\" ",
         i, stat2strtype(fds.get_stat(i)->st_mode), details);
 
     if (_vm_inited_fds.get_state(i, FdsInfo::CLOSED) != FdsInfo::CLOSED) {
-      print_resources(ostream, "OK: inherited from process env");
+      print_resources("OK: inherited from process env \n");
       continue;
     }
 
@@ -6219,31 +6220,31 @@ void VM_Crac::doit() {
       const int mjr = major(st->st_rdev);
       const int mnr = minor(st->st_rdev);
       if (mjr == 1 && (mnr == 8 || mnr == 9)) {
-        print_resources(ostream, "OK: always available, random or urandom");
+        print_resources("OK: always available, random or urandom \n");
         continue;
       }
     }
 
     if (fds.check(i, FdsInfo::M_CLASSPATH) && !fds.check(i, FdsInfo::M_CANT_RESTORE)) {
-      print_resources(ostream, "OK: in classpath");
+      print_resources("OK: in classpath\n");
       continue;
     }
 
     if (fds.check(i, FdsInfo::M_PERSISTENT)) {
-      print_resources(ostream, "OK: assured persistent");
+      print_resources("OK: assured persistent\n");
       continue;
     }
 
     if (S_ISSOCK(st->st_mode)) {
       if (is_socket_from_jcmd(i)){
-        print_resources(ostream, "OK: jcmd socket");
+        print_resources("OK: jcmd socket\n");
         continue;
       }
       details = sock_details(details, detailsbuf, sizeof(detailsbuf));
-      print_resources(ostream, "issock, details2=\"%s\" ", details);
+      print_resources(" details2=\"%s\" ", details);
     }
 
-    print_resources(ostream, "BAD: opened by application");
+    print_resources("BAD: opened by application\n");
     ok = false;
 
     char* msg = NEW_C_HEAP_ARRAY(char, strlen(details) + 1, mtInternal);
@@ -6265,10 +6266,11 @@ void VM_Crac::doit() {
 
   int shmid = 0;
   if (CRAllowToSkipCheckpoint) {
-    trace_cr(ostream, "Skip Checkpoint");
+    trace_cr("Skip Checkpoint");
   } else {
-    trace_cr(ostream, "Checkpoint ...");
-    // If execution comes here, assumme that further all be ok.
+    trace_cr("Checkpoint ...");
+    // If execution comes here, redirect output to console
+    ostream = tty;
     report_ok_to_jcmd();
     int ret = checkpoint_restore(&shmid);
     if (ret == JVM_CHECKPOINT_ERROR) {
@@ -6370,7 +6372,7 @@ static Handle ret_cr(int ret, Handle new_args, Handle new_props, Handle err_code
 
 /** Checkpoint main entry.
  */
-Handle os::Linux::checkpoint(bool dry_run, jlong stream, jlong op, TRAPS) {
+Handle os::Linux::checkpoint(bool dry_run, jlong stream, TRAPS) {
   if (!CRaCCheckpointTo) {
     return ret_cr(JVM_CHECKPOINT_NONE, Handle(), Handle(), Handle(), Handle(), THREAD);
   }
@@ -6384,7 +6386,7 @@ Handle os::Linux::checkpoint(bool dry_run, jlong stream, jlong op, TRAPS) {
   Universe::heap()->collect(GCCause::_full_gc_alot);
   Universe::heap()->set_cleanup_unused(false);
 
-  VM_Crac cr(dry_run, (outputStream*)stream, (LinuxAttachOperation*)op);
+  VM_Crac cr(dry_run, (outputStream*)stream);
   {
     MutexLocker ml(Heap_lock);
     VMThread::execute(&cr);

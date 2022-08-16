@@ -1044,17 +1044,15 @@ void CheckpointDCmd::execute(DCmdSource source, TRAPS) {
   JavaValue result(T_OBJECT);
   JavaCallArguments args;
   args.push_long((jlong)output());
-  args.push_long((jlong)LinuxAttachListener::get_jcmdOperation());
   JavaCalls::call_static(&result, k,
                          vmSymbols::checkpointRestoreInternal_name(),
                          vmSymbols::checkpointRestereInternal_signature(), &args, CHECK);
-  jvalue*jv = (jvalue*)result.get_value_addr();
-  oop str = cast_to_oop(jv->l);
+  oop str = result.get_oop();
   if (str != NULL) {
-      char* out = java_lang_String::as_utf8_string(str);
-      if (out) {
-          output()->print_cr("An exception during a checkpoint operation: ");
-          output()->print_cr("%s", out);
-      }
+    char* out = java_lang_String::as_utf8_string(str);
+    if (strlen(out) > 0) {
+      output()->print_cr("An exception during a checkpoint operation: ");
+      output()->print("%s ", out);
+    }
   }
 }

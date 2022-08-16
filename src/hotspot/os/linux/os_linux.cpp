@@ -6269,9 +6269,9 @@ void VM_Crac::doit() {
     trace_cr("Skip Checkpoint");
   } else {
     trace_cr("Checkpoint ...");
-    // If execution comes here, redirect output to console
-    ostream = tty;
     report_ok_to_jcmd();
+    //If execution comes here, redirect output to console
+    ostream = tty;
     int ret = checkpoint_restore(&shmid);
     if (ret == JVM_CHECKPOINT_ERROR) {
       PerfMemoryLinux::restore();

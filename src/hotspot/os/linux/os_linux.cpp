@@ -401,13 +401,13 @@ class VM_Crac: public VM_Operation {
   LinuxAttachOperation* _attach_op;
 
 public:
-  VM_Crac(bool dry_run, outputStream* output_stream) :
+  VM_Crac(bool dry_run, bufferedStream* jcmd_stream) :
     _dry_run(dry_run),
     _ok(false),
     _failures(new (ResourceObj::C_HEAP, mtInternal) GrowableArray<CracFailDep>(0, mtInternal)),
     _restore_parameters(new CracRestoreParameters(NULL, NULL)),
-    _ostream((output_stream == NULL) ? tty : output_stream),
-    _attach_op(output_stream ? LinuxAttachListener::get_current_op() : NULL)
+    _ostream(jcmd_stream ? jcmd_stream : tty),
+    _attach_op(jcmd_stream ? LinuxAttachListener::get_current_op() : NULL)
   { }
 
   ~VM_Crac() {
@@ -426,7 +426,7 @@ public:
 
 private:
   bool is_socket_from_jcmd(int sock_fd);
-  void report_ok_to_jcmd();
+  void report_ok_to_jcmd_if_any();
   void print_resources(const char* msg, ...);
   void trace_cr(const char* msg, ...);
 };
@@ -6179,11 +6179,13 @@ bool VM_Crac::is_socket_from_jcmd(int sock) {
   return sock == sock_fd;
 }
 
-void VM_Crac::report_ok_to_jcmd() {
+void VM_Crac::report_ok_to_jcmd_if_any() {
   if (_attach_op == NULL)
     return;
   bufferedStream* buf = static_cast<bufferedStream*>(_ostream);
   _attach_op->effectively_complete_raw(JNI_OK, buf);
+  // redirect any further output to console
+  _ostream = tty;
 }
 
 void VM_Crac::doit() {
@@ -6269,9 +6271,7 @@ void VM_Crac::doit() {
     trace_cr("Skip Checkpoint");
   } else {
     trace_cr("Checkpoint ...");
-    report_ok_to_jcmd();
-    //If execution comes here, redirect output to console
-    _ostream = tty;
+    report_ok_to_jcmd_if_any();
     int ret = checkpoint_restore(&shmid);
     if (ret == JVM_CHECKPOINT_ERROR) {
       PerfMemoryLinux::restore();
@@ -6373,7 +6373,7 @@ static Handle ret_cr(int ret, Handle new_args, Handle new_props, Handle err_code
 
 /** Checkpoint main entry.
  */
-Handle os::Linux::checkpoint(bool dry_run, jlong stream, TRAPS) {
+Handle os::Linux::checkpoint(bool dry_run, jlong jcmd_stream, TRAPS) {
   if (!CRaCCheckpointTo) {
     return ret_cr(JVM_CHECKPOINT_NONE, Handle(), Handle(), Handle(), Handle(), THREAD);
   }
@@ -6387,7 +6387,7 @@ Handle os::Linux::checkpoint(bool dry_run, jlong stream, TRAPS) {
   Universe::heap()->collect(GCCause::_full_gc_alot);
   Universe::heap()->set_cleanup_unused(false);
 
-  VM_Crac cr(dry_run, (outputStream*)stream);
+  VM_Crac cr(dry_run, (bufferedStream*)jcmd_stream);
   {
     MutexLocker ml(Heap_lock);
     VMThread::execute(&cr);

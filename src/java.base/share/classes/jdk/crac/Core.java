@@ -257,16 +257,18 @@ public class Core {
     }
 
     /* called by VM */
-    private static String checkpointRestoreInternal(long outputStream_p){
-        StringWriter sw = new StringWriter();
-        PrintWriter pw = new PrintWriter(sw);
+    private static String checkpointRestoreInternal(long outputStream_p) {
         try {
             checkpointRestore(outputStream_p);
         } catch (CheckpointException e) {
+            StringWriter sw = new StringWriter();
+            PrintWriter pw = new PrintWriter(sw);
             e.printStackTrace(pw);
+            return sw.toString();
         } catch (RestoreException e) {
             e.printStackTrace();
+            return null;
         }
-        return sw.toString();
+        return null;
     }
 }

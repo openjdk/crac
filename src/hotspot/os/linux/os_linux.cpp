@@ -6173,14 +6173,14 @@ void VM_Crac::read_shm(int shmid) {
 
 // If checkpoint is called throught the API, jcmd operation and jcmd output doesn't exist.
 bool VM_Crac::is_socket_from_jcmd(int sock) {
-  if (_attach_op == 0)
+  if (_attach_op == NULL)
     return false;
   int sock_fd = _attach_op->socket();
   return sock == sock_fd;
 }
 
 void VM_Crac::report_ok_to_jcmd() {
-  if (_attach_op == 0)
+  if (_attach_op == NULL)
     return;
   bufferedStream* buf = static_cast<bufferedStream*>(_ostream);
   _attach_op->effectively_complete_raw(JNI_OK, buf);

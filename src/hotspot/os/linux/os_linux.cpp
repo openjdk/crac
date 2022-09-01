@@ -397,23 +397,23 @@ class VM_Crac: public VM_Operation {
   bool _ok;
   GrowableArray<CracFailDep>* _failures;
   CracRestoreParameters *_restore_parameters;
-  outputStream* ostream;
-  LinuxAttachOperation* attached_operation;
- public:
+  outputStream* _ostream;
+  LinuxAttachOperation* _attach_op;
+
+public:
   VM_Crac(bool dry_run, outputStream* output_stream) :
     _dry_run(dry_run),
     _ok(false),
     _failures(new (ResourceObj::C_HEAP, mtInternal) GrowableArray<CracFailDep>(0, mtInternal)),
-    _restore_parameters(new CracRestoreParameters(NULL, NULL)) {
-    attached_operation = (LinuxAttachOperation*)LinuxAttachListener::get_attach_op();
-    ostream = (output_stream == NULL) ? tty : output_stream;
-  }
+    _restore_parameters(new CracRestoreParameters(NULL, NULL)),
+    _ostream((output_stream == NULL) ? tty : output_stream),
+    _attach_op((LinuxAttachOperation*)LinuxAttachListener::get_attach_op())
+  { }
 
   ~VM_Crac() {
     delete _failures;
     delete _restore_parameters;
   }
-
 
   GrowableArray<CracFailDep>* failures() { return _failures; }
   bool ok() { return _ok; }
@@ -424,11 +424,11 @@ class VM_Crac: public VM_Operation {
   void doit();
   void read_shm(int shmid);
 
-  private:
-  int is_socket_from_jcmd(int sock_fd);
+private:
+  bool is_socket_from_jcmd(int sock_fd);
   void report_ok_to_jcmd();
-  void print_resources(const char* msg, ... );
-  void trace_cr(const char* msg, ... );
+  void print_resources(const char* msg, ...);
+  void trace_cr(const char* msg, ...);
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -5719,21 +5719,21 @@ bool os::supports_map_sync() {
   return true;
 }
 
-void VM_Crac::trace_cr(const char* msg, ... ) {
+void VM_Crac::trace_cr(const char* msg, ...) {
   if (CRTrace) {
     va_list ap;
     va_start(ap, msg);
-    ostream->print("CR: ");
-    ostream->vprint_cr(msg, ap);
+    _ostream->print("CR: ");
+    _ostream->vprint_cr(msg, ap);
     va_end(ap);
   }
 }
 
-void VM_Crac::print_resources(const char* msg, ... ) {
+void VM_Crac::print_resources(const char* msg, ...) {
   if (CRPrintResourcesOnCheckpoint) {
     va_list ap;
     va_start(ap, msg);
-    ostream->vprint(msg, ap);
+    _ostream->vprint(msg, ap);
     va_end(ap);
   }
 }
@@ -6172,18 +6172,18 @@ void VM_Crac::read_shm(int shmid) {
 }
 
 // If checkpoint is called throught the API, jcmd operation and jcmd output doesn't exist.
-int VM_Crac::is_socket_from_jcmd(int sock) {
-  if (attached_operation == 0)
-    return 0;
-  int sock_fd = attached_operation->socket();
+bool VM_Crac::is_socket_from_jcmd(int sock) {
+  if (_attach_op == 0)
+    return false;
+  int sock_fd = _attach_op->socket();
   return sock == sock_fd;
 }
 
-void VM_Crac::report_ok_to_jcmd (){
-  if (attached_operation == 0)
+void VM_Crac::report_ok_to_jcmd() {
+  if (_attach_op == 0)
     return;
-  bufferedStream* buf = static_cast<bufferedStream*>(ostream);
-  attached_operation->effectively_complete_raw(JNI_OK, buf);
+  bufferedStream* buf = static_cast<bufferedStream*>(_ostream);
+  _attach_op->effectively_complete_raw(JNI_OK, buf);
 }
 
 void VM_Crac::doit() {
@@ -6211,7 +6211,7 @@ void VM_Crac::doit() {
         i, stat2strtype(fds.get_stat(i)->st_mode), details);
 
     if (_vm_inited_fds.get_state(i, FdsInfo::CLOSED) != FdsInfo::CLOSED) {
-      print_resources("OK: inherited from process env \n");
+      print_resources("OK: inherited from process env\n");
       continue;
     }
 
@@ -6220,7 +6220,7 @@ void VM_Crac::doit() {
       const int mjr = major(st->st_rdev);
       const int mnr = minor(st->st_rdev);
       if (mjr == 1 && (mnr == 8 || mnr == 9)) {
-        print_resources("OK: always available, random or urandom \n");
+        print_resources("OK: always available, random or urandom\n");
         continue;
       }
     }
@@ -6271,13 +6271,14 @@ void VM_Crac::doit() {
     trace_cr("Checkpoint ...");
     report_ok_to_jcmd();
     //If execution comes here, redirect output to console
-    ostream = tty;
+    _ostream = tty;
     int ret = checkpoint_restore(&shmid);
     if (ret == JVM_CHECKPOINT_ERROR) {
       PerfMemoryLinux::restore();
       return;
     }
   }
+
   read_shm(shmid);
   PerfMemoryLinux::restore();
 

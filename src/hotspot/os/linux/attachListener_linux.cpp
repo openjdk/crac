@@ -386,10 +386,11 @@ void LinuxAttachOperation::write_operation_result(jint result, bufferedStream* s
   st->reset();
 }
 
-void assert_listener_thread () {
+static void assert_listener_thread() {
+#ifdef ASSERT
   ResourceMark rm; // For retrieving the thread names
-  const char assertion_listener_thread[] = "Attach Listener";
-  assert(strcmp(assertion_listener_thread, Thread::current()->name()) == 0, "should gets called from Attach Listener thread");
+  assert(strcmp("Attach Listener", Thread::current()->name()) == 0, "should gets called from Attach Listener thread");
+#endif
 }
 
 AttachOperation* LinuxAttachListener::get_attach_op() {

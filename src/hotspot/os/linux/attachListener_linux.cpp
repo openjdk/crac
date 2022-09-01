@@ -342,6 +342,8 @@ int LinuxAttachListener::write_fully(int s, char* buf, int len) {
 
 void LinuxAttachOperation::complete(jint result, bufferedStream* st) {
   LinuxAttachOperation::effectively_complete_raw(result, st);
+  // reset the current op as late as possible, this happens on attach listener thread.
+  LinuxAttachListener::reset_current_op();
   delete this;
 }
 
@@ -368,7 +370,6 @@ void LinuxAttachOperation::effectively_complete_raw(jint result, bufferedStream*
     write_operation_result(result, st);
   }
   _effectively_completed = true;
-  LinuxAttachListener::reset_current_op();
 }
 
 void LinuxAttachOperation::write_operation_result(jint result, bufferedStream* st) {

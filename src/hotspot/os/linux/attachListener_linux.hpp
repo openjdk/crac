@@ -47,7 +47,7 @@ class LinuxAttachListener: AllStatic {
   static bool _atexit_registered;
 
   // this is for proper reporting JDK.Chekpoint processing to jcmd peer
-  static AttachOperation* _attach_op;
+  static LinuxAttachOperation* _current_op;
 
   // reads a request from the given connected socket
   static LinuxAttachOperation* read_request(int s);
@@ -85,8 +85,8 @@ class LinuxAttachListener: AllStatic {
   static int write_fully(int s, char* buf, int len);
 
   static LinuxAttachOperation* dequeue();
-  static void set_attach_op(AttachOperation* s);
-  static AttachOperation* get_attach_op();
+  static LinuxAttachOperation* get_current_op();
+  static void reset_current_op();
 };
 
 #endif // OS_LINUX_ATTACHLISTENERLINUX_HPP

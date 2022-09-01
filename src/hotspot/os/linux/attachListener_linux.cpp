@@ -65,7 +65,7 @@ char LinuxAttachListener::_path[UNIX_PATH_MAX];
 bool LinuxAttachListener::_has_path;
 volatile int LinuxAttachListener::_listener = -1;
 bool LinuxAttachListener::_atexit_registered = false;
-AttachOperation* LinuxAttachListener::_attach_op = NULL;
+LinuxAttachOperation* LinuxAttachListener::_current_op = NULL;
 
 // Supporting class to help split a buffer into individual components
 class ArgumentIterator : public StackObj {
@@ -314,6 +314,7 @@ LinuxAttachOperation* LinuxAttachListener::dequeue() {
       ::close(s);
       continue;
     } else {
+      _current_op = op;
       return op;
     }
   }
@@ -341,7 +342,6 @@ int LinuxAttachListener::write_fully(int s, char* buf, int len) {
 
 void LinuxAttachOperation::complete(jint result, bufferedStream* st) {
   LinuxAttachOperation::effectively_complete_raw(result, st);
-  LinuxAttachListener::set_attach_op(NULL);
   delete this;
 }
 
@@ -368,6 +368,7 @@ void LinuxAttachOperation::effectively_complete_raw(jint result, bufferedStream*
     write_operation_result(result, st);
   }
   _effectively_completed = true;
+  LinuxAttachListener::reset_current_op();
 }
 
 void LinuxAttachOperation::write_operation_result(jint result, bufferedStream* st) {
@@ -393,14 +394,14 @@ static void assert_listener_thread() {
 #endif
 }
 
-AttachOperation* LinuxAttachListener::get_attach_op() {
+LinuxAttachOperation* LinuxAttachListener::get_current_op() {
   assert_listener_thread();
-  return LinuxAttachListener::_attach_op;
+  return LinuxAttachListener::_current_op;
 }
 
-void LinuxAttachListener::set_attach_op(AttachOperation* s) {
+void LinuxAttachListener::reset_current_op() {
   assert_listener_thread();
-  LinuxAttachListener::_attach_op = s;
+  LinuxAttachListener::_current_op = NULL;
 }
 
 // AttachListener functions
@@ -410,7 +411,6 @@ AttachOperation* AttachListener::dequeue() {
   ThreadBlockInVM tbivm(thread);
 
   AttachOperation* op = LinuxAttachListener::dequeue();
-  LinuxAttachListener::set_attach_op(op);
   return op;
 }
 

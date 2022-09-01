@@ -263,13 +263,9 @@ public class Core {
         try {
             checkpointRestore(outputStream_p);
         } catch (CheckpointException e) {
-            for (Throwable t : e.getSuppressed()) {
-                t.printStackTrace(pw);
-            }
+            e.printStackTrace(pw);
         } catch (RestoreException e) {
-            for (Throwable t : e.getSuppressed()) {
-                t.printStackTrace();
-            }
+            e.printStackTrace();
         }
         return sw.toString();
     }

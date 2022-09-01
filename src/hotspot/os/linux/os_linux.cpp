@@ -407,7 +407,7 @@ public:
     _failures(new (ResourceObj::C_HEAP, mtInternal) GrowableArray<CracFailDep>(0, mtInternal)),
     _restore_parameters(new CracRestoreParameters(NULL, NULL)),
     _ostream((output_stream == NULL) ? tty : output_stream),
-    _attach_op(LinuxAttachListener::get_current_op())
+    _attach_op(output_stream ? LinuxAttachListener::get_current_op() : NULL)
   { }
 
   ~VM_Crac() {

@@ -20,7 +20,7 @@ jobs:
         run: |
           if [ ${{ startsWith(github.ref, 'refs/tags/') }} = true ]; then
             TAG=${GITHUB_REF##refs/tags/}
-            BUNDLENAME=jdk${TAG}
+            BUNDLENAME=openjdk-${TAG}_linux-x64
             BUILDNUMBER=${TAG##*-crac+}
           else
             TAG=notag

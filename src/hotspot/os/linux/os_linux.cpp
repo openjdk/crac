@@ -433,11 +433,16 @@ os::Linux::mallinfo_func_t os::Linux::_mallinfo = NULL;
 os::Linux::mallinfo2_func_t os::Linux::_mallinfo2 = NULL;
 #endif // __GLIBC__
 
-static const char* _crengine = NULL;
-
 static jlong initial_time_count=0;
 
 static int clock_tics_per_sec = 100;
+
+// CRaC
+static const char* _crengine = NULL;
+static jlong _restore_start_time;
+static jlong _restore_start_counter;
+static FdsInfo _vm_inited_fds(false);
+static GrowableArray<PersistentResourceDesc>* _persistent_resources = NULL;
 
 // If the VM might have been created on the primordial thread, we need to resolve the
 // primordial thread stack bounds and check if the current thread might be the
@@ -447,10 +452,6 @@ static int clock_tics_per_sec = 100;
 static bool suppress_primordial_thread_resolution = false;
 
 // utility functions
-
-FdsInfo _vm_inited_fds(false);
-
-static GrowableArray<PersistentResourceDesc>* _persistent_resources = NULL;
 
 julong os::available_memory() {
   return Linux::available_memory();
@@ -5698,6 +5699,22 @@ int os::compare_file_modified_times(const char* file1, const char* file2) {
 
 bool os::supports_map_sync() {
   return true;
+}
+
+// CRaC
+
+jlong os::Linux::restore_start_time() {
+  if (!_restore_start_time) {
+    return -1;
+  }
+  return _restore_start_time;
+}
+
+jlong os::Linux::uptime_since_restore() {
+  if (!_restore_start_counter) {
+    return -1;
+  }
+  return javaTimeNanos() - _restore_start_counter;
 }
 
 static void trace_cr(const char* msg, ...) {

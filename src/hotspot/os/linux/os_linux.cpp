@@ -288,6 +288,8 @@ class CracRestoreParameters : public CHeapObj<mtInternal> {
   const char* _args;
 
   struct header {
+    jlong _restore_time;
+    jlong _restore_counter;
     int _nprops;
   };
 
@@ -330,8 +332,14 @@ class CracRestoreParameters : public CHeapObj<mtInternal> {
     delete _properties;
   }
 
-  static bool write_to(int fd, const SystemProperty* props, const char *args) {
+  static bool write_to(int fd,
+      const SystemProperty* props,
+      const char *args,
+      jlong restore_time,
+      jlong restore_counter) {
     header hdr = {
+      restore_time,
+      restore_counter,
       system_props_length(props)
     };
 
@@ -6369,6 +6377,9 @@ Handle os::Linux::checkpoint(bool dry_run, TRAPS) {
 void os::Linux::restore() {
   struct stat st;
 
+  jlong restore_time = javaTimeMillis();
+  jlong restore_counter = javaTimeNanos();
+
   compute_crengine();
 
   int id = getpid();
@@ -6378,7 +6389,9 @@ void os::Linux::restore() {
     if (CracRestoreParameters::write_to(
           shmfd,
           Arguments::system_properties(),
-          Arguments::java_command() ? Arguments::java_command() : "")) {
+          Arguments::java_command() ? Arguments::java_command() : "",
+          restore_time,
+          restore_counter)) {
       char strid[32];
       snprintf(strid, sizeof(strid), "%d", id);
       setenv("CRAC_NEW_ARGS_ID", strid, true);
@@ -6412,6 +6425,9 @@ bool CracRestoreParameters::read_from(int fd) {
   // parse the contents to read new system properties and arguments
   header* hdr = (header*)_raw_content;
   char* cursor = _raw_content + sizeof(header);
+
+  _restore_start_time = hdr->_restore_time;
+  _restore_start_counter = hdr->_restore_counter;
 
   for (int i = 0; i < hdr->_nprops; i++) {
     assert((cursor + strlen(cursor) <= contents + st.st_size), "property length exceeds shared memory size");

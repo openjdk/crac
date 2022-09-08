@@ -353,36 +353,8 @@ class CracRestoreParameters : public CHeapObj<mtInternal> {
     return write_check_error(fd, args, strlen(args)+1); // +1 for null char
   }
 
-  bool read_from(int fd) {
-    struct stat st;
-    if (fstat(fd, &st)) {
-      perror("fstat (ignoring restore parameters)");
-      return false;
-    }
+  bool read_from(int fd);
 
-    char *contents = NEW_C_HEAP_ARRAY(char, st.st_size, mtInternal);
-    if (read(fd, contents, st.st_size) < 0) {
-      perror("read (ignoring restore parameters)");
-      FREE_C_HEAP_ARRAY(char, contents);
-      return false;
-    }
-
-    _raw_content = contents;
-
-    // parse the contents to read new system properties and arguments
-    header* hdr = (header*)_raw_content;
-    char* cursor = _raw_content + sizeof(header);
-
-    for (int i = 0; i < hdr->_nprops; i++) {
-      assert((cursor + strlen(cursor) <= contents + st.st_size), "property length exceeds shared memory size");
-      int idx = _properties->append(cursor);
-      int prop_len = strlen(cursor) + 1;
-      cursor = cursor + prop_len;
-    }
-
-    _args = cursor;
-    return true;
-  }
 };
 
 class VM_Crac: public VM_Operation {
@@ -6420,6 +6392,38 @@ void os::Linux::restore() {
     warning("cannot execute \"%s restore ...\" (%s)", _crengine, strerror(errno));
   }
 }
+
+bool CracRestoreParameters::read_from(int fd) {
+  struct stat st;
+  if (fstat(fd, &st)) {
+    perror("fstat (ignoring restore parameters)");
+    return false;
+  }
+
+  char *contents = NEW_C_HEAP_ARRAY(char, st.st_size, mtInternal);
+  if (read(fd, contents, st.st_size) < 0) {
+    perror("read (ignoring restore parameters)");
+    FREE_C_HEAP_ARRAY(char, contents);
+    return false;
+  }
+
+  _raw_content = contents;
+
+  // parse the contents to read new system properties and arguments
+  header* hdr = (header*)_raw_content;
+  char* cursor = _raw_content + sizeof(header);
+
+  for (int i = 0; i < hdr->_nprops; i++) {
+    assert((cursor + strlen(cursor) <= contents + st.st_size), "property length exceeds shared memory size");
+    int idx = _properties->append(cursor);
+    int prop_len = strlen(cursor) + 1;
+    cursor = cursor + prop_len;
+  }
+
+  _args = cursor;
+  return true;
+}
+
 
 void os::print_memory_mappings(char* addr, size_t bytes, outputStream* st) {
   unsigned long long start = (unsigned long long)addr;

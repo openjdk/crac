@@ -389,7 +389,7 @@ class VM_Crac: public VM_Operation {
   virtual bool allow_nested_vm_operations() const  { return true; }
   VMOp_Type type() const { return VMOp_VM_Crac; }
   void doit();
-  void read_shm(int shmid);
+  bool read_shm(int shmid);
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -6119,14 +6119,16 @@ static const char* sock_details(const char* details, char* buf, size_t sz) {
   return details;
 }
 
-void VM_Crac::read_shm(int shmid) {
+bool VM_Crac::read_shm(int shmid) {
   CracSHM shm(shmid);
   int shmfd = shm.open(O_RDONLY);
   shm.unlink();
-  if (0 <= shmfd) {
-    _restore_parameters.read_from(shmfd);
-    close(shmfd);
+  if (shmfd < 0) {
+    return false;
   }
+  bool ret = _restore_parameters.read_from(shmfd);
+  close(shmfd);
+  return ret;
 }
 
 void VM_Crac::doit() {
@@ -6228,7 +6230,10 @@ void VM_Crac::doit() {
     return;
   }
 
-  read_shm(shmid);
+  if (shmid <= 0 || !VM_Crac::read_shm(shmid)) {
+    _restore_start_time = os::javaTimeMillis();
+    _restore_start_counter = os::javaTimeNanos();
+  }
   PerfMemoryLinux::restore();
 
   _ok = true;

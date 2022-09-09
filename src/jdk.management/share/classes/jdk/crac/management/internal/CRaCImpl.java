@@ -1,6 +1,7 @@
-package com.sun.management.internal;
+package jdk.crac.management.internal;
 
-import com.sun.management.CRaCMXBean;
+import com.sun.management.internal.PlatformMBeanProviderImpl;
+import jdk.crac.management.CRaCMXBean;
 import sun.management.Util;
 import sun.management.VMManagement;
 

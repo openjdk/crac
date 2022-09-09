@@ -23,26 +23,44 @@
  * questions.
  */
 
-package com.sun.management;
+package jdk.crac.management;
 
+import java.io.NotActiveException;
+import java.lang.management.ManagementFactory;
 import java.lang.management.PlatformManagedObject;
+import java.lang.management.RuntimeMXBean;
 
 /**
- * Platform-specific management interface for the Unix
- * operating system on which the Java virtual machine is running.
- *
- * @author  Mandy Chung
- * @since   1.5
+ * Management interface for the CRaC functionality of the Java virtual machine.
  */
 public interface CRaCMXBean extends PlatformManagedObject {
 
     /**
-     * Returns the uptime of the Java virtual machine since restore in milliseconds.
-     * If the machine was not restored, returns zero.
+     * Returns the time since the Java virtual machine restore was initiated.
+     * If the machine was not restored, returns -1.
      *
+     * @see RuntimeMXBean#getStartTime()
      * @return uptime of the Java virtual machine in milliseconds.
      */
     public long getUptimeSinceRestore();
 
+    /**
+     * Returns the time when the Java virtual machine restore was initiated.
+     * The value is the number of milliseconds since the start of the epoch.
+     * If the machine was not restored, returns -1.
+     *
+     * @see RuntimeMXBean#getUptime()
+     * @return start time of the Java virtual machine in milliseconds.
+     */
     public long getRestoreTime();
+
+    /**
+     * Returns the implementation of the MXBean.
+     *
+     * @return implementation of the MXBean.
+     */
+    public static CRaCMXBean getCRaCMXBean() {
+        return ManagementFactory.getPlatformMXBean(CRaCMXBean.class);
+    }
+
 }

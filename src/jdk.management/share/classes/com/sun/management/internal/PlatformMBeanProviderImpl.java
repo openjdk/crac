@@ -24,7 +24,7 @@
  */
 package com.sun.management.internal;
 
-import com.sun.management.CRaCMXBean;
+import jdk.crac.management.CRaCMXBean;
 import com.sun.management.DiagnosticCommandMBean;
 import com.sun.management.HotSpotDiagnosticMXBean;
 import com.sun.management.ThreadMXBean;
@@ -43,6 +43,7 @@ import java.util.stream.Collectors;
 import java.util.stream.Stream;
 import javax.management.DynamicMBean;
 
+import jdk.crac.management.internal.CRaCImpl;
 import sun.management.ManagementFactoryHelper;
 import sun.management.spi.PlatformMBeanProvider;
 
@@ -276,7 +277,7 @@ public final class PlatformMBeanProviderImpl extends PlatformMBeanProvider {
          */
         initMBeanList.add(new PlatformComponent<CRaCMXBean>() {
             private final Set<String> cracMXBeanInterfaceNames =
-                Collections.singleton("com.sun.management.CRaCMXBean");
+                Collections.singleton("jdk.crac.management.CRaCMXBean");
 
             @Override
             public Set<Class<? extends CRaCMXBean>> mbeanInterfaces() {

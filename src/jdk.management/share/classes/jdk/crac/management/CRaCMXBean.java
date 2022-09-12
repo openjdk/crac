@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2003, 2013, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2022, Azul Systems, Inc. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -25,7 +25,6 @@
 
 package jdk.crac.management;
 
-import java.io.NotActiveException;
 import java.lang.management.ManagementFactory;
 import java.lang.management.PlatformManagedObject;
 import java.lang.management.RuntimeMXBean;

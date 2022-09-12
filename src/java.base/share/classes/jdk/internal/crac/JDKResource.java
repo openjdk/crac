@@ -50,11 +50,9 @@ public interface JDKResource extends Resource {
         /**
          * Most resources should use this option.
          *
-         * @see sun.awt.X11.XToolkit
+         * @see sun.awt.X11.X11GraphicsEnvironment
          */
         NORMAL,
-
-
         /**
          * Priority of the
          * sun.nio.ch.EPollSelectorImpl resource
@@ -76,31 +74,14 @@ public interface JDKResource extends Resource {
          */
         SEEDER_HOLDER,
 
-
-        /* Keep next priorities here to ensure handling of pending References
+        /* Keep next priorities last to ensure handling of pending References
          * appeared on earlier priorities. */
 
         /**
          * Priority of the
-         * java.lan.ref.Reference static resource
+         * jdk.internal.ref.CleanerImpl resources
          */
-        REFERENCE_HANDLER,
-        /**
-         * Priority of the
-         * jdk.internal.ref.CleanerImpl resource,
-         * sun.java2d.Disposer resource
-         */
-        REFERENCE_QUEUES,
-
-
-        /* Keep next priority last to reinitialize
-        GraphicsEnvironment connection properly */
-
-        /**
-         * Priority of the
-         * java.awt.GraphicsEnvironment resource
-         */
-        GRAPHICS_ENVIRONMENT,
+        CLEANERS,
     };
 
     Priority getPriority();

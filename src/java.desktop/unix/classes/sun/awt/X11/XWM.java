@@ -47,14 +47,14 @@ import sun.util.logging.PlatformLogger;
  * Class incapsulating knowledge about window managers in general
  * Descendants should provide some information about specific window manager.
  */
-public final class XWM
+final class XWM
 {
 
     private static final PlatformLogger log = PlatformLogger.getLogger("sun.awt.X11.XWM");
     private static final PlatformLogger insLog = PlatformLogger.getLogger("sun.awt.X11.insets.XWM");
     private static final PlatformLogger stateLog = PlatformLogger.getLogger("sun.awt.X11.states.XWM");
 
-    public static void beforeCheckpoint() {
+    static void beforeCheckpoint() throws Exception {
         winmgr_running = false;
         awt_wmgr = XWM.UNDETERMINED_WM;
 
@@ -70,7 +70,7 @@ public final class XWM
         XAtom.beforeCheckpoint();
     }
 
-    public static void afterRestore() {
+    static void afterRestore() throws Exception {
         XAtom.afterRestore();
 
         // Initialize the cleared XWM atoms

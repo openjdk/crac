@@ -104,8 +104,9 @@ public abstract class GraphicsEnvironment {
 
     /**
      * Reinitialization of the local {@code GraphicsEnvironment}.
-     * This must be done after GC, because some objects require
-     * connection to be disposed.
+     *
+     * This must be done after GC and reference handling,
+     * because some objects require connection to be disposed.
      * It depends on {@code GraphicsEnvironment} extending classes.
      *
      * @see sun.awt.X11GraphicsEnvironment
@@ -114,7 +115,7 @@ public abstract class GraphicsEnvironment {
     private static final JDKResource jdkResource = new JDKResource() {
         @Override
         public JDKResource.Priority getPriority() {
-            return Priority.GRAPHICS_ENVIRONMENT;
+            return Priority.NORMAL;
         }
 
         @Override
@@ -135,8 +136,10 @@ public abstract class GraphicsEnvironment {
      * of the local {@code GraphicsEnvironment}.
      *
      * @see sun.awt.X11GraphicsEnvironment
+     * @throws Exception if not overridden
      */
-    protected void beforeCheckpoint() {
+    protected void beforeCheckpoint() throws Exception {
+        throw new UnsupportedOperationException("Should be overridden.");
     }
 
     /**
@@ -146,8 +149,10 @@ public abstract class GraphicsEnvironment {
      * of the local {@code GraphicsEnvironment}.
      *
      * @see sun.awt.X11GraphicsEnvironment
+     * @throws Exception if not overridden
      */
-    protected void afterRestore() {
+    protected void afterRestore() throws Exception {
+        throw new UnsupportedOperationException("Should be overridden.");
     }
 
     static {

@@ -167,46 +167,6 @@ import sun.util.logging.PlatformLogger;
 public class Window extends Container implements Accessible {
 
     /**
-     * {@code Window} disposing to reinitialize {@code XToolkit} properly.
-     * {@code XToolkit} depends on this method.
-     *
-     * @see sun.awt.X11.XToolkit
-     *
-     * Note: When the last displayable window within the
-     * Java virtual machine (VM) is disposed of, the VM may terminate.
-     *
-     * @see #dispose
-     */
-    public static void beforeCheckpoint() {
-        for (int i = 0; i < allWindows.size(); i++) {
-            Window window = allWindows.get(i);
-            // Ensure that the window is removed from the
-            // AppContext before sun.java2d.Disposer disposed it
-            window.disposerRecord.dispose();
-            // When the last displayable window within the
-            // Java virtual machine (VM) is disposed of, the VM may terminate
-            window.dispose();
-            // Let the GC collect this window
-            window = null;
-        }
-        nameCounter = 0;
-
-        Cursor.beforeCheckpoint();
-    }
-
-    /**
-     * {@code Window} restoring to reinitialize {@code XToolkit} properly.
-     * {@code XToolkit} depends on this method.
-     *
-     * TODO: AWT components reinitialization to the original state
-     *
-     * @see sun.awt.X11.XToolkit
-     */
-    public static void afterRestore() {
-        Cursor.afterRestore();
-    }
-
-    /**
      * Enumeration of available <i>window types</i>.
      *
      * A window type defines the generic visual appearance and behavior of a
@@ -4157,6 +4117,44 @@ public class Window extends Container implements Accessible {
 
             public Window[] getOwnedWindows(Window w) {
                 return w.getOwnedWindows_NoClientCode();
+            }
+
+            /**
+             * {@code Window} disposing to reinitialize {@code XToolkit} properly.
+             * {@code XToolkit} depends on this method.
+             *
+             * @see sun.awt.X11.XToolkit
+             *
+             * Note: When the last displayable window within the
+             * Java virtual machine (VM) is disposed of, the VM may terminate.
+             *
+             * @see #dispose
+             */
+            public void beforeCheckpoint() throws Exception {
+                for (int i = 0; i < allWindows.size(); i++) {
+                    Window window = allWindows.get(i);
+                    // Ensure that the window is removed from the
+                    // AppContext before sun.java2d.Disposer disposed it
+                    window.disposerRecord.dispose();
+                    // When the last displayable window within the
+                    // Java virtual machine (VM) is disposed of, the VM may terminate
+                    window.dispose();
+                }
+                nameCounter = 0;
+
+                AWTAccessor.getCursorAccessor().beforeCheckpoint();
+            }
+
+            /**
+             * {@code Window} restoring to reinitialize {@code XToolkit} properly.
+             * {@code XToolkit} depends on this method.
+             *
+             * TODO: AWT components reinitialization to the original state
+             *
+             * @see sun.awt.X11.XToolkit
+             */
+            public void afterRestore() throws Exception {
+                AWTAccessor.getCursorAccessor().afterRestore();
             }
         }); // WindowAccessor
     } // static

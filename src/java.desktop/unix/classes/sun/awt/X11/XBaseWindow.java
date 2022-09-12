@@ -37,11 +37,11 @@ public class XBaseWindow {
     private static final PlatformLogger focusLog = PlatformLogger.getLogger("sun.awt.X11.focus.XBaseWindow");
     private static final PlatformLogger grabLog = PlatformLogger.getLogger("sun.awt.X11.grab.XBaseWindow");
 
-    public static void beforeCheckpoint() {
+    static void beforeCheckpoint() throws Exception {
         wm_client_leader = null;
     }
 
-    public static void afterRestore() {
+    static void afterRestore() throws Exception {
     }
 
     public static final String

@@ -26,6 +26,8 @@
 package sun.java2d;
 
 import sun.awt.util.ThreadGroupUtils;
+import sun.awt.AWTAccessor;
+import sun.awt.AWTAccessor.DisposerAccessor;
 
 import java.lang.ref.Reference;
 import java.lang.ref.ReferenceQueue;
@@ -35,10 +37,6 @@ import java.security.AccessController;
 import java.security.PrivilegedAction;
 import java.util.ArrayList;
 import java.util.Hashtable;
-
-import jdk.crac.Context;
-import jdk.crac.Resource;
-import jdk.internal.crac.JDKResource;
 
 /**
  * This class is used for registering and disposing the native
@@ -55,7 +53,7 @@ import jdk.internal.crac.JDKResource;
  * @see DisposerRecord
  */
 @SuppressWarnings("removal")
-public class Disposer implements Runnable, JDKResource {
+public class Disposer implements Runnable {
     private static final ReferenceQueue<Object> queue = new ReferenceQueue<>();
     private static final Hashtable<java.lang.ref.Reference<Object>, DisposerRecord> records =
         new Hashtable<>();
@@ -97,21 +95,21 @@ public class Disposer implements Runnable, JDKResource {
             return null;
         });
 
-        jdk.internal.crac.Core.getJDKContext().register(disposerInstance);
-    }
+        AWTAccessor.setDisposerAccessor(new DisposerAccessor() {
+            public void beforeCheckpoint() throws Exception {
+                final long timeout = 1_000; // reasonable for ref.clear() and rec.dispose() to finish
+                while (!records.isEmpty() &&
+                        !jdk.crac.Misc.waitForQueueProcessed(queue, 1, timeout)) {
+                    // This loop reflects the loop in the disposer handler thread,
+                    // that allows a race between reference disposing from the records
+                    // and waiting for the queue. So we need to wait for the queue
+                    // to be processed with the timeout as well.
+                }
+            }
 
-    @Override
-    public Priority getPriority() {
-        return Priority.REFERENCE_QUEUES;
-    }
-
-    @Override
-    public void beforeCheckpoint(Context<? extends Resource> context) throws Exception {
-        queue.waitForWaiters(1);
-    }
-
-    @Override
-    public void afterRestore(Context<? extends Resource> context) throws Exception {
+            public void afterRestore() throws Exception {
+            }
+        });
     }
 
     /**

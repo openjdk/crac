@@ -40,6 +40,9 @@ import java.awt.geom.Point2D;
 import java.awt.image.BufferStrategy;
 import java.awt.peer.ComponentPeer;
 
+import sun.java2d.Disposer;
+import sun.awt.X11.XToolkit;
+
 import java.awt.peer.MenuComponentPeer;
 import java.lang.invoke.MethodHandles;
 import java.lang.reflect.InvocationTargetException;
@@ -286,7 +289,7 @@ public final class AWTAccessor {
     /*
      * An interface of accessor for java.awt.Window class.
      */
-    public interface WindowAccessor {
+    public interface WindowAccessor extends CheckpointRestoreAccessor {
         /*
          * Update the image of a non-opaque (translucent) window.
          */
@@ -605,7 +608,7 @@ public final class AWTAccessor {
     /**
      * An accessor for the Cursor class
      */
-    public interface CursorAccessor {
+    public interface CursorAccessor extends CheckpointRestoreAccessor {
         /**
          * Returns pData of the Cursor class
          */
@@ -827,6 +830,27 @@ public final class AWTAccessor {
                                       DropTargetContextPeer dtcp);
     }
 
+    /**
+     * An accessor object for the reinitialized
+     * by CRaC AWT classes.
+     */
+    private interface CheckpointRestoreAccessor {
+        void beforeCheckpoint() throws Exception;
+        void afterRestore() throws Exception;
+    }
+
+    /**
+     * An accessor object for the Java2D Disposer class.
+     */
+    public interface DisposerAccessor extends CheckpointRestoreAccessor {
+    }
+
+    /**
+     * An accessor object for the X11 XToolkit class.
+     */
+    public interface XToolkitAccessor extends CheckpointRestoreAccessor {
+    }
+
     /*
      * Accessor instances are initialized in the static initializers of
      * corresponding AWT classes by using setters defined below.
@@ -862,6 +886,8 @@ public final class AWTAccessor {
     private static AccessibleBundleAccessor accessibleBundleAccessor;
     private static DragSourceContextAccessor dragSourceContextAccessor;
     private static DropTargetContextAccessor dropTargetContextAccessor;
+    private static DisposerAccessor disposerAccessor;
+    private static XToolkitAccessor xToolkitAccessor;
 
     /*
      * Set an accessor object for the java.awt.Component class.
@@ -1393,6 +1419,40 @@ public final class AWTAccessor {
      */
     public static void setDropTargetContextAccessor(DropTargetContextAccessor accessor) {
         AWTAccessor.dropTargetContextAccessor = accessor;
+    }
+
+    /*
+     * Get the accessor object for the sun.java2d.Disposer class.
+     */
+    public static DisposerAccessor getDisposerAccessor() {
+        if (disposerAccessor == null) {
+            ensureClassInitialized(Disposer.class);
+        }
+        return disposerAccessor;
+    }
+
+    /*
+     * Set the accessor object for the sun.java2d.Disposer class.
+     */
+    public static void setDisposerAccessor(DisposerAccessor accessor) {
+        disposerAccessor = accessor;
+    }
+
+    /*
+     * Get the accessor object for the sun.awt.X11.XToolkit class.
+     */
+    public static XToolkitAccessor getXToolkitAccessor() {
+        if (xToolkitAccessor == null) {
+            ensureClassInitialized(XToolkit.class);
+        }
+        return xToolkitAccessor;
+    }
+
+    /*
+     * Set the accessor object for the sun.awt.X11.XToolkit class.
+     */
+    public static void setXToolkitAccessor(XToolkitAccessor accessor) {
+        xToolkitAccessor = accessor;
     }
 
     private static void ensureClassInitialized(Class<?> c) {

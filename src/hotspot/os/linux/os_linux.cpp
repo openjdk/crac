@@ -6431,8 +6431,8 @@ bool CracRestoreParameters::read_from(int fd) {
   header* hdr = (header*)_raw_content;
   char* cursor = _raw_content + sizeof(header);
 
-  _restore_start_time = hdr->_restore_time;
-  _restore_start_counter = hdr->_restore_counter;
+  ::_restore_start_time = hdr->_restore_time;
+  ::_restore_start_counter = hdr->_restore_counter;
 
   for (int i = 0; i < hdr->_nprops; i++) {
     assert((cursor + strlen(cursor) <= contents + st.st_size), "property length exceeds shared memory size");

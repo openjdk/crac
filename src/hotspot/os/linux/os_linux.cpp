@@ -1,6 +1,6 @@
 /*
  * Copyright (c) 1999, 2021, Oracle and/or its affiliates. All rights reserved.
- * Copyright (c) 2017, 2021, Azul Systems, Inc. All rights reserved.
+ * Copyright (c) 2017, 2022, Azul Systems, Inc. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -291,6 +291,7 @@ class CracRestoreParameters : public CHeapObj<mtInternal> {
     jlong _restore_time;
     jlong _restore_counter;
     int _nprops;
+    int _nenvs;
   };
 
   static bool write_check_error(int fd, const void *buf, int count) {
@@ -340,7 +341,8 @@ class CracRestoreParameters : public CHeapObj<mtInternal> {
     header hdr = {
       restore_time,
       restore_counter,
-      system_props_length(props)
+      system_props_length(props),
+      0
     };
 
     if (!write_check_error(fd, (void *)&hdr, sizeof(header))) {
@@ -356,6 +358,37 @@ class CracRestoreParameters : public CHeapObj<mtInternal> {
         return false;
       }
       p = p->next();
+    }
+
+    {
+      // Write env vars
+      int envCnt = 0;
+      for (auto env = environ; *env; ++env)
+      {
+        if (!write_check_error(fd, *env, strlen(*env) + 1)) {
+          return false;
+        }
+        ++envCnt; 
+      }
+
+      // Update written header with env counter
+      const auto curPos = lseek(fd, 0, SEEK_CUR);
+      if (0 > curPos) {
+        perror("shm seek error");
+        return false;
+      }
+      hdr._nenvs = envCnt;
+      if (0 > lseek(fd, 0, SEEK_SET)) {
+        perror("shm seek error");
+        return false;
+      }
+      if (!write_check_error(fd, (void *)&hdr, sizeof(header))) {
+        return false;
+      }
+      if (0 > lseek(fd, curPos, SEEK_SET)) {
+        perror("shm seek error");
+        return false;
+      }
     }
 
     return write_check_error(fd, args, strlen(args)+1); // +1 for null char
@@ -6439,6 +6472,19 @@ bool CracRestoreParameters::read_from(int fd) {
     int idx = _properties->append(cursor);
     int prop_len = strlen(cursor) + 1;
     cursor = cursor + prop_len;
+  }
+
+  for (int i = 0; i < hdr->_nenvs; i++) {
+    const auto envname = cursor;
+    while ('=' != *cursor++) {
+      assert(cursor <= contents + st.st_size, "environment var name length exceeds shared memory size");
+    }
+    cursor[-1] = 0;
+    const auto envvalue = cursor;
+    while (0 != *cursor++) {
+      assert(cursor <= contents + st.st_size, "environment var value length exceeds shared memory size");
+    }
+    setenv(envname, envvalue, 1);
   }
 
   _args = cursor;

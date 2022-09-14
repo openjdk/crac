@@ -363,7 +363,7 @@ class CracRestoreParameters : public CHeapObj<mtInternal> {
     {
       // Write env vars
       int envCnt = 0;
-      for (auto env = environ; *env; ++env)
+      for (char **env = environ; *env; ++env)
       {
         if (!write_check_error(fd, *env, strlen(*env) + 1)) {
           return false;
@@ -372,7 +372,7 @@ class CracRestoreParameters : public CHeapObj<mtInternal> {
       }
 
       // Update written header with env counter
-      const auto curPos = lseek(fd, 0, SEEK_CUR);
+      const off_t curPos = lseek(fd, 0, SEEK_CUR);
       if (0 > curPos) {
         perror("shm seek error");
         return false;

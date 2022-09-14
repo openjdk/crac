@@ -131,7 +131,7 @@ final class ProcessEnvironment
         return new StringEnvironment(new HashMap<>(capacity));
     }
 
-    static void updateEnvironment() {
+    static private void updateEnvironment() {
         byte[][] environ = environ();
         // Read environment variables back to front,
         // so that earlier variables override later ones.

@@ -6460,7 +6460,7 @@ bool CracRestoreParameters::read_from(int fd) {
   }
 
   {
-    char* env_mem = (char*) malloc(hdr->_env_memory_size); // left this pointer unowned, it is freed when process dies
+    char* env_mem = NEW_C_HEAP_ARRAY(char, hdr->_env_memory_size, mtArguments); // left this pointer unowned, it is freed when process dies
     memcpy(env_mem, cursor, hdr->_env_memory_size);
 
     const char* env_end = env_mem + hdr->_env_memory_size;

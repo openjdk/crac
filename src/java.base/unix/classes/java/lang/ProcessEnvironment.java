@@ -66,8 +66,6 @@ final class ProcessEnvironment
 {
     private static class CracSubscriber
             implements jdk.internal.crac.JDKResource {
-        public CracSubscriber() {
-        }
 
         @Override
         public void beforeCheckpoint(Context<? extends Resource> context) throws Exception {
@@ -82,7 +80,6 @@ final class ProcessEnvironment
         public Priority getPriority() {
             return Priority.NORMAL;
         }
-
     }
 
     private static HashMap<Variable,Value> theEnvironment;

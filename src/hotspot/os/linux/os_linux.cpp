@@ -361,7 +361,7 @@ class CracRestoreParameters : public CHeapObj<mtInternal> {
     while (p != NULL) {
       char prop[4096];
       int len = snprintf(prop, sizeof(prop), "%s=%s", p->key(), p->value());
-      guarantee((unsigned)len < sizeof(prop), "property does not fit temp buffer");
+      guarantee((0 < len) && ((unsigned)len < sizeof(prop)), "property does not fit temp buffer");
       if (!write_check_error(fd, prop, len+1)) {
         return false;
       }

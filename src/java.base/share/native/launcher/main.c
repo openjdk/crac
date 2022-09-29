@@ -106,6 +106,33 @@ main(int argc, char **argv)
         int i, main_jargc, extra_jargc;
         JLI_List list;
 
+#ifdef __linux__
+        for (int i = 1; i < argc; ++i) {
+            if (strstr(argv[i], "-XX:CRaCCheckpointTo")) {
+                char* tunables = getenv("GLIBC_TUNABLES");
+
+                // do not try overwrite an existing tunable setting
+                if (tunables && strstr(tunables, "glibc.pthread.rseq")) {
+                    break;
+                }
+
+                char newtunes[4096];
+                int sz = snprintf(newtunes, sizeof(newtunes), "GLIBC_TUNABLES=%s:glibc.pthread.rseq=0", tunables);
+                if (sz < 0 || (int)sizeof(newtunes) <= sz) {
+                    fprintf(stderr, "Cannot update GLIBC_TUNABLES: does not fit\n");
+                    return 1;
+                }
+                if (putenv(newtunes) < 0) {
+                    perror("putenv");
+                    return 1;
+                }
+                execv("/proc/self/exe", argv);
+                perror("re-exec");
+                return 1;
+            }
+        }
+#endif
+
         main_jargc = (sizeof(const_jargs) / sizeof(char *)) > 1
             ? sizeof(const_jargs) / sizeof(char *)
             : 0; // ignore the null terminator index

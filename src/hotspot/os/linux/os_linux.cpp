@@ -369,8 +369,7 @@ class CracRestoreParameters : public CHeapObj<mtInternal> {
     }
 
     // Write env vars
-    for (char** env = environ; *env; ++env)
-    {
+    for (char** env = environ; *env; ++env) {
       if (!write_check_error(fd, *env, strlen(*env) + 1)) {
         return false;
       }

@@ -6458,17 +6458,15 @@ bool CracRestoreParameters::read_from(int fd) {
     cursor = cursor + prop_len;
   }
 
-  {
-    char* env_mem = NEW_C_HEAP_ARRAY(char, hdr->_env_memory_size, mtArguments); // left this pointer unowned, it is freed when process dies
-    memcpy(env_mem, cursor, hdr->_env_memory_size);
+  char* env_mem = NEW_C_HEAP_ARRAY(char, hdr->_env_memory_size, mtArguments); // left this pointer unowned, it is freed when process dies
+  memcpy(env_mem, cursor, hdr->_env_memory_size);
 
-    const char* env_end = env_mem + hdr->_env_memory_size;
-    while (env_mem < env_end) {
-      const size_t s = strlen(env_mem) + 1;
-      assert(env_mem + s <= env_end, "env vars exceed memory buffer, maybe ending 0 is lost");
-      putenv(env_mem);
-      env_mem += s;
-    }
+  const char* env_end = env_mem + hdr->_env_memory_size;
+  while (env_mem < env_end) {
+    const size_t s = strlen(env_mem) + 1;
+    assert(env_mem + s <= env_end, "env vars exceed memory buffer, maybe ending 0 is lost");
+    putenv(env_mem);
+    env_mem += s;
   }
   cursor += hdr->_env_memory_size;
 

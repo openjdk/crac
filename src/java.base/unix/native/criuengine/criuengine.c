@@ -105,6 +105,11 @@ static int checkpoint(pid_t jvm,
             "-v4", "-o", "dump4.log", // -D without -W makes criu cd to image dir for logs
         };
         const char** arg = args + 10;
+
+        if (leave_running) {
+            *arg++ = "-R";
+        }
+
         char *criuopts = getenv("CRAC_CRIU_OPTS");
         if (criuopts) {
             char* criuopt = strtok(criuopts, " ");
@@ -115,9 +120,6 @@ static int checkpoint(pid_t jvm,
             if (criuopt) {
                 fprintf(stderr, "Warning: too many arguments in CRAC_CRIU_OPTS (dropped from '%s')\n", criuopt);
             }
-        }
-        if (leave_running) {
-            *arg++ = "-R";
         }
         *arg++ = NULL;
 

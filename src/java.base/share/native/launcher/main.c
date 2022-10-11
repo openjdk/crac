@@ -108,28 +108,36 @@ main(int argc, char **argv)
 
 #ifdef __linux__
         for (int i = 1; i < argc; ++i) {
-            if (strstr(argv[i], "-XX:CRaCCheckpointTo")) {
-                char* tunables = getenv("GLIBC_TUNABLES");
+            if (!strstr(argv[i], "-XX:CRaCCheckpointTo")) {
+                continue;
+            }
 
-                // do not try overwrite an existing tunable setting
-                if (tunables && strstr(tunables, "glibc.pthread.rseq")) {
-                    break;
-                }
+            char* tunables = getenv("GLIBC_TUNABLES");
+            // do not try overwrite an existing tunable setting
+            if (tunables && strstr(tunables, "glibc.pthread.rseq")) {
+                break;
+            }
 
-                char newtunes[4096];
-                int sz = snprintf(newtunes, sizeof(newtunes), "GLIBC_TUNABLES=%s:glibc.pthread.rseq=0", tunables);
-                if (sz < 0 || (int)sizeof(newtunes) <= sz) {
+            char tunables_buf[4096];
+            char* new_tunables = NULL;
+            if (!tunables) {
+                new_tunables = "GLIBC_TUNABLES=glibc.pthread.rseq=0";
+            } else {
+                int sz = snprintf(tunables_buf, sizeof(tunables_buf), "GLIBC_TUNABLES=%s:glibc.pthread.rseq=0", tunables);
+                if (sz < 0 || (int)sizeof(tunables_buf) <= sz) {
                     fprintf(stderr, "Cannot update GLIBC_TUNABLES: does not fit\n");
                     return 1;
                 }
-                if (putenv(newtunes) < 0) {
-                    perror("putenv");
-                    return 1;
-                }
-                execv("/proc/self/exe", argv);
-                perror("re-exec");
+                new_tunables = tunables_buf;
+            }
+
+            if (putenv(new_tunables) < 0) {
+                perror("putenv");
                 return 1;
             }
+            execv("/proc/self/exe", argv);
+            perror("re-exec");
+            return 1;
         }
 #endif
 

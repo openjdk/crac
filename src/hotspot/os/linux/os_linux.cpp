@@ -1,6 +1,6 @@
 /*
  * Copyright (c) 1999, 2021, Oracle and/or its affiliates. All rights reserved.
- * Copyright (c) 2017, 2021, Azul Systems, Inc. All rights reserved.
+ * Copyright (c) 2017, 2022, Azul Systems, Inc. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -291,6 +291,7 @@ class CracRestoreParameters : public CHeapObj<mtInternal> {
     jlong _restore_time;
     jlong _restore_counter;
     int _nprops;
+    int _env_memory_size;
   };
 
   static bool write_check_error(int fd, const void *buf, int count) {
@@ -311,6 +312,14 @@ class CracRestoreParameters : public CHeapObj<mtInternal> {
     while (props != NULL) {
       ++len;
       props = props->next();
+    }
+    return len;
+  }
+
+  static int env_vars_size(const char* const * env) {
+    int len = 0;
+    for (; *env; ++env) {
+      len += strlen(*env) + 1;
     }
     return len;
   }
@@ -340,7 +349,8 @@ class CracRestoreParameters : public CHeapObj<mtInternal> {
     header hdr = {
       restore_time,
       restore_counter,
-      system_props_length(props)
+      system_props_length(props),
+      env_vars_size(environ)
     };
 
     if (!write_check_error(fd, (void *)&hdr, sizeof(header))) {
@@ -356,6 +366,13 @@ class CracRestoreParameters : public CHeapObj<mtInternal> {
         return false;
       }
       p = p->next();
+    }
+
+    // Write env vars
+    for (char** env = environ; *env; ++env) {
+      if (!write_check_error(fd, *env, strlen(*env) + 1)) {
+        return false;
+      }
     }
 
     return write_check_error(fd, args, strlen(args)+1); // +1 for null char
@@ -6440,6 +6457,18 @@ bool CracRestoreParameters::read_from(int fd) {
     int prop_len = strlen(cursor) + 1;
     cursor = cursor + prop_len;
   }
+
+  char* env_mem = NEW_C_HEAP_ARRAY(char, hdr->_env_memory_size, mtArguments); // left this pointer unowned, it is freed when process dies
+  memcpy(env_mem, cursor, hdr->_env_memory_size);
+
+  const char* env_end = env_mem + hdr->_env_memory_size;
+  while (env_mem < env_end) {
+    const size_t s = strlen(env_mem) + 1;
+    assert(env_mem + s <= env_end, "env vars exceed memory buffer, maybe ending 0 is lost");
+    putenv(env_mem);
+    env_mem += s;
+  }
+  cursor += hdr->_env_memory_size;
 
   _args = cursor;
   return true;

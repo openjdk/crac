@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2022, Azul Systems, Inc. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -23,18 +23,34 @@
  * questions.
  */
 
-/**
- * Defines JDK-specific management interfaces for the JVM.
- *
- * @moduleGraph
- * @since 9
- */
-module jdk.management {
-    requires transitive java.management;
+package jdk.crac.management.internal;
 
-    exports com.sun.management;
-    exports jdk.crac.management;
+import com.sun.management.internal.PlatformMBeanProviderImpl;
+import jdk.crac.management.CRaCMXBean;
+import sun.management.Util;
+import sun.management.VMManagement;
 
-    provides sun.management.spi.PlatformMBeanProvider with
-        com.sun.management.internal.PlatformMBeanProviderImpl;
+import javax.management.ObjectName;
+
+public class CRaCImpl implements CRaCMXBean {
+    private final VMManagement vm;
+
+    public CRaCImpl(VMManagement vm) {
+        this.vm = vm;
+    }
+
+    @Override
+    public long getUptimeSinceRestore() {
+        return vm.getUptimeSinceRestore();
+    }
+
+    @Override
+    public long getRestoreTime() {
+        return vm.getRestoreTime();
+    }
+
+    @Override
+    public ObjectName getObjectName() {
+        return Util.newObjectName(PlatformMBeanProviderImpl.CRAC_MXBEAN_NAME);
+    }
 }

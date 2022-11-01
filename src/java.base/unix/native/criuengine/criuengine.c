@@ -89,6 +89,7 @@ static int checkpoint(pid_t jvm,
         exit(0);
     }
 
+    char* leave_running = getenv("CRAC_CRIU_LEAVE_RUNNING");
 
     char jvmpidchar[32];
     snprintf(jvmpidchar, sizeof(jvmpidchar), "%d", jvm);
@@ -104,6 +105,11 @@ static int checkpoint(pid_t jvm,
             "-v4", "-o", "dump4.log", // -D without -W makes criu cd to image dir for logs
         };
         const char** arg = args + 10;
+
+        if (leave_running) {
+            *arg++ = "-R";
+        }
+
         char *criuopts = getenv("CRAC_CRIU_OPTS");
         if (criuopts) {
             char* criuopt = strtok(criuopts, " ");
@@ -125,6 +131,8 @@ static int checkpoint(pid_t jvm,
     int status;
     if (child != wait(&status) || !WIFEXITED(status) || WEXITSTATUS(status)) {
         kickjvm(jvm, -1);
+    } else if (leave_running) {
+        kickjvm(jvm, 0);
     }
 
     create_cppath(imagedir);

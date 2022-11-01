@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2022, Azul Systems, Inc. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -24,17 +24,7 @@
  */
 
 /**
- * Defines JDK-specific management interfaces for the JVM.
- *
- * @moduleGraph
- * @since 9
+ * This package contains management interfaces for CRaC.
  */
-module jdk.management {
-    requires transitive java.management;
 
-    exports com.sun.management;
-    exports jdk.crac.management;
-
-    provides sun.management.spi.PlatformMBeanProvider with
-        com.sun.management.internal.PlatformMBeanProviderImpl;
-}
+package jdk.crac.management;

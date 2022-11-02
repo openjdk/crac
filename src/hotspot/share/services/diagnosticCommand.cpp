@@ -54,6 +54,7 @@
 #include "services/heapDumper.hpp"
 #include "services/management.hpp"
 #include "services/writeableFlags.hpp"
+#include "attachListener_linux.hpp"
 #include "utilities/debug.hpp"
 #include "utilities/events.hpp"
 #include "utilities/formatBuffer.hpp"
@@ -791,7 +792,7 @@ void JMXStatusDCmd::execute(DCmdSource source, TRAPS) {
   JavaValue result(T_OBJECT);
   JavaCalls::call_static(&result, k, vmSymbols::getAgentStatus_name(), vmSymbols::void_string_signature(), CHECK);
 
-  jvalue* jv = (jvalue*) result.get_value_addr();
+  jvalue* jv = (jvalue*)result.get_value_addr();
   oop str = cast_to_oop(jv->l);
   if (str != NULL) {
       char* out = java_lang_String::as_utf8_string(str);
@@ -1040,9 +1041,18 @@ void DebugOnCmdStartDCmd::execute(DCmdSource source, TRAPS) {
 void CheckpointDCmd::execute(DCmdSource source, TRAPS) {
   Klass* k = SystemDictionary::resolve_or_fail(vmSymbols::jdk_crac_Core(),
                                                  true, CHECK);
-  JavaValue result(T_VOID);
+  JavaValue result(T_OBJECT);
+  JavaCallArguments args;
+  args.push_long((jlong)output());
   JavaCalls::call_static(&result, k,
                          vmSymbols::checkpointRestoreInternal_name(),
-                         vmSymbols::void_method_signature(), CHECK);
+                         vmSymbols::checkpointRestereInternal_signature(), &args, CHECK);
+  oop str = result.get_oop();
+  if (str != NULL) {
+    char* out = java_lang_String::as_utf8_string(str);
+    if (out[0] != '\0') {
+      output()->print_cr("An exception during a checkpoint operation: ");
+      output()->print("%s", out);
+    }
+  }
 }
-

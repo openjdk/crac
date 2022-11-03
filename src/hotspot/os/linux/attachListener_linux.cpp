@@ -39,8 +39,6 @@
 #include <sys/un.h>
 #include <sys/stat.h>
 
-
-
 // The attach mechanism on Linux uses a UNIX domain socket. An attach listener
 // thread is created at startup or is created on-demand via a signal from
 // the client tool. The attach listener creates a socket and binds it to a file
@@ -56,9 +54,6 @@
 // 2. When a client connect, the SO_PEERCRED socket option is used to
 //    obtain the credentials of client. We check that the effective uid
 //    of the client matches this process.
-
-
-
 
 // statics
 char LinuxAttachListener::_path[UNIX_PATH_MAX];
@@ -362,6 +357,7 @@ void LinuxAttachOperation::effectively_complete_raw(jint result, bufferedStream*
     return;
   }
 
+  // write operation result
   Thread* thread = Thread::current();
   if (thread->is_Java_thread()) {
     ThreadBlockInVM((JavaThread* )thread);
@@ -412,6 +408,7 @@ AttachOperation* AttachListener::dequeue() {
   ThreadBlockInVM tbivm(thread);
 
   AttachOperation* op = LinuxAttachListener::dequeue();
+
   return op;
 }
 

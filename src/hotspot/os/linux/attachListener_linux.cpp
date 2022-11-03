@@ -380,7 +380,7 @@ void LinuxAttachOperation::write_operation_result(jint result, bufferedStream* s
   // write any result data
   if (rc == 0) {
     LinuxAttachListener::write_fully(this->socket(), (char*) st->base(), st->size());
-    ::shutdown(this->socket(), 2);
+    ::shutdown(this->socket(), SHUT_RDWR);
   }
 
   // done

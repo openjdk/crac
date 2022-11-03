@@ -1053,13 +1053,13 @@ void CheckpointDCmd::execute(DCmdSource source, TRAPS) {
   if (str != NULL) {
     char* out = java_lang_String::as_utf8_string(str);
     if (out[0] != '\0') {
+      stringStream output_buf;
+      output_buf.print("An exception during a checkpoint operation: \n%s", out);
       current_op = LinuxAttachListener::get_current_op();
       if (current_op->get_effectively_completed()){
-        tty->print_cr("An exception during a checkpoint operation: ");
-        tty->print("%s", out);
+        tty->print("%s", output_buf.as_string());
       } else {
-        output()->print_cr("An exception during a checkpoint operation: ");
-        output()->print("%s", out);
+        output()->print("%s", output_buf.as_string());
       }
     }
   }

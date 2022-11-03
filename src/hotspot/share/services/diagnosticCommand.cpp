@@ -1056,7 +1056,7 @@ void CheckpointDCmd::execute(DCmdSource source, TRAPS) {
       stringStream output_buf;
       output_buf.print("An exception during a checkpoint operation: \n%s", out);
       current_op = LinuxAttachListener::get_current_op();
-      if (current_op->get_effectively_completed()){
+      if (current_op->is_effectively_completed()){
         tty->print("%s", output_buf.as_string());
       } else {
         output()->print("%s", output_buf.as_string());

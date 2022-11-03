@@ -36,7 +36,7 @@ class LinuxAttachOperation: public AttachOperation {
  public:
   void complete(jint res, bufferedStream* st);
   void effectively_complete_raw(jint res, bufferedStream* st);
-  bool get_effectively_completed()                      { return _effectively_completed; }
+  bool is_effectively_completed()                      { return _effectively_completed; }
 
   void set_socket(int s)                                { _socket = s; }
   int socket() const                                    { return _socket; }

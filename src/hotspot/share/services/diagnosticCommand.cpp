@@ -55,6 +55,7 @@
 #include "services/management.hpp"
 #include "services/writeableFlags.hpp"
 #include "attachListener_linux.hpp"
+#include "linuxAttachOperation.hpp"
 #include "utilities/debug.hpp"
 #include "utilities/events.hpp"
 #include "utilities/formatBuffer.hpp"
@@ -1044,15 +1045,22 @@ void CheckpointDCmd::execute(DCmdSource source, TRAPS) {
   JavaValue result(T_OBJECT);
   JavaCallArguments args;
   args.push_long((jlong)output());
+  LinuxAttachOperation* current_op;
   JavaCalls::call_static(&result, k,
                          vmSymbols::checkpointRestoreInternal_name(),
-                         vmSymbols::checkpointRestereInternal_signature(), &args, CHECK);
+                         vmSymbols::checkpointRestoreInternal_signature(), &args, CHECK);
   oop str = result.get_oop();
   if (str != NULL) {
     char* out = java_lang_String::as_utf8_string(str);
     if (out[0] != '\0') {
-      output()->print_cr("An exception during a checkpoint operation: ");
-      output()->print("%s", out);
+      current_op = LinuxAttachListener::get_current_op();
+      if (current_op->get_effectively_completed()){
+        tty->print_cr("An exception during a checkpoint operation: ");
+        tty->print("%s", out);
+      } else {
+        output()->print_cr("An exception during a checkpoint operation: ");
+        output()->print("%s", out);
+      }
     }
   }
 }

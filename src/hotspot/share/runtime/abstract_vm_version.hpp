@@ -73,6 +73,8 @@ class Abstract_VM_Version: AllStatic {
 
   static VirtualizationType _detected_virtualization;
 
+  static void insert_features_names(char* buf, size_t buflen, const char* features_names[], uint64_t features = _features);
+
  public:
   // Called as part of the runtime services initialization which is
   // called from the management module initialization (via init_globals())
@@ -121,7 +123,6 @@ class Abstract_VM_Version: AllStatic {
 
   static uint64_t features()           { return _features; }
   static const char* features_string() { return _features_string; }
-  static void insert_features_names(char* buf, size_t buflen, const char* features_names[]);
 
   static VirtualizationType get_detected_virtualization() {
     return _detected_virtualization;

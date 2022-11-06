@@ -414,6 +414,7 @@ public:
   VMOp_Type type() const { return VMOp_VM_Crac; }
   void doit();
   bool read_shm(int shmid);
+  static void verify_cpu_compatibility();
 
 private:
   bool is_socket_from_jcmd(int sock_fd);
@@ -6184,6 +6185,63 @@ void VM_Crac::report_ok_to_jcmd_if_any() {
   _ostream = tty;
 }
 
+void VM_Crac::verify_cpu_compatibility() {
+  uint64_t features_saved = Abstract_VM_Version::features();
+#define SUPPORTS_SET \
+    SUPPORTS(supports_cx8) \
+    SUPPORTS(supports_atomic_getset4) \
+    SUPPORTS(supports_atomic_getset8) \
+    SUPPORTS(supports_atomic_getadd4) \
+    SUPPORTS(supports_atomic_getadd8) \
+    /**/
+#define SUPPORTS(x) bool x##_saved = Abstract_VM_Version::x();
+  SUPPORTS_SET
+#undef SUPPORTS
+
+  // FIXME: x86 only - VM_Version::initialize() would be slow due to Assembler::precompute_instructions().
+  VM_Version::initialize_features(false);
+
+  uint64_t features_missing = Abstract_VM_Version::features() & ~features_saved;
+warning("restore:Abstract_VM_Version::features()=0x" UINT64_FORMAT_X " features_saved=0x" UINT64_FORMAT_X " features_missing=0x" UINT64_FORMAT_X,Abstract_VM_Version::features(),features_saved,features_missing);
+
+  if (features_missing) {
+    char buf[512];
+    int res = jio_snprintf(
+		buf, sizeof(buf),
+		"You have to specify -XX:CPUFeatures=0x" UINT64_FORMAT_X " during -XX:CRaCCheckpointTo making of the checkpoint"
+		"; specified -XX:CRaCRestoreFrom file contains CPU features 0x" UINT64_FORMAT_X
+		"; this machine's CPU features are 0x" UINT64_FORMAT_X
+		"; missing features of this CPU are 0x" UINT64_FORMAT_X,
+		Abstract_VM_Version::features() & features_saved,
+		Abstract_VM_Version::features(), features_saved, features_missing);
+    assert(res > 0, "not enough temporary space allocated");
+    VM_Version::insert_features_names(buf + res, sizeof(buf) - res, features_missing);
+warning("vm_exit_during_initialization(%s)",buf); //////////////////////////////////FIXME
+    vm_exit_during_initialization(buf);
+  }
+  auto supports_exit = [&](const char *supports, bool file, bool this_cpu) {
+    char buf[512];
+    int res = jio_snprintf(
+		buf, sizeof(buf),
+		"Specified -XX:CRaCRestoreFrom file contains feature %s value %d while this CPU has value %d",
+		supports, file, this_cpu);
+    assert(res > 0, "not enough temporary space allocated");
+warning("vm_exit_during_initialization(%s)",buf); //////////////////////////////////FIXME
+    vm_exit_during_initialization(buf);
+  };
+///////////////////////////FIXME: Verify #x
+#define SUPPORTS(x)                                           \
+  if (x##_saved != Abstract_VM_Version::x()) {                \
+    supports_exit( #x , Abstract_VM_Version::x(), x##_saved); \
+  }
+  SUPPORTS_SET
+#undef SUPPORTS
+#undef SUPPORTS_SET
+
+  CPUFeatures = features_saved;
+  VM_Version::initialize_features(true);
+}
+
 void VM_Crac::doit() {
 
   AttachListener::abort();
@@ -6274,6 +6332,8 @@ void VM_Crac::doit() {
       return;
     }
   }
+
+  verify_cpu_compatibility();
 
   if (shmid <= 0 || !VM_Crac::read_shm(shmid)) {
     _restore_start_time = os::javaTimeMillis();

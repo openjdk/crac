@@ -220,7 +220,11 @@ define_pd_global(intx, InitArrayShortSize, 8*BytesPerLong);
                                                                             \
   product(bool, IntelJccErratumMitigation, true, DIAGNOSTIC,                \
              "Turn off JVM mitigations related to Intel micro code "        \
-             "mitigations for the Intel JCC erratum")
+             "mitigations for the Intel JCC erratum")                       \
+                                                                            \
+  product(uint64_t, CPUFeatures, 0, "CPU feature set, "                     \
+      "use -XX:CPUFeatures=0xnumber with -XX:CRaCCheckpointTo when you "    \
+      "get an error during -XX:CRaCRestoreFrom on a different machine")     \
 
 // end of ARCH_FLAGS
 

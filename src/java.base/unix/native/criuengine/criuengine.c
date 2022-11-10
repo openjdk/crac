@@ -89,21 +89,40 @@ static int checkpoint(pid_t jvm,
         exit(0);
     }
 
+    char* leave_running = getenv("CRAC_CRIU_LEAVE_RUNNING");
 
     char jvmpidchar[32];
     snprintf(jvmpidchar, sizeof(jvmpidchar), "%d", jvm);
 
     pid_t child = fork();
     if (!child) {
-        const char* args[] = {
+        const char* args[32] = {
             criu,
             "dump",
             "-t", jvmpidchar,
             "-D", imagedir,
             "--shell-job",
             "-v4", "-o", "dump4.log", // -D without -W makes criu cd to image dir for logs
-            NULL
         };
+        const char** arg = args + 10;
+
+        if (leave_running) {
+            *arg++ = "-R";
+        }
+
+        char *criuopts = getenv("CRAC_CRIU_OPTS");
+        if (criuopts) {
+            char* criuopt = strtok(criuopts, " ");
+            while (criuopt && ARRAY_SIZE(args) >= (size_t)(arg - args) + 1/* account for trailing NULL */) {
+                *arg++ = criuopt;
+                criuopt = strtok(NULL, " ");
+            }
+            if (criuopt) {
+                fprintf(stderr, "Warning: too many arguments in CRAC_CRIU_OPTS (dropped from '%s')\n", criuopt);
+            }
+        }
+        *arg++ = NULL;
+
         execv(criu, (char**)args);
         perror("criu dump");
         exit(1);
@@ -112,6 +131,8 @@ static int checkpoint(pid_t jvm,
     int status;
     if (child != wait(&status) || !WIFEXITED(status) || WEXITSTATUS(status)) {
         kickjvm(jvm, -1);
+    } else if (leave_running) {
+        kickjvm(jvm, 0);
     }
 
     create_cppath(imagedir);
@@ -155,23 +176,35 @@ static int restore(const char *basedir,
         }
     }
 
-    const char* args[32] = { criu, "restore" };
-    const char** arg = args + 2;
+    const char* args[32] = {
+        criu,
+        "restore",
+        "-W", ".",
+        "--shell-job",
+        "--action-script", self,
+        "-D", imagedir,
+        "-v1"
+    };
+    const char** arg = args + 10;
     if (inherit_perfdata) {
         *arg++ = "--inherit-fd";
         *arg++ = inherit_perfdata;
     }
     const char* tail[] = {
-        "-W", ".",
-        "--shell-job",
-        "--action-script", self,
-        "-D", imagedir,
-        "-v1",
         "--exec-cmd", "--", self, "restorewait",
         NULL
     };
-    static_assert(ARRAY_SIZE(args) >= 2 + ARRAY_SIZE(tail),
-            "all possible arguments should fit");
+    char *criuopts = getenv("CRAC_CRIU_OPTS");
+    if (criuopts) {
+        char* criuopt = strtok(criuopts, " ");
+        while (criuopt && ARRAY_SIZE(args) >= (size_t)(arg - args + ARRAY_SIZE(tail))) {
+            *arg++ = criuopt;
+            criuopt = strtok(NULL, " ");
+        }
+        if (criuopt) {
+            fprintf(stderr, "Warning: too many arguments in CRAC_CRIU_OPTS (dropped from '%s')\n", criuopt);
+        }
+    }
 
     memcpy(arg, tail, sizeof(tail));
 

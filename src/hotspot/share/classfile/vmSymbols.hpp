@@ -707,6 +707,7 @@
                                                                                                                   \
   template(jdk_crac_Core,                          "jdk/crac/Core")                                               \
   template(checkpointRestoreInternal_name,         "checkpointRestoreInternal")                                   \
+  template(checkpointRestoreInternal_signature,    "(J)Ljava/lang/String;")                                       \
                                                                                                                   \
   /*end*/
 

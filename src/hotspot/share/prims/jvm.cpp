@@ -3849,8 +3849,8 @@ JVM_ENTRY_NO_ENV(jint, JVM_FindSignal(const char *name))
   return os::get_signal_number(name);
 JVM_END
 
-JVM_ENTRY(jobjectArray, JVM_Checkpoint(JNIEnv *env, jboolean dry_run))
-  Handle ret = os::Linux::checkpoint(dry_run, CHECK_NULL);
+JVM_ENTRY(jobjectArray, JVM_Checkpoint(JNIEnv *env, jboolean dry_run, jlong jcmd_stream))
+  Handle ret = os::Linux::checkpoint(dry_run, jcmd_stream, CHECK_NULL);
   return (jobjectArray) JNIHandles::make_local(THREAD, ret());
 JVM_END
 

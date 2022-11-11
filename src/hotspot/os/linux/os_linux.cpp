@@ -6207,14 +6207,14 @@ void VM_Crac::doit() {
     const char* details = 0 < linkret ? detailsbuf : "";
     print_resources("JVM: FD fd=%d type=%s: details1=\"%s\" ",
         i, stat2strtype(fds.get_stat(i)->st_mode), details);
-
-    if (i < 3) // close stdin std err if they are "redirected" to file
+    if (i < 3) // Check if std descriptors binded to file
     {
-      if (strcmp("regular", stat2strtype(fds.get_stat(i)->st_mode)) == 0){
-        if (CRPrintResourcesOnCheckpoint) {
-          tty->print_cr("Closing the redirected std stream ");
-        }
+      if (!S_ISCHR(fds.get_stat(i)->st_mode)){
+        print_resources(" Redirecting std from file to pseudo terminal \n");
+        int fd_tmp=open("/dev/pts/0", O_WRONLY);
         close(i);
+        dup2(fd_tmp, i);
+        close(fd_tmp);
         continue;
       }
     }

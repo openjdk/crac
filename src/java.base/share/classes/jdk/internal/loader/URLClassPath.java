@@ -78,6 +78,7 @@ import jdk.internal.crac.Core;
 import jdk.internal.crac.JDKResource;
 import jdk.internal.crac.JDKResource.Priority;
 import jdk.internal.util.jar.InvalidJarIndexError;
+import jdk.internal.util.jar.JarFileCRaCSupport;
 import jdk.internal.util.jar.JarIndex;
 import sun.net.util.URLUtil;
 import sun.net.www.ParseUtil;
@@ -827,15 +828,8 @@ public class URLClassPath {
             @Override
             public void beforeCheckpoint(Context<? extends jdk.crac.Resource> context) {
                 try {
-                    Method zipBeforeCheckpoint = ZipFile.class.getDeclaredMethod("beforeCheckpoint");
-                    @SuppressWarnings("removal")
-                    Void v = AccessController.doPrivileged(new PrivilegedAction<Void>() {
-                        public Void run() {
-                            zipBeforeCheckpoint.setAccessible(true);
-                            return null;
-                        }});
-                    zipBeforeCheckpoint.invoke(this);
-                } catch (Throwable e) {
+                    JarFileCRaCSupport.beforeCheckpoint(this);
+                } catch (ReflectiveOperationException e) {
                     e.printStackTrace();
                 }
             }

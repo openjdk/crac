@@ -32,10 +32,13 @@ import java.io.InputStream;
 import java.io.UncheckedIOException;
 import java.lang.module.ModuleReader;
 import java.lang.module.ModuleReference;
+import java.lang.reflect.Method;
 import java.net.URI;
 import java.nio.ByteBuffer;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.security.AccessController;
+import java.security.PrivilegedAction;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
@@ -48,8 +51,12 @@ import java.util.jar.JarFile;
 import java.util.stream.Stream;
 import java.util.zip.ZipFile;
 
+import jdk.crac.Context;
+import jdk.crac.Resource;
+import jdk.internal.crac.JDKResource;
 import jdk.internal.jmod.JmodFile;
 import jdk.internal.module.ModuleHashes.HashSupplier;
+import jdk.internal.util.jar.JarFileCRaCSupport;
 import sun.net.www.ParseUtil;
 
 
@@ -221,6 +228,7 @@ class ModuleReferences {
     static class JarModuleReader extends SafeCloseModuleReader {
         private final JarFile jf;
         private final URI uri;
+        private final JDKResource resource;
 
         static JarFile newJarFile(Path path) {
             try {
@@ -236,6 +244,27 @@ class ModuleReferences {
         JarModuleReader(Path path, URI uri) {
             this.jf = newJarFile(path);
             this.uri = uri;
+            this.resource = new JDKResource() {
+                @Override
+                public Priority getPriority() {
+                    return Priority.NORMAL;
+                }
+
+                @Override
+                public void beforeCheckpoint(Context<? extends Resource> context) {
+                    try {
+                        JarFileCRaCSupport.beforeCheckpoint(jf);
+                    } catch (ReflectiveOperationException e) {
+                        e.printStackTrace();
+                    }
+                }
+
+                @Override
+                public void afterRestore(Context<? extends Resource> context) {
+
+                }
+            };
+            jdk.internal.crac.Core.getJDKContext().register(this.resource);
         }
 
         private JarEntry getEntry(String name) {

@@ -25,15 +25,28 @@
 
 package jdk.internal.util.jar;
 
-import java.lang.reflect.InvocationTargetException;
+import jdk.crac.Context;
+import jdk.crac.Resource;
+import jdk.internal.crac.Core;
+import jdk.internal.crac.JDKResource;
+
+import java.io.File;
+import java.io.IOException;
 import java.lang.reflect.Method;
 import java.security.AccessController;
 import java.security.PrivilegedAction;
 import java.util.jar.JarFile;
 import java.util.zip.ZipFile;
 
-public class JarFileCRaCSupport {
-    public static void beforeCheckpoint(JarFile jarFile) throws NoSuchMethodException, InvocationTargetException, IllegalAccessException {
+public class PersistentJarFile extends JarFile implements JDKResource {
+
+    public PersistentJarFile(File file, boolean b, int openRead, Runtime.Version runtimeVersion) throws IOException {
+        super(file, b, openRead, runtimeVersion);
+        Core.getJDKContext().register(this);
+    }
+
+    @Override
+    public void beforeCheckpoint(Context<? extends Resource> context) throws Exception {
         Method zipBeforeCheckpoint = ZipFile.class.getDeclaredMethod("beforeCheckpoint");
         @SuppressWarnings("removal")
         Void v = AccessController.doPrivileged(new PrivilegedAction<Void>() {
@@ -41,6 +54,16 @@ public class JarFileCRaCSupport {
                 zipBeforeCheckpoint.setAccessible(true);
                 return null;
             }});
-        zipBeforeCheckpoint.invoke(jarFile);
+        zipBeforeCheckpoint.invoke(this);
+    }
+
+    @Override
+    public void afterRestore(Context<? extends Resource> context) throws Exception {
+        // do nothing, no fixup required
+    }
+
+    @Override
+    public Priority getPriority() {
+        return Priority.NORMAL;
     }
 }

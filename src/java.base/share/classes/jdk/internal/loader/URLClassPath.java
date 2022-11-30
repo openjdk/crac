@@ -25,7 +25,6 @@
 
 package jdk.internal.loader;
 
-import java.lang.reflect.Method;
 import java.io.Closeable;
 import java.io.File;
 import java.io.FileInputStream;
@@ -45,7 +44,6 @@ import java.security.AccessControlException;
 import java.security.AccessController;
 import java.security.CodeSigner;
 import java.security.Permission;
-import java.security.PrivilegedAction;
 import java.security.PrivilegedActionException;
 import java.security.PrivilegedExceptionAction;
 import java.security.cert.Certificate;
@@ -70,15 +68,11 @@ import java.util.jar.Attributes;
 import java.util.jar.Attributes.Name;
 import java.util.zip.ZipFile;
 
-import jdk.crac.Context;
 import jdk.internal.access.JavaNetURLAccess;
 import jdk.internal.access.JavaUtilZipFileAccess;
 import jdk.internal.access.SharedSecrets;
-import jdk.internal.crac.Core;
-import jdk.internal.crac.JDKResource;
-import jdk.internal.crac.JDKResource.Priority;
 import jdk.internal.util.jar.InvalidJarIndexError;
-import jdk.internal.util.jar.JarFileCRaCSupport;
+import jdk.internal.util.jar.PersistentJarFile;
 import jdk.internal.util.jar.JarIndex;
 import sun.net.util.URLUtil;
 import sun.net.www.ParseUtil;
@@ -820,31 +814,6 @@ public class URLClassPath {
             return jar;
         }
 
-        static class ClassLoaderJarFile extends JarFile implements JDKResource {
-            public ClassLoaderJarFile (File file, boolean verify, int mode, Runtime.Version version) throws IOException {
-                super(file, verify, mode, version);
-            }
-
-            @Override
-            public void beforeCheckpoint(Context<? extends jdk.crac.Resource> context) {
-                try {
-                    JarFileCRaCSupport.beforeCheckpoint(this);
-                } catch (ReflectiveOperationException e) {
-                    e.printStackTrace();
-                }
-            }
-
-            @Override
-            public void afterRestore(Context<? extends jdk.crac.Resource> context) {
-                // do nothing, no fixup required
-            }
-
-            @Override
-            public Priority getPriority() {
-                return Priority.NORMAL;
-            }
-        }
-
         private JarFile getJarFile(URL url) throws IOException {
             // Optimize case where url refers to a local jar file
             if (isOptimizable(url)) {
@@ -852,10 +821,8 @@ public class URLClassPath {
                 if (!p.exists()) {
                     throw new FileNotFoundException(p.getPath());
                 }
-                ClassLoaderJarFile clJarFile = new ClassLoaderJarFile(new File(p.getPath()), true, ZipFile.OPEN_READ,
-                        JarFile.runtimeVersion());
-                Core.getJDKContext().register(clJarFile);
-                return checkJar(clJarFile);
+                return checkJar(new PersistentJarFile(new File(p.getPath()), true, ZipFile.OPEN_READ,
+                        JarFile.runtimeVersion()));
             }
             URLConnection uc = (new URL(getBaseURL(), "#runtime")).openConnection();
             uc.setRequestProperty(USER_AGENT_JAVA_VERSION, JAVA_VERSION);

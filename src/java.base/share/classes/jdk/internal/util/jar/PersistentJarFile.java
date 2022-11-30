@@ -27,16 +27,13 @@ package jdk.internal.util.jar;
 
 import jdk.crac.Context;
 import jdk.crac.Resource;
+import jdk.internal.access.SharedSecrets;
 import jdk.internal.crac.Core;
 import jdk.internal.crac.JDKResource;
 
 import java.io.File;
 import java.io.IOException;
-import java.lang.reflect.Method;
-import java.security.AccessController;
-import java.security.PrivilegedAction;
 import java.util.jar.JarFile;
-import java.util.zip.ZipFile;
 
 public class PersistentJarFile extends JarFile implements JDKResource {
 
@@ -47,14 +44,7 @@ public class PersistentJarFile extends JarFile implements JDKResource {
 
     @Override
     public void beforeCheckpoint(Context<? extends Resource> context) throws Exception {
-        Method zipBeforeCheckpoint = ZipFile.class.getDeclaredMethod("beforeCheckpoint");
-        @SuppressWarnings("removal")
-        Void v = AccessController.doPrivileged(new PrivilegedAction<Void>() {
-            public Void run() {
-                zipBeforeCheckpoint.setAccessible(true);
-                return null;
-            }});
-        zipBeforeCheckpoint.invoke(this);
+        SharedSecrets.getJavaUtilZipFileAccess().beforeCheckpoint(this);
     }
 
     @Override

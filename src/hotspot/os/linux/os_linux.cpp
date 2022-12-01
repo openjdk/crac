@@ -6021,9 +6021,6 @@ public:
 
 static int checkpoint_restore(int *shmid) {
 
-  extern void reset_ifunc();
-  reset_ifunc();
-
   int cres = call_crengine();
   if (cres < 0) {
     return JVM_CHECKPOINT_ERROR;
@@ -6039,6 +6036,9 @@ static int checkpoint_restore(int *shmid) {
     sig = sigwaitinfo(&waitmask, &info);
   } while (sig == -1 && errno == EINTR);
   assert(sig == RESTORE_SIGNAL, "got what requested");
+
+  extern void reset_ifunc();
+  reset_ifunc();
 
   if (CRTraceStartupTime) {
     tty->print_cr("STARTUPTIME " JLONG_FORMAT " restore-native", os::javaTimeNanos());

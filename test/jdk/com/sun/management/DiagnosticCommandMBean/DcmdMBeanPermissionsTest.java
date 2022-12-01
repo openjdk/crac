@@ -233,6 +233,9 @@ public class DcmdMBeanPermissionsTest {
         sm.grantPermission(new java.lang.RuntimePermission("modifyThread"));
         sm.grantPermission(new java.security.SecurityPermission("getProperty.jdk.jar.disabledAlgorithms"));
         for(MBeanOperationInfo opInfo : info.getOperations()) {
+            if (opInfo.getName().equals("jdkCheckpoint")) {
+                continue;
+            }
             Permission opPermission = new MBeanPermission(info.getClassName(),
                     opInfo.getName(),
                     on,

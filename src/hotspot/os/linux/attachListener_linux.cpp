@@ -31,6 +31,7 @@
 #include "attachListener_linux.hpp"
 #include "services/dtraceAttacher.hpp"
 #include "linuxAttachOperation.hpp"
+#include "memory/resourceArea.hpp"
 
 #include <unistd.h>
 #include <signal.h>

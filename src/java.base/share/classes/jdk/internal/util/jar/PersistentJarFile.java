@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013, 2021, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2022, Azul Systems, Inc. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -23,26 +23,37 @@
  * questions.
  */
 
-package jdk.internal.access;
+package jdk.internal.util.jar;
 
-import java.util.Enumeration;
-import java.util.List;
-import java.util.jar.JarEntry;
+import jdk.crac.Context;
+import jdk.crac.Resource;
+import jdk.internal.access.SharedSecrets;
+import jdk.internal.crac.Core;
+import jdk.internal.crac.JDKResource;
+
+import java.io.File;
+import java.io.IOException;
 import java.util.jar.JarFile;
-import java.util.stream.Stream;
-import java.util.zip.ZipEntry;
-import java.util.zip.ZipFile;
 
-public interface JavaUtilZipFileAccess {
-    public boolean startsWithLocHeader(ZipFile zip);
-    public List<String> getManifestAndSignatureRelatedFiles(JarFile zip);
-    public String getManifestName(JarFile zip, boolean onlyIfSignatureRelatedFiles);
-    public int getManifestNum(JarFile zip);
-    public int[] getMetaInfVersions(JarFile zip);
-    public Enumeration<JarEntry> entries(ZipFile zip);
-    public Stream<JarEntry> stream(ZipFile zip);
-    public Stream<String> entryNameStream(ZipFile zip);
-    public void setExtraAttributes(ZipEntry ze, int extraAttrs);
-    public int getExtraAttributes(ZipEntry ze);
-    public void beforeCheckpoint(ZipFile zip);
+public class PersistentJarFile extends JarFile implements JDKResource {
+
+    public PersistentJarFile(File file, boolean b, int openRead, Runtime.Version runtimeVersion) throws IOException {
+        super(file, b, openRead, runtimeVersion);
+        Core.getJDKContext().register(this);
+    }
+
+    @Override
+    public void beforeCheckpoint(Context<? extends Resource> context) throws Exception {
+        SharedSecrets.getJavaUtilZipFileAccess().beforeCheckpoint(this);
+    }
+
+    @Override
+    public void afterRestore(Context<? extends Resource> context) throws Exception {
+        // do nothing, no fixup required
+    }
+
+    @Override
+    public Priority getPriority() {
+        return Priority.NORMAL;
+    }
 }

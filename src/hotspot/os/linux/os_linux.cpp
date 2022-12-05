@@ -39,6 +39,7 @@
 #include "oops/oop.inline.hpp"
 #include "oops/typeArrayOop.inline.hpp"
 #include "os_linux.inline.hpp"
+#include "os_linux_ifunc.hpp"
 #include "os_posix.inline.hpp"
 #include "os_share_linux.hpp"
 #include "osContainer_linux.hpp"
@@ -6037,8 +6038,7 @@ static int checkpoint_restore(int *shmid) {
   } while (sig == -1 && errno == EINTR);
   assert(sig == RESTORE_SIGNAL, "got what requested");
 
-  extern void reset_ifunc();
-  reset_ifunc();
+  linux_ifunc_reset();
 
   if (CRTraceStartupTime) {
     tty->print_cr("STARTUPTIME " JLONG_FORMAT " restore-native", os::javaTimeNanos());

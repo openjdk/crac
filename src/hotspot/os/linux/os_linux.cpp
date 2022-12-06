@@ -6022,13 +6022,6 @@ public:
 };
 
 static int checkpoint_restore(int *shmid) {
-{ bool stop=false;
-while (stop);
-}
-  StubCodeDesc::thaw();
-  VM_Version::initialize();
-  CodeCache::mark_all_nmethods_for_deoptimization();
-  Deoptimization::deoptimize_all_marked();
 
   int cres = call_crengine();
   if (cres < 0) {
@@ -6046,7 +6039,16 @@ while (stop);
   } while (sig == -1 && errno == EINTR);
   assert(sig == RESTORE_SIGNAL, "got what requested");
 
+{ bool stop=false;
+while (stop);
+}
   linux_ifunc_reset();
+
+  StubCodeDesc::thaw();
+  VM_Version::initialize();
+
+  CodeCache::mark_all_nmethods_for_deoptimization();
+  Deoptimization::deoptimize_all_marked();
 
   if (CRTraceStartupTime) {
     tty->print_cr("STARTUPTIME " JLONG_FORMAT " restore-native", os::javaTimeNanos());

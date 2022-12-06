@@ -25,6 +25,7 @@
 
 // no precompiled headers
 #include "jvm.h"
+#include "classfile/systemDictionary.hpp"
 #include "classfile/vmSymbols.hpp"
 #include "code/icBuffer.hpp"
 #include "code/vtableStubs.hpp"
@@ -6020,7 +6021,65 @@ public:
   }
 };
 
+static bool cpu_initialize_done;
+static os::PlatformMonitor *cpu_initialize_sync;
+
+class CpuInitializeThread : public JavaThread {
+ public:
+  CpuInitializeThread() : JavaThread(&entry_point) {}
+
+  // EscapeBarrier::thread_added would assert otherwise.
+  virtual bool is_hidden_from_external_view() const
+#if __cplusplus >= 201103L
+  override
+#endif
+  { return true; }
+
+ private:
+  static void entry_point(JavaThread* thread, TRAPS) {
+  tty->print_cr("thread init");
+    StubCodeDesc::thaw();
+    VM_Version::initialize();
+  tty->print_cr("thread lock");
+    cpu_initialize_sync->lock();
+  tty->print_cr("thread notify");
+    cpu_initialize_done = true;
+    cpu_initialize_sync->notify();
+  tty->print_cr("thread unlock");
+    cpu_initialize_sync->unlock();
+  }
+};
+
 static int checkpoint_restore(int *shmid) {
+{ bool stop=true;
+while (stop);
+}
+  ResourceMark rm;
+  EXCEPTION_MARK;
+
+  cpu_initialize_done = false;
+  cpu_initialize_sync = new os::PlatformMonitor();
+  {
+    // It cannot be joined due to PTHREAD_CREATE_DETACHED.
+    Klass* k = SystemDictionary::resolve_or_fail(vmSymbols::java_lang_Thread(), true, CHECK_(JVM_CHECKPOINT_ERROR));
+    instanceHandle thread_oop = InstanceKlass::cast(k)->allocate_instance_handle(CHECK_(JVM_CHECKPOINT_ERROR));
+    CpuInitializeThread *jt = new CpuInitializeThread();
+    java_lang_Thread::set_thread(thread_oop(), jt);
+    java_lang_Thread::set_daemon(thread_oop());
+    THREAD->set_threadObj(thread_oop());
+    Threads::add(jt);
+    Thread::start(jt);
+  }
+tty->print_cr("jt lock");
+  cpu_initialize_sync->lock();
+  while (!cpu_initialize_done) {
+tty->print_cr("jt wait");
+    cpu_initialize_sync->wait(0);
+}
+tty->print_cr("jt unlock");
+  cpu_initialize_sync->unlock();
+  delete cpu_initialize_sync;
+tty->print_cr("jt done");
 
   int cres = call_crengine();
   if (cres < 0) {

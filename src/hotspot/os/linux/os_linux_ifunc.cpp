@@ -49,7 +49,8 @@
 #define DT_RELRSZ	35		/* Total size of RELR relative relocations */
 #endif
 
-#define RTLD_GLOBAL_RO_DL_X86_CPU_FEATURES_BASIC_KIND_OFFSET 0x70 // gdb -batch /lib64/ld-linux-x86-64.so.2 -ex 'p/x (void *)&_rtld_global_ro._dl_x86_cpu_features.basic.kind - (void *)&_rtld_global_ro'
+#define RTLD_GLOBAL_RO_DL_X86_CPU_FEATURES 0x70 // gdb -batch /lib64/ld-linux-x86-64.so.2 -ex 'p/x (void *)&_rtld_global_ro._dl_x86_cpu_features - (void *)&_rtld_global_ro'
+#define RTLD_GLOBAL_RO_DL_X86_CPU_FEATURES_SIZEOF 0x1e0 // gdb -batch /lib64/ld-linux-x86-64.so.2 -ex 'p/x sizeof(_rtld_global_ro._dl_x86_cpu_features)'
 #define ARCH_KIND_UNKNOWN 0 // gdb -batch /lib64/ld-linux-x86-64.so.2 -ex 'p/x arch_kind_unknown'
 
 #define strcmp strcmp_local
@@ -76,6 +77,13 @@ static size_t strlen_local(const char *cs) {
   while (*cs++)
     ++retval;
   return retval;
+}
+
+#define memset memset_local
+static void *memset_local(void *m, int c, size_t n) {
+  for (uint8_t *d = (uint8_t *)m; n--; ++d)
+    *d = c;
+  return m;
 }
 
 static void ehdr_verify(const Elf64_Ehdr *ehdr) {
@@ -434,6 +442,7 @@ static int reset_ifunc_iterate_phdr(struct dl_phdr_info *info, size_t size, void
   assert(*l_relocated_p & ~L_RELOCATED_MASK);
   *l_relocated_p &= ~L_RELOCATED_MASK;
   void **l_scope_p = (void **)(((const uint8_t *)map) + L_SCOPE_OFFSET);
+  // FIXME: skip ifuncs
   dl_relocate_object((struct link_map *)map, *l_scope_p, 0/*lazy*/, 0/*consider_profiling*/);
   // It was read/write before but dl_relocate_object made it read-only.
   const void *dynamic_start = NULL;
@@ -507,19 +516,21 @@ static void reset_glibc() {
   intersect(&rtld_global_ro, &rtld_global_ro_end, &tunable_list, &tunable_list_end);
   readonly_unset(rtld_global_ro, rtld_global_ro_end);
   readonly_unset(tunable_list, tunable_list_end);
-  uint32_t *kind_p = (uint32_t *)(((uint8_t *)rtld_global_ro_exact) + RTLD_GLOBAL_RO_DL_X86_CPU_FEATURES_BASIC_KIND_OFFSET);
-  assert(*kind_p != ARCH_KIND_UNKNOWN);
-  *kind_p = ARCH_KIND_UNKNOWN;
+  void *cpu_features = (void *)(((uint8_t *)rtld_global_ro_exact) + RTLD_GLOBAL_RO_DL_X86_CPU_FEATURES);
+  assert(*(const uint32_t *)cpu_features != ARCH_KIND_UNKNOWN); // .basic.kind
+  memset(cpu_features, 0, RTLD_GLOBAL_RO_DL_X86_CPU_FEATURES_SIZEOF);
+  assert(*(const uint32_t *)cpu_features == ARCH_KIND_UNKNOWN); // .basic.kind
   dl_x86_init_cpu_features_p dl_x86_init_cpu_features = (dl_x86_init_cpu_features_p)symtab_lookup("_dl_x86_init_cpu_features", NULL);
   (*dl_x86_init_cpu_features)();
-  assert(*kind_p != ARCH_KIND_UNKNOWN);
+  assert(*(const uint32_t *)cpu_features != ARCH_KIND_UNKNOWN); // .basic.kind
   readonly_reset(rtld_global_ro, rtld_global_ro_end);
   readonly_reset(tunable_list, tunable_list_end);
 }
 
 void linux_ifunc_reset() {
   fprintf(stderr,"--reset_ifunc\n");
+  // dl_relocate_object() from reset_ifunc_iterate_phdr may be calling glibc ifunc resolvers already.
+  reset_glibc();
   int i = dl_iterate_phdr(reset_ifunc_iterate_phdr, NULL/*data*/);
   assert(!i);
-  reset_glibc();
 }

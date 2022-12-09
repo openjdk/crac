@@ -45,7 +45,7 @@ public class PersistentJarFile extends JarFile implements JDKResource {
 
     @Override
     public void beforeCheckpoint(Context<? extends Resource> context) throws Exception {
-        logger.log(System.Logger.Level.INFO, "Assuming persistent " + this.getName());
+        logger.log(System.Logger.Level.INFO, this.getName() + " is recorded as always available on restore");
         SharedSecrets.getJavaUtilZipFileAccess().beforeCheckpoint(this);
     }
 

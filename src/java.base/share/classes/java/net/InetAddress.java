@@ -46,6 +46,9 @@ import java.util.concurrent.ConcurrentSkipListSet;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.Arrays;
 
+import jdk.crac.Context;
+import jdk.crac.Core;
+import jdk.crac.Resource;
 import jdk.internal.access.JavaNetInetAddressAccess;
 import jdk.internal.access.SharedSecrets;
 import sun.security.action.*;
@@ -341,6 +344,19 @@ public class InetAddress implements java.io.Serializable {
                 }
         );
         init();
+        // DNS cache is cleared before the checkpoint; application restored at later point
+        // or in a different environment should query DNS again.
+        Core.getGlobalContext().register(new Resource() {
+            @Override
+            public void beforeCheckpoint(Context<? extends Resource> context) throws Exception {
+                cache.clear();
+                expirySet.clear();
+            }
+
+            @Override
+            public void afterRestore(Context<? extends Resource> context) throws Exception {
+            }
+        });
     }
 
     /**

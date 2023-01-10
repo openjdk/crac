@@ -2117,6 +2117,11 @@ const intx ObjectAlignmentInBytes = 8;
       "Throw CheckpointException if uncheckpointable resource handle found")\
                                                                             \
   product(bool, CRTrace, true, "Minimal C/R tracing")                       \
+                                                                            \
+  product(ccstr, CRIgnoredFileDescriptors, NULL, "Comma-separated list of " \
+      "file descriptor numbers or paths. All file descriptors greater than" \
+      " 2 (stdin, stdout and stderr are excluded automatically) not in "    \
+      "this list are closed when the VM is started.")                       \
 
 // end of RUNTIME_FLAGS
 

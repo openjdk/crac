@@ -645,6 +645,7 @@ class Arguments : AllStatic {
     assert(Arguments::is_dumping_archive(), "dump time only");
   }
 
+  static bool is_option_set(const JavaVMInitArgs* args, const char *option);
   static bool is_restore_option_set(const JavaVMInitArgs* args);
 
   static bool parse_options_for_restore(const JavaVMInitArgs* args);

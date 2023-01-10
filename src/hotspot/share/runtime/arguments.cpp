@@ -2314,16 +2314,20 @@ jint Arguments::parse_xss(const JavaVMOption* option, const char* tail, intx* ou
   return JNI_OK;
 }
 
-bool Arguments::is_restore_option_set(const JavaVMInitArgs* args) {
+bool Arguments::is_option_set(const JavaVMInitArgs* args, const char *what) {
   const char* tail;
   // iterate over arguments
   for (int index = 0; index < args->nOptions; index++) {
     const JavaVMOption* option = args->options + index;
-    if (match_option(option, "-XX:CRaCRestoreFrom", &tail)) {
+    if (match_option(option, what, &tail)) {
       return true;
     }
   }
   return false;
+}
+
+bool Arguments::is_restore_option_set(const JavaVMInitArgs* args) {
+  return is_option_set(args, "-XX:CRaCRestoreFrom");
 }
 
 bool Arguments::parse_options_for_restore(const JavaVMInitArgs* args) {

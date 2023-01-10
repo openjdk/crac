@@ -6202,7 +6202,7 @@ void VM_Crac::doit() {
       continue;
     }
 
-    char detailsbuf[128];
+    char detailsbuf[PATH_MAX];
     int linkret = readfdlink(i, detailsbuf, sizeof(detailsbuf));
     const char* details = 0 < linkret ? detailsbuf : "";
     print_resources("JVM: FD fd=%d type=%s: details1=\"%s\" ",
@@ -6454,6 +6454,59 @@ void os::Linux::restore() {
     execl(_crengine, _crengine, "restore", CRaCRestoreFrom, NULL);
     warning("cannot execute \"%s restore ...\" (%s)", _crengine, strerror(errno));
   }
+}
+
+static bool is_fd_ignored(int fd, const char *path) {
+  int path_len = path ? strlen(path) : -1;
+  if (!strncmp("/proc/", path, 6) && !strcmp("/fd", path + path_len - 3)) {
+    // silently ignore us reading our own descriptors
+    return true;
+  }
+
+  const char *list = CRIgnoredFileDescriptors;
+  while (list && *list) {
+    const char *end = strchr(list, ',');
+    if (!end) {
+      end = list + strlen(list);
+    }
+    char *invalid;
+    int ignored_fd = strtol(list, &invalid, 10);
+    if (invalid == end) { // entry was integer -> file descriptor
+      if (fd == ignored_fd) {
+        log_trace(os)("CRaC not closing file descriptor %d (%s) as it is marked as ignored.", fd, path);
+        return true;
+      }
+    } else { // interpret entry as path
+      if (path_len != -1 && path_len == end - list && !strncmp(path, list, end - list)) {
+        log_trace(os)("CRaC not closing file descriptor %d (%s) as it is marked as ignored.", fd, path);
+        return true;
+      }
+    }
+    if (*end) {
+      list = end + 1;
+    } else {
+      break;
+    }
+  }
+  return false;
+}
+
+void os::Linux::close_extra_descriptors() {
+  char path[PATH_MAX];
+  struct dirent *dp;
+
+  DIR *dir = opendir("/proc/self/fd");
+  while (dp = readdir(dir)) {
+    int fd = atoi(dp->d_name);
+    if (fd > 2) {
+      int r = readfdlink(fd, path, sizeof(path));
+      if (!is_fd_ignored(fd, r != -1 ? path : nullptr)) {
+        tty->print("CRaC closing file descriptor %d: %s\n", fd, path);
+        close(fd);
+      }
+    }
+  }
+  closedir(dir);
 }
 
 bool CracRestoreParameters::read_from(int fd) {

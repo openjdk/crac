@@ -1639,6 +1639,7 @@ class Threads: AllStatic {
   static void possibly_parallel_threads_do(bool is_par, ThreadClosure* tc);
 
   static jint check_for_restore(JavaVMInitArgs* args);
+  static void close_extra_descriptors(JavaVMInitArgs* args);
 
   // Initializes the vm and creates the vm thread
   static jint create_vm(JavaVMInitArgs* args, bool* canTryAgain);

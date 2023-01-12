@@ -36,6 +36,7 @@ import java.io.IOException;
 import java.util.jar.JarFile;
 
 public class PersistentJarFile extends JarFile implements JDKResource {
+    static final System.Logger logger = System.getLogger("jdk.crac");
 
     public PersistentJarFile(File file, boolean b, int openRead, Runtime.Version runtimeVersion) throws IOException {
         super(file, b, openRead, runtimeVersion);
@@ -44,6 +45,7 @@ public class PersistentJarFile extends JarFile implements JDKResource {
 
     @Override
     public void beforeCheckpoint(Context<? extends Resource> context) throws Exception {
+        logger.log(System.Logger.Level.INFO, this.getName() + " is recorded as always available on restore");
         SharedSecrets.getJavaUtilZipFileAccess().beforeCheckpoint(this);
     }
 

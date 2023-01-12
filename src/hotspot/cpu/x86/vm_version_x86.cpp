@@ -615,7 +615,7 @@ class VM_Version_StubGenerator: public StubCodeGenerator {
   };
 };
 
-void VM_Version::get_processor_features() {
+void VM_Version::get_processor_features(bool use_CPUFeatures) {
 
   _cpu = 4; // 486 by default
   _model = 0;
@@ -640,6 +640,25 @@ void VM_Version::get_processor_features() {
     // and only if hyperthreading is available.
     _logical_processors_per_package = logical_processor_count();
     _L1_data_cache_line_size = L1_line_size();
+  }
+
+warning("use_CPUFeatures=%d FLAG_IS_DEFAULT(CPUFeatures)=%d _features=0x%lx",use_CPUFeatures,FLAG_IS_DEFAULT(CPUFeatures),_features);
+  if (use_CPUFeatures && !FLAG_IS_DEFAULT(CPUFeatures)) {
+    uint64_t features_missing = CPUFeatures & ~_features;
+warning("features_missing=0x%lx",features_missing);
+    if (features_missing) {
+      char buf[512];
+      int res = jio_snprintf(
+		  buf, sizeof(buf),
+		  "Specified -XX:CPUFeatures=0x" UINT64_FORMAT_X
+		  "; this machine's CPU features are 0x" UINT64_FORMAT_X
+		  "; missing features of this CPU are 0x" UINT64_FORMAT_X,
+		  CPUFeatures, _features, features_missing);
+      assert(res > 0, "not enough temporary space allocated");
+      insert_features_names(buf + res, sizeof(buf) - res, features_missing);
+      vm_exit_during_initialization(buf);
+    }
+    _features = CPUFeatures;
   }
 
   _supports_cx8 = supports_cmpxchg8();
@@ -794,7 +813,7 @@ void VM_Version::get_processor_features() {
               cores_per_cpu(), threads_per_core(),
               cpu_family(), _model, _stepping, os::cpu_microcode_revision());
   assert(res > 0, "not enough temporary space allocated");
-  insert_features_names(buf + res, sizeof(buf) - res, _features_names);
+  insert_features_names(buf + res, sizeof(buf) - res);
 
   _features_string = os::strdup(buf);
 
@@ -1727,6 +1746,8 @@ void VM_Version::get_processor_features() {
   if (FLAG_IS_DEFAULT(UseSignumIntrinsic)) {
       FLAG_SET_DEFAULT(UseSignumIntrinsic, true);
   }
+
+warning("end of get_processor_features(%d) = _features = 0x%lx",use_CPUFeatures,_features);
 }
 
 void VM_Version::print_platform_virtualization_info(outputStream* st) {
@@ -1885,7 +1906,7 @@ void VM_Version::check_virtualizations() {
   }
 }
 
-void VM_Version::initialize() {
+void VM_Version::initialize_features(bool use_CPUFeatures) {
   ResourceMark rm;
   // Making this stub must be FIRST use of assembler
   stub_blob = BufferBlob::create("VM_Version stub", stub_size);
@@ -1900,7 +1921,11 @@ void VM_Version::initialize() {
   detect_virt_stub = CAST_TO_FN_PTR(detect_virt_stub_t,
                                      g.generate_detect_virt());
 
-  get_processor_features();
+  get_processor_features(use_CPUFeatures);
+}
+
+void VM_Version::initialize() {
+  initialize_features();
 
   LP64_ONLY(Assembler::precompute_instructions();)
 

@@ -707,7 +707,7 @@ enum Extended_Family {
     return retVal;
   }
 
-  static void get_processor_features();
+  static void get_processor_features(bool use_CPUFeatures);
 
 public:
   // Offsets for cpuid asm stub
@@ -740,9 +740,14 @@ public:
   static void set_avx_cpuFeatures() { _features = (CPU_SSE | CPU_SSE2 | CPU_AVX | CPU_VZEROUPPER ); }
   static void set_evex_cpuFeatures() { _features = (CPU_AVX512F | CPU_SSE | CPU_SSE2 | CPU_VZEROUPPER ); }
 
+  static void insert_features_names(char* buf, size_t buflen, uint64_t features = _features) {
+    Abstract_VM_Version::insert_features_names(buf, buflen, _features_names, features);
+  }
+
 
   // Initialization
   static void initialize();
+  static void initialize_features(bool use_CPUFeatures = true);
 
   // Override Abstract_VM_Version implementation
   static void print_platform_virtualization_info(outputStream*);

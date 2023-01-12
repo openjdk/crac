@@ -6039,7 +6039,7 @@ static int checkpoint_restore(int *shmid) {
   } while (sig == -1 && errno == EINTR);
   assert(sig == RESTORE_SIGNAL, "got what requested");
 
-{ bool stop=true;
+{ bool stop=false;
 while (stop);
 }
   linux_ifunc_reset();

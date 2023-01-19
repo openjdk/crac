@@ -124,22 +124,6 @@ static int symtab_lookup_iterate_phdr(struct dl_phdr_info *info, size_t size, vo
   struct symtab_lookup *data_p = (struct symtab_lookup *)data_voidp;
   //fprintf(stderr,"symtab_lookup(%s): link_map=%p l_addr=0x%lx l_ld=%p l_ld_diff=0x%lx %s\n",
   //	name, map, map->l_addr, map->l_ld, ((uintptr_t)map->l_ld)-map->l_addr, (!map->l_name[0] ? "<empty>" : map->l_name));
-#if 0
-  const Elf64_Ehdr *ehdr = NULL;
-  assert(size >= offsetof(struct dl_phdr_info, dlpi_adds));
-  for (size_t phdr_ix = 0; phdr_ix < info->dlpi_phnum; ++phdr_ix) {
-    const Elf64_Phdr *phdr = info->dlpi_phdr + phdr_ix;
-    if (phdr->p_type == PT_PHDR) {
-      assert(phdr->p_offset == phdr->p_vaddr); // FIXME: It may not apply.
-      assert(phdr->p_paddr == phdr->p_vaddr);
-      assert(phdr->p_filesz == phdr->p_memsz);
-      assert(phdr->p_memsz == sizeof(*phdr) * info->dlpi_phnum);
-      assert(!ehdr);
-      ehdr = (const Elf64_Ehdr *)(((const uint8_t *)info->dlpi_phdr) - phdr->p_vaddr);
-    }
-  }
-  assert(ehdr);
-#endif
   const char *filename = info->dlpi_name;
   if (strcmp(filename, "linux-vdso.so.1") == 0)
     return 0; // unused
@@ -149,9 +133,6 @@ static int symtab_lookup_iterate_phdr(struct dl_phdr_info *info, size_t size, vo
   assert(elf_fd != -1);
   const Elf64_Ehdr *ehdr = (const Elf64_Ehdr *)file_mmap(elf_fd);
   ehdr_verify(ehdr);
-#if 0
-  assert((const Elf64_Phdr *)(((const uint8_t *)ehdr) + ehdr->e_phoff) == info->dlpi_phdr);
-#endif
   assert(ehdr->e_phentsize == sizeof(Elf64_Phdr));
   assert(ehdr->e_phnum == info->dlpi_phnum);
   const Elf64_Shdr *shdr_base = (const Elf64_Shdr *)(((const uint8_t *)ehdr) + ehdr->e_shoff);
@@ -317,34 +298,6 @@ const struct link_map *phdr_info_to_link_map(struct dl_phdr_info *phdr_info) {
   assert(err == 1);
   assert(link_map);
   return link_map;
-#if 0
-  assert(size >= offsetof(struct dl_phdr_info, dlpi_adds));
-  const Elf64_Ehdr *ehdr = NULL;
-  const Elf64_Phdr *dynamic_phdr = NULL;
-  assert(size >= offsetof(struct dl_phdr_info, dlpi_adds));
-  for (size_t phdr_ix = 0; phdr_ix < info->dlpi_phnum; ++phdr_ix) {
-    const Elf64_Phdr *phdr = info->dlpi_phdr + phdr_ix;
-    if (phdr->p_type == PT_PHDR || phdr->p_type == PT_DYNAMIC) {
-      assert(phdr->p_offset == phdr->p_vaddr); // FIXME: It may not apply.
-      assert(phdr->p_paddr == phdr->p_vaddr);
-      assert(phdr->p_filesz == phdr->p_memsz);
-    }
-    if (phdr->p_type == PT_PHDR) {
-      assert(phdr->p_memsz == sizeof(*phdr) * info->dlpi_phnum);
-      assert(!ehdr);
-      ehdr = (const Elf64_Ehdr *)(((const uint8_t *)info->dlpi_phdr) - phdr->p_vaddr);
-      assert(ehdr);
-      ehdr_verify(ehdr);
-    }
-    if (phdr->p_type == PT_DYNAMIC) {
-      assert(!relro_phdr);
-      dynamic_phdr = phdr;
-    }
-  }
-  assert(ehdr);
-  assert(dynamic_phdr);
-  const Elf64_Dyn *dynamic = (const Elf64_Dyn *)(((const uint8_t *)ehdr) + dynamic_phdr->p_vaddr);
-#endif
 }
 
 static void page_align(const void **start_p, const void **end_p) {

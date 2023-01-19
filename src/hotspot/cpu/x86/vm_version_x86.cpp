@@ -642,23 +642,20 @@ void VM_Version::get_processor_features(bool use_CPUFeatures) {
     _L1_data_cache_line_size = L1_line_size();
   }
 
-warning("use_CPUFeatures=%d FLAG_IS_DEFAULT(CPUFeatures)=%d _features=0x%lx",use_CPUFeatures,FLAG_IS_DEFAULT(CPUFeatures),_features);
-{ bool stop=false;
-while (stop);
-}
   if (use_CPUFeatures && !FLAG_IS_DEFAULT(CPUFeatures)) {
     uint64_t features_missing = CPUFeatures & ~_features;
-warning("features_missing=0x%lx",features_missing);
     if (features_missing) {
       char buf[512];
       int res = jio_snprintf(
 		  buf, sizeof(buf),
 		  "Specified -XX:CPUFeatures=0x" UINT64_FORMAT_X
 		  "; this machine's CPU features are 0x" UINT64_FORMAT_X
-		  "; missing features of this CPU are 0x" UINT64_FORMAT_X,
+		  "; missing features of this CPU are 0x" UINT64_FORMAT_X " ",
 		  CPUFeatures, _features, features_missing);
       assert(res > 0, "not enough temporary space allocated");
       insert_features_names(buf + res, sizeof(buf) - res, features_missing);
+      assert(buf[res] == ',', "unexpeced VM_Version::insert_features_names separator instead of ','");
+      buf[res] = '=';
       vm_exit_during_initialization(buf);
     }
     _features = CPUFeatures;
@@ -1749,8 +1746,6 @@ warning("features_missing=0x%lx",features_missing);
   if (FLAG_IS_DEFAULT(UseSignumIntrinsic)) {
       FLAG_SET_DEFAULT(UseSignumIntrinsic, true);
   }
-
-warning("end of get_processor_features(%d) = _features = 0x%lx",use_CPUFeatures,_features);
 }
 
 void VM_Version::print_platform_virtualization_info(outputStream* st) {

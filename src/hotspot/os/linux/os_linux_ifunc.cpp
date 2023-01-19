@@ -528,7 +528,6 @@ static void reset_glibc() {
 }
 
 void linux_ifunc_reset() {
-  fprintf(stderr,"--reset_ifunc\n");
   // dl_relocate_object() from reset_ifunc_iterate_phdr may be calling glibc ifunc resolvers already.
   reset_glibc();
   int i = dl_iterate_phdr(reset_ifunc_iterate_phdr, NULL/*data*/);

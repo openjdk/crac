@@ -6041,14 +6041,6 @@ static int checkpoint_restore(int *shmid) {
   assert(sig == RESTORE_SIGNAL, "got what requested");
 
   linux_ifunc_reset();
-{ bool stop=!!getenv("STOP"); // getenv() needs IFUNC
-while (stop);
-}
-
-  StubCodeDesc::thaw();
-#if 0
-  VM_Version::initialize();
-#endif
 
   CodeCache::mark_all_nmethods_for_deoptimization();
   Deoptimization::deoptimize_all_marked();
@@ -6209,11 +6201,12 @@ void VM_Crac::verify_cpu_compatibility() {
     SUPPORTS(supports_atomic_getadd4) \
     SUPPORTS(supports_atomic_getadd8) \
     /**/
-#define SUPPORTS(x) bool x##_saved = ! Abstract_VM_Version::x();
+#define SUPPORTS(x) bool x##_saved = Abstract_VM_Version::x();
   SUPPORTS_SET
 #undef SUPPORTS
 
   // FIXME: x86 only
+  StubCodeDesc::thaw();
   VM_Version::initialize_features(false);
 
   uint64_t features_missing = features_saved & ~Abstract_VM_Version::features();

@@ -6209,16 +6209,14 @@ void VM_Crac::verify_cpu_compatibility() {
     SUPPORTS(supports_atomic_getadd4) \
     SUPPORTS(supports_atomic_getadd8) \
     /**/
-#define SUPPORTS(x) bool x##_saved = Abstract_VM_Version::x();
+#define SUPPORTS(x) bool x##_saved = ! Abstract_VM_Version::x();
   SUPPORTS_SET
 #undef SUPPORTS
 
-  // FIXME: x86 only - VM_Version::initialize() would be slow due to Assembler::precompute_instructions().
+  // FIXME: x86 only
   VM_Version::initialize_features(false);
 
   uint64_t features_missing = features_saved & ~Abstract_VM_Version::features();
-warning("restore:Abstract_VM_Version::features()=0x" UINT64_FORMAT_X " features_saved=0x" UINT64_FORMAT_X " features_missing=0x" UINT64_FORMAT_X,Abstract_VM_Version::features(),features_saved,features_missing);
-
   if (features_missing) {
     char buf[512];
     int res = jio_snprintf(
@@ -6234,20 +6232,17 @@ warning("restore:Abstract_VM_Version::features()=0x" UINT64_FORMAT_X " features_
     VM_Version::insert_features_names(buf + res, sizeof(buf) - res, features_missing);
     assert(buf[res] == ',', "unexpeced VM_Version::insert_features_names separator instead of ','");
     buf[res] = '=';
-//warning("vm_exit_during_initialization(%s)",buf); //////////////////////////////////FIXME
     vm_exit_during_initialization(buf);
   }
   auto supports_exit = [&](const char *supports, bool file, bool this_cpu) {
     char buf[512];
     int res = jio_snprintf(
 		buf, sizeof(buf),
-		"Specified -XX:CRaCRestoreFrom file contains feature %s value %d while this CPU has value %d",
+		"Specified -XX:CRaCRestoreFrom file contains feature \"%s\" value %d while this CPU has value %d",
 		supports, file, this_cpu);
     assert(res > 0, "not enough temporary space allocated");
-//warning("vm_exit_during_initialization(%s)",buf); //////////////////////////////////FIXME
     vm_exit_during_initialization(buf);
   };
-///////////////////////////FIXME: Verify #x
 #define SUPPORTS(x)                                           \
   if (x##_saved != Abstract_VM_Version::x()) {                \
     supports_exit( #x , Abstract_VM_Version::x(), x##_saved); \

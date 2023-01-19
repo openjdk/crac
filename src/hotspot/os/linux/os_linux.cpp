@@ -6040,13 +6040,15 @@ static int checkpoint_restore(int *shmid) {
   } while (sig == -1 && errno == EINTR);
   assert(sig == RESTORE_SIGNAL, "got what requested");
 
-{ bool stop=false;
+  linux_ifunc_reset();
+{ bool stop=!!getenv("STOP"); // getenv() needs IFUNC
 while (stop);
 }
-  linux_ifunc_reset();
 
   StubCodeDesc::thaw();
+#if 0
   VM_Version::initialize();
+#endif
 
   CodeCache::mark_all_nmethods_for_deoptimization();
   Deoptimization::deoptimize_all_marked();
@@ -6214,7 +6216,7 @@ void VM_Crac::verify_cpu_compatibility() {
   // FIXME: x86 only - VM_Version::initialize() would be slow due to Assembler::precompute_instructions().
   VM_Version::initialize_features(false);
 
-  uint64_t features_missing = Abstract_VM_Version::features() & ~features_saved;
+  uint64_t features_missing = features_saved & ~Abstract_VM_Version::features();
 warning("restore:Abstract_VM_Version::features()=0x" UINT64_FORMAT_X " features_saved=0x" UINT64_FORMAT_X " features_missing=0x" UINT64_FORMAT_X,Abstract_VM_Version::features(),features_saved,features_missing);
 
   if (features_missing) {
@@ -6224,12 +6226,15 @@ warning("restore:Abstract_VM_Version::features()=0x" UINT64_FORMAT_X " features_
 		"You have to specify -XX:CPUFeatures=0x" UINT64_FORMAT_X " during -XX:CRaCCheckpointTo making of the checkpoint"
 		"; specified -XX:CRaCRestoreFrom file contains CPU features 0x" UINT64_FORMAT_X
 		"; this machine's CPU features are 0x" UINT64_FORMAT_X
-		"; missing features of this CPU are 0x" UINT64_FORMAT_X,
+		"; missing features of this CPU are 0x" UINT64_FORMAT_X " ",
 		Abstract_VM_Version::features() & features_saved,
-		Abstract_VM_Version::features(), features_saved, features_missing);
+		features_saved, Abstract_VM_Version::features(),
+		features_missing);
     assert(res > 0, "not enough temporary space allocated");
     VM_Version::insert_features_names(buf + res, sizeof(buf) - res, features_missing);
-warning("vm_exit_during_initialization(%s)",buf); //////////////////////////////////FIXME
+    assert(buf[res] == ',', "unexpeced VM_Version::insert_features_names separator instead of ','");
+    buf[res] = '=';
+//warning("vm_exit_during_initialization(%s)",buf); //////////////////////////////////FIXME
     vm_exit_during_initialization(buf);
   }
   auto supports_exit = [&](const char *supports, bool file, bool this_cpu) {
@@ -6239,7 +6244,7 @@ warning("vm_exit_during_initialization(%s)",buf); //////////////////////////////
 		"Specified -XX:CRaCRestoreFrom file contains feature %s value %d while this CPU has value %d",
 		supports, file, this_cpu);
     assert(res > 0, "not enough temporary space allocated");
-warning("vm_exit_during_initialization(%s)",buf); //////////////////////////////////FIXME
+//warning("vm_exit_during_initialization(%s)",buf); //////////////////////////////////FIXME
     vm_exit_during_initialization(buf);
   };
 ///////////////////////////FIXME: Verify #x

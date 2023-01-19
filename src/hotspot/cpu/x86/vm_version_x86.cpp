@@ -643,6 +643,9 @@ void VM_Version::get_processor_features(bool use_CPUFeatures) {
   }
 
 warning("use_CPUFeatures=%d FLAG_IS_DEFAULT(CPUFeatures)=%d _features=0x%lx",use_CPUFeatures,FLAG_IS_DEFAULT(CPUFeatures),_features);
+{ bool stop=false;
+while (stop);
+}
   if (use_CPUFeatures && !FLAG_IS_DEFAULT(CPUFeatures)) {
     uint64_t features_missing = CPUFeatures & ~_features;
 warning("features_missing=0x%lx",features_missing);

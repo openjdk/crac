@@ -10567,9 +10567,8 @@ static u_char* vzup_code  = NULL;
 static int     vzup_len   = 0;
 
 void Assembler::precompute_instructions() {
-  assert(!Universe::is_fully_initialized() || SafepointSynchronize::is_at_safepoint(),
-    "must still be single threaded or at safepoint");
-//FIXME:  guarantee(!precomputed, "only once");
+  assert(!Universe::is_fully_initialized(), "must still be single threaded");
+  guarantee(!precomputed, "only once");
   precomputed = true;
   ResourceMark rm;
 

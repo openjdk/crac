@@ -2717,14 +2717,6 @@ jint Threads::check_for_restore(JavaVMInitArgs* args) {
   return JNI_OK;
 }
 
-void Threads::close_extra_descriptors(JavaVMInitArgs *args) {
-  if (Arguments::is_option_set(args, "-XX:CRaCCheckpointTo")) {
-    // FIXME: better method to go apply the options?
-    Arguments::parse_options_for_restore(args);
-    os::Linux::close_extra_descriptors();
-  }
-}
-
 jint Threads::create_vm(JavaVMInitArgs* args, bool* canTryAgain) {
   extern void JDK_Version_init();
 
@@ -2753,9 +2745,6 @@ jint Threads::create_vm(JavaVMInitArgs* args, bool* canTryAgain) {
   // Record VM creation timing statistics
   TraceVmCreationTime create_vm_timer;
   create_vm_timer.start();
-
-  // We need to close the descriptors before JDK starts opening modules directory
-  close_extra_descriptors(args);
 
   // Initialize system properties.
   Arguments::init_system_properties();

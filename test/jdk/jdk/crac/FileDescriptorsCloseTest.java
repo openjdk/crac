@@ -28,6 +28,7 @@ import jdk.test.lib.Utils;
 import jdk.test.lib.process.ProcessTools;
 
 import java.io.IOException;
+import java.lang.reflect.Method;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.*;
@@ -37,17 +38,20 @@ import java.util.stream.Collectors;
  * @test
  * @library /test/lib
  * @build CheckpointRestore
- * @run main FileDescriptorsCloseTest
+ * @run main FileDescriptorsCloseTest testCheckpointWithOpenFds
+ * @run main FileDescriptorsCloseTest testIgnoredFileDescriptors
  */
 public class FileDescriptorsCloseTest {
     private static final String EXTRA_FD_WRAPPER = Path.of(Utils.TEST_SRC, "extra_fd_wrapper.sh").toString();
 
     public static void main(String[] args) throws Throwable {
-        testCheckpointWithOpenFds();
-        testIgnoredFileDescriptors();
+        if (args.length < 1) {
+            throw new IllegalArgumentException();
+        }
+        FileDescriptorsCloseTest.class.getMethod(args[0]).invoke(null);
     }
 
-    private static void testCheckpointWithOpenFds() throws Throwable {
+    public static void testCheckpointWithOpenFds() throws Throwable {
         List<String> cmd = new ArrayList<>();
         cmd.add(EXTRA_FD_WRAPPER);
         cmd.add(JDKToolFinder.getJDKTool("java"));
@@ -64,7 +68,7 @@ public class FileDescriptorsCloseTest {
                 .shouldContain(CheckpointRestore.RESTORED_MESSAGE);
     }
 
-    private static void testIgnoredFileDescriptors() throws Throwable {
+    public static void testIgnoredFileDescriptors() throws Throwable {
         List<String> cmd = new ArrayList<>();
         cmd.add(EXTRA_FD_WRAPPER);
         cmd.addAll(Arrays.asList("-o", "43", "/dev/stdout"));
@@ -73,7 +77,7 @@ public class FileDescriptorsCloseTest {
         cmd.add("-cp");
         cmd.add(System.getProperty("java.class.path"));
         cmd.add("-XX:CRaCCheckpointTo=./cr");
-        cmd.add("-XX:CRIgnoredFileDescriptors=43,/dev/null,44,/dev/urandom");
+        cmd.add("-XX:CRaCIgnoredFileDescriptors=43,/dev/null,44,/dev/urandom");
         cmd.add("FileDescriptorsCloseTest$TestIgnoredDescriptors");
         // Note that the process is killed after checkpoint
         ProcessTools.executeProcess(cmd.toArray(new String[0]))

@@ -5750,6 +5750,9 @@ void os::Linux::vm_create_start() {
   if (!CRaCCheckpointTo) {
     return;
   }
+  if (CRaCCheckpointTo) {
+    close_extra_descriptors();
+  }
   _vm_inited_fds.initialize();
 }
 
@@ -6456,14 +6459,15 @@ void os::Linux::restore() {
   }
 }
 
+static char modules_path[JVM_MAXPATHLEN] = { '\0' };
+
 static bool is_fd_ignored(int fd, const char *path) {
-  int path_len = path ? strlen(path) : -1;
-  if (!strncmp("/proc/", path, 6) && !strcmp("/fd", path + path_len - 3)) {
-    // silently ignore us reading our own descriptors
+  if (!strcmp(modules_path, path)) {
+    // modules directory is opened al the time
     return true;
   }
 
-  const char *list = CRIgnoredFileDescriptors;
+  const char *list = CRaCIgnoredFileDescriptors;
   while (list && *list) {
     const char *end = strchr(list, ',');
     if (!end) {
@@ -6477,6 +6481,7 @@ static bool is_fd_ignored(int fd, const char *path) {
         return true;
       }
     } else { // interpret entry as path
+      int path_len = path ? strlen(path) : -1;
       if (path_len != -1 && path_len == end - list && !strncmp(path, list, end - list)) {
         log_trace(os)("CRaC not closing file descriptor %d (%s) as it is marked as ignored.", fd, path);
         return true;
@@ -6492,13 +6497,18 @@ static bool is_fd_ignored(int fd, const char *path) {
 }
 
 void os::Linux::close_extra_descriptors() {
+  if (modules_path[0] == '\0') {
+    const char* fileSep = os::file_separator();
+    jio_snprintf(modules_path, JVM_MAXPATHLEN, "%s%slib%smodules", Arguments::get_java_home(), fileSep, fileSep);
+  }
+
   char path[PATH_MAX];
   struct dirent *dp;
 
   DIR *dir = opendir("/proc/self/fd");
   while (dp = readdir(dir)) {
     int fd = atoi(dp->d_name);
-    if (fd > 2) {
+    if (fd > 2 && fd != dirfd(dir)) {
       int r = readfdlink(fd, path, sizeof(path));
       if (!is_fd_ignored(fd, r != -1 ? path : nullptr)) {
         tty->print("CRaC closing file descriptor %d: %s\n", fd, path);

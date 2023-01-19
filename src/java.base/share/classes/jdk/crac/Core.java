@@ -110,6 +110,7 @@ public class Core {
         return globalContext;
     }
 
+    @SuppressWarnings("removal")
     private static void checkpointRestore1(long jcmdStream) throws
             CheckpointException,
             RestoreException {
@@ -125,13 +126,6 @@ public class Core {
         }
 
         final Object[] bundle = checkpointRestore0(checkpointException != null, jcmdStream);
-	checkpointRestore2(bundle, checkpointException);
-    }
-
-    @SuppressWarnings("removal")
-    private static void checkpointRestore2(Object[] bundle, CheckpointException checkpointException) throws
-            CheckpointException,
-            RestoreException {
         final int retCode = (Integer)bundle[0];
         final String newArguments = (String)bundle[1];
         final String[] newProperties = (String[])bundle[2];

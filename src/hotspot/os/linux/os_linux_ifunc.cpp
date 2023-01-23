@@ -52,6 +52,7 @@
 #define RTLD_GLOBAL_RO_DL_X86_CPU_FEATURES 0x70 // gdb -batch /lib64/ld-linux-x86-64.so.2 -ex 'p/x (void *)&_rtld_global_ro._dl_x86_cpu_features - (void *)&_rtld_global_ro'
 #define RTLD_GLOBAL_RO_DL_X86_CPU_FEATURES_SIZEOF 0x1e0 // gdb -batch /lib64/ld-linux-x86-64.so.2 -ex 'p/x sizeof(_rtld_global_ro._dl_x86_cpu_features)'
 #define ARCH_KIND_UNKNOWN 0 // gdb -batch /lib64/ld-linux-x86-64.so.2 -ex 'p/x arch_kind_unknown'
+#define TUNABLE_T_SIZEOF 112 // gdb -batch /lib64/ld-linux-x86-64.so.2 -ex 'p sizeof(tunable_t)'
 
 #define strcmp strcmp_local
 static int strcmp_local(const char *a, const char *b) {
@@ -144,7 +145,7 @@ static int symtab_lookup_iterate_phdr(struct dl_phdr_info *info, size_t size, vo
   for (size_t shdr_ix = 0; shdr_ix < ehdr->e_shnum; ++shdr_ix) {
     const Elf64_Shdr *shdr = shdr_base + shdr_ix;
     //   [34] .symtab           SYMTAB          0000000000000000 0cfb68 003fd8 18     35 642  8
-    if (shdr->sh_type == SHT_SYMTAB) {
+    if (shdr->sh_type == SHT_DYNSYM) {
       symtab = (const Elf64_Sym *)(((const uint8_t *)ehdr) + shdr->sh_offset);
       sym_count = shdr->sh_size / sizeof(*symtab);
       assert(shdr->sh_size == sym_count * sizeof(*symtab));
@@ -162,7 +163,11 @@ static int symtab_lookup_iterate_phdr(struct dl_phdr_info *info, size_t size, vo
       //assert(ELF64_ST_BIND(sym->st_info) == STB_LOCAL); // FIXME
       //assert(ELF64_ST_TYPE(sym->st_info) == STT_FUNC); // FIXME
       assert(ELF64_ST_VISIBILITY(sym->st_other) == STV_DEFAULT); // FIXME
-      assert(sym->st_shndx != SHN_UNDEF);
+      if (sym->st_shndx == SHN_UNDEF) {
+	assert(sym->st_value == 0);
+	assert(sym->st_size == 0);
+	continue;
+      }
       assert(sym->st_value != 0);
       assert(sym->st_size != 0);
       // FIXME: We may have found the symbol multiple times - which one is preferred?
@@ -330,10 +335,31 @@ static void readonly_reset(const void *start, const void *end) {
   verify_rwxp(start, end, 04/*r--*/);
 }
 
+static const void *dl_relocate_object_get() {
+  const uint8_t *dl_get_tls_static_info = (const uint8_t *)symtab_lookup("_dl_get_tls_static_info", NULL);
+  const uint8_t and_1shl27_edx_mov_rsi_offset_rbp[] = { 0x81, 0xe2, 0x00, 0x00, 0x00, 0x08, 0x48, 0x89, 0xb5 };
+  const uint8_t *p = dl_get_tls_static_info - 1;
+  for (;;) {
+    if (memcmp(p, and_1shl27_edx_mov_rsi_offset_rbp, sizeof(and_1shl27_edx_mov_rsi_offset_rbp)) == 0)
+      break;
+    --p;
+  }
+  const uint8_t push_rbp[] = { 0x55 };
+  for (;;) {
+    if (memcmp(p, push_rbp, sizeof(push_rbp)) == 0)
+      break;
+    --p;
+  }
+  const uint8_t endbr64[] = { 0xf3, 0x0f, 0x1e, 0xfa };
+  if (memcmp(p - sizeof(endbr64), endbr64, sizeof(endbr64)) == 0)
+    p -= sizeof(endbr64);
+  return p;
+}
+
 typedef void (*dl_relocate_object_p) (struct link_map *l, const void */*struct r_scope_elem *scope[]*/, int reloc_mode, int consider_profiling);
 
 static int reset_ifunc_iterate_phdr(struct dl_phdr_info *info, size_t size, void *data_unused) {
-  dl_relocate_object_p dl_relocate_object = (dl_relocate_object_p)symtab_lookup("_dl_relocate_object", NULL);
+  dl_relocate_object_p dl_relocate_object = (dl_relocate_object_p)dl_relocate_object_get();
   if (strcmp(info->dlpi_name, "/lib64/ld-linux-x86-64.so.2") == 0) // _dl_relocate_object would crash on scope == NULL.
     return 0; // unused
   const void *relro = NULL;
@@ -457,13 +483,65 @@ static void intersect(const void **first_start_p, const void **first_end_p, cons
   }
 }
 
+/* 00000000000168b0 <__tunable_get_val>:
+ * 168b0:       f3 0f 1e fa             endbr64
+ * 168b4:       89 ff                   mov    %edi,%edi
+ * 168b6:       48 8d 0d e3 f1 01 00    lea    0x1f1e3(%rip),%rcx        # 35aa0 <tunable_list>
+ */
+static const void *tunable_list_get() {
+  const uint8_t *tunable_get_val = (const uint8_t *)symtab_lookup("__tunable_get_val", NULL);
+  const uint8_t endbr64[] = { 0xf3, 0x0f, 0x1e, 0xfa };
+  if (memcmp(tunable_get_val, endbr64, sizeof(endbr64)) == 0)
+    tunable_get_val += sizeof(endbr64);
+  const uint8_t mov_edi_edi[] = { 0x89, 0xff };
+  assert(memcmp(tunable_get_val, mov_edi_edi, sizeof(mov_edi_edi)) == 0);
+  tunable_get_val += sizeof(mov_edi_edi);
+  const uint8_t lea_offset_rip_rcx[] = { 0x48, 0x8d, 0x0d };
+  assert(memcmp(tunable_get_val, lea_offset_rip_rcx, sizeof(lea_offset_rip_rcx)) == 0);
+  tunable_get_val += sizeof(lea_offset_rip_rcx);
+  return tunable_get_val + 4 + *(const uint32_t *)tunable_get_val;
+}
+
+static size_t tunable_list_count() {
+  FILE *f = popen("/lib64/ld-linux-x86-64.so.2 --list-tunables", "r");
+  assert(f);
+  size_t lines = 0;
+  for (;;) {
+    int i = fgetc(f);
+    if (i == EOF)
+      break;
+    if (i == '\n')
+      ++lines;
+  }
+  assert(!ferror(f));
+  assert(feof(f));
+  int rc = pclose(f);
+  assert(rc == 0);
+  return lines;
+}
+
+static const void *dl_x86_init_cpu_features_get() {
+  const uint8_t *dl_x86_get_cpu_features = (const uint8_t *)symtab_lookup("_dl_x86_get_cpu_features", NULL);
+  const uint8_t mov_offset_rip_eax[] = { 0x8b, 0x05 };
+  const uint8_t *p = dl_x86_get_cpu_features - 1;
+  for (;;) {
+    if (memcmp(p, mov_offset_rip_eax, sizeof(mov_offset_rip_eax)) == 0)
+      break;
+    --p;
+  }
+  const uint8_t endbr64[] = { 0xf3, 0x0f, 0x1e, 0xfa };
+  if (memcmp(p - sizeof(endbr64), endbr64, sizeof(endbr64)) == 0)
+    p -= sizeof(endbr64);
+  return p;
+}
+
 typedef void (*dl_x86_init_cpu_features_p)();
 static void reset_glibc() {
   const void *rtld_global_ro_end;
   const void *rtld_global_ro = symtab_lookup("_rtld_global_ro", &rtld_global_ro_end);
   const void *rtld_global_ro_exact = rtld_global_ro;
-  const void *tunable_list_end;
-  const void *tunable_list = symtab_lookup("tunable_list", &tunable_list_end);
+  const void *tunable_list = tunable_list_get();
+  const void *tunable_list_end = ((const uint8_t *)tunable_list) + TUNABLE_T_SIZEOF * tunable_list_count();
   page_align(&rtld_global_ro, &rtld_global_ro_end);
   page_align(&tunable_list, &tunable_list_end);
   intersect(&rtld_global_ro, &rtld_global_ro_end, &tunable_list, &tunable_list_end);
@@ -473,7 +551,7 @@ static void reset_glibc() {
   assert(*(const uint32_t *)cpu_features != ARCH_KIND_UNKNOWN); // .basic.kind
   memset(cpu_features, 0, RTLD_GLOBAL_RO_DL_X86_CPU_FEATURES_SIZEOF);
   assert(*(const uint32_t *)cpu_features == ARCH_KIND_UNKNOWN); // .basic.kind
-  dl_x86_init_cpu_features_p dl_x86_init_cpu_features = (dl_x86_init_cpu_features_p)symtab_lookup("_dl_x86_init_cpu_features", NULL);
+  dl_x86_init_cpu_features_p dl_x86_init_cpu_features = (dl_x86_init_cpu_features_p)dl_x86_init_cpu_features_get();
   (*dl_x86_init_cpu_features)();
   assert(*(const uint32_t *)cpu_features != ARCH_KIND_UNKNOWN); // .basic.kind
   readonly_reset(rtld_global_ro, rtld_global_ro_end);

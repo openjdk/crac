@@ -120,6 +120,7 @@ static void file_munmap(const void *p, int fd) {
 struct symtab_lookup {
   const char *name;
   const void *start, *end;
+  unsigned sht;
 };
 static int symtab_lookup_iterate_phdr(struct dl_phdr_info *info, size_t size, void *data_voidp) {
   struct symtab_lookup *data_p = (struct symtab_lookup *)data_voidp;
@@ -145,7 +146,7 @@ static int symtab_lookup_iterate_phdr(struct dl_phdr_info *info, size_t size, vo
   for (size_t shdr_ix = 0; shdr_ix < ehdr->e_shnum; ++shdr_ix) {
     const Elf64_Shdr *shdr = shdr_base + shdr_ix;
     //   [34] .symtab           SYMTAB          0000000000000000 0cfb68 003fd8 18     35 642  8
-    if (shdr->sh_type == SHT_DYNSYM) {
+    if (shdr->sh_type == data_p->sht) {
       symtab = (const Elf64_Sym *)(((const uint8_t *)ehdr) + shdr->sh_offset);
       sym_count = shdr->sh_size / sizeof(*symtab);
       assert(shdr->sh_size == sym_count * sizeof(*symtab));
@@ -182,15 +183,21 @@ static int symtab_lookup_iterate_phdr(struct dl_phdr_info *info, size_t size, vo
   return 0;
 }
 
-static const void *symtab_lookup(const char *name, const void **end_return) {
+static const void *symtab_lookup(const char *name, const void **end_return, unsigned sht) {
+  assert(sht == SHT_DYNSYM || sht == SHT_SYMTAB);
   struct symtab_lookup data;
   data.name = name;
   data.start = NULL;
+  data.sht= sht;
   int i = dl_iterate_phdr(symtab_lookup_iterate_phdr, &data);
   assert(!i);
-  if (!data.start) {
-    fprintf(stderr, "symtab_lookup failed: %s\n", name);
-    assert(0);
+  if (sht == SHT_DYNSYM) {
+    if (!data.start) {
+      fprintf(stderr, "symtab_lookup failed: %s\n", name);
+      assert(0);
+    }
+    const void *dl = dlsym(RTLD_DEFAULT, name);
+    assert(dl == data.start);
   }
   if (end_return)
     *end_return = data.end;
@@ -336,7 +343,7 @@ static void readonly_reset(const void *start, const void *end) {
 }
 
 static const void *dl_relocate_object_get() {
-  const uint8_t *dl_get_tls_static_info = (const uint8_t *)symtab_lookup("_dl_get_tls_static_info", NULL);
+  const uint8_t *dl_get_tls_static_info = (const uint8_t *)symtab_lookup("_dl_get_tls_static_info", NULL, SHT_DYNSYM);
   const uint8_t and_1shl27_edx_mov_rsi_offset_rbp[] = { 0x81, 0xe2, 0x00, 0x00, 0x00, 0x08, 0x48, 0x89, 0xb5 };
   const uint8_t *p = dl_get_tls_static_info - 1;
   for (;;) {
@@ -344,9 +351,9 @@ static const void *dl_relocate_object_get() {
       break;
     --p;
   }
-  const uint8_t push_rbp[] = { 0x55 };
+  const uint8_t push_rbp_mov_rsp_rbp[] = { 0x55, 0x48, 0x89, 0xe5 };
   for (;;) {
-    if (memcmp(p, push_rbp, sizeof(push_rbp)) == 0)
+    if (memcmp(p, push_rbp_mov_rsp_rbp, sizeof(push_rbp_mov_rsp_rbp)) == 0)
       break;
     --p;
   }
@@ -360,6 +367,8 @@ typedef void (*dl_relocate_object_p) (struct link_map *l, const void */*struct r
 
 static int reset_ifunc_iterate_phdr(struct dl_phdr_info *info, size_t size, void *data_unused) {
   dl_relocate_object_p dl_relocate_object = (dl_relocate_object_p)dl_relocate_object_get();
+  dl_relocate_object_p dl_relocate_object_symtab = (dl_relocate_object_p)symtab_lookup("_dl_relocate_object", NULL, SHT_SYMTAB);
+  assert(dl_relocate_object_symtab == NULL || dl_relocate_object_symtab == dl_relocate_object);
   if (strcmp(info->dlpi_name, "/lib64/ld-linux-x86-64.so.2") == 0) // _dl_relocate_object would crash on scope == NULL.
     return 0; // unused
   const void *relro = NULL;
@@ -489,7 +498,7 @@ static void intersect(const void **first_start_p, const void **first_end_p, cons
  * 168b6:       48 8d 0d e3 f1 01 00    lea    0x1f1e3(%rip),%rcx        # 35aa0 <tunable_list>
  */
 static const void *tunable_list_get() {
-  const uint8_t *tunable_get_val = (const uint8_t *)symtab_lookup("__tunable_get_val", NULL);
+  const uint8_t *tunable_get_val = (const uint8_t *)symtab_lookup("__tunable_get_val", NULL, SHT_DYNSYM);
   const uint8_t endbr64[] = { 0xf3, 0x0f, 0x1e, 0xfa };
   if (memcmp(tunable_get_val, endbr64, sizeof(endbr64)) == 0)
     tunable_get_val += sizeof(endbr64);
@@ -521,7 +530,7 @@ static size_t tunable_list_count() {
 }
 
 static const void *dl_x86_init_cpu_features_get() {
-  const uint8_t *dl_x86_get_cpu_features = (const uint8_t *)symtab_lookup("_dl_x86_get_cpu_features", NULL);
+  const uint8_t *dl_x86_get_cpu_features = (const uint8_t *)symtab_lookup("_dl_x86_get_cpu_features", NULL, SHT_DYNSYM);
   const uint8_t mov_offset_rip_eax[] = { 0x8b, 0x05 };
   const uint8_t *p = dl_x86_get_cpu_features - 1;
   for (;;) {
@@ -538,10 +547,20 @@ static const void *dl_x86_init_cpu_features_get() {
 typedef void (*dl_x86_init_cpu_features_p)();
 static void reset_glibc() {
   const void *rtld_global_ro_end;
-  const void *rtld_global_ro = symtab_lookup("_rtld_global_ro", &rtld_global_ro_end);
+  const void *rtld_global_ro = symtab_lookup("_rtld_global_ro", &rtld_global_ro_end, SHT_DYNSYM);
+  const void *rtld_global_ro_symtab_end;
+  const void *rtld_global_ro_symtab = symtab_lookup("_rtld_global_ro", &rtld_global_ro_symtab_end, SHT_SYMTAB);
+  if (rtld_global_ro_symtab) {
+    assert(rtld_global_ro_symtab == rtld_global_ro);
+    assert(rtld_global_ro_symtab_end == rtld_global_ro_end);
+  }
   const void *rtld_global_ro_exact = rtld_global_ro;
   const void *tunable_list = tunable_list_get();
   const void *tunable_list_end = ((const uint8_t *)tunable_list) + TUNABLE_T_SIZEOF * tunable_list_count();
+  const void *tunable_list_symtab_end;
+  const void *tunable_list_symtab = symtab_lookup("tunable_list", &tunable_list_symtab_end, SHT_SYMTAB);
+  assert(tunable_list_symtab == NULL || tunable_list_symtab == tunable_list);
+  assert(tunable_list_symtab == NULL || tunable_list_symtab_end == tunable_list_end);
   page_align(&rtld_global_ro, &rtld_global_ro_end);
   page_align(&tunable_list, &tunable_list_end);
   intersect(&rtld_global_ro, &rtld_global_ro_end, &tunable_list, &tunable_list_end);
@@ -552,6 +571,8 @@ static void reset_glibc() {
   memset(cpu_features, 0, RTLD_GLOBAL_RO_DL_X86_CPU_FEATURES_SIZEOF);
   assert(*(const uint32_t *)cpu_features == ARCH_KIND_UNKNOWN); // .basic.kind
   dl_x86_init_cpu_features_p dl_x86_init_cpu_features = (dl_x86_init_cpu_features_p)dl_x86_init_cpu_features_get();
+  dl_x86_init_cpu_features_p dl_x86_init_cpu_features_symtab = (dl_x86_init_cpu_features_p)symtab_lookup("_dl_x86_init_cpu_features", NULL, SHT_SYMTAB);
+  assert(dl_x86_init_cpu_features_symtab == NULL || dl_x86_init_cpu_features_symtab == dl_x86_init_cpu_features);
   (*dl_x86_init_cpu_features)();
   assert(*(const uint32_t *)cpu_features != ARCH_KIND_UNKNOWN); // .basic.kind
   readonly_reset(rtld_global_ro, rtld_global_ro_end);

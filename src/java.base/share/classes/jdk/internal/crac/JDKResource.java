@@ -84,6 +84,7 @@ public interface JDKResource extends Resource {
          */
         CLEANERS,
 
+        PRE_FILE_DESRIPTORS,
         FILE_DESCRIPTORS,
     };
 

@@ -27,8 +27,13 @@ package java.io;
 
 import java.nio.channels.FileChannel;
 
+import jdk.crac.Context;
+import jdk.crac.Resource;
+import jdk.crac.impl.CheckpointOpenFileException;
 import jdk.internal.access.JavaIORandomAccessFileAccess;
 import jdk.internal.access.SharedSecrets;
+import jdk.internal.crac.Core;
+import jdk.internal.crac.JDKResource;
 import sun.nio.ch.FileChannelImpl;
 
 
@@ -79,6 +84,31 @@ public class RandomAccessFile implements DataOutput, DataInput, Closeable {
     private static final int O_SYNC =   4;
     private static final int O_DSYNC =  8;
     private static final int O_TEMPORARY =  16;
+
+    private class Resource implements JDKResource {
+        Resource() {
+            Core.getJDKContext().register(this);
+        }
+
+        @Override
+        public void beforeCheckpoint(Context<? extends jdk.crac.Resource> context) throws Exception {
+            if (Core.getJDKContext().claimFdWeak(fd, this)) {
+                throw new CheckpointOpenFileException(this.toString());
+            }
+        }
+
+        @Override
+        public void afterRestore(Context<? extends jdk.crac.Resource> context) throws Exception {
+
+        }
+
+        @Override
+        public Priority getPriority() {
+            return Priority.PRE_FILE_DESRIPTORS;
+        }
+    }
+
+    Resource resource = new Resource();
 
     /**
      * Creates a random access file stream to read from, and optionally

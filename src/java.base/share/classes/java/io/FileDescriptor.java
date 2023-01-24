@@ -34,6 +34,7 @@ import jdk.crac.impl.CheckpointOpenFileException;
 import jdk.internal.access.JavaIOFileDescriptorAccess;
 import jdk.internal.access.SharedSecrets;
 import jdk.internal.crac.Core;
+import jdk.internal.crac.JDKContext;
 import jdk.internal.ref.PhantomCleanable;
 
 /**
@@ -326,7 +327,8 @@ public final class FileDescriptor {
 
     private synchronized void beforeCheckpoint() throws CheckpointOpenFileException {
         if (cleanup != null) {
-            if (!jdk.internal.crac.Core.getJDKContext().isFdClaimed(this)) {
+            JDKContext ctx = jdk.internal.crac.Core.getJDKContext();
+            if (ctx.claimFdWeak(this, this)) {
                 throw new CheckpointOpenFileException(Integer.toString(this.fd));
             }
         }

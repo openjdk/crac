@@ -35,6 +35,6 @@
 #include "jdk_crac_Core.h"
 
 JNIEXPORT jobjectArray JNICALL
-Java_jdk_crac_Core_checkpointRestore0(JNIEnv *env, jclass ignore, jarray fdArray, jboolean dry_run)
-    return JVM_Checkpoint(env, fdArray, dry_run, jcmd_stream);
+Java_jdk_crac_Core_checkpointRestore0(JNIEnv *env, jclass ignore, jarray fdArr, jobjectArray objArr, jboolean dry_run, jlong jcmd_stream) {
+    return JVM_Checkpoint(env, fdArr, objArr, dry_run, jcmd_stream);
 }

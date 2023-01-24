@@ -30,7 +30,6 @@
 #include "code/vtableStubs.hpp"
 #include "compiler/compileBroker.hpp"
 #include "compiler/disassembler.hpp"
-#include "gc/shared/oopStorageSet.hpp"
 #include "interpreter/interpreter.hpp"
 #include "jvmtifiles/jvmti.h"
 #include "logging/log.hpp"
@@ -38,7 +37,6 @@
 #include "memory/allocation.inline.hpp"
 #include "memory/oopFactory.hpp"
 #include "oops/oop.inline.hpp"
-#include "oops/oopHandle.inline.hpp"
 #include "oops/typeArrayOop.inline.hpp"
 #include "os_linux.inline.hpp"
 #include "os_posix.inline.hpp"
@@ -55,6 +53,8 @@
 #include "runtime/init.hpp"
 #include "runtime/java.hpp"
 #include "runtime/javaCalls.hpp"
+#include "runtime/jniHandles.hpp"
+#include "runtime/jniHandles.inline.hpp"
 #include "runtime/mutexLocker.hpp"
 #include "runtime/objectMonitor.hpp"
 #include "runtime/osThread.hpp"
@@ -176,10 +176,7 @@ public:
   };
 
   enum mark_t {
-    M_ZIP_CACHE    = 1 << 0,
-    M_CANT_RESTORE = 1 << 1,
-    M_CLASSPATH    = 1 << 2,
-    M_PERSISTENT   = 1 << 3,
+    M_CANT_RESTORE = 1 << 0,
   };
 
 private:
@@ -405,6 +402,7 @@ public:
   bool read_shm(int shmid);
 
 private:
+  bool is_claimed_fd(int fd);
   bool is_socket_from_jcmd(int sock_fd);
   void report_ok_to_jcmd_if_any();
   void print_resources(const char* msg, ...);
@@ -450,8 +448,6 @@ static FdsInfo _vm_inited_fds(false);
 static bool suppress_primordial_thread_resolution = false;
 
 // utility functions
-
-FdsInfo _vm_inited_fds(false);
 
 julong os::available_memory() {
   return Linux::available_memory();
@@ -6101,6 +6097,17 @@ void VM_Crac::report_ok_to_jcmd_if_any() {
   _ostream = tty;
 }
 
+bool VM_Crac::is_claimed_fd(int fd) {
+  typeArrayOop claimed_fds = typeArrayOop(JNIHandles::resolve_non_null(_fd_arr));
+  for (int j = 0; j < claimed_fds->length(); ++j) {
+    jint cfd = claimed_fds->int_at(j);
+    if (fd == cfd) {
+      return true;
+    }
+  }
+  return false;
+}
+
 void VM_Crac::doit() {
 
   AttachListener::abort();
@@ -6121,31 +6128,17 @@ void VM_Crac::doit() {
     print_resources("JVM: FD fd=%d type=%s: details1=\"%s\" ",
         i, stat2strtype(fds.get_stat(i)->st_mode), details);
 
+    if (is_claimed_fd(i)) {
+      print_resources("OK: claimed by java code\n");
+      continue;
+    }
+
     if (_vm_inited_fds.get_state(i, FdsInfo::CLOSED) != FdsInfo::CLOSED) {
       print_resources("OK: inherited from process env\n");
       continue;
     }
 
     struct stat* st = fds.get_stat(i);
-    if (S_ISCHR(st->st_mode)) {
-      const int mjr = major(st->st_rdev);
-      const int mnr = minor(st->st_rdev);
-      if (mjr == 1 && (mnr == 8 || mnr == 9)) {
-        print_resources("OK: always available, random or urandom\n");
-        continue;
-      }
-    }
-
-    if (fds.check(i, FdsInfo::M_CLASSPATH) && !fds.check(i, FdsInfo::M_CANT_RESTORE)) {
-      print_resources("OK: in classpath\n");
-      continue;
-    }
-
-    if (fds.check(i, FdsInfo::M_PERSISTENT)) {
-      print_resources("OK: assured persistent\n");
-      continue;
-    }
-
     if (S_ISSOCK(st->st_mode)) {
       if (is_socket_from_jcmd(i)){
         print_resources("OK: jcmd socket\n");

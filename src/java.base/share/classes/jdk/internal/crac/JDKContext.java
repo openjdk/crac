@@ -76,15 +76,11 @@ public class JDKContext extends AbstractContextImpl<JDKResource, Void> {
     public void claimFd(FileDescriptor fd, Object obj) {
         Object e = claimedFds.put(fd, obj);
         if (e != null) {
-            throw new AssertionError(fd + "was already claimed by " + e);
+            throw new AssertionError(fd + " was already claimed by " + e);
         }
     }
 
-    public boolean isFdClaimed(FileDescriptor fd) {
-        return claimedFds.get(fd) != null;
-    }
-
-    public void claimFdWeak(FileDescriptor fd, Object obj) {
-        claimedFds.putIfAbsent(fd, obj);
+    public boolean claimFdWeak(FileDescriptor fd, Object obj) {
+        return claimedFds.putIfAbsent(fd, obj) == null;
     }
 }

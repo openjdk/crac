@@ -1143,13 +1143,7 @@ enum cr_fail_type {
 };
 
 JNIEXPORT jobjectArray JNICALL
-JVM_Checkpoint(JNIEnv *env, jboolean dry_run, jlong jcmd_stream);
-
-JNIEXPORT void JNICALL
-JVM_ClaimFd(jobject obj, jlong fd);
-
-JNIEXPORT void JNICALL
-JVM_UnclaimFd(jobject obj, jlong fd);
+JVM_Checkpoint(JNIEnv *env, jarray fd_arr,jobjectArray obj_arr, jboolean dry_run, jlong jcmd_stream);
 
 #ifdef __cplusplus
 } /* extern "C" */

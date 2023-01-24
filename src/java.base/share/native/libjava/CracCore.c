@@ -41,28 +41,16 @@ Java_jdk_crac_Core_checkpointRestore0(JNIEnv *env, jclass ignore, jboolean dry_r
     return JVM_Checkpoint(env, dry_run, jcmd_stream);
 }
 
-JNIEXPORT void JNICALL Java_jdk_internal_crac_Core_registerPersistent0
-  (JNIEnv *env, jclass ignore, jobject fileDesc)
+JNIEXPORT void JNICALL Java_jdk_internal_crac_Core_claimFd0
+  (JNIEnv *env, jclass ignore, jobject fileDesc, jobject obj)
 {
     jint fd = THIS_FD(fileDesc);
-
-    struct stat st;
-    if (-1 == fstat(fd, &st)) {
-        return;
-    }
-
-    JVM_RegisterPersistent(fd, st.st_dev, st.st_ino);
+    JVM_ClaimFd(env, fd, obj);
 }
 
-JNIEXPORT void JNICALL Java_jdk_internal_crac_Core_unregisterPersistent0
-  (JNIEnv *env, jclass ignore, jobject fileDesc)
+JNIEXPORT void JNICALL Java_jdk_internal_crac_Core_unclaimFd0
+  (JNIEnv *env, jclass ignore, jobject fileDesc, jobject obj)
 {
     jint fd = THIS_FD(fileDesc);
-
-    struct stat st;
-    if (-1 == fstat(fd, &st)) {
-        return;
-    }
-
-    JVM_DeregisterPersistent(fd, st.st_dev, st.st_ino);
+    JVM_UnclaimFd(env, fd, obj);
 }

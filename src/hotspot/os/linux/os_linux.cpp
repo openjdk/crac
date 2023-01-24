@@ -30,6 +30,7 @@
 #include "code/vtableStubs.hpp"
 #include "compiler/compileBroker.hpp"
 #include "compiler/disassembler.hpp"
+#include "gc/shared/oopStorageSet.hpp"
 #include "interpreter/interpreter.hpp"
 #include "jvmtifiles/jvmti.h"
 #include "logging/log.hpp"
@@ -37,6 +38,7 @@
 #include "memory/allocation.inline.hpp"
 #include "memory/oopFactory.hpp"
 #include "oops/oop.inline.hpp"
+#include "oops/oopHandle.inline.hpp"
 #include "oops/typeArrayOop.inline.hpp"
 #include "os_linux.inline.hpp"
 #include "os_posix.inline.hpp"
@@ -260,14 +262,14 @@ struct ClaimedFd {
   int _fd;
   OopHandle _handle;
 
-  ClaimedFd(int fd, oop obj) :
-    _fd(fd),
-    _handle(Universe::vm_global(), obj)
-  {}
+  ClaimedFd(int fd, oop obj);
 
   ClaimedFd() :
-    _fd(INT_MAX)
+    _fd(INT_MAX),
+    _handle()
   {}
+
+  void release();
 };
 
 struct CracFailDep {
@@ -384,6 +386,7 @@ class CracRestoreParameters : public CHeapObj<mtInternal> {
 };
 
 class VM_Crac: public VM_Operation {
+  jarray _fd_arr;
   const bool _dry_run;
   bool _ok;
   GrowableArray<CracFailDep>* _failures;
@@ -392,7 +395,8 @@ class VM_Crac: public VM_Operation {
   LinuxAttachOperation* _attach_op;
 
 public:
-  VM_Crac(bool dry_run, bufferedStream* jcmd_stream) :
+  VM_Crac(jarray fd_arr, jobjectArray obj_arr, bool dry_run, bufferedStream* jcmd_stream) :
+    _fd_arr(fd_arr),
     _dry_run(dry_run),
     _ok(false),
     _failures(new (ResourceObj::C_HEAP, mtInternal) GrowableArray<CracFailDep>(0, mtInternal)),
@@ -451,7 +455,6 @@ static const char* _crengine = NULL;
 static jlong _restore_start_time;
 static jlong _restore_start_counter;
 static FdsInfo _vm_inited_fds(false);
-static GrowableArray<PersistentResourceDesc>* _persistent_resources = NULL;
 
 // If the VM might have been created on the primordial thread, we need to resolve the
 // primordial thread stack bounds and check if the current thread might be the
@@ -461,10 +464,6 @@ static GrowableArray<PersistentResourceDesc>* _persistent_resources = NULL;
 static bool suppress_primordial_thread_resolution = false;
 
 // utility functions
-
-FdsInfo _vm_inited_fds(false);
-
-static GrowableArrayCHeap<ClaimedFd, mtInternal>* _claimed_fd = NULL;
 
 julong os::available_memory() {
   return Linux::available_memory();
@@ -5862,6 +5861,16 @@ void FdsInfo::initialize() {
   }
 }
 
+ClaimedFd::ClaimedFd(int fd, oop obj) :
+  _fd(fd),
+  _handle(_claimed_fd_oops, obj)
+{}
+
+void ClaimedFd::release() {
+  _fd = INT_MAX;
+  _handle.release(_claimed_fd_oops);
+}
+
 static void mark_classpath_entry(FdsInfo *fds, char* cp) {
   struct stat st;
   if (-1 == stat(cp, &st)) {
@@ -6286,43 +6295,6 @@ void VM_Crac::doit() {
   _ok = true;
 }
 
-bool os::Linux::claim_fd(jobject obj, jlong fd) {
-  if (!CRaCCheckpointTo) {
-    return;
-  }
-  if (!_claimed_fd) {
-    _claimed_fd = new GrowableArrayCHeap<OopHandle, mtInternal>(1);
-  }
-
-  for (int i = 0; i < _claimed_fd->length(); ++i) {
-    ClaimedFd *cfd = _claimed_fd->adr_at(i);
-    if (cfd->_fd == fd) {
-      return false;
-    }
-  }
-
-  _claimed_fd->append(ClaimedFd(obj, fd));
-  return true;
-}
-
-bool os::Linux::unclaim_fd(jobject obj, jlong fd) {
-  if (!CRaCCheckpointTo) {
-    return;
-  }
-  if (!_claimed_fd) {
-    return;
-  }
-
-  for (int i = 0; i < _claimed_fd->length(); ++i) {
-    ClaimedFd *cfd = _claimed_fd->adr_at(i);
-    if (cfd->_fd == fd && cfd->_handle->peek() == obj) {
-      _claimed_fd->remove_at(i);
-      return true;
-    }
-  }
-  return false;
-}
-
 bool os::Linux::prepare_checkpoint() {
   struct stat st;
 
@@ -6364,7 +6336,7 @@ static Handle ret_cr(int ret, Handle new_args, Handle new_props, Handle err_code
 
 /** Checkpoint main entry.
  */
-Handle os::Linux::checkpoint(bool dry_run, jlong jcmd_stream, TRAPS) {
+Handle os::Linux::checkpoint(jarray fd_arr, jobjectArray obj_arr, bool dry_run, jlong jcmd_stream, TRAPS) {
   if (!CRaCCheckpointTo) {
     return ret_cr(JVM_CHECKPOINT_NONE, Handle(), Handle(), Handle(), Handle(), THREAD);
   }
@@ -6378,7 +6350,7 @@ Handle os::Linux::checkpoint(bool dry_run, jlong jcmd_stream, TRAPS) {
   Universe::heap()->collect(GCCause::_full_gc_alot);
   Universe::heap()->set_cleanup_unused(false);
 
-  VM_Crac cr(dry_run, (bufferedStream*)jcmd_stream);
+  VM_Crac cr(fd_arr, obj_arr, dry_run, (bufferedStream*)jcmd_stream);
   {
     MutexLocker ml(Heap_lock);
     VMThread::execute(&cr);
@@ -6522,4 +6494,4 @@ void os::print_memory_mappings(char* addr, size_t bytes, outputStream* st) {
     }
     st->cr();
   }
-}
+

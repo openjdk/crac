@@ -30,11 +30,9 @@ import java.util.List;
 import java.util.Objects;
 
 import jdk.crac.Context;
-import jdk.crac.Resource;
 import jdk.internal.access.JavaIOFileDescriptorAccess;
 import jdk.internal.access.SharedSecrets;
 import jdk.internal.crac.Core;
-import jdk.internal.crac.JDKResource;
 import jdk.internal.ref.PhantomCleanable;
 
 /**
@@ -161,7 +159,7 @@ public final class FileDescriptor {
         this.fd = fd;
         this.handle = getHandle(fd);
         this.append = getAppend(fd);
-        jdk.internal.crac.Core.registerPersistent(this);
+        jdk.internal.crac.Core.claimFd(this, this);
     }
 
     /**
@@ -258,7 +256,7 @@ public final class FileDescriptor {
             cleanup = null;
         }
         this.fd = fd;
-        jdk.internal.crac.Core.registerPersistent(this);
+        jdk.internal.crac.Core.claimFd(this, this);
     }
 
     /**
@@ -290,7 +288,7 @@ public final class FileDescriptor {
             cleanup.clear();
         }
         cleanup = cleanable;
-        Core.registerPersistent(this);
+        Core.claimFd(this, this);
     }
 
     /**
@@ -308,7 +306,7 @@ public final class FileDescriptor {
             cleanup.clear();
         }
         cleanup = null;
-        Core.unregisterPersistent(this);
+        Core.unclaimFd(this, this);
     }
 
     /**
@@ -322,7 +320,7 @@ public final class FileDescriptor {
     synchronized void close() throws IOException {
         unregisterCleanup();
         close0();
-        Core.unregisterPersistent(this);
+        Core.unclaimFd(this, this);
     }
 
     private synchronized void beforeCheckpoint() {

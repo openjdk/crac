@@ -173,10 +173,8 @@ class Linux {
 
   static void vm_create_start();
   static bool prepare_checkpoint();
-  static Handle checkpoint(bool dry_run, jlong jcmd_stream, TRAPS);
+  static Handle checkpoint(jarray fd_arr, jobjectArray obj_arr, bool dry_run, jlong jcmd_stream, TRAPS);
   static void restore();
-  static bool claim_fd(jobject obj, jlong fd);
-  static bool unclaim_fd(jobject obj, jlong fd);
 
   static jlong restore_start_time();
   static jlong uptime_since_restore();

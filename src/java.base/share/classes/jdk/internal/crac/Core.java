@@ -27,13 +27,10 @@
 package jdk.internal.crac;
 
 import java.io.FileDescriptor;
+import java.util.WeakHashMap;
 
 public class Core {
     private static JDKContext JDKContext;
-
-    private static native void registerPersistent0(FileDescriptor fd);
-    private static native void unregisterPersistent0(FileDescriptor fd);
-
     static {
         JDKContext = new JDKContext();
         jdk.crac.Core.getGlobalContext().register(JDKContext);
@@ -43,11 +40,18 @@ public class Core {
         return JDKContext;
     }
 
-    public static void registerPersistent(FileDescriptor fd) {
-        registerPersistent0(fd);
+
+    private static WeakHashMap<FileDescriptor, Object> claimedFds = new WeakHashMap<>();
+
+    public static WeakHashMap<FileDescriptor, Object> getClaimedFds() {
+        return claimedFds;
     }
 
-    public static void unregisterPersistent(FileDescriptor fd) {
-        unregisterPersistent0(fd);
+    public static void claimFd(FileDescriptor fd, Object obj) {
+        claimedFds.put(fd, obj);
+    }
+
+    public static void unclaimFd(FileDescriptor fd, Object obj) {
+        claimedFds.remove(fd, obj);
     }
 }

@@ -30,17 +30,19 @@ import jdk.crac.impl.CheckpointOpenFileException;
 import jdk.crac.impl.CheckpointOpenResourceException;
 import jdk.crac.impl.CheckpointOpenSocketException;
 import jdk.crac.impl.OrderedContext;
-import java.io.StringWriter;
-import java.io.PrintWriter;
+import jdk.internal.access.SharedSecrets;
 import sun.security.action.GetBooleanAction;
 
+import java.io.FileDescriptor;
+import java.io.PrintWriter;
+import java.io.StringWriter;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.security.AccessController;
 import java.security.PrivilegedAction;
 import java.security.PrivilegedActionException;
 import java.security.PrivilegedExceptionAction;
-import java.util.Arrays;
+import java.util.*;
 
 /**
  * The coordination service.
@@ -56,8 +58,7 @@ public class Core {
     private static final int JVM_CR_FAIL_PIPE = 3;
 
     private static final long JCMD_STREAM_NULL = 0;
-
-    private static native Object[] checkpointRestore0(boolean dryRun, long jcmdStream);
+    private static native Object[] checkpointRestore0(int[] fdArr, Object[] objArr, boolean dryRun, long jcmdStream);
     private static final Object checkpointRestoreLock = new Object();
     private static boolean checkpointInProgress = false;
 
@@ -125,7 +126,16 @@ public class Core {
             }
         }
 
-        final Object[] bundle = checkpointRestore0(checkpointException != null, jcmdStream);
+        WeakHashMap<FileDescriptor, Object> claimedFdsMap = jdk.internal.crac.Core.getClaimedFds();
+        List<Map.Entry<FileDescriptor, Object>> claimedPairs = claimedFdsMap.entrySet().stream().toList();
+        int[] fdArr = new int[claimedFdsMap.size()];
+        Object[] objArr = new Object[claimedFdsMap.size()];
+        for (int i = 0; i < claimedPairs.size(); ++i) {
+            fdArr[i] = SharedSecrets.getJavaIOFileDescriptorAccess().get(claimedPairs.get(i).getKey());
+            objArr[i] = claimedPairs.get(i).getValue();
+        }
+
+        final Object[] bundle = checkpointRestore0(fdArr, objArr, checkpointException != null, jcmdStream);
         final int retCode = (Integer)bundle[0];
         final String newArguments = (String)bundle[1];
         final String[] newProperties = (String[])bundle[2];

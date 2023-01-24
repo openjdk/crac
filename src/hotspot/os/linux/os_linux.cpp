@@ -48,7 +48,6 @@
 #include "prims/jvm_misc.hpp"
 #include "runtime/arguments.hpp"
 #include "runtime/atomic.hpp"
-#include "runtime/deoptimization.hpp"
 #include "runtime/globals.hpp"
 #include "runtime/globals_extension.hpp"
 #include "runtime/interfaceSupport.inline.hpp"
@@ -6090,9 +6089,11 @@ class Freeze {
     err = pthread_cond_wait(&resume_cond, &unused_mutex);
     assert(!err, "pthread error");
   }
+  bool frozen;
 
 public:
   bool freeze() {
+    frozen = false;
     struct sigaction act;
     memset(&act, 0, sizeof(act));
     act.sa_handler = handler;
@@ -6121,6 +6122,7 @@ public:
       assert(!err, "pthread error");
     }
     assert(signalled == count, "JVM: Freeze: signalled == count");
+    frozen = true;
     err = pthread_mutex_unlock(&signalled_mutex);
     assert(!err, "pthread error");
     if (sigaction(signo, &act_old, NULL)) {
@@ -6130,9 +6132,15 @@ public:
     return true;
   }
   void thaw() {
+    if (!frozen)
+      return;
+    frozen = false;
     int err;
     err = pthread_cond_broadcast(&resume_cond);
     assert(!err, "pthread error");
+  }
+  ~Freeze() {
+    thaw();
   }
 };
 pthread_mutex_t Freeze::signalled_mutex;
@@ -6164,9 +6172,6 @@ static int checkpoint_restore(int *shmid) {
   assert(sig == RESTORE_SIGNAL, "got what requested");
 
   linux_ifunc_reset();
-
-  CodeCache::mark_all_nmethods_for_deoptimization();
-  Deoptimization::deoptimize_all_marked();
 
   freeze.thaw();
 

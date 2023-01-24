@@ -39,19 +39,4 @@ public class Core {
     public static JDKContext getJDKContext() {
         return JDKContext;
     }
-
-
-    private static WeakHashMap<FileDescriptor, Object> claimedFds = new WeakHashMap<>();
-
-    public static WeakHashMap<FileDescriptor, Object> getClaimedFds() {
-        return claimedFds;
-    }
-
-    public static void claimFd(FileDescriptor fd, Object obj) {
-        claimedFds.put(fd, obj);
-    }
-
-    public static void unclaimFd(FileDescriptor fd, Object obj) {
-        claimedFds.remove(fd, obj);
-    }
 }

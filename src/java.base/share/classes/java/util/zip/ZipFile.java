@@ -65,6 +65,7 @@ import jdk.internal.access.JavaUtilZipFileAccess;
 import jdk.internal.access.JavaUtilJarAccess;
 import jdk.internal.access.SharedSecrets;
 import jdk.internal.crac.Core;
+import jdk.internal.crac.JDKContext;
 import jdk.internal.misc.VM;
 import jdk.internal.perf.PerfCounter;
 import jdk.internal.ref.CleanerFactory;
@@ -1800,7 +1801,7 @@ public class ZipFile implements ZipConstants, Closeable {
                 } catch (IOException e) {
                 }
                 if (fd != null) {
-                    Core.claimFd(fd, this);
+                    Core.getJDKContext().claimFd(fd, this);
                 }
             }
         }

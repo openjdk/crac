@@ -57,8 +57,16 @@ public class Core {
     private static final int JVM_CR_FAIL_SOCK = 2;
     private static final int JVM_CR_FAIL_PIPE = 3;
 
+<<<<<<< HEAD
     private static final long JCMD_STREAM_NULL = 0;
     private static native Object[] checkpointRestore0(int[] fdArr, Object[] objArr, boolean dryRun, long jcmdStream);
+||||||| parent of 373c8465f0c (WIP)
+    private static native Object[] checkpointRestore0(int[] fdArr, Object[] objArr, boolean dryRun);
+
+=======
+    private static native Object[] checkpointRestore0(int[] fdArr, boolean dryRun);
+
+>>>>>>> 373c8465f0c (WIP)
     private static final Object checkpointRestoreLock = new Object();
     private static boolean checkpointInProgress = false;
 
@@ -126,7 +134,7 @@ public class Core {
             }
         }
 
-        WeakHashMap<FileDescriptor, Object> claimedFdsMap = jdk.internal.crac.Core.getClaimedFds();
+        WeakHashMap<FileDescriptor, Object> claimedFdsMap = jdk.internal.crac.Core.getJDKContext().getClaimedFds();
         List<Map.Entry<FileDescriptor, Object>> claimedPairs = claimedFdsMap.entrySet().stream().toList();
         int[] fdArr = new int[claimedFdsMap.size()];
         Object[] objArr = new Object[claimedFdsMap.size()];

@@ -30,6 +30,7 @@ import java.util.List;
 import java.util.Objects;
 
 import jdk.crac.Context;
+import jdk.crac.impl.CheckpointOpenFileException;
 import jdk.internal.access.JavaIOFileDescriptorAccess;
 import jdk.internal.access.SharedSecrets;
 import jdk.internal.crac.Core;
@@ -57,9 +58,9 @@ public final class FileDescriptor {
     private List<Closeable> otherParents;
     private boolean closed;
 
-    class Resource implements jdk.crac.Resource {
+    class Resource implements jdk.internal.crac.JDKResource {
         Resource() {
-            jdk.crac.Core.getGlobalContext().register(this);
+            jdk.internal.crac.Core.getJDKContext().register(this);
         }
 
         @Override
@@ -71,6 +72,11 @@ public final class FileDescriptor {
         @Override
         public void afterRestore(Context<? extends jdk.crac.Resource> context) throws Exception {
             FileDescriptor.this.afterRestore();
+        }
+
+        @Override
+        public Priority getPriority() {
+            return Priority.FILE_DESCRIPTORS;
         }
     }
 
@@ -159,7 +165,6 @@ public final class FileDescriptor {
         this.fd = fd;
         this.handle = getHandle(fd);
         this.append = getAppend(fd);
-        jdk.internal.crac.Core.claimFd(this, this);
     }
 
     /**
@@ -256,7 +261,6 @@ public final class FileDescriptor {
             cleanup = null;
         }
         this.fd = fd;
-        jdk.internal.crac.Core.claimFd(this, this);
     }
 
     /**
@@ -288,7 +292,6 @@ public final class FileDescriptor {
             cleanup.clear();
         }
         cleanup = cleanable;
-        Core.claimFd(this, this);
     }
 
     /**
@@ -306,7 +309,6 @@ public final class FileDescriptor {
             cleanup.clear();
         }
         cleanup = null;
-        Core.unclaimFd(this, this);
     }
 
     /**
@@ -320,12 +322,13 @@ public final class FileDescriptor {
     synchronized void close() throws IOException {
         unregisterCleanup();
         close0();
-        Core.unclaimFd(this, this);
     }
 
-    private synchronized void beforeCheckpoint() {
+    private synchronized void beforeCheckpoint() throws CheckpointOpenFileException {
         if (cleanup != null) {
-            System.out.println("WARNING: " + this);
+            if (!jdk.internal.crac.Core.getJDKContext().isFdClaimed(this)) {
+                throw new CheckpointOpenFileException(Integer.toString(this.fd));
+            }
         }
     }
 

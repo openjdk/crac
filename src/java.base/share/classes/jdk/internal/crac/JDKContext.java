@@ -26,12 +26,21 @@
 
 package jdk.internal.crac;
 
+import jdk.crac.CheckpointException;
+import jdk.crac.Context;
+import jdk.crac.Resource;
+import jdk.crac.RestoreException;
 import jdk.crac.impl.AbstractContextImpl;
 
+import java.io.FileDescriptor;
 import java.util.Comparator;
 import java.util.Map;
+import java.util.WeakHashMap;
 
 public class JDKContext extends AbstractContextImpl<JDKResource, Void> {
+
+    private WeakHashMap<FileDescriptor, Object> claimedFds;
+
     static class ContextComparator implements Comparator<Map.Entry<JDKResource, Void>> {
         @Override
         public int compare(Map.Entry<JDKResource, Void> o1, Map.Entry<JDKResource, Void> o2) {
@@ -44,7 +53,38 @@ public class JDKContext extends AbstractContextImpl<JDKResource, Void> {
     }
 
     @Override
+    public synchronized void beforeCheckpoint(Context<? extends Resource> context) throws CheckpointException {
+        claimedFds = new WeakHashMap<>();
+        super.beforeCheckpoint(context);
+    }
+
+    @Override
+    public synchronized void afterRestore(Context<? extends Resource> context) throws RestoreException {
+        super.afterRestore(context);
+        claimedFds = null;
+    }
+
+    @Override
     public void register(JDKResource resource) {
         register(resource, null);
+    }
+
+    public WeakHashMap<FileDescriptor, Object> getClaimedFds() {
+        return claimedFds;
+    }
+
+    public void claimFd(FileDescriptor fd, Object obj) {
+        Object e = claimedFds.put(fd, obj);
+        if (e != null) {
+            throw new AssertionError(fd + "was already claimed by " + e);
+        }
+    }
+
+    public boolean isFdClaimed(FileDescriptor fd) {
+        return claimedFds.get(fd) != null;
+    }
+
+    public void claimFdWeak(FileDescriptor fd, Object obj) {
+        claimedFds.putIfAbsent(fd, obj);
     }
 }

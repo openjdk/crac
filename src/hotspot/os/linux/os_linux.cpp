@@ -258,20 +258,6 @@ public:
   }
 };
 
-struct ClaimedFd {
-  int _fd;
-  OopHandle _handle;
-
-  ClaimedFd(int fd, oop obj);
-
-  ClaimedFd() :
-    _fd(INT_MAX),
-    _handle()
-  {}
-
-  void release();
-};
-
 struct CracFailDep {
   int _type;
   char* _msg;
@@ -464,6 +450,8 @@ static FdsInfo _vm_inited_fds(false);
 static bool suppress_primordial_thread_resolution = false;
 
 // utility functions
+
+FdsInfo _vm_inited_fds(false);
 
 julong os::available_memory() {
   return Linux::available_memory();
@@ -5861,88 +5849,6 @@ void FdsInfo::initialize() {
   }
 }
 
-ClaimedFd::ClaimedFd(int fd, oop obj) :
-  _fd(fd),
-  _handle(_claimed_fd_oops, obj)
-{}
-
-void ClaimedFd::release() {
-  _fd = INT_MAX;
-  _handle.release(_claimed_fd_oops);
-}
-
-static void mark_classpath_entry(FdsInfo *fds, char* cp) {
-  struct stat st;
-  if (-1 == stat(cp, &st)) {
-    return;
-  }
-  for (int i = 0; i < fds->len(); ++i) {
-    if (same_stat(&st, fds->get_stat(i))) {
-      fds->mark(i, FdsInfo::M_CLASSPATH);
-    }
-  }
-}
-
-static void do_classpaths(void (*fn)(FdsInfo*, char*), FdsInfo *fds, char* classpath) {
-  assert(SafepointSynchronize::is_at_safepoint(),
-      "can't do nasty things with sysclasspath");
-  char *cp = classpath;
-  char *n;
-  while ((n = strchr(cp, ':'))) {
-    *n = '\0';
-    fn(fds, cp);
-    *n = ':';
-    cp = n + 1;
-  }
-  mark_classpath_entry(fds, cp);
-}
-
-
-static void mark_all_in(FdsInfo *fds, char* dirpath) {
-  DIR *dir = os::opendir(dirpath);
-  if (!dir) {
-    return;
-  }
-
-  struct dirent* dent;
-  while ((dent = os::readdir(dir))) {
-    for (int i = 0; i < fds->len(); ++i) {
-      if (fds->get_state(i) != FdsInfo::ROOT) {
-        continue;
-      }
-      struct stat* fstat = fds->get_stat(i);
-      if (dent->d_ino == fstat->st_ino) {
-        fds->mark(i, FdsInfo::M_CLASSPATH);
-      }
-    }
-  }
-
-  os::closedir(dir);
-}
-
-static void mark_persistent(FdsInfo *fds) {
-  if (!_claimed_fd) {
-    return;
-  }
-
-  for (int i = 0; i < _claimed_fd->length(); ++i) {
-    ClaimedFd *cfd = _claimed_fd->adr_at(i);
-    int fd = cfd->_fd;
-    if (fds->len() <= fd) {
-      break;
-    }
-    if (fds->get_state(fd) != FdsInfo::ROOT) {
-      continue;
-    }
-#if 0
-    struct stat* st = fds->get_stat(fd);
-    if (st->st_dev == pr->_st_dev && st->st_ino == pr->_st_ino) {
-      fds->mark(fd, FdsInfo::M_PERSISTENT);
-    }
-#endif
-  }
-}
-
 static int cr_util_path(char* path, int len) {
   os::jvm_path(path, len);
   // path is ".../lib/server/libjvm.so"
@@ -6200,10 +6106,6 @@ void VM_Crac::doit() {
   AttachListener::abort();
 
   FdsInfo fds;
-  do_classpaths(mark_classpath_entry, &fds, Arguments::get_sysclasspath());
-  do_classpaths(mark_classpath_entry, &fds, Arguments::get_appclasspath());
-  do_classpaths(mark_all_in, &fds, Arguments::get_ext_dirs());
-  mark_persistent(&fds);
 
   // dry-run fails checkpoint
   bool ok = !_dry_run;
@@ -6494,4 +6396,4 @@ void os::print_memory_mappings(char* addr, size_t bytes, outputStream* st) {
     }
     st->cr();
   }
-
+}

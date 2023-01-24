@@ -6022,7 +6022,130 @@ public:
   }
 };
 
+class Freeze {
+  static const int signo = SIGUSR1;
+  struct sigaction act_old;
+
+  template<class Callback> bool all_threads(Callback callback) const {
+    const char dirname[] = "/proc/self/task";
+    GrowableArray<pid_t> done;
+    bool signalled;
+    do {
+      signalled = false;
+      DIR *dir = opendir(dirname);
+      if (dir == NULL) {
+	tty->print_cr("JVM: Error opening %s: %m", dirname);
+	return false;
+      }
+      pid_t tid = gettid();
+      struct dirent *ent;
+      while (errno = 0, ent = readdir(dir)) {
+	const char *name = ent->d_name;
+	if (strcmp(name, ".") == 0)
+	  continue;
+	if (strcmp(name, "..") == 0)
+	  continue;
+	char *endptr;
+	unsigned long l = strtoul(name, &endptr, 10);
+	pid_t ent_tid = l;
+	if (l >= LONG_MAX || ent_tid != (long) l) {
+	  tty->print_cr("JVM: Error parsing %s entry \"%s\"", dirname, name);
+	  return false;
+	}
+	if (ent_tid == tid)
+	  continue;
+	if (!done.append_if_missing(ent_tid))
+	  continue;
+	signalled = true;
+	callback(ent_tid);
+      }
+      if (errno) {
+	tty->print_cr("JVM: Error reading %s: %m", dirname);
+	return false;
+      }
+      if (closedir(dir)) {
+	tty->print_cr("JVM: Error closing %s: %m", dirname);
+	return false;
+      }
+    } while (signalled);
+    return true;
+  }
+  static pthread_mutex_t signalled_mutex;
+  static pthread_cond_t signalled_cond;
+  static size_t signalled;
+  static pthread_cond_t resume_cond;
+  static void handler(int handler_signo) {
+    assert(handler_signo == signo, "handler signo");
+    int err;
+    err = pthread_mutex_lock(&signalled_mutex);
+    assert(!err, "pthread error");
+    ++signalled;
+    err = pthread_mutex_unlock(&signalled_mutex);
+    assert(!err, "pthread error");
+    err = pthread_cond_signal(&signalled_cond);
+    assert(!err, "pthread error");
+    pthread_mutex_t unused_mutex = PTHREAD_MUTEX_INITIALIZER;
+    err = pthread_mutex_lock(&unused_mutex);
+    assert(!err, "pthread error");
+    err = pthread_cond_wait(&resume_cond, &unused_mutex);
+    assert(!err, "pthread error");
+  }
+
+public:
+  bool freeze() {
+    struct sigaction act;
+    memset(&act, 0, sizeof(act));
+    act.sa_handler = handler;
+    if (sigaction(signo, &act, &act_old)) {
+      tty->print_cr("JVM: Freeze::freeze sigaction(%d): %m", signo);
+      return false;
+    }
+    assert(act_old.sa_handler == SIG_DFL, "SIG_DFL for signo");
+    signalled_mutex = PTHREAD_MUTEX_INITIALIZER;
+    signalled_cond = PTHREAD_COND_INITIALIZER;
+    signalled = 0;
+    resume_cond = PTHREAD_COND_INITIALIZER;
+    size_t count = 0;
+    all_threads([&](pid_t ent_tid) {
+      if (!tgkill(getpid(), ent_tid, signo)) {
+	++count;
+      } else {
+	tty->print_cr("JVM: Error sending signal %d to TID %ld", signo, (long)ent_tid);
+      }
+    });
+    int err;
+    err = pthread_mutex_lock(&signalled_mutex);
+    assert(!err, "pthread error");
+    while (signalled < count) {
+      err = pthread_cond_wait(&signalled_cond, &signalled_mutex);
+      assert(!err, "pthread error");
+    }
+    assert(signalled == count, "JVM: Freeze: signalled == count");
+    err = pthread_mutex_unlock(&signalled_mutex);
+    assert(!err, "pthread error");
+    if (sigaction(signo, &act_old, NULL)) {
+      tty->print_cr("JVM: Freeze::thaw sigaction(%d): %m", signo);
+      return false;
+    }
+    return true;
+  }
+  void thaw() {
+    int err;
+    err = pthread_cond_broadcast(&resume_cond);
+    assert(!err, "pthread error");
+  }
+};
+pthread_mutex_t Freeze::signalled_mutex;
+pthread_cond_t Freeze::signalled_cond;
+size_t Freeze::signalled;
+pthread_cond_t Freeze::resume_cond;
+
 static int checkpoint_restore(int *shmid) {
+
+  Freeze freeze;
+  if (!freeze.freeze()) {
+    return JVM_CHECKPOINT_ERROR;
+  }
 
   int cres = call_crengine();
   if (cres < 0) {
@@ -6044,6 +6167,8 @@ static int checkpoint_restore(int *shmid) {
 
   CodeCache::mark_all_nmethods_for_deoptimization();
   Deoptimization::deoptimize_all_marked();
+
+  freeze.thaw();
 
   if (CRTraceStartupTime) {
     tty->print_cr("STARTUPTIME " JLONG_FORMAT " restore-native", os::javaTimeNanos());

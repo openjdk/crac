@@ -55,13 +55,26 @@
 #define TUNABLE_T_SIZEOF 112 // gdb -batch /lib64/ld-linux-x86-64.so.2 -ex 'p sizeof(tunable_t)'
 
 #define strcmp strcmp_local
-static int strcmp_local(const char *a, const char *b) {
+static int strcmp_local(const char *s1, const char *s2) {
+  const unsigned char *a = (const unsigned char *) s1;
+  const unsigned char *b = (const unsigned char *) s2;
   for (;; ++a, ++b) {
     if (*a != *b)
       return *b > *a ? +1 : -1;
     if (*a == 0)
       return 0;
   }
+}
+
+#define memcmp memcmp_local
+static int memcmp_local(const void *s1, const void *s2, size_t n) {
+  const unsigned char *a = (const unsigned char *) s1;
+  const unsigned char *b = (const unsigned char *) s2;
+  for (; n-- > 0; ++a, ++b) {
+    if (*a != *b)
+      return *b > *a ? +1 : -1;
+  }
+  return 0;
 }
 
 #define strchr strchr_local

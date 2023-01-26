@@ -326,7 +326,7 @@ public final class FileDescriptor {
     }
 
     private synchronized void beforeCheckpoint() throws CheckpointOpenFileException {
-        if (cleanup != null) {
+        if (valid()) {
             JDKContext ctx = jdk.internal.crac.Core.getJDKContext();
             if (ctx.claimFdWeak(this, this)) {
                 throw new CheckpointOpenFileException(Integer.toString(this.fd));

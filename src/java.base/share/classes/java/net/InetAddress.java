@@ -304,6 +304,9 @@ public class InetAddress implements java.io.Serializable {
     @java.io.Serial
     private static final long serialVersionUID = 3286316764910316507L;
 
+    /* Resource registration uses weak references; we need to keep it locally. */
+    private static final Resource checkpointListener;
+
     /*
      * Load net library into runtime, and perform initializations.
      */
@@ -344,9 +347,9 @@ public class InetAddress implements java.io.Serializable {
                 }
         );
         init();
-        // DNS cache is cleared before the checkpoint; application restored at later point
+        // DNS cache is cleared before the checkpoint; application restored at a later point
         // or in a different environment should query DNS again.
-        Core.getGlobalContext().register(new Resource() {
+        checkpointListener = new Resource() {
             @Override
             public void beforeCheckpoint(Context<? extends Resource> context) throws Exception {
                 cache.clear();
@@ -356,7 +359,8 @@ public class InetAddress implements java.io.Serializable {
             @Override
             public void afterRestore(Context<? extends Resource> context) throws Exception {
             }
-        });
+        };
+        Core.getGlobalContext().register(checkpointListener);
     }
 
     /**

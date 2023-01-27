@@ -33,7 +33,6 @@ import jdk.crac.Context;
 import jdk.crac.impl.CheckpointOpenFileException;
 import jdk.internal.access.JavaIOFileDescriptorAccess;
 import jdk.internal.access.SharedSecrets;
-import jdk.internal.crac.Core;
 import jdk.internal.crac.JDKContext;
 import jdk.internal.ref.PhantomCleanable;
 

@@ -35,11 +35,13 @@ import jdk.crac.impl.AbstractContextImpl;
 import java.io.FileDescriptor;
 import java.util.Comparator;
 import java.util.Map;
+import java.util.Set;
 import java.util.WeakHashMap;
 
 public class JDKContext extends AbstractContextImpl<JDKResource, Void> {
 
     private WeakHashMap<FileDescriptor, Object> claimedFds;
+    private final WeakHashMap<FileDescriptor, Object> nativeClosedFds = new WeakHashMap<>();
 
     static class ContextComparator implements Comparator<Map.Entry<JDKResource, Void>> {
         @Override
@@ -82,5 +84,15 @@ public class JDKContext extends AbstractContextImpl<JDKResource, Void> {
 
     public boolean claimFdWeak(FileDescriptor fd, Object obj) {
         return claimedFds.putIfAbsent(fd, obj) == null;
+    }
+
+    // This method should be called before actually closing the FD to prevent
+    // false positives when checkpoint happens just before the native call.
+    public void markClosedByNative(FileDescriptor fd) {
+        nativeClosedFds.put(fd, null);
+    }
+
+    public Set<FileDescriptor> getFdsClosedByNative() {
+        return nativeClosedFds.keySet();
     }
 }

@@ -104,6 +104,7 @@ class EPollSelectorImpl extends SelectorImpl implements JDKResource {
     private boolean interruptTriggered;
 
     private volatile CheckpointRestoreState checkpointState = CheckpointRestoreState.NORMAL_OPERATION;;
+    private final NativeFileDescriptorResource resource = new NativeFileDescriptorResource(this);
 
     private void initFDs() throws IOException {
         epfd = EPoll.create();
@@ -116,6 +117,7 @@ class EPollSelectorImpl extends SelectorImpl implements JDKResource {
             FileDispatcherImpl.closeIntFD(epfd);
             throw ioe;
         }
+        resource.add(epfd);
 
         // register the eventfd object for wakeups
         EPoll.ctl(epfd, EPOLL_CTL_ADD, eventfd.efd(), EPOLLIN);
@@ -148,6 +150,7 @@ class EPollSelectorImpl extends SelectorImpl implements JDKResource {
             if (fdToKey.size() == 0) {
                 eventfd.close();
                 eventfd = null;
+                resource.remove(epfd);
                 FileDispatcherImpl.closeIntFD(epfd);
                 thisState = CheckpointRestoreState.CHECKPOINTED;
             } else {
@@ -301,6 +304,7 @@ class EPollSelectorImpl extends SelectorImpl implements JDKResource {
             interruptTriggered = true;
         }
 
+        resource.remove(epfd);
         FileDispatcherImpl.closeIntFD(epfd);
         EPoll.freePollArray(pollArrayAddress);
 

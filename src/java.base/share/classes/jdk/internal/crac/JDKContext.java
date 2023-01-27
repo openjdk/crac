@@ -31,17 +31,19 @@ import jdk.crac.Context;
 import jdk.crac.Resource;
 import jdk.crac.RestoreException;
 import jdk.crac.impl.AbstractContextImpl;
+import jdk.internal.access.JavaIOFileDescriptorAccess;
+import jdk.internal.access.SharedSecrets;
 
 import java.io.FileDescriptor;
-import java.util.Comparator;
-import java.util.Map;
-import java.util.Set;
-import java.util.WeakHashMap;
+import java.util.*;
+import java.util.stream.Collectors;
 
 public class JDKContext extends AbstractContextImpl<JDKResource, Void> {
 
     private WeakHashMap<FileDescriptor, Object> claimedFds;
     private final WeakHashMap<FileDescriptor, Object> nativeClosedFds = new WeakHashMap<>();
+
+    private WeakHashMap<Object, Integer> nativeFds;
 
     static class ContextComparator implements Comparator<Map.Entry<JDKResource, Void>> {
         @Override
@@ -57,6 +59,7 @@ public class JDKContext extends AbstractContextImpl<JDKResource, Void> {
     @Override
     public synchronized void beforeCheckpoint(Context<? extends Resource> context) throws CheckpointException {
         claimedFds = new WeakHashMap<>();
+        nativeFds = new WeakHashMap<>();
         super.beforeCheckpoint(context);
     }
 
@@ -71,8 +74,13 @@ public class JDKContext extends AbstractContextImpl<JDKResource, Void> {
         register(resource, null);
     }
 
-    public WeakHashMap<FileDescriptor, Object> getClaimedFds() {
-        return claimedFds;
+    public Map<Integer, Object> getClaimedFds() {
+        JavaIOFileDescriptorAccess fileDescriptorAccess = SharedSecrets.getJavaIOFileDescriptorAccess();
+        Map<Integer, Object> fdInfoMap = claimedFds.entrySet().stream()
+                .filter(entry -> !nativeClosedFds.containsKey(entry.getKey()))
+                .collect(Collectors.toMap(entry -> fileDescriptorAccess.get(entry.getKey()), Map.Entry::getValue));
+        nativeFds.forEach((owner, fd) -> fdInfoMap.put(fd, owner));
+        return fdInfoMap;
     }
 
     public void claimFd(FileDescriptor fd, Object obj) {
@@ -86,13 +94,13 @@ public class JDKContext extends AbstractContextImpl<JDKResource, Void> {
         return claimedFds.putIfAbsent(fd, obj) == null;
     }
 
+    public void claimNativeFd(int fd, Object resource) {
+        nativeFds.put(resource, fd);
+    }
+
     // This method should be called before actually closing the FD to prevent
     // false positives when checkpoint happens just before the native call.
     public void markClosedByNative(FileDescriptor fd) {
         nativeClosedFds.put(fd, null);
-    }
-
-    public Set<FileDescriptor> getFdsClosedByNative() {
-        return nativeClosedFds.keySet();
     }
 }

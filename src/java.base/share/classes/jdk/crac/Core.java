@@ -128,17 +128,13 @@ public class Core {
         }
 
         JDKContext jdkContext = jdk.internal.crac.Core.getJDKContext();
-        WeakHashMap<FileDescriptor, Object> claimedFdsMap = jdkContext.getClaimedFds();
-        Set<FileDescriptor> fdsClosedByNative = jdkContext.getFdsClosedByNative();
-        List<Map.Entry<FileDescriptor, Object>> claimedPairs = claimedFdsMap.entrySet().stream()
-                .filter(entry -> !fdsClosedByNative.contains(entry.getKey())).toList();
-        int[] fdArr = new int[claimedFdsMap.size()];
-        Object[] objArr = new Object[claimedFdsMap.size()];
+        List<Map.Entry<Integer, Object>> claimedPairs = jdkContext.getClaimedFds().entrySet().stream().toList();
+        int[] fdArr = new int[claimedPairs.size()];
+        Object[] objArr = new Object[claimedPairs.size()];
         for (int i = 0; i < claimedPairs.size(); ++i) {
-            int fd = SharedSecrets.getJavaIOFileDescriptorAccess().get(claimedPairs.get(i).getKey());
-            fdArr[i] = fd;
+            fdArr[i] = claimedPairs.get(i).getKey();
             objArr[i] = claimedPairs.get(i).getValue();
-            System.out.printf("%d %s\n", fd, objArr[i]);
+            System.out.printf("%d %s\n", fdArr[i], objArr[i]);
         }
 
         final Object[] bundle = checkpointRestore0(fdArr, objArr, checkpointException != null, jcmdStream);

@@ -41,7 +41,6 @@ import java.util.stream.Collectors;
 public class JDKContext extends AbstractContextImpl<JDKResource, Void> {
 
     private WeakHashMap<FileDescriptor, Object> claimedFds;
-    private final WeakHashMap<FileDescriptor, Object> nativeClosedFds = new WeakHashMap<>();
 
     private WeakHashMap<Object, Integer> nativeFds;
 
@@ -77,7 +76,6 @@ public class JDKContext extends AbstractContextImpl<JDKResource, Void> {
     public Map<Integer, Object> getClaimedFds() {
         JavaIOFileDescriptorAccess fileDescriptorAccess = SharedSecrets.getJavaIOFileDescriptorAccess();
         Map<Integer, Object> fdInfoMap = claimedFds.entrySet().stream()
-                .filter(entry -> !nativeClosedFds.containsKey(entry.getKey()))
                 .collect(Collectors.toMap(entry -> fileDescriptorAccess.get(entry.getKey()), Map.Entry::getValue));
         nativeFds.forEach((owner, fd) -> fdInfoMap.put(fd, owner));
         return fdInfoMap;
@@ -96,11 +94,5 @@ public class JDKContext extends AbstractContextImpl<JDKResource, Void> {
 
     public void claimNativeFd(int fd, Object resource) {
         nativeFds.put(resource, fd);
-    }
-
-    // This method should be called before actually closing the FD to prevent
-    // false positives when checkpoint happens just before the native call.
-    public void markClosedByNative(FileDescriptor fd) {
-        nativeClosedFds.put(fd, null);
     }
 }

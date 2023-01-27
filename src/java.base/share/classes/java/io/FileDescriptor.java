@@ -58,15 +58,25 @@ public final class FileDescriptor {
     private List<Closeable> otherParents;
     private boolean closed;
 
+    /**
+     * Called by FileDispatcherImpl when the file descriptor is about to be closed natively.
+     */
+    public void markClosedByNIO() {
+        resource.closedByNIO = true;
+    }
+
     class Resource implements jdk.internal.crac.JDKResource {
+        private boolean closedByNIO;
+
         Resource() {
             jdk.internal.crac.Core.getJDKContext().register(this);
         }
 
         @Override
         public void beforeCheckpoint(Context<? extends jdk.crac.Resource> context) throws Exception {
-            FileDescriptor.this.beforeCheckpoint();
-
+            if (!closedByNIO) {
+                FileDescriptor.this.beforeCheckpoint();
+            }
         }
 
         @Override

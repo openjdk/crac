@@ -25,8 +25,6 @@
 
 package sun.nio.ch;
 
-import jdk.internal.crac.Core;
-
 import java.io.FileDescriptor;
 import java.io.IOException;
 
@@ -58,8 +56,7 @@ class DatagramDispatcher extends NativeDispatcher {
     }
 
     void close(FileDescriptor fd) throws IOException {
-        Core.getJDKContext().markClosedByNative(fd);
-        FileDispatcherImpl.close0(fd);
+        FileDispatcherImpl.closeAndMark(fd);
     }
 
     void preClose(FileDescriptor fd) throws IOException {

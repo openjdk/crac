@@ -209,8 +209,11 @@ static const void *symtab_lookup(const char *name, const void **end_return, unsi
       fprintf(stderr, "symtab_lookup failed: %s\n", name);
       assert(0);
     }
-    const void *dl = dlsym(RTLD_DEFAULT, name);
-    assert(dl == data.start);
+    // It would crash on debian12.
+    if (strcmp(name, "_dl_get_tls_static_info") != 0) {
+      const void *dl = dlsym(RTLD_DEFAULT, name);
+      assert(dl == data.start);
+    }
   }
   if (end_return)
     *end_return = data.end;
@@ -312,6 +315,7 @@ static void verify_rwxp(const void *start, const void *end, int rwxp_want) {
   assert(start < end);
   while (start < end) {
     int rwxp_found = mprotect_read(start, &start);
+    if (rwxp_found != rwxp_want) { printf("sudo gdb -p %d\n",getpid()); pause(); }
     assert(rwxp_found == rwxp_want);
   }
 }
@@ -376,111 +380,6 @@ static const void *dl_relocate_object_get() {
   return p;
 }
 
-typedef void (*dl_relocate_object_p) (struct link_map *l, const void */*struct r_scope_elem *scope[]*/, int reloc_mode, int consider_profiling);
-
-static int reset_ifunc_iterate_phdr(struct dl_phdr_info *info, size_t size, void *data_unused) {
-  dl_relocate_object_p dl_relocate_object = (dl_relocate_object_p)dl_relocate_object_get();
-  dl_relocate_object_p dl_relocate_object_symtab = (dl_relocate_object_p)symtab_lookup("_dl_relocate_object", NULL, SHT_SYMTAB);
-  assert(dl_relocate_object_symtab == NULL || dl_relocate_object_symtab == dl_relocate_object);
-  if (strcmp(info->dlpi_name, "/lib64/ld-linux-x86-64.so.2") == 0) // _dl_relocate_object would crash on scope == NULL.
-    return 0; // unused
-  const void *relro = NULL;
-  const void *relro_end;
-  assert(size >= offsetof(struct dl_phdr_info, dlpi_adds));
-  for (size_t phdr_ix = 0; phdr_ix < info->dlpi_phnum; ++phdr_ix) {
-    const Elf64_Phdr *phdr = info->dlpi_phdr + phdr_ix;
-    if (phdr->p_type == PT_GNU_RELRO) {
-      // It does not apply: assert(phdr->p_offset == phdr->p_vaddr);
-      assert(phdr->p_paddr == phdr->p_vaddr);
-      // /lib64/libz.so.1: p_filesz=0x538 > p_memsz=0x550
-      assert(!relro);
-      relro = (const void *)(uintptr_t)(phdr->p_vaddr + info->dlpi_addr);
-      relro_end = (const void *)(((const uint8_t *)relro) + phdr->p_memsz);
-      relro = (const void *)(((uintptr_t)relro) & -PAGE_SIZE);
-      assert(relro);
-      relro_end = (const void *)((((uintptr_t)relro_end) + PAGE_SIZE - 1) & -PAGE_SIZE);
-    }
-  }
-  if (relro) {
-    verify_rwxp(relro, relro_end, 04/*r--*/);
-    int err = mprotect((void *)relro, (const uint8_t *)relro_end - (const uint8_t *)relro, PROT_READ | PROT_WRITE);
-    assert(!err);
-    verify_rwxp(relro, relro_end, 06/*rw-*/);
-  }
-  const struct link_map *map = phdr_info_to_link_map(info);
-  Elf64_Dyn *dynamic = map->l_ld;
-  Elf64_Xword *relxsz_p = NULL;
-  Elf64_Xword *relxcount_p = NULL;
-  for (; dynamic->d_tag != DT_NULL; ++dynamic)
-    switch (dynamic->d_tag) {
-    case DT_RELASZ:
-    case DT_RELSZ:
-    case DT_RELRSZ:
-      assert(!relxsz_p);
-      relxsz_p = &dynamic->d_un.d_val;
-      break;
-    case DT_RELCOUNT:
-    case DT_RELACOUNT:
-      assert(!relxcount_p);
-      relxcount_p = &dynamic->d_un.d_val;
-      break;
-    case DT_PLTREL:
-      // It is impossible to relocate DT_REL twice.
-      assert(dynamic->d_un.d_val == DT_RELA);
-      break;
-    }
-  Elf64_Xword relxsz_saved;
-  if (relxsz_p) {
-    relxsz_saved = *relxsz_p;
-    *relxsz_p = 0;
-  }
-  Elf64_Xword relxcount_saved;
-  if (relxcount_p) {
-    relxcount_saved = *relxcount_p;
-    *relxcount_p = 0;
-  }
-  unsigned *l_relocated_p = (unsigned *)(((const uint8_t *)map) + L_RELOCATED_OFFSET);
-  assert(*l_relocated_p & ~L_RELOCATED_MASK);
-  *l_relocated_p &= ~L_RELOCATED_MASK;
-  void **l_scope_p = (void **)(((const uint8_t *)map) + L_SCOPE_OFFSET);
-  // FIXME: skip ifuncs
-  dl_relocate_object((struct link_map *)map, *l_scope_p, 0/*lazy*/, 0/*consider_profiling*/);
-  // It was read/write before but dl_relocate_object made it read-only.
-  const void *dynamic_start = NULL;
-  const void *dynamic_end;
-  if (relxsz_p) {
-    dynamic_start = relxsz_p;
-    dynamic_end = relxsz_p + 1;
-  }
-  if (relxcount_p) {
-    if (!dynamic_start) {
-      dynamic_start = relxcount_p;
-      dynamic_end = relxcount_p + 1;
-    } else {
-      if (dynamic_start > relxcount_p)
-	dynamic_start = relxcount_p;
-      if (dynamic_end < relxcount_p + 1)
-	dynamic_end = relxcount_p + 1;
-    }
-  }
-  if (dynamic_start) {
-    page_align(&dynamic_start, &dynamic_end);
-    readonly_unset(dynamic_start, dynamic_end);
-  }
-  if (relxsz_p)
-    *relxsz_p = relxsz_saved;
-  if (relxcount_p)
-    *relxcount_p = relxcount_saved;
-  if (dynamic_start)
-    readonly_reset(dynamic_start, dynamic_end);
-  if (relro) {
-    int err = mprotect((void *)relro, (const uint8_t *)relro_end - (const uint8_t *)relro, PROT_READ);
-    assert(!err);
-    verify_rwxp(relro, relro_end, 04/*r--*/);
-  }
-  return 0; // unused
-}
-
 static void swap(const void **a_p, const void **b_p) {
   const void *p = *a_p;
   *a_p = *b_p;
@@ -503,6 +402,133 @@ static void intersect(const void **first_start_p, const void **first_end_p, cons
     if (*second_start_p > *second_end_p)
       *second_end_p = *second_start_p;
   }
+}
+
+typedef void (*dl_relocate_object_p) (struct link_map *l, const void */*struct r_scope_elem *scope[]*/, int reloc_mode, int consider_profiling);
+
+static int reset_ifunc_iterate_phdr(struct dl_phdr_info *info, size_t size, void *data_unused) {
+  dl_relocate_object_p dl_relocate_object = (dl_relocate_object_p)dl_relocate_object_get();
+  dl_relocate_object_p dl_relocate_object_symtab = (dl_relocate_object_p)symtab_lookup("_dl_relocate_object", NULL, SHT_SYMTAB);
+  assert(dl_relocate_object_symtab == NULL || dl_relocate_object_symtab == dl_relocate_object);
+  if (strcmp(info->dlpi_name, "/lib64/ld-linux-x86-64.so.2") == 0) // _dl_relocate_object would crash on scope == NULL.
+    return 0; // unused
+  const void *relro = NULL;
+  const void *relro_end;
+  assert(size >= offsetof(struct dl_phdr_info, dlpi_adds));
+  for (size_t phdr_ix = 0; phdr_ix < info->dlpi_phnum; ++phdr_ix) {
+    const Elf64_Phdr *phdr = info->dlpi_phdr + phdr_ix;
+    if (phdr->p_type == PT_GNU_RELRO) {
+      // It does not apply: assert(phdr->p_offset == phdr->p_vaddr);
+      assert(phdr->p_paddr == phdr->p_vaddr);
+      // /lib64/libz.so.1: p_filesz=0x538 > p_memsz=0x550
+      assert(!relro);
+      relro = (const void *)(uintptr_t)(phdr->p_vaddr + info->dlpi_addr);
+      relro_end = (const void *)(((const uint8_t *)relro) + phdr->p_memsz);
+      page_align(&relro, &relro_end);
+      assert(relro);
+    }
+  }
+  if (relro) {
+    verify_rwxp(relro, relro_end, 04/*r--*/);
+    int err = mprotect((void *)relro, (const uint8_t *)relro_end - (const uint8_t *)relro, PROT_READ | PROT_WRITE);
+    assert(!err);
+    verify_rwxp(relro, relro_end, 06/*rw-*/);
+  }
+  const struct link_map *map = phdr_info_to_link_map(info);
+  Elf64_Dyn *dynamic = map->l_ld;
+  Elf64_Xword *relxsz_p = NULL;
+  Elf64_Xword *relrsz_p = NULL;
+  Elf64_Xword *relxcount_p = NULL;
+  for (; dynamic->d_tag != DT_NULL; ++dynamic)
+    switch (dynamic->d_tag) {
+    case DT_RELASZ:
+    case DT_RELSZ:
+      assert(!relxsz_p);
+      relxsz_p = &dynamic->d_un.d_val;
+      break;
+    case DT_RELRSZ:
+      assert(!relrsz_p);
+      relrsz_p = &dynamic->d_un.d_val;
+      break;
+    case DT_RELCOUNT:
+    case DT_RELACOUNT:
+      assert(!relxcount_p);
+      relxcount_p = &dynamic->d_un.d_val;
+      break;
+    case DT_PLTREL:
+      // It is impossible to relocate DT_REL twice.
+      assert(dynamic->d_un.d_val == DT_RELA);
+      break;
+    }
+  Elf64_Xword relxsz_saved;
+  if (relxsz_p) {
+    relxsz_saved = *relxsz_p;
+    *relxsz_p = 0;
+  }
+  Elf64_Xword relrsz_saved;
+  if (relrsz_p) {
+    relrsz_saved = *relrsz_p;
+    *relrsz_p = 0;
+  }
+  Elf64_Xword relxcount_saved;
+  if (relxcount_p) {
+    relxcount_saved = *relxcount_p;
+    *relxcount_p = 0;
+  }
+  unsigned *l_relocated_p = (unsigned *)(((const uint8_t *)map) + L_RELOCATED_OFFSET);
+  assert(*l_relocated_p & ~L_RELOCATED_MASK);
+  *l_relocated_p &= ~L_RELOCATED_MASK;
+  void **l_scope_p = (void **)(((const uint8_t *)map) + L_SCOPE_OFFSET);
+  // FIXME: skip ifuncs
+  dl_relocate_object((struct link_map *)map, *l_scope_p, 0/*lazy*/, 0/*consider_profiling*/);
+  // It was read/write before but dl_relocate_object made it read-only.
+  const void *dynamic_start = NULL;
+  const void *dynamic_end;
+  if (relxsz_p) {
+    dynamic_start = relxsz_p;
+    dynamic_end = relxsz_p + 1;
+  }
+  if (relrsz_p) {
+    if (!dynamic_start) {
+      dynamic_start = relrsz_p;
+      dynamic_end = relrsz_p + 1;
+    } else {
+      if (dynamic_start > relrsz_p)
+	dynamic_start = relrsz_p;
+      if (dynamic_end < relrsz_p + 1)
+	dynamic_end = relrsz_p + 1;
+    }
+  }
+  if (relxcount_p) {
+    if (!dynamic_start) {
+      dynamic_start = relxcount_p;
+      dynamic_end = relxcount_p + 1;
+    } else {
+      if (dynamic_start > relxcount_p)
+	dynamic_start = relxcount_p;
+      if (dynamic_end < relxcount_p + 1)
+	dynamic_end = relxcount_p + 1;
+    }
+  }
+  if (dynamic_start) {
+    page_align(&dynamic_start, &dynamic_end);
+    intersect(&relro, &relro_end, &dynamic_start, &dynamic_end);
+    readonly_unset(dynamic_start, dynamic_end);
+  }
+  if (relxsz_p)
+    *relxsz_p = relxsz_saved;
+  if (relrsz_p)
+    *relrsz_p = relrsz_saved;
+  if (relxcount_p)
+    *relxcount_p = relxcount_saved;
+  if (dynamic_start)
+    readonly_reset(dynamic_start, dynamic_end);
+  if (relro) {
+    int err = mprotect((void *)relro, (const uint8_t *)relro_end - (const uint8_t *)relro, PROT_READ);
+    assert(!err);
+    verify_rwxp(relro, relro_end, 04/*r--*/);
+  }
+  return 0; // unused
 }
 
 /* 00000000000168b0 <__tunable_get_val>:

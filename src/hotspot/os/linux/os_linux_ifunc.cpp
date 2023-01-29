@@ -38,12 +38,12 @@
 #include <sys/user.h>
 #include <stdlib.h>
 
-#define L_SCOPE_OFFSET     0x398 // gdb -batch /lib64/ld-linux-x86-64.so.2 -ex 'p &((struct link_map *)0)->l_scope'
-#define L_RELOCATED_OFFSET 0x31c // gdb -batch /lib64/ld-linux-x86-64.so.2 -ex 'p &((struct link_map *)0)->l_relocated'
+#define L_SCOPE_OFFSET     0x3b0 // gdb -batch /lib64/ld-linux-x86-64.so.2 -ex 'p &((struct link_map *)0)->l_scope'
+#define L_RELOCATED_OFFSET 0x334 // gdb -batch /lib64/ld-linux-x86-64.so.2 -ex 'p &((struct link_map *)0)->l_relocated'
 // ptype/o struct link_map
-// /*    796: 2   |       4 */    unsigned int l_relocated : 1;
-// 796==0x31c
-#define L_RELOCATED_MASK (1<<2)
+// /*    820: 3   |       4 */    unsigned int l_relocated : 1;
+// 820==0x334
+#define L_RELOCATED_MASK (1<<3)
 
 #ifndef DT_RELRSZ
 #define DT_RELRSZ	35		/* Total size of RELR relative relocations */
@@ -428,12 +428,8 @@ static int reset_ifunc_iterate_phdr(struct dl_phdr_info *info, size_t size, void
       assert(relro);
     }
   }
-  if (relro) {
-    verify_rwxp(relro, relro_end, 04/*r--*/);
-    int err = mprotect((void *)relro, (const uint8_t *)relro_end - (const uint8_t *)relro, PROT_READ | PROT_WRITE);
-    assert(!err);
-    verify_rwxp(relro, relro_end, 06/*rw-*/);
-  }
+  if (relro)
+    readonly_unset(relro, relro_end);
   const struct link_map *map = phdr_info_to_link_map(info);
   Elf64_Dyn *dynamic = map->l_ld;
   Elf64_Xword *relxsz_p = NULL;
@@ -512,7 +508,9 @@ static int reset_ifunc_iterate_phdr(struct dl_phdr_info *info, size_t size, void
   }
   if (dynamic_start) {
     page_align(&dynamic_start, &dynamic_end);
+    // dl_relocate_object made it already readonly: readonly_reset(relro, relro_end);
     intersect(&relro, &relro_end, &dynamic_start, &dynamic_end);
+    readonly_unset(relro, relro_end);
     readonly_unset(dynamic_start, dynamic_end);
   }
   if (relxsz_p)
@@ -523,11 +521,8 @@ static int reset_ifunc_iterate_phdr(struct dl_phdr_info *info, size_t size, void
     *relxcount_p = relxcount_saved;
   if (dynamic_start)
     readonly_reset(dynamic_start, dynamic_end);
-  if (relro) {
-    int err = mprotect((void *)relro, (const uint8_t *)relro_end - (const uint8_t *)relro, PROT_READ);
-    assert(!err);
-    verify_rwxp(relro, relro_end, 04/*r--*/);
-  }
+  if (relro)
+    readonly_reset(relro, relro_end);
   return 0; // unused
 }
 

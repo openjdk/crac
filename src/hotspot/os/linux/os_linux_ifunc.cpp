@@ -42,17 +42,17 @@
 #define L_RELOCATED_OFFSET 0x334 // gdb -batch /lib64/ld-linux-x86-64.so.2 -ex 'p &((struct link_map *)0)->l_relocated'
 // ptype/o struct link_map
 // /*    820: 3   |       4 */    unsigned int l_relocated : 1;
+//            ^
 // 820==0x334
 #define L_RELOCATED_MASK (1<<3)
-
-#ifndef DT_RELRSZ
-#define DT_RELRSZ	35		/* Total size of RELR relative relocations */
-#endif
-
 #define RTLD_GLOBAL_RO_DL_X86_CPU_FEATURES 0x70 // gdb -batch /lib64/ld-linux-x86-64.so.2 -ex 'p/x (void *)&_rtld_global_ro._dl_x86_cpu_features - (void *)&_rtld_global_ro'
 #define RTLD_GLOBAL_RO_DL_X86_CPU_FEATURES_SIZEOF 0x1e0 // gdb -batch /lib64/ld-linux-x86-64.so.2 -ex 'p/x sizeof(_rtld_global_ro._dl_x86_cpu_features)'
 #define ARCH_KIND_UNKNOWN 0 // gdb -batch /lib64/ld-linux-x86-64.so.2 -ex 'p/x arch_kind_unknown'
 #define TUNABLE_T_SIZEOF 112 // gdb -batch /lib64/ld-linux-x86-64.so.2 -ex 'p sizeof(tunable_t)'
+
+#ifndef DT_RELRSZ
+#define DT_RELRSZ	35		/* Total size of RELR relative relocations */
+#endif
 
 #define strcmp strcmp_local
 static int strcmp_local(const char *s1, const char *s2) {

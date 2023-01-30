@@ -6033,38 +6033,38 @@ class Freeze {
       signalled = false;
       DIR *dir = opendir(dirname);
       if (dir == NULL) {
-	tty->print_cr("JVM: Error opening %s: %m", dirname);
-	return false;
+        tty->print_cr("JVM: Error opening %s: %m", dirname);
+        return false;
       }
       pid_t tid = gettid();
       struct dirent *ent;
       while (errno = 0, ent = readdir(dir)) {
-	const char *name = ent->d_name;
-	if (strcmp(name, ".") == 0)
-	  continue;
-	if (strcmp(name, "..") == 0)
-	  continue;
-	char *endptr;
-	unsigned long l = strtoul(name, &endptr, 10);
-	pid_t ent_tid = l;
-	if (l >= LONG_MAX || ent_tid != (long) l) {
-	  tty->print_cr("JVM: Error parsing %s entry \"%s\"", dirname, name);
-	  return false;
-	}
-	if (ent_tid == tid)
-	  continue;
-	if (!done.append_if_missing(ent_tid))
-	  continue;
-	signalled = true;
-	callback(ent_tid);
+        const char *name = ent->d_name;
+        if (strcmp(name, ".") == 0)
+          continue;
+        if (strcmp(name, "..") == 0)
+          continue;
+        char *endptr;
+        unsigned long l = strtoul(name, &endptr, 10);
+        pid_t ent_tid = l;
+        if (l >= LONG_MAX || ent_tid != (long) l) {
+          tty->print_cr("JVM: Error parsing %s entry \"%s\"", dirname, name);
+          return false;
+        }
+        if (ent_tid == tid)
+          continue;
+        if (!done.append_if_missing(ent_tid))
+          continue;
+        signalled = true;
+        callback(ent_tid);
       }
       if (errno) {
-	tty->print_cr("JVM: Error reading %s: %m", dirname);
-	return false;
+        tty->print_cr("JVM: Error reading %s: %m", dirname);
+        return false;
       }
       if (closedir(dir)) {
-	tty->print_cr("JVM: Error closing %s: %m", dirname);
-	return false;
+        tty->print_cr("JVM: Error closing %s: %m", dirname);
+        return false;
       }
     } while (signalled);
     return true;
@@ -6109,9 +6109,9 @@ public:
     size_t count = 0;
     all_threads([&](pid_t ent_tid) {
       if (!tgkill(getpid(), ent_tid, signo)) {
-	++count;
+        ++count;
       } else {
-	tty->print_cr("JVM: Error sending signal %d to TID %ld", signo, (long)ent_tid);
+        tty->print_cr("JVM: Error sending signal %d to TID %ld", signo, (long)ent_tid);
       }
     });
     int err;
@@ -6346,14 +6346,14 @@ void VM_Crac::verify_cpu_compatibility() {
   if (features_missing) {
     char buf[512];
     int res = jio_snprintf(
-		buf, sizeof(buf),
-		"You have to specify -XX:CPUFeatures=0x" UINT64_FORMAT_X " during -XX:CRaCCheckpointTo making of the checkpoint"
-		"; specified -XX:CRaCRestoreFrom file contains CPU features 0x" UINT64_FORMAT_X
-		"; this machine's CPU features are 0x" UINT64_FORMAT_X
-		"; missing features of this CPU are 0x" UINT64_FORMAT_X " ",
-		Abstract_VM_Version::features() & features_saved,
-		features_saved, Abstract_VM_Version::features(),
-		features_missing);
+                buf, sizeof(buf),
+                "You have to specify -XX:CPUFeatures=0x" UINT64_FORMAT_X " during -XX:CRaCCheckpointTo making of the checkpoint"
+                "; specified -XX:CRaCRestoreFrom file contains CPU features 0x" UINT64_FORMAT_X
+                "; this machine's CPU features are 0x" UINT64_FORMAT_X
+                "; missing features of this CPU are 0x" UINT64_FORMAT_X " ",
+                Abstract_VM_Version::features() & features_saved,
+                features_saved, Abstract_VM_Version::features(),
+                features_missing);
     assert(res > 0, "not enough temporary space allocated");
     VM_Version::insert_features_names(buf + res, sizeof(buf) - res, features_missing);
     assert(buf[res] == ',', "unexpeced VM_Version::insert_features_names separator instead of ','");
@@ -6363,9 +6363,9 @@ void VM_Crac::verify_cpu_compatibility() {
   auto supports_exit = [&](const char *supports, bool file, bool this_cpu) {
     char buf[512];
     int res = jio_snprintf(
-		buf, sizeof(buf),
-		"Specified -XX:CRaCRestoreFrom file contains feature \"%s\" value %d while this CPU has value %d",
-		supports, file, this_cpu);
+                buf, sizeof(buf),
+                "Specified -XX:CRaCRestoreFrom file contains feature \"%s\" value %d while this CPU has value %d",
+                supports, file, this_cpu);
     assert(res > 0, "not enough temporary space allocated");
     vm_exit_during_initialization(buf);
   };

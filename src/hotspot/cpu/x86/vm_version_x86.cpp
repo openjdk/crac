@@ -647,11 +647,11 @@ void VM_Version::get_processor_features(bool use_CPUFeatures) {
     if (features_missing) {
       char buf[512];
       int res = jio_snprintf(
-		  buf, sizeof(buf),
-		  "Specified -XX:CPUFeatures=0x" UINT64_FORMAT_X
-		  "; this machine's CPU features are 0x" UINT64_FORMAT_X
-		  "; missing features of this CPU are 0x" UINT64_FORMAT_X " ",
-		  CPUFeatures, _features, features_missing);
+                  buf, sizeof(buf),
+                  "Specified -XX:CPUFeatures=0x" UINT64_FORMAT_X
+                  "; this machine's CPU features are 0x" UINT64_FORMAT_X
+                  "; missing features of this CPU are 0x" UINT64_FORMAT_X " ",
+                  CPUFeatures, _features, features_missing);
       assert(res > 0, "not enough temporary space allocated");
       insert_features_names(buf + res, sizeof(buf) - res, features_missing);
       assert(buf[res] == ',', "unexpeced VM_Version::insert_features_names separator instead of ','");

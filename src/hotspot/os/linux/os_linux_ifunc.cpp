@@ -55,7 +55,7 @@ static const char tunable_t_sizeof_expr[] = "p sizeof(tunable_t)";
 static unsigned   l_relocated_bitno = 3;
 
 #ifndef DT_RELRSZ
-#define DT_RELRSZ	35		/* Total size of RELR relative relocations */
+#define DT_RELRSZ       35              /* Total size of RELR relative relocations */
 #endif
 
 #define strcmp strcmp_local
@@ -144,8 +144,6 @@ struct symtab_lookup {
 };
 static int symtab_lookup_iterate_phdr(struct dl_phdr_info *info, size_t size, void *data_voidp) {
   struct symtab_lookup *data_p = (struct symtab_lookup *)data_voidp;
-  //fprintf(stderr,"symtab_lookup(%s): link_map=%p l_addr=0x%lx l_ld=%p l_ld_diff=0x%lx %s\n",
-  //	name, map, map->l_addr, map->l_ld, ((uintptr_t)map->l_ld)-map->l_addr, (!map->l_name[0] ? "<empty>" : map->l_name));
   const char *filename = info->dlpi_name;
   if (strcmp(filename, "linux-vdso.so.1") == 0)
     return 0; // unused
@@ -185,9 +183,9 @@ static int symtab_lookup_iterate_phdr(struct dl_phdr_info *info, size_t size, vo
       //assert(ELF64_ST_TYPE(sym->st_info) == STT_FUNC); // FIXME
       assert(ELF64_ST_VISIBILITY(sym->st_other) == STV_DEFAULT); // FIXME
       if (sym->st_shndx == SHN_UNDEF) {
-	assert(sym->st_value == 0);
-	assert(sym->st_size == 0);
-	continue;
+        assert(sym->st_value == 0);
+        assert(sym->st_size == 0);
+        continue;
       }
       assert(sym->st_value != 0);
       assert(sym->st_size != 0);
@@ -297,7 +295,7 @@ static int mprotect_read(const void *addr, const void **addr_end_return) {
     ++cs;
     if (start <= addr_u && addr_u < end) {
       if (addr_end_return)
-	*addr_end_return = (const void *)(uintptr_t)end;
+        *addr_end_return = (const void *)(uintptr_t)end;
       retval = rwxp;
       break;
     }
@@ -494,9 +492,9 @@ static int reset_ifunc_iterate_phdr(struct dl_phdr_info *info, size_t size, void
       dynamic_end = relrsz_p + 1;
     } else {
       if (dynamic_start > relrsz_p)
-	dynamic_start = relrsz_p;
+        dynamic_start = relrsz_p;
       if (dynamic_end < relrsz_p + 1)
-	dynamic_end = relrsz_p + 1;
+        dynamic_end = relrsz_p + 1;
     }
   }
   if (relxcount_p) {
@@ -505,9 +503,9 @@ static int reset_ifunc_iterate_phdr(struct dl_phdr_info *info, size_t size, void
       dynamic_end = relxcount_p + 1;
     } else {
       if (dynamic_start > relxcount_p)
-	dynamic_start = relxcount_p;
+        dynamic_start = relxcount_p;
       if (dynamic_end < relxcount_p + 1)
-	dynamic_end = relxcount_p + 1;
+        dynamic_end = relxcount_p + 1;
     }
   }
   if (dynamic_start) {

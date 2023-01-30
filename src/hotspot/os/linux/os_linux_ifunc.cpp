@@ -49,7 +49,7 @@ static const char rtld_global_ro_dl_x86_cpu_features_offset_expr[] = "p (void *)
 static unsigned   rtld_global_ro_dl_x86_cpu_features_sizeof = 0x1e0;
 static const char rtld_global_ro_dl_x86_cpu_features_sizeof_expr[] = "p sizeof(_rtld_global_ro._dl_x86_cpu_features)";
 static unsigned   arch_kind_unknown = 0;
-static const char arch_kind_unknown_expr[] = "p arch_kind_unknown";
+static const char arch_kind_unknown_expr[] = "p (int)arch_kind_unknown";
 static unsigned   tunable_t_sizeof = 112;
 static const char tunable_t_sizeof_expr[] = "p sizeof(tunable_t)";
 static unsigned   l_relocated_bitno = 3;
@@ -645,16 +645,25 @@ static void fetch_offset(unsigned *unsigned_p, const char *expr) {
   s = strrchr(line, ')');
   if (s)
     ++s;
-  else
-    s = line;
+  else {
+    s = strrchr(line, '=');
+    if (!s) {
+      fprintf(stderr, "No ')' or '=' found for: %s\n", expr);
+      return;
+    }
+    ++s;
+  }
   int err;
   err = pclose(f);
   char *end;
   unsigned long ul = strtoul(s, &end, 0);
-  if (ul < INT_MAX && (!end || !*end)) {
-    assert(!err);
-    *unsigned_p = ul;
+  if (ul >= INT_MAX || (end && *end)) {
+    fprintf(stderr,"Number not parseable \"%s\" for: %s\n", s, expr);
+    return;
   }
+  assert(!err);
+  fprintf(stderr,"%u->%lu %s\n",*unsigned_p,ul,expr);
+  *unsigned_p = ul;
 }
 
 static void fetch_l_relocated_bitno() {
@@ -701,6 +710,7 @@ static void fetch_l_relocated_bitno() {
       fprintf(stderr, "Too large l_relocated_bitno = %lu: %s\n", ul, line);
       break;
     }
+    fprintf(stderr,"%u->%lu %s\n",l_relocated_bitno,ul,"l_relocated_bitno");
     l_relocated_bitno = ul;
     break;
   }

@@ -34,7 +34,11 @@ import jdk.crac.impl.AbstractContextImpl;
 import jdk.internal.access.JavaIOFileDescriptorAccess;
 import jdk.internal.access.SharedSecrets;
 
+import java.io.File;
 import java.io.FileDescriptor;
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.*;
 import java.util.stream.Collectors;
 
@@ -45,6 +49,27 @@ public class JDKContext extends AbstractContextImpl<JDKResource, Void> {
     private WeakHashMap<FileDescriptor, Object> claimedFds;
 
     private WeakHashMap<Object, Integer> nativeFds;
+
+    public boolean matchClasspath(String path) {
+        Path p = Path.of(path);
+        String classpath = System.getProperty("java.class.path");
+        int index = 0;
+        while (index >= 0) {
+            int end = classpath.indexOf(File.pathSeparatorChar, index);
+            if (end < 0) {
+                end = classpath.length();
+            }
+            try {
+                if (Files.isSameFile(p, Path.of(classpath.substring(index, end)))) {
+                    return true;
+                }
+            } catch (IOException e) {
+                // ignore exception
+                return false;
+            }
+        }
+        return false;
+    }
 
     static class ContextComparator implements Comparator<Map.Entry<JDKResource, Void>> {
         @Override

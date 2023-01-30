@@ -26,6 +26,7 @@
 #ifndef OS_LINUX_OS_LINUX_IFUNC_HPP
 #define OS_LINUX_OS_LINUX_IFUNC_HPP
 
+void linux_ifunc_fetch_offsets();
 void linux_ifunc_reset();
 
 #endif // OS_LINUX_OS_LINUX_IFUNC_HPP

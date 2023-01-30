@@ -38,17 +38,20 @@
 #include <sys/user.h>
 #include <stdlib.h>
 
-#define L_SCOPE_OFFSET     0x3b0 // gdb -batch /lib64/ld-linux-x86-64.so.2 -ex 'p &((struct link_map *)0)->l_scope'
-#define L_RELOCATED_OFFSET 0x334 // gdb -batch /lib64/ld-linux-x86-64.so.2 -ex 'p &((struct link_map *)0)->l_relocated'
-// ptype/o struct link_map
-// /*    820: 3   |       4 */    unsigned int l_relocated : 1;
-//            ^
-// 820==0x334
-#define L_RELOCATED_MASK (1<<3)
-#define RTLD_GLOBAL_RO_DL_X86_CPU_FEATURES 0x70 // gdb -batch /lib64/ld-linux-x86-64.so.2 -ex 'p/x (void *)&_rtld_global_ro._dl_x86_cpu_features - (void *)&_rtld_global_ro'
-#define RTLD_GLOBAL_RO_DL_X86_CPU_FEATURES_SIZEOF 0x1e0 // gdb -batch /lib64/ld-linux-x86-64.so.2 -ex 'p/x sizeof(_rtld_global_ro._dl_x86_cpu_features)'
-#define ARCH_KIND_UNKNOWN 0 // gdb -batch /lib64/ld-linux-x86-64.so.2 -ex 'p/x arch_kind_unknown'
-#define TUNABLE_T_SIZEOF 112 // gdb -batch /lib64/ld-linux-x86-64.so.2 -ex 'p sizeof(tunable_t)'
+// gdb -batch /lib64/ld-linux-x86-64.so.2 -ex
+static unsigned   l_scope_offset = 0x3b0;
+static const char l_scope_offset_expr[] = "p &((struct link_map *)0)->l_scope";
+static unsigned   l_relocated_offset = 0x334;
+static const char l_relocated_offset_expr[] = "p &((struct link_map *)0)->l_relocated";
+static unsigned   rtld_global_ro_dl_x86_cpu_features_offset = 0x70;
+static const char rtld_global_ro_dl_x86_cpu_features_offset_expr[] = "p (void *)&_rtld_global_ro._dl_x86_cpu_features - (void *)&_rtld_global_ro";
+static unsigned   rtld_global_ro_dl_x86_cpu_features_sizeof = 0x1e0;
+static const char rtld_global_ro_dl_x86_cpu_features_sizeof_expr[] = "p sizeof(_rtld_global_ro._dl_x86_cpu_features)";
+static unsigned   arch_kind_unknown = 0;
+static const char arch_kind_unknown_expr[] = "p arch_kind_unknown";
+static unsigned   tunable_t_sizeof = 112;
+static const char tunable_t_sizeof_expr[] = "p sizeof(tunable_t)";
+static unsigned   l_relocated_bitno = 3;
 
 #ifndef DT_RELRSZ
 #define DT_RELRSZ	35		/* Total size of RELR relative relocations */
@@ -78,11 +81,14 @@ static int memcmp_local(const void *s1, const void *s2, size_t n) {
 }
 
 #define strchr strchr_local
-static const char *strchr_local(const char *cs, int c) {
-  for (; *cs; ++cs)
-    if ((uint8_t)*cs == (uint8_t)c)
-      return cs;
+static char *strchr_local(char *s, int c) {
+  for (; *s; ++s)
+    if ((uint8_t)*s == (uint8_t)c)
+      return s;
   return NULL;
+}
+static const char *strchr_local(const char *cs, int c) {
+  return strchr_local((char *)cs, c);
 }
 
 #define strlen strlen_local
@@ -468,10 +474,10 @@ static int reset_ifunc_iterate_phdr(struct dl_phdr_info *info, size_t size, void
     relxcount_saved = *relxcount_p;
     *relxcount_p = 0;
   }
-  unsigned *l_relocated_p = (unsigned *)(((const uint8_t *)map) + L_RELOCATED_OFFSET);
-  assert(*l_relocated_p & ~L_RELOCATED_MASK);
-  *l_relocated_p &= ~L_RELOCATED_MASK;
-  void **l_scope_p = (void **)(((const uint8_t *)map) + L_SCOPE_OFFSET);
+  unsigned *l_relocated_p = (unsigned *)(((const uint8_t *)map) + l_relocated_offset);
+  assert(*l_relocated_p & ~(1 << l_relocated_bitno));
+  *l_relocated_p &= ~(1 << l_relocated_bitno);
+  void **l_scope_p = (void **)(((const uint8_t *)map) + l_scope_offset);
   // FIXME: skip ifuncs
   dl_relocate_object((struct link_map *)map, *l_scope_p, 0/*lazy*/, 0/*consider_profiling*/);
   // It was read/write before but dl_relocate_object made it read-only.
@@ -587,7 +593,7 @@ static void reset_glibc() {
   }
   const void *rtld_global_ro_exact = rtld_global_ro;
   const void *tunable_list = tunable_list_get();
-  const void *tunable_list_end = ((const uint8_t *)tunable_list) + TUNABLE_T_SIZEOF * tunable_list_count();
+  const void *tunable_list_end = ((const uint8_t *)tunable_list) + tunable_t_sizeof * tunable_list_count();
   const void *tunable_list_symtab_end;
   const void *tunable_list_symtab = symtab_lookup("tunable_list", &tunable_list_symtab_end, SHT_SYMTAB);
   assert(tunable_list_symtab == NULL || tunable_list_symtab == tunable_list);
@@ -597,17 +603,118 @@ static void reset_glibc() {
   intersect(&rtld_global_ro, &rtld_global_ro_end, &tunable_list, &tunable_list_end);
   readonly_unset(rtld_global_ro, rtld_global_ro_end);
   readonly_unset(tunable_list, tunable_list_end);
-  void *cpu_features = (void *)(((uint8_t *)rtld_global_ro_exact) + RTLD_GLOBAL_RO_DL_X86_CPU_FEATURES);
-  assert(*(const uint32_t *)cpu_features != ARCH_KIND_UNKNOWN); // .basic.kind
-  memset(cpu_features, 0, RTLD_GLOBAL_RO_DL_X86_CPU_FEATURES_SIZEOF);
-  assert(*(const uint32_t *)cpu_features == ARCH_KIND_UNKNOWN); // .basic.kind
+  void *cpu_features = (void *)(((uint8_t *)rtld_global_ro_exact) + rtld_global_ro_dl_x86_cpu_features_offset);
+  assert(*(const uint32_t *)cpu_features != arch_kind_unknown); // .basic.kind
+  memset(cpu_features, 0, rtld_global_ro_dl_x86_cpu_features_sizeof);
+  assert(*(const uint32_t *)cpu_features == arch_kind_unknown); // .basic.kind
   dl_x86_init_cpu_features_p dl_x86_init_cpu_features = (dl_x86_init_cpu_features_p)dl_x86_init_cpu_features_get();
   dl_x86_init_cpu_features_p dl_x86_init_cpu_features_symtab = (dl_x86_init_cpu_features_p)symtab_lookup("_dl_x86_init_cpu_features", NULL, SHT_SYMTAB);
   assert(dl_x86_init_cpu_features_symtab == NULL || dl_x86_init_cpu_features_symtab == dl_x86_init_cpu_features);
   (*dl_x86_init_cpu_features)();
-  assert(*(const uint32_t *)cpu_features != ARCH_KIND_UNKNOWN); // .basic.kind
+  assert(*(const uint32_t *)cpu_features != arch_kind_unknown); // .basic.kind
   readonly_reset(rtld_global_ro, rtld_global_ro_end);
   readonly_reset(tunable_list, tunable_list_end);
+}
+
+static FILE *fetch_offset_popen(const char *expr) {
+  char *cmd;
+  int err;
+  err = asprintf(&cmd, "gdb -batch /lib64/ld-linux-x86-64.so.2 -ex '%s'", expr);
+  assert(err > 0);
+  FILE *f = popen(cmd, "r");
+  assert(f);
+  free(cmd);
+  return f;
+}
+
+static void fetch_offset(unsigned *unsigned_p, const char *expr) {
+  FILE *f = fetch_offset_popen(expr);
+  char line[LINE_MAX];
+  char *s = fgets(line, sizeof(line), f);
+  if (s == NULL) {
+    assert(feof(f));
+    assert(!ferror(f));
+    return;
+  }
+  assert(s == line);
+  s = strchr(line, '\n');
+  assert(s);
+  assert(!s[1]);
+  *s = 0;
+  s = strrchr(line, ')');
+  if (s)
+    ++s;
+  else
+    s = line;
+  int err;
+  err = pclose(f);
+  char *end;
+  unsigned long ul = strtoul(s, &end, 0);
+  if (ul < INT_MAX && (!end || !*end)) {
+    assert(!err);
+    *unsigned_p = ul;
+  }
+}
+
+static void fetch_l_relocated_bitno() {
+  FILE *f = fetch_offset_popen("ptype/o struct link_map");
+  char line[LINE_MAX];
+  for (;;) {
+    char *s = fgets(line, sizeof(line), f);
+    if (!s) {
+      assert(feof(f));
+      assert(!ferror(f));
+      break;
+    }
+    s = strchr(line, '\n');
+    assert(s);
+    assert(!s[1]);
+    *s = 0;
+    // ptype/o struct link_map
+    // /*    820: 3   |       4 */    unsigned int l_relocated : 1;
+    //            ^
+    // 820==0x334
+    if (!strstr(line, " l_relocated : 1;"))
+      continue;
+    assert(line[0] == '/');
+    assert(line[1] == '*');
+    char *end;
+    unsigned long ul;
+    ul = strtoul(line + 2, &end, 0);
+    if (!end || *end != ':') {
+      fprintf(stderr, "':' not found: %s\n", line);
+      break;
+    }
+    if (ul != l_relocated_offset) {
+      fprintf(stderr, "l_relocated_offset = %u != %lu from: %s\n", l_relocated_offset, ul, line);
+      break;
+    }
+    ul = strtoul(end + 1, &end, 0);
+    while (end && *end == ' ')
+      ++end;
+    if (!end || *end != '|') {
+      fprintf(stderr, "'|' not found: %s end=%s ul=%lu\n", line, end,ul);
+      break;
+    }
+    if (ul >= 320) {
+      fprintf(stderr, "Too large l_relocated_bitno = %lu: %s\n", ul, line);
+      break;
+    }
+    l_relocated_bitno = ul;
+    break;
+  }
+  pclose(f);
+}
+
+void linux_ifunc_fetch_offsets() {
+#define GET(n) fetch_offset(&n, n##_expr)
+  GET(l_scope_offset);
+  GET(l_relocated_offset);
+  GET(rtld_global_ro_dl_x86_cpu_features_offset);
+  GET(rtld_global_ro_dl_x86_cpu_features_sizeof);
+  GET(arch_kind_unknown);
+  GET(tunable_t_sizeof);
+  fetch_l_relocated_bitno();
 }
 
 void linux_ifunc_reset() {

@@ -6150,6 +6150,9 @@ pthread_cond_t Freeze::resume_cond;
 
 static int checkpoint_restore(int *shmid) {
 
+  // All the systems for restore should have the same glibc version (despite possibly different CPUs).
+  linux_ifunc_fetch_offsets();
+
   Freeze freeze;
   if (!freeze.freeze()) {
     return JVM_CHECKPOINT_ERROR;

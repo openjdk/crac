@@ -38,6 +38,7 @@
 #include <sys/user.h>
 #include <stdlib.h>
 
+// These offsets are for Debian 12 x86_64:
 // gdb -batch /lib64/ld-linux-x86-64.so.2 -ex
 static unsigned   l_scope_offset = 0x3b0;
 static const char l_scope_offset_expr[] = "p &((struct link_map *)0)->l_scope";

@@ -30,7 +30,7 @@ public class CheckpointOpenFileException extends
         CheckpointOpenResourceException {
     private static final long serialVersionUID = 4696394478625532246L;
 
-    public CheckpointOpenFileException(String details) {
-        super(details);
+    public CheckpointOpenFileException(String details, Throwable cause) {
+        super(details, cause);
     }
 }

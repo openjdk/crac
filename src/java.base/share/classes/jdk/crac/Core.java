@@ -64,6 +64,7 @@ public class Core {
     private static boolean checkpointInProgress = false;
 
     private static class FlagsHolder {
+        private FlagsHolder() {}
         public static final boolean TRACE_STARTUP_TIME =
             GetBooleanAction.privilegedGetProperty("jdk.crac.trace-startup-time");
     }
@@ -87,7 +88,7 @@ public class Core {
             switch(codes[i]) {
                 case JVM_CR_FAIL_FILE:
                     exception.addSuppressed(
-                            new CheckpointOpenFileException(messages[i]));
+                            new CheckpointOpenFileException(messages[i], null));
                     break;
                 case JVM_CR_FAIL_SOCK:
                     exception.addSuppressed(
@@ -97,7 +98,7 @@ public class Core {
                     // FALLTHROUGH
                 default:
                     exception.addSuppressed(
-                            new CheckpointOpenResourceException(messages[i]));
+                            new CheckpointOpenResourceException(messages[i], null));
                     break;
             }
         }

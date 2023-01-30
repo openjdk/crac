@@ -39,6 +39,8 @@ import java.util.*;
 import java.util.stream.Collectors;
 
 public class JDKContext extends AbstractContextImpl<JDKResource, Void> {
+    public static final String COLLECT_FD_STACKTRACES_PROPERTY = "jdk.crac.collect-fd-stacktraces";
+    public static final String COLLECT_FD_STACKTRACES_HINT = "Use -D" + COLLECT_FD_STACKTRACES_PROPERTY + "=true to find the source.";
 
     private WeakHashMap<FileDescriptor, Object> claimedFds;
 
@@ -77,7 +79,9 @@ public class JDKContext extends AbstractContextImpl<JDKResource, Void> {
         JavaIOFileDescriptorAccess fileDescriptorAccess = SharedSecrets.getJavaIOFileDescriptorAccess();
         Map<Integer, Object> fdInfoMap = claimedFds.entrySet().stream()
                 .collect(Collectors.toMap(entry -> fileDescriptorAccess.get(entry.getKey()), Map.Entry::getValue));
-        nativeFds.forEach((owner, fd) -> fdInfoMap.put(fd, owner));
+        // We're using putIfAbsent because sometimes the native FD is eventually used in a FileDescriptor;
+        // we don't want to overwrite the information.
+        nativeFds.forEach((owner, fd) -> fdInfoMap.putIfAbsent(fd, owner));
         return fdInfoMap;
     }
 

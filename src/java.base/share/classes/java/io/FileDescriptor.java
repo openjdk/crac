@@ -33,8 +33,11 @@ import jdk.crac.Context;
 import jdk.crac.impl.CheckpointOpenFileException;
 import jdk.internal.access.JavaIOFileDescriptorAccess;
 import jdk.internal.access.SharedSecrets;
+import jdk.internal.crac.Core;
 import jdk.internal.crac.JDKContext;
+import jdk.internal.crac.JDKResource;
 import jdk.internal.ref.PhantomCleanable;
+import sun.security.action.GetBooleanAction;
 
 /**
  * Instances of the file descriptor class serve as an opaque handle
@@ -66,10 +69,20 @@ public final class FileDescriptor {
     }
 
     class Resource implements jdk.internal.crac.JDKResource {
+        private static final boolean COLLECT_FD_STACKTRACES =
+                GetBooleanAction.privilegedGetProperty(JDKContext.COLLECT_FD_STACKTRACES_PROPERTY);
+
         private boolean closedByNIO;
+        final Exception stackTraceHolder;
 
         Resource() {
-            jdk.internal.crac.Core.getJDKContext().register(this);
+            JDKContext jdkContext = Core.getJDKContext();
+            jdkContext.register(this);
+            if (COLLECT_FD_STACKTRACES) {
+                stackTraceHolder = new Exception("This file descriptor was created here");
+            } else {
+                stackTraceHolder = null;
+            }
         }
 
         @Override
@@ -99,6 +112,25 @@ public final class FileDescriptor {
 
     static {
         initIDs();
+
+        Core.getJDKContext().register(checkpointListener = new JDKResource() {
+            @Override
+            public Priority getPriority() {
+                return Priority.NORMAL;
+            }
+
+            @Override
+            public void beforeCheckpoint(Context<? extends jdk.crac.Resource> context) {
+                JDKContext ctx = (JDKContext) context;
+                ctx.claimFd(in, "System.in");
+                ctx.claimFd(out, "System.out");
+                ctx.claimFd(err, "System.err");
+            }
+
+            @Override
+            public void afterRestore(Context<? extends jdk.crac.Resource> context) {
+            }
+        });
     }
 
     // Set up JavaIOFileDescriptorAccess in SharedSecrets
@@ -213,6 +245,9 @@ public final class FileDescriptor {
     public boolean valid() {
         return (handle != -1) || (fd != -1);
     }
+
+    private static final JDKResource checkpointListener;
+
 
     /**
      * Force all system buffers to synchronize with the underlying
@@ -338,7 +373,7 @@ public final class FileDescriptor {
         if (valid()) {
             JDKContext ctx = jdk.internal.crac.Core.getJDKContext();
             if (ctx.claimFdWeak(this, this)) {
-                throw new CheckpointOpenFileException(Integer.toString(this.fd));
+                throw new CheckpointOpenFileException("FileDescriptor " + this.fd + " left open. " + JDKContext.COLLECT_FD_STACKTRACES_HINT, resource.stackTraceHolder);
             }
         }
     }

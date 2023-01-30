@@ -31,6 +31,7 @@ import jdk.crac.Resource;
 import jdk.internal.crac.JDKResource;
 import jdk.internal.crac.JDKResource.Priority;
 
+import java.io.FileDescriptor;
 import java.io.IOException;
 import java.nio.channels.ClosedSelectorException;
 import java.nio.channels.IllegalSelectorException;
@@ -111,7 +112,10 @@ class EPollSelectorImpl extends SelectorImpl implements JDKResource {
 
         try {
             this.eventfd = new EventFD();
-            IOUtil.configureBlocking(IOUtil.newFD(eventfd.efd()), false);
+            FileDescriptor fd = IOUtil.newFD(eventfd.efd());
+            // This FileDescriptor is a one-time use, the actual FD will be closed from EventFD
+            fd.markClosedByNIO();
+            IOUtil.configureBlocking(fd, false);
         } catch (IOException ioe) {
             EPoll.freePollArray(pollArrayAddress);
             FileDispatcherImpl.closeIntFD(epfd);

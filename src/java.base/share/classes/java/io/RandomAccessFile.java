@@ -28,11 +28,11 @@ package java.io;
 import java.nio.channels.FileChannel;
 
 import jdk.crac.Context;
-import jdk.crac.Resource;
 import jdk.crac.impl.CheckpointOpenFileException;
 import jdk.internal.access.JavaIORandomAccessFileAccess;
 import jdk.internal.access.SharedSecrets;
 import jdk.internal.crac.Core;
+import jdk.internal.crac.JDKContext;
 import jdk.internal.crac.JDKResource;
 import sun.nio.ch.FileChannelImpl;
 
@@ -93,7 +93,8 @@ public class RandomAccessFile implements DataOutput, DataInput, Closeable {
         @Override
         public void beforeCheckpoint(Context<? extends jdk.crac.Resource> context) throws Exception {
             if (Core.getJDKContext().claimFdWeak(fd, this)) {
-                throw new CheckpointOpenFileException(this.toString());
+                throw new CheckpointOpenFileException("RandomAccessFile " + path + " left open." + JDKContext.COLLECT_FD_STACKTRACES_HINT,
+                        fd.resource.stackTraceHolder);
             }
         }
 

@@ -26,9 +26,10 @@ import jdk.crac.*;
 public class RestoreEnvironmentTest {
     static public void main(String[] args) throws Exception {
         {
-            String testVarName = "RESTORE_ENVIRONMENT_TEST_VAR";
+            final int testVarCount = 4;
+            final String testVarName = "RESTORE_ENVIRONMENT_TEST_VAR";
 
-            for (int i = 0; i < 3; ++i) {
+            for (int i = 0; i < testVarCount; ++i) {
                 var testVar = java.lang.System.getenv(testVarName + i);
                 System.out.println("(before checkpoint) " + testVarName + i + "=" + testVar);
             }
@@ -36,7 +37,7 @@ public class RestoreEnvironmentTest {
             jdk.crac.Core.checkpointRestore();
 
             System.out.print("(after restore) ");
-            for (int i = 0; i < 3; ++i) {
+            for (int i = 0; i < testVarCount; ++i) {
                 var testVar = java.lang.System.getenv(testVarName + i);
                 System.out.print(testVarName + i + "=" + testVar + ";");
             }

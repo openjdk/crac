@@ -209,11 +209,8 @@ static const void *symtab_lookup(const char *name, const void **end_return, unsi
       fprintf(stderr, "symtab_lookup failed: %s\n", name);
       assert(0);
     }
-    // It would crash on debian12.
-    if (strcmp(name, "_dl_get_tls_static_info") != 0) {
-      const void *dl = dlsym(RTLD_DEFAULT, name);
-      assert(dl == data.start);
-    }
+    const void *dl = dlsym(RTLD_DEFAULT, name);
+    assert(dl == data.start);
   }
   if (end_return)
     *end_return = data.end;

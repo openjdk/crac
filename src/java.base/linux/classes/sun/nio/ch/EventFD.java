@@ -33,13 +33,11 @@ import java.io.IOException;
 final class EventFD {
     private final int efd;
 
-    private final NativeFileDescriptorResource resource = new NativeFileDescriptorResource(this);
     /**
      * Creates a blocking eventfd object with initial value zero.
      */
     EventFD() throws IOException {
         efd = eventfd0();
-        resource.add(efd);
     }
 
     int efd() {
@@ -55,7 +53,6 @@ final class EventFD {
     }
 
     void close() throws IOException {
-        resource.remove(efd);
         FileDispatcherImpl.closeIntFD(efd);
     }
 

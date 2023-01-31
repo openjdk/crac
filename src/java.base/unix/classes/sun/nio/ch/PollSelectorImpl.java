@@ -67,8 +67,6 @@ class PollSelectorImpl extends SelectorImpl {
     private final Object interruptLock = new Object();
     private boolean interruptTriggered;
 
-    private final NativeFileDescriptorResource resource = new NativeFileDescriptorResource(this);
-
     PollSelectorImpl(SelectorProvider sp) throws IOException {
         super(sp);
 
@@ -79,8 +77,6 @@ class PollSelectorImpl extends SelectorImpl {
             long fds = IOUtil.makePipe(false);
             this.fd0 = (int) (fds >>> 32);
             this.fd1 = (int) fds;
-            resource.add(fd0);
-            resource.add(fd1);
         } catch (IOException ioe) {
             pollArray.free();
             throw ioe;
@@ -206,9 +202,7 @@ class PollSelectorImpl extends SelectorImpl {
         }
 
         pollArray.free();
-        resource.remove(fd0);
         FileDispatcherImpl.closeIntFD(fd0);
-        resource.remove(fd1);
         FileDispatcherImpl.closeIntFD(fd1);
     }
 

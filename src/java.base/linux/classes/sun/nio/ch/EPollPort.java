@@ -86,8 +86,6 @@ final class EPollPort
     private final Event NEED_TO_POLL = new Event(null, 0);
     private final Event EXECUTE_TASK_OR_SHUTDOWN = new Event(null, 0);
 
-    private final NativeFileDescriptorResource resource = new NativeFileDescriptorResource(this);
-
     EPollPort(AsynchronousChannelProvider provider, ThreadPool pool)
         throws IOException
     {
@@ -105,9 +103,6 @@ final class EPollPort
             FileDispatcherImpl.closeIntFD(epfd);
             throw ioe;
         }
-        resource.add(epfd);
-        resource.add(sp[0]);
-        resource.add(sp[1]);
 
         // register one end with epoll
         EPoll.ctl(epfd, EPOLL_CTL_ADD, sp[0], EPOLLIN);
@@ -132,9 +127,9 @@ final class EPollPort
                 return;
             closed = true;
         }
-        try { resource.remove(epfd); FileDispatcherImpl.closeIntFD(epfd); } catch (IOException ioe) { }
-        try { resource.remove(sp[0]); FileDispatcherImpl.closeIntFD(sp[0]); } catch (IOException ioe) { }
-        try { resource.remove(sp[1]); FileDispatcherImpl.closeIntFD(sp[1]); } catch (IOException ioe) { }
+        try { FileDispatcherImpl.closeIntFD(epfd); } catch (IOException ioe) { }
+        try { FileDispatcherImpl.closeIntFD(sp[0]); } catch (IOException ioe) { }
+        try { FileDispatcherImpl.closeIntFD(sp[1]); } catch (IOException ioe) { }
         EPoll.freePollArray(address);
     }
 

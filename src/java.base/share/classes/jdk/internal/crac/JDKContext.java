@@ -48,8 +48,6 @@ public class JDKContext extends AbstractContextImpl<JDKResource, Void> {
 
     private WeakHashMap<FileDescriptor, Object> claimedFds;
 
-    private WeakHashMap<Object, Integer> nativeFds;
-
     public boolean matchClasspath(String path) {
         Path p = Path.of(path);
         String classpath = System.getProperty("java.class.path");
@@ -85,7 +83,6 @@ public class JDKContext extends AbstractContextImpl<JDKResource, Void> {
     @Override
     public synchronized void beforeCheckpoint(Context<? extends Resource> context) throws CheckpointException {
         claimedFds = new WeakHashMap<>();
-        nativeFds = new WeakHashMap<>();
         super.beforeCheckpoint(context);
     }
 
@@ -102,12 +99,8 @@ public class JDKContext extends AbstractContextImpl<JDKResource, Void> {
 
     public Map<Integer, Object> getClaimedFds() {
         JavaIOFileDescriptorAccess fileDescriptorAccess = SharedSecrets.getJavaIOFileDescriptorAccess();
-        Map<Integer, Object> fdInfoMap = claimedFds.entrySet().stream()
+        return claimedFds.entrySet().stream()
                 .collect(Collectors.toMap(entry -> fileDescriptorAccess.get(entry.getKey()), Map.Entry::getValue));
-        // We're using putIfAbsent because sometimes the native FD is eventually used in a FileDescriptor;
-        // we don't want to overwrite the information.
-        nativeFds.forEach((owner, fd) -> fdInfoMap.putIfAbsent(fd, owner));
-        return fdInfoMap;
     }
 
     public void claimFd(FileDescriptor fd, Object obj) {
@@ -125,9 +118,5 @@ public class JDKContext extends AbstractContextImpl<JDKResource, Void> {
             return false;
         }
         return claimedFds.putIfAbsent(fd, obj) == null;
-    }
-
-    public void claimNativeFd(int fd, Object resource) {
-        nativeFds.put(resource, fd);
     }
 }

@@ -6083,6 +6083,7 @@ class Freeze {
     assert(!err, "pthread error");
     err = pthread_cond_signal(&signalled_cond);
     assert(!err, "pthread error");
+    // Just wait until thaw() is called. No mutex is needed for that.
     pthread_mutex_t unused_mutex = PTHREAD_MUTEX_INITIALIZER;
     err = pthread_mutex_lock(&unused_mutex);
     assert(!err, "pthread error");

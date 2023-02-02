@@ -6028,9 +6028,9 @@ class Freeze {
   template<class Callback> bool all_threads(Callback callback) const {
     const char dirname[] = "/proc/self/task";
     GrowableArray<pid_t> done;
-    bool signalled;
+    bool retry;
     do {
-      signalled = false;
+      retry = false;
       DIR *dir = opendir(dirname);
       if (dir == NULL) {
         tty->print_cr("JVM: Error opening %s: %m", dirname);
@@ -6055,7 +6055,7 @@ class Freeze {
           continue;
         if (!done.append_if_missing(ent_tid))
           continue;
-        signalled = true;
+        retry = true;
         callback(ent_tid);
       }
       if (errno) {
@@ -6066,7 +6066,7 @@ class Freeze {
         tty->print_cr("JVM: Error closing %s: %m", dirname);
         return false;
       }
-    } while (signalled);
+    } while (retry);
     return true;
   }
   static pthread_mutex_t signalled_mutex;

@@ -47,7 +47,7 @@ import java.util.function.Consumer;
  * @build ResolveInetAddress
  * @run main/timeout=360 TestInetAddress
  */
-public class TestInetAddress {
+public class ResolveTest {
     private static final String imageName = Common.imageName("inet-address");
     public static final String TEST_HOSTNAME = "some.test.hostname.example.com";
     public static final String CONTAINER_NAME = "test-inet-address";
@@ -124,11 +124,8 @@ public class TestInetAddress {
     }
 
     private static void checkpointTestProcess() throws Exception {
-        int javaPid = DockerTestUtils.execute("docker", "exec", CONTAINER_NAME, "/jdk/bin/jps").asLines().stream()
-                .filter(line -> !line.isBlank() && !line.contains("Jps"))
-                .mapToInt(line -> Integer.parseInt(line.split("\\s")[0]))
-                .min().orElseThrow();
-        DockerTestUtils.execute("docker", "exec", CONTAINER_NAME, "/jdk/bin/jcmd", String.valueOf(javaPid), "JDK.checkpoint")
+        DockerTestUtils.execute("docker", "exec", CONTAINER_NAME,
+                        "/jdk/bin/jcmd", ResolveInetAddress.class.getName(), "JDK.checkpoint")
                 .shouldHaveExitValue(0);
     }
 

@@ -45,7 +45,7 @@ import java.util.function.Consumer;
  * @library /test/lib
  * @modules java.base/jdk.crac
  * @build ResolveInetAddress
- * @run main/timeout=360 TestInetAddress
+ * @run main/timeout=360 ResolveTest
  */
 public class ResolveTest {
     private static final String imageName = Common.imageName("inet-address");

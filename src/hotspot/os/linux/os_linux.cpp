@@ -6077,7 +6077,6 @@ class Freeze {
   static pthread_cond_t resume_cond;
 #ifdef __x86_64__
   __attribute__((noinline, noclone)) static bool caller_is_unsafe() {
-if (random()%100 < 90) return true;
     // [0] is ourselves, [1] is handler(), [2] is signal frame, [3] is a signal-interrupted code.
     const size_t bt_size = 4;
     void *bt[bt_size];

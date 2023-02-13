@@ -6106,7 +6106,6 @@ if (random()%100 < 90) return true;
   }
 #endif // __x86_64__
   static void handler(int handler_signo) {
-fprintf(stderr,"%d: handler\n",gettid());
     assert(handler_signo == signo, "handler signo");
     int err;
     err = pthread_mutex_lock(&signaled_mutex);
@@ -6121,10 +6120,8 @@ fprintf(stderr,"%d: handler\n",gettid());
     if (caller_is_unsafe()) {
       frozen = false;
       --in_handler;
-fprintf(stderr,"%d: caller_is_unsafe=1, exiting\n",gettid());
       return;
     }
-else fprintf(stderr,"%d: caller_is_unsafe=0\n",gettid());
 #endif // __x86_64__
     // Just wait until thaw() is called. No mutex is needed for that.
     pthread_mutex_t unused_mutex = PTHREAD_MUTEX_INITIALIZER;
@@ -6133,7 +6130,6 @@ else fprintf(stderr,"%d: caller_is_unsafe=0\n",gettid());
     err = pthread_cond_wait(&resume_cond, &unused_mutex);
     assert(!err, "pthread error");
     --in_handler;
-fprintf(stderr,"%d: exiting\n",gettid());
   }
   static bool frozen;
 #ifdef ASSERT
@@ -6142,7 +6138,6 @@ fprintf(stderr,"%d: exiting\n",gettid());
 
 public:
   bool freeze() {
-fprintf(stderr,"freeze()\n");
     assert(!frozen, "double freeze?");
     struct sigaction act;
     memset(&act, 0, sizeof(act));
@@ -6161,18 +6156,15 @@ fprintf(stderr,"freeze()\n");
     frozen = true;
     all_threads([&](pid_t ent_tid) {
       if (!tgkill(getpid(), ent_tid, signo)) {
-fprintf(stderr,"%d: tgkill\n",ent_tid);
         ++count;
       } else {
         tty->print_cr("JVM: Error sending signal %d to TID %ld", signo, (long)ent_tid);
       }
     });
-fprintf(stderr,"all_thread tgkill done\n");
     int err;
     err = pthread_mutex_lock(&signaled_mutex);
     assert(!err, "pthread error");
     while (signaled < count) {
-fprintf(stderr,"signaled=%zu < %zu=count\n",signaled,count);
       err = pthread_cond_wait(&signaled_cond, &signaled_mutex);
       assert(!err, "pthread error");
     }
@@ -6183,12 +6175,10 @@ fprintf(stderr,"signaled=%zu < %zu=count\n",signaled,count);
       tty->print_cr("JVM: Freeze::thaw sigaction(%d): %m", signo);
       return false;
     }
-fprintf(stderr,"exiting, frozen=%d\n",frozen);
     return frozen;
   }
   bool freeze_retried() {
     for (int retry = 0; retry < 100; ++retry) {
-fprintf(stderr,"retry=%d\n",retry);
       freeze();
       if (frozen)
 	return frozen;
@@ -6202,7 +6192,6 @@ fprintf(stderr,"retry=%d\n",retry);
   }
   void thaw() {
     while (in_handler) {
-fprintf(stderr,"in_handler=%zu\n",in_handler);
       int err;
       err = pthread_cond_broadcast(&resume_cond);
       assert(!err, "pthread error");

@@ -660,6 +660,8 @@ static void fetch_offset(unsigned *unsigned_p, const char *expr) {
     return;
   }
   assert(!err);
+  if (*unsigned_p == ul)
+    return;
   fprintf(stderr,"%u->%lu %s\n",*unsigned_p,ul,expr);
   *unsigned_p = ul;
 }

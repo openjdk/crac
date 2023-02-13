@@ -120,6 +120,7 @@
 # include <sys/ioctl.h>
 # include <libgen.h>
 # include <linux/elf-em.h>
+# include <execinfo.h>
 #ifdef __GLIBC__
 # include <malloc.h>
 #endif
@@ -6045,9 +6046,9 @@ class Freeze {
         if (strcmp(name, "..") == 0)
           continue;
         char *endptr;
-        unsigned long l = strtoul(name, &endptr, 10);
-        pid_t ent_tid = l;
-        if (l >= LONG_MAX || ent_tid != (long) l) {
+        unsigned long ul = strtoul(name, &endptr, 10);
+        pid_t ent_tid = ul;
+        if (ul >= LONG_MAX || ent_tid != (long) ul) {
           tty->print_cr("JVM: Error parsing %s entry \"%s\"", dirname, name);
           return false;
         }
@@ -6069,32 +6070,80 @@ class Freeze {
     } while (retry);
     return true;
   }
-  static pthread_mutex_t signalled_mutex;
-  static pthread_cond_t signalled_cond;
-  static size_t signalled;
+  static pthread_mutex_t signaled_mutex;
+  static pthread_cond_t signaled_cond;
+  // FIXME: 'in_handler' should be atomic.
+  static size_t signaled, in_handler;
   static pthread_cond_t resume_cond;
+#ifdef __x86_64__
+  __attribute__((noinline, noclone)) static bool caller_is_unsafe() {
+if (random()%100 < 90) return true;
+    // [0] is ourselves, [1] is handler(), [2] is signal frame, [3] is a signal-interrupted code.
+    const size_t bt_size = 4;
+    void *bt[bt_size];
+    if (backtrace(bt, bt_size) != bt_size) {
+      tty->print_cr("JVM: Freeze: TID %d backtrace(%zu) failed\n", (int)gettid(), bt_size);
+      return false;
+    }
+    const void *code = bt[bt_size - 1];
+    Dl_info info;
+    if (!dladdr(code, &info)) {
+      // Signal-interrupted code is not in a shared library.
+      return false;
+    }
+    const char *cs = strrchr(info.dli_fname, '/');
+    if (!cs || strcmp(cs + 1, "libc.so.6") != 0) {
+      // Signal-interrupted code is not in glibc.
+      return false;
+    }
+    const uint16_t *syscall = ((const uint16_t *)code) - 1;
+    // The check is not absolutely safe as we cannot disasemble backwards.
+    if (*syscall == 0x050f) {
+      // Signal-interrupted code is waiting in syscall.
+      return false;
+    }
+    return true;
+  }
+#endif // __x86_64__
   static void handler(int handler_signo) {
+fprintf(stderr,"%d: handler\n",gettid());
     assert(handler_signo == signo, "handler signo");
     int err;
-    err = pthread_mutex_lock(&signalled_mutex);
+    err = pthread_mutex_lock(&signaled_mutex);
     assert(!err, "pthread error");
-    ++signalled;
-    err = pthread_mutex_unlock(&signalled_mutex);
+    ++signaled;
+    ++in_handler;
+    err = pthread_mutex_unlock(&signaled_mutex);
     assert(!err, "pthread error");
-    err = pthread_cond_signal(&signalled_cond);
+    err = pthread_cond_signal(&signaled_cond);
     assert(!err, "pthread error");
+#ifdef __x86_64__
+    if (caller_is_unsafe()) {
+      frozen = false;
+      --in_handler;
+fprintf(stderr,"%d: caller_is_unsafe=1, exiting\n",gettid());
+      return;
+    }
+else fprintf(stderr,"%d: caller_is_unsafe=0\n",gettid());
+#endif // __x86_64__
     // Just wait until thaw() is called. No mutex is needed for that.
     pthread_mutex_t unused_mutex = PTHREAD_MUTEX_INITIALIZER;
     err = pthread_mutex_lock(&unused_mutex);
     assert(!err, "pthread error");
     err = pthread_cond_wait(&resume_cond, &unused_mutex);
     assert(!err, "pthread error");
+    --in_handler;
+fprintf(stderr,"%d: exiting\n",gettid());
   }
-  bool frozen;
+  static bool frozen;
+#ifdef ASSERT
+  static bool singleton;
+#endif
 
 public:
   bool freeze() {
-    frozen = false;
+fprintf(stderr,"freeze()\n");
+    assert(!frozen, "double freeze?");
     struct sigaction act;
     memset(&act, 0, sizeof(act));
     act.sa_handler = handler;
@@ -6103,51 +6152,90 @@ public:
       return false;
     }
     assert(act_old.sa_handler == SIG_DFL, "SIG_DFL for signo");
-    signalled_mutex = PTHREAD_MUTEX_INITIALIZER;
-    signalled_cond = PTHREAD_COND_INITIALIZER;
-    signalled = 0;
+    signaled_mutex = PTHREAD_MUTEX_INITIALIZER;
+    signaled_cond = PTHREAD_COND_INITIALIZER;
+    signaled = 0;
+    in_handler = 0;
     resume_cond = PTHREAD_COND_INITIALIZER;
     size_t count = 0;
+    frozen = true;
     all_threads([&](pid_t ent_tid) {
       if (!tgkill(getpid(), ent_tid, signo)) {
+fprintf(stderr,"%d: tgkill\n",ent_tid);
         ++count;
       } else {
         tty->print_cr("JVM: Error sending signal %d to TID %ld", signo, (long)ent_tid);
       }
     });
+fprintf(stderr,"all_thread tgkill done\n");
     int err;
-    err = pthread_mutex_lock(&signalled_mutex);
+    err = pthread_mutex_lock(&signaled_mutex);
     assert(!err, "pthread error");
-    while (signalled < count) {
-      err = pthread_cond_wait(&signalled_cond, &signalled_mutex);
+    while (signaled < count) {
+fprintf(stderr,"signaled=%zu < %zu=count\n",signaled,count);
+      err = pthread_cond_wait(&signaled_cond, &signaled_mutex);
       assert(!err, "pthread error");
     }
-    assert(signalled == count, "JVM: Freeze: signalled == count");
-    frozen = true;
-    err = pthread_mutex_unlock(&signalled_mutex);
+    assert(signaled == count, "JVM: Freeze: signaled == count");
+    err = pthread_mutex_unlock(&signaled_mutex);
     assert(!err, "pthread error");
     if (sigaction(signo, &act_old, NULL)) {
       tty->print_cr("JVM: Freeze::thaw sigaction(%d): %m", signo);
       return false;
     }
-    return true;
+fprintf(stderr,"exiting, frozen=%d\n",frozen);
+    return frozen;
+  }
+  bool freeze_retried() {
+    for (int retry = 0; retry < 100; ++retry) {
+fprintf(stderr,"retry=%d\n",retry);
+      freeze();
+      if (frozen)
+	return frozen;
+      thaw();
+      if (retry == 0)
+	tty->print_cr("JVM: Freeze: Some tasks are unsafe to freeze (in glibc), retrying");
+      usleep(1000000/2 + random() % 1000000/2);
+    }
+    tty->print_cr("JVM: Freeze: Some tasks failed to freeze (in glibc)");
+    return frozen;
   }
   void thaw() {
-    if (!frozen)
-      return;
+    while (in_handler) {
+fprintf(stderr,"in_handler=%zu\n",in_handler);
+      int err;
+      err = pthread_cond_broadcast(&resume_cond);
+      assert(!err, "pthread error");
+#ifdef _POSIX_PRIORITY_SCHEDULING
+      err = sched_yield();
+      assert(!err, "sched_yield error");
+#endif
+    }
+  }
+  Freeze() {
+#ifdef ASSERT
+    assert(!singleton, "singleton safety");
+    singleton = true;
+#endif
     frozen = false;
-    int err;
-    err = pthread_cond_broadcast(&resume_cond);
-    assert(!err, "pthread error");
   }
   ~Freeze() {
-    thaw();
+    if (frozen)
+      thaw();
+#ifdef ASSERT
+    assert(singleton, "singleton safety");
+    singleton = false;
+#endif
   }
 };
-pthread_mutex_t Freeze::signalled_mutex;
-pthread_cond_t Freeze::signalled_cond;
-size_t Freeze::signalled;
+pthread_mutex_t Freeze::signaled_mutex;
+pthread_cond_t Freeze::signaled_cond;
+size_t Freeze::signaled, Freeze::in_handler;
 pthread_cond_t Freeze::resume_cond;
+bool Freeze::frozen;
+#ifdef ASSERT
+bool Freeze::singleton = false;
+#endif
 
 static int checkpoint_restore(int *shmid) {
 
@@ -6155,7 +6243,7 @@ static int checkpoint_restore(int *shmid) {
   linux_ifunc_fetch_offsets();
 
   Freeze freeze;
-  if (!freeze.freeze()) {
+  if (!freeze.freeze_retried()) {
     return JVM_CHECKPOINT_ERROR;
   }
 

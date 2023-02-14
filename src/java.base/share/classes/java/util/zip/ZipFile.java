@@ -1137,8 +1137,11 @@ public class ZipFile implements ZipConstants, Closeable {
                 public void setExtraAttributes(ZipEntry ze, int extraAttrs) {
                     ze.extraAttributes = extraAttrs;
                 }
-
-             }
+                @Override
+                public void beforeCheckpoint(ZipFile zip) {
+                    zip.beforeCheckpoint();
+                }
+            }
         );
         isWindows = VM.getSavedProperty("os.name").contains("Windows");
     }

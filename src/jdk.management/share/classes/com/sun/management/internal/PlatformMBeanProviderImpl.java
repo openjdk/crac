@@ -24,6 +24,7 @@
  */
 package com.sun.management.internal;
 
+import jdk.crac.management.CRaCMXBean;
 import com.sun.management.DiagnosticCommandMBean;
 import com.sun.management.HotSpotDiagnosticMXBean;
 import com.sun.management.ThreadMXBean;
@@ -41,6 +42,8 @@ import java.util.Set;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 import javax.management.DynamicMBean;
+
+import jdk.crac.management.internal.CRaCImpl;
 import sun.management.ManagementFactoryHelper;
 import sun.management.spi.PlatformMBeanProvider;
 
@@ -52,6 +55,11 @@ public final class PlatformMBeanProviderImpl extends PlatformMBeanProvider {
     private final List<PlatformComponent<?>> mxbeanList;
     private static HotSpotDiagnostic hsDiagMBean = null;
     private static OperatingSystemMXBean osMBean = null;
+
+    // CRaC
+    private static CRaCMXBean cracMXBean = null;
+    public static final String CRAC_MXBEAN_NAME =
+        "jdk.management:type=CRaC";
 
     static {
        AccessController.doPrivileged((PrivilegedAction<Void>) () -> {
@@ -264,6 +272,36 @@ public final class PlatformMBeanProviderImpl extends PlatformMBeanProvider {
             });
         }
 
+        /**
+         * CRaC MXBean
+         */
+        initMBeanList.add(new PlatformComponent<CRaCMXBean>() {
+            private final Set<String> cracMXBeanInterfaceNames =
+                Collections.singleton("jdk.crac.management.CRaCMXBean");
+
+            @Override
+            public Set<Class<? extends CRaCMXBean>> mbeanInterfaces() {
+                return Collections.singleton(CRaCMXBean.class);
+            }
+
+            @Override
+            public Set<String> mbeanInterfaceNames() {
+                return cracMXBeanInterfaceNames;
+            }
+
+            @Override
+            public String getObjectNamePattern() {
+                return CRAC_MXBEAN_NAME;
+            }
+
+            @Override
+            public Map<String, CRaCMXBean> nameToMBeanMap() {
+                return Collections.<String, CRaCMXBean>singletonMap(
+                    CRAC_MXBEAN_NAME,
+                    getCRaCMXBean());
+            }
+        });
+
         initMBeanList.trimToSize();
         return initMBeanList;
     }
@@ -280,5 +318,12 @@ public final class PlatformMBeanProviderImpl extends PlatformMBeanProvider {
             osMBean = new OperatingSystemImpl(ManagementFactoryHelper.getVMManagement());
         }
         return osMBean;
+    }
+
+    private static synchronized CRaCMXBean getCRaCMXBean() {
+        if (cracMXBean == null) {
+            cracMXBean = new CRaCImpl(ManagementFactoryHelper.getVMManagement());
+        }
+        return cracMXBean;
     }
 }

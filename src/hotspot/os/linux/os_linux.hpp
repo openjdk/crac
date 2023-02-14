@@ -173,10 +173,13 @@ class Linux {
 
   static void vm_create_start();
   static bool prepare_checkpoint();
-  static Handle checkpoint(bool dry_run, TRAPS);
+  static Handle checkpoint(bool dry_run, jlong jcmd_stream, TRAPS);
   static void restore();
   static void register_persistent_fd(int fd, int st_dev, int st_ino);
   static void deregister_persistent_fd(int fd, int st_dev, int st_ino);
+
+  static jlong restore_start_time();
+  static jlong uptime_since_restore();
 
   // Determine if the vmid is the parent pid for a child in a PID namespace.
   // Return the namespace pid if so, otherwise -1.

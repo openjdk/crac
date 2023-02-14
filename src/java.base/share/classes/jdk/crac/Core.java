@@ -30,6 +30,8 @@ import jdk.crac.impl.CheckpointOpenFileException;
 import jdk.crac.impl.CheckpointOpenResourceException;
 import jdk.crac.impl.CheckpointOpenSocketException;
 import jdk.crac.impl.OrderedContext;
+import java.io.StringWriter;
+import java.io.PrintWriter;
 import sun.security.action.GetBooleanAction;
 
 import java.lang.reflect.InvocationTargetException;
@@ -53,8 +55,9 @@ public class Core {
     private static final int JVM_CR_FAIL_SOCK = 2;
     private static final int JVM_CR_FAIL_PIPE = 3;
 
-    private static native Object[] checkpointRestore0(boolean dryRun);
+    private static final long JCMD_STREAM_NULL = 0;
 
+    private static native Object[] checkpointRestore0(boolean dryRun, long jcmdStream);
     private static final Object checkpointRestoreLock = new Object();
     private static boolean checkpointInProgress = false;
 
@@ -108,7 +111,7 @@ public class Core {
     }
 
     @SuppressWarnings("removal")
-    private static void checkpointRestore1() throws
+    private static void checkpointRestore1(long jcmdStream) throws
             CheckpointException,
             RestoreException {
         CheckpointException checkpointException = null;
@@ -122,7 +125,7 @@ public class Core {
             }
         }
 
-        final Object[] bundle = checkpointRestore0(checkpointException != null);
+        final Object[] bundle = checkpointRestore0(checkpointException != null, jcmdStream);
         final int retCode = (Integer)bundle[0];
         final String newArguments = (String)bundle[1];
         final String[] newProperties = (String[])bundle[2];
@@ -225,16 +228,22 @@ public class Core {
     public static void checkpointRestore() throws
             CheckpointException,
             RestoreException {
-        // checkpointRestore protects against the simultaneous
+        checkpointRestore(JCMD_STREAM_NULL);
+    }
+
+    private static void checkpointRestore(long jcmdStream) throws
+            CheckpointException,
+            RestoreException {
+        // checkpointRestoreLock protects against the simultaneous
         // call of checkpointRestore from different threads.
         synchronized (checkpointRestoreLock) {
             // checkpointInProgress protects against recursive
             // checkpointRestore from resource's
             // beforeCheckpoint/afterRestore methods
             if (!checkpointInProgress) {
+                checkpointInProgress = true;
                 try {
-                    checkpointInProgress = true;
-                    checkpointRestore1();
+                    checkpointRestore1(jcmdStream);
                 } finally {
                     if (FlagsHolder.TRACE_STARTUP_TIME) {
                         System.out.println("STARTUPTIME " + System.nanoTime() + " restore-finish");
@@ -248,22 +257,18 @@ public class Core {
     }
 
     /* called by VM */
-    private static void checkpointRestoreInternal() {
-        Thread thread = new Thread(() -> {
-            try {
-                Thread.sleep(100);
-            } catch (InterruptedException e) {
-            }
-
-            try {
-                checkpointRestore();
-            } catch (CheckpointException | RestoreException e) {
-                for (Throwable t : e.getSuppressed()) {
-                    t.printStackTrace();
-                }
-            }
-        });
-        thread.setDaemon(true);
-        thread.start();
+    private static String checkpointRestoreInternal(long jcmdStream) {
+        try {
+            checkpointRestore(jcmdStream);
+        } catch (CheckpointException e) {
+            StringWriter sw = new StringWriter();
+            PrintWriter pw = new PrintWriter(sw);
+            e.printStackTrace(pw);
+            return sw.toString();
+        } catch (RestoreException e) {
+            e.printStackTrace();
+            return null;
+        }
+        return null;
     }
 }

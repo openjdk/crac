@@ -5750,9 +5750,7 @@ void os::Linux::vm_create_start() {
   if (!CRaCCheckpointTo) {
     return;
   }
-  if (CRaCCheckpointTo) {
-    close_extra_descriptors();
-  }
+  close_extra_descriptors();
   _vm_inited_fds.initialize();
 }
 

@@ -29,6 +29,7 @@ import java.nio.channels.FileChannel;
 
 import jdk.crac.Context;
 import jdk.crac.impl.CheckpointOpenFileException;
+import jdk.internal.access.JavaIOFileDescriptorAccess;
 import jdk.internal.access.JavaIORandomAccessFileAccess;
 import jdk.internal.access.SharedSecrets;
 import jdk.internal.crac.Core;
@@ -86,6 +87,8 @@ public class RandomAccessFile implements DataOutput, DataInput, Closeable {
     private static final int O_TEMPORARY =  16;
 
     private class Resource implements JDKResource {
+        private static final JavaIOFileDescriptorAccess fdAccess = SharedSecrets.getJavaIOFileDescriptorAccess();
+
         Resource() {
             Core.getJDKContext().register(this);
         }
@@ -97,7 +100,8 @@ public class RandomAccessFile implements DataOutput, DataInput, Closeable {
                     // Files on the classpath are considered persistent, exception is not thrown
                     return;
                 }
-                throw new CheckpointOpenFileException("RandomAccessFile " + path + " left open." + JDKContext.COLLECT_FD_STACKTRACES_HINT,
+                int fdNum = fdAccess.get(fd);
+                throw new CheckpointOpenFileException("RandomAccessFile " + path + " left open (file descriptor " + fdNum + "). " + JDKContext.COLLECT_FD_STACKTRACES_HINT,
                         fd.resource.stackTraceHolder);
             }
         }

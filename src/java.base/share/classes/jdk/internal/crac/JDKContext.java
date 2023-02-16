@@ -33,6 +33,7 @@ import jdk.crac.RestoreException;
 import jdk.crac.impl.AbstractContextImpl;
 import jdk.internal.access.JavaIOFileDescriptorAccess;
 import jdk.internal.access.SharedSecrets;
+import sun.security.action.GetBooleanAction;
 
 import java.io.File;
 import java.io.FileDescriptor;
@@ -45,6 +46,9 @@ import java.util.stream.Collectors;
 public class JDKContext extends AbstractContextImpl<JDKResource, Void> {
     public static final String COLLECT_FD_STACKTRACES_PROPERTY = "jdk.crac.collect-fd-stacktraces";
     public static final String COLLECT_FD_STACKTRACES_HINT = "Use -D" + COLLECT_FD_STACKTRACES_PROPERTY + "=true to find the source.";
+    public static final boolean COLLECT_FD_STACKTRACES =
+            GetBooleanAction.privilegedGetProperty(JDKContext.COLLECT_FD_STACKTRACES_PROPERTY);
+
 
     private WeakHashMap<FileDescriptor, Object> claimedFds;
 

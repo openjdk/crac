@@ -37,7 +37,6 @@ import jdk.internal.crac.Core;
 import jdk.internal.crac.JDKContext;
 import jdk.internal.crac.JDKResource;
 import jdk.internal.ref.PhantomCleanable;
-import sun.security.action.GetBooleanAction;
 
 /**
  * Instances of the file descriptor class serve as an opaque handle
@@ -61,24 +60,14 @@ public final class FileDescriptor {
     private List<Closeable> otherParents;
     private boolean closed;
 
-    /**
-     * Called by FileDispatcherImpl when the file descriptor is about to be closed natively.
-     */
-    public void markClosedByNIO() {
-        resource.closedByNIO = true;
-    }
-
     class Resource implements jdk.internal.crac.JDKResource {
-        private static final boolean COLLECT_FD_STACKTRACES =
-                GetBooleanAction.privilegedGetProperty(JDKContext.COLLECT_FD_STACKTRACES_PROPERTY);
-
         private boolean closedByNIO;
         final Exception stackTraceHolder;
 
         Resource() {
             JDKContext jdkContext = Core.getJDKContext();
             jdkContext.register(this);
-            if (COLLECT_FD_STACKTRACES) {
+            if (JDKContext.COLLECT_FD_STACKTRACES) {
                 stackTraceHolder = new Exception("This file descriptor was created here");
             } else {
                 stackTraceHolder = null;
@@ -155,6 +144,11 @@ public final class FileDescriptor {
 
                     public void close(FileDescriptor fdo) throws IOException {
                         fdo.close();
+                    }
+
+                    @Override
+                    public void markClosed(FileDescriptor fdo) {
+                        fdo.resource.closedByNIO = true;
                     }
 
                     /* Register for a normal FileCleanable fd/handle cleanup. */

@@ -28,6 +28,8 @@ package sun.nio.ch;
 
 import jdk.crac.Context;
 import jdk.crac.Resource;
+import jdk.internal.access.JavaIOFileDescriptorAccess;
+import jdk.internal.access.SharedSecrets;
 import jdk.internal.crac.JDKResource;
 import jdk.internal.crac.JDKResource.Priority;
 
@@ -59,6 +61,9 @@ class EPollSelectorImpl extends SelectorImpl implements JDKResource {
 
     // maximum number of events to poll in one call to epoll_wait
     private static final int NUM_EPOLLEVENTS = Math.min(IOUtil.fdLimit(), 1024);
+
+    private static final JavaIOFileDescriptorAccess fdAccess
+            = SharedSecrets.getJavaIOFileDescriptorAccess();
 
     private enum CheckpointRestoreState {
         NORMAL_OPERATION,
@@ -113,7 +118,7 @@ class EPollSelectorImpl extends SelectorImpl implements JDKResource {
             this.eventfd = new EventFD();
             FileDescriptor fd = IOUtil.newFD(eventfd.efd());
             // This FileDescriptor is a one-time use, the actual FD will be closed from EventFD
-            fd.markClosedByNIO();
+            fdAccess.markClosed(fd);
             IOUtil.configureBlocking(fd, false);
         } catch (IOException ioe) {
             EPoll.freePollArray(pollArrayAddress);

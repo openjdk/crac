@@ -208,7 +208,7 @@ class FileDispatcherImpl extends FileDispatcher {
     // Shared with SocketDispatcher and DatagramDispatcher but
     // NOT used by FileDispatcherImpl
     static void closeAndMark(FileDescriptor fd) throws IOException {
-        fd.markClosedByNIO();
+        fdAccess.markClosed(fd);
         close0(fd);
     }
 

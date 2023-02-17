@@ -669,6 +669,10 @@ void VM_Version::get_processor_features() {
     _L1_data_cache_line_size = L1_line_size();
   }
 
+  if (ShowCPUFeatures) {
+    tty->print_cr("This machine's CPU features are: -XX:CPUFeatures=0x" UINT64_FORMAT_X, _features);
+  }
+
   assert(!CPUFeatures == FLAG_IS_DEFAULT(CPUFeatures), "CPUFeatures parsing");
   if (CPUFeatures) {
     uint64_t CPUFeatures_x64 = CPUFeatures_parse(CPUFeatures);

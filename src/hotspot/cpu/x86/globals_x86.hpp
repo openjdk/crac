@@ -226,7 +226,10 @@ define_pd_global(intx, InitArrayShortSize, 8*BytesPerLong);
       "use -XX:CPUFeatures=0xnumber with -XX:CRaCCheckpointTo when you "    \
       "get an error during -XX:CRaCRestoreFrom on a different machine; "    \
       "-XX:CPUFeatures=native is the default; "                             \
-      "-XX:CPUFeatures=generic is compatible but not as slow as 0")
+      "-XX:CPUFeatures=generic is compatible but not as slow as 0")         \
+                                                                            \
+  product(bool, ShowCPUFeatures, false, "Show features of this CPU "        \
+      "to be possibly used for the -XX:CPUFeatures=0xnumber option")
 
 // end of ARCH_FLAGS
 

@@ -615,7 +615,34 @@ class VM_Version_StubGenerator: public StubCodeGenerator {
   };
 };
 
-void VM_Version::get_processor_features(bool use_CPUFeatures) {
+uint64_t VM_Version::CPUFeatures_parse(const char *ccstr) {
+  assert(ccstr, "CPUFeatures_parse NULL");
+  if (strcmp(ccstr, "native") == 0) {
+    return Abstract_VM_Version::features();
+  }
+  if (strcmp(ccstr, "generic") == 0) {
+    // FIXME: This is for: Intel(R) Xeon(R) CPU E5-2630 v3 @ 2.40GHz
+    return 0 | CPU_CX8 | CPU_CMOV | CPU_FXSR | CPU_MMX | CPU_SSE | CPU_SSE2
+      | CPU_SSE3 | CPU_SSSE3 | CPU_SSE4_1 | CPU_SSE4_2 | CPU_POPCNT | CPU_LZCNT
+      | CPU_TSC | CPU_AVX | CPU_AVX2 | CPU_AES | CPU_ERMS | CPU_CLMUL
+      | CPU_BMI1 | CPU_BMI2 | CPU_FMA | CPU_VZEROUPPER | CPU_FLUSH | CPU_HV;
+  }
+  char *endptr;
+  errno = 0;
+  unsigned long long ull = strtoull(ccstr, &endptr, 0);
+  if (!errno && (!endptr || !*endptr))
+    return ull;
+  char buf[512];
+  int res = jio_snprintf(
+	      buf, sizeof(buf),
+	      "Improperly specified VM option 'CPUFeatures=%s'", ccstr);
+  assert(res > 0, "not enough temporary space allocated");
+  vm_exit_during_initialization(buf);
+  // NOTREACHED
+  return 0;
+}
+
+void VM_Version::get_processor_features() {
 
   _cpu = 4; // 486 by default
   _model = 0;
@@ -642,23 +669,25 @@ void VM_Version::get_processor_features(bool use_CPUFeatures) {
     _L1_data_cache_line_size = L1_line_size();
   }
 
-  if (use_CPUFeatures && !FLAG_IS_DEFAULT(CPUFeatures)) {
-    uint64_t features_missing = CPUFeatures & ~_features;
+  assert(!CPUFeatures == FLAG_IS_DEFAULT(CPUFeatures), "CPUFeatures parsing");
+  if (CPUFeatures) {
+    uint64_t CPUFeatures_x64 = CPUFeatures_parse(CPUFeatures);
+    uint64_t features_missing = CPUFeatures_x64 & ~_features;
     if (features_missing) {
       char buf[512];
       int res = jio_snprintf(
-                  buf, sizeof(buf),
-                  "Specified -XX:CPUFeatures=0x" UINT64_FORMAT_X
-                  "; this machine's CPU features are 0x" UINT64_FORMAT_X
-                  "; missing features of this CPU are 0x" UINT64_FORMAT_X " ",
-                  CPUFeatures, _features, features_missing);
+		  buf, sizeof(buf),
+		  "Specified -XX:CPUFeatures=0x" UINT64_FORMAT_X
+		  "; this machine's CPU features are 0x" UINT64_FORMAT_X
+		  "; missing features of this CPU are 0x" UINT64_FORMAT_X " ",
+		  CPUFeatures_x64, _features, features_missing);
       assert(res > 0, "not enough temporary space allocated");
       insert_features_names(buf + res, sizeof(buf) - res, features_missing);
       assert(buf[res] == ',', "unexpeced VM_Version::insert_features_names separator instead of ','");
       buf[res] = '=';
       vm_exit_during_initialization(buf);
     }
-    _features = CPUFeatures;
+    _features = CPUFeatures_x64;
   }
 
   _supports_cx8 = supports_cmpxchg8();
@@ -1904,7 +1933,7 @@ void VM_Version::check_virtualizations() {
   }
 }
 
-void VM_Version::initialize_features(bool use_CPUFeatures) {
+void VM_Version::initialize_features() {
   ResourceMark rm;
   // Making this stub must be FIRST use of assembler
   stub_blob = BufferBlob::create("VM_Version stub", stub_size);
@@ -1919,7 +1948,7 @@ void VM_Version::initialize_features(bool use_CPUFeatures) {
   detect_virt_stub = CAST_TO_FN_PTR(detect_virt_stub_t,
                                      g.generate_detect_virt());
 
-  get_processor_features(use_CPUFeatures);
+  get_processor_features();
 }
 
 void VM_Version::initialize() {

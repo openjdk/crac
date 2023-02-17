@@ -6207,8 +6207,9 @@ void VM_Crac::verify_cpu_compatibility() {
 
   // FIXME: x86 only
   StubCodeDesc::thaw();
-  VM_Version::initialize_features(false);
+  VM_Version::initialize_features();
 
+  // Abstract_VM_Version::features() may be less than current CPU's features as they have been already masked by the CPUFeatures argument (if it is present).
   uint64_t features_missing = features_saved & ~Abstract_VM_Version::features();
   if (features_missing) {
     char buf[512];
@@ -6216,11 +6217,9 @@ void VM_Crac::verify_cpu_compatibility() {
                 buf, sizeof(buf),
                 "You have to specify -XX:CPUFeatures=0x" UINT64_FORMAT_X " during -XX:CRaCCheckpointTo making of the checkpoint"
                 "; specified -XX:CRaCRestoreFrom file contains CPU features 0x" UINT64_FORMAT_X
-                "; this machine's CPU features are 0x" UINT64_FORMAT_X
                 "; missing features of this CPU are 0x" UINT64_FORMAT_X " ",
                 Abstract_VM_Version::features() & features_saved,
-                features_saved, Abstract_VM_Version::features(),
-                features_missing);
+                features_saved, features_missing);
     assert(res > 0, "not enough temporary space allocated");
     VM_Version::insert_features_names(buf + res, sizeof(buf) - res, features_missing);
     assert(buf[res] == ',', "unexpeced VM_Version::insert_features_names separator instead of ','");
@@ -6243,9 +6242,6 @@ void VM_Crac::verify_cpu_compatibility() {
   SUPPORTS_SET
 #undef SUPPORTS
 #undef SUPPORTS_SET
-
-  CPUFeatures = features_saved;
-  VM_Version::initialize_features(true);
 }
 
 void VM_Crac::doit() {

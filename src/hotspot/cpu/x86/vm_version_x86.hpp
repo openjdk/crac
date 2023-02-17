@@ -707,7 +707,9 @@ enum Extended_Family {
     return retVal;
   }
 
-  static void get_processor_features(bool use_CPUFeatures);
+  static void get_processor_features();
+
+  static uint64_t CPUFeatures_parse(const char *ccstr);
 
 public:
   // Offsets for cpuid asm stub
@@ -747,7 +749,7 @@ public:
 
   // Initialization
   static void initialize();
-  static void initialize_features(bool use_CPUFeatures = true);
+  static void initialize_features();
 
   // Override Abstract_VM_Version implementation
   static void print_platform_virtualization_info(outputStream*);

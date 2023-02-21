@@ -93,6 +93,34 @@ WinMain(HINSTANCE inst, HINSTANCE previnst, LPSTR cmdline, int cmdshow)
     __initenv = _environ;
 
 #else /* JAVAW */
+
+#include <sys/wait.h>
+
+static int is_checkpoint = 0;
+
+static void parse_checkpoint(const char *arg) {
+    if (!is_checkpoint) {
+        const char *checkpoint_arg = "-XX:CRaCCheckpointTo";
+        const int len = strlen(checkpoint_arg);
+        if (0 == strncmp(arg, checkpoint_arg, len)) {
+            is_checkpoint = 1;
+        }
+    }
+}
+
+int wait_for_children() {
+    int status = 0;
+    pid_t pid;
+    do {
+        int st = 0;
+        pid = wait(&st);
+        if (!status) {
+            status = st;
+        }
+    } while (!(-1 == pid && ECHILD == errno));
+    return status;
+}
+
 JNIEXPORT int
 main(int argc, char **argv)
 {
@@ -183,6 +211,7 @@ main(int argc, char **argv)
         }
         // Iterate the rest of command line
         for (i = 1; i < argc; i++) {
+            parse_checkpoint(argv[i]);
             JLI_List argsInFile = JLI_PreprocessArg(argv[i], JNI_TRUE);
             if (NULL == argsInFile) {
                 JLI_List_add(args, JLI_StringDup(argv[i]));
@@ -201,6 +230,13 @@ main(int argc, char **argv)
         // add the NULL pointer at argv[argc]
         JLI_List_add(args, NULL);
         margv = args->elements;
+    }
+
+    if (is_checkpoint && 1 == getpid()) {
+        if (0 < fork()) {
+            const int status = wait_for_children();
+            exit(status);
+        }
     }
 #endif /* WIN32 */
     return JLI_Launch(margc, margv,

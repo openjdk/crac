@@ -108,7 +108,7 @@ static void parse_checkpoint(const char *arg) {
     }
 }
 
-int wait_for_children() {
+static int wait_for_children() {
     int status = 0;
     pid_t pid;
     do {

@@ -621,11 +621,19 @@ uint64_t VM_Version::CPUFeatures_parse(const char *ccstr) {
     return Abstract_VM_Version::features();
   }
   if (strcmp(ccstr, "generic") == 0) {
-    // FIXME: This is for: Intel(R) Xeon(R) CPU E5-2630 v3 @ 2.40GHz
-    return 0 | CPU_CX8 | CPU_CMOV | CPU_FXSR | CPU_MMX | CPU_SSE | CPU_SSE2
-      | CPU_SSE3 | CPU_SSSE3 | CPU_SSE4_1 | CPU_SSE4_2 | CPU_POPCNT | CPU_LZCNT
-      | CPU_TSC | CPU_AVX | CPU_AVX2 | CPU_AES | CPU_ERMS | CPU_CLMUL
-      | CPU_BMI1 | CPU_BMI2 | CPU_FMA | CPU_VZEROUPPER | CPU_FLUSH | CPU_HV;
+    // 32-bit x86 cannot rely on anything.
+    return 0
+#ifdef AMD64
+      // These options are all in /proc/cpuinfo of one of the first 64-bit CPUs - Atom D2700 (and Opteron 1352): https://superuser.com/q/1572306/1015048
+      | CPU_SSE | CPU_SSE2 // enabled in 'gcc -Q --help=target', used by OpenJDK
+      | CPU_FXSR // enabled in 'gcc -Q --help=target', unused by OpenJDK
+      | CPU_MMX // enabled in 'gcc -Q --help=target', used only by 32-bit x86 OpenJDK
+      | CPU_TSC // not used by gcc, used by OpenJDK
+      | CPU_CX8 // gcc detects it to set cpu "pentium" (=32-bit only), used by OpenJDK
+      | CPU_CMOV // gcc detects it to set cpu "pentiumpro" (=32-bit only), used by OpenJDK
+      | CPU_FLUSH // ="clflush" in cpuinfo, not used by gcc, required by OpenJDK
+#endif
+    ;
   }
   char *endptr;
   errno = 0;

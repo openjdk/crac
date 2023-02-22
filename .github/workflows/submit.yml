@@ -216,6 +216,7 @@ jobs:
           - jdk/tier1 part 1
           - jdk/tier1 part 2
           - jdk/tier1 part 3
+          - jdk/crac
           - langtools/tier1
           - hs/tier1 common
           - hs/tier1 compiler
@@ -229,6 +230,8 @@ jobs:
             suites: test/jdk/:tier1_part2
           - test: jdk/tier1 part 3
             suites: test/jdk/:tier1_part3
+          - test: jdk/crac
+            suites: test/jdk/jdk/crac
           - test: langtools/tier1
             suites: test/langtools/:tier1
           - test: hs/tier1 common
@@ -681,6 +684,7 @@ jobs:
           - jdk/tier1 part 1
           - jdk/tier1 part 2
           - jdk/tier1 part 3
+          - jdk/crac
           - langtools/tier1
           - hs/tier1 common
           - hs/tier1 compiler
@@ -694,6 +698,8 @@ jobs:
             suites: test/jdk/:tier1_part2
           - test: jdk/tier1 part 3
             suites: test/jdk/:tier1_part3
+          - test: jdk/crac
+            suites: test/jdk/jdk/crac
           - test: langtools/tier1
             suites: test/langtools/:tier1
           - test: hs/tier1 common

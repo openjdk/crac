@@ -39,7 +39,7 @@ e=$?
 set -e
 [ $e -eq 137 ]
 
-${TESTJAVA}/bin/java -cp ${TESTCLASSPATH} -XX:CRaCRestoreFrom=cr Test $alg 100
+${TESTJAVA}/bin/java -cp ${TESTCLASSPATH} -XX:CRaCRestoreFrom=cr
 
 echo PASSED
 done

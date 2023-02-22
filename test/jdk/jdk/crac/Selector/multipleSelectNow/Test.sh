@@ -37,7 +37,7 @@ e=$?
 set -e
 [ $e -eq 137 ]
 
-${TESTJAVA}/bin/java -XX:CRaCRestoreFrom=cr Test
+${TESTJAVA}/bin/java -XX:CRaCRestoreFrom=cr
 echo "PASSED 1"
 
 

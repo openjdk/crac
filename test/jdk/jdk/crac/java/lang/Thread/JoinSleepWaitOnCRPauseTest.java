@@ -189,8 +189,7 @@ public class JoinSleepWaitOnCRPauseTest {
             // falls within this pause period
             Thread.sleep(CRPAUSE_MS);
 
-            pb = ProcessTools.createJavaProcessBuilder(
-                "-XX:CRaCRestoreFrom=" + crImg, "JoinSleepWaitOnCRPauseTest");
+            pb = ProcessTools.createJavaProcessBuilder("-XX:CRaCRestoreFrom=" + crImg);
             out = new OutputAnalyzer(pb.start());
             out.shouldHaveExitValue(0);
 

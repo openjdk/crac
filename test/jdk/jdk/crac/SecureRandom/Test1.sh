@@ -26,7 +26,7 @@
 ## @summary verify that SHA1PRNG secure random is reseeded after restore if
 ##  initialized with default seed
 ## @compile Test1.java
-## @run shell/timeout=60 Test.sh
+## @run shell/timeout=60 Test1.sh
 ##
 
 set -x
@@ -43,10 +43,10 @@ do
 
     [ $e -eq 137 ]
 
-    ${TESTJAVA}/bin/java -cp ${TESTCLASSPATH} -XX:CRaCRestoreFrom=cr Test1 $test
+    ${TESTJAVA}/bin/java -cp ${TESTCLASSPATH} -XX:CRaCRestoreFrom=cr
     e1=$?
 
-    ${TESTJAVA}/bin/java -cp ${TESTCLASSPATH} -XX:CRaCRestoreFrom=cr Test1 $test
+    ${TESTJAVA}/bin/java -cp ${TESTCLASSPATH} -XX:CRaCRestoreFrom=cr
     e2=$?
 
     if [ $test == "0" ]; then

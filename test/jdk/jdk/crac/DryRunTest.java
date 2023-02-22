@@ -28,7 +28,7 @@ import jdk.crac.*;
 
 /**
  * @test DryRunTest
- * @run main/othervm -XX:CREngine=simengine -XX:CRaCCheckpointTo=./cr -XX:+CRPrintResourcesOnCheckpoint DryRunTest
+ * @run main/othervm -XX:CREngine=simengine -XX:CRaCCheckpointTo=./cr -XX:+UnlockDiagnosticVMOptions -XX:+CRPrintResourcesOnCheckpoint DryRunTest
  */
 public class DryRunTest {
     static class CRResource implements Resource {

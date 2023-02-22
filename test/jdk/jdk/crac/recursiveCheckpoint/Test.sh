@@ -25,21 +25,22 @@
 ## @test Test.sh
 ## @summary check that the recursive checkpoint is not allowed
 ## @compile Test.java
-## @run shell/timeout=120 Test.sh Test0.sh
+## @run shell/timeout=30 Test.sh
 ##
 
 set -x
+IMGDIR="cr"
 
-    IMGDIR="cr"
-
-    set +e
-    ${TESTJAVA}/bin/java -cp ${TESTCLASSPATH} -XX:CRaCCheckpointTo=$IMGDIR -XX:CREngine=pauseengine Test $test 10
-    e=$?
-    for run in {1..11}; do
-        set -e
-        [ $e -eq 137 ]
-
-        ${TESTJAVA}/bin/java -XX:CRaCRestoreFrom=$IMGDIR  -XX:CREngine=pauseengine Test 10
-    done
-    echo "PASSED $test"
-
+# We must use pauseengine: CRIU does not support checkpoint after restore, the restored process
+# has the image directory mapped and second checkpoint would mess this up.
+${TESTJAVA}/bin/java -cp ${TESTCLASSPATH} -XX:CRaCCheckpointTo=$IMGDIR -XX:CREngine=pauseengine Test $test 10 &
+PID=$!
+# Wait until the checkpoint happens - inotifywait would be better
+while [ ! -f $IMGDIR/pid ]; do sleep 1; done;
+set -e
+for run in $(seq 1 11); do
+    echo "Restore #"$run
+    ${TESTJAVA}/bin/java -XX:CRaCRestoreFrom=$IMGDIR -XX:CREngine=pauseengine
+done
+wait $PID
+echo "PASSED $test"

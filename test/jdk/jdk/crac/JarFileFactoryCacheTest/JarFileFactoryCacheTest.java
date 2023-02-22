@@ -30,7 +30,7 @@ import java.nio.file.Path;
 /**
  * @test JarFileFactoryCacheTest
  * @library /test/lib
- * @run main/othervm -XX:CREngine=simengine -XX:CRaCCheckpointTo=./cr -XX:+CRPrintResourcesOnCheckpoint JarFileFactoryCacheTest
+ * @run main/othervm -XX:CREngine=simengine -XX:CRaCCheckpointTo=./cr -XX:+UnlockDiagnosticVMOptions -XX:+CRPrintResourcesOnCheckpoint JarFileFactoryCacheTest
  */
 public class JarFileFactoryCacheTest {
     static public void main(String[] args) throws Exception {

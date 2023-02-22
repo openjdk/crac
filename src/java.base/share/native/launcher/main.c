@@ -114,11 +114,41 @@ static int wait_for_children() {
     do {
         int st = 0;
         pid = wait(&st);
-        if (!status) {
-            status = st;
+        if (!status && 0 < pid && WIFEXITED(st)) {
+            status = WEXITSTATUS(st);
         }
-    } while (!(-1 == pid && ECHILD == errno));
+    } while (-1 != pid || ECHILD != errno);
     return status;
+}
+
+static pid_t g_child_pid = -1;
+
+static void sighandler(int sig, siginfo_t *info, void *param) {
+    if (0 < g_child_pid) {
+        kill(g_child_pid, sig);
+    }
+}
+
+static void setup_sighandler() {
+    struct sigaction sigact;
+    sigfillset(&sigact.sa_mask);
+    sigact.sa_flags = SA_SIGINFO;
+    sigact.sa_sigaction = sighandler;
+
+    for (int sig = 1; sig < __SIGRTMIN; ++sig) {
+        if (sig == SIGKILL || sig == SIGSTOP) {
+            continue;
+        }
+        if (-1 == sigaction(sig, &sigact, NULL)) {
+            perror("sigaction");
+        }
+    }
+
+    sigset_t allset;
+    sigfillset(&allset);
+    if (-1 == sigprocmask(SIG_UNBLOCK, &allset, NULL)) {
+        perror("sigprocmask");
+    }
 }
 
 JNIEXPORT int
@@ -232,8 +262,13 @@ main(int argc, char **argv)
         margv = args->elements;
     }
 
+    // Avoid unexpected process completion when checkpointing under docker container run
+    // by creating the main process waiting for children before exit.
     if (is_checkpoint && 1 == getpid()) {
-        if (0 < fork()) {
+        g_child_pid = fork();
+        if (0 < g_child_pid) {
+            // The main process should forward signals to the child.
+            setup_sighandler();
             const int status = wait_for_children();
             exit(status);
         }

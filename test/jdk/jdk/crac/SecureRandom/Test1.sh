@@ -31,9 +31,6 @@
 
 set -x
 
-export TESTJAVA=/home/parallels/Work/CRAC/jdk
-export TESTCLASSPATH=.
-
 set +e
 for test in `seq 0 1`
 do
@@ -49,8 +46,8 @@ do
     ${TESTJAVA}/bin/java -cp ${TESTCLASSPATH} -XX:CRaCRestoreFrom=cr
     e2=$?
 
-    if [ $test == "0" ]; then
-        if [ $e1 == $e2 ]; then
+    if [ $test = "0" ]; then
+        if [ $e1 = $e2 ]; then
             echo FAILED
             exit 1
         fi

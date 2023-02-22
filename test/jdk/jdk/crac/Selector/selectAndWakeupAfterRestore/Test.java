@@ -18,10 +18,27 @@
 // CA 94089 USA or visit www.azul.com if you need additional information or
 // have any questions.
 
+import jdk.test.lib.crac.CracBuilder;
+import jdk.test.lib.crac.CracTest;
 
+import java.io.IOException;
 import java.nio.channels.Selector;
 
-public class Test {
+/*
+ * @test Selector/selectAndWakeupAfterRestore
+ * @summary a trivial check that Selector.wakeup() after restore behaves as expected
+ * @library /test/lib
+ * @run main Test
+ */
+public class Test implements CracTest {
+    public static void main(String[] args) throws Exception {
+        CracTest.run(Test.class, args);
+    }
+
+    @Override
+    public void test() throws IOException, InterruptedException {
+        new CracBuilder().main(Test.class).args(CracTest.args()).doCheckpointAndRestore();
+    }
 
     private static void selectAndWakeup(Selector selector) throws java.io.IOException {
 
@@ -40,7 +57,8 @@ public class Test {
         selector.select();
     }
 
-    public static void main(String args[]) throws Exception {
+    @Override
+    public void exec() throws Exception {
 
         Selector selector = Selector.open();
 

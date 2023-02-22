@@ -18,15 +18,47 @@
 // CA 94089 USA or visit www.azul.com if you need additional information or
 // have any questions.
 
+import jdk.test.lib.crac.CracBuilder;
+import jdk.test.lib.crac.CracTest;
+import jdk.test.lib.crac.CracTestArg;
 
+import java.io.IOException;
 import java.nio.channels.Selector;
 
+/*
+ * @test Selector/selectAfterWakeup
+ * @summary check that the Selector's wakeup() makes the subsequent select() call to return immediately
+ *          (see also jdk/test/java/nio/channels/Selector/WakeupSpeed.java);
+ *          covers ZE-983
+ * @library /test/lib
+ * @run main Test true  false false
+ * @run main Test true  false true
+ * @run main Test true  true  false
+ * @run main Test true  true  true
+ * @run main Test false true  false
+ * @run main Test false true  true
+ */
+public class Test implements CracTest {
+    @CracTestArg(0)
+    boolean wakeupBeforeCheckpoint;
 
-public class Test {
+    @CracTestArg(1)
+    boolean wakeupAfterRestore;
 
-    private static void test(boolean wakeupBeforeCheckpoint,
-                             boolean wakeupAfterRestore,
-                             boolean setSelectTimeout) throws Exception {
+    @CracTestArg(2)
+    boolean setSelectTimeout;
+
+    public static void main(String[] args) throws Exception {
+        CracTest.run(Test.class, args);
+    }
+
+    @Override
+    public void test() throws IOException, InterruptedException {
+        new CracBuilder().main(Test.class).args(CracTest.args()).doCheckpointAndRestore();
+    }
+
+    @Override
+    public void exec() throws Exception {
 
         Selector selector = Selector.open();
 
@@ -47,34 +79,5 @@ public class Test {
         else { selector.select(); }
 
         selector.close();
-    }
-
-    public static void main(String args[]) throws Exception {
-
-        if (args.length < 1) { throw new RuntimeException("test number is missing"); }
-
-        switch (args[0]) {
-            case "1":
-                test(true, false, false); // ZE-983
-                break;
-            case "2":
-                test(true, false, true);
-                break;
-            case "3":
-                test(true, true, false); // ZE-983
-                break;
-            case "4":
-                test(true, true, true);
-                break;
-            case "5":
-                test(false, true, false);
-                break;
-            case "6":
-                test(false, true, true);
-                break;
-
-            default:
-                throw new RuntimeException("invalid test number");
-        }
     }
 }

@@ -18,16 +18,48 @@
 // CA 94089 USA or visit www.azul.com if you need additional information or
 // have any questions.
 
+import jdk.test.lib.crac.CracBuilder;
+import jdk.test.lib.crac.CracTest;
+import jdk.test.lib.crac.CracTestArg;
 
 import java.nio.channels.Selector;
 import java.io.IOException;
 
-public class Test {
+/*
+ * @test Selector/wakeupByClose
+ * @summary check that the Selector's close() wakes it up after restore
+ * @library /test/lib
+ * @run main Test true  false
+ * @run main Test false false
+ * @run main Test true  true
+ * @run main Test false true
+ */
+public class Test implements CracTest {
 
     static boolean awakened, closed;
 
-    private static void test(boolean setTimeout, boolean skipCR) throws Exception {
+    @CracTestArg(0)
+    boolean setTimeout;
 
+    @CracTestArg(1)
+    boolean skipCR;
+
+    public static void main(String[] args) throws Exception {
+        CracTest.run(Test.class, args);
+    }
+
+    @Override
+    public void test() throws IOException, InterruptedException {
+        CracBuilder builder = new CracBuilder().main(Test.class).args(CracTest.args());
+        if (skipCR) {
+            builder.doPlain();
+        } else {
+            builder.doCheckpointAndRestore();
+        }
+    }
+
+    @Override
+    public void exec() throws Exception {
         Selector selector = Selector.open();
 
         Thread tSelect = new Thread(new Runnable() {
@@ -73,27 +105,5 @@ public class Test {
             throw new RuntimeException("selector did not close");
         }
     }
-
-    public static void main(String[] args) throws Exception {
-
-       if (args.length < 1) { throw new RuntimeException("test number is missing"); }
-
-        switch (args[0]) {
-            case "1":
-                test(true, false);
-                break;
-            case "2":
-                test(false, false);
-                break;
-            // 3, 4: skip C/R
-            case "3":
-                test(true, true);
-                break;
-            case "4":
-                test(false, true);
-                break;
-            default:
-                throw new RuntimeException("invalid test number");
-        }
-    }
 }
+

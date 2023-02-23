@@ -643,8 +643,13 @@ static const char *unstable_chroot_error = "/proc file system not found.\n"
                      "Java may be unstable running multithreaded in a chroot "
                      "environment on Linux when /proc filesystem is not mounted.";
 
-void os::Linux::initialize_system_info() {
+void os::Linux::initialize_processor_count() {
   set_processor_count(sysconf(_SC_NPROCESSORS_CONF));
+  assert(processor_count() > 0, "linux error");
+}
+
+void os::Linux::initialize_system_info() {
+  initialize_processor_count();
   if (processor_count() == 1) {
     pid_t pid = os::Linux::gettid();
     char fname[32];
@@ -657,7 +662,6 @@ void os::Linux::initialize_system_info() {
     }
   }
   _physical_memory = (julong)sysconf(_SC_PHYS_PAGES) * (julong)sysconf(_SC_PAGESIZE);
-  assert(processor_count() > 0, "linux error");
 }
 
 void os::init_system_properties_values() {
@@ -6070,9 +6074,8 @@ class Freeze {
     } while (retry);
     return true;
   }
-  static pthread_mutex_t signaled_mutex;
+  static pthread_mutex_t signaled_and_in_handler_mutex; // protect both 'signaled' and 'in_handler'
   static pthread_cond_t signaled_cond;
-  // FIXME: 'in_handler' should be atomic.
   static size_t signaled, in_handler;
   static pthread_cond_t resume_cond;
 #ifdef __x86_64__
@@ -6107,18 +6110,22 @@ class Freeze {
   static void handler(int handler_signo) {
     assert(handler_signo == signo, "handler signo");
     int err;
-    err = pthread_mutex_lock(&signaled_mutex);
+    err = pthread_mutex_lock(&signaled_and_in_handler_mutex);
     assert(!err, "pthread error");
     ++signaled;
     ++in_handler;
-    err = pthread_mutex_unlock(&signaled_mutex);
+    err = pthread_mutex_unlock(&signaled_and_in_handler_mutex);
     assert(!err, "pthread error");
     err = pthread_cond_signal(&signaled_cond);
     assert(!err, "pthread error");
 #ifdef __x86_64__
     if (caller_is_unsafe()) {
       frozen = false;
+      err = pthread_mutex_lock(&signaled_and_in_handler_mutex);
+      assert(!err, "pthread error");
       --in_handler;
+      err = pthread_mutex_unlock(&signaled_and_in_handler_mutex);
+      assert(!err, "pthread error");
       return;
     }
 #endif // __x86_64__
@@ -6128,7 +6135,11 @@ class Freeze {
     assert(!err, "pthread error");
     err = pthread_cond_wait(&resume_cond, &unused_mutex);
     assert(!err, "pthread error");
+    err = pthread_mutex_lock(&signaled_and_in_handler_mutex);
+    assert(!err, "pthread error");
     --in_handler;
+    err = pthread_mutex_unlock(&signaled_and_in_handler_mutex);
+    assert(!err, "pthread error");
   }
   static bool frozen;
 #ifdef ASSERT
@@ -6146,7 +6157,7 @@ public:
       return false;
     }
     assert(act_old.sa_handler == SIG_DFL, "SIG_DFL for signo");
-    signaled_mutex = PTHREAD_MUTEX_INITIALIZER;
+    signaled_and_in_handler_mutex = PTHREAD_MUTEX_INITIALIZER;
     signaled_cond = PTHREAD_COND_INITIALIZER;
     signaled = 0;
     in_handler = 0;
@@ -6161,14 +6172,14 @@ public:
       }
     });
     int err;
-    err = pthread_mutex_lock(&signaled_mutex);
+    err = pthread_mutex_lock(&signaled_and_in_handler_mutex);
     assert(!err, "pthread error");
     while (signaled < count) {
-      err = pthread_cond_wait(&signaled_cond, &signaled_mutex);
+      err = pthread_cond_wait(&signaled_cond, &signaled_and_in_handler_mutex);
       assert(!err, "pthread error");
     }
     assert(signaled == count, "JVM: Freeze: signaled == count");
-    err = pthread_mutex_unlock(&signaled_mutex);
+    err = pthread_mutex_unlock(&signaled_and_in_handler_mutex);
     assert(!err, "pthread error");
     if (sigaction(signo, &act_old, NULL)) {
       tty->print_cr("JVM: Freeze::thaw sigaction(%d): %m", signo);
@@ -6189,8 +6200,17 @@ public:
     tty->print_cr("JVM: Freeze: Some tasks failed to freeze (in glibc)");
     return frozen;
   }
+  size_t in_handler_get_locked() {
+    int err;
+    err = pthread_mutex_lock(&signaled_and_in_handler_mutex);
+    assert(!err, "pthread error");
+    size_t retval = in_handler;
+    err = pthread_mutex_unlock(&signaled_and_in_handler_mutex);
+    assert(!err, "pthread error");
+    return retval;
+  }
   void thaw() {
-    while (in_handler) {
+    while (in_handler_get_locked()) {
       int err;
       err = pthread_cond_broadcast(&resume_cond);
       assert(!err, "pthread error");
@@ -6216,7 +6236,7 @@ public:
 #endif
   }
 };
-pthread_mutex_t Freeze::signaled_mutex;
+pthread_mutex_t Freeze::signaled_and_in_handler_mutex;
 pthread_cond_t Freeze::signaled_cond;
 size_t Freeze::signaled, Freeze::in_handler;
 pthread_cond_t Freeze::resume_cond;
@@ -6225,7 +6245,7 @@ bool Freeze::frozen;
 bool Freeze::singleton = false;
 #endif
 
-static int checkpoint_restore(int *shmid) {
+int os::Linux::checkpoint_restore(int *shmid) {
 
   // All the systems for restore should have the same glibc version (despite possibly different CPUs).
   linux_ifunc_fetch_offsets();
@@ -6252,6 +6272,10 @@ static int checkpoint_restore(int *shmid) {
   assert(sig == RESTORE_SIGNAL, "got what requested");
 
   linux_ifunc_reset();
+
+  initialize_processor_count();
+  if (_cpu_to_node != NULL)
+    rebuild_cpu_to_node_map();
 
   freeze.thaw();
 
@@ -6538,7 +6562,7 @@ void VM_Crac::doit() {
   } else {
     trace_cr("Checkpoint ...");
     report_ok_to_jcmd_if_any();
-    int ret = checkpoint_restore(&shmid);
+    int ret = os::Linux::checkpoint_restore(&shmid);
     if (ret == JVM_CHECKPOINT_ERROR) {
       PerfMemoryLinux::restore();
       return;

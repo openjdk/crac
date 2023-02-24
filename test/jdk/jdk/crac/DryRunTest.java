@@ -53,7 +53,7 @@ public class DryRunTest implements CracTest {
 
     @Override
     public void test() throws IOException, InterruptedException {
-        new CracBuilder().engine(CracEngine.SIMPLE).printResources(true)
+        new CracBuilder().engine(CracEngine.SIMULATE).printResources(true)
                 .main(DryRunTest.class).args(CracTest.args())
                 .startCheckpoint().waitForSuccess();
     }

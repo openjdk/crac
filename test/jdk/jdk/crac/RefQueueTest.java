@@ -43,7 +43,7 @@ public class RefQueueTest implements CracTest {
 
     @Override
     public void test() throws Exception {
-        new CracBuilder().engine(CracEngine.SIMPLE)
+        new CracBuilder().engine(CracEngine.SIMULATE)
                 .main(RefQueueTest.class).args(CracTest.args())
                 .startCheckpoint().waitForSuccess();
     }

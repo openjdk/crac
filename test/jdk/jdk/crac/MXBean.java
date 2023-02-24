@@ -68,7 +68,7 @@ public class MXBean implements CracTest {
     public void test() throws Exception {
         long start = System.currentTimeMillis();
 
-        OutputAnalyzer output = new CracBuilder().engine(CracEngine.SIMPLE)
+        OutputAnalyzer output = new CracBuilder().engine(CracEngine.SIMULATE)
                 .main(MXBean.class).args(CracTest.args())
                 .captureOutput(true)
                 .startCheckpoint().waitForSuccess().outputAnalyzer();

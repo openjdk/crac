@@ -44,7 +44,7 @@ public class JarFileFactoryCacheTest implements CracTest {
 
     @Override
     public void test() throws Exception {
-        new CracBuilder().engine(CracEngine.SIMPLE).printResources(true)
+        new CracBuilder().engine(CracEngine.SIMULATE).printResources(true)
                 .main(JarFileFactoryCacheTest.class).args(CracTest.args())
                 .startCheckpoint().waitForSuccess();
     }

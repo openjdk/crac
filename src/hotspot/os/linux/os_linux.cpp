@@ -6461,7 +6461,8 @@ static char modules_path[JVM_MAXPATHLEN] = { '\0' };
 
 static bool is_fd_ignored(int fd, const char *path) {
   if (!strcmp(modules_path, path)) {
-    // modules directory is opened al the time
+    // Path to the modules directory is opened early when JVM is booted up and won't be closed.
+    // We can ignore this for purposes of CRaC.
     return true;
   }
 
@@ -6495,6 +6496,8 @@ static bool is_fd_ignored(int fd, const char *path) {
 }
 
 void os::Linux::close_extra_descriptors() {
+  // Path to the modules directory is opened early when JVM is booted up and won't be closed.
+  // We can ignore this for purposes of CRaC.
   if (modules_path[0] == '\0') {
     const char* fileSep = os::file_separator();
     jio_snprintf(modules_path, JVM_MAXPATHLEN, "%s%slib%smodules", Arguments::get_java_home(), fileSep, fileSep);
@@ -6509,7 +6512,7 @@ void os::Linux::close_extra_descriptors() {
     if (fd > 2 && fd != dirfd(dir)) {
       int r = readfdlink(fd, path, sizeof(path));
       if (!is_fd_ignored(fd, r != -1 ? path : nullptr)) {
-        tty->print("CRaC closing file descriptor %d: %s\n", fd, path);
+        log_warning(os)("CRaC closing file descriptor %d: %s\n", fd, path);
         close(fd);
       }
     }

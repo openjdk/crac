@@ -2123,7 +2123,6 @@ const intx ObjectAlignmentInBytes = 8;
                                                                             \
   product(bool, CRTrace, true, "Minimal C/R tracing")                       \
 
-
 // end of RUNTIME_FLAGS
 
 DECLARE_FLAGS(LP64_RUNTIME_FLAGS)

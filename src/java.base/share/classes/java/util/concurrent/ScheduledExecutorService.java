@@ -147,6 +147,11 @@ public interface ScheduledExecutorService extends ExecutorService {
      * subsequent executions may start late, but will not concurrently
      * execute.
      *
+     * @crac Since the execution is suspended after a checkpoint the command
+     * could execute many times after a restore. This is likely an undesired
+     * behaviour, therefore it is recommended to cancel the future before
+     * checkpoint and schedule the command again after restore.
+     *
      * @param command the task to execute
      * @param initialDelay the time to delay first execution
      * @param period the period between successive executions
@@ -185,6 +190,11 @@ public interface ScheduledExecutorService extends ExecutorService {
      * Subsequent executions are suppressed.  Subsequent calls to
      * {@link Future#isDone isDone()} on the returned future will
      * return {@code true}.
+     *
+     * @crac Since the execution is suspended after a checkpoint the command
+     * could execute many times after a restore. This is likely an undesired
+     * behaviour, therefore it is recommended to cancel the future before
+     * checkpoint and schedule the command again after restore.
      *
      * @param command the task to execute
      * @param initialDelay the time to delay first execution

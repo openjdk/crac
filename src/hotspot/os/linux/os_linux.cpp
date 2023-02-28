@@ -6021,6 +6021,7 @@ public:
 };
 
 static int checkpoint_restore(int *shmid) {
+  os::record_time_before_checkpoint();
 
   int cres = call_crengine();
   if (cres < 0) {
@@ -6037,6 +6038,8 @@ static int checkpoint_restore(int *shmid) {
     sig = sigwaitinfo(&waitmask, &info);
   } while (sig == -1 && errno == EINTR);
   assert(sig == RESTORE_SIGNAL, "got what requested");
+
+  os::update_javaTimeNanos_offset();
 
   if (CRTraceStartupTime) {
     tty->print_cr("STARTUPTIME " JLONG_FORMAT " restore-native", os::javaTimeNanos());

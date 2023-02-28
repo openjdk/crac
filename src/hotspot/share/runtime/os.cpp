@@ -82,6 +82,13 @@ int               os::_processor_count    = 0;
 int               os::_initial_active_processor_count = 0;
 os::PageSizes     os::_page_sizes;
 
+// Timestamps recorded before checkpoint
+jlong os::checkpoint_millis = -1;
+jlong os::checkpoint_nanos;
+// Value based on wall clock time difference that will guarantee monotonic
+// System.nanoTime() close to actual wall-clock time difference.
+jlong os::javaTimeNanos_offset = 0;
+
 #ifndef PRODUCT
 julong os::num_mallocs = 0;         // # of calls to malloc/realloc
 julong os::alloc_bytes = 0;         // # of bytes allocated
@@ -2022,4 +2029,24 @@ void os::PageSizes::print_on(outputStream* st) const {
   if (first) {
     st->print("empty");
   }
+}
+
+void os::record_time_before_checkpoint() {
+  // If CRaC supports multiple checkpoint - restore - checkpoint - restore cycles
+  // we want to record the timestamps only on the first checkpoint, but update
+  // the offset after each restore
+  if (checkpoint_millis < 0) {
+      checkpoint_millis = javaTimeMillis();
+      checkpoint_nanos = javaTimeNanos();
+  }
+}
+
+void os::update_javaTimeNanos_offset() {
+  assert(checkpoint_millis >= 0, "Restore without a checkpoint?");
+  long diff_millis = javaTimeMillis() - checkpoint_millis;
+  // If the wall clock has gone backwards we won't add it to the offset
+  if (diff_millis < 0) {
+    diff_millis = 0;
+  }
+  javaTimeNanos_offset = checkpoint_nanos - javaTimeNanos() + diff_millis * 1000000L;
 }

@@ -130,6 +130,10 @@ class os: AllStatic {
   static address            _polling_page;
   static PageSizes          _page_sizes;
 
+  static jlong checkpoint_millis;
+  static jlong checkpoint_nanos;
+  static jlong javaTimeNanos_offset;
+
   static char*  pd_reserve_memory(size_t bytes, bool executable);
 
   static char*  pd_attempt_reserve_memory_at(char* addr, size_t bytes, bool executable);
@@ -198,6 +202,9 @@ class os: AllStatic {
   static void   javaTimeNanos_info(jvmtiTimerInfo *info_ptr);
   static void   javaTimeSystemUTC(jlong &seconds, jlong &nanos);
   static void   run_periodic_checks();
+
+  static void record_time_before_checkpoint();
+  static void update_javaTimeNanos_offset();
 
   // Returns the elapsed time in seconds since the vm started.
   static double elapsedTime();

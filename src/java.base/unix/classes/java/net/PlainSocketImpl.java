@@ -35,6 +35,9 @@ import jdk.internal.crac.JDKResource.Priority;
 /*
  * On Unix systems we simply delegate to native methods.
  *
+ * @crac The socket is automatically closed before checkpoint and reopened
+ * after restore; there is no handling needed from the application side.
+ *
  * @author Chris Hegarty
  */
 

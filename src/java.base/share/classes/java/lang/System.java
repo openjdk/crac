@@ -543,6 +543,12 @@ public final class System {
      * if (System.nanoTime() >= startTime + timeoutNanos) ...}</pre>
      * because of the possibility of numerical overflow.
      *
+     * @crac The value returned by this method can be non-consistent after
+     * restore from a checkpoint. Applications are recommended to discard
+     * the measurement if the difference from previous invocation is outside
+     * of expected bounds, or {@link javax.crac.Context#register(javax.crac.Resource) register}
+     * a resource that will help with adapting after the restore.
+     *
      * @return the current value of the running Java Virtual Machine's
      *         high-resolution time source, in nanoseconds
      * @since 1.5
@@ -779,6 +785,12 @@ public final class System {
      * {@link #setProperties(Properties)}, {@link #setProperty(String, String)}, or
      * {@link #clearProperty(String)} may not have the desired effect.
      *
+     * @crac While the API note above discourages from changing system properties during
+     * runtime it is actually quite common after restore from a checkpoint. The application
+     * should {@link javax.crac.Context#register(javax.crac.Resource) register}
+     * a resource and in the {@link javax.crac.Resource#afterRestore(javax.crac.Context) afterRestore method}
+     * reload system properties, propagating any change.
+     *
      * @implNote
      * In addition to the standard system properties, the system
      * properties may include the following keys:
@@ -893,6 +905,10 @@ public final class System {
      * unless otherwise specified</strong>.
      * See {@linkplain #getProperties getProperties} for details.
      *
+     * @crac While the API note above discourages from changing system properties during
+     * runtime it is actually quite common after restore from a checkpoint.
+     * See {@linkplain #getProperties getProperties} for details.
+     *
      * @param      key   the name of the system property.
      * @return     the string value of the system property,
      *             or {@code null} if there is no property with that key.
@@ -928,6 +944,10 @@ public final class System {
      * If there is no current set of system properties, a set of system
      * properties is first created and initialized in the same manner as
      * for the {@code getProperties} method.
+     *
+     * @crac While traditionally it is discouraged to change system properties during
+     * runtime it is actually quite common after restore from a checkpoint.
+     * See {@linkplain #getProperties getProperties} for details.
      *
      * @param      key   the name of the system property.
      * @param      def   a default value.
@@ -1083,6 +1103,12 @@ public final class System {
      * {@code System.getenv("FOO").equals(System.getenv("foo"))}
      * is likely to be true on Microsoft Windows.
      *
+     * @crac While environment variables are typically constant through
+     * the lifetime of a process these can change after restore from
+     * a checkpoint. The application should {@link javax.crac.Context#register(javax.crac.Resource) register}
+     * a resource and in the {@link javax.crac.Resource#afterRestore(javax.crac.Context) afterRestore method}
+     * reload environment variables, propagating any change.
+     *
      * @param  name the name of the environment variable
      * @return the string value of the variable, or {@code null}
      *         if the variable is not defined in the system environment
@@ -1135,6 +1161,12 @@ public final class System {
      * <p>When passing information to a Java subprocess,
      * <a href=#EnvironmentVSSystemProperties>system properties</a>
      * are generally preferred over environment variables.
+     *
+     * @crac While environment variables are typically constant through
+     * the lifetime of a process these can change after restore from
+     * a checkpoint. The application should {@link javax.crac.Context#register(javax.crac.Resource) register}
+     * a resource and in the {@link javax.crac.Resource#afterRestore(javax.crac.Context) afterRestore method}
+     * reload the environment variable, propagating any change.
      *
      * @return the environment as a map of variable names to values
      * @throws SecurityException

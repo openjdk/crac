@@ -42,6 +42,9 @@ import jdk.crac.Resource;
 /* A factory for cached JAR file. This class is used to both retrieve
  * and cache Jar files.
  *
+ * @crac All JarFile instances that are not referenced from elsewhere are
+ * removed from the cache before a checkpoint.
+ *
  * @author Benjamin Renaud
  * @since 1.2
  */

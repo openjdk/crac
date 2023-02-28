@@ -192,6 +192,10 @@ import sun.nio.cs.UTF_8;
  * </dd>
  * </dl>
  *
+ * @crac This class holds a cache of resolved hostname-address pairs;
+ * this cache is wiped out before checkpoint since this mapping might be
+ * outdated or invalid in the environment where the process is restored.
+ *
  * @author  Chris Warth
  * @see     java.net.InetAddress#getByAddress(byte[])
  * @see     java.net.InetAddress#getByAddress(java.lang.String, byte[])

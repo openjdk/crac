@@ -35,6 +35,12 @@ import java.io.File;
 import java.io.IOException;
 import java.util.jar.JarFile;
 
+/**
+ * @crac It is assumed that JAR files opened through this class thatn are open
+ * during checkpoint will be present on same path in the filesystem after
+ * restore. Therefore, application does <strong>not</strong> have to close
+ * these files before a checkpoint.
+ */
 public class PersistentJarFile extends JarFile implements JDKResource {
     // PersistentJarFile is <clinit>ed when loading classes on the module path;
     // when initializing the logger an implementation of logging is looked up through

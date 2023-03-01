@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022, Azul Systems, Inc. All rights reserved.
+ * Copyright (c) 2023, Azul Systems, Inc. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -23,38 +23,15 @@
  * questions.
  */
 
-import jdk.test.lib.process.OutputAnalyzer;
-import jdk.test.lib.process.ProcessTools;
+import jdk.crac.CheckpointException;
+import jdk.crac.Core;
+import jdk.crac.RestoreException;
 
-/**
- * @test
- * @library /test/lib
- * @build CheckpointRestore
- * @run main LeaveRunning
- */
-public class LeaveRunning {
-    public static void main(String[] args) {
-        OutputAnalyzer output;
-        try {
-            ProcessBuilder pb = ProcessTools.createTestJvm(
-                "-XX:CRaCCheckpointTo=./cr", CheckpointRestore.class.getSimpleName());
-            pb.environment().put("CRAC_CRIU_LEAVE_RUNNING", "");
-            output = ProcessTools.executeProcess(pb);
-        } catch (Exception e) {
-            throw new RuntimeException(e);
-        }
+class CheckpointRestore {
+    static final String RESTORED_MESSAGE = "Restored";
 
-        output.shouldHaveExitValue(0);
-        output.shouldContain(CheckpointRestore.RESTORED_MESSAGE);
-
-        try {
-            output = ProcessTools.executeTestJvm(
-                "-XX:CRaCRestoreFrom=./cr");
-        } catch (Exception e) {
-            throw new RuntimeException(e);
-        }
-
-        output.shouldHaveExitValue(0);
-        output.shouldContain(CheckpointRestore.RESTORED_MESSAGE);
+    public static void main(String[] args) throws CheckpointException, RestoreException {
+        Core.checkpointRestore();
+        System.out.println(RESTORED_MESSAGE);
     }
 }

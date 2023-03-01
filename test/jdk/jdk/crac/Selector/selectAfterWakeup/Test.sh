@@ -44,7 +44,7 @@ do
     set -e
     [ $e -eq 137 ]
 
-    ${TESTJAVA}/bin/java -XX:CRaCRestoreFrom=$IMGDIR Test
+    ${TESTJAVA}/bin/java -XX:CRaCRestoreFrom=$IMGDIR
 
     echo "PASSED $test"
 

@@ -28,6 +28,8 @@ import jdk.crac.*;
 
 /**
  * @test
+ * The test will inherit FD with asmtools open and checkpoint would complain; as a workaround we'll add this to classpath
+ * @library ${jtreg.home}/lib/asmtools.jar
  * @run main/othervm -XX:CREngine=simengine -XX:CRaCCheckpointTo=./cr RefQueueTest
  */
 public class RefQueueTest {

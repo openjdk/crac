@@ -1,20 +1,26 @@
 package jdk.test.lib.crac;
 
+import jdk.test.lib.Container;
 import jdk.test.lib.Utils;
+import jdk.test.lib.containers.docker.DockerTestUtils;
+import jdk.test.lib.util.FileUtils;
 
 import java.io.File;
 import java.io.IOException;
 import java.nio.file.Path;
 import java.util.*;
 
-import static jdk.test.lib.Asserts.assertEquals;
-import static jdk.test.lib.Asserts.assertNull;
+import static jdk.test.lib.Asserts.*;
 
 public class CracBuilder {
     private static final String DEFAULT_IMAGE_DIR = "cr";
+    public static final String CONTAINER_NAME = "crac-test";
+    public static final String DOCKER_JAVA = "/jdk/bin/java";
+    private static final List<String> CRIU_CANDIDATES = Arrays.asList(Utils.TEST_JDK + "/lib/criu", "/usr/sbin/criu", "/sbin/criu");
+    private static final String CRIU_PATH;
 
     boolean verbose = true;
-    final List<String> classpath = new ArrayList<>();
+    final List<String> classpathEntries = new ArrayList<>();
     final Map<String, String> env = new HashMap<>();
     String imageDir = DEFAULT_IMAGE_DIR;
     CracEngine engine;
@@ -22,17 +28,33 @@ public class CracBuilder {
     Class<?> main;
     String[] args;
     boolean captureOutput;
+    String dockerImageName;
+
+    boolean containerStarted;
+
+    static {
+        String path = System.getenv("CRAC_CRIU_PATH");
+        if (path == null) {
+            for (String candidate : CRIU_CANDIDATES) {
+                if (new File(candidate).exists()) {
+                    path = candidate;
+                    break;
+                }
+            }
+        }
+        CRIU_PATH = path;
+    }
 
     public CracBuilder() {
-        classpath.addAll(Arrays.asList(Utils.TEST_CLASS_PATH.split(File.pathSeparator)));
     }
+
     public CracBuilder verbose(boolean verbose) {
         this.verbose = verbose;
         return this;
     }
 
     public CracBuilder classpathEntry(String cp) {
-        classpath.add(cp);
+        classpathEntries.add(cp);
         return this;
     }
 
@@ -79,12 +101,23 @@ public class CracBuilder {
         return this;
     }
 
-    public void doCheckpoint() throws IOException, InterruptedException {
+    public CracBuilder inDockerImage(String imageName) {
+        assertNull(dockerImageName);
+        this.dockerImageName = imageName;
+        return this;
+    }
+
+    public void doCheckpoint() throws Exception {
         startCheckpoint().waitForCheckpointed();
     }
 
-    public CracProcess startCheckpoint() throws IOException {
-        List<String> cmd = prepareCommand();
+    public CracProcess startCheckpoint() throws Exception {
+        return startCheckpoint(null);
+    }
+
+    public CracProcess startCheckpoint(List<String> javaPrefix) throws Exception {
+        ensureContainerStarted();
+        List<String> cmd = prepareCommand(javaPrefix);
         cmd.add("-XX:CRaCCheckpointTo=" + imageDir);
         cmd.add(main.getName());
         if (args != null) {
@@ -97,12 +130,53 @@ public class CracBuilder {
         return new CracProcess(this, cmd);
     }
 
-    public CracProcess doRestore() throws IOException, InterruptedException {
+    private void ensureContainerStarted() throws Exception {
+        if (dockerImageName == null) {
+            return;
+        }
+        if (CRIU_PATH == null) {
+            fail("CRAC_CRIU_PATH is not set and cannot find criu executable in any of: " + CRIU_CANDIDATES);
+        }
+        if (!containerStarted) {
+            ensureContainerKilled();
+            DockerTestUtils.buildJdkDockerImage(dockerImageName, "Dockerfile-is-ignored", "jdk-docker");
+            FileUtils.deleteFileTreeWithRetry(Path.of(".", "jdk-docker"));
+            List<String> cmd = new ArrayList<>();
+            cmd.add(Container.ENGINE_COMMAND);
+            cmd.addAll(Arrays.asList("run", "--rm", "-d"));
+            cmd.add("--privileged"); // required to give CRIU sufficient permissions
+            cmd.add("--init"); // otherwise the checkpointed process would not be reaped (by sleep with PID 1)
+            cmd.addAll(Arrays.asList("--volume", Utils.TEST_CLASSES + ":/test-classes/"));
+            cmd.addAll(Arrays.asList("--volume", "cr:/cr"));
+            cmd.addAll(Arrays.asList("--volume", CRIU_PATH + ":/criu"));
+            cmd.addAll(Arrays.asList("--env", "CRAC_CRIU_PATH=/criu"));
+            cmd.addAll(Arrays.asList("--name", CONTAINER_NAME));
+            cmd.add(dockerImageName);
+            cmd.addAll(Arrays.asList("sleep", "3600"));
+
+            if (verbose) {
+                System.err.println("Starting docker container:\n" + String.join(" ", cmd));
+            }
+            assertEquals(0, new ProcessBuilder().inheritIO().command(cmd).start().waitFor());
+            containerStarted = true;
+        }
+    }
+
+    public void ensureContainerKilled() throws Exception {
+        DockerTestUtils.execute(Container.ENGINE_COMMAND, "kill", CONTAINER_NAME).getExitValue();
+        DockerTestUtils.removeDockerImage(dockerImageName);
+    }
+
+    public CracProcess doRestore() throws Exception {
         return startRestore().waitForSuccess();
     }
 
-    public CracProcess startRestore() throws IOException {
-        List<String> cmd = prepareCommand();
+    public CracProcess startRestore() throws Exception {
+         return startRestore(null);
+    }
+    public CracProcess startRestore(List<String> prefixJava) throws Exception {
+        ensureContainerStarted();
+        List<String> cmd = prepareCommand(prefixJava);
         cmd.add("-XX:CRaCRestoreFrom=" + imageDir);
         if (verbose) {
             System.err.println("Starting restored process:");
@@ -113,10 +187,13 @@ public class CracBuilder {
 
     public CracProcess startPlain() throws IOException {
         List<String> cmd = new ArrayList<>();
+        if (dockerImageName != null) {
+            cmd.addAll(Arrays.asList(Container.ENGINE_COMMAND, "exec", CONTAINER_NAME));
+        }
         cmd.add(Utils.TEST_JDK + "/bin/java");
         cmd.add("-ea");
         cmd.add("-cp");
-        cmd.add(String.join(File.pathSeparator, classpath));
+        cmd.add(getClassPath());
         cmd.add(main.getName());
         if (args != null) {
             cmd.addAll(Arrays.asList(args));
@@ -128,16 +205,33 @@ public class CracBuilder {
         return new CracProcess(this, cmd);
     }
 
+    private String getClassPath() {
+        String classPath = classpathEntries.isEmpty() ? "" : String.join(File.pathSeparator, classpathEntries) + File.pathSeparator;
+        if (dockerImageName == null) {
+            classPath += Utils.TEST_CLASS_PATH;
+        } else {
+            classPath += "/test-classes";
+        }
+        return classPath;
+    }
+
     public CracProcess doPlain() throws IOException, InterruptedException {
         return startPlain().waitForSuccess();
     }
 
-    private List<String> prepareCommand() {
+    private List<String> prepareCommand(List<String> javaPrefix) {
         List<String> cmd = new ArrayList<>();
-        cmd.add(Utils.TEST_JDK + "/bin/java");
+        if (javaPrefix != null) {
+            cmd.addAll(javaPrefix);
+        } else if (dockerImageName != null) {
+            cmd.addAll(Arrays.asList(Container.ENGINE_COMMAND, "exec", CONTAINER_NAME));
+            cmd.add(DOCKER_JAVA);
+        } else {
+            cmd.add(Utils.TEST_JDK + "/bin/java");
+        }
         cmd.add("-ea");
         cmd.add("-cp");
-        cmd.add(String.join(File.pathSeparator, classpath));
+        cmd.add(getClassPath());
         if (engine != null) {
             cmd.add("-XX:CREngine=" + engine.engine);
         }
@@ -148,7 +242,7 @@ public class CracBuilder {
         return cmd;
     }
 
-    public void doCheckpointAndRestore() throws IOException, InterruptedException {
+    public void doCheckpointAndRestore() throws Exception {
         doCheckpoint();
         doRestore();
     }

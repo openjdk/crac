@@ -119,7 +119,7 @@ public class InterlockTest implements Resource, CracTest {
     }
 
     @Override
-    public void test() throws IOException, InterruptedException {
+    public void test() throws Exception {
         new CracBuilder().main(InterlockTest.class).args(CracTest.args())
                 .doCheckpointAndRestore();
     }

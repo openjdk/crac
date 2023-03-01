@@ -62,7 +62,7 @@ public class Test implements CracTest {
     }
 
     @Override
-    public void test() throws IOException, InterruptedException {
+    public void test() throws Exception {
         CracBuilder builder = new CracBuilder().main(Test.class).args(CracTest.args());
         if (skipCR) {
             builder.doPlain();

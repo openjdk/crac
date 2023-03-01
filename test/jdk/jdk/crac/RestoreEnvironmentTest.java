@@ -44,7 +44,7 @@ public class RestoreEnvironmentTest implements CracTest {
     }
 
     @Override
-    public void test() throws IOException, InterruptedException {
+    public void test() throws Exception {
         CracBuilder builder = new CracBuilder().captureOutput(true)
                 .main(RestoreEnvironmentTest.class).args(CracTest.args())
                 .env(TEST_VAR_NAME + 0, BEFORE_CHECKPOINT)

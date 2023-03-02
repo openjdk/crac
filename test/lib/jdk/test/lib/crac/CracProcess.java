@@ -1,10 +1,13 @@
 package jdk.test.lib.crac;
 
 import jdk.test.lib.process.OutputAnalyzer;
+import jdk.test.lib.process.StreamPumper;
 
 import java.io.IOException;
+import java.io.InputStream;
 import java.nio.file.*;
 import java.util.List;
+import java.util.function.Consumer;
 import java.util.function.Predicate;
 import java.util.stream.Stream;
 
@@ -86,5 +89,21 @@ public class CracProcess {
     public OutputAnalyzer outputAnalyzer() throws IOException {
         assertTrue(builder.captureOutput, "Output must be captured with .captureOutput(true)");
         return new OutputAnalyzer(process);
+    }
+
+    public CracProcess watch(Consumer<String> outputConsumer, Consumer<String> errorConsumer) {
+        assertTrue(builder.captureOutput, "Output must be captured with .captureOutput(true)");
+        pump(process.getInputStream(), outputConsumer);
+        pump(process.getErrorStream(), errorConsumer);
+        return this;
+    }
+
+    private static void pump(InputStream stream, Consumer<String> consumer) {
+        new StreamPumper(stream).addPump(new StreamPumper.LinePump() {
+            @Override
+            protected void processLine(String line) {
+                consumer.accept(line);
+            }
+        }).process();
     }
 }

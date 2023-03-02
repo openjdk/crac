@@ -15,4 +15,9 @@ public @interface CracTestArg {
      * @return The (zero-based) index of the argument used as source of the data.
      */
     int value() default 0;
+
+    /**
+     * @return Can this argument be omitted?
+     */
+    boolean optional() default false;
 }

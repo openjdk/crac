@@ -20,6 +20,8 @@ import static jdk.test.lib.Asserts.*;
  */
 public interface CracTest {
 
+    String RESTORED_MESSAGE = "Restored";
+
     /**
      * This method is called when JTReg invokes the test; it is supposed to start
      * another process (most often using CRaC VM options) and validate its behaviour.
@@ -67,7 +69,13 @@ public interface CracTest {
                 Field f = argFields[index];
                 assertFalse(Modifier.isFinal(f.getModifiers()), "@CracTestArg fields must not be final!");
                 Class<?> t = f.getType();
-                assertLessThan(index + argsOffset, args.length, "Not enough args for field " + f.getName() + "(" + index + "): have " + (args.length - argsOffset));
+                if (index + argsOffset >= args.length) {
+                    if (f.getAnnotation(CracTestArg.class).optional()) {
+                        break;
+                    } else {
+                        fail("Not enough args for field " + f.getName() + "(" + index + "): have " + (args.length - argsOffset));
+                    }
+                }
                 String arg = args[index + argsOffset];
                 Object value = arg;
                 if (t == boolean.class || t == Boolean.class) {
@@ -109,8 +117,10 @@ public interface CracTest {
         if (sortedFields.length == 0) {
             return sortedFields;
         }
+        int firstOptional = -1;
         for (int i = 0; i < sortedFields.length; ++i) {
-            int index = sortedFields[i].getAnnotation(CracTestArg.class).value();
+            CracTestArg annotation = sortedFields[i].getAnnotation(CracTestArg.class);
+            int index = annotation.value();
             assertGreaterThanOrEqual(index, 0);
             if (i == 0) {
                 assertEquals(0, index, "@CracTestArg numbers should start with 0");
@@ -120,6 +130,11 @@ public interface CracTest {
             } else if (index > i) {
                 fail("Gap in @CracTestArg indices: missing " + i + ", next is " + index);
             }
+            if (annotation.optional()) {
+                firstOptional = index;
+            } else if (firstOptional >= 0) {
+                fail("Argument " + firstOptional + " is optional; all subsequent arguments must be optional, too.");
+            }
         }
         return sortedFields;
     }
@@ -127,9 +142,13 @@ public interface CracTest {
     /**
      * Used as argument for {@link CracBuilder#args(String...)}.
      */
-    static String[] args() {
+    static String[] args(String... extraArgs) {
         assertNotNull(ArgsHolder.args, "Args are null; are you trying to access them from test method?");
-        return ArgsHolder.args;
+        if (extraArgs == null || extraArgs.length == 0) {
+            return ArgsHolder.args;
+        } else {
+            return Stream.concat(Stream.of(ArgsHolder.args), Stream.of(extraArgs)).toArray(String[]::new);
+        }
     }
 }
 

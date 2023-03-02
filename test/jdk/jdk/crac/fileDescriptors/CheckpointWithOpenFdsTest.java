@@ -1,12 +1,10 @@
 /*
- * Copyright (c) 2022, Azul Systems, Inc. All rights reserved.
+ * Copyright (c) 2023, Azul Systems, Inc. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 2 only, as
- * published by the Free Software Foundation.  Oracle designates this
- * particular file as subject to the "Classpath" exception as provided
- * by Oracle in the LICENSE file that accompanied this code.
+ * published by the Free Software Foundation.
  *
  * This code is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
@@ -23,27 +21,31 @@
  * questions.
  */
 
-import jdk.crac.*;
-
+import jdk.crac.Core;
+import jdk.test.lib.Utils;
 import jdk.test.lib.crac.CracBuilder;
 import jdk.test.lib.crac.CracTest;
+
+import java.nio.file.Path;
+import java.util.*;
 
 /**
  * @test
  * @library /test/lib
- * @run main LeaveRunning
+ * @run main CheckpointWithOpenFdsTest
  */
-public class LeaveRunning implements CracTest {
-    public static void main(String[] args) throws Exception {
-        CracTest.run(LeaveRunning.class, args);
+public class CheckpointWithOpenFdsTest implements CracTest {
+    private static final String EXTRA_FD_WRAPPER = Path.of(Utils.TEST_SRC, "extra_fd_wrapper.sh").toString();
+
+    public static void main(String[] args) throws Throwable {
+        CracTest.run(CheckpointWithOpenFdsTest.class, args);
     }
 
     @Override
     public void test() throws Exception {
-        CracBuilder builder = new CracBuilder().env("CRAC_CRIU_LEAVE_RUNNING", "")
-                .captureOutput(true).main(LeaveRunning.class).args(CracTest.args());
-        builder.startCheckpoint().waitForSuccess().outputAnalyzer().shouldContain(RESTORED_MESSAGE);
-        builder.doRestore().outputAnalyzer().shouldContain(RESTORED_MESSAGE);
+        CracBuilder builder = new CracBuilder().main(CheckpointWithOpenFdsTest.class).args(CracTest.args());
+        builder.startCheckpoint(Arrays.asList(EXTRA_FD_WRAPPER, CracBuilder.JAVA)).waitForCheckpointed();
+        builder.captureOutput(true).doRestore().outputAnalyzer().shouldContain(RESTORED_MESSAGE);
     }
 
     @Override

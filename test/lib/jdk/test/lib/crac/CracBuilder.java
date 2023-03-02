@@ -3,6 +3,7 @@ package jdk.test.lib.crac;
 import jdk.test.lib.Container;
 import jdk.test.lib.Utils;
 import jdk.test.lib.containers.docker.DockerTestUtils;
+import jdk.test.lib.process.ProcessTools;
 import jdk.test.lib.util.FileUtils;
 
 import java.io.File;
@@ -15,6 +16,7 @@ import static jdk.test.lib.Asserts.*;
 public class CracBuilder {
     private static final String DEFAULT_IMAGE_DIR = "cr";
     public static final String CONTAINER_NAME = "crac-test";
+    public static final String JAVA = Utils.TEST_JDK + "/bin/java";
     public static final String DOCKER_JAVA = "/jdk/bin/java";
     private static final List<String> CRIU_CANDIDATES = Arrays.asList(Utils.TEST_JDK + "/lib/criu", "/usr/sbin/criu", "/sbin/criu");
     private static final String CRIU_PATH;
@@ -29,6 +31,7 @@ public class CracBuilder {
     String[] args;
     boolean captureOutput;
     String dockerImageName;
+    private String[] dockerOptions;
 
     boolean containerStarted;
 
@@ -107,6 +110,12 @@ public class CracBuilder {
         return this;
     }
 
+    public CracBuilder dockerOptions(String... options) {
+        assertNull(dockerOptions);
+        this.dockerOptions = options;
+        return this;
+    }
+
     public void doCheckpoint() throws Exception {
         startCheckpoint().waitForCheckpointed();
     }
@@ -141,19 +150,7 @@ public class CracBuilder {
             ensureContainerKilled();
             DockerTestUtils.buildJdkDockerImage(dockerImageName, "Dockerfile-is-ignored", "jdk-docker");
             FileUtils.deleteFileTreeWithRetry(Path.of(".", "jdk-docker"));
-            List<String> cmd = new ArrayList<>();
-            cmd.add(Container.ENGINE_COMMAND);
-            cmd.addAll(Arrays.asList("run", "--rm", "-d"));
-            cmd.add("--privileged"); // required to give CRIU sufficient permissions
-            cmd.add("--init"); // otherwise the checkpointed process would not be reaped (by sleep with PID 1)
-            cmd.addAll(Arrays.asList("--volume", Utils.TEST_CLASSES + ":/test-classes/"));
-            cmd.addAll(Arrays.asList("--volume", "cr:/cr"));
-            cmd.addAll(Arrays.asList("--volume", CRIU_PATH + ":/criu"));
-            cmd.addAll(Arrays.asList("--env", "CRAC_CRIU_PATH=/criu"));
-            cmd.addAll(Arrays.asList("--name", CONTAINER_NAME));
-            cmd.add(dockerImageName);
-            cmd.addAll(Arrays.asList("sleep", "3600"));
-
+            List<String> cmd = prepareContainerCommand(dockerImageName, dockerOptions);
             if (verbose) {
                 System.err.println("Starting docker container:\n" + String.join(" ", cmd));
             }
@@ -162,9 +159,38 @@ public class CracBuilder {
         }
     }
 
+    private List<String> prepareContainerCommand(String imageName, String[] options) {
+        List<String> cmd = new ArrayList<>();
+        cmd.add(Container.ENGINE_COMMAND);
+        cmd.addAll(Arrays.asList("run", "--rm", "-d"));
+        cmd.add("--privileged"); // required to give CRIU sufficient permissions
+        cmd.add("--init"); // otherwise the checkpointed process would not be reaped (by sleep with PID 1)
+        cmd.addAll(Arrays.asList("--volume", Utils.TEST_CLASSES + ":/test-classes/"));
+        cmd.addAll(Arrays.asList("--volume", "cr:/cr"));
+        cmd.addAll(Arrays.asList("--volume", CRIU_PATH + ":/criu"));
+        cmd.addAll(Arrays.asList("--env", "CRAC_CRIU_PATH=/criu"));
+        cmd.addAll(Arrays.asList("--name", CONTAINER_NAME));
+        if (options != null) {
+            cmd.addAll(Arrays.asList(options));
+        }
+        cmd.add(imageName);
+        cmd.addAll(Arrays.asList("sleep", "3600"));
+        return cmd;
+    }
+
     public void ensureContainerKilled() throws Exception {
         DockerTestUtils.execute(Container.ENGINE_COMMAND, "kill", CONTAINER_NAME).getExitValue();
         DockerTestUtils.removeDockerImage(dockerImageName);
+    }
+
+    public void recreateContainer(String imageName, String... options) throws Exception {
+        assertTrue(containerStarted);
+        DockerTestUtils.execute(Container.ENGINE_COMMAND, "kill", CONTAINER_NAME).getExitValue();
+        List<String> cmd = prepareContainerCommand(imageName, options);
+        if (verbose) {
+            System.err.println("Restarting docker container:\n" + String.join(" ", cmd));
+        }
+        assertEquals(0, new ProcessBuilder().inheritIO().command(cmd).start().waitFor());
     }
 
     public CracProcess doRestore() throws Exception {
@@ -190,7 +216,7 @@ public class CracBuilder {
         if (dockerImageName != null) {
             cmd.addAll(Arrays.asList(Container.ENGINE_COMMAND, "exec", CONTAINER_NAME));
         }
-        cmd.add(Utils.TEST_JDK + "/bin/java");
+        cmd.add(JAVA);
         cmd.add("-ea");
         cmd.add("-cp");
         cmd.add(getClassPath());
@@ -227,7 +253,7 @@ public class CracBuilder {
             cmd.addAll(Arrays.asList(Container.ENGINE_COMMAND, "exec", CONTAINER_NAME));
             cmd.add(DOCKER_JAVA);
         } else {
-            cmd.add(Utils.TEST_JDK + "/bin/java");
+            cmd.add(JAVA);
         }
         cmd.add("-ea");
         cmd.add("-cp");
@@ -245,5 +271,17 @@ public class CracBuilder {
     public void doCheckpointAndRestore() throws Exception {
         doCheckpoint();
         doRestore();
+    }
+
+    public void checkpointViaJcmd() throws Exception {
+        List<String> cmd = new ArrayList<>();
+        if (dockerImageName != null) {
+            cmd.addAll(Arrays.asList(Container.ENGINE_COMMAND, "exec", CONTAINER_NAME, "/jdk/bin/jcmd"));
+        } else {
+            cmd.add(Utils.TEST_JDK + "/bin/jcmd");
+        }
+        cmd.addAll(Arrays.asList(main.getName(), "JDK.checkpoint"));
+        // This works for non-docker commands, too
+        DockerTestUtils.execute(cmd).shouldHaveExitValue(0);
     }
 }

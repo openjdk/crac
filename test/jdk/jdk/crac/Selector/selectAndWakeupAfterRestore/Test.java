@@ -29,7 +29,7 @@ import java.nio.channels.Selector;
  * @summary a trivial check that Selector.wakeup() after restore behaves as expected
  * @library /test/lib
  * @build Test
- * @run driver jdk.test.lib.crac.CracTest Test
+ * @run driver jdk.test.lib.crac.CracTest
  */
 public class Test implements CracTest {
     @Override

@@ -32,7 +32,7 @@ import java.util.*;
  * @test
  * @library /test/lib
  * @build CheckpointWithOpenFdsTest
- * @run driver jdk.test.lib.crac.CracTest CheckpointWithOpenFdsTest
+ * @run driver jdk.test.lib.crac.CracTest
  */
 public class CheckpointWithOpenFdsTest implements CracTest {
     private static final String EXTRA_FD_WRAPPER = Path.of(Utils.TEST_SRC, "extra_fd_wrapper.sh").toString();

@@ -32,12 +32,12 @@ import jdk.test.lib.crac.CracTestArg;
  * @library /test/lib
  * @build ChannelResource
  * @build Test
- * @run driver jdk.test.lib.crac.CracTest Test SELECT_NOW true
- * @run driver jdk.test.lib.crac.CracTest Test SELECT_NOW false
- * @run driver jdk.test.lib.crac.CracTest Test SELECT true
- * @run driver jdk.test.lib.crac.CracTest Test SELECT false
- * @run driver jdk.test.lib.crac.CracTest Test SELECT_TIMEOUT true
- * @run driver jdk.test.lib.crac.CracTest Test SELECT_TIMEOUT false
+ * @run driver jdk.test.lib.crac.CracTest SELECT_NOW true
+ * @run driver jdk.test.lib.crac.CracTest SELECT_NOW false
+ * @run driver jdk.test.lib.crac.CracTest SELECT true
+ * @run driver jdk.test.lib.crac.CracTest SELECT false
+ * @run driver jdk.test.lib.crac.CracTest SELECT_TIMEOUT true
+ * @run driver jdk.test.lib.crac.CracTest SELECT_TIMEOUT false
  */
 public class Test implements CracTest {
     @CracTestArg(0)

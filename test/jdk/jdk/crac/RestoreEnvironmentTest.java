@@ -31,7 +31,7 @@ import java.io.IOException;
  * @summary the test checks that actual environment variables are propagated into a restored process.
  * @library /test/lib
  * @build RestoreEnvironmentTest
- * @run driver/timeout=120 jdk.test.lib.crac.CracTest RestoreEnvironmentTest
+ * @run driver/timeout=120 jdk.test.lib.crac.CracTest
  */
 public class RestoreEnvironmentTest implements CracTest {
     static final String TEST_VAR_NAME = "RESTORE_ENVIRONMENT_TEST_VAR";

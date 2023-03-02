@@ -51,7 +51,7 @@ import java.util.function.Consumer;
  * @requires docker.support
  * @library /test/lib
  * @build ResolveTest
- * @run driver jdk.test.lib.crac.CracTest ResolveTest
+ * @run driver jdk.test.lib.crac.CracTest
  */
 public class ResolveTest implements CracTest {
     private static final String imageName = Common.imageName("inet-address");

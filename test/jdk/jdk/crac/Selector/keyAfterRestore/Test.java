@@ -31,8 +31,8 @@ import jdk.test.lib.crac.CracTestArg;
  * @library /test/lib
  * @build ChannelResource
  * @build Test
- * @run driver/timeout=30 jdk.test.lib.crac.CracTest Test true
- * @run driver/timeout=30 jdk.test.lib.crac.CracTest Test false
+ * @run driver/timeout=30 jdk.test.lib.crac.CracTest true
+ * @run driver/timeout=30 jdk.test.lib.crac.CracTest false
  */
 public class Test implements CracTest {
     @CracTestArg

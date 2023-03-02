@@ -36,7 +36,7 @@ import java.nio.file.Path;
  * @test JarFileFactoryCacheTest
  * @library /test/lib
  * @build JarFileFactoryCacheTest
- * @run driver jdk.test.lib.crac.CracTest JarFileFactoryCacheTest
+ * @run driver jdk.test.lib.crac.CracTest
  */
 public class JarFileFactoryCacheTest implements CracTest {
     @Override

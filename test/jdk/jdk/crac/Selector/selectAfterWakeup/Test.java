@@ -32,12 +32,12 @@ import java.nio.channels.Selector;
  *          covers ZE-983
  * @library /test/lib
  * @build Test
- * @run driver jdk.test.lib.crac.CracTest Test true  false false
- * @run driver jdk.test.lib.crac.CracTest Test true  false true
- * @run driver jdk.test.lib.crac.CracTest Test true  true  false
- * @run driver jdk.test.lib.crac.CracTest Test true  true  true
- * @run driver jdk.test.lib.crac.CracTest Test false true  false
- * @run driver jdk.test.lib.crac.CracTest Test false true  true
+ * @run driver jdk.test.lib.crac.CracTest true  false false
+ * @run driver jdk.test.lib.crac.CracTest true  false true
+ * @run driver jdk.test.lib.crac.CracTest true  true  false
+ * @run driver jdk.test.lib.crac.CracTest true  true  true
+ * @run driver jdk.test.lib.crac.CracTest false true  false
+ * @run driver jdk.test.lib.crac.CracTest false true  true
  */
 public class Test implements CracTest {
     @CracTestArg(0)

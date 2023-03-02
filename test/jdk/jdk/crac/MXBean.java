@@ -41,7 +41,7 @@ import static jdk.test.lib.Asserts.assertLT;
  * @test
  * @library /test/lib
  * @build MXBean
- * @run driver jdk.test.lib.crac.CracTest MXBean
+ * @run driver jdk.test.lib.crac.CracTest
  */
 public class MXBean implements CracTest {
     static final long TIME_TOLERANCE = 10_000; // ms

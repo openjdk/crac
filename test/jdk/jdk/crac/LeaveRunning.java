@@ -32,7 +32,7 @@ import jdk.test.lib.crac.CracTest;
  * @test
  * @library /test/lib
  * @build LeaveRunning
- * @run driver jdk.test.lib.crac.CracTest LeaveRunning
+ * @run driver jdk.test.lib.crac.CracTest
  */
 public class LeaveRunning implements CracTest {
     @Override

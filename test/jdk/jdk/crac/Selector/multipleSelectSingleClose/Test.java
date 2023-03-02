@@ -34,9 +34,9 @@ import java.util.concurrent.atomic.AtomicInteger;
  * @summary check a coexistence of multiple select() + C/R in case when the selector is finally closed
  * @library /test/lib
  * @build Test
- * @run driver jdk.test.lib.crac.CracTest Test false false
- * @run driver jdk.test.lib.crac.CracTest Test false true
- * @run driver jdk.test.lib.crac.CracTest Test true  true
+ * @run driver jdk.test.lib.crac.CracTest false false
+ * @run driver jdk.test.lib.crac.CracTest false true
+ * @run driver jdk.test.lib.crac.CracTest true  true
  */
 public class Test implements CracTest {
     private final static Random RND = new Random();

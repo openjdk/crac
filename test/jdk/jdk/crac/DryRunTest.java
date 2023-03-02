@@ -34,7 +34,7 @@ import jdk.test.lib.crac.CracTest;
  * @test DryRunTest
  * @library /test/lib
  * @build DryRunTest
- * @run driver jdk.test.lib.crac.CracTest DryRunTest
+ * @run driver jdk.test.lib.crac.CracTest
  */
 public class DryRunTest implements CracTest {
     static class CRResource implements Resource {

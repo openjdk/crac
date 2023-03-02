@@ -37,12 +37,12 @@ import java.util.concurrent.CountDownLatch;
  *          (i.e. between the checkpoint and restore)
  *
  * @build JoinSleepWaitOnCRPauseTest
- * @run driver jdk.test.lib.crac.CracTest JoinSleepWaitOnCRPauseTest join_ms
- * @run driver jdk.test.lib.crac.CracTest JoinSleepWaitOnCRPauseTest join_ns
- * @run driver jdk.test.lib.crac.CracTest JoinSleepWaitOnCRPauseTest sleep_ms
- * @run driver jdk.test.lib.crac.CracTest JoinSleepWaitOnCRPauseTest sleep_ns
- * @run driver jdk.test.lib.crac.CracTest JoinSleepWaitOnCRPauseTest wait_ms
- * @run driver jdk.test.lib.crac.CracTest JoinSleepWaitOnCRPauseTest wait_ns
+ * @run driver jdk.test.lib.crac.CracTest join_ms
+ * @run driver jdk.test.lib.crac.CracTest join_ns
+ * @run driver jdk.test.lib.crac.CracTest sleep_ms
+ * @run driver jdk.test.lib.crac.CracTest sleep_ns
+ * @run driver jdk.test.lib.crac.CracTest wait_ms
+ * @run driver jdk.test.lib.crac.CracTest wait_ns
  */
 public class JoinSleepWaitOnCRPauseTest implements CracTest {
     private enum TestType {

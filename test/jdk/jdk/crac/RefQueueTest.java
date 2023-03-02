@@ -33,7 +33,7 @@ import jdk.test.lib.crac.CracTest;
  * @test
  * @library /test/lib
  * @build RefQueueTest
- * @run driver jdk.test.lib.crac.CracTest RefQueueTest
+ * @run driver jdk.test.lib.crac.CracTest
  */
 public class RefQueueTest implements CracTest {
     private static final Cleaner cleaner = Cleaner.create();

@@ -33,8 +33,8 @@ import static jdk.test.lib.Asserts.assertNotEquals;
  * @summary Verify that SHA1PRNG secure random is reseeded after restore if initialized with default seed.
  * @library /test/lib
  * @build ReseedTest
- * @run driver/timeout=60 jdk.test.lib.crac.CracTest ReseedTest true
- * @run driver/timeout=60 jdk.test.lib.crac.CracTest ReseedTest false
+ * @run driver/timeout=60 jdk.test.lib.crac.CracTest true
+ * @run driver/timeout=60 jdk.test.lib.crac.CracTest false
  */
 public class ReseedTest implements CracTest {
     @CracTestArg

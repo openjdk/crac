@@ -28,7 +28,7 @@ import java.util.concurrent.atomic.AtomicInteger;
  * @summary check that the recursive checkpoint is not allowed
  * @library /test/lib
  * @build Test
- * @run driver/timeout=60 jdk.test.lib.crac.CracTest Test 10
+ * @run driver/timeout=60 jdk.test.lib.crac.CracTest 10
  */
 public class Test implements Resource, CracTest {
     private static final AtomicInteger counter = new AtomicInteger(0);

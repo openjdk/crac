@@ -3,8 +3,11 @@ package jdk.test.lib.crac;
 import jdk.crac.Core;
 
 import java.lang.reflect.*;
-import java.util.Arrays;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.Comparator;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import java.util.stream.Stream;
 
 import static jdk.test.lib.Asserts.*;
@@ -13,9 +16,10 @@ import static jdk.test.lib.Asserts.*;
  * CRaC tests usually consists of two parts; the test started by JTreg through the 'run' tag
  * and subprocesses started by the test with various VM options. These are represented by the
  * {@link #test()} and {@link #exec()} methods.
- * CracTest use '@run driver jdk.test.crac.lib.CracTest MyTest' as the executable command;
- * the main method in this class instantiates the test (public no-arg constructor is needed)
- * and populates fields annotated with {@link CracTestArg} and executes the {@link #test()} method.
+ * CracTest use '@run driver jdk.test.crac.lib.CracTest' as the executable command; the main
+ * method in this class discovers the executed class from system properties passed by JTReg,
+ * instantiates the test (public no-arg constructor is needed), populates fields annotated
+ * with {@link CracTestArg} and executes the {@link #test()} method.
  * The test method is expected to use {@link CracBuilder} to start another process. By default,
  * CracBuilder invokes the test with arguments that will again instantiate and fill the instance
  * and invoke the {@link #exec()} method.
@@ -49,22 +53,40 @@ public interface CracTest {
         private static final Class<CracTestArg> dummyField = CracTestArg.class;
     }
 
+    /**
+     * Main method for orchestrating the test. This should be called directly by JTReg.
+     */
     static void main(String[] args) throws Exception {
-        if (args.length == 0) {
-            throw new IllegalArgumentException("No main class set!");
+        String testClassName;
+        if (args.length == 0 || !ArgsHolder.RUN_TEST.equals(args[0])) {
+            // We will look up the class name (and package) to avoid boilerplate in any @run invocation
+            String testFile = System.getProperty("test.file");
+            String source = Files.readString(Path.of(testFile)).replace('\n', ' ');
+            Matcher clsMatcher = Pattern.compile("class\\s+(\\S+)\\s+(extends\\s+\\S+\\s+)?implements\\s+(\\S+\\s*,\\s*)*CracTest").matcher(source);
+            if (!clsMatcher.find()) {
+                fail("Cannot find test class in " + testFile + ", does it look like class <test> implements CracTest?");
+            }
+            testClassName = clsMatcher.group(1);
+            Matcher pkgMatcher = Pattern.compile("package\\s+([^;]+);").matcher(source);
+            if (pkgMatcher.find()) {
+                testClassName = pkgMatcher.group(1) + "." + testClassName;
+            }
+        } else {
+            testClassName = args[1];
         }
+
         // When we use CracTest as driver the file with test is not compiled without a @build tag.
         // We could compile the class here and load it from a new classloader but since the test library
         // is not compiled completely we could be missing some dependencies - this would be just too fragile.
         Class<?> testClass;
         try {
-            testClass = Class.forName(args[0]);
+            testClass = Class.forName(testClassName);
         } catch (ClassNotFoundException e) {
-            throw new ClassNotFoundException("Test class not found, add jtreg tag @build " + args[0], e);
+            throw new ClassNotFoundException("Test class " + testClassName + " not found, add jtreg tag @build " + args[0], e);
         }
         if (CracTest.class.isAssignableFrom(testClass)) {
             //noinspection unchecked
-            run((Class<? extends CracTest>) testClass, Arrays.copyOfRange(args, 1, args.length));
+            run((Class<? extends CracTest>) testClass, args);
         } else {
             throw new IllegalArgumentException("Class " + testClass.getName() + " does not implement CracTest!");
         }
@@ -72,7 +94,8 @@ public interface CracTest {
 
     /**
      * This method should be invoked from the public static void main(String[]) method.
-     * @param testClass
+     *
+     * @param testClass Class implementing the test.
      * @param args Arguments received in the main method.
      * @throws Exception
      */
@@ -82,12 +105,12 @@ public interface CracTest {
         int argsOffset = 0;
         if (args.length == 0 || !args[0].equals(ArgsHolder.RUN_TEST)) {
             String[] newArgs = new String[args.length + 2];
-            newArgs[0] = testClass.getName();
-            newArgs[1] = ArgsHolder.RUN_TEST;
+            newArgs[0] = ArgsHolder.RUN_TEST;
+            newArgs[1] = testClass.getName();
             System.arraycopy(args, 0, newArgs, 2, args.length);
             ArgsHolder.args = newArgs;
         } else {
-            argsOffset = 1;
+            argsOffset = 2;
         }
 
         try {

@@ -30,7 +30,7 @@ import jdk.test.lib.crac.CracTest;
  * @test
  * @library /test/lib
  * @build LazyProps
- * @run driver jdk.test.lib.crac.CracTest LazyProps
+ * @run driver jdk.test.lib.crac.CracTest
  */
 public class LazyProps implements CracTest {
     @Override

@@ -33,12 +33,12 @@ import java.util.concurrent.atomic.AtomicInteger;
  * @summary check work of multiple select() + wakeup() + C/R
  * @library /test/lib
  * @build Test
- * @run driver/timeout=30 jdk.test.lib.crac.CracTest Test ONLY_TIMEOUTS false
- * @run driver/timeout=30 jdk.test.lib.crac.CracTest Test NO_TIMEOUTS false
- * @run driver/timeout=30 jdk.test.lib.crac.CracTest Test MIXED false
- * @run driver/timeout=30 jdk.test.lib.crac.CracTest Test ONLY_TIMEOUTS true
- * @run driver/timeout=30 jdk.test.lib.crac.CracTest Test NO_TIMEOUTS true
- * @run driver/timeout=30 jdk.test.lib.crac.CracTest Test MIXED true
+ * @run driver/timeout=30 jdk.test.lib.crac.CracTest ONLY_TIMEOUTS false
+ * @run driver/timeout=30 jdk.test.lib.crac.CracTest NO_TIMEOUTS false
+ * @run driver/timeout=30 jdk.test.lib.crac.CracTest MIXED false
+ * @run driver/timeout=30 jdk.test.lib.crac.CracTest ONLY_TIMEOUTS true
+ * @run driver/timeout=30 jdk.test.lib.crac.CracTest NO_TIMEOUTS true
+ * @run driver/timeout=30 jdk.test.lib.crac.CracTest MIXED true
  */
 public class Test implements CracTest {
 

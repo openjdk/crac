@@ -474,8 +474,9 @@ static int reset_ifunc_iterate_phdr(struct dl_phdr_info *info, size_t size, void
     *relxcount_p = 0;
   }
   unsigned *l_relocated_p = (unsigned *)(((const uint8_t *)map) + l_relocated_offset);
-  assert(*l_relocated_p & ~(1 << l_relocated_bitno));
+  assert(*l_relocated_p & (1 << l_relocated_bitno));
   *l_relocated_p &= ~(1 << l_relocated_bitno);
+  assert(!(*l_relocated_p & (1 << l_relocated_bitno)));
   void **l_scope_p = (void **)(((const uint8_t *)map) + l_scope_offset);
   // FIXME: skip ifuncs
   dl_relocate_object((struct link_map *)map, *l_scope_p, 0/*lazy*/, 0/*consider_profiling*/);

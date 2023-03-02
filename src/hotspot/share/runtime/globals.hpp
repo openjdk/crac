@@ -2100,6 +2100,11 @@ const intx ObjectAlignmentInBytes = 8;
       "-XX:CRaCRestoreFrom and continue initialization if restore is "      \
       "unavailable")                                                        \
                                                                             \
+  product(ccstr, CRaCIgnoredFileDescriptors, NULL, "Comma-separated list "  \
+      "of file descriptor numbers or paths. All file descriptors greater "  \
+      "than 2 (stdin, stdout and stderr are excluded automatically) not "   \
+      "in this list are closed when the VM is started.")                    \
+                                                                            \
   product(bool, CRAllowToSkipCheckpoint, false, DIAGNOSTIC,                 \
           "Allow implementation to not call Checkpoint if helper not found")\
                                                                             \

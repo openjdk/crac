@@ -36,12 +36,13 @@ import java.util.concurrent.CountDownLatch;
  *          if their end time fell on the CRaC pause period
  *          (i.e. between the checkpoint and restore)
  *
- * @run main JoinSleepWaitOnCRPauseTest join_ms
- * @run main JoinSleepWaitOnCRPauseTest join_ns
- * @run main JoinSleepWaitOnCRPauseTest sleep_ms
- * @run main JoinSleepWaitOnCRPauseTest sleep_ns
- * @run main JoinSleepWaitOnCRPauseTest wait_ms
- * @run main JoinSleepWaitOnCRPauseTest wait_ns
+ * @build JoinSleepWaitOnCRPauseTest
+ * @run driver jdk.test.lib.crac.CracTest JoinSleepWaitOnCRPauseTest join_ms
+ * @run driver jdk.test.lib.crac.CracTest JoinSleepWaitOnCRPauseTest join_ns
+ * @run driver jdk.test.lib.crac.CracTest JoinSleepWaitOnCRPauseTest sleep_ms
+ * @run driver jdk.test.lib.crac.CracTest JoinSleepWaitOnCRPauseTest sleep_ns
+ * @run driver jdk.test.lib.crac.CracTest JoinSleepWaitOnCRPauseTest wait_ms
+ * @run driver jdk.test.lib.crac.CracTest JoinSleepWaitOnCRPauseTest wait_ns
  */
 public class JoinSleepWaitOnCRPauseTest implements CracTest {
     private enum TestType {
@@ -63,10 +64,6 @@ public class JoinSleepWaitOnCRPauseTest implements CracTest {
     private volatile long tDone = -1;
 
     private final CountDownLatch checkpointLatch = new CountDownLatch(1);
-
-    public static void main(String[] args) throws Exception {
-        CracTest.run(JoinSleepWaitOnCRPauseTest.class, args);
-    }
 
     @Override
     public void exec() throws Exception {
@@ -168,8 +165,7 @@ public class JoinSleepWaitOnCRPauseTest implements CracTest {
     @Override
     public void test() throws Exception {
         CracBuilder builder = new CracBuilder()
-                .imageDir("cr_" + testType.name())
-                .main(JoinSleepWaitOnCRPauseTest.class).args(CracTest.args());
+                .imageDir("cr_" + testType.name());
         builder.doCheckpoint();
 
         // sleep a few seconds to ensure the task execution time

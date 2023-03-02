@@ -31,17 +31,14 @@ import jdk.test.lib.crac.CracTest;
 /**
  * @test
  * @library /test/lib
- * @run main LeaveRunning
+ * @build LeaveRunning
+ * @run driver jdk.test.lib.crac.CracTest LeaveRunning
  */
 public class LeaveRunning implements CracTest {
-    public static void main(String[] args) throws Exception {
-        CracTest.run(LeaveRunning.class, args);
-    }
-
     @Override
     public void test() throws Exception {
         CracBuilder builder = new CracBuilder().env("CRAC_CRIU_LEAVE_RUNNING", "")
-                .captureOutput(true).main(LeaveRunning.class).args(CracTest.args());
+                .captureOutput(true);
         builder.startCheckpoint().waitForSuccess().outputAnalyzer().shouldContain(RESTORED_MESSAGE);
         builder.doRestore().outputAnalyzer().shouldContain(RESTORED_MESSAGE);
     }

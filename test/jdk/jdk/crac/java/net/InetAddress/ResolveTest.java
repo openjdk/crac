@@ -34,6 +34,7 @@ import jdk.test.lib.process.StreamPumper;
 
 import java.io.IOException;
 import java.io.InputStream;
+import java.lang.reflect.Method;
 import java.net.InetAddress;
 import java.net.UnknownHostException;
 import java.nio.file.Files;
@@ -49,8 +50,8 @@ import java.util.function.Consumer;
  * @summary Test if InetAddress cache is flushed after checkpoint/restore
  * @requires docker.support
  * @library /test/lib
- * @modules java.base/jdk.crac
- * @run main/timeout=360 ResolveTest
+ * @build ResolveTest
+ * @run driver jdk.test.lib.crac.CracTest ResolveTest
  */
 public class ResolveTest implements CracTest {
     private static final String imageName = Common.imageName("inet-address");
@@ -62,10 +63,6 @@ public class ResolveTest implements CracTest {
     @CracTestArg(value = 1, optional = true)
     String checkFile;
 
-    public static void main(String[] args) throws Exception {
-        CracTest.run(ResolveTest.class, args);
-    }
-
     @Override
     public void test() throws Exception {
         if (!DockerTestUtils.canTestDocker()) {
@@ -74,7 +71,7 @@ public class ResolveTest implements CracTest {
         CracBuilder builder = new CracBuilder()
                 .inDockerImage(imageName).dockerOptions("--add-host", TEST_HOSTNAME + ":192.168.12.34")
                 .captureOutput(true)
-                .main(ResolveTest.class).args(CracTest.args(TEST_HOSTNAME, "/second-run"));
+                .args(CracTest.args(TEST_HOSTNAME, "/second-run"));
 
         try {
             CompletableFuture<?> firstOutputFuture = new CompletableFuture<Void>();

@@ -31,21 +31,18 @@ import java.util.concurrent.atomic.AtomicInteger;
  * @test Selector/multipleSelectNow
  * @summary check work of multiple selectNow() + C/R peaceful coexistence
  * @library /test/lib
- * @run main Test false
- * @run main Test true
+ * @build Test
+ * @run driver jdk.test.lib.crac.CracTest Test false
+ * @run driver jdk.test.lib.crac.CracTest Test true
  */
 public class Test implements CracTest {
 
     @CracTestArg
     boolean skipCR;
 
-    public static void main(String[] args) throws Exception {
-        CracTest.run(Test.class, args);
-    }
-
     @Override
     public void test() throws Exception {
-        CracBuilder builder = new CracBuilder().main(Test.class).args(CracTest.args());
+        CracBuilder builder = new CracBuilder();
         if (skipCR) {
             builder.doPlain();
         } else {

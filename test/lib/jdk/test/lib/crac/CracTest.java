@@ -3,6 +3,7 @@ package jdk.test.lib.crac;
 import jdk.crac.Core;
 
 import java.lang.reflect.*;
+import java.util.Arrays;
 import java.util.Comparator;
 import java.util.stream.Stream;
 
@@ -12,11 +13,12 @@ import static jdk.test.lib.Asserts.*;
  * CRaC tests usually consists of two parts; the test started by JTreg through the 'run' tag
  * and subprocesses started by the test with various VM options. These are represented by the
  * {@link #test()} and {@link #exec()} methods.
- * As a convention the static main method invokes {@link #run(Class, String[]) CracTest.run(self.class, args)}
- * passing all arguments; this method instantiates the test (public no-arg constructor is needed),
- * populates fields annotated with {@link CracTestArg} and executes the {@link #test()} method.
- * The test method is expected to use {@link CracBuilder} to start another process using the same class
- * for {@link CracBuilder#main(Class)} and {@link #args()} for {@link CracBuilder#args(String...)}.
+ * CracTest use '@run driver jdk.test.crac.lib.CracTest MyTest' as the executable command;
+ * the main method in this class instantiates the test (public no-arg constructor is needed)
+ * and populates fields annotated with {@link CracTestArg} and executes the {@link #test()} method.
+ * The test method is expected to use {@link CracBuilder} to start another process. By default,
+ * CracBuilder invokes the test with arguments that will again instantiate and fill the instance
+ * and invoke the {@link #exec()} method.
  */
 public interface CracTest {
 
@@ -40,7 +42,32 @@ public interface CracTest {
 
     class ArgsHolder {
         private static final String RUN_TEST = "__run_test__";
+        private static Class<? extends CracTest> testClass;
         private static String[] args;
+        // This field is present as workaround for @build <test> somehow missing
+        // the annotation when
+        private static final Class<CracTestArg> dummyField = CracTestArg.class;
+    }
+
+    static void main(String[] args) throws Exception {
+        if (args.length == 0) {
+            throw new IllegalArgumentException("No main class set!");
+        }
+        // When we use CracTest as driver the file with test is not compiled without a @build tag.
+        // We could compile the class here and load it from a new classloader but since the test library
+        // is not compiled completely we could be missing some dependencies - this would be just too fragile.
+        Class<?> testClass;
+        try {
+            testClass = Class.forName(args[0]);
+        } catch (ClassNotFoundException e) {
+            throw new ClassNotFoundException("Test class not found, add jtreg tag @build " + args[0], e);
+        }
+        if (CracTest.class.isAssignableFrom(testClass)) {
+            //noinspection unchecked
+            run((Class<? extends CracTest>) testClass, Arrays.copyOfRange(args, 1, args.length));
+        } else {
+            throw new IllegalArgumentException("Class " + testClass.getName() + " does not implement CracTest!");
+        }
     }
 
     /**
@@ -51,11 +78,13 @@ public interface CracTest {
      */
     static void run(Class<? extends CracTest> testClass, String[] args) throws Exception {
         assertNotNull(args);
+        ArgsHolder.testClass = testClass;
         int argsOffset = 0;
         if (args.length == 0 || !args[0].equals(ArgsHolder.RUN_TEST)) {
-            String[] newArgs = new String[args.length + 1];
-            newArgs[0] = ArgsHolder.RUN_TEST;
-            System.arraycopy(args, 0, newArgs, 1, args.length);
+            String[] newArgs = new String[args.length + 2];
+            newArgs[0] = testClass.getName();
+            newArgs[1] = ArgsHolder.RUN_TEST;
+            System.arraycopy(args, 0, newArgs, 2, args.length);
             ArgsHolder.args = newArgs;
         } else {
             argsOffset = 1;
@@ -79,7 +108,7 @@ public interface CracTest {
                 String arg = args[index + argsOffset];
                 Object value = arg;
                 if (t == boolean.class || t == Boolean.class) {
-                    assertTrue("true".equals(arg) || "false".equals(arg), "Boolean arg should be either 'true' or 'false', was: " + arg);
+                    assertTrue("true".equals(arg) || "false".equals(arg), "Argument " + index + "Boolean arg should be either 'true' or 'false', was: " + arg);
                     value = Boolean.parseBoolean(arg);
                 } else if (t == int.class || t == Integer.class) {
                     try {
@@ -149,6 +178,10 @@ public interface CracTest {
         } else {
             return Stream.concat(Stream.of(ArgsHolder.args), Stream.of(extraArgs)).toArray(String[]::new);
         }
+    }
+
+    static Class<? extends CracTest> testClass() {
+        return ArgsHolder.testClass;
     }
 }
 

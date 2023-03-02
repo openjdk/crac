@@ -32,19 +32,15 @@ import jdk.test.lib.crac.CracTest;
 /**
  * @test
  * @library /test/lib
- * @run main RefQueueTest
+ * @build RefQueueTest
+ * @run driver jdk.test.lib.crac.CracTest RefQueueTest
  */
 public class RefQueueTest implements CracTest {
     private static final Cleaner cleaner = Cleaner.create();
 
-    public static void main(String[] args) throws Exception {
-        CracTest.run(RefQueueTest.class, args);
-    }
-
     @Override
     public void test() throws Exception {
         new CracBuilder().engine(CracEngine.SIMULATE)
-                .main(RefQueueTest.class).args(CracTest.args())
                 .startCheckpoint().waitForSuccess();
     }
 

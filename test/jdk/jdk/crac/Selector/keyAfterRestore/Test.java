@@ -30,20 +30,17 @@ import jdk.test.lib.crac.CracTestArg;
  * @summary a trivial test for SelectionKey's state after restore
  * @library /test/lib
  * @build ChannelResource
- * @run main/timeout=30 Test true
- * @run main/timeout=30 Test false
+ * @build Test
+ * @run driver/timeout=30 jdk.test.lib.crac.CracTest Test true
+ * @run driver/timeout=30 jdk.test.lib.crac.CracTest Test false
  */
 public class Test implements CracTest {
     @CracTestArg
     boolean openSelectorAtFirst;
 
-    public static void main(String[] args) throws Exception {
-        CracTest.run(Test.class, args);
-    }
-
     @Override
     public void test() throws Exception {
-        new CracBuilder().main(Test.class).args(CracTest.args()).doCheckpointAndRestore();
+        new CracBuilder().doCheckpointAndRestore();
     }
 
     @Override

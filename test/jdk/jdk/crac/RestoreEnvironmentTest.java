@@ -30,7 +30,8 @@ import java.io.IOException;
  * @test RestoreEnvironmentTest
  * @summary the test checks that actual environment variables are propagated into a restored process.
  * @library /test/lib
- * @run main/timeout=120 RestoreEnvironmentTest
+ * @build RestoreEnvironmentTest
+ * @run driver/timeout=120 jdk.test.lib.crac.CracTest RestoreEnvironmentTest
  */
 public class RestoreEnvironmentTest implements CracTest {
     static final String TEST_VAR_NAME = "RESTORE_ENVIRONMENT_TEST_VAR";
@@ -39,14 +40,9 @@ public class RestoreEnvironmentTest implements CracTest {
     static final String NEW_VALUE = "NewValue";
     public static final String PREFIX = "(after restore) ";
 
-    public static void main(String[] args) throws Exception {
-        CracTest.run(RestoreEnvironmentTest.class, args);
-    }
-
     @Override
     public void test() throws Exception {
         CracBuilder builder = new CracBuilder().captureOutput(true)
-                .main(RestoreEnvironmentTest.class).args(CracTest.args())
                 .env(TEST_VAR_NAME + 0, BEFORE_CHECKPOINT)
                 .env(TEST_VAR_NAME + 1, BEFORE_CHECKPOINT);
         builder.doCheckpoint();

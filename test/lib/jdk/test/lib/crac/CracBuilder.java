@@ -3,7 +3,6 @@ package jdk.test.lib.crac;
 import jdk.test.lib.Container;
 import jdk.test.lib.Utils;
 import jdk.test.lib.containers.docker.DockerTestUtils;
-import jdk.test.lib.process.ProcessTools;
 import jdk.test.lib.util.FileUtils;
 
 import java.io.File;
@@ -20,6 +19,13 @@ public class CracBuilder {
     public static final String DOCKER_JAVA = "/jdk/bin/java";
     private static final List<String> CRIU_CANDIDATES = Arrays.asList(Utils.TEST_JDK + "/lib/criu", "/usr/sbin/criu", "/sbin/criu");
     private static final String CRIU_PATH;
+
+    // This dummy field is here as workaround for (possibly) a JTReg bug;
+    // some tests don't build CracTestArg into their Test.d/ directory
+    // (not all classes from /test/lib are built!) and the tests would fail.
+    // This does not always happen when the test is run individually but breaks
+    // when the whole suite is executed.
+    private static final Class<CracTestArg> dummyWorkaround = CracTestArg.class;
 
     boolean verbose = true;
     final List<String> classpathEntries = new ArrayList<>();
@@ -93,10 +99,18 @@ public class CracBuilder {
         return this;
     }
 
+    public Class<?> main() {
+        return main != null ? main : CracTest.class;
+    }
+
     public CracBuilder args(String... args) {
         assertNull(this.args); // set once
         this.args = args;
         return this;
+    }
+
+    public String[] args() {
+        return args != null ? args : CracTest.args();
     }
 
     public CracBuilder captureOutput(boolean captureOutput) {
@@ -128,10 +142,8 @@ public class CracBuilder {
         ensureContainerStarted();
         List<String> cmd = prepareCommand(javaPrefix);
         cmd.add("-XX:CRaCCheckpointTo=" + imageDir);
-        cmd.add(main.getName());
-        if (args != null) {
-            cmd.addAll(Arrays.asList(args));
-        }
+        cmd.add(main().getName());
+        cmd.addAll(Arrays.asList(args()));
         if (verbose) {
             System.err.println("Starting process to be checkpointed:");
             System.err.println(String.join(" ", cmd));
@@ -220,10 +232,8 @@ public class CracBuilder {
         cmd.add("-ea");
         cmd.add("-cp");
         cmd.add(getClassPath());
-        cmd.add(main.getName());
-        if (args != null) {
-            cmd.addAll(Arrays.asList(args));
-        }
+        cmd.add(main().getName());
+        cmd.addAll(Arrays.asList(args()));
         if (verbose) {
             System.err.println("Starting process without CRaC:");
             System.err.println(String.join(" ", cmd));
@@ -280,7 +290,7 @@ public class CracBuilder {
         } else {
             cmd.add(Utils.TEST_JDK + "/bin/jcmd");
         }
-        cmd.addAll(Arrays.asList(main.getName(), "JDK.checkpoint"));
+        cmd.addAll(Arrays.asList(main().getName(), "JDK.checkpoint"));
         // This works for non-docker commands, too
         DockerTestUtils.execute(cmd).shouldHaveExitValue(0);
     }

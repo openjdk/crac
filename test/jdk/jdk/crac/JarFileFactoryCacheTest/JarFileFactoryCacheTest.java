@@ -35,17 +35,13 @@ import java.nio.file.Path;
 /**
  * @test JarFileFactoryCacheTest
  * @library /test/lib
- * @run main JarFileFactoryCacheTest
+ * @build JarFileFactoryCacheTest
+ * @run driver jdk.test.lib.crac.CracTest JarFileFactoryCacheTest
  */
 public class JarFileFactoryCacheTest implements CracTest {
-    public static void main(String[] args) throws Exception {
-        CracTest.run(JarFileFactoryCacheTest.class, args);
-    }
-
     @Override
     public void test() throws Exception {
         new CracBuilder().engine(CracEngine.SIMULATE).printResources(true)
-                .main(JarFileFactoryCacheTest.class).args(CracTest.args())
                 .startCheckpoint().waitForSuccess();
     }
 

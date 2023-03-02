@@ -29,7 +29,8 @@ import java.io.IOException;
  * @summary check that the Selector selected before the checkpoint,
  *          will wake up by timeout after the restore
  * @library /test/lib
- * @run main Test
+ * @build Test
+ * @run driver jdk.test.lib.crac.CracTest Test
  */
 public class Test implements CracTest {
 
@@ -37,13 +38,9 @@ public class Test implements CracTest {
 
     static boolean awakened = false;
 
-    public static void main(String[] args) throws Exception {
-        CracTest.run(Test.class, args);
-    }
-
     @Override
     public void test() throws Exception {
-        new CracBuilder().main(Test.class).args(CracTest.args()).doCheckpointAndRestore();
+        new CracBuilder().doCheckpointAndRestore();
     }
 
     @Override

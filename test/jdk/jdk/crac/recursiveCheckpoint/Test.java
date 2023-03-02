@@ -27,7 +27,8 @@ import java.util.concurrent.atomic.AtomicInteger;
  * @test
  * @summary check that the recursive checkpoint is not allowed
  * @library /test/lib
- * @run main/timeout=60 Test 10
+ * @build Test
+ * @run driver/timeout=60 jdk.test.lib.crac.CracTest Test 10
  */
 public class Test implements Resource, CracTest {
     private static final AtomicInteger counter = new AtomicInteger(0);
@@ -36,13 +37,9 @@ public class Test implements Resource, CracTest {
     @CracTestArg
     int numThreads;
 
-    public static void main(String[] args) throws Exception {
-        CracTest.run(Test.class, args);
-    }
-
     @Override
     public void test() throws Exception {
-        CracBuilder builder = new CracBuilder().engine(CracEngine.PAUSE).main(Test.class).args(CracTest.args());
+        CracBuilder builder = new CracBuilder().engine(CracEngine.PAUSE);
         CracProcess process = builder.startCheckpoint();
         process.waitForPausePid();
         for (int i = 1; i <= numThreads + 1; ++i) {

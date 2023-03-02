@@ -29,12 +29,13 @@ import java.io.IOException;
  * @test Selector/interruptedSelection
  * @summary check that the thread blocked by Selector.select() could be properly woken up by an interruption
  * @library /test/lib
- * @run main/timeout=30 Test true  true  false
- * @run main/timeout=30 Test true  false false
- * @run main/timeout=30 Test false true  false
- * @run main/timeout=30 Test false false false
- * @run main/timeout=30 Test true  true  true
- * @run main/timeout=30 Test false true  true
+ * @build Test
+ * @run driver/timeout=30 jdk.test.lib.crac.CracTest Test true  true  false
+ * @run driver/timeout=30 jdk.test.lib.crac.CracTest Test true  false false
+ * @run driver/timeout=30 jdk.test.lib.crac.CracTest Test false true  false
+ * @run driver/timeout=30 jdk.test.lib.crac.CracTest Test false false false
+ * @run driver/timeout=30 jdk.test.lib.crac.CracTest Test true  true  true
+ * @run driver/timeout=30 jdk.test.lib.crac.CracTest Test false true  true
  */
 public class Test implements CracTest {
     @CracTestArg(0)
@@ -46,13 +47,9 @@ public class Test implements CracTest {
     @CracTestArg(2)
     boolean skipCR;
 
-    public static void main(String[] args) throws Exception {
-        CracTest.run(Test.class, args);
-    }
-
     @Override
     public void test() throws Exception {
-        CracBuilder builder = new CracBuilder().main(Test.class).args(CracTest.args());
+        CracBuilder builder = new CracBuilder();
         if (skipCR) {
             builder.doPlain();
         } else {

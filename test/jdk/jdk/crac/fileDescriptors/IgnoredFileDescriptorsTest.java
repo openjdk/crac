@@ -38,14 +38,11 @@ import java.util.stream.Collectors;
 /**
  * @test
  * @library /test/lib
- * @run main IgnoredFileDescriptorsTest
+ * @build IgnoredFileDescriptorsTest
+ * @run driver jdk.test.lib.crac.CracTest IgnoredFileDescriptorsTest
  */
 public class IgnoredFileDescriptorsTest implements CracTest {
     private static final String EXTRA_FD_WRAPPER = Path.of(Utils.TEST_SRC, "extra_fd_wrapper.sh").toString();
-
-    public static void main(String[] args) throws Throwable {
-        CracTest.run(IgnoredFileDescriptorsTest.class, args);
-    }
 
     @Override
     public void test() throws Exception {
@@ -56,7 +53,7 @@ public class IgnoredFileDescriptorsTest implements CracTest {
         prefix.add(CracBuilder.JAVA);
         prefix.add("-XX:CRaCIgnoredFileDescriptors=43,/dev/null,44,/dev/urandom");
 
-        CracBuilder builder = new CracBuilder().main(IgnoredFileDescriptorsTest.class).args(CracTest.args());
+        CracBuilder builder = new CracBuilder();
         builder.startCheckpoint(prefix).waitForCheckpointed();
         builder.captureOutput(true).doRestore().outputAnalyzer().shouldContain(RESTORED_MESSAGE);
     }

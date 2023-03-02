@@ -33,7 +33,8 @@ import jdk.test.lib.crac.CracTest;
 /**
  * @test DryRunTest
  * @library /test/lib
- * @run main DryRunTest
+ * @build DryRunTest
+ * @run driver jdk.test.lib.crac.CracTest DryRunTest
  */
 public class DryRunTest implements CracTest {
     static class CRResource implements Resource {
@@ -47,14 +48,9 @@ public class DryRunTest implements CracTest {
         }
     }
 
-    public static void main(String[] args) throws Exception {
-        CracTest.run(DryRunTest.class, args);
-    }
-
     @Override
     public void test() throws Exception {
         new CracBuilder().engine(CracEngine.SIMULATE).printResources(true)
-                .main(DryRunTest.class).args(CracTest.args())
                 .startCheckpoint().waitForSuccess();
     }
 

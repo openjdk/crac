@@ -40,14 +40,11 @@ import static jdk.test.lib.Asserts.assertLT;
 /**
  * @test
  * @library /test/lib
- * @run main MXBean
+ * @build MXBean
+ * @run driver jdk.test.lib.crac.CracTest MXBean
  */
 public class MXBean implements CracTest {
     static final long TIME_TOLERANCE = 10_000; // ms
-
-    public static void main(String[] args) throws Exception {
-        CracTest.run(MXBean.class, args);
-    }
 
     @Override
     public void exec() throws CheckpointException, RestoreException {
@@ -69,7 +66,6 @@ public class MXBean implements CracTest {
         long start = System.currentTimeMillis();
 
         OutputAnalyzer output = new CracBuilder().engine(CracEngine.SIMULATE)
-                .main(MXBean.class).args(CracTest.args())
                 .captureOutput(true)
                 .startCheckpoint().waitForSuccess().outputAnalyzer();
 

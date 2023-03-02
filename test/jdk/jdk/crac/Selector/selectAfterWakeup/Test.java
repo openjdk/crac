@@ -31,12 +31,13 @@ import java.nio.channels.Selector;
  *          (see also jdk/test/java/nio/channels/Selector/WakeupSpeed.java);
  *          covers ZE-983
  * @library /test/lib
- * @run main Test true  false false
- * @run main Test true  false true
- * @run main Test true  true  false
- * @run main Test true  true  true
- * @run main Test false true  false
- * @run main Test false true  true
+ * @build Test
+ * @run driver jdk.test.lib.crac.CracTest Test true  false false
+ * @run driver jdk.test.lib.crac.CracTest Test true  false true
+ * @run driver jdk.test.lib.crac.CracTest Test true  true  false
+ * @run driver jdk.test.lib.crac.CracTest Test true  true  true
+ * @run driver jdk.test.lib.crac.CracTest Test false true  false
+ * @run driver jdk.test.lib.crac.CracTest Test false true  true
  */
 public class Test implements CracTest {
     @CracTestArg(0)
@@ -48,13 +49,9 @@ public class Test implements CracTest {
     @CracTestArg(2)
     boolean setSelectTimeout;
 
-    public static void main(String[] args) throws Exception {
-        CracTest.run(Test.class, args);
-    }
-
     @Override
     public void test() throws Exception {
-        new CracBuilder().main(Test.class).args(CracTest.args()).doCheckpointAndRestore();
+        new CracBuilder().doCheckpointAndRestore();
     }
 
     @Override

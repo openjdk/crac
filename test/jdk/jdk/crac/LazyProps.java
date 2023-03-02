@@ -29,16 +29,13 @@ import jdk.test.lib.crac.CracTest;
 /**
  * @test
  * @library /test/lib
- * @run main LazyProps
+ * @build LazyProps
+ * @run driver jdk.test.lib.crac.CracTest LazyProps
  */
 public class LazyProps implements CracTest {
-    public static void main(String[] args) throws Exception {
-        CracTest.run(LazyProps.class, args);
-    }
-
     @Override
     public void test() throws Exception {
-        new CracBuilder().engine(CracEngine.SIMULATE).main(LazyProps.class).args(CracTest.args())
+        new CracBuilder().engine(CracEngine.SIMULATE)
                 .captureOutput(true)
                 .startCheckpoint().waitForSuccess()
                 .outputAnalyzer().shouldContain("jdk.crac beforeCheckpoint");

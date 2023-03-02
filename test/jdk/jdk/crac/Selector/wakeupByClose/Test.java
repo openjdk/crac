@@ -29,10 +29,11 @@ import java.io.IOException;
  * @test Selector/wakeupByClose
  * @summary check that the Selector's close() wakes it up after restore
  * @library /test/lib
- * @run main Test true  false
- * @run main Test false false
- * @run main Test true  true
- * @run main Test false true
+ * @build Test
+ * @run driver jdk.test.lib.crac.CracTest Test true  false
+ * @run driver jdk.test.lib.crac.CracTest Test false false
+ * @run driver jdk.test.lib.crac.CracTest Test true  true
+ * @run driver jdk.test.lib.crac.CracTest Test false true
  */
 public class Test implements CracTest {
 
@@ -44,13 +45,9 @@ public class Test implements CracTest {
     @CracTestArg(1)
     boolean skipCR;
 
-    public static void main(String[] args) throws Exception {
-        CracTest.run(Test.class, args);
-    }
-
     @Override
     public void test() throws Exception {
-        CracBuilder builder = new CracBuilder().main(Test.class).args(CracTest.args());
+        CracBuilder builder = new CracBuilder();
         if (skipCR) {
             builder.doPlain();
         } else {

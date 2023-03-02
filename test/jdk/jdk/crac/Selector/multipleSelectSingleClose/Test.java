@@ -33,9 +33,10 @@ import java.util.concurrent.atomic.AtomicInteger;
  * @test Selector/multipleSelectSingleClose
  * @summary check a coexistence of multiple select() + C/R in case when the selector is finally closed
  * @library /test/lib
- * @run main Test false false
- * @run main Test false true
- * @run main Test true  true
+ * @build Test
+ * @run driver jdk.test.lib.crac.CracTest Test false false
+ * @run driver jdk.test.lib.crac.CracTest Test false true
+ * @run driver jdk.test.lib.crac.CracTest Test true  true
  */
 public class Test implements CracTest {
     private final static Random RND = new Random();
@@ -46,13 +47,9 @@ public class Test implements CracTest {
     @CracTestArg(1)
     boolean closeBeforeCheckpoint;
 
-    public static void main(String[] args) throws Exception {
-        CracTest.run(Test.class, args);
-    }
-
     @Override
     public void test() throws Exception {
-        CracBuilder builder = new CracBuilder().main(Test.class).args(CracTest.args());
+        CracBuilder builder = new CracBuilder();
         if (skipCR) {
             builder.doPlain();
         } else {

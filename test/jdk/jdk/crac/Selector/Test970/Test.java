@@ -31,12 +31,13 @@ import jdk.test.lib.crac.CracTestArg;
  *          is locked depending on mutual order of selector and channel creation")
  * @library /test/lib
  * @build ChannelResource
- * @run main Test SELECT_NOW true
- * @run main Test SELECT_NOW false
- * @run main Test SELECT true
- * @run main Test SELECT false
- * @run main Test SELECT_TIMEOUT true
- * @run main Test SELECT_TIMEOUT false
+ * @build Test
+ * @run driver jdk.test.lib.crac.CracTest Test SELECT_NOW true
+ * @run driver jdk.test.lib.crac.CracTest Test SELECT_NOW false
+ * @run driver jdk.test.lib.crac.CracTest Test SELECT true
+ * @run driver jdk.test.lib.crac.CracTest Test SELECT false
+ * @run driver jdk.test.lib.crac.CracTest Test SELECT_TIMEOUT true
+ * @run driver jdk.test.lib.crac.CracTest Test SELECT_TIMEOUT false
  */
 public class Test implements CracTest {
     @CracTestArg(0)
@@ -45,13 +46,9 @@ public class Test implements CracTest {
     @CracTestArg(1)
     boolean openSelectorAtFirst;
 
-    public static void main(String[] args) throws Exception {
-        CracTest.run(Test.class, args);
-    }
-
     @Override
     public void test() throws Exception {
-        new CracBuilder().main(Test.class).args(CracTest.args()).doCheckpointAndRestore();
+        new CracBuilder().doCheckpointAndRestore();
     }
 
     @Override

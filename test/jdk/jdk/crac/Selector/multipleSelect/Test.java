@@ -32,12 +32,13 @@ import java.util.concurrent.atomic.AtomicInteger;
  * @test Selector/multipleSelect
  * @summary check work of multiple select() + wakeup() + C/R
  * @library /test/lib
- * @run main/timeout=30 Test ONLY_TIMEOUTS false
- * @run main/timeout=30 Test NO_TIMEOUTS false
- * @run main/timeout=30 Test MIXED false
- * @run main/timeout=30 Test ONLY_TIMEOUTS true
- * @run main/timeout=30 Test NO_TIMEOUTS true
- * @run main/timeout=30 Test MIXED true
+ * @build Test
+ * @run driver/timeout=30 jdk.test.lib.crac.CracTest Test ONLY_TIMEOUTS false
+ * @run driver/timeout=30 jdk.test.lib.crac.CracTest Test NO_TIMEOUTS false
+ * @run driver/timeout=30 jdk.test.lib.crac.CracTest Test MIXED false
+ * @run driver/timeout=30 jdk.test.lib.crac.CracTest Test ONLY_TIMEOUTS true
+ * @run driver/timeout=30 jdk.test.lib.crac.CracTest Test NO_TIMEOUTS true
+ * @run driver/timeout=30 jdk.test.lib.crac.CracTest Test MIXED true
  */
 public class Test implements CracTest {
 
@@ -57,13 +58,9 @@ public class Test implements CracTest {
     @CracTestArg(1)
     boolean skipCR;
 
-    public static void main(String[] args) throws Exception {
-        CracTest.run(Test.class, args);
-    }
-
     @Override
     public void test() throws Exception {
-        CracBuilder builder = new CracBuilder().main(Test.class).args(CracTest.args());
+        CracBuilder builder = new CracBuilder();
         if (skipCR) {
             builder.doPlain();
         } else {

@@ -28,16 +28,13 @@ import java.nio.channels.Selector;
  * @test Selector/selectAndWakeupAfterRestore
  * @summary a trivial check that Selector.wakeup() after restore behaves as expected
  * @library /test/lib
- * @run main Test
+ * @build Test
+ * @run driver jdk.test.lib.crac.CracTest Test
  */
 public class Test implements CracTest {
-    public static void main(String[] args) throws Exception {
-        CracTest.run(Test.class, args);
-    }
-
     @Override
     public void test() throws Exception {
-        new CracBuilder().main(Test.class).args(CracTest.args()).doCheckpointAndRestore();
+        new CracBuilder().doCheckpointAndRestore();
     }
 
     private static void selectAndWakeup(Selector selector) throws java.io.IOException {

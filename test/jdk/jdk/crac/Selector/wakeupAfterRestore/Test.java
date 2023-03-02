@@ -29,8 +29,9 @@ import java.io.IOException;
  * @test Selector/wakeupAfterRestore
  * @summary check that the thread blocked by Selector.select() on checkpoint could be properly woken up after restore
  * @library /test/lib
- * @run main Test true
- * @run main Test false
+ * @build Test
+ * @run driver jdk.test.lib.crac.CracTest Test true
+ * @run driver jdk.test.lib.crac.CracTest Test false
  */
 public class Test implements CracTest {
 
@@ -41,13 +42,9 @@ public class Test implements CracTest {
     @CracTestArg
     boolean setTimeout;
 
-    public static void main(String[] args) throws Exception {
-        CracTest.run(Test.class, args);
-    }
-
     @Override
     public void test() throws Exception {
-        new CracBuilder().main(Test.class).args(CracTest.args()).doCheckpointAndRestore();
+        new CracBuilder().doCheckpointAndRestore();
     }
 
     @Override

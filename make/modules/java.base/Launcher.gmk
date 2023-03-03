@@ -146,6 +146,16 @@ ifeq ($(call isTargetOs, macosx linux windows), true)
   ))
   TARGETS += $(BUILD_SIMENGINE)
 
+  ifneq ($(USE_CRIU_CRAC),)
+
+    CRIU_CRAC_BIN := $(SUPPORT_OUTPUTDIR)/modules_libs/$(MODULE)/criu
+    TARGETS += $(CRIU_CRAC_BIN)
+
+$(CRIU_CRAC_BIN) : $(USE_CRIU_CRAC)
+	$(call MakeTargetDir)
+	$(CP) $(USE_CRIU_CRAC) $(CRIU_CRAC_BIN)
+
+  endif
 endif
 
 ################################################################################

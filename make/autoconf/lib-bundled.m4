@@ -41,6 +41,7 @@ AC_DEFUN_ONCE([LIB_SETUP_BUNDLED_LIBS],
   LIB_SETUP_ZLIB
   LIB_SETUP_LCMS
   LIB_SETUP_HARFBUZZ
+  LIB_SETUP_CRIU_CRAC
 ])
 
 ################################################################################
@@ -312,4 +313,22 @@ AC_DEFUN_ONCE([LIB_SETUP_HARFBUZZ],
   AC_SUBST(USE_EXTERNAL_HARFBUZZ)
   AC_SUBST(HARFBUZZ_CFLAGS)
   AC_SUBST(HARFBUZZ_LIBS)
+])
+
+AC_DEFUN_ONCE([LIB_SETUP_CRIU_CRAC],
+[
+  AC_ARG_WITH(criu-crac, [AS_HELP_STRING([--with-criu-crac],
+      [use specified criu binary for CRaC implementation])])
+
+  AC_MSG_CHECKING([for criu-crac])
+
+  USE_CRIU_CRAC=
+  if test -f "${with_criu_crac}"; then
+    USE_CRIU_CRAC="${with_criu_crac}"
+    AC_MSG_RESULT([exists])
+  else
+    AC_MSG_RESULT([none])
+  fi
+
+  AC_SUBST(USE_CRIU_CRAC)
 ])

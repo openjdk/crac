@@ -111,7 +111,7 @@ jobs:
       fail-fast: false
       matrix:
         flavor:
-#          - build release
+          - build release
           - build debug
         include:
           - flavor: build debug
@@ -213,43 +213,43 @@ jobs:
       fail-fast: false
       matrix:
         test:
-#          - jdk/tier1 part 1
-#          - jdk/tier1 part 2
-#          - jdk/tier1 part 3
+          - jdk/tier1 part 1
+          - jdk/tier1 part 2
+          - jdk/tier1 part 3
           - jdk/crac
-#          - langtools/tier1
-#          - hs/tier1 common
-#          - hs/tier1 compiler
-#          - hs/tier1 gc
-#          - hs/tier1 runtime
-#          - hs/tier1 serviceability
+          - langtools/tier1
+          - hs/tier1 common
+          - hs/tier1 compiler
+          - hs/tier1 gc
+          - hs/tier1 runtime
+          - hs/tier1 serviceability
         include:
-#          - test: jdk/tier1 part 1
-#            suites: test/jdk/:tier1_part1
-#          - test: jdk/tier1 part 2
-#            suites: test/jdk/:tier1_part2
-#          - test: jdk/tier1 part 3
-#            suites: test/jdk/:tier1_part3
+          - test: jdk/tier1 part 1
+            suites: test/jdk/:tier1_part1
+          - test: jdk/tier1 part 2
+            suites: test/jdk/:tier1_part2
+          - test: jdk/tier1 part 3
+            suites: test/jdk/:tier1_part3
           - test: jdk/crac
             suites: test/jdk/jdk/crac
             artifact: -debug
-#          - test: langtools/tier1
-#            suites: test/langtools/:tier1
-#          - test: hs/tier1 common
-#            suites: test/hotspot/jtreg/:tier1_common
-#            artifact: -debug
-#          - test: hs/tier1 compiler
-#            suites: test/hotspot/jtreg/:tier1_compiler
-#            artifact: -debug
-#          - test: hs/tier1 gc
-#            suites: test/hotspot/jtreg/:tier1_gc
-#            artifact: -debug
-#          - test: hs/tier1 runtime
-#            suites: test/hotspot/jtreg/:tier1_runtime
-#            artifact: -debug
-#          - test: hs/tier1 serviceability
-#            suites: test/hotspot/jtreg/:tier1_serviceability
-#            artifact: -debug
+          - test: langtools/tier1
+            suites: test/langtools/:tier1
+          - test: hs/tier1 common
+            suites: test/hotspot/jtreg/:tier1_common
+            artifact: -debug
+          - test: hs/tier1 compiler
+            suites: test/hotspot/jtreg/:tier1_compiler
+            artifact: -debug
+          - test: hs/tier1 gc
+            suites: test/hotspot/jtreg/:tier1_gc
+            artifact: -debug
+          - test: hs/tier1 runtime
+            suites: test/hotspot/jtreg/:tier1_runtime
+            artifact: -debug
+          - test: hs/tier1 serviceability
+            suites: test/hotspot/jtreg/:tier1_serviceability
+            artifact: -debug
 
     env:
       JDK_VERSION: "${{ fromJson(needs.prerequisites.outputs.dependencies).DEFAULT_VERSION_FEATURE }}"

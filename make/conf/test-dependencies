@@ -34,6 +34,10 @@ LINUX_X64_BOOT_JDK_FILENAME=openjdk-16_linux-x64_bin.tar.gz
 LINUX_X64_BOOT_JDK_URL=https://download.java.net/java/GA/jdk16/7863447f0ab643c585b9bdebf67c69db/36/GPL/openjdk-16_linux-x64_bin.tar.gz
 LINUX_X64_BOOT_JDK_SHA256=e952958f16797ad7dc7cd8b724edd69ec7e0e0434537d80d6b5165193e33b931
 
+LINUX_X64_CRIU_FILENAME=criu-dist-tar.gz
+LINUX_X64_CRIU_URL=https://github.com/CRaC/criu/releases/download/release-crac/criu-dist.tar.gz
+LINUX_X64_CRIU_SHA256=d2cee868ccf81b49328e4a32ff929599f639a28b5ef7a71a0c80f8c8c452d89d
+
 WINDOWS_X64_BOOT_JDK_FILENAME=openjdk-16_windows-x64_bin.zip
 WINDOWS_X64_BOOT_JDK_URL=https://download.java.net/java/GA/jdk16/7863447f0ab643c585b9bdebf67c69db/36/GPL/openjdk-16_windows-x64_bin.zip
 WINDOWS_X64_BOOT_JDK_SHA256=a78bdeaad186297601edac6772d931224d7af6f682a43372e693c37020bd37d6

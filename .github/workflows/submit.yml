@@ -240,7 +240,7 @@ jobs:
 #          - test: hs/tier1 compiler
 #            suites: test/hotspot/jtreg/:tier1_compiler
 #            artifact: -debug
-#          - test: hs/tier1 gc  
+#          - test: hs/tier1 gc
 #            suites: test/hotspot/jtreg/:tier1_gc
 #            artifact: -debug
 #          - test: hs/tier1 runtime
@@ -256,6 +256,9 @@ jobs:
       BOOT_JDK_FILENAME: "${{ fromJson(needs.prerequisites.outputs.dependencies).LINUX_X64_BOOT_JDK_FILENAME }}"
       BOOT_JDK_URL: "${{ fromJson(needs.prerequisites.outputs.dependencies).LINUX_X64_BOOT_JDK_URL }}"
       BOOT_JDK_SHA256: "${{ fromJson(needs.prerequisites.outputs.dependencies).LINUX_X64_BOOT_JDK_SHA256 }}"
+      CRIU_FILENAME: "${{ fromJson(needs.prerequisites.outputs.dependencies).LINUX_X64_CRIU_FILENAME }}"
+      CRIU_URL: "${{ fromJson(needs.prerequisites.outputs.dependencies).LINUX_X64_CRIU_URL }}"
+      CRIU_SHA: "${{ fromJson(needs.prerequisites.outputs.dependencies).LINUX_X64_CRIU_SHA }}"
 
     steps:
       - name: Checkout the source
@@ -276,6 +279,22 @@ jobs:
           tar -xf "${HOME}/bootjdk/${BOOT_JDK_FILENAME}" -C "${HOME}/bootjdk/${BOOT_JDK_VERSION}"
           mv "${HOME}/bootjdk/${BOOT_JDK_VERSION}/"*/* "${HOME}/bootjdk/${BOOT_JDK_VERSION}/"
         if: steps.bootjdk.outputs.cache-hit != 'true'
+
+      - name: Restore CRIU from cache
+        id: criu
+        uses: actions/cache@v3
+        with:
+          path: ~/criu/criu
+          key: criu-${{ runner.os }}-${{ env.CRIU_SHA256 }}
+
+      - name: Download CRIU
+        run: |
+          mkdir -p "${HOME}/criu"
+          wget -O "${HOME}/criu/${CRIU_FILENAME}" "${CRIU_URL}"
+          echo "${CRIU_SHA256} ${HOME}/${CRIU_FILENAME}" | sha256sum -c >/dev/null -
+          tar -xf "${HOME}/criu/${CRIU_FILENAME}" -C "${HOME}/criu"
+          mv "${HOME}/criu/criu-dist/sbin/criu" "${HOME}/criu/criu"
+        if: steps.criu.outputs.cache-hit != 'true'
 
       - name: Restore jtreg artifact
         id: jtreg_restore
@@ -321,6 +340,14 @@ jobs:
         run: |
           imageroot=`find ${HOME}/jdk-linux-x64${{ matrix.artifact }}/jdk-${{ env.JDK_VERSION }}-internal+0_linux-x64_bin${{ matrix.artifact }} -name release -type f`
           echo "imageroot=`dirname ${imageroot}`" >> $GITHUB_ENV
+
+      - name: Install CRIU into libraries
+        run: |
+          criuengine=`find ${HOME}/jdk-linux-x64${{ matrix.artifact }}/jdk-${{ env.JDK_VERSION }}-internal+0_linux-x64_bin${{ matrix.artifact }} -name criuengine -type f`
+          criu=`dirname ${criuengine}`/criu
+          cp "${HOME}/criu/criu" ${criu}
+          sudo chown root:root ${criu}
+          sudo chmod u+s ${criu}
 
       - name: Run tests
         run: >

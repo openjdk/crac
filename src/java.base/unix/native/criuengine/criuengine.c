@@ -183,7 +183,7 @@ static int restore(const char *basedir,
         "--shell-job",
         "--action-script", self,
         "-D", imagedir,
-        "-v1"
+        "-v4"
     };
     const char** arg = args + 10;
     if (inherit_perfdata) {

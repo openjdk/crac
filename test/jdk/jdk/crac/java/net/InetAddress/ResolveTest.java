@@ -66,7 +66,7 @@ public class ResolveTest {
             return;
         }
         DockerTestUtils.execute("docker", "version");
-        DockerTestUtils.execute(CRAC_CRIU_PATH, "criu", "--version");
+        DockerTestUtils.execute(CRAC_CRIU_PATH, "--version");
         if (!Files.exists(Path.of(CRAC_CRIU_PATH))) {
             throw new RuntimeException("criu cannot be found in " + CRAC_CRIU_PATH);
         }

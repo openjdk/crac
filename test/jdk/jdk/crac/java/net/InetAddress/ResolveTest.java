@@ -65,6 +65,8 @@ public class ResolveTest {
         if (!DockerTestUtils.canTestDocker()) {
             return;
         }
+        DockerTestUtils.execute("docker", "version");
+        DockerTestUtils.execute(CRAC_CRIU_PATH, "criu", "--version");
         if (!Files.exists(Path.of(CRAC_CRIU_PATH))) {
             throw new RuntimeException("criu cannot be found in " + CRAC_CRIU_PATH);
         }
@@ -124,7 +126,7 @@ public class ResolveTest {
     }
 
     private static void checkpointTestProcess() throws Exception {
-        DockerTestUtils.execute("docker", "exec", CONTAINER_NAME,
+        DockerTestUtils.execute("docker", "exec", "--privileged", CONTAINER_NAME,
                         "/jdk/bin/jcmd", ResolveInetAddress.class.getName(), "JDK.checkpoint")
                 .shouldHaveExitValue(0);
     }

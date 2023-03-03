@@ -111,7 +111,7 @@ jobs:
       fail-fast: false
       matrix:
         flavor:
-          - build release
+#          - build release
           - build debug
         include:
           - flavor: build debug
@@ -240,7 +240,7 @@ jobs:
 #          - test: hs/tier1 compiler
 #            suites: test/hotspot/jtreg/:tier1_compiler
 #            artifact: -debug
-#          - test: hs/tier1 gc
+#          - test: hs/tier1 gc  
 #            suites: test/hotspot/jtreg/:tier1_gc
 #            artifact: -debug
 #          - test: hs/tier1 runtime
@@ -565,7 +565,7 @@ jobs:
     name: Linux x86
     runs-on: "ubuntu-20.04"
     needs: prerequisites
-    if: needs.prerequisites.outputs.should_run != 'false' && needs.prerequisites.outputs.platform_linux_x86 != 'false' && ${{ false }}
+    if: needs.prerequisites.outputs.should_run != 'false' && needs.prerequisites.outputs.platform_linux_x86 != 'false'
 
     strategy:
       fail-fast: false
@@ -857,7 +857,7 @@ jobs:
     name: Windows x64
     runs-on: "windows-2019"
     needs: prerequisites
-    if: needs.prerequisites.outputs.should_run != 'false' && needs.prerequisites.outputs.platform_windows_x64 != 'false' && ${{ false }}
+    if: needs.prerequisites.outputs.should_run != 'false' && needs.prerequisites.outputs.platform_windows_x64 != 'false'
 
     strategy:
       fail-fast: false
@@ -1284,7 +1284,7 @@ jobs:
     name: macOS aarch64
     runs-on: "macos-10.15"
     needs: prerequisites
-    if: needs.prerequisites.outputs.should_run != 'false' && needs.prerequisites.outputs.platform_macos_aarch64 != 'false' && ${{ false }}
+    if: needs.prerequisites.outputs.should_run != 'false' && needs.prerequisites.outputs.platform_macos_aarch64 != 'false'
 
     strategy:
       fail-fast: false

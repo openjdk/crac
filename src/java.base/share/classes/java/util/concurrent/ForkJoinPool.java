@@ -35,6 +35,11 @@
 
 package java.util.concurrent;
 
+import jdk.crac.Context;
+import jdk.crac.Resource;
+import jdk.internal.crac.Core;
+import jdk.internal.crac.JDKResource;
+
 import java.lang.Thread.UncaughtExceptionHandler;
 import java.lang.invoke.MethodHandles;
 import java.lang.invoke.VarHandle;
@@ -48,6 +53,7 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
+import java.util.function.IntSupplier;
 import java.util.function.Predicate;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.locks.LockSupport;
@@ -1410,7 +1416,7 @@ public class ForkJoinPool extends AbstractExecutorService {
     volatile long stealCount;            // collects worker nsteals
     int scanRover;                       // advances across pollScan calls
     volatile int threadIds;              // for worker thread names
-    final int bounds;                    // min, max threads packed as shorts
+    int bounds;                          // min, max threads packed as shorts
     volatile int mode;                   // parallelism, runstate, queue mode
     WorkQueue[] queues;                  // main registry
     final ReentrantLock registrationLock;
@@ -1422,6 +1428,8 @@ public class ForkJoinPool extends AbstractExecutorService {
 
     @jdk.internal.vm.annotation.Contended("fjpctl") // segregate
     volatile long ctl;                   // main pool control
+
+    private final AutoResize resizeResource;
 
     // Support for atomic operations
     private static final VarHandle CTL;
@@ -2544,6 +2552,21 @@ public class ForkJoinPool extends AbstractExecutorService {
         this.queues = new WorkQueue[size];
         String pid = Integer.toString(getAndAddPoolIds(1) + 1);
         this.workerNamePrefix = "ForkJoinPool-" + pid + "-worker-";
+        if (isAllowResize() && p == Runtime.getRuntime().availableProcessors()) {
+            resizeResource = new AutoResize(() -> Runtime.getRuntime().availableProcessors());
+        } else {
+            resizeResource = null;
+        }
+    }
+
+    private static boolean isAllowResize() {
+        boolean allowResize = true;
+        try {
+            String allow = System.getProperty("java.util.concurrent.ForkJoinPool.allowResize");
+            allowResize = allow == null || "true".equalsIgnoreCase(allow);
+        } catch (Exception ignore) {
+        }
+        return allowResize;
     }
 
     // helper method for commonPool constructor
@@ -2564,6 +2587,7 @@ public class ForkJoinPool extends AbstractExecutorService {
         int parallelism = Runtime.getRuntime().availableProcessors() - 1;
         ForkJoinWorkerThreadFactory fac = null;
         UncaughtExceptionHandler handler = null;
+        long ka = DEFAULT_KEEPALIVE;
         try {  // ignore exceptions in accessing/parsing properties
             fac = (ForkJoinWorkerThreadFactory) newInstanceFromSystemProperty(
                 "java.util.concurrent.ForkJoinPool.common.threadFactory");
@@ -2573,10 +2597,14 @@ public class ForkJoinPool extends AbstractExecutorService {
                 ("java.util.concurrent.ForkJoinPool.common.parallelism");
             if (pp != null)
                 parallelism = Integer.parseInt(pp);
+            String kas = System.getProperty
+                ("java.util.concurrent.ForkJoinPool.common.keepAlive");
+            if (kas != null)
+                ka = Long.parseLong(kas);
         } catch (Exception ignore) {
         }
         this.ueh = handler;
-        this.keepAlive = DEFAULT_KEEPALIVE;
+        this.keepAlive = ka;
         this.saturate = null;
         this.workerNamePrefix = null;
         int p = Math.min(Math.max(parallelism, 0), MAX_CAP), size;
@@ -2595,6 +2623,11 @@ public class ForkJoinPool extends AbstractExecutorService {
             new DefaultCommonPoolForkJoinWorkerThreadFactory();
         this.queues = new WorkQueue[size];
         this.registrationLock = new ReentrantLock();
+        if (isAllowResize()) {
+            resizeResource = new AutoResize(() -> Runtime.getRuntime().availableProcessors() - 1);
+        } else {
+            resizeResource = null;
+        }
     }
 
     /**
@@ -3511,5 +3544,41 @@ public class ForkJoinPool extends AbstractExecutorService {
         common = tmp;
 
         COMMON_PARALLELISM = Math.max(common.mode & SMASK, 1);
+    }
+
+    private class AutoResize implements JDKResource {
+        private final IntSupplier parallelismSupplier;
+
+        public AutoResize(IntSupplier parallelismSuplier) {
+            this.parallelismSupplier = parallelismSuplier;
+            Core.getJDKContext().register(this);
+        }
+
+        @Override
+        public void beforeCheckpoint(Context<? extends Resource> context) throws Exception {
+        }
+
+        @Override
+        public void afterRestore(Context<? extends Resource> context) throws Exception {
+            int p = parallelismSupplier.getAsInt();
+            int m = mode;
+            int oldP = m & SMASK;
+            int newSpares = Math.max(0, (bounds >>> SWIDTH) + oldP - p);
+            int newMinAvail = ((bounds & SMASK) + oldP - p);
+            if (ForkJoinPool.this == ForkJoinPool.common && p > 0) {
+                newSpares = ForkJoinPool.COMMON_MAX_SPARES;
+                newMinAvail = 1 - p;
+            }
+            bounds = (newMinAvail & SMASK) | (newSpares << SWIDTH);
+            while (m < SHUTDOWN && !MODE.compareAndSet(ForkJoinPool.this, m, (p & SMASK) | (m & ~SMASK))) {
+                m = mode;
+            }
+            getAndAddCtl((((oldP - p) * TC_UNIT) & TC_MASK) + (((oldP - p) * RC_UNIT) & RC_MASK));
+        }
+
+        @Override
+        public Priority getPriority() {
+            return Priority.NORMAL;
+        }
     }
 }

@@ -258,7 +258,7 @@ jobs:
       BOOT_JDK_SHA256: "${{ fromJson(needs.prerequisites.outputs.dependencies).LINUX_X64_BOOT_JDK_SHA256 }}"
       CRIU_FILENAME: "${{ fromJson(needs.prerequisites.outputs.dependencies).LINUX_X64_CRIU_FILENAME }}"
       CRIU_URL: "${{ fromJson(needs.prerequisites.outputs.dependencies).LINUX_X64_CRIU_URL }}"
-      CRIU_SHA: "${{ fromJson(needs.prerequisites.outputs.dependencies).LINUX_X64_CRIU_SHA }}"
+      CRIU_SHA256: "${{ fromJson(needs.prerequisites.outputs.dependencies).LINUX_X64_CRIU_SHA256 }}"
 
     steps:
       - name: Checkout the source

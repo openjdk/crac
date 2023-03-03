@@ -232,6 +232,7 @@ jobs:
 #            suites: test/jdk/:tier1_part3
           - test: jdk/crac
             suites: test/jdk/jdk/crac
+            artifact: -debug
 #          - test: langtools/tier1
 #            suites: test/langtools/:tier1
 #          - test: hs/tier1 common

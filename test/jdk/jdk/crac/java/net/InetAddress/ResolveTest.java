@@ -38,6 +38,8 @@ import java.util.List;
 import java.util.concurrent.*;
 import java.util.function.Consumer;
 
+import static jdk.test.lib.Asserts.assertEquals;
+
 /*
  * @test
  * @summary Test if InetAddress cache is flushed after checkpoint/restore
@@ -126,9 +128,12 @@ public class ResolveTest {
     }
 
     private static void checkpointTestProcess() throws Exception {
-        DockerTestUtils.execute("docker", "exec", "--privileged", CONTAINER_NAME,
+        int exitValue = DockerTestUtils.execute("docker", "exec", "--privileged", CONTAINER_NAME,
                         "/jdk/bin/jcmd", ResolveInetAddress.class.getName(), "JDK.checkpoint")
-                .shouldHaveExitValue(0);
+                .getExitValue();
+        DockerTestUtils.execute(Container.ENGINE_COMMAND, "exec", CONTAINER_NAME, "cat", "/cr/dump4.log").outputTo(System.out);
+        assertEquals(0, exitValue);
+//                .shouldHaveExitValue(0);
     }
 
     private static Future<Void> executeWatching(List<String> command, Consumer<String> outputConsumer, Consumer<String> errorConsumer) throws IOException, ExecutionException, InterruptedException, TimeoutException {

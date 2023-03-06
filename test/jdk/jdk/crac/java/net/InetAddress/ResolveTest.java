@@ -147,6 +147,10 @@ public class ResolveTest {
     }
 
     private static void startRestoredProcess() throws Exception {
+        // These commands shouldn't be here but somehow the test fails with 'open cppath: No such file or directory' without them.
+        DockerTestUtils.execute(Container.ENGINE_COMMAND, "volume", "ls");
+        DockerTestUtils.execute(Container.ENGINE_COMMAND, "run", "--rm", "--volume", "cr:/cr", imageName, "ls", "-l", "/cr").outputTo(System.out);
+
         DockerRunOptions opts = new DockerRunOptions(imageName, "/jdk/bin/java", "ResolveInetAddress");
         opts.addDockerOpts("--volume", Utils.TEST_CLASSES + ":/test-classes/");
         opts.addDockerOpts("--volume", "cr:/cr");

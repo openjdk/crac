@@ -36,7 +36,7 @@ LINUX_X64_BOOT_JDK_SHA256=e952958f16797ad7dc7cd8b724edd69ec7e0e0434537d80d6b5165
 
 LINUX_X64_CRIU_FILENAME=criu-crac-release-1.3.tar.gz
 LINUX_X64_CRIU_URL=https://github.com/CRaC/criu/releases/download/release-1.3/criu-crac-release-1.3.tar.gz
-LINUX_X64_CRIU_SHA256=d2cee868ccf81b49328e4a32ff929599f639a28b5ef7a71a0c80f8c8c452d89d
+LINUX_X64_CRIU_SHA256=82a014bf342c957305b98a71867c0994ebf6e7379f01f083121884793768d966
 
 WINDOWS_X64_BOOT_JDK_FILENAME=openjdk-16_windows-x64_bin.zip
 WINDOWS_X64_BOOT_JDK_URL=https://download.java.net/java/GA/jdk16/7863447f0ab643c585b9bdebf67c69db/36/GPL/openjdk-16_windows-x64_bin.zip

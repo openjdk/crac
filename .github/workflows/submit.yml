@@ -294,7 +294,7 @@ jobs:
           wget -O "${HOME}/criu/${CRIU_FILENAME}" "${CRIU_URL}"
           echo "${CRIU_SHA256} ${HOME}/criu/${CRIU_FILENAME}" | sha256sum -c >/dev/null -
           tar -xf "${HOME}/criu/${CRIU_FILENAME}" -C "${HOME}/criu"
-          mv "${HOME}/criu/criu-dist/sbin/criu" "${HOME}/criu/criu"
+          mv "${HOME}/criu/*/sbin/criu" "${HOME}/criu/criu"
         if: steps.criu.outputs.cache-hit != 'true'
 
       - name: Restore jtreg artifact

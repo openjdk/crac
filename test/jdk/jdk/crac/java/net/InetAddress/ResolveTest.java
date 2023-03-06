@@ -38,8 +38,6 @@ import java.util.List;
 import java.util.concurrent.*;
 import java.util.function.Consumer;
 
-import static jdk.test.lib.Asserts.assertEquals;
-
 /*
  * @test
  * @summary Test if InetAddress cache is flushed after checkpoint/restore
@@ -67,8 +65,6 @@ public class ResolveTest {
         if (!DockerTestUtils.canTestDocker()) {
             return;
         }
-        DockerTestUtils.execute("docker", "version");
-        DockerTestUtils.execute(CRAC_CRIU_PATH, "--version");
         if (!Files.exists(Path.of(CRAC_CRIU_PATH))) {
             throw new RuntimeException("criu cannot be found in " + CRAC_CRIU_PATH);
         }
@@ -128,12 +124,9 @@ public class ResolveTest {
     }
 
     private static void checkpointTestProcess() throws Exception {
-        int exitValue = DockerTestUtils.execute("docker", "exec", "--privileged", CONTAINER_NAME,
+        DockerTestUtils.execute("docker", "exec", CONTAINER_NAME,
                         "/jdk/bin/jcmd", ResolveInetAddress.class.getName(), "JDK.checkpoint")
-                .getExitValue();
-        DockerTestUtils.execute(Container.ENGINE_COMMAND, "exec", CONTAINER_NAME, "cat", "/cr/dump4.log").outputTo(System.out);
-        assertEquals(0, exitValue);
-//                .shouldHaveExitValue(0);
+                .shouldHaveExitValue(0);
     }
 
     private static Future<Void> executeWatching(List<String> command, Consumer<String> outputConsumer, Consumer<String> errorConsumer) throws IOException, ExecutionException, InterruptedException, TimeoutException {
@@ -154,8 +147,6 @@ public class ResolveTest {
     }
 
     private static void startRestoredProcess() throws Exception {
-        DockerTestUtils.execute(Container.ENGINE_COMMAND, "volume", "ls");
-        DockerTestUtils.execute(Container.ENGINE_COMMAND, "run", "--rm", "--volume", "cr:/cr", imageName, "ls", "-l", "/cr").outputTo(System.out);
         DockerRunOptions opts = new DockerRunOptions(imageName, "/jdk/bin/java", "ResolveInetAddress");
         opts.addDockerOpts("--volume", Utils.TEST_CLASSES + ":/test-classes/");
         opts.addDockerOpts("--volume", "cr:/cr");

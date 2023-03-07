@@ -116,7 +116,7 @@ static int wait_for_children() {
     do {
         int st = 0;
         pid = wait(&st);
-        if (pid == g_child_pid && WIFEXITED(st)) {
+        if (pid == g_child_pid) {
             status = st;
         }
     } while (-1 != pid || ECHILD != errno);

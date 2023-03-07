@@ -70,6 +70,8 @@ public class ResolveTest {
         }
         DockerTestUtils.buildJdkDockerImage(imageName, "Dockerfile-is-ignored", "jdk-docker");
         try {
+            // Make sure we're starting with a clean image directory
+            DockerTestUtils.execute(Container.ENGINE_COMMAND, "volume", "rm", "cr");
             Future<?> completed = startTestProcess();
             checkpointTestProcess();
             completed.get(5, TimeUnit.SECONDS);
@@ -96,11 +98,16 @@ public class ResolveTest {
         cmd.addAll(Arrays.asList("--name", CONTAINER_NAME));
         cmd.add(imageName);
         // Checkpointing does not work for PID 1, therefore we add an intermediary bash process
+        // At the same time docker --init is not sufficient; since `tini` does not wait for *all*
+        // children to finish, just the main process, creating /cr/cppath might race and we would
+        // not be able to restore the process.
+        // This workaround should not be necessary when https://github.com/openjdk/crac/pull/46
+        // is integrated.
         List<String> javaCmd = new ArrayList<>();
-        javaCmd.addAll(Arrays.asList("/jdk/bin/java", "-cp /test-classes/", "-XX:CRaCCheckpointTo=/cr"));
+        javaCmd.addAll(Arrays.asList("/jdk/bin/java", "-cp", "/test-classes/", "-XX:CRaCCheckpointTo=/cr"));
         javaCmd.addAll(Arrays.asList(Utils.getTestJavaOpts()));
         javaCmd.addAll(Arrays.asList("ResolveInetAddress", TEST_HOSTNAME, "/second-run"));
-        cmd.addAll(Arrays.asList("-c", String.join(" ", javaCmd) + "; echo i-am-here-to-force-child-process"));
+        cmd.addAll(Arrays.asList("-c", String.join(" ", javaCmd) + "; while [ ! -s /cr/cppath ]; do sleep 1; done;"));
 
         System.err.println("Running: " + String.join(" ", cmd));
 
@@ -147,10 +154,6 @@ public class ResolveTest {
     }
 
     private static void startRestoredProcess() throws Exception {
-        // These commands shouldn't be here but somehow the test fails with 'open cppath: No such file or directory' without them.
-        DockerTestUtils.execute(Container.ENGINE_COMMAND, "volume", "ls");
-        DockerTestUtils.execute(Container.ENGINE_COMMAND, "run", "--rm", "--volume", "cr:/cr", imageName, "ls", "-l", "/cr").outputTo(System.out);
-
         DockerRunOptions opts = new DockerRunOptions(imageName, "/jdk/bin/java", "ResolveInetAddress");
         opts.addDockerOpts("--volume", Utils.TEST_CLASSES + ":/test-classes/");
         opts.addDockerOpts("--volume", "cr:/cr");

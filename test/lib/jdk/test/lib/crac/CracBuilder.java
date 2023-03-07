@@ -229,7 +229,6 @@ public class CracBuilder {
         DockerTestUtils.execute(Container.ENGINE_COMMAND, "exec",
                 CONTAINER_NAME, "bash", "-c",
                 "while [ $(cat /proc/sys/kernel/ns_last_pid) -le " + minPid + " ]; do cat /dev/null; done");
-        DockerTestUtils.execute(Container.ENGINE_COMMAND, "exec", CONTAINER_NAME, "ps", "fauxT");
     }
 
     public CracProcess doRestore() throws Exception {

@@ -111,16 +111,21 @@ static void parse_checkpoint(const char *arg) {
 static pid_t g_child_pid = -1;
 
 static int wait_for_children() {
-    int status = 0;
+    int status = -1;
     pid_t pid;
     do {
         int st = 0;
         pid = wait(&st);
         if (pid == g_child_pid && WIFEXITED(st)) {
-            status = WEXITSTATUS(st);
+            status = st;
         }
     } while (-1 != pid || ECHILD != errno);
-    return status;
+
+    if (WIFEXITED(status)) {
+        return WEXITSTATUS(status);
+    }
+
+    return 1;
 }
 
 static void sighandler(int sig, siginfo_t *info, void *param) {

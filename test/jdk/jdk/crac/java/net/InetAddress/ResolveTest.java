@@ -21,29 +21,19 @@
  * questions.
  */
 
-import jdk.test.lib.Container;
 import jdk.test.lib.Utils;
 import jdk.test.lib.containers.docker.Common;
-import jdk.test.lib.containers.docker.DockerRunOptions;
 import jdk.test.lib.containers.docker.DockerTestUtils;
 import jdk.test.lib.crac.CracBuilder;
 import jdk.test.lib.crac.CracProcess;
 import jdk.test.lib.crac.CracTest;
 import jdk.test.lib.crac.CracTestArg;
-import jdk.test.lib.process.StreamPumper;
 
-import java.io.IOException;
-import java.io.InputStream;
-import java.lang.reflect.Method;
 import java.net.InetAddress;
 import java.net.UnknownHostException;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.List;
 import java.util.concurrent.*;
-import java.util.function.Consumer;
 
 /*
  * @test
@@ -92,11 +82,7 @@ public class ResolveTest implements CracTest {
                     "--add-host", TEST_HOSTNAME + ":192.168.56.78",
                     "--volume", Utils.TEST_CLASSES + ":/second-run"); // any file/dir suffices
 
-            // We need to cycle PIDs; had we tried to restore right away the exec would get the
-            // same PIDs and restore would fail.
-            DockerTestUtils.execute(Container.ENGINE_COMMAND, "exec",
-                    CracBuilder.CONTAINER_NAME, "bash", "-c",
-                    "cat /dev/null & while [ $! -lt 100 ]; do cat /dev/null & done");
+
             builder.startRestore().outputAnalyzer()
                     .shouldHaveExitValue(0)
                     .shouldContain("192.168.56.78");

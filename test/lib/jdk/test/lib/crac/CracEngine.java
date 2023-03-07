@@ -1,7 +1,7 @@
 package jdk.test.lib.crac;
 
 public enum CracEngine {
-    CRIU("criu"),
+    CRIU("criuengine"),
     PAUSE("pauseengine"),
     SIMULATE("simengine");
 

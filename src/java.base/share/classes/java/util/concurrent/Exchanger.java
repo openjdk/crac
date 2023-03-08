@@ -267,16 +267,6 @@ public class Exchanger<V> {
      */
     private static final int SEQ = MMASK + 1;
 
-    /** The number of CPUs, for sizing and spin control */
-    private static final int NCPU = Runtime.getRuntime().availableProcessors();
-
-    /**
-     * The maximum slot index of the arena: The number of slots that
-     * can in principle hold all threads without contention, or at
-     * most the maximum indexable value.
-     */
-    static final int FULL = (NCPU >= (MMASK << 1)) ? MMASK : NCPU >>> 1;
-
     /**
      * The bound for spins while waiting for a match. The actual
      * number of iterations will on average be about twice this value
@@ -340,6 +330,16 @@ public class Exchanger<V> {
      * constructed only once.
      */
     private volatile int bound;
+
+    /**
+     * The maximum slot index of the arena: The number of slots that
+     * can in principle hold all threads without contention, or at
+     * most the maximum indexable value.
+     */
+    private static int full() {
+        int ncpu = CpuCount.get();
+        return (ncpu >= (MMASK << 1)) ? MMASK : ncpu >>> 1;
+    }
 
     /**
      * Exchange function when arenas enabled. See above for explanation.
@@ -427,7 +427,7 @@ public class Exchanger<V> {
                     p.collides = 0;
                     i = (i != m || m == 0) ? m : m - 1;
                 }
-                else if ((c = p.collides) < m || m == FULL ||
+                else if ((c = p.collides) < m || m == full() ||
                          !BOUND.compareAndSet(this, b, b + SEQ + 1)) {
                     p.collides = c + 1;
                     i = (i == 0) ? m : i - 1;          // cyclically traverse
@@ -466,9 +466,9 @@ public class Exchanger<V> {
                     return v;
                 }
                 // create arena on contention, but continue until slot null
-                if (NCPU > 1 && bound == 0 &&
+                if (CpuCount.get() > 1 && bound == 0 &&
                     BOUND.compareAndSet(this, 0, SEQ))
-                    arena = new Node[(FULL + 2) << ASHIFT];
+                    arena = new Node[(full() + 2) << ASHIFT];
             }
             else if (arena != null)
                 return null; // caller must reroute to arenaExchange
@@ -483,7 +483,7 @@ public class Exchanger<V> {
         // await release
         int h = p.hash;
         long end = timed ? System.nanoTime() + ns : 0L;
-        int spins = (NCPU > 1) ? SPINS : 1;
+        int spins = (CpuCount.get() > 1) ? SPINS : 1;
         Object v;
         while ((v = p.match) == null) {
             if (spins > 0) {

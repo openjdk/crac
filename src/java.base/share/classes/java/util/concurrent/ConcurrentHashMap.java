@@ -593,9 +593,6 @@ public class ConcurrentHashMap<K,V> extends AbstractMap<K,V>
     static final int RESERVED  = -3; // hash for transient reservations
     static final int HASH_BITS = 0x7fffffff; // usable bits of normal node hash
 
-    /** Number of CPUS, to place bounds on some sizings */
-    static final int NCPU = Runtime.getRuntime().availableProcessors();
-
     /**
      * Serialized pseudo-fields, provided only for jdk7 compatibility.
      * @serialField segments Segment[]
@@ -2423,7 +2420,8 @@ public class ConcurrentHashMap<K,V> extends AbstractMap<K,V>
      */
     private final void transfer(Node<K,V>[] tab, Node<K,V>[] nextTab) {
         int n = tab.length, stride;
-        if ((stride = (NCPU > 1) ? (n >>> 3) / NCPU : n) < MIN_TRANSFER_STRIDE)
+        int ncpu = CpuCount.get();
+        if ((stride = (ncpu > 1) ? (n >>> 3) / ncpu : n) < MIN_TRANSFER_STRIDE)
             stride = MIN_TRANSFER_STRIDE; // subdivide range
         if (nextTab == null) {            // initiating
             try {
@@ -2618,7 +2616,7 @@ public class ConcurrentHashMap<K,V> extends AbstractMap<K,V>
                     wasUncontended = true;      // Continue after rehash
                 else if (U.compareAndSetLong(c, CELLVALUE, v = c.value, v + x))
                     break;
-                else if (counterCells != cs || n >= NCPU)
+                else if (counterCells != cs || n >= CpuCount.get())
                     collide = false;            // At max size or stale
                 else if (!collide)
                     collide = true;

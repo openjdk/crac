@@ -35,6 +35,11 @@
 
 package java.util.concurrent.atomic;
 
+import jdk.crac.Context;
+import jdk.crac.Resource;
+import jdk.internal.crac.Core;
+import jdk.internal.crac.JDKResource;
+
 import java.lang.invoke.MethodHandles;
 import java.lang.invoke.VarHandle;
 import java.util.Arrays;
@@ -150,7 +155,22 @@ abstract class Striped64 extends Number {
     }
 
     /** Number of CPUS, to place bound on table size */
-    static final int NCPU = Runtime.getRuntime().availableProcessors();
+    private static int NCPU = Runtime.getRuntime().availableProcessors();
+    private static final JDKResource RESOURCE = new JDKResource() {
+        @Override
+        public Priority getPriority() {
+            return Priority.NORMAL;
+        }
+
+        @Override
+        public void beforeCheckpoint(Context<? extends Resource> context) throws Exception {
+        }
+
+        @Override
+        public void afterRestore(Context<? extends Resource> context) throws Exception {
+            NCPU = Runtime.getRuntime().availableProcessors();
+        }
+    };
 
     /**
      * Table of cells. When non-null, size is a power of 2.
@@ -381,6 +401,7 @@ abstract class Striped64 extends Number {
     private static final VarHandle CELLSBUSY;
     private static final VarHandle THREAD_PROBE;
     static {
+        Core.getJDKContext().register(RESOURCE);
         try {
             MethodHandles.Lookup l = MethodHandles.lookup();
             BASE = l.findVarHandle(Striped64.class,
@@ -402,5 +423,4 @@ abstract class Striped64 extends Number {
             throw new ExceptionInInitializerError(e);
         }
     }
-
 }

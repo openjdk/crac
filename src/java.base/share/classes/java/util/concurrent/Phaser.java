@@ -1002,9 +1002,6 @@ public class Phaser {
         }
     }
 
-    /** The number of CPUs, for spin control */
-    private static final int NCPU = Runtime.getRuntime().availableProcessors();
-
     /**
      * The number of times to spin before blocking while waiting for
      * advance, per arrival while waiting. On multiprocessors, fully
@@ -1016,7 +1013,9 @@ public class Phaser {
      * SPINS_PER_ARRIVAL more times before blocking. The value trades
      * off good-citizenship vs big unnecessary slowdowns.
      */
-    static final int SPINS_PER_ARRIVAL = (NCPU < 2) ? 1 : 1 << 8;
+    private static int spinsPerArrival() {
+        return CpuCount.get() < 2 ? 1 : 1 << 8;
+    }
 
     /**
      * Possibly blocks and waits for phase to advance unless aborted.
@@ -1032,15 +1031,15 @@ public class Phaser {
         releaseWaiters(phase-1);          // ensure old queue clean
         boolean queued = false;           // true when node is enqueued
         int lastUnarrived = 0;            // to increase spins upon change
-        int spins = SPINS_PER_ARRIVAL;
+        int spins = spinsPerArrival();
         long s;
         int p;
         while ((p = (int)((s = state) >>> PHASE_SHIFT)) == phase) {
             if (node == null) {           // spinning in noninterruptible mode
                 int unarrived = (int)s & UNARRIVED_MASK;
                 if (unarrived != lastUnarrived &&
-                    (lastUnarrived = unarrived) < NCPU)
-                    spins += SPINS_PER_ARRIVAL;
+                    (lastUnarrived = unarrived) < CpuCount.get())
+                    spins += spinsPerArrival();
                 boolean interrupted = Thread.interrupted();
                 if (interrupted || --spins < 0) { // need node to record intr
                     node = new QNode(this, phase, false, false, 0L);

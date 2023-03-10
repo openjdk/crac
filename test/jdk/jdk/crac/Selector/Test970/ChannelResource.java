@@ -29,9 +29,11 @@ import java.nio.channels.SocketChannel;
 
 class ChannelResource implements Resource {
 
-    public enum SelectionType {SELECT, SELECT_TIMEOUT, SELECT_NOW}
-
-    ;
+    public enum SelectionType {
+        SELECT,
+        SELECT_TIMEOUT,
+        SELECT_NOW
+    };
 
     private SocketChannel channel;
     private SelectionKey key;
@@ -54,7 +56,7 @@ class ChannelResource implements Resource {
         this.selector = selector;
     }
 
-    @java.lang.Override
+    @Override
     public void beforeCheckpoint(Context<? extends Resource> context) throws IOException {
 
         channel.socket().close();
@@ -66,7 +68,7 @@ class ChannelResource implements Resource {
             selector.select(500);
         } else {
             new Thread(new Runnable() {
-                @java.lang.Override
+                @Override
                 public void run() {
                     try {
                         Thread.sleep(1000);
@@ -81,7 +83,7 @@ class ChannelResource implements Resource {
         }
     }
 
-    @java.lang.Override
+    @Override
     public void afterRestore(Context<? extends Resource> context) {
     }
 }

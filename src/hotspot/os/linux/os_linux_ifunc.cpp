@@ -93,6 +93,7 @@ static const char *strchr_local(const char *cs, int c) {
 }
 
 #define strlen strlen_local
+__attribute__ ((optimize(0))) // otherwise GCC will replace the function by system strlen() again; also fixed by -fno-builtin
 static size_t strlen_local(const char *cs) {
   size_t retval = 0;
   while (*cs++)

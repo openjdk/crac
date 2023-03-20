@@ -23,14 +23,20 @@
 
 import java.io.File;
 import java.io.FileOutputStream;
+import java.io.IOException;
 
 import jdk.crac.*;
+import jdk.test.lib.crac.CracBuilder;
+import jdk.test.lib.crac.CracEngine;
+import jdk.test.lib.crac.CracTest;
 
 /**
  * @test DryRunTest
- * @run main/othervm -XX:CREngine=simengine -XX:CRaCCheckpointTo=./cr -XX:+UnlockDiagnosticVMOptions -XX:+CRPrintResourcesOnCheckpoint DryRunTest
+ * @library /test/lib
+ * @build DryRunTest
+ * @run driver jdk.test.lib.crac.CracTest
  */
-public class DryRunTest {
+public class DryRunTest implements CracTest {
     static class CRResource implements Resource {
         @Override
         public void beforeCheckpoint(Context<? extends Resource> context) throws Exception {
@@ -42,7 +48,14 @@ public class DryRunTest {
         }
     }
 
-    static public void main(String[] args) throws Exception {
+    @Override
+    public void test() throws Exception {
+        new CracBuilder().engine(CracEngine.SIMULATE).printResources(true)
+                .startCheckpoint().waitForSuccess();
+    }
+
+    @Override
+    public void exec() throws Exception {
         Resource resource = new CRResource();
         Core.getGlobalContext().register(resource);
 

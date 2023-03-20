@@ -21,26 +21,51 @@
  * have any questions.
  */
 
-import jdk.crac.*;
+import jdk.test.lib.crac.CracBuilder;
+import jdk.test.lib.crac.CracTest;
 
-public class RestoreEnvironmentTest {
-    static public void main(String[] args) throws Exception {
-        {
-            String testVarName = "RESTORE_ENVIRONMENT_TEST_VAR";
+import java.io.IOException;
 
-            for (int i = 0; i < 3; ++i) {
-                var testVar = java.lang.System.getenv(testVarName + i);
-                System.out.println("(before checkpoint) " + testVarName + i + "=" + testVar);
-            }
+/*
+ * @test RestoreEnvironmentTest
+ * @summary the test checks that actual environment variables are propagated into a restored process.
+ * @library /test/lib
+ * @build RestoreEnvironmentTest
+ * @run driver/timeout=120 jdk.test.lib.crac.CracTest
+ */
+public class RestoreEnvironmentTest implements CracTest {
+    static final String TEST_VAR_NAME = "RESTORE_ENVIRONMENT_TEST_VAR";
+    static final String BEFORE_CHECKPOINT = "BeforeCheckpoint";
+    static final String AFTER_RESTORE = "AfterRestore";
+    static final String NEW_VALUE = "NewValue";
+    public static final String PREFIX = "(after restore) ";
 
-            jdk.crac.Core.checkpointRestore();
+    @Override
+    public void test() throws Exception {
+        CracBuilder builder = new CracBuilder().captureOutput(true)
+                .env(TEST_VAR_NAME + 0, BEFORE_CHECKPOINT)
+                .env(TEST_VAR_NAME + 1, BEFORE_CHECKPOINT);
+        builder.doCheckpoint();
+        builder.env(TEST_VAR_NAME + 1, AFTER_RESTORE);
+        builder.env(TEST_VAR_NAME + 2, NEW_VALUE);
+        builder.doRestore().outputAnalyzer()
+                .shouldContain(PREFIX + TEST_VAR_NAME + "0=" + BEFORE_CHECKPOINT)
+                .shouldContain(PREFIX + TEST_VAR_NAME + "1=" + AFTER_RESTORE)
+                .shouldContain(PREFIX + TEST_VAR_NAME + "2=" + NEW_VALUE);
+    }
 
-            System.out.print("(after restore) ");
-            for (int i = 0; i < 3; ++i) {
-                var testVar = java.lang.System.getenv(testVarName + i);
-                System.out.print(testVarName + i + "=" + testVar + ";");
-            }
+    @Override
+    public void exec() throws Exception {
+        for (int i = 0; i < 3; ++i) {
+            var testVar = java.lang.System.getenv(TEST_VAR_NAME + i);
+            System.out.println("(before checkpoint) " + TEST_VAR_NAME + i + "=" + testVar);
         }
-        System.out.println();
+
+        jdk.crac.Core.checkpointRestore();
+
+        for (int i = 0; i < 3; ++i) {
+            var testVar = java.lang.System.getenv(TEST_VAR_NAME + i);
+            System.out.println(PREFIX + TEST_VAR_NAME + i + "=" + testVar + "");
+        }
     }
 }

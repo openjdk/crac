@@ -18,39 +18,48 @@
 // CA 94089 USA or visit www.azul.com if you need additional information or
 // have any questions.
 
-
 import jdk.crac.*;
-import java.util.Random;
+import jdk.test.lib.crac.CracBuilder;
+import jdk.test.lib.crac.CracTest;
+import jdk.test.lib.crac.CracTestArg;
+
+import java.io.IOException;
 import java.security.SecureRandom;
-import java.util.concurrent.atomic.AtomicLong;
 
-public class Test implements Resource {
-
-    private static final AtomicLong counter = new AtomicLong(0);
-    private static boolean stop = false;
+/*
+ * @test
+ * @summary Verify that secure random is not interlocked during checkpoint/restore.
+ * @library /test/lib
+ * @build InterlockTest
+ * @run driver/timeout=60 jdk.test.lib.crac.CracTest SHA1PRNG 100
+ * @run driver/timeout=60 jdk.test.lib.crac.CracTest NativePRNGBlocking 100
+ * @run driver/timeout=60 jdk.test.lib.crac.CracTest NativePRNGNonBlocking 100
+ * @run driver/timeout=60 jdk.test.lib.crac.CracTest NativePRNG 100
+ */
+public class InterlockTest implements Resource, CracTest {
     private static final long MIN_TIMEOUT = 100;
     private static final long MAX_TIMEOUT = 1000;
-    private static SecureRandom sr;
-    private static String algName = null;
 
-    private static class TestThread1 extends Thread {
-        private long timeout;
+    private boolean stop = false;
+    private SecureRandom sr;
 
-        TestThread1(long timeout) {
-            this.timeout = timeout;
-        }
+    @CracTestArg(0)
+    String algName;
 
+    @CracTestArg(1)
+    int numThreads;
+
+    private class TestThread1 extends Thread {
         @Override
         public void run() {
             while (!stop) {
-                Test.set();
+                set();
             }
         }
     };
 
-    private static class TestThread2 extends Thread implements Resource {
-        private long timeout;
-        private SecureRandom sr;
+    private class TestThread2 extends Thread implements Resource {
+        private final SecureRandom sr;
 
         synchronized void set() {
             sr.nextInt();
@@ -59,8 +68,7 @@ public class Test implements Resource {
             sr.nextInt();
         }
 
-        TestThread2(long timeout) throws Exception {
-            this.timeout = timeout;
+        TestThread2() throws Exception {
             sr = SecureRandom.getInstance(algName);
             Core.getGlobalContext().register(this);
         }
@@ -83,11 +91,11 @@ public class Test implements Resource {
         }
     };
 
-    synchronized static void clean() {
+    synchronized void clean() {
         sr.nextInt();
     }
 
-    synchronized static void set() {
+    synchronized void set() {
         sr.nextInt();
     }
 
@@ -106,31 +114,26 @@ public class Test implements Resource {
         stop = true;
     }
 
-    public static void main(String args[]) throws Exception {
-        if (args.length < 1) { throw new RuntimeException("Alg name is not provided"); }
-        if (args.length < 2) { throw new RuntimeException("number of threads is missing"); }
-        algName = args[0];
-        int numThreads;
-        try{
-            numThreads = Integer.parseInt(args[1]);
-        } catch (NumberFormatException ex){
-            throw new RuntimeException("invalid number of threads");
-        }
-        Test test = new Test();
-        test.sr = SecureRandom.getInstance(algName);
-        Core.getGlobalContext().register(test);
+    @Override
+    public void test() throws Exception {
+        new CracBuilder().doCheckpointAndRestore();
+    }
 
-        Random random = new Random();
+    @Override
+    public void exec() throws Exception {
+        sr = SecureRandom.getInstance(algName);
+        Core.getGlobalContext().register(this);
+
         Thread[] threads = new Thread[numThreads];
-        for(int i=0; i<numThreads; i++) {
-            threads[i] = (i%2==0)?
-                    new TestThread1(random.nextLong(MAX_TIMEOUT - MIN_TIMEOUT) + MIN_TIMEOUT):
-                    new TestThread2(random.nextLong(MAX_TIMEOUT - MIN_TIMEOUT) + MIN_TIMEOUT);
+        for(int i = 0; i < numThreads; i++) {
+            threads[i] = (i % 2 == 0) ?
+                    new TestThread1():
+                    new TestThread2();
             threads[i].start();
         };
-        Thread.currentThread().sleep(MIN_TIMEOUT);
+        Thread.sleep(MIN_TIMEOUT);
         set();
-        Thread.currentThread().sleep(MIN_TIMEOUT);
+        Thread.sleep(MIN_TIMEOUT);
 
         Object checkpointLock = new Object();
         Thread checkpointThread = new Thread("checkpointThread") {
@@ -155,6 +158,6 @@ public class Test implements Resource {
                 throw new RuntimeException("Checkpoint/Restore ERROR " + e);
             }
         }
-        Thread.currentThread().sleep(MAX_TIMEOUT);
+        Thread.sleep(MAX_TIMEOUT);
     }
 }

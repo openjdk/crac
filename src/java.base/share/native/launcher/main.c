@@ -125,6 +125,17 @@ static int wait_for_children() {
         return WEXITSTATUS(status);
     }
 
+    if (WIFSIGNALED(status)) {
+        // Try to terminate the current process with the same signal
+        // as the child process was terminated
+        const int sig = WTERMSIG(status);
+        signal(sig, SIG_DFL);
+        raise(sig);
+        // Signal was ignored, return 128+n as bash does
+        // see https://linux.die.net/man/1/bash
+        return 128+sig;
+    }
+
     return 1;
 }
 

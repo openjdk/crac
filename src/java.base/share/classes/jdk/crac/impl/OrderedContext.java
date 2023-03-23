@@ -35,19 +35,14 @@ import java.util.Map;
 public class OrderedContext extends AbstractContextImpl<Resource, Long> {
     private long order;
 
-    static class ContextComparator implements Comparator<Map.Entry<Resource, Long>> {
-        @Override
-        public int compare(Map.Entry<Resource, Long> o1, Map.Entry<Resource, Long> o2) {
-            return (int)(o2.getValue() - o1.getValue());
-        }
-    }
-
     public OrderedContext() {
-        super(new ContextComparator());
     }
 
     @Override
     public synchronized void register(Resource r) {
-        register(r, order++);
+        // Priorities are executed from lowest to highest; in order to call
+        // beforeCheckpoint in reverse order compared to registration we use
+        // descending numbers.
+        register(r, Long.MAX_VALUE - (order++));
     }
 }

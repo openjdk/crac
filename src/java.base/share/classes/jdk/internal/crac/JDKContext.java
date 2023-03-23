@@ -49,7 +49,6 @@ public class JDKContext extends AbstractContextImpl<JDKResource, Void> {
     public static final boolean COLLECT_FD_STACKTRACES =
             GetBooleanAction.privilegedGetProperty(JDKContext.COLLECT_FD_STACKTRACES_PROPERTY);
 
-
     private WeakHashMap<FileDescriptor, Object> claimedFds;
 
     public boolean matchClasspath(String path) {
@@ -73,15 +72,7 @@ public class JDKContext extends AbstractContextImpl<JDKResource, Void> {
         return false;
     }
 
-    static class ContextComparator implements Comparator<Map.Entry<JDKResource, Void>> {
-        @Override
-        public int compare(Map.Entry<JDKResource, Void> o1, Map.Entry<JDKResource, Void> o2) {
-            return o1.getKey().getPriority().compareTo(o2.getKey().getPriority());
-        }
-    }
-
     JDKContext() {
-        super(new ContextComparator());
     }
 
     @Override
@@ -98,7 +89,7 @@ public class JDKContext extends AbstractContextImpl<JDKResource, Void> {
 
     @Override
     public void register(JDKResource resource) {
-        register(resource, null);
+        register(resource, resource.getPriority().ordinal());
     }
 
     public Map<Integer, Object> getClaimedFds() {

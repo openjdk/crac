@@ -22,59 +22,113 @@
 
 package jdk.crac.impl;
 
-import jdk.crac.CheckpointException;
-import jdk.crac.Context;
-import jdk.crac.Resource;
-import jdk.crac.RestoreException;
-import sun.security.action.GetBooleanAction;
+import jdk.crac.*;
 
 import java.util.*;
-import java.util.stream.Collectors;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.locks.ReentrantLock;
 
 public abstract class AbstractContextImpl<R extends Resource, P> extends Context<R> {
-
-    private static class FlagsHolder {
-        public static final boolean DEBUG =
-            GetBooleanAction.privilegedGetProperty("jdk.crac.debug");
-    }
-
-    private WeakHashMap<R, P> checkpointQ = new WeakHashMap<>();
+    private WeakHashMap<R, Long> resources = new WeakHashMap<>();
+    // Queue content is temporary, so we won't mind that it's not a weak reference
+    private Queue<Map.Entry<R, Long>> resourceQueue = new LinkedList<>();
     private List<R> restoreQ = null;
-    private Comparator<Map.Entry<R, P>> comparator;
+    private volatile long currentPriority = -1;
+    // We use two locks: checkpointLock is required for both running the beforeCheckpoint
+    // and registering a new resource, while restoreLock is required for running afterRestore
+    // and beforeCheckpoint (to achieve exclusivity of before and after). It is fine
+    // to acquire checkpointLock and register a new resource during afterRestore.
+    private final ReentrantLock checkpointLock = new ReentrantLock();
+    private final ReentrantLock restoreLock = new ReentrantLock();
 
-    protected AbstractContextImpl(Comparator<Map.Entry<R, P>> comparator) {
-        this.comparator = comparator;
+    protected void register(R resource, long priority) {
+        assert priority >= 0;
+        boolean locked = false;
+        try {
+            // We don't want to deadlock if the registration happens from another thread
+            while (!checkpointLock.tryLock(10, TimeUnit.MILLISECONDS)) {
+                throwIfCheckpointInProgress(priority);
+            }
+            locked = true;
+            // This is important for the case of recursive registration
+            throwIfCheckpointInProgress(priority);
+            if (currentPriority < 0) {
+                resources.put(resource, priority);
+            } else {
+                resourceQueue.add(Map.entry(resource, priority));
+            }
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        } finally {
+            if (locked) {
+                checkpointLock.unlock();
+            }
+        }
     }
 
-    protected synchronized void register(R resource, P payload) {
-        checkpointQ.put(resource, payload);
+    private void throwIfCheckpointInProgress(long priority) {
+        if (priority <= currentPriority) {
+            throw new IllegalStateException("Notifications for an upcoming checkpoint are already in progress (priority "
+                    + currentPriority + "). Please make sure to register this resource earlier or use higher priorty (" + priority + ")");
+        }
     }
 
     @Override
-    public synchronized void beforeCheckpoint(Context<? extends Resource> context) throws CheckpointException {
-        List<R> resources = checkpointQ.entrySet().stream()
-            .sorted(comparator)
-            .map(Map.Entry::getKey)
-            .collect(Collectors.toList());
+    public void beforeCheckpoint(Context<? extends Resource> context) throws CheckpointException {
+        // If afterRestore is running we need to delay the beforeCheckpoint
+        restoreLock.lock();
+        try {
+            checkpointLock.lock();
+            try {
+                runBeforeCheckpoint();
+            } finally {
+                if (restoreQ != null) {
+                    Collections.reverse(restoreQ);
+                }
+                currentPriority = -1;
+                checkpointLock.unlock();
+            }
+        } finally {
+            restoreLock.unlock();
+        }
+    }
 
+    private void runBeforeCheckpoint() throws CheckpointException {
+        Map.Entry<R, Long> drained;
+        while ((drained = resourceQueue.poll()) != null) {
+            resources.put(drained.getKey(), drained.getValue());
+        }
         CheckpointException exception = new CheckpointException();
-        for (Resource r : resources) {
-            if (FlagsHolder.DEBUG) {
-                System.err.println("jdk.crac beforeCheckpoint " + r.toString());
-            }
-            try {
-                r.beforeCheckpoint(this);
-            } catch (CheckpointException e) {
-                for (Throwable t : e.getSuppressed()) {
-                    exception.addSuppressed(t);
+        TreeMap<Long, List<R>> resources = this.resources.entrySet().stream().collect(
+                TreeMap::new, (m, e) -> m.computeIfAbsent(e.getValue(), p -> new ArrayList<>()).add(e.getKey()), TreeMap::putAll);
+        restoreQ = new ArrayList<>(this.resources.size());
+
+        // We cannot simply iterate because we could cause mutations
+        while (!resources.isEmpty()) {
+            var entry = resources.firstEntry();
+            resources.remove(entry.getKey());
+            currentPriority = entry.getKey();
+            for (R r : entry.getValue()) {
+                LoggerContainer.debug("beforeCheckpoint %s", r);
+                try {
+                    r.beforeCheckpoint(this);
+                    restoreQ.add(r);
+                } catch (CheckpointException e) {
+                    for (Throwable t : e.getSuppressed()) {
+                        exception.addSuppressed(t);
+                    }
+                } catch (Exception e) {
+                    exception.addSuppressed(e);
                 }
-            } catch (Exception e) {
-                exception.addSuppressed(e);
+            }
+            while ((drained = resourceQueue.poll()) != null) {
+                if (drained.getValue() <= currentPriority) {
+                    // this should be prevented in register method
+                    throw new IllegalStateException();
+                }
+                resources.computeIfAbsent(drained.getValue(), p -> new ArrayList<>()).add(drained.getKey());
             }
         }
-
-        Collections.reverse(resources);
-        restoreQ = resources;
 
         if (0 < exception.getSuppressed().length) {
             throw exception;
@@ -82,26 +136,33 @@ public abstract class AbstractContextImpl<R extends Resource, P> extends Context
     }
 
     @Override
-    public synchronized void afterRestore(Context<? extends Resource> context) throws RestoreException {
-        RestoreException exception = new RestoreException();
-        for (Resource r : restoreQ) {
-            if (FlagsHolder.DEBUG) {
-                System.err.println("jdk.crac afterRestore " + r.toString());
-            }
-            try {
-                r.afterRestore(this);
-            } catch (RestoreException e) {
-                for (Throwable t : e.getSuppressed()) {
-                    exception.addSuppressed(t);
+    public void afterRestore(Context<? extends Resource> context) throws RestoreException {
+        restoreLock.lock();
+        try {
+            RestoreException exception = new RestoreException();
+            for (Resource r : restoreQ) {
+                LoggerContainer.debug("afterRestore %s");
+                try {
+                    r.afterRestore(this);
+                } catch (RestoreException e) {
+                    Throwable[] suppressed = e.getSuppressed();
+                    if (suppressed.length == 0) {
+                        exception.addSuppressed(e);
+                    }
+                    for (Throwable t : suppressed) {
+                        exception.addSuppressed(t);
+                    }
+                } catch (Exception e) {
+                    exception.addSuppressed(e);
                 }
-            } catch (Exception e) {
-                exception.addSuppressed(e);
             }
-        }
-        restoreQ = null;
+            restoreQ = null;
 
-        if (0 < exception.getSuppressed().length) {
-            throw exception;
+            if (0 < exception.getSuppressed().length) {
+                throw exception;
+            }
+        } finally {
+            restoreLock.unlock();
         }
     }
 }

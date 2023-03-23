@@ -30,11 +30,9 @@ import jdk.crac.impl.CheckpointOpenFileException;
 import jdk.crac.impl.CheckpointOpenResourceException;
 import jdk.crac.impl.CheckpointOpenSocketException;
 import jdk.crac.impl.OrderedContext;
-import jdk.internal.access.SharedSecrets;
 import jdk.internal.crac.JDKContext;
 import sun.security.action.GetBooleanAction;
 
-import java.io.FileDescriptor;
 import java.io.PrintWriter;
 import java.io.StringWriter;
 import java.lang.reflect.InvocationTargetException;
@@ -132,10 +130,11 @@ public class Core {
         List<Map.Entry<Integer, Object>> claimedPairs = jdkContext.getClaimedFds().entrySet().stream().toList();
         int[] fdArr = new int[claimedPairs.size()];
         Object[] objArr = new Object[claimedPairs.size()];
+        LoggerContainer.debug("Claimed open file descriptors:");
         for (int i = 0; i < claimedPairs.size(); ++i) {
             fdArr[i] = claimedPairs.get(i).getKey();
             objArr[i] = claimedPairs.get(i).getValue();
-            System.out.printf("%d %s\n", fdArr[i], objArr[i]);
+            LoggerContainer.debug( "\t%d %s\n", fdArr[i], objArr[i]);
         }
 
         final Object[] bundle = checkpointRestore0(fdArr, objArr, checkpointException != null, jcmdStream);

@@ -5736,6 +5736,7 @@ void os::Linux::vm_create_start() {
   if (!CRaCCheckpointTo) {
     return;
   }
+  close_extra_descriptors();
   _vm_inited_fds.initialize();
 }
 
@@ -6122,7 +6123,7 @@ void VM_Crac::doit() {
       continue;
     }
 
-    char detailsbuf[128];
+    char detailsbuf[PATH_MAX];
     int linkret = readfdlink(i, detailsbuf, sizeof(detailsbuf));
     const char* details = 0 < linkret ? detailsbuf : "";
     print_resources("JVM: FD fd=%d type=%s: details1=\"%s\" ",
@@ -6313,6 +6314,69 @@ void os::Linux::restore() {
     execl(_crengine, _crengine, "restore", CRaCRestoreFrom, NULL);
     warning("cannot execute \"%s restore ...\" (%s)", _crengine, strerror(errno));
   }
+}
+
+static char modules_path[JVM_MAXPATHLEN] = { '\0' };
+
+static bool is_fd_ignored(int fd, const char *path) {
+  if (!strcmp(modules_path, path)) {
+    // Path to the modules directory is opened early when JVM is booted up and won't be closed.
+    // We can ignore this for purposes of CRaC.
+    return true;
+  }
+
+  const char *list = CRaCIgnoredFileDescriptors;
+  while (list && *list) {
+    const char *end = strchr(list, ',');
+    if (!end) {
+      end = list + strlen(list);
+    }
+    char *invalid;
+    int ignored_fd = strtol(list, &invalid, 10);
+    if (invalid == end) { // entry was integer -> file descriptor
+      if (fd == ignored_fd) {
+        log_trace(os)("CRaC not closing file descriptor %d (%s) as it is marked as ignored.", fd, path);
+        return true;
+      }
+    } else { // interpret entry as path
+      int path_len = path ? strlen(path) : -1;
+      if (path_len != -1 && path_len == end - list && !strncmp(path, list, end - list)) {
+        log_trace(os)("CRaC not closing file descriptor %d (%s) as it is marked as ignored.", fd, path);
+        return true;
+      }
+    }
+    if (*end) {
+      list = end + 1;
+    } else {
+      break;
+    }
+  }
+  return false;
+}
+
+void os::Linux::close_extra_descriptors() {
+  // Path to the modules directory is opened early when JVM is booted up and won't be closed.
+  // We can ignore this for purposes of CRaC.
+  if (modules_path[0] == '\0') {
+    const char* fileSep = os::file_separator();
+    jio_snprintf(modules_path, JVM_MAXPATHLEN, "%s%slib%smodules", Arguments::get_java_home(), fileSep, fileSep);
+  }
+
+  char path[PATH_MAX];
+  struct dirent *dp;
+
+  DIR *dir = opendir("/proc/self/fd");
+  while (dp = readdir(dir)) {
+    int fd = atoi(dp->d_name);
+    if (fd > 2 && fd != dirfd(dir)) {
+      int r = readfdlink(fd, path, sizeof(path));
+      if (!is_fd_ignored(fd, r != -1 ? path : nullptr)) {
+        log_warning(os)("CRaC closing file descriptor %d: %s\n", fd, path);
+        close(fd);
+      }
+    }
+  }
+  closedir(dir);
 }
 
 bool CracRestoreParameters::read_from(int fd) {

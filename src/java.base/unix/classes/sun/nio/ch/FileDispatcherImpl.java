@@ -249,7 +249,7 @@ class FileDispatcherImpl extends FileDispatcher {
     static native void release0(FileDescriptor fd, long pos, long size)
         throws IOException;
 
-    static native void close0(FileDescriptor fd) throws IOException;
+    private static native void close0(FileDescriptor fd) throws IOException;
 
     static native void preClose0(FileDescriptor fd) throws IOException;
 

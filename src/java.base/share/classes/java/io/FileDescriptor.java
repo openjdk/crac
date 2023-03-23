@@ -367,7 +367,11 @@ public final class FileDescriptor {
         if (valid()) {
             JDKContext ctx = jdk.internal.crac.Core.getJDKContext();
             if (ctx.claimFdWeak(this, this)) {
-                throw new CheckpointOpenFileException("FileDescriptor " + this.fd + " left open. " + JDKContext.COLLECT_FD_STACKTRACES_HINT, resource.stackTraceHolder);
+                String msg = "FileDescriptor " + this.fd + " left open. ";
+                if (!JDKContext.COLLECT_FD_STACKTRACES) {
+                    msg += JDKContext.COLLECT_FD_STACKTRACES_HINT;
+                }
+                throw new CheckpointOpenFileException(msg, resource.stackTraceHolder);
             }
         }
     }

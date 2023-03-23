@@ -101,8 +101,11 @@ public class RandomAccessFile implements DataOutput, DataInput, Closeable {
                     return;
                 }
                 int fdNum = fdAccess.get(fd);
-                throw new CheckpointOpenFileException("RandomAccessFile " + path + " left open (file descriptor " + fdNum + "). " + JDKContext.COLLECT_FD_STACKTRACES_HINT,
-                        fd.resource.stackTraceHolder);
+                String msg = "RandomAccessFile " + path + " left open (file descriptor " + fdNum + "). ";
+                if (!JDKContext.COLLECT_FD_STACKTRACES) {
+                    msg += JDKContext.COLLECT_FD_STACKTRACES_HINT;
+                }
+                throw new CheckpointOpenFileException(msg, fd.resource.stackTraceHolder);
             }
         }
 

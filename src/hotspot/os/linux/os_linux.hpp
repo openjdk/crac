@@ -175,6 +175,7 @@ class Linux {
   static bool prepare_checkpoint();
   static Handle checkpoint(jarray fd_arr, jobjectArray obj_arr, bool dry_run, jlong jcmd_stream, TRAPS);
   static void restore();
+  static void close_extra_descriptors();
 
   static jlong restore_start_time();
   static jlong uptime_since_restore();

@@ -26,6 +26,7 @@
 package jdk.internal.util.jar;
 
 import jdk.crac.Context;
+import jdk.crac.LoggerContainer;
 import jdk.crac.Resource;
 import jdk.internal.access.SharedSecrets;
 import jdk.internal.crac.Core;
@@ -36,13 +37,6 @@ import java.io.IOException;
 import java.util.jar.JarFile;
 
 public class PersistentJarFile extends JarFile implements JDKResource {
-    // PersistentJarFile is <clinit>ed when loading classes on the module path;
-    // when initializing the logger an implementation of logging is looked up through
-    // service-loading and that causes a recursion in opening the module.
-    // Therefore, we isolate the logger into a subclass and initialize only when needed.
-    private static class LoggerContainer {
-        private static final System.Logger logger = System.getLogger("jdk.crac");
-    }
 
     public PersistentJarFile(File file, boolean b, int openRead, Runtime.Version runtimeVersion) throws IOException {
         super(file, b, openRead, runtimeVersion);
@@ -51,7 +45,7 @@ public class PersistentJarFile extends JarFile implements JDKResource {
 
     @Override
     public void beforeCheckpoint(Context<? extends Resource> context) throws Exception {
-        LoggerContainer.logger.log(System.Logger.Level.INFO, this.getName() + " is recorded as always available on restore");
+        LoggerContainer.info(this.getName() + " is recorded as always available on restore");
         SharedSecrets.getJavaUtilZipFileAccess().beforeCheckpoint(this);
     }
 

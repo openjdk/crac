@@ -18,17 +18,40 @@
 // CA 94089 USA or visit www.azul.com if you need additional information or
 // have any questions.
 
+import jdk.test.lib.crac.CracBuilder;
+import jdk.test.lib.crac.CracTest;
+import jdk.test.lib.crac.CracTestArg;
 
 import java.nio.channels.Selector;
 import java.io.IOException;
 
 import java.util.concurrent.atomic.AtomicInteger;
 
+/*
+ * @test Selector/multipleSelectNow
+ * @summary check work of multiple selectNow() + C/R peaceful coexistence
+ * @library /test/lib
+ * @build Test
+ * @run driver jdk.test.lib.crac.CracTest false
+ * @run driver jdk.test.lib.crac.CracTest true
+ */
+public class Test implements CracTest {
 
-public class Test {
+    @CracTestArg
+    boolean skipCR;
 
-    private static void test(boolean skipCR) throws Exception {
+    @Override
+    public void test() throws Exception {
+        CracBuilder builder = new CracBuilder();
+        if (skipCR) {
+            builder.doPlain();
+        } else {
+            builder.doCheckpointAndRestore();
+        }
+    }
 
+    @Override
+    public void exec() throws Exception {
         AtomicInteger nSelected = new AtomicInteger(0);
 
         Selector selector = Selector.open();
@@ -84,23 +107,5 @@ public class Test {
         selector.select(200);
 
         selector.close();
-    }
-
-
-
-    public static void main(String args[]) throws Exception {
-
-        if (args.length < 1) { throw new RuntimeException("test number is missing"); }
-
-        switch (args[0]) {
-            case "1":
-                test(false);
-                break;
-            case "2":
-                test(true);
-                break;
-            default:
-                throw new RuntimeException("invalid test number");
-        }
     }
 }

@@ -44,8 +44,9 @@ public class ReseedTest implements CracTest {
     public void test() throws Exception {
         CracBuilder builder = new CracBuilder();
         builder.doCheckpoint();
-        int e1 = builder.startRestore().waitFor();
-        int e2 = builder.startRestore().waitFor();
+        builder.captureOutput(true);
+        String e1 = builder.doRestore().outputAnalyzer().getStdout();
+        String e2 = builder.doRestore().outputAnalyzer().getStdout();
         if (reseed) {
             assertEquals(e1, e2);
         } else {
@@ -70,7 +71,7 @@ public class ReseedTest implements CracTest {
             throw new RuntimeException("Restore ERROR " + e);
         }
 
-        int r = sr.nextInt(255);
-        System.exit(r);
+        System.out.println(sr.nextInt());
+        System.exit(0);
     }
 }

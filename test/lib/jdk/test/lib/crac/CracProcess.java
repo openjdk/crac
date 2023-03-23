@@ -80,9 +80,7 @@ public class CracProcess {
     public CracProcess waitForSuccess() throws InterruptedException {
         int exitValue = process.waitFor();
         assertEquals(0, exitValue, "Process returned unexpected exit code: " + exitValue);
-        if (builder.verbose) {
-            System.err.printf("Process %d completed with exit value %d%n", process.pid(), exitValue);
-        }
+        builder.log("Process %d completed with exit value %d%n", process.pid(), exitValue);
         return this;
     }
 

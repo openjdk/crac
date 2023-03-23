@@ -48,12 +48,13 @@ public class JarFileFactoryCacheTest implements CracTest {
     @Override
     public void exec() throws Exception {
         Path temp = Files.createTempDirectory(JarFileFactoryCacheTest.class.getName());
+        Path testFilePath = temp.resolve("test.txt");
         try {
-            Files.writeString(temp.resolve("test.txt"), "test\n");
+            Files.writeString(testFilePath, "test\n");
             jdk.test.lib.util.JarUtils.createJarFile(
                     Path.of("test.jar"), temp, "test.txt");
         } finally {
-            File testTxt = temp.resolve("test.txt").toFile();
+            File testTxt = testFilePath.toFile();
             if (testTxt.exists()) {
                 assert testTxt.delete();
             }

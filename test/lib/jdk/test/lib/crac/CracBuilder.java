@@ -28,6 +28,7 @@ public class CracBuilder {
     private static final Class<CracTestArg> dummyWorkaround = CracTestArg.class;
 
     boolean verbose = true;
+    boolean debug = false;
     final List<String> classpathEntries = new ArrayList<>();
     final Map<String, String> env = new HashMap<>();
     String imageDir = DEFAULT_IMAGE_DIR;
@@ -59,6 +60,11 @@ public class CracBuilder {
 
     public CracBuilder verbose(boolean verbose) {
         this.verbose = verbose;
+        return this;
+    }
+
+    public CracBuilder debug(boolean debug) {
+        this.debug = debug;
         return this;
     }
 
@@ -144,11 +150,19 @@ public class CracBuilder {
         cmd.add("-XX:CRaCCheckpointTo=" + imageDir);
         cmd.add(main().getName());
         cmd.addAll(Arrays.asList(args()));
-        if (verbose) {
-            System.err.println("Starting process to be checkpointed:");
-            System.err.println(String.join(" ", cmd));
-        }
+        log("Starting process to be checkpointed:");
+        log(String.join(" ", cmd));
         return new CracProcess(this, cmd);
+    }
+
+    void log(String fmt, Object... args) {
+        if (verbose) {
+            if (args.length == 0) {
+                System.err.println(fmt);
+            } else {
+                System.err.printf(fmt, args);
+            }
+        }
     }
 
     private void ensureContainerStarted() throws Exception {
@@ -162,10 +176,10 @@ public class CracBuilder {
             ensureContainerKilled();
             DockerTestUtils.buildJdkDockerImage(dockerImageName, "Dockerfile-is-ignored", "jdk-docker");
             FileUtils.deleteFileTreeWithRetry(Path.of(".", "jdk-docker"));
+            // Make sure we start with a clean image directory
+            DockerTestUtils.execute(Container.ENGINE_COMMAND, "volume", "rm", "cr");
             List<String> cmd = prepareContainerCommand(dockerImageName, dockerOptions);
-            if (verbose) {
-                System.err.println("Starting docker container:\n" + String.join(" ", cmd));
-            }
+            log("Starting docker container:\n" + String.join(" ", cmd));
             assertEquals(0, new ProcessBuilder().inheritIO().command(cmd).start().waitFor());
             containerStarted = true;
         }
@@ -177,11 +191,17 @@ public class CracBuilder {
         cmd.addAll(Arrays.asList("run", "--rm", "-d"));
         cmd.add("--privileged"); // required to give CRIU sufficient permissions
         cmd.add("--init"); // otherwise the checkpointed process would not be reaped (by sleep with PID 1)
-        cmd.addAll(Arrays.asList("--volume", Utils.TEST_CLASSES + ":/test-classes/"));
+        int entryCounter = 0;
+        for (var entry : Utils.TEST_CLASS_PATH.split(File.pathSeparator)) {
+            cmd.addAll(Arrays.asList("--volume", entry + ":/cp/" + (entryCounter++)));
+        }
         cmd.addAll(Arrays.asList("--volume", "cr:/cr"));
         cmd.addAll(Arrays.asList("--volume", CRIU_PATH + ":/criu"));
         cmd.addAll(Arrays.asList("--env", "CRAC_CRIU_PATH=/criu"));
         cmd.addAll(Arrays.asList("--name", CONTAINER_NAME));
+        if (debug) {
+            cmd.addAll(Arrays.asList("--publish", "5005:5005"));
+        }
         if (options != null) {
             cmd.addAll(Arrays.asList(options));
         }
@@ -197,12 +217,18 @@ public class CracBuilder {
 
     public void recreateContainer(String imageName, String... options) throws Exception {
         assertTrue(containerStarted);
+        String minPid = DockerTestUtils.execute(Container.ENGINE_COMMAND, "exec", CONTAINER_NAME,
+                "cat", "/proc/sys/kernel/ns_last_pid").getStdout().trim();
         DockerTestUtils.execute(Container.ENGINE_COMMAND, "kill", CONTAINER_NAME).getExitValue();
         List<String> cmd = prepareContainerCommand(imageName, options);
-        if (verbose) {
-            System.err.println("Restarting docker container:\n" + String.join(" ", cmd));
-        }
+        log("Recreating docker container:\n" + String.join(" ", cmd));
         assertEquals(0, new ProcessBuilder().inheritIO().command(cmd).start().waitFor());
+        // We need to cycle PIDs; had we tried to restore right away the exec would get the
+        // same PIDs and restore would fail.
+        log("Cycling PIDs until %s%n", minPid);
+        DockerTestUtils.execute(Container.ENGINE_COMMAND, "exec",
+                CONTAINER_NAME, "bash", "-c",
+                "while [ $(cat /proc/sys/kernel/ns_last_pid) -le " + minPid + " ]; do cat /dev/null; done");
     }
 
     public CracProcess doRestore() throws Exception {
@@ -216,10 +242,8 @@ public class CracBuilder {
         ensureContainerStarted();
         List<String> cmd = prepareCommand(prefixJava);
         cmd.add("-XX:CRaCRestoreFrom=" + imageDir);
-        if (verbose) {
-            System.err.println("Starting restored process:");
-            System.err.println(String.join(" ", cmd));
-        }
+        log("Starting restored process:");
+        log(String.join(" ", cmd));
         return new CracProcess(this, cmd);
     }
 
@@ -232,12 +256,13 @@ public class CracBuilder {
         cmd.add("-ea");
         cmd.add("-cp");
         cmd.add(getClassPath());
+        if (debug) {
+            cmd.add("-agentlib:jdwp=transport=dt_socket,server=y,suspend=y,address=0.0.0.0:5005");
+        }
         cmd.add(main().getName());
         cmd.addAll(Arrays.asList(args()));
-        if (verbose) {
-            System.err.println("Starting process without CRaC:");
-            System.err.println(String.join(" ", cmd));
-        }
+        log("Starting process without CRaC:");
+        log(String.join(" ", cmd));
         return new CracProcess(this, cmd);
     }
 
@@ -246,7 +271,10 @@ public class CracBuilder {
         if (dockerImageName == null) {
             classPath += Utils.TEST_CLASS_PATH;
         } else {
-            classPath += "/test-classes";
+            int numEntries = Utils.TEST_CLASS_PATH.split(File.pathSeparator).length;
+            for (int i = 0; i < numEntries; ++i) {
+                classPath += "/cp/" + i + File.pathSeparator;
+            }
         }
         return classPath;
     }
@@ -275,6 +303,10 @@ public class CracBuilder {
             cmd.add("-XX:+UnlockDiagnosticVMOptions");
             cmd.add("-XX:+CRPrintResourcesOnCheckpoint");
         }
+        if (debug) {
+            cmd.add("-agentlib:jdwp=transport=dt_socket,server=y,suspend=y,address=0.0.0.0:5005");
+            cmd.add("-XX:-CRDoThrowCheckpointException");
+        }
         return cmd;
     }
 
@@ -294,4 +326,5 @@ public class CracBuilder {
         // This works for non-docker commands, too
         DockerTestUtils.execute(cmd).shouldHaveExitValue(0);
     }
+
 }

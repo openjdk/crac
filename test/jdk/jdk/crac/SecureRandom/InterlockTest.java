@@ -114,10 +114,6 @@ public class InterlockTest implements Resource, CracTest {
         stop = true;
     }
 
-    public static void main(String[] args) throws Exception {
-        CracTest.run(InterlockTest.class, args);
-    }
-
     @Override
     public void test() throws Exception {
         new CracBuilder().doCheckpointAndRestore();

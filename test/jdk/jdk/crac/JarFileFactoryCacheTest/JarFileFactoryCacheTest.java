@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022, Azul Systems, Inc. All rights reserved.
+ * Copyright (c) 2022-2023, Azul Systems, Inc. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -22,30 +22,53 @@
  */
 
 import jdk.crac.*;
+import jdk.test.lib.crac.CracBuilder;
+import jdk.test.lib.crac.CracEngine;
+import jdk.test.lib.crac.CracTest;
 
+import java.io.File;
 import java.io.InputStream;
 import java.net.URL;
+import java.nio.file.Files;
 import java.nio.file.Path;
 
 /**
  * @test JarFileFactoryCacheTest
  * @library /test/lib
- * @run main/othervm -XX:CREngine=simengine -XX:CRaCCheckpointTo=./cr -XX:+UnlockDiagnosticVMOptions -XX:+CRPrintResourcesOnCheckpoint JarFileFactoryCacheTest
+ * @build JarFileFactoryCacheTest
+ * @run driver jdk.test.lib.crac.CracTest
  */
-public class JarFileFactoryCacheTest {
-    static public void main(String[] args) throws Exception {
-        jdk.test.lib.util.JarUtils.createJarFile(
-            Path.of("test.jar"),
-            Path.of(System.getProperty("test.src")),
-            "test.txt");
+public class JarFileFactoryCacheTest implements CracTest {
+    @Override
+    public void test() throws Exception {
+        new CracBuilder().engine(CracEngine.SIMULATE).printResources(true)
+                .startCheckpoint().waitForSuccess();
+    }
+
+    @Override
+    public void exec() throws Exception {
+        Path temp = Files.createTempDirectory(JarFileFactoryCacheTest.class.getName());
+        Path testFilePath = temp.resolve("test.txt");
+        try {
+            Files.writeString(testFilePath, "test\n");
+            jdk.test.lib.util.JarUtils.createJarFile(
+                    Path.of("test.jar"), temp, "test.txt");
+        } finally {
+            File testTxt = testFilePath.toFile();
+            if (testTxt.exists()) {
+                assert testTxt.delete();
+            }
+            assert temp.toFile().delete();
+        }
 
         URL url = new URL("jar:file:test.jar!/test.txt");
         InputStream inputStream = url.openStream();
         byte[] content = inputStream.readAllBytes();
         if (content.length != 5) {
-            throw new AssertionError("wrong content");
+            throw new AssertionError("wrong content: " + new String(content));
         }
         inputStream.close();
+        // Nulling the variables is actually necessary!
         inputStream = null;
         url = null;
 

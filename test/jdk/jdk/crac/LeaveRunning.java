@@ -23,38 +23,29 @@
  * questions.
  */
 
-import jdk.test.lib.process.OutputAnalyzer;
-import jdk.test.lib.process.ProcessTools;
+import jdk.crac.*;
+
+import jdk.test.lib.crac.CracBuilder;
+import jdk.test.lib.crac.CracTest;
 
 /**
  * @test
  * @library /test/lib
- * @build CheckpointRestore
- * @run main LeaveRunning
+ * @build LeaveRunning
+ * @run driver jdk.test.lib.crac.CracTest
  */
-public class LeaveRunning {
-    public static void main(String[] args) {
-        OutputAnalyzer output;
-        try {
-            ProcessBuilder pb = ProcessTools.createTestJvm(
-                "-XX:CRaCCheckpointTo=./cr", CheckpointRestore.class.getSimpleName());
-            pb.environment().put("CRAC_CRIU_LEAVE_RUNNING", "");
-            output = ProcessTools.executeProcess(pb);
-        } catch (Exception e) {
-            throw new RuntimeException(e);
-        }
+public class LeaveRunning implements CracTest {
+    @Override
+    public void test() throws Exception {
+        CracBuilder builder = new CracBuilder().env("CRAC_CRIU_LEAVE_RUNNING", "")
+                .captureOutput(true);
+        builder.startCheckpoint().waitForSuccess().outputAnalyzer().shouldContain(RESTORED_MESSAGE);
+        builder.doRestore().outputAnalyzer().shouldContain(RESTORED_MESSAGE);
+    }
 
-        output.shouldHaveExitValue(0);
-        output.shouldContain(CheckpointRestore.RESTORED_MESSAGE);
-
-        try {
-            output = ProcessTools.executeTestJvm(
-                "-XX:CRaCRestoreFrom=./cr");
-        } catch (Exception e) {
-            throw new RuntimeException(e);
-        }
-
-        output.shouldHaveExitValue(0);
-        output.shouldContain(CheckpointRestore.RESTORED_MESSAGE);
+    @Override
+    public void exec() throws Exception {
+        Core.checkpointRestore();
+        System.out.println(RESTORED_MESSAGE);
     }
 }

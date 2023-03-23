@@ -21,150 +21,108 @@
  * questions.
  */
 
-import jdk.test.lib.Container;
 import jdk.test.lib.Utils;
 import jdk.test.lib.containers.docker.Common;
-import jdk.test.lib.containers.docker.DockerRunOptions;
 import jdk.test.lib.containers.docker.DockerTestUtils;
-import jdk.test.lib.process.StreamPumper;
+import jdk.test.lib.crac.CracBuilder;
+import jdk.test.lib.crac.CracProcess;
+import jdk.test.lib.crac.CracTest;
+import jdk.test.lib.crac.CracTestArg;
 
-import java.io.IOException;
-import java.io.InputStream;
+import java.net.InetAddress;
+import java.net.UnknownHostException;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.List;
 import java.util.concurrent.*;
-import java.util.function.Consumer;
 
 /*
  * @test
  * @summary Test if InetAddress cache is flushed after checkpoint/restore
  * @requires docker.support
  * @library /test/lib
- * @modules java.base/jdk.crac
- * @build ResolveInetAddress
- * @run main/timeout=360 ResolveTest
+ * @build ResolveTest
+ * @run driver jdk.test.lib.crac.CracTest
  */
-public class ResolveTest {
+public class ResolveTest implements CracTest {
     private static final String imageName = Common.imageName("inet-address");
     public static final String TEST_HOSTNAME = "some.test.hostname.example.com";
-    public static final String CONTAINER_NAME = "test-inet-address";
-    public static final String CRAC_CRIU_PATH;
 
-    static {
-        String path = System.getenv("CRAC_CRIU_PATH");
-        if (path == null) {
-            path = Utils.TEST_JDK + "/lib/criu";
-        }
-        CRAC_CRIU_PATH = path;
-    }
+    @CracTestArg(value = 0, optional = true)
+    String ip;
 
-    public static void main(String[] args) throws Exception {
+    @CracTestArg(value = 1, optional = true)
+    String checkFile;
+
+    @Override
+    public void test() throws Exception {
         if (!DockerTestUtils.canTestDocker()) {
             return;
         }
-        if (!Files.exists(Path.of(CRAC_CRIU_PATH))) {
-            throw new RuntimeException("criu cannot be found in " + CRAC_CRIU_PATH);
-        }
-        DockerTestUtils.buildJdkDockerImage(imageName, "Dockerfile-is-ignored", "jdk-docker");
+        CracBuilder builder = new CracBuilder()
+                .inDockerImage(imageName).dockerOptions("--add-host", TEST_HOSTNAME + ":192.168.12.34")
+                .captureOutput(true)
+                .args(CracTest.args(TEST_HOSTNAME, "/second-run"));
+
         try {
-            // Make sure we're starting with a clean image directory
-            DockerTestUtils.execute(Container.ENGINE_COMMAND, "volume", "rm", "cr");
-            Future<?> completed = startTestProcess();
-            checkpointTestProcess();
-            completed.get(5, TimeUnit.SECONDS);
-            startRestoredProcess();
+            CompletableFuture<?> firstOutputFuture = new CompletableFuture<Void>();
+            CracProcess checkpointed = builder.startCheckpoint().watch(line -> {
+                System.out.println("OUTPUT: " + line);
+                if (line.equals("192.168.12.34")) {
+                    firstOutputFuture.complete(null);
+                }
+            }, error -> {
+                System.err.println("ERROR: " + error);
+                firstOutputFuture.cancel(false);
+            });
+            firstOutputFuture.get(10, TimeUnit.SECONDS);
+            builder.checkpointViaJcmd();
+            checkpointed.waitForCheckpointed();
+
+            builder.recreateContainer(imageName,
+                    "--add-host", TEST_HOSTNAME + ":192.168.56.78",
+                    "--volume", Utils.TEST_CLASSES + ":/second-run"); // any file/dir suffices
+
+
+            builder.startRestore().outputAnalyzer()
+                    .shouldHaveExitValue(0)
+                    .shouldContain("192.168.56.78");
         } finally {
-            ensureContainerDead();
-            DockerTestUtils.removeDockerImage(imageName);
+            builder.ensureContainerKilled();
         }
     }
 
-    private static Future<?> startTestProcess() throws Exception {
-        ensureContainerDead();
-
-        List<String> cmd = new ArrayList<>();
-        cmd.add(Container.ENGINE_COMMAND);
-        cmd.addAll(Arrays.asList("run", "--rm", "--add-host", TEST_HOSTNAME + ":192.168.12.34"));
-        cmd.addAll(Arrays.asList("--volume", Utils.TEST_CLASSES + ":/test-classes/"));
-        cmd.addAll(Arrays.asList("--volume", "cr:/cr"));
-        cmd.addAll(Arrays.asList("--volume", CRAC_CRIU_PATH + ":/criu"));
-        cmd.addAll(Arrays.asList("--env", "CRAC_CRIU_PATH=/criu"));
-        cmd.addAll(Arrays.asList("--entrypoint", "bash"));
-        // checkpoint-restore does not work without this: TODO fine-grained --cap-add
-        cmd.add("--privileged");
-        cmd.addAll(Arrays.asList("--name", CONTAINER_NAME));
-        cmd.add(imageName);
-        // Checkpointing does not work for PID 1, therefore we add an intermediary bash process
-        // At the same time docker --init is not sufficient; since `tini` does not wait for *all*
-        // children to finish, just the main process, creating /cr/cppath might race and we would
-        // not be able to restore the process.
-        // This workaround should not be necessary when https://github.com/openjdk/crac/pull/46
-        // is integrated.
-        List<String> javaCmd = new ArrayList<>();
-        javaCmd.addAll(Arrays.asList("/jdk/bin/java", "-cp", "/test-classes/", "-XX:CRaCCheckpointTo=/cr"));
-        javaCmd.addAll(Arrays.asList(Utils.getTestJavaOpts()));
-        javaCmd.addAll(Arrays.asList("ResolveInetAddress", TEST_HOSTNAME, "/second-run"));
-        cmd.addAll(Arrays.asList("-c", String.join(" ", javaCmd) + "; while [ ! -s /cr/cppath ]; do sleep 1; done;"));
-
-        System.err.println("Running: " + String.join(" ", cmd));
-
-        CompletableFuture<?> firstOutputFuture = new CompletableFuture<Void>();
-        Future<?> completed = executeWatching(cmd, line -> {
-            System.out.println("OUTPUT: " + line);
-            if (line.equals("192.168.12.34")) {
-                firstOutputFuture.complete(null);
+    @Override
+    public void exec() throws Exception {
+        if (ip == null || checkFile == null) {
+            System.err.println("Args: <ip address> <check file path>");
+            return;
+        }
+        printAddress(ip);
+        while (!Files.exists(Path.of(checkFile))) {
+            try {
+                //noinspection BusyWait
+                Thread.sleep(100);
+            } catch (InterruptedException e) {
+                System.err.println("Interrupted!");
+                return;
             }
-        }, error -> {
-            System.err.println("ERROR: " + error);
-            firstOutputFuture.cancel(false);
-        });
-        firstOutputFuture.get(10, TimeUnit.SECONDS);
-        return completed;
+        }
+        printAddress(ip);
     }
 
-    private static void ensureContainerDead() throws Exception {
-        // ensure the container is not running, ignore if not present
-        DockerTestUtils.execute("docker", "kill", CONTAINER_NAME).getExitValue();
-    }
-
-    private static void checkpointTestProcess() throws Exception {
-        DockerTestUtils.execute("docker", "exec", CONTAINER_NAME,
-                        "/jdk/bin/jcmd", ResolveInetAddress.class.getName(), "JDK.checkpoint")
-                .shouldHaveExitValue(0);
-    }
-
-    private static Future<Void> executeWatching(List<String> command, Consumer<String> outputConsumer, Consumer<String> errorConsumer) throws IOException, ExecutionException, InterruptedException, TimeoutException {
-        ProcessBuilder pb = new ProcessBuilder(command);
-        Process p = pb.start();
-        Future<Void> outputPumper = pump(p.getInputStream(), outputConsumer);
-        Future<Void> errorPumper = pump(p.getErrorStream(), errorConsumer);
-        return outputPumper;
-    }
-
-    private static Future<Void> pump(InputStream stream, Consumer<String> consumer) {
-        return new StreamPumper(stream).addPump(new StreamPumper.LinePump() {
-            @Override
-            protected void processLine(String line) {
-                consumer.accept(line);
+    private static void printAddress(String hostname) {
+        try {
+            InetAddress address = InetAddress.getByName(hostname);
+            // we will assume IPv4 address
+            byte[] bytes = address.getAddress();
+            System.out.print(bytes[0] & 0xFF);
+            for (int i = 1; i < bytes.length; ++i) {
+                System.out.print('.');
+                System.out.print(bytes[i] & 0xFF);
             }
-        }).process();
-    }
-
-    private static void startRestoredProcess() throws Exception {
-        DockerRunOptions opts = new DockerRunOptions(imageName, "/jdk/bin/java", "ResolveInetAddress");
-        opts.addDockerOpts("--volume", Utils.TEST_CLASSES + ":/test-classes/");
-        opts.addDockerOpts("--volume", "cr:/cr");
-        opts.addDockerOpts("--volume", Utils.TEST_CLASSES + ":/second-run"); // any file suffices
-        opts.addDockerOpts("--volume", CRAC_CRIU_PATH + ":/criu");
-        opts.addDockerOpts("--env", "CRAC_CRIU_PATH=/criu");
-        opts.addDockerOpts("--add-host", TEST_HOSTNAME + ":192.168.56.78");
-        opts.addDockerOpts("--privileged");
-        opts.addJavaOpts("-XX:CRaCRestoreFrom=/cr");
-        DockerTestUtils.dockerRunJava(opts)
-                .shouldHaveExitValue(0)
-                .shouldContain("192.168.56.78");
+            System.out.println();
+        } catch (UnknownHostException e) {
+            System.out.println();
+        }
     }
 }

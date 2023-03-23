@@ -18,15 +18,36 @@
 // CA 94089 USA or visit www.azul.com if you need additional information or
 // have any questions.
 
-
 import jdk.crac.*;
+import jdk.test.lib.crac.*;
+
 import java.util.concurrent.atomic.AtomicInteger;
 
-
-public class Test implements Resource {
-
+/*
+ * @test
+ * @summary check that the recursive checkpoint is not allowed
+ * @library /test/lib
+ * @build Test
+ * @run driver/timeout=60 jdk.test.lib.crac.CracTest 10
+ */
+public class Test implements Resource, CracTest {
     private static final AtomicInteger counter = new AtomicInteger(0);
     private static Exception exception = null;
+
+    @CracTestArg
+    int numThreads;
+
+    @Override
+    public void test() throws Exception {
+        CracBuilder builder = new CracBuilder().engine(CracEngine.PAUSE);
+        CracProcess process = builder.startCheckpoint();
+        process.waitForPausePid();
+        for (int i = 1; i <= numThreads + 1; ++i) {
+            System.err.printf("Restore #%d%n", i);
+            builder.doRestore();
+        }
+        process.waitForSuccess();
+    }
 
     private static class TestThread extends Thread {
 
@@ -86,24 +107,17 @@ public class Test implements Resource {
         }
     }
 
-    public static void main(String args[]) throws Exception {
-        if (args.length < 1) { throw new RuntimeException("number of threads is missing"); }
-        int numThreads;
-        try{
-            numThreads = Integer.parseInt(args[0]);
-        } catch (NumberFormatException ex){
-            throw new RuntimeException("invalid number of threads");
-        }
-
+    @Override
+    public void exec() throws Exception {
         Core.getGlobalContext().register(new Test());
 
         TestThread[] threads = new TestThread[numThreads];
-        for(int i=0; i<numThreads; i++) {
+        for (int i = 0; i < numThreads; i++) {
             threads[i] = new TestThread();
             threads[i].start();
         };
 
-        Thread.currentThread().sleep(100);
+        Thread.sleep(100);
         try {
             jdk.crac.Core.checkpointRestore();
         } catch (CheckpointException e) {
@@ -112,7 +126,7 @@ public class Test implements Resource {
             throw new RuntimeException("Restore ERROR " + e);
         }
 
-        for(int i=0; i<numThreads; i++) {
+        for (int i = 0; i < numThreads; i++) {
             threads[i].join();
         };
 

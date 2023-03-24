@@ -46,8 +46,12 @@ import java.util.stream.Collectors;
 public class JDKContext extends AbstractContextImpl<JDKResource, Void> {
     public static final String COLLECT_FD_STACKTRACES_PROPERTY = "jdk.crac.collect-fd-stacktraces";
     public static final String COLLECT_FD_STACKTRACES_HINT = "Use -D" + COLLECT_FD_STACKTRACES_PROPERTY + "=true to find the source.";
-    public static final boolean COLLECT_FD_STACKTRACES =
-            GetBooleanAction.privilegedGetProperty(JDKContext.COLLECT_FD_STACKTRACES_PROPERTY);
+
+    // JDKContext by itself is initialized too early when system properties are not set yet
+    public static class Properties {
+        public static final boolean COLLECT_FD_STACKTRACES =
+                GetBooleanAction.privilegedGetProperty(JDKContext.COLLECT_FD_STACKTRACES_PROPERTY);
+    }
 
     private WeakHashMap<FileDescriptor, Object> claimedFds;
 

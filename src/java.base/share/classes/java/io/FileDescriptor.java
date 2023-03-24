@@ -67,7 +67,7 @@ public final class FileDescriptor {
         Resource() {
             JDKContext jdkContext = Core.getJDKContext();
             jdkContext.register(this);
-            if (JDKContext.COLLECT_FD_STACKTRACES) {
+            if (JDKContext.Properties.COLLECT_FD_STACKTRACES) {
                 stackTraceHolder = new Exception("This file descriptor was created here");
             } else {
                 stackTraceHolder = null;
@@ -368,7 +368,7 @@ public final class FileDescriptor {
             JDKContext ctx = jdk.internal.crac.Core.getJDKContext();
             if (ctx.claimFdWeak(this, this)) {
                 String msg = "FileDescriptor " + this.fd + " left open. ";
-                if (!JDKContext.COLLECT_FD_STACKTRACES) {
+                if (!JDKContext.Properties.COLLECT_FD_STACKTRACES) {
                     msg += JDKContext.COLLECT_FD_STACKTRACES_HINT;
                 }
                 throw new CheckpointOpenFileException(msg, resource.stackTraceHolder);

@@ -102,7 +102,7 @@ public class RandomAccessFile implements DataOutput, DataInput, Closeable {
                 }
                 int fdNum = fdAccess.get(fd);
                 String msg = "RandomAccessFile " + path + " left open (file descriptor " + fdNum + "). ";
-                if (!JDKContext.COLLECT_FD_STACKTRACES) {
+                if (!JDKContext.Properties.COLLECT_FD_STACKTRACES) {
                     msg += JDKContext.COLLECT_FD_STACKTRACES_HINT;
                 }
                 throw new CheckpointOpenFileException(msg, fd.resource.stackTraceHolder);

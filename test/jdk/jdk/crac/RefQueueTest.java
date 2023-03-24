@@ -25,16 +25,27 @@ import java.io.*;
 import java.lang.ref.Cleaner;
 
 import jdk.crac.*;
+import jdk.test.lib.crac.CracBuilder;
+import jdk.test.lib.crac.CracEngine;
+import jdk.test.lib.crac.CracTest;
 
 /**
  * @test
- * @run main/othervm -XX:CREngine=simengine -XX:CRaCCheckpointTo=./cr RefQueueTest
+ * @library /test/lib
+ * @build RefQueueTest
+ * @run driver jdk.test.lib.crac.CracTest
  */
-public class RefQueueTest {
+public class RefQueueTest implements CracTest {
     private static final Cleaner cleaner = Cleaner.create();
 
-    static public void main(String[] args) throws Exception {
+    @Override
+    public void test() throws Exception {
+        new CracBuilder().engine(CracEngine.SIMULATE)
+                .startCheckpoint().waitForSuccess();
+    }
 
+    @Override
+    public void exec() throws Exception {
         File badFile = File.createTempFile("jtreg-RefQueueTest", null);
         OutputStream badStream = new FileOutputStream(badFile);
         badStream.write('j');

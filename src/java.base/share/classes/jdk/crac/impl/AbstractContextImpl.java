@@ -109,7 +109,7 @@ public abstract class AbstractContextImpl<R extends Resource, P> extends Context
             resources.remove(entry.getKey());
             currentPriority = entry.getKey();
             for (R r : entry.getValue()) {
-                LoggerContainer.debug("beforeCheckpoint %s", r);
+                LoggerContainer.debug("beforeCheckpoint {0}", r);
                 try {
                     r.beforeCheckpoint(this);
                     restoreQ.add(r);
@@ -141,7 +141,7 @@ public abstract class AbstractContextImpl<R extends Resource, P> extends Context
         try {
             RestoreException exception = new RestoreException();
             for (Resource r : restoreQ) {
-                LoggerContainer.debug("afterRestore %s");
+                LoggerContainer.debug("afterRestore {0}", r);
                 try {
                     r.afterRestore(this);
                 } catch (RestoreException e) {

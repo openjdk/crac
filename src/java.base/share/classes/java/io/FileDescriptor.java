@@ -90,6 +90,11 @@ public final class FileDescriptor {
         public Priority getPriority() {
             return Priority.FILE_DESCRIPTORS;
         }
+
+        @Override
+        public String toString() {
+            return getClass().getName() + "(FD " + fd + ")";
+        }
     }
 
     Resource resource = new Resource();

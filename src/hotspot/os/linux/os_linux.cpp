@@ -39,7 +39,6 @@
 #include "oops/oop.inline.hpp"
 #include "oops/typeArrayOop.inline.hpp"
 #include "os_linux.inline.hpp"
-#include "os_linux_ifunc.hpp"
 #include "os_posix.inline.hpp"
 #include "os_share_linux.hpp"
 #include "osContainer_linux.hpp"
@@ -120,7 +119,6 @@
 # include <sys/ioctl.h>
 # include <libgen.h>
 # include <linux/elf-em.h>
-# include <execinfo.h>
 #ifdef __GLIBC__
 # include <malloc.h>
 #endif
@@ -6026,234 +6024,7 @@ public:
   }
 };
 
-class Freeze {
-  static const int signo = SIGUSR1;
-  struct sigaction act_old;
-
-  template<class Callback> bool all_threads(Callback callback) const {
-    const char dirname[] = "/proc/self/task";
-    GrowableArray<pid_t> done;
-    bool retry;
-    do {
-      retry = false;
-      DIR *dir = opendir(dirname);
-      if (dir == NULL) {
-        tty->print_cr("JVM: Error opening %s: %m", dirname);
-        return false;
-      }
-      pid_t tid = gettid();
-      struct dirent *ent;
-      while (errno = 0, ent = readdir(dir)) {
-        const char *name = ent->d_name;
-        if (strcmp(name, ".") == 0)
-          continue;
-        if (strcmp(name, "..") == 0)
-          continue;
-        char *endptr;
-        unsigned long ul = strtoul(name, &endptr, 10);
-        pid_t ent_tid = ul;
-        if (ul >= LONG_MAX || ent_tid != (long) ul) {
-          tty->print_cr("JVM: Error parsing %s entry \"%s\"", dirname, name);
-          return false;
-        }
-        if (ent_tid == tid)
-          continue;
-        if (!done.append_if_missing(ent_tid))
-          continue;
-        retry = true;
-        callback(ent_tid);
-      }
-      if (errno) {
-        tty->print_cr("JVM: Error reading %s: %m", dirname);
-        return false;
-      }
-      if (closedir(dir)) {
-        tty->print_cr("JVM: Error closing %s: %m", dirname);
-        return false;
-      }
-    } while (retry);
-    return true;
-  }
-  static pthread_mutex_t signaled_and_in_handler_mutex; // protect both 'signaled' and 'in_handler'
-  static pthread_cond_t signaled_cond;
-  static size_t signaled, in_handler;
-  static pthread_cond_t resume_cond;
-#ifdef __x86_64__
-  __attribute__((noinline, noclone)) static bool caller_is_unsafe() {
-    // [0] is ourselves, [1] is handler(), [2] is signal frame, [3] is a signal-interrupted code.
-    const size_t bt_size = 4;
-    void *bt[bt_size];
-    if (backtrace(bt, bt_size) != bt_size) {
-      tty->print_cr("JVM: Freeze: TID %d backtrace(%zu) failed\n", (int)gettid(), bt_size);
-      return false;
-    }
-    const void *code = bt[bt_size - 1];
-    Dl_info info;
-    if (!dladdr(code, &info)) {
-      // Signal-interrupted code is not in a shared library.
-      return false;
-    }
-    const char *cs = strrchr(info.dli_fname, '/');
-    if (!cs || strcmp(cs + 1, "libc.so.6") != 0) {
-      // Signal-interrupted code is not in glibc.
-      return false;
-    }
-    const uint16_t *syscall = ((const uint16_t *)code) - 1;
-    // The check is not absolutely safe as we cannot disasemble backwards.
-    if (*syscall == 0x050f) {
-      // Signal-interrupted code is waiting in syscall.
-      return false;
-    }
-    return true;
-  }
-#endif // __x86_64__
-  static void handler(int handler_signo) {
-    assert(handler_signo == signo, "handler signo");
-    int err;
-    err = pthread_mutex_lock(&signaled_and_in_handler_mutex);
-    assert(!err, "pthread error");
-    ++signaled;
-    ++in_handler;
-    err = pthread_mutex_unlock(&signaled_and_in_handler_mutex);
-    assert(!err, "pthread error");
-    err = pthread_cond_signal(&signaled_cond);
-    assert(!err, "pthread error");
-#ifdef __x86_64__
-    if (caller_is_unsafe()) {
-      frozen = false;
-      err = pthread_mutex_lock(&signaled_and_in_handler_mutex);
-      assert(!err, "pthread error");
-      --in_handler;
-      err = pthread_mutex_unlock(&signaled_and_in_handler_mutex);
-      assert(!err, "pthread error");
-      return;
-    }
-#endif // __x86_64__
-    // Just wait until thaw() is called. No mutex is needed for that.
-    pthread_mutex_t unused_mutex = PTHREAD_MUTEX_INITIALIZER;
-    err = pthread_mutex_lock(&unused_mutex);
-    assert(!err, "pthread error");
-    err = pthread_cond_wait(&resume_cond, &unused_mutex);
-    assert(!err, "pthread error");
-    err = pthread_mutex_lock(&signaled_and_in_handler_mutex);
-    assert(!err, "pthread error");
-    --in_handler;
-    err = pthread_mutex_unlock(&signaled_and_in_handler_mutex);
-    assert(!err, "pthread error");
-  }
-  static bool frozen;
-#ifdef ASSERT
-  static bool singleton;
-#endif
-
-public:
-  bool freeze() {
-    assert(!frozen, "double freeze?");
-    struct sigaction act;
-    memset(&act, 0, sizeof(act));
-    act.sa_handler = handler;
-    if (sigaction(signo, &act, &act_old)) {
-      tty->print_cr("JVM: Freeze::freeze sigaction(%d): %m", signo);
-      return false;
-    }
-    assert(act_old.sa_handler == SIG_DFL, "SIG_DFL for signo");
-    signaled_and_in_handler_mutex = PTHREAD_MUTEX_INITIALIZER;
-    signaled_cond = PTHREAD_COND_INITIALIZER;
-    signaled = 0;
-    in_handler = 0;
-    resume_cond = PTHREAD_COND_INITIALIZER;
-    size_t count = 0;
-    frozen = true;
-    all_threads([&](pid_t ent_tid) {
-      if (!tgkill(getpid(), ent_tid, signo)) {
-        ++count;
-      } else {
-        tty->print_cr("JVM: Error sending signal %d to TID %ld", signo, (long)ent_tid);
-      }
-    });
-    int err;
-    err = pthread_mutex_lock(&signaled_and_in_handler_mutex);
-    assert(!err, "pthread error");
-    while (signaled < count) {
-      err = pthread_cond_wait(&signaled_cond, &signaled_and_in_handler_mutex);
-      assert(!err, "pthread error");
-    }
-    assert(signaled == count, "JVM: Freeze: signaled == count");
-    err = pthread_mutex_unlock(&signaled_and_in_handler_mutex);
-    assert(!err, "pthread error");
-    if (sigaction(signo, &act_old, NULL)) {
-      tty->print_cr("JVM: Freeze::thaw sigaction(%d): %m", signo);
-      return false;
-    }
-    return frozen;
-  }
-  bool freeze_retried() {
-    for (int retry = 0; retry < 100; ++retry) {
-      freeze();
-      if (frozen)
-	return frozen;
-      thaw();
-      if (retry == 0)
-	tty->print_cr("JVM: Freeze: Some tasks are unsafe to freeze (in glibc), retrying");
-      usleep(1000000/2 + random() % 1000000/2);
-    }
-    tty->print_cr("JVM: Freeze: Some tasks failed to freeze (in glibc)");
-    return frozen;
-  }
-  size_t in_handler_get_locked() {
-    int err;
-    err = pthread_mutex_lock(&signaled_and_in_handler_mutex);
-    assert(!err, "pthread error");
-    size_t retval = in_handler;
-    err = pthread_mutex_unlock(&signaled_and_in_handler_mutex);
-    assert(!err, "pthread error");
-    return retval;
-  }
-  void thaw() {
-    while (in_handler_get_locked()) {
-      int err;
-      err = pthread_cond_broadcast(&resume_cond);
-      assert(!err, "pthread error");
-#ifdef _POSIX_PRIORITY_SCHEDULING
-      err = sched_yield();
-      assert(!err, "sched_yield error");
-#endif
-    }
-  }
-  Freeze() {
-#ifdef ASSERT
-    assert(!singleton, "singleton safety");
-    singleton = true;
-#endif
-    frozen = false;
-  }
-  ~Freeze() {
-    if (frozen)
-      thaw();
-#ifdef ASSERT
-    assert(singleton, "singleton safety");
-    singleton = false;
-#endif
-  }
-};
-pthread_mutex_t Freeze::signaled_and_in_handler_mutex;
-pthread_cond_t Freeze::signaled_cond;
-size_t Freeze::signaled, Freeze::in_handler;
-pthread_cond_t Freeze::resume_cond;
-bool Freeze::frozen;
-#ifdef ASSERT
-bool Freeze::singleton = false;
-#endif
-
 int os::Linux::checkpoint_restore(int *shmid) {
-
-  // All the systems for restore should have the same glibc version (despite possibly different CPUs).
-  linux_ifunc_fetch_offsets();
-
-  Freeze freeze;
-  if (!freeze.freeze_retried()) {
-    return JVM_CHECKPOINT_ERROR;
-  }
 
   int cres = call_crengine();
   if (cres < 0) {
@@ -6271,13 +6042,9 @@ int os::Linux::checkpoint_restore(int *shmid) {
   } while (sig == -1 && errno == EINTR);
   assert(sig == RESTORE_SIGNAL, "got what requested");
 
-  linux_ifunc_reset();
-
   initialize_processor_count();
   if (_cpu_to_node != NULL)
     rebuild_cpu_to_node_map();
-
-  freeze.thaw();
 
   if (CRTraceStartupTime) {
     tty->print_cr("STARTUPTIME " JLONG_FORMAT " restore-native", os::javaTimeNanos());

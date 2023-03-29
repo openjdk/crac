@@ -244,7 +244,6 @@ ifeq ($(call check-jvm-feature, opt-size), true)
       objArrayKlass.cpp \
       os_linux.cpp \
       os_linux_arm.cpp \
-      os_linux_ifunc.cpp \
       resourceArea.cpp \
       rewriter.cpp \
       sharedRuntime.cpp \

@@ -22,6 +22,7 @@
  */
 
 import jdk.crac.*;
+import jdk.crac.management.CRaCMXBean;
 import jdk.test.lib.containers.docker.Common;
 import jdk.test.lib.containers.docker.DockerTestUtils;
 import jdk.test.lib.crac.CracBuilder;
@@ -35,6 +36,8 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Arrays;
 import java.util.concurrent.TimeUnit;
+
+import static jdk.test.lib.Asserts.*;
 
 /**
  * @test NanoTimeTest
@@ -52,16 +55,12 @@ public class NanoTimeTest implements CracTest {
     @CracTestArg
     long monotonicOffset;
 
-    public static void main(String[] args) throws Exception {
-        CracTest.run(NanoTimeTest.class, args);
-    }
-
     @Override
     public void test() throws Exception {
         if (!DockerTestUtils.canTestDocker()) {
             return;
         }
-        CracBuilder builder = new CracBuilder().inDockerImage(imageName).main(NanoTimeTest.class).args(CracTest.args());
+        CracBuilder builder = new CracBuilder().inDockerImage(imageName);
         try {
             builder.doCheckpoint();
 
@@ -84,23 +83,19 @@ public class NanoTimeTest implements CracTest {
         long after = System.nanoTime();
         System.out.println("Before: " + before);
         System.out.println("After: " + after);
-        if (after < before) {
-            throw new AssertionError("After < Before");
-        } else if (after > before + TimeUnit.HOURS.toNanos(1)) {
-            // Even though we have shifted the monotic offset by a day the difference
-            // is adjusted by difference between wall clock time before and after;
-            // the difference in monotonic time is considered "random"
-            throw new AssertionError("After too late");
-        }
+        assertLTE(before, after, "After < Before");
+        // Even though we have shifted the monotic offset by a day the difference
+        // is adjusted by difference between wall clock time before and after;
+        // the difference in monotonic time is considered "random"
+        assertLT(after, before + TimeUnit.HOURS.toNanos(1), "After too late");
 
         long boottimeAfter = readSystemUptime();
-        if (boottimeAfter < boottimeBefore + 86_400_000) {
-            throw new AssertionError("Boottime was not changed");
-        }
+        assertGTE(boottimeAfter, boottimeBefore + 86_400_000, "Boottime was not changed");
         RuntimeMXBean runtimeMX = ManagementFactory.getRuntimeMXBean();
-        if (runtimeMX.getUptime() < 0) {
-            throw new AssertionError("VM Uptime is negative!");
-        }
+        assertGTE(runtimeMX.getUptime(), 0L,"VM Uptime is negative!");
+        CRaCMXBean cracBean = CRaCMXBean.getCRaCMXBean();
+        assertLT(cracBean.getUptimeSinceRestore(), 60_000L);
+        assertGTE(cracBean.getUptimeSinceRestore(), 0L);
     }
 
     private long readSystemUptime() throws IOException {

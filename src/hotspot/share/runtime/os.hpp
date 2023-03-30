@@ -205,6 +205,9 @@ class os: AllStatic {
 
   static void record_time_before_checkpoint();
   static void update_javaTimeNanos_offset();
+  static jlong monotonic_time_offset() {
+    return javaTimeNanos_offset;
+  }
 
   // Returns the elapsed time in seconds since the vm started.
   static double elapsedTime();

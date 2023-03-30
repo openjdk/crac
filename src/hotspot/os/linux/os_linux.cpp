@@ -291,7 +291,7 @@ class CracRestoreParameters : public CHeapObj<mtInternal> {
 
   struct header {
     jlong _restore_time;
-    jlong _restore_counter;
+    jlong _restore_nanos;
     int _nprops;
     int _env_memory_size;
   };
@@ -347,10 +347,10 @@ class CracRestoreParameters : public CHeapObj<mtInternal> {
       const SystemProperty* props,
       const char *args,
       jlong restore_time,
-      jlong restore_counter) {
+      jlong restore_nanos) {
     header hdr = {
       restore_time,
-      restore_counter,
+      restore_nanos,
       system_props_length(props),
       env_vars_size(environ)
     };
@@ -450,7 +450,7 @@ static int clock_tics_per_sec = 100;
 // CRaC
 static const char* _crengine = NULL;
 static jlong _restore_start_time;
-static jlong _restore_start_counter;
+static jlong _restore_start_nanos;
 static FdsInfo _vm_inited_fds(false);
 static GrowableArray<PersistentResourceDesc>* _persistent_resources = NULL;
 
@@ -5721,10 +5721,10 @@ jlong os::Linux::restore_start_time() {
 }
 
 jlong os::Linux::uptime_since_restore() {
-  if (!_restore_start_counter) {
+  if (!_restore_start_nanos) {
     return -1;
   }
-  return javaTimeNanos() - _restore_start_counter;
+  return javaTimeNanos() - _restore_start_nanos;
 }
 
 void VM_Crac::trace_cr(const char* msg, ...) {
@@ -6281,7 +6281,9 @@ void VM_Crac::doit() {
 
   if (shmid <= 0 || !VM_Crac::read_shm(shmid)) {
     _restore_start_time = os::javaTimeMillis();
-    _restore_start_counter = os::javaTimeNanos();
+    _restore_start_nanos = os::javaTimeNanos();
+  } else {
+    _restore_start_nanos += os::monotonic_time_offset();
   }
   PerfMemoryLinux::restore();
 
@@ -6432,7 +6434,7 @@ void os::Linux::restore() {
   struct stat st;
 
   jlong restore_time = javaTimeMillis();
-  jlong restore_counter = javaTimeNanos();
+  jlong restore_nanos = javaTimeNanos();
 
   compute_crengine();
 
@@ -6445,7 +6447,7 @@ void os::Linux::restore() {
           Arguments::system_properties(),
           Arguments::java_command() ? Arguments::java_command() : "",
           restore_time,
-          restore_counter)) {
+          restore_nanos)) {
       char strid[32];
       snprintf(strid, sizeof(strid), "%d", id);
       setenv("CRAC_NEW_ARGS_ID", strid, true);
@@ -6544,7 +6546,7 @@ bool CracRestoreParameters::read_from(int fd) {
   char* cursor = _raw_content + sizeof(header);
 
   ::_restore_start_time = hdr->_restore_time;
-  ::_restore_start_counter = hdr->_restore_counter;
+  ::_restore_start_nanos = hdr->_restore_nanos;
 
   for (int i = 0; i < hdr->_nprops; i++) {
     assert((cursor + strlen(cursor) <= contents + st.st_size), "property length exceeds shared memory size");

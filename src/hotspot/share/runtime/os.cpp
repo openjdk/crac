@@ -2048,5 +2048,7 @@ void os::update_javaTimeNanos_offset() {
   if (diff_millis < 0) {
     diff_millis = 0;
   }
+  // Make the javaTimeNanos() on the next line return true monotonic time
+  javaTimeNanos_offset = 0;
   javaTimeNanos_offset = checkpoint_nanos - javaTimeNanos() + diff_millis * 1000000L;
 }

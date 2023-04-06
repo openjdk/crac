@@ -60,6 +60,7 @@ public class Core {
     private static native Object[] checkpointRestore0(boolean dryRun, long jcmdStream);
     private static final Object checkpointRestoreLock = new Object();
     private static boolean checkpointInProgress = false;
+    private static boolean jsigLoaded;
 
     private static class FlagsHolder {
         public static final boolean TRACE_STARTUP_TIME =
@@ -237,6 +238,12 @@ public class Core {
         // checkpointRestoreLock protects against the simultaneous
         // call of checkpointRestore from different threads.
         synchronized (checkpointRestoreLock) {
+            if (!jsigLoaded) {
+                // Signal handlers chaining is necessary for remapping memory
+                // with repeated checkpoint-restores
+                System.loadLibrary("jsig");
+                jsigLoaded = true;
+            }
             // checkpointInProgress protects against recursive
             // checkpointRestore from resource's
             // beforeCheckpoint/afterRestore methods

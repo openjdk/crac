@@ -78,6 +78,7 @@
 #include "utilities/events.hpp"
 #include "utilities/elfFile.hpp"
 #include "utilities/growableArray.hpp"
+#include "utilities/hashtable.hpp"
 #include "utilities/macros.hpp"
 #include "utilities/powerOfTwo.hpp"
 #include "utilities/vmError.hpp"
@@ -288,6 +289,7 @@ class CracRestoreParameters : public CHeapObj<mtInternal> {
   char* _raw_content;
   GrowableArray<const char *>* _properties;
   const char* _args;
+  const char* _next_checkpoint_to;
 
   struct header {
     jlong _restore_time;
@@ -329,15 +331,17 @@ class CracRestoreParameters : public CHeapObj<mtInternal> {
  public:
   const char *args() const { return _args; }
   GrowableArray<const char *>* properties() const { return _properties; }
+  const char *next_checkpoint_to() const { return _next_checkpoint_to; }
 
   CracRestoreParameters() :
     _raw_content(NULL),
     _properties(new (ResourceObj::C_HEAP, mtInternal) GrowableArray<const char *>(0, mtInternal)),
-    _args(NULL)
+    _args(NULL),
+    _next_checkpoint_to(NULL)
   {}
 
   ~CracRestoreParameters() {
-    if (_raw_content) {
+    if (_raw_content != NULL) {
       FREE_C_HEAP_ARRAY(char, _raw_content);
     }
     delete _properties;
@@ -377,7 +381,15 @@ class CracRestoreParameters : public CHeapObj<mtInternal> {
       }
     }
 
-    return write_check_error(fd, args, strlen(args)+1); // +1 for null char
+    if (!write_check_error(fd, args, strlen(args)+1)) { // +1 for null char
+      return false;
+    }
+
+    const char* next_checkpoint = CRaCCheckpointTo;
+    if (next_checkpoint == NULL) {
+      next_checkpoint = "";
+    }
+    return write_check_error(fd, next_checkpoint, strlen(next_checkpoint) + 1);
   }
 
   bool read_from(int fd);
@@ -420,6 +432,7 @@ private:
   void report_ok_to_jcmd_if_any();
   void print_resources(const char* msg, ...);
   void trace_cr(const char* msg, ...);
+  void remap_old_imagedir();
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -6165,6 +6178,17 @@ bool VM_Crac::read_shm(int shmid) {
   }
   bool ret = _restore_parameters.read_from(shmfd);
   close(shmfd);
+  if (ret) {
+    const char* next = _restore_parameters.next_checkpoint_to();
+    if (next != NULL) {
+      static bool checkpoint_to_allocated = false;
+      if (CRaCCheckpointTo != NULL && checkpoint_to_allocated) {
+        FREE_C_HEAP_ARRAY(char, CRaCCheckpointTo);
+      }
+      CRaCCheckpointTo = next;
+      checkpoint_to_allocated = true;
+    }
+  }
   return ret;
 }
 
@@ -6185,6 +6209,164 @@ void VM_Crac::report_ok_to_jcmd_if_any() {
   _ostream = tty;
 }
 
+static char *old_imagedir = NULL;
+static pthread_mutex_t remapper_mutex = PTHREAD_MUTEX_INITIALIZER;
+
+static void retry_after_remap(int sig, siginfo_t *info, void *ucontext) {
+  // We will block this thread until remapper is done.
+  // We could validate that the address is one of the remapped ones
+  // but since JavaThreads are blocked now nobody should just cause SIGSEGV
+  pthread_mutex_lock(&remapper_mutex);
+  pthread_mutex_unlock(&remapper_mutex);
+}
+
+static void *remapper_thread(void *unused) {
+  struct sigaction sa, old;
+  memset(&sa, 0, sizeof(struct sigaction));
+  sigemptyset(&sa.sa_mask);
+
+  sa.sa_flags     = SA_NODEFER | SA_SIGINFO;
+  sa.sa_sigaction = retry_after_remap;
+
+  sigaction(SIGSEGV, &sa, &old);
+
+  FILE *maps = fopen("/proc/self/maps", "r");
+  if (maps == NULL) {
+    fprintf(stderr, "Can't open /proc/self/maps\n");
+    return NULL;
+  }
+
+  size_t imagedir_len = strlen(old_imagedir);
+
+  char buf[PATH_MAX];
+  while (fgets(buf, PATH_MAX, maps)) {
+    const char* fields[6];
+    int nfields = 1;
+    fields[0] = buf;
+    for (int i = 0; i < PATH_MAX && buf[i] != 0; ++i) {
+      if (buf[i] == ' ') {
+        while (i < PATH_MAX && buf[i] == ' ') {
+          buf[i++] = '\0';
+        }
+        fields[nfields++] = buf + i;
+        if (nfields >= 6) break;
+      }
+    }
+    if (nfields >= 6 && strncmp(old_imagedir, fields[5], imagedir_len) == 0) {
+      long start = 0, end = 0;
+      if (sscanf(fields[0], "%lx-%lx", &start, &end) == 2) {
+        size_t length = end - start;
+        void *copy = mmap(NULL, length, PROT_READ | PROT_WRITE | PROT_EXEC, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+        if (copy == MAP_FAILED) {
+          perror("Failed to mmap anonymous memory to replace file mapping");
+          continue;
+        }
+        if (mprotect((void *) start, length, PROT_READ | PROT_EXEC) != 0) {
+          perror("Failed to protect memory against modifications while copying");
+          if (munmap(copy, length) != 0) {
+            perror("Cannot unmap the anonymous copy");
+          }
+          continue;
+        }
+        memcpy(copy, (void *) start, length);
+        if (mremap(copy, length, length, MREMAP_FIXED | MREMAP_MAYMOVE, start) == MAP_FAILED) {
+          perror("Failed to remap anonymous memory into file mapping");
+          fprintf(stderr, "\tRemapping %p(+%lx) into %lx-%lx\n", copy, length, start, end);
+          if (munmap(copy, length) != 0) {
+            perror("Cannot unmap the anonymous copy");
+          }
+        }
+      }
+    }
+  }
+
+  fclose(maps);
+  sigaction(SIGSEGV, &old, NULL);
+
+  return NULL;
+}
+
+void VM_Crac::remap_old_imagedir() {
+  if (old_imagedir != NULL) {
+    // This VM_Operation is executed when all threads are already at safepoint, so it's
+    // safe to copy and remap their threads. We will do the remapping itself in a new
+    // thread that does not have stack mapped to any of the mmaped files.
+    // If any of the non-java threads start mutating its stack it will trigger SIGSEGV
+    // as we've made it read-only using mprotect.
+    pthread_attr_t attr;
+    if (pthread_attr_init(&attr) != 0) {
+      perror("Cannot initialize thread attributes");
+      return;
+    }
+    size_t stacksize;
+    if (pthread_attr_getstacksize(&attr, &stacksize) != 0) {
+      perror("Cannot find proper stack size");
+      return;
+    }
+    // We need to guarantee that new thread stack won't be mapped to a file
+    // (this can happen even for a new thread)
+    void *stackaddr = mmap(NULL, stacksize, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+    if (stackaddr == MAP_FAILED) {
+      perror("Cannot mmap anonymous memory for the remapper thread");
+      return;
+    }
+    if (pthread_attr_setstack(&attr, stackaddr, stacksize) != 0) {
+      perror("Cannot set remapper thread stack address");
+      if (munmap(stackaddr, stacksize) != 0) {
+        perror("Cannot release mmapped memory");
+      }
+      return;
+    }
+    pthread_mutex_lock(&remapper_mutex);
+    pthread_t remapper_tid;
+    int ret = pthread_create(&remapper_tid, &attr, remapper_thread, NULL);
+    if (ret != 0) {
+      perror("Failed to create remapper thread");
+    } else {
+      pthread_join(remapper_tid, NULL);
+    }
+    pthread_mutex_unlock(&remapper_mutex);
+    remapper_tid = 0;
+    if (munmap(stackaddr, stacksize) != 0) {
+      perror("Cannot release mmapped memory");
+    }
+
+    FREE_C_HEAP_ARRAY(char, old_imagedir);
+    old_imagedir = NULL;
+  }
+  if (CRaCCheckpointTo != NULL) {
+    size_t len = strlen(CRaCCheckpointTo);
+    char cwd[PATH_MAX];
+    size_t cwd_len = 0;
+    if (len == 0 || CRaCCheckpointTo[0] != '/') {
+      // use absolute path
+      if (getcwd(cwd, PATH_MAX) == NULL) {
+        perror("Cannot fetch current directory");
+        return;
+      }
+      cwd_len = strlen(cwd);
+      if (cwd_len == 0 || cwd[cwd_len - 1] != '/') {
+        cwd[cwd_len] = '/';
+        cwd_len++;
+      }
+    }
+    bool add_slash = false;
+    if (len == 0 || CRaCCheckpointTo[len - 1] != '/') {
+      ++len; // add /
+      add_slash = true;
+    }
+    old_imagedir = NEW_C_HEAP_ARRAY(char, cwd_len + len + 1, mtArguments);
+    if (cwd_len > 0) {
+      strncpy(old_imagedir, cwd, cwd_len);
+    }
+    strncpy(old_imagedir + cwd_len, CRaCCheckpointTo, len);
+    if (add_slash) {
+      old_imagedir[cwd_len + len - 1] = '/';
+    }
+    old_imagedir[cwd_len + len] = '\0';
+  }
+}
+
 void VM_Crac::doit() {
 
   AttachListener::abort();
@@ -6197,6 +6379,8 @@ void VM_Crac::doit() {
 
   // dry-run fails checkpoint
   bool ok = !_dry_run;
+
+  remap_old_imagedir();
 
   for (int i = 0; i < fds.len(); ++i) {
     if (fds.get_state(i) == FdsInfo::CLOSED) {
@@ -6267,7 +6451,7 @@ void VM_Crac::doit() {
   if (CRAllowToSkipCheckpoint) {
     trace_cr("Skip Checkpoint");
   } else {
-    trace_cr("Checkpoint ...");
+    trace_cr("Checkpoint to %s ...", CRaCCheckpointTo);
     report_ok_to_jcmd_if_any();
     int ret = checkpoint_restore(&shmid);
     if (ret == JVM_CHECKPOINT_ERROR) {
@@ -6520,6 +6704,11 @@ void os::Linux::close_extra_descriptors() {
   closedir(dir);
 }
 
+// Since putenv does not do its own copy of the strings we need to keep
+// them around and release memory properly.
+typedef KVHashtable<const char *, const char *, mtInternal> C_Str_Hashtable;
+static C_Str_Hashtable env_holder(93);
+
 bool CracRestoreParameters::read_from(int fd) {
   struct stat st;
   if (fstat(fd, &st)) {
@@ -6550,19 +6739,44 @@ bool CracRestoreParameters::read_from(int fd) {
     cursor = cursor + prop_len;
   }
 
-  char* env_mem = NEW_C_HEAP_ARRAY(char, hdr->_env_memory_size, mtArguments); // left this pointer unowned, it is freed when process dies
-  memcpy(env_mem, cursor, hdr->_env_memory_size);
-
-  const char* env_end = env_mem + hdr->_env_memory_size;
-  while (env_mem < env_end) {
-    const size_t s = strlen(env_mem) + 1;
-    assert(env_mem + s <= env_end, "env vars exceed memory buffer, maybe ending 0 is lost");
-    putenv(env_mem);
-    env_mem += s;
+  const char* env_end = cursor + hdr->_env_memory_size;
+  while (cursor < env_end) {
+    const size_t s = strlen(cursor) + 1;
+    assert(cursor + s <= env_end, "env vars exceed memory buffer, maybe ending 0 is lost");
+    char* eq = strchr(cursor, '=');
+    if (eq != NULL) {
+      *eq = '\0';
+      C_Str_Hashtable::KVHashtableEntry *old = env_holder.lookup_entry(cursor);
+      *eq = '=';
+      char* value = NEW_C_HEAP_ARRAY(char, s, mtInternal);
+      strncpy(value, cursor, s);
+      putenv(value);
+      if (old == NULL) {
+        char* key = NEW_C_HEAP_ARRAY(char, eq - cursor + 1, mtInternal);
+        strncpy(key, cursor, eq - cursor);
+        key[eq - cursor] = '\0';
+        env_holder.add(key, value);
+      } else {
+        FREE_C_HEAP_ARRAY(char, old->_value);
+        old->_value = value;
+      }
+    } else {
+      assert(false, "no '=' in env vars?");
+    }
+    cursor += s;
   }
-  cursor += hdr->_env_memory_size;
 
   _args = cursor;
+  cursor += strlen(_args) + 1;
+
+  char* buf = NULL;
+  if (*cursor != '\0') {
+    size_t len = strlen(cursor) + 1;
+    buf = NEW_C_HEAP_ARRAY(char, len, mtArguments);
+    strncpy(buf, cursor, len);
+    buf[len - 1] = '\0';
+  }
+  _next_checkpoint_to = buf;
   return true;
 }
 

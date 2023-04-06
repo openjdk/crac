@@ -1209,5 +1209,16 @@ template<typename K> bool primitive_equals(const K& k0, const K& k1) {
   return k0 == k1;
 }
 
+template<ccstr> unsigned primitive_hash(const ccstr& k) {
+  unsigned h = 0;
+  for (ccstr c = k; *c != 0; ++c) {
+    h = 31 * h + (*c & 0xff);
+  }
+  return h;
+}
+
+template<ccstr> bool primitive_equals(const ccstr& k0, const ccstr& k1) {
+  return strcmp(k0, k1) == 0;
+}
 
 #endif // SHARE_UTILITIES_GLOBALDEFINITIONS_HPP

@@ -136,8 +136,8 @@ public class CracBuilder {
         return this;
     }
 
-    public void doCheckpoint() throws Exception {
-        startCheckpoint().waitForCheckpointed();
+    public CracProcess doCheckpoint() throws Exception {
+        return startCheckpoint().waitForCheckpointed();
     }
 
     public CracProcess startCheckpoint() throws Exception {
@@ -151,7 +151,6 @@ public class CracBuilder {
         cmd.add(main().getName());
         cmd.addAll(Arrays.asList(args()));
         log("Starting process to be checkpointed:");
-        log(String.join(" ", cmd));
         return new CracProcess(this, cmd);
     }
 
@@ -243,7 +242,15 @@ public class CracBuilder {
         List<String> cmd = prepareCommand(prefixJava);
         cmd.add("-XX:CRaCRestoreFrom=" + imageDir);
         log("Starting restored process:");
-        log(String.join(" ", cmd));
+        return new CracProcess(this, cmd);
+    }
+
+    public CracProcess startRestoreAndCheckpointTo(String newImageDir) throws Exception {
+        ensureContainerStarted();
+        List<String> cmd = prepareCommand(null);
+        cmd.add("-XX:CRaCRestoreFrom=" + imageDir);
+        cmd.add("-XX:CRaCCheckpointTo=" + newImageDir);
+        log("Starting restored process for checkpoint:");
         return new CracProcess(this, cmd);
     }
 
@@ -262,7 +269,6 @@ public class CracBuilder {
         cmd.add(main().getName());
         cmd.addAll(Arrays.asList(args()));
         log("Starting process without CRaC:");
-        log(String.join(" ", cmd));
         return new CracProcess(this, cmd);
     }
 
@@ -284,15 +290,7 @@ public class CracBuilder {
     }
 
     private List<String> prepareCommand(List<String> javaPrefix) {
-        List<String> cmd = new ArrayList<>();
-        if (javaPrefix != null) {
-            cmd.addAll(javaPrefix);
-        } else if (dockerImageName != null) {
-            cmd.addAll(Arrays.asList(Container.ENGINE_COMMAND, "exec", CONTAINER_NAME));
-            cmd.add(DOCKER_JAVA);
-        } else {
-            cmd.add(JAVA);
-        }
+        List<String> cmd = getJavaPrefix(javaPrefix);
         cmd.add("-ea");
         cmd.add("-cp");
         cmd.add(getClassPath());
@@ -306,6 +304,19 @@ public class CracBuilder {
         if (debug) {
             cmd.add("-agentlib:jdwp=transport=dt_socket,server=y,suspend=y,address=0.0.0.0:5005");
             cmd.add("-XX:-CRDoThrowCheckpointException");
+        }
+        return cmd;
+    }
+
+    private List<String> getJavaPrefix(List<String> override) {
+        List<String> cmd = new ArrayList<>();
+        if (override != null) {
+            cmd.addAll(override);
+        } else if (dockerImageName != null) {
+            cmd.addAll(Arrays.asList(Container.ENGINE_COMMAND, "exec", CONTAINER_NAME));
+            cmd.add(DOCKER_JAVA);
+        } else {
+            cmd.add(JAVA);
         }
         return cmd;
     }

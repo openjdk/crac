@@ -18,6 +18,7 @@ public class CracProcess {
     private final Process process;
 
     public CracProcess(CracBuilder builder, List<String> cmd) throws IOException {
+        builder.log(String.join(" ", cmd));
         this.builder = builder;
         ProcessBuilder pb = new ProcessBuilder().inheritIO();
         if (builder.captureOutput) {
@@ -32,13 +33,14 @@ public class CracProcess {
         return process.waitFor();
     }
 
-    public void waitForCheckpointed() throws InterruptedException {
+    public CracProcess waitForCheckpointed() throws InterruptedException {
         if (builder.engine == null || builder.engine == CracEngine.CRIU) {
             assertEquals(137, process.waitFor(), "Checkpointed process was not killed as expected.");
             // TODO: we could check that "CR: Checkpoint" was written out
         } else {
             fail("With engine " + builder.engine.engine + " use the async version.");
         }
+        return this;
     }
 
     public void waitForPausePid() throws IOException, InterruptedException {

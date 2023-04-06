@@ -301,6 +301,10 @@ static int restorewait(void) {
 
     if (WIFEXITED(status)) {
         return WEXITSTATUS(status);
+    } else if (WIFSIGNALED(status)) {
+        return 128 + WTERMSIG(status);
+    } else if (WIFSTOPPED(status)) {
+        return 128 + WSTOPSIG(status);
     }
 
     if (WIFSIGNALED(status)) {

@@ -228,6 +228,7 @@ template<
     bool     (*EQUALS)(K const&, K const&) = primitive_equals<K>
     >
 class KVHashtable : public BasicHashtable<F> {
+public:
   class KVHashtableEntry : public BasicHashtableEntry<F> {
   public:
     K _key;
@@ -265,6 +266,17 @@ public:
     for (KVHashtableEntry* e = bucket(index); e != NULL; e = e->next()) {
       if (e->hash() == hash && EQUALS(e->_key, key)) {
         return &(e->_value);
+      }
+    }
+    return NULL;
+  }
+
+  KVHashtableEntry* lookup_entry(K key) const {
+    unsigned int hash = HASH(key);
+    int index = BasicHashtable<F>::hash_to_index(hash);
+    for (KVHashtableEntry* e = bucket(index); e != NULL; e = e->next()) {
+      if (e->hash() == hash && EQUALS(e->_key, key)) {
+        return e;
       }
     }
     return NULL;

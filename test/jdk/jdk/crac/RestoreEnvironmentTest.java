@@ -24,8 +24,6 @@
 import jdk.test.lib.crac.CracBuilder;
 import jdk.test.lib.crac.CracTest;
 
-import java.io.IOException;
-
 /*
  * @test RestoreEnvironmentTest
  * @summary the test checks that actual environment variables are propagated into a restored process.
@@ -37,8 +35,10 @@ public class RestoreEnvironmentTest implements CracTest {
     static final String TEST_VAR_NAME = "RESTORE_ENVIRONMENT_TEST_VAR";
     static final String BEFORE_CHECKPOINT = "BeforeCheckpoint";
     static final String AFTER_RESTORE = "AfterRestore";
+    static final String AFTER_SECOND_RESTORE = "AfterSecondRestore";
     static final String NEW_VALUE = "NewValue";
-    public static final String PREFIX = "(after restore) ";
+    public static final String PREFIX1 = "(after restore) ";
+    public static final String PREFIX2 = "(after second restore) ";
 
     @Override
     public void test() throws Exception {
@@ -48,24 +48,31 @@ public class RestoreEnvironmentTest implements CracTest {
         builder.doCheckpoint();
         builder.env(TEST_VAR_NAME + 1, AFTER_RESTORE);
         builder.env(TEST_VAR_NAME + 2, NEW_VALUE);
+        builder.startRestore().waitForCheckpointed().outputAnalyzer()
+                .shouldContain(PREFIX1 + TEST_VAR_NAME + "0=" + BEFORE_CHECKPOINT)
+                .shouldContain(PREFIX1 + TEST_VAR_NAME + "1=" + AFTER_RESTORE)
+                .shouldContain(PREFIX1 + TEST_VAR_NAME + "2=" + NEW_VALUE);
+        builder.env(TEST_VAR_NAME + 0, AFTER_SECOND_RESTORE);
+        builder.env(TEST_VAR_NAME + 1, AFTER_SECOND_RESTORE);
         builder.doRestore().outputAnalyzer()
-                .shouldContain(PREFIX + TEST_VAR_NAME + "0=" + BEFORE_CHECKPOINT)
-                .shouldContain(PREFIX + TEST_VAR_NAME + "1=" + AFTER_RESTORE)
-                .shouldContain(PREFIX + TEST_VAR_NAME + "2=" + NEW_VALUE);
+                .shouldContain(PREFIX2 + TEST_VAR_NAME + "0=" + AFTER_SECOND_RESTORE)
+                .shouldContain(PREFIX2 + TEST_VAR_NAME + "1=" + AFTER_SECOND_RESTORE)
+                .shouldContain(PREFIX2 + TEST_VAR_NAME + "2=" + NEW_VALUE);
     }
 
     @Override
     public void exec() throws Exception {
-        for (int i = 0; i < 3; ++i) {
-            var testVar = java.lang.System.getenv(TEST_VAR_NAME + i);
-            System.out.println("(before checkpoint) " + TEST_VAR_NAME + i + "=" + testVar);
-        }
-
+        printVars("(before checkpoint) ");
         jdk.crac.Core.checkpointRestore();
+        printVars(PREFIX1);
+        jdk.crac.Core.checkpointRestore();
+        printVars(PREFIX2);
+    }
 
+    private static void printVars(String prefix) {
         for (int i = 0; i < 3; ++i) {
-            var testVar = java.lang.System.getenv(TEST_VAR_NAME + i);
-            System.out.println(PREFIX + TEST_VAR_NAME + i + "=" + testVar + "");
+            var testVar = System.getenv(TEST_VAR_NAME + i);
+            System.out.println(prefix + TEST_VAR_NAME + i + "=" + testVar);
         }
     }
 }

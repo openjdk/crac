@@ -1151,6 +1151,21 @@ JVM_RegisterPersistent(int fd, int st_dev, int st_ino);
 JNIEXPORT void JNICALL
 JVM_DeregisterPersistent(int fd, int st_dev, int st_ino);
 
+JNIEXPORT void* JNICALL
+JVM_ThreadListAllocate();
+
+JNIEXPORT void JNICALL
+JVM_ThreadListDestroy(void *addr);
+
+JNIEXPORT void JNICALL
+JVM_ThreadListRemoveSelf(void *addr);
+
+JNIEXPORT jint JNICALL
+JVM_ThreadListLength(const void *addr);
+
+JNIEXPORT void JNICALL
+JVM_RCU_SynchronizeThreads(void *addr, const char **methods);
+
 #ifdef __cplusplus
 } /* extern "C" */
 

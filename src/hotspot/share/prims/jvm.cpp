@@ -3861,3 +3861,88 @@ JVM_END
 JVM_LEAF(void, JVM_DeregisterPersistent(int fd, int st_dev, int st_ino))
   os::Linux::deregister_persistent_fd(fd, st_dev, st_ino);
 JVM_END
+
+typedef GrowableArrayCHeap<JavaThread *, mtSynchronizer>* ThreadList;
+
+JVM_LEAF(void *, JVM_ThreadListAllocate())
+  return new GrowableArrayCHeap<JavaThread *, mtSynchronizer>(16);
+JVM_END
+
+JVM_LEAF(void, JVM_ThreadListDestroy(void *addr))
+  delete ((ThreadList) addr);
+JVM_END
+
+JVM_LEAF(void, JVM_ThreadListRemoveSelf(void *addr))
+  ThreadList list = ((ThreadList) addr);
+  Thread *self = Thread::current();
+  // We can't use remove_if_existing because the signature won't match
+  for (int i = 0; i < list->length(); ++i) {
+    if (list->at(i) == self) {
+      list->delete_at(i);
+      return;
+    }
+  }
+JVM_END
+
+JVM_LEAF(jint, JVM_ThreadListLength(const void *addr))
+  ThreadList list = (ThreadList) addr;
+  return list->length();
+JVM_END
+
+class VM_RCU_Synchronize: public VM_Operation {
+  ThreadList _reader_threads;
+  const char **_method_list;
+public:
+  VM_RCU_Synchronize(ThreadList reader_threads, const char **method_list):
+    _reader_threads(reader_threads),
+    _method_list(method_list)
+  {
+    assert(reader_threads != NULL, "Reader threads not allocated");
+    assert(method_list != NULL, "No methods?");
+  }
+
+  VMOp_Type type() const { return VMOp_VM_RCU_Synchronize; }
+  void doit();
+};
+
+JVM_ENTRY_NO_ENV(void, JVM_RCU_SynchronizeThreads(void *addr, const char **methods))
+  VM_RCU_Synchronize sync((ThreadList) addr, methods);
+  VMThread::execute(&sync);
+JVM_END
+
+void VM_RCU_Synchronize::doit() {
+  SafeThreadsListPtr listPtr(Thread::current(), true);
+  ThreadsList *list = listPtr.list();
+  assert(list != NULL, "Thread list is null");
+  for (uint i = 0; i < list->length(); ++i) {
+    JavaThread* t = list->thread_at(i);
+    assert(t != NULL, "Thread is null");
+    if (t->has_last_Java_frame()) {
+      RegisterMap reg_map(t);
+      vframe* start_vf = t->last_java_vframe(&reg_map);
+      bool match = false;
+      for (vframe* f = start_vf; f != NULL && !match; f = f->sender() ) {
+        if (f->is_java_frame()) {
+          javaVFrame* jvf = javaVFrame::cast(f);
+          ResourceMark rm;
+          const char *method = jvf->method()->name_and_sig_as_C_string();
+          // TODO: let's assume the list is sorted and use binary search
+          for (const char **m = _method_list; *m != NULL; ++m) {
+            if (strcmp(*m, method) == 0) {
+#ifndef PROD
+              for (int j = 0; j < _reader_threads->length(); ++j) {
+                assert(t != _reader_threads->at(j), "Thread already in the list");
+              }
+#endif //PROD
+              _reader_threads->append(t);
+              match = true;
+              break;
+            }
+          }
+        }
+      }
+    }
+  }
+}
+
+

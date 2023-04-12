@@ -110,7 +110,8 @@
   template(GTestExecuteAtSafepoint)               \
   template(JFROldObject)                          \
   template(JvmtiPostObjectFree)                   \
-  template(VM_Crac)
+  template(VM_Crac)                               \
+  template(VM_RCU_Synchronize)
 
 class Thread;
 class outputStream;

@@ -71,32 +71,30 @@ public class Core {
 
     private static class LockHolder {
         public static RCULock DEFAULT_LOCK = new RCULock(new String[0]);
-        private static JDKResource DEFAULT_LOCK_SYNC = new JDKResource() {
-            @Override
-            public JDKResource.Priority getPriority() {
-                return JDKResource.Priority.NORMAL;
-            }
-
-            @Override
-            public void beforeCheckpoint(Context<? extends Resource> context) throws Exception {
-                jdk.crac.Core.defaultLock().synchronizeBegin();
-            }
-
-            @Override
-            public void afterRestore(Context<? extends Resource> context) throws Exception {
-                jdk.crac.Core.defaultLock().synchronizeEnd();
-            }
-        };
-
-        static {
-            jdk.internal.crac.Core.getJDKContext().register(DEFAULT_LOCK_SYNC);
-        }
     }
 
     private static final Context<Resource> globalContext = new OrderedContext();
+    private static final Context<Resource> synchronizedContext = new OrderedContext() {
+        @Override
+        public synchronized void beforeCheckpoint(Context<? extends Resource> context) throws CheckpointException {
+            defaultLock().synchronizeBegin();
+            super.beforeCheckpoint(context);
+        }
+
+        @Override
+        public synchronized void afterRestore(Context<? extends Resource> context) throws RestoreException {
+            try {
+                super.afterRestore(context);
+            } finally {
+                defaultLock().synchronizeEnd();
+            }
+        }
+    };
+
     static {
         // force JDK context initialization
         jdk.internal.crac.Core.getJDKContext();
+        globalContext.register(synchronizedContext);
     }
 
     /** This class is not instantiable. */
@@ -139,6 +137,18 @@ public class Core {
      */
     public static Context<Resource> getGlobalContext() {
         return globalContext;
+    }
+
+    /**
+     * Retrieves a context guarded by {@link #defaultLock()} - the {@link RCULock#synchronizeBegin()}
+     * will be called before all {@link Resource#beforeCheckpoint(Context)} invocations on resources
+     * registered in this context, and {@link RCULock#synchronizeEnd()} will be called after all
+     * invocations of {@link Resource#afterRestore(Context)}.
+     *
+     * @return The context synchronized through {@link #defaultLock()}
+     */
+    public static Context<Resource> getSynchronizedContext() {
+        return synchronizedContext;
     }
 
     @SuppressWarnings("removal")

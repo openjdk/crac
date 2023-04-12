@@ -51,6 +51,8 @@ public class RCULockTest {
     }
 
     private void run() throws Exception {
+        // just add some other methods to test that code path
+        lock.amendCriticalMethods("foo.Bar(I)I");
         new Thread(this::synchronizer, "synchronizer").start();
         for (int i = 0; i < NUM_READERS; ++i) {
             new Thread(this::reader, "reader-" + i).start();

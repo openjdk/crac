@@ -7,11 +7,15 @@ import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
 import java.lang.invoke.*;
+import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.List;
+import java.util.TreeSet;
 import java.util.concurrent.locks.Condition;
 import java.util.concurrent.locks.ReentrantLock;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 import java.util.stream.StreamSupport;
 
@@ -61,16 +65,23 @@ public class RCULock {
     private long readerThreadsList;
     @SuppressWarnings("unused") // used in native code
     private long readCriticalMethods;
+    private final TreeSet<String> methodsCopy;
     private SwitchPoint lockSwitchPoint = new SwitchPoint();
     private SwitchPoint unlockSwitchPoint = new SwitchPoint();
     private volatile MethodHandle lockImpl;
     private volatile MethodHandle unlockImpl;
 
     static {
-        initFieldOffsets();
+        try {
+            Field readerThreadsList = RCULock.class.getDeclaredField("readerThreadsList");
+            Field readCriticalMethods = RCULock.class.getDeclaredField("readCriticalMethods");
+            initFieldOffsets(readerThreadsList, readCriticalMethods);
+        } catch (NoSuchFieldException e) {
+            throw new ExceptionInInitializerError(e);
+        }
     }
 
-    private static native void initFieldOffsets();
+    private static native void initFieldOffsets(Field readerThreadsList, Field readCriticalMethods);
 
     /**
      * Inspect the classes for all methods (including private ones) marked with
@@ -81,7 +92,11 @@ public class RCULock {
      * @return New lock instance.
      */
     public static RCULock forClasses(Class<?>... classes) {
-        ArrayList<Method> methods = new ArrayList<>();
+        return new RCULock(findAnnotated(classes));
+    }
+
+    private static List<Method> findAnnotated(Class<?>[] classes) {
+        List<Method> methods = new ArrayList<>();
         for (Class<?> cls : classes) {
             while (cls != null && cls != Object.class) {
                 for (Method m : cls.getDeclaredMethods()) {
@@ -92,7 +107,7 @@ public class RCULock {
                 cls = cls.getSuperclass();
             }
         }
-        return new RCULock(methods);
+        return methods;
     }
 
     /**
@@ -102,10 +117,14 @@ public class RCULock {
      */
     public RCULock(Iterable<Method> readCriticalMethods) {
         this(StreamSupport.stream(readCriticalMethods.spliterator(), false)
-                .map(m -> m.getDeclaringClass().getName() + "." + m.getName() + "(" +
+                .map(RCULock::signature).toArray(String[]::new));
+    }
+
+    private static String signature(Method m) {
+        return m.getDeclaringClass().getName() + "." + m.getName() + "(" +
                 Arrays.stream(m.getParameterTypes())
                         .map(Class::descriptorString).collect(Collectors.joining())
-                + ")" + m.getReturnType().descriptorString()).toArray(String[]::new));
+                + ")" + m.getReturnType().descriptorString();
     }
 
     /**
@@ -113,11 +132,15 @@ public class RCULock {
      * <p>
      * The signatures follow the form
      * <pre>my.package.MyClass.foobar(another/package/SomeClass;Z)V</pre>
+     * 
+     * @apiNote This constructor does not use var-args argument to prevent
+     * accidentally creating a RCULock without declaring any critical methods.
      *
      * @param readCriticalMethods List of signatures for methods invoked in the read-critical section.
      */
     public RCULock(String[] readCriticalMethods) {
         initSwitchPoints();
+        methodsCopy = new TreeSet<>(Arrays.asList(readCriticalMethods));
         //noinspection CapturingCleaner
         CleanerFactory.cleaner().register(this, this::destroy);
         Arrays.sort(readCriticalMethods);
@@ -127,6 +150,51 @@ public class RCULock {
     private native void init(String[] readCriticalMethods);
 
     private native void destroy();
+
+    /**
+     * Inspect the classes for all methods (including private ones) marked with
+     * the {@link RCULock.Critical} annotation and add these to the list
+     * of read-critical methods.
+     *
+     * @param classes Classes to be inspected.
+     */
+    public void amendClasses(Class<?>... classes) {
+        amendCriticalMethods(findAnnotated(classes));
+    }
+
+    /**
+     * Add read-critical methods.
+     * 
+     * @param methods List of read-critical methods.
+     *                
+     * @see RCULock#RCULock(Iterable)
+     */
+    public void amendCriticalMethods(Iterable<Method> methods) {
+        amendCriticalMethods(StreamSupport.stream(methods.spliterator(), false)
+                .map(RCULock::signature).toArray(String[]::new));
+    }
+
+    /**
+     * Add read-critical methods using signatures.
+     * 
+     * @param methods List of method signatures.
+     *                
+     * @see RCULock#RCULock(String[])
+     */
+    public void amendCriticalMethods(String... methods) {
+        lock.lock();
+        try {
+            if (synchronize) {
+                throw new IllegalMonitorStateException("Already synchronizing");
+            }
+            methodsCopy.addAll(Arrays.asList(methods));
+            updateMethods(methodsCopy.toArray(new String[0]));
+        } finally {
+            lock.unlock();
+        }
+    }
+
+    private native void updateMethods(String[] methods);
 
     private void initSwitchPoints() {
         try {

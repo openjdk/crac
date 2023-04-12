@@ -32,6 +32,9 @@ import jdk.crac.impl.CheckpointOpenSocketException;
 import jdk.crac.impl.OrderedContext;
 import java.io.StringWriter;
 import java.io.PrintWriter;
+
+import jdk.internal.crac.JDKContext;
+import jdk.internal.crac.JDKResource;
 import sun.security.action.GetBooleanAction;
 
 import java.lang.reflect.InvocationTargetException;
@@ -66,6 +69,30 @@ public class Core {
             GetBooleanAction.privilegedGetProperty("jdk.crac.trace-startup-time");
     }
 
+    private static class LockHolder {
+        public static RCULock DEFAULT_LOCK = new RCULock(new String[0]);
+        private static JDKResource DEFAULT_LOCK_SYNC = new JDKResource() {
+            @Override
+            public JDKResource.Priority getPriority() {
+                return JDKResource.Priority.NORMAL;
+            }
+
+            @Override
+            public void beforeCheckpoint(Context<? extends Resource> context) throws Exception {
+                jdk.crac.Core.defaultLock().synchronizeBegin();
+            }
+
+            @Override
+            public void afterRestore(Context<? extends Resource> context) throws Exception {
+                jdk.crac.Core.defaultLock().synchronizeEnd();
+            }
+        };
+
+        static {
+            jdk.internal.crac.Core.getJDKContext().register(DEFAULT_LOCK_SYNC);
+        }
+    }
+
     private static final Context<Resource> globalContext = new OrderedContext();
     static {
         // force JDK context initialization
@@ -74,6 +101,10 @@ public class Core {
 
     /** This class is not instantiable. */
     private Core() {
+    }
+
+    public static RCULock defaultLock() {
+        return LockHolder.DEFAULT_LOCK;
     }
 
     private static void translateJVMExceptions(int[] codes, String[] messages,

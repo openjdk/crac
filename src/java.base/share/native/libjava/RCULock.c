@@ -25,6 +25,7 @@
 
 /** \file */
 
+#include <assert.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -37,17 +38,65 @@ static jfieldID readerThreadsListField = NULL;
 static jfieldID readCriticalMethodsField = NULL;
 
 JNIEXPORT void JNICALL
-Java_jdk_crac_RCULock_initFieldOffsets(JNIEnv *env, jclass cls)
+Java_jdk_crac_RCULock_initFieldOffsets(JNIEnv *env, jclass cls,
+        jobject readerThreadsList, jobject readCriticalMethods)
 {
-    readerThreadsListField = (*env)->GetFieldID(env, cls, "readerThreadsList", "J");
-    readCriticalMethodsField = (*env)->GetFieldID(env, cls, "readCriticalMethods", "J");
+    readerThreadsListField = (*env)->FromReflectedField(env, readerThreadsList);
+    readCriticalMethodsField = (*env)->FromReflectedField(env, readCriticalMethods);
 }
 
 static void free_up_to(char **mem, uint limit) {
-    for (uint i = 0; i < limit; ++i) {
-        free(*(mem + i));
+    for (uint i = 0; i < limit && mem[i] != NULL; ++i) {
+        free(mem[i]);
     }
     free(mem);
+}
+
+static char **copy_signatures(JNIEnv *env, jobjectArray methods) {
+    jsize num = (*env)->GetArrayLength(env, methods);
+    char **c_methods = malloc(sizeof(char *) * (num + 1));
+    if (c_methods == NULL) {
+        JNU_ThrowOutOfMemoryError(env, NULL);
+        return NULL;
+    }
+    for (int i = 0; i < num; ++i) {
+        jobject el = (*env)->GetObjectArrayElement(env, methods, i);
+        if ((*env)->ExceptionOccurred(env)) {
+            free_up_to(c_methods, i);
+            // exception already pending
+            return NULL;
+        } else if (el == NULL) {
+            free_up_to(c_methods, i);
+            JNU_ThrowNullPointerException(env, "null signature");
+            return NULL;
+        }
+        jsize len = (*env)->GetStringLength(env, el);
+        const char *sig = (*env)->GetStringUTFChars(env, el, NULL);
+        if (sig == NULL) {
+            free_up_to(c_methods, i);
+            JNU_ThrowNullPointerException(env, "null signature");
+            return NULL;
+        }
+        char *copy = malloc((len + 1) * sizeof(char));
+        if (copy == NULL) {
+            (*env)->ReleaseStringUTFChars(env, el, sig);
+            free_up_to(c_methods, i);
+            JNU_ThrowOutOfMemoryError(env, NULL);
+            return NULL;
+        }
+        strncpy(copy, sig, len + 1);
+        (*env)->ReleaseStringUTFChars(env, el, sig);
+        c_methods[i] = copy;
+    }
+    c_methods[num] = NULL;
+#ifndef PROD
+    // Note: strcmp can be used for UTF-8 strings but I am not sure if
+    // the sort in Java matches comparison through strcmp.
+    for (int i = 1; i < num; ++i) {
+        assert(strcmp(c_methods[i - 1], c_methods[i]) < 0);
+    }
+#endif // !PROD
+    return c_methods;
 }
 
 JNIEXPORT void JNICALL
@@ -60,42 +109,10 @@ Java_jdk_crac_RCULock_init(JNIEnv *env, jobject rcuLock, jobjectArray methods)
     }
     (*env)->SetLongField(env, rcuLock, readerThreadsListField, (jlong) threads);
 
-    jsize num = (*env)->GetArrayLength(env, methods);
-    char **c_methods = malloc(sizeof(char *) * (num + 1));
-    if (c_methods == NULL) {
-        JNU_ThrowOutOfMemoryError(env, NULL);
-        return;
+    char **c_methods = copy_signatures(env, methods);
+    if (c_methods != NULL) {
+        (*env)->SetLongField(env, rcuLock, readCriticalMethodsField, (jlong) (void *) c_methods);
     }
-    for (int i = 0; i < num; ++i) {
-        jobject el = (*env)->GetObjectArrayElement(env, methods, i);
-        if (el == NULL) {
-            free_up_to(c_methods, i);
-            JNU_ThrowNullPointerException(env, "null signature");
-            return;
-        }
-        jsize len = (*env)->GetStringLength(env, el);
-        const char *sig = (*env)->GetStringUTFChars(env, el, NULL);
-        if (sig == NULL) {
-            free_up_to(c_methods, i);
-            JNU_ThrowNullPointerException(env, "null signature");
-            return;
-        }
-        char *copy = malloc((len + 1) * sizeof(char));
-        if (copy == NULL) {
-            (*env)->ReleaseStringUTFChars(env, el, sig);
-            free_up_to(c_methods, i);
-            JNU_ThrowOutOfMemoryError(env, NULL);
-            return;
-        }
-        strncpy(copy, sig, len + 1);
-        (*env)->ReleaseStringUTFChars(env, el, sig);
-        c_methods[i] = copy;
-    }
-    c_methods[num] = NULL;
-#ifndef PROD
-    // TODO: assert methods are sorted - note that we should mind UTF-8 format
-#endif // !PROD
-    (*env)->SetLongField(env, rcuLock, readCriticalMethodsField, (jlong) (void *) c_methods);
 }
 
 JNIEXPORT void JNICALL
@@ -116,6 +133,21 @@ Java_jdk_crac_RCULock_destroy(JNIEnv *env, jobject rcuLock)
         }
         free(m);
         (*env)->SetLongField(env, rcuLock, readCriticalMethodsField, 0);
+    }
+}
+
+JNIEXPORT void JNICALL
+Java_jdk_crac_RCULock_updateMethods(JNIEnv *env, jobject rcuLock, jobjectArray methods)
+{
+    jlong old_methods = (*env)->GetLongField(env, rcuLock, readCriticalMethodsField);
+    if (old_methods == 0) {
+        JNU_ThrowNullPointerException(env, "Is this lock destroyed?");
+        return;
+    }
+    free_up_to((char **) (void *) old_methods, INT32_MAX);
+    char **c_methods = copy_signatures(env, methods);
+    if (c_methods != NULL) {
+        (*env)->SetLongField(env, rcuLock, readCriticalMethodsField, (jlong) (void *) c_methods);
     }
 }
 

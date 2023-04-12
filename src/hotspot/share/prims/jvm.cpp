@@ -3906,11 +3906,20 @@ public:
 };
 
 JVM_ENTRY_NO_ENV(void, JVM_RCU_SynchronizeThreads(void *addr, const char **methods))
+  // If there are no methods to check there's no point in executing the VM op
+  if (*methods == NULL) {
+    return;
+  }
   VM_RCU_Synchronize sync((ThreadList) addr, methods);
   VMThread::execute(&sync);
 JVM_END
 
 void VM_RCU_Synchronize::doit() {
+  const char **m = _method_list;
+  while (*m != NULL) m++;
+  const size_t num = m - _method_list;
+  assert(num > 0, "No methods");
+
   SafeThreadsListPtr listPtr(Thread::current(), true);
   ThreadsList *list = listPtr.list();
   assert(list != NULL, "Thread list is null");
@@ -3926,9 +3935,12 @@ void VM_RCU_Synchronize::doit() {
           javaVFrame* jvf = javaVFrame::cast(f);
           ResourceMark rm;
           const char *method = jvf->method()->name_and_sig_as_C_string();
-          // TODO: let's assume the list is sorted and use binary search
-          for (const char **m = _method_list; *m != NULL; ++m) {
-            if (strcmp(*m, method) == 0) {
+          // binary search in sorted array
+          size_t low = 0, high = num - 1;
+          while (low <= high) {
+            size_t mid = low + ((high - low) >> 1);
+            int comp = strcmp(method, _method_list[mid]);
+            if (comp == 0) {
 #ifndef PROD
               for (int j = 0; j < _reader_threads->length(); ++j) {
                 assert(t != _reader_threads->at(j), "Thread already in the list");
@@ -3936,6 +3948,12 @@ void VM_RCU_Synchronize::doit() {
 #endif //PROD
               _reader_threads->append(t);
               match = true;
+              break;
+            } else if (comp > 0) {
+              low = mid + 1;
+            } else if (mid != 0) {
+              high = mid - 1;
+            } else {
               break;
             }
           }

@@ -132,7 +132,7 @@ public class RCULock {
      * <p>
      * The signatures follow the form
      * <pre>my.package.MyClass.foobar(another/package/SomeClass;Z)V</pre>
-     * 
+     *
      * @apiNote This constructor does not use var-args argument to prevent
      * accidentally creating a RCULock without declaring any critical methods.
      *
@@ -164,9 +164,9 @@ public class RCULock {
 
     /**
      * Add read-critical methods.
-     * 
+     *
      * @param methods List of read-critical methods.
-     *                
+     *
      * @see RCULock#RCULock(Iterable)
      */
     public void amendCriticalMethods(Iterable<Method> methods) {
@@ -176,9 +176,9 @@ public class RCULock {
 
     /**
      * Add read-critical methods using signatures.
-     * 
+     *
      * @param methods List of method signatures.
-     *                
+     *
      * @see RCULock#RCULock(String[])
      */
     public void amendCriticalMethods(String... methods) {

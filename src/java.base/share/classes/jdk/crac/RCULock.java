@@ -131,9 +131,10 @@ public class RCULock {
     private void initSwitchPoints() {
         try {
             MethodType voidType = MethodType.methodType(void.class);
-            MethodHandle noop = MethodHandles.lookup().findSpecial(RCULock.class, "noop", voidType, RCULock.class);
-            MethodHandle readLockImpl = MethodHandles.lookup().findSpecial(RCULock.class, "readLockImpl", voidType, RCULock.class);
-            MethodHandle readUnlockImpl = MethodHandles.lookup().findSpecial(RCULock.class, "readUnlockImpl", voidType, RCULock.class);
+            MethodHandles.Lookup lookup = MethodHandles.lookup();
+            MethodHandle noop = lookup.findSpecial(RCULock.class, "noop", voidType, RCULock.class);
+            MethodHandle readLockImpl = lookup.findSpecial(RCULock.class, "readLockImpl", voidType, RCULock.class);
+            MethodHandle readUnlockImpl = lookup.findSpecial(RCULock.class, "readUnlockImpl", voidType, RCULock.class);
             lockSwitchPoint = new SwitchPoint();
             lockImpl = lockSwitchPoint.guardWithTest(noop, readLockImpl);
             unlockSwitchPoint = new SwitchPoint();

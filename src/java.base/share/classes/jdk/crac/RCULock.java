@@ -242,6 +242,7 @@ public class RCULock {
             // synchronizeBegin will catch us in again, so we don't need to
             // do anything.
             removeThread();
+            beginCondition.signal();
             // The lock is released as we are waiting for beginCondition
             while (synchronize) {
                 endCondition.awaitUninterruptibly();

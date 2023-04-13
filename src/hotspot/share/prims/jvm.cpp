@@ -3853,3 +3853,7 @@ JVM_ENTRY(jobjectArray, JVM_Checkpoint(JNIEnv *env, jarray fd_arr, jobjectArray 
   Handle ret = os::Linux::checkpoint(fd_arr, obj_arr, dry_run, jcmd_stream, CHECK_NULL);
   return (jobjectArray) JNIHandles::make_local(THREAD, ret());
 JVM_END
+
+JVM_LEAF(jlong, JVM_RestoreStartTime())
+  return os::Linux::restore_start_time();
+JVM_END

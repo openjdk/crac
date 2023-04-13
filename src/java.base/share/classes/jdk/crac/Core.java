@@ -33,8 +33,6 @@ import jdk.crac.impl.OrderedContext;
 import jdk.internal.crac.JDKContext;
 import jdk.internal.crac.LoggerContainer;
 
-import sun.security.action.GetBooleanAction;
-
 import java.io.PrintWriter;
 import java.io.StringWriter;
 import java.lang.reflect.InvocationTargetException;
@@ -46,6 +44,7 @@ import java.security.PrivilegedExceptionAction;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.TimeUnit;
 
 /**
  * The coordination service.
@@ -64,12 +63,7 @@ public class Core {
     private static native Object[] checkpointRestore0(int[] fdArr, Object[] objArr, boolean dryRun, long jcmdStream);
     private static final Object checkpointRestoreLock = new Object();
     private static boolean checkpointInProgress = false;
-
-    private static class FlagsHolder {
-        private FlagsHolder() {}
-        public static final boolean TRACE_STARTUP_TIME =
-            GetBooleanAction.privilegedGetProperty("jdk.crac.trace-startup-time");
-    }
+    private static long javaRestoreStartNanos;
 
     private static final Context<Resource> globalContext = new OrderedContext<>("GlobalContext");
     static {
@@ -150,9 +144,7 @@ public class Core {
         final int[] codes = (int[])bundle[3];
         final String[] messages = (String[])bundle[4];
 
-        if (FlagsHolder.TRACE_STARTUP_TIME) {
-            System.out.println("STARTUPTIME " + System.nanoTime() + " restore");
-        }
+        javaRestoreStartNanos = System.nanoTime();
 
         if (retCode != JVM_CHECKPOINT_OK) {
             if (checkpointException == null) {
@@ -263,9 +255,10 @@ public class Core {
                 try {
                     checkpointRestore1(jcmdStream);
                 } finally {
-                    if (FlagsHolder.TRACE_STARTUP_TIME) {
-                        System.out.println("STARTUPTIME " + System.nanoTime() + " restore-finish");
-                    }
+                    LoggerContainer.debug("Java part of restore took {0} ms",
+                                TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - javaRestoreStartNanos));
+                    LoggerContainer.debug("Complete restore took {0} ms",
+                                System.currentTimeMillis() - restoreStartTime());
                     checkpointInProgress = false;
                 }
             } else {
@@ -273,6 +266,9 @@ public class Core {
             }
         }
     }
+
+    // In Core we don't have access to MX beans
+    private static native long restoreStartTime();
 
     /* called by VM */
     private static String checkpointRestoreInternal(long jcmdStream) {

@@ -38,3 +38,9 @@ JNIEXPORT jobjectArray JNICALL
 Java_jdk_crac_Core_checkpointRestore0(JNIEnv *env, jclass ignore, jarray fdArr, jobjectArray objArr, jboolean dry_run, jlong jcmd_stream) {
     return JVM_Checkpoint(env, fdArr, objArr, dry_run, jcmd_stream);
 }
+
+JNIEXPORT jlong JNICALL
+Java_jdk_crac_Core_restoreStartTime(JNIEnv *env, jclass ignore)
+{
+    return JVM_RestoreStartTime();
+}

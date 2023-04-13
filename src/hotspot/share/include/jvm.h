@@ -1145,6 +1145,9 @@ enum cr_fail_type {
 JNIEXPORT jobjectArray JNICALL
 JVM_Checkpoint(JNIEnv *env, jarray fd_arr, jobjectArray obj_arr, jboolean dry_run, jlong jcmd_stream);
 
+JNIEXPORT jlong JNICALL
+JVM_RestoreStartTime();
+
 #ifdef __cplusplus
 } /* extern "C" */
 

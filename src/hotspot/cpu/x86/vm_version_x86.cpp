@@ -37,6 +37,7 @@
 #include "runtime/vm_version.hpp"
 #include "utilities/powerOfTwo.hpp"
 #include "utilities/virtualizationSupport.hpp"
+#include <sys/platform/x86.h>
 
 #include OS_HEADER_INLINE(os)
 
@@ -650,6 +651,325 @@ uint64_t VM_Version::CPUFeatures_parse(const char *ccstr) {
   return 0;
 }
 
+// sysdeps/x86/include/cpu-features.h
+enum
+{
+  CPUID_INDEX_MAX = CPUID_INDEX_14_ECX_0 + 1
+};
+
+void VM_Version::libc_not_using(uint64_t mask) {
+  if (!mask)
+    return;
+
+  char errbuf[512];
+  const int index_max = CPUID_INDEX_MAX;
+  enum { eax = 0, ebx, ecx, edx, reg_max };
+  unsigned active[index_max][reg_max] = { 0 };
+#define CMD "/lib64/ld-linux-x86-64.so.2 --list-diagnostics"
+  // FIXME: popen runs bash
+  FILE *f = popen(CMD, "r");
+  if (!f) {
+    jio_snprintf(errbuf, sizeof(errbuf), "Cannot popen " CMD ": %m");
+    vm_exit_during_initialization(errbuf);
+  }
+  for (;;) {
+    char line[LINE_MAX];
+    char *s = fgets(line, sizeof(line), f);
+    if (!s)
+      break;
+    s = line;
+    // x86.cpu_features.features[0x0].active[0x2]=0x7ed83203
+    const char prefix[] = "x86.cpu_features.features[";
+    if (strncmp(s, prefix, sizeof(prefix) - 1) != 0)
+      continue;
+    s += sizeof(prefix) - 1;
+    unsigned long index = strtoul(s, &s, 0);
+    if (index >= index_max)
+      continue;
+    const char mid[] = "].active[";
+    if (strncmp(s, mid, sizeof(mid) - 1) != 0)
+      continue;
+    s += sizeof(mid) - 1;
+    unsigned long reg = strtoul(s, &s, 0);
+    if (reg >= reg_max)
+      continue;
+    if (s[0] != ']' || s[1] != '=')
+      continue;
+    s += 2;
+    unsigned long val = strtoul(s, &s, 0);
+    if (val > UINT_MAX)
+      continue;
+    if (s[0] != '\n' || s[1] != 0)
+      continue;
+    active[index][reg] = val;
+  }
+  if (ferror(f)) {
+    jio_snprintf(errbuf, sizeof(errbuf), "Error reading popen-ed " CMD ": %m");
+    vm_exit_during_initialization(errbuf);
+  }
+  if (!feof(f)) {
+    vm_exit_during_initialization("EOF not reached on popen-ed " CMD);
+  }
+  int err = pclose(f);
+  if (err == -1) {
+    jio_snprintf(errbuf, sizeof(errbuf), "Error closing popen-ed " CMD ": %m");
+    vm_exit_during_initialization(errbuf);
+  }
+  if (err) {
+    jio_snprintf(errbuf, sizeof(errbuf), "Error closing popen-ed " CMD ": exit status %d" ,err);
+    vm_exit_during_initialization(errbuf);
+  }
+#undef CMD
+
+  uint64_t disable = 0;
+  if (mask & CPU_AVX) {
+    mask &= ~CPU_AVX;
+    StdCpuid1Ecx std_cpuid1_ecx;
+    std_cpuid1_ecx.value = active[CPUID_INDEX_1][ecx];
+    if (std_cpuid1_ecx.bits.avx != 0)
+      disable |= CPU_AVX;
+    if (std_cpuid1_ecx.bits.osxsave != 0)
+      disable |= CPU_OSXSAVE;
+    // FIXME: XemXcr0Eax xem_xcr0_eax;
+    // _cpuid_info.xem_xcr0_eax.bits.sse != 0 &&
+    // _cpuid_info.xem_xcr0_eax.bits.ymm != 0)
+  }
+  if (mask & CPU_CX8) {
+    mask &= ~CPU_CX8;
+    StdCpuid1Edx std_cpuid1_edx;
+    std_cpuid1_edx.value = active[CPUID_INDEX_1][edx];
+    if (std_cpuid1_edx.bits.cmpxchg8 != 0)
+      disable |= CPU_CX8;
+  }
+//  if (mask & CPU_FMA) {
+//    mask &= ~CPU_FMA;
+//  }
+//  if (mask & CPU_HTT) {
+//    mask &= ~CPU_HTT;
+//  }
+//  if (mask & CPU_IBT) {
+//    mask &= ~CPU_IBT;
+//  }
+//  if (mask & CPU_RTM) {
+//    mask &= ~CPU_RTM;
+//  }
+//  if (mask & CPU_AVX2) {
+//    mask &= ~CPU_AVX2;
+//  }
+//  if (mask & CPU_BMI1) {
+//    mask &= ~CPU_BMI1;
+//  }
+//  if (mask & CPU_BMI2) {
+//    mask &= ~CPU_BMI2;
+//  }
+//  if (mask & CPU_CMOV) {
+//    mask &= ~CPU_CMOV;
+//  }
+//  if (mask & CPU_ERMS) {
+//    mask &= ~CPU_ERMS;
+//  }
+//  if (mask & CPU_FMA4) {
+//    mask &= ~CPU_FMA4;
+//  }
+//  if (mask & CPU_SSE2) {
+//    mask &= ~CPU_SSE2;
+//  }
+//  if (mask & CPU_LZCNT) {
+//    mask &= ~CPU_LZCNT;
+//  }
+//  if (mask & CPU_MOVBE) {
+//    mask &= ~CPU_MOVBE;
+//  }
+//  if (mask & CPU_SHSTK) {
+//    mask &= ~CPU_SHSTK;
+//  }
+//  if (mask & CPU_SSSE3) {
+//    mask &= ~CPU_SSSE3;
+//  }
+//  if (mask & CPU_XSAVE) {
+//    mask &= ~CPU_XSAVE;
+//  }
+//  if (mask & CPU_POPCNT) {
+//    mask &= ~CPU_POPCNT;
+//  }
+//  if (mask & CPU_SSE4_1) {
+//    mask &= ~CPU_SSE4_1;
+//  }
+//  if (mask & CPU_SSE4_2) {
+//    mask &= ~CPU_SSE4_2;
+//  }
+//  if (mask & CPU_AVX512F) {
+//    mask &= ~CPU_AVX512F;
+//  }
+//  if (mask & CPU_OSXSAVE) {
+//    mask &= ~CPU_OSXSAVE;
+//  }
+//  if (mask & CPU_AVX512CD) {
+//    mask &= ~CPU_AVX512CD;
+//  }
+//  if (mask & CPU_AVX512BW) {
+//    mask &= ~CPU_AVX512BW;
+//  }
+//  if (mask & CPU_AVX512DQ) {
+//    mask &= ~CPU_AVX512DQ;
+//  }
+//  if (mask & CPU_AVX512ER) {
+//    mask &= ~CPU_AVX512ER;
+//  }
+//  if (mask & CPU_AVX512PF) {
+//    mask &= ~CPU_AVX512PF;
+//  }
+//  if (mask & CPU_AVX512VL) {
+//    mask &= ~CPU_AVX512VL;
+//  }
+
+  if (0/*FIXME*/ && mask) {
+    jio_snprintf(errbuf, sizeof(errbuf), "internal error: Unsupported handling CPU_* %" PRIx64, mask);
+    vm_exit_during_initialization(errbuf);
+  }
+
+#define PREFIX ":glibc.cpu.hwcaps="
+  const char prefix[] = PREFIX;
+  const size_t prefix_len = sizeof(prefix) - 1;
+  char disable_str[64 * (10 + 3) + 1] = PREFIX;
+#undef PREFIX
+  char *disable_end = disable_str + prefix_len;
+#define DISABLE2(hotspot, libc) do {					\
+    if (disable & CPU_##hotspot) {					\
+      disable &= ~CPU_##hotspot;					\
+      const char str[] = ",-CPU_" #libc;				\
+      size_t remains = disable_str + sizeof(disable_str) - disable_end;	\
+      strncpy(disable_end, str, remains);				\
+      size_t len = strnlen(disable_end, remains);			\
+      remains -= len;							\
+      assert(remains > 0, "internal error: disable_str overflow");	\
+      disable_end += len;						\
+    }									\
+  } while (0);
+#define DISABLE(name) DISABLE2(name, name)
+  DISABLE(AVX)
+  DISABLE(CX8)
+  DISABLE(FMA)
+  DISABLE2(HT, HTT)
+  DISABLE(IBT)
+  DISABLE(RTM)
+  DISABLE(AVX2)
+  DISABLE(BMI1)
+  DISABLE(BMI2)
+  DISABLE(CMOV)
+  DISABLE(ERMS)
+  DISABLE(FMA4)
+  DISABLE(SSE2)
+  DISABLE(LZCNT)
+  DISABLE(MOVBE)
+  DISABLE(SHSTK)
+  DISABLE(SSSE3)
+  DISABLE(XSAVE)
+  DISABLE(POPCNT)
+  DISABLE(SSE4_1)
+  DISABLE(SSE4_2)
+  DISABLE(AVX512F)
+  DISABLE(OSXSAVE)
+  DISABLE(AVX512CD)
+  DISABLE(AVX512BW)
+  DISABLE(AVX512DQ)
+  DISABLE(AVX512ER)
+  DISABLE(AVX512PF)
+  DISABLE(AVX512VL)
+#undef DISABLE
+  *disable_end = 0;
+
+  assert(disable == 0, "Unsupported disabling CPU_*");
+  if (disable) {
+    jio_snprintf(errbuf, sizeof(errbuf), "internal error: Unsupported disabling CPU_* %" PRIx64, disable);
+    vm_exit_during_initialization(errbuf);
+  }
+
+  if (!disable_str[0])
+    return;
+
+#define REEXEC_NAME "HOTSPOT_GLIBC_TUNABLES_REEXEC"
+  if (getenv(REEXEC_NAME))
+    vm_exit_during_initialization("internal error: GLIBC_TUNABLES had no effect and " REEXEC_NAME " is set");
+  if (setenv(REEXEC_NAME, "1", 1)) {
+    jio_snprintf(errbuf, sizeof(errbuf), "setenv " REEXEC_NAME " error: %m");
+    vm_exit_during_initialization(errbuf);
+  }
+#undef REEXEC_NAME
+
+#define TUNABLES_NAME "GLIBC_TUNABLES"
+  const char *env = getenv(TUNABLES_NAME);
+  if (!env) {
+    err = setenv(TUNABLES_NAME, disable_str, 0);
+  } else {
+    char buf[strlen(disable_str) + strlen(env) + 100];
+    const char *hwcaps = strstr(env, prefix + 1 /* skip ':' */);
+    if (!hwcaps) {
+      strcpy(buf, env);
+      strcat(buf, disable_str);
+    } else {
+      const char *colon = strchr(hwcaps, ':');
+      if (!colon) {
+	strcpy(buf, env);
+	strcat(buf, disable_str + prefix_len);
+      } else {
+	err = jio_snprintf(buf, sizeof(buf), "%.*s%s%s", (int)(colon - env), env, disable_str + prefix_len, colon);
+	assert(err >= 0 && (unsigned)err < sizeof(buf), "internal error: " TUNABLES_NAME " buffer overflow");
+      }
+    }
+    err = setenv(TUNABLES_NAME, buf, 1);
+  }
+  if (err) {
+    jio_snprintf(errbuf, sizeof(errbuf), "setenv " TUNABLES_NAME " error: %m");
+    vm_exit_during_initialization(errbuf);
+  }
+#undef TUNABLES_NAME
+
+  long arg_max = sysconf(_SC_ARG_MAX);
+  if (arg_max == -1) {
+    jio_snprintf(errbuf, sizeof(errbuf), "sysconf(_SC_ARG_MAX): %m");
+    vm_exit_during_initialization(errbuf);
+  }
+  char buf[arg_max + 1];
+#define CMDLINE "/proc/self/cmdline"
+  int fd = open(CMDLINE, O_RDONLY);
+  if (fd == -1) {
+    jio_snprintf(errbuf, sizeof(errbuf), "Cannot open " CMDLINE ": %m");
+    vm_exit_during_initialization(errbuf);
+  }
+  ssize_t got = read(fd, buf, sizeof(buf));
+  if (got == -1) {
+    jio_snprintf(errbuf, sizeof(errbuf), "Cannot read " CMDLINE ": %m");
+    vm_exit_during_initialization(errbuf);
+  }
+  if ((size_t)got == sizeof(buf)) {
+    jio_snprintf(errbuf, sizeof(errbuf), "compilation error: CMDLINE reading returned %zd > %ld = sysconf(_SC_ARG_MAX)", got, arg_max);
+    vm_exit_during_initialization(errbuf);
+  }
+  if (close(fd)) {
+    jio_snprintf(errbuf, sizeof(errbuf), "Cannot close " CMDLINE ": %m");
+    vm_exit_during_initialization(errbuf);
+  }
+  char *argv[got + 1];
+  char **argvp = argv;
+  char *s = buf;
+  while (s < buf + got) {
+    *argvp++ = s;
+    s += strnlen(s, buf + got - s);
+    if (s == buf + got)
+      vm_exit_during_initialization("Missing end of string zero while parsing " CMDLINE);
+    ++s;
+  }
+  *argvp = NULL;
+#undef CMDLINE
+
+#define EXEC "/proc/self/exe"
+  execv(EXEC, argv);
+  jio_snprintf(errbuf, sizeof(errbuf), "Cannot re-execute " EXEC ": %m");
+  vm_exit_during_initialization(errbuf);
+#undef EXEC
+}
+
 void VM_Version::get_processor_features() {
 
   _cpu = 4; // 486 by default
@@ -701,6 +1021,8 @@ void VM_Version::get_processor_features() {
     }
     _features = CPUFeatures_x64;
   }
+
+  libc_not_using((CPU_MAX - 1) & ~_features);
 
   _supports_cx8 = supports_cmpxchg8();
   // xchg and xadd instructions

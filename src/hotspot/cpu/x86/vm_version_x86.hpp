@@ -82,11 +82,12 @@ class VM_Version : public Abstract_VM_Version {
                dca      : 1,
                sse4_1   : 1,
                sse4_2   : 1,
-                        : 2,
+                        : 1,
+               movbe    : 1,
                popcnt   : 1,
                         : 1,
                aes      : 1,
-                        : 1,
+               xsave    : 1,
                osxsave  : 1,
                avx      : 1,
                         : 2,
@@ -153,7 +154,9 @@ class VM_Version : public Abstract_VM_Version {
                sse4a        : 1,
                misalignsse  : 1,
                prefetchw    : 1,
-                            : 22;
+                            : 7,
+               fma4         : 1,
+                            : 14;
     } bits;
   };
 
@@ -243,7 +246,7 @@ class VM_Version : public Abstract_VM_Version {
                      ospke : 1,
                            : 1,
               avx512_vbmi2 : 1,
-                           : 1,
+                     shstk : 1,
                       gfni : 1,
                       vaes : 1,
          avx512_vpclmulqdq : 1,
@@ -261,7 +264,9 @@ class VM_Version : public Abstract_VM_Version {
       uint32_t             : 2,
              avx512_4vnniw : 1,
              avx512_4fmaps : 1,
-                           : 28;
+                           : 16,
+             ibt           : 1,
+                           : 11;
     } bits;
   };
 
@@ -359,7 +364,14 @@ protected:
                                                      \
     decl(AVX512_VBMI2,      "avx512_vbmi2",      44) /* VBMI2 shift left double instructions */ \
     decl(AVX512_VBMI,       "avx512_vbmi",       45) /* Vector BMI instructions */ \
-    decl(HV,                "hv",                46) /* Hypervisor instructions */
+    decl(HV,                "hv",                46) /* Hypervisor instructions */ \
+    decl(FMA4,              "fma4",              47) /* Tracking of a CPU feature for libc */ \
+    decl(MOVBE,             "movbe",             48) /* Tracking of a CPU feature for libc */ \
+    decl(OSXSAVE,           "osxsave",           49) /* Tracking of a CPU feature for libc */ \
+    decl(IBT,               "ibt",               50) /* Tracking of a CPU feature for libc */ \
+    decl(SHSTK,             "shstk",             51) /* Tracking of a CPU feature for libc */ \
+    decl(XSAVE,             "xsave",             52) /* Tracking of a CPU feature for libc */ \
+    decl(MAX,               "max",               53) /* Maximum - unused feature */
 
 #define DECLARE_CPU_FEATURE_FLAG(id, name, bit) CPU_##id = (1ULL << bit),
     CPU_FEATURE_FLAGS(DECLARE_CPU_FEATURE_FLAG)
@@ -556,8 +568,14 @@ enum Extended_Family {
       result |= CPU_SSE4_1;
     if (_cpuid_info.std_cpuid1_ecx.bits.sse4_2 != 0)
       result |= CPU_SSE4_2;
+    if (_cpuid_info.std_cpuid1_ecx.bits.movbe != 0)
+      result |= CPU_MOVBE;
     if (_cpuid_info.std_cpuid1_ecx.bits.popcnt != 0)
       result |= CPU_POPCNT;
+    if (_cpuid_info.std_cpuid1_ecx.bits.osxsave != 0)
+      result |= CPU_OSXSAVE;
+    if (_cpuid_info.std_cpuid1_ecx.bits.xsave != 0)
+      result |= CPU_XSAVE;
     if (_cpuid_info.std_cpuid1_ecx.bits.avx != 0 &&
         _cpuid_info.std_cpuid1_ecx.bits.osxsave != 0 &&
         _cpuid_info.xem_xcr0_eax.bits.sse != 0 &&
@@ -595,8 +613,12 @@ enum Extended_Family {
           result |= CPU_AVX512_VBMI;
         if (_cpuid_info.sef_cpuid7_ecx.bits.avx512_vbmi2 != 0)
           result |= CPU_AVX512_VBMI2;
+        if (_cpuid_info.sef_cpuid7_ecx.bits.shstk != 0)
+          result |= CPU_SHSTK;
       }
     }
+    if (_cpuid_info.sef_cpuid7_edx.bits.ibt != 0)
+      result |= CPU_IBT;
     if (_cpuid_info.std_cpuid1_ecx.bits.hv != 0)
       result |= CPU_HV;
     if (_cpuid_info.sef_cpuid7_ebx.bits.bmi1 != 0)
@@ -633,6 +655,8 @@ enum Extended_Family {
         result |= CPU_LZCNT;
       if (_cpuid_info.ext_cpuid1_ecx.bits.sse4a != 0)
         result |= CPU_SSE4A;
+      if (_cpuid_info.ext_cpuid1_ecx.bits.fma4 != 0)
+        result |= CPU_FMA4;
     }
 
     // Intel features.
@@ -710,6 +734,7 @@ enum Extended_Family {
   static void get_processor_features();
 
   static uint64_t CPUFeatures_parse(const char *ccstr);
+  static void libc_not_using(uint64_t mask);
 
 public:
   // Offsets for cpuid asm stub

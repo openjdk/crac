@@ -6600,3 +6600,30 @@ void os::print_memory_mappings(char* addr, size_t bytes, outputStream* st) {
     st->cr();
   }
 }
+
+bool os::read_bootid(char *dest, size_t size) {
+  int fd = ::open("/proc/sys/kernel/random/boot_id", O_RDONLY);
+  if (fd < 0) {
+    perror("CRaC: Cannot read system boot ID");
+    return false;
+  }
+  size_t rd = 0;
+  bool success = true;
+  do {
+    ssize_t r = read(fd, dest + rd, size - rd - 1);
+    if (r == 0) {
+      break;
+    } else if (r < 0) {
+      if (errno == EINTR) {
+        continue;
+      }
+      success = false;
+      perror("CRaC: Cannot read system boot ID");
+      break;
+    }
+    rd += r;
+  } while (rd < size - 1);
+  dest[size - 1] = '\0';
+  ::close(fd);
+  return success;
+}

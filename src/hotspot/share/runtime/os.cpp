@@ -83,8 +83,9 @@ int               os::_initial_active_processor_count = 0;
 os::PageSizes     os::_page_sizes;
 
 // Timestamps recorded before checkpoint
-jlong os::checkpoint_millis = -1;
+jlong os::checkpoint_millis;
 jlong os::checkpoint_nanos;
+char os::checkpoint_bootid[UUID_LENGTH + 1];
 // Value based on wall clock time difference that will guarantee monotonic
 // System.nanoTime() close to actual wall-clock time difference.
 jlong os::javaTimeNanos_offset = 0;
@@ -2032,23 +2033,25 @@ void os::PageSizes::print_on(outputStream* st) const {
 }
 
 void os::record_time_before_checkpoint() {
-  // If CRaC supports multiple checkpoint - restore - checkpoint - restore cycles
-  // we want to record the timestamps only on the first checkpoint, but update
-  // the offset after each restore
-  if (checkpoint_millis < 0) {
-      checkpoint_millis = javaTimeMillis();
-      checkpoint_nanos = javaTimeNanos();
-  }
+  checkpoint_millis = javaTimeMillis();
+  checkpoint_nanos = javaTimeNanos();
+  memset(checkpoint_bootid, 0, sizeof(checkpoint_bootid));
+  read_bootid(checkpoint_bootid, sizeof(checkpoint_bootid));
 }
 
 void os::update_javaTimeNanos_offset() {
-  assert(checkpoint_millis >= 0, "Restore without a checkpoint?");
-  long diff_millis = javaTimeMillis() - checkpoint_millis;
-  // If the wall clock has gone backwards we won't add it to the offset
-  if (diff_millis < 0) {
-    diff_millis = 0;
+  char buf[UUID_LENGTH + 1];
+  // We will change the nanotime offset only if this is not the same boot
+  // to prevent reducing the accuracy of System.nanoTime() unnecessarily
+  if (!read_bootid(buf, sizeof(buf)) || strncmp(buf, checkpoint_bootid, UUID_LENGTH) != 0) {
+    assert(checkpoint_millis >= 0, "Restore without a checkpoint?");
+    long diff_millis = javaTimeMillis() - checkpoint_millis;
+    // If the wall clock has gone backwards we won't add it to the offset
+    if (diff_millis < 0) {
+      diff_millis = 0;
+    }
+    // Make the javaTimeNanos() on the next line return true monotonic time
+    javaTimeNanos_offset = 0;
+    javaTimeNanos_offset = checkpoint_nanos - javaTimeNanos() + diff_millis * 1000000L;
   }
-  // Make the javaTimeNanos() on the next line return true monotonic time
-  javaTimeNanos_offset = 0;
-  javaTimeNanos_offset = checkpoint_nanos - javaTimeNanos() + diff_millis * 1000000L;
 }

@@ -23,6 +23,7 @@
 
 import jdk.crac.*;
 import jdk.crac.management.CRaCMXBean;
+import jdk.test.lib.Container;
 import jdk.test.lib.containers.docker.Common;
 import jdk.test.lib.containers.docker.DockerTestUtils;
 import jdk.test.lib.crac.CracBuilder;
@@ -60,15 +61,29 @@ public class NanoTimeTest implements CracTest {
         if (!DockerTestUtils.canTestDocker()) {
             return;
         }
-        CracBuilder builder = new CracBuilder().inDockerImage(imageName);
+        CracBuilder builder = new CracBuilder();
+        Path bootIdFile = Files.createTempFile("NanoTimeTest-", "-boot_id");
         try {
-            builder.doCheckpoint();
+            // TODO: use more official image
+            builder.withBaseImage("ghcr.io/rvansa/crac-test-base", "latest")
+                    .dockerOptions("-v", bootIdFile + ":/fake_boot_id")
+                    .inDockerImage(imageName);
 
-            builder.startRestore(Arrays.asList("docker", "exec", CracBuilder.CONTAINER_NAME,
+            Files.writeString(bootIdFile, "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx");
+            // We need to preload the library before checkpoint
+            builder.doCheckpoint(Container.ENGINE_COMMAND, "exec",
+                    "-e", "LD_PRELOAD=/opt/path-mapping-quiet.so",
+                    "-e", "PATH_MAPPING=/proc/sys/kernel/random/boot_id:/fake_boot_id",
+                    CracBuilder.CONTAINER_NAME, CracBuilder.DOCKER_JAVA);
+
+            Files.writeString(bootIdFile, "yyyyyyyy-yyyy-yyyy-yyyy-yyyyyyyyyyyy");
+
+            builder.doRestore(Container.ENGINE_COMMAND, "exec", CracBuilder.CONTAINER_NAME,
                     "unshare", "--fork", "--time", "--boottime", "86400", "--monotonic", String.valueOf(monotonicOffset),
-                    CracBuilder.DOCKER_JAVA)).waitForSuccess();
+                    CracBuilder.DOCKER_JAVA);
         } finally {
             builder.ensureContainerKilled();
+            assertTrue(bootIdFile.toFile().delete());
         }
     }
 

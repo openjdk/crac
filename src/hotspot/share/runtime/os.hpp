@@ -82,6 +82,9 @@ enum WXMode {
   WXExec
 };
 
+// xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
+#define UUID_LENGTH 36
+
 // Executable parameter flag for os::commit_memory() and
 // os::commit_memory_or_exit().
 const bool ExecMem = true;
@@ -132,6 +135,7 @@ class os: AllStatic {
 
   static jlong checkpoint_millis;
   static jlong checkpoint_nanos;
+  static char checkpoint_bootid[UUID_LENGTH + 1];
   static jlong javaTimeNanos_offset;
 
   static char*  pd_reserve_memory(size_t bytes, bool executable);
@@ -177,6 +181,8 @@ class os: AllStatic {
   static void initialize_initial_active_processor_count();
 
   LINUX_ONLY(static void pd_init_container_support();)
+
+  static bool read_bootid(char *dest, size_t size);
 
  public:
   static void init(void);                      // Called before command line parsing

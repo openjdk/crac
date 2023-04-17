@@ -658,6 +658,7 @@ enum
 };
 
 void VM_Version::libc_not_using(uint64_t mask) {
+setbuf(stdout,NULL);
   if (!mask)
     return;
 
@@ -702,6 +703,7 @@ void VM_Version::libc_not_using(uint64_t mask) {
     if (s[0] != '\n' || s[1] != 0)
       continue;
     active[index][reg] = val;
+fputs(line,stdout);
   }
   if (ferror(f)) {
     jio_snprintf(errbuf, sizeof(errbuf), "Error reading popen-ed " CMD ": %m");
@@ -837,7 +839,7 @@ void VM_Version::libc_not_using(uint64_t mask) {
 #define DISABLE2(hotspot, libc) do {					\
     if (disable & CPU_##hotspot) {					\
       disable &= ~CPU_##hotspot;					\
-      const char str[] = ",-CPU_" #libc;				\
+      const char str[] = ",-" #libc;					\
       size_t remains = disable_str + sizeof(disable_str) - disable_end;	\
       strncpy(disable_end, str, remains);				\
       size_t len = strnlen(disable_end, remains);			\
@@ -885,22 +887,25 @@ void VM_Version::libc_not_using(uint64_t mask) {
     vm_exit_during_initialization(errbuf);
   }
 
-  if (!disable_str[0])
+  if (disable_end == disable_str + prefix_len)
     return;
 
+#define TUNABLES_NAME "GLIBC_TUNABLES"
 #define REEXEC_NAME "HOTSPOT_GLIBC_TUNABLES_REEXEC"
-  if (getenv(REEXEC_NAME))
-    vm_exit_during_initialization("internal error: GLIBC_TUNABLES had no effect and " REEXEC_NAME " is set");
+  if (getenv(REEXEC_NAME)) {
+    jio_snprintf(errbuf, sizeof(errbuf), "internal error: " TUNABLES_NAME "=%s had no effect and " REEXEC_NAME " is set", getenv(TUNABLES_NAME));
+    vm_exit_during_initialization(errbuf);
+  }
   if (setenv(REEXEC_NAME, "1", 1)) {
     jio_snprintf(errbuf, sizeof(errbuf), "setenv " REEXEC_NAME " error: %m");
     vm_exit_during_initialization(errbuf);
   }
 #undef REEXEC_NAME
 
-#define TUNABLES_NAME "GLIBC_TUNABLES"
   const char *env = getenv(TUNABLES_NAME);
   if (!env) {
     err = setenv(TUNABLES_NAME, disable_str, 0);
+puts(disable_str);
   } else {
     char buf[strlen(disable_str) + strlen(env) + 100];
     const char *hwcaps = strstr(env, prefix + 1 /* skip ':' */);
@@ -918,6 +923,7 @@ void VM_Version::libc_not_using(uint64_t mask) {
       }
     }
     err = setenv(TUNABLES_NAME, buf, 1);
+puts(buf);
   }
   if (err) {
     jio_snprintf(errbuf, sizeof(errbuf), "setenv " TUNABLES_NAME " error: %m");
@@ -925,42 +931,59 @@ void VM_Version::libc_not_using(uint64_t mask) {
   }
 #undef TUNABLES_NAME
 
-  long arg_max = sysconf(_SC_ARG_MAX);
-  if (arg_max == -1) {
-    jio_snprintf(errbuf, sizeof(errbuf), "sysconf(_SC_ARG_MAX): %m");
-    vm_exit_during_initialization(errbuf);
-  }
-  char buf[arg_max + 1];
+  char *buf = NULL;
+  size_t buf_allocated = 0;
+  size_t buf_used = 0;
 #define CMDLINE "/proc/self/cmdline"
   int fd = open(CMDLINE, O_RDONLY);
   if (fd == -1) {
     jio_snprintf(errbuf, sizeof(errbuf), "Cannot open " CMDLINE ": %m");
     vm_exit_during_initialization(errbuf);
   }
-  ssize_t got = read(fd, buf, sizeof(buf));
-  if (got == -1) {
-    jio_snprintf(errbuf, sizeof(errbuf), "Cannot read " CMDLINE ": %m");
-    vm_exit_during_initialization(errbuf);
-  }
-  if ((size_t)got == sizeof(buf)) {
-    jio_snprintf(errbuf, sizeof(errbuf), "compilation error: CMDLINE reading returned %zd > %ld = sysconf(_SC_ARG_MAX)", got, arg_max);
-    vm_exit_during_initialization(errbuf);
-  }
+  ssize_t got;
+  do {
+    if (buf_used == buf_allocated) {
+      buf_allocated = MAX2(size_t(4096), 2 * buf_allocated);
+      buf = (char *)os::realloc(buf, buf_allocated, mtOther);
+      if (buf == NULL) {
+	jio_snprintf(errbuf, sizeof(errbuf), CMDLINE " reading failed allocating %zu bytes", buf_allocated);
+	vm_exit_during_initialization(errbuf);
+      }
+    }
+    got = read(fd, buf + buf_used, buf_allocated - buf_used);
+    if (got == -1) {
+      jio_snprintf(errbuf, sizeof(errbuf), "Cannot read " CMDLINE ": %m");
+      vm_exit_during_initialization(errbuf);
+    }
+    buf_used += got;
+  } while (got);
   if (close(fd)) {
     jio_snprintf(errbuf, sizeof(errbuf), "Cannot close " CMDLINE ": %m");
     vm_exit_during_initialization(errbuf);
   }
-  char *argv[got + 1];
-  char **argvp = argv;
+  char **argv = NULL;
+  size_t argv_allocated = 0;
+  size_t argv_used = 0;
   char *s = buf;
-  while (s < buf + got) {
-    *argvp++ = s;
-    s += strnlen(s, buf + got - s);
-    if (s == buf + got)
+  while (s <= buf + buf_used) {
+    if (argv_used == argv_allocated) {
+      argv_allocated = MAX2(size_t(256), 2 * argv_allocated);
+      argv = (char **)os::realloc(argv, argv_allocated * sizeof(*argv), mtOther);
+      if (argv == NULL) {
+	jio_snprintf(errbuf, sizeof(errbuf), CMDLINE " reading failed allocating %zu pointers", argv_allocated);
+	vm_exit_during_initialization(errbuf);
+      }
+    }
+    if (s == buf + buf_used) {
+      break;
+    }
+    argv[argv_used++] = s;
+    s += strnlen(s, buf + buf_used - s);
+    if (s == buf + buf_used)
       vm_exit_during_initialization("Missing end of string zero while parsing " CMDLINE);
     ++s;
   }
-  *argvp = NULL;
+  argv[argv_used] = NULL;
 #undef CMDLINE
 
 #define EXEC "/proc/self/exe"

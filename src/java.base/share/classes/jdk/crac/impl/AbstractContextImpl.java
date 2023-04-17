@@ -98,7 +98,7 @@ public abstract class AbstractContextImpl<R extends Resource, P> extends Context
         while ((drained = resourceQueue.poll()) != null) {
             resources.put(drained.getKey(), drained.getValue());
         }
-        CheckpointException exception = new CheckpointException();
+        CheckpointException exception = null;
         TreeMap<Long, List<R>> resources = this.resources.entrySet().stream().collect(
                 TreeMap::new, (m, e) -> m.computeIfAbsent(e.getValue(), p -> new ArrayList<>()).add(e.getKey()), TreeMap::putAll);
         restoreQ = new ArrayList<>(this.resources.size());
@@ -114,10 +114,22 @@ public abstract class AbstractContextImpl<R extends Resource, P> extends Context
                     r.beforeCheckpoint(this);
                     restoreQ.add(r);
                 } catch (CheckpointException e) {
-                    for (Throwable t : e.getSuppressed()) {
+                    enqueueIfContext(r);
+                    if (exception == null) {
+                        exception = new CheckpointException();
+                    }
+                    Throwable[] suppressed = e.getSuppressed();
+                    if (suppressed.length == 0) {
+                        exception.addSuppressed(e);
+                    }
+                    for (Throwable t : suppressed) {
                         exception.addSuppressed(t);
                     }
                 } catch (Exception e) {
+                    enqueueIfContext(r);
+                    if (exception == null) {
+                        exception = new CheckpointException();
+                    }
                     exception.addSuppressed(e);
                 }
             }
@@ -130,8 +142,17 @@ public abstract class AbstractContextImpl<R extends Resource, P> extends Context
             }
         }
 
-        if (0 < exception.getSuppressed().length) {
+        if (exception != null) {
             throw exception;
+        }
+    }
+
+    private void enqueueIfContext(R r) {
+        // When the resource itself is a context it contains other resources that should
+        // be restored upon unsuccessful checkpoint (if the beforeCheckpoint has thrown
+        // we are going to call afterRestore on all checkpointed resources immediately)
+        if (r instanceof Context<?>) {
+            restoreQ.add(r);
         }
     }
 
@@ -139,12 +160,17 @@ public abstract class AbstractContextImpl<R extends Resource, P> extends Context
     public void afterRestore(Context<? extends Resource> context) throws RestoreException {
         restoreLock.lock();
         try {
-            RestoreException exception = new RestoreException();
+            RestoreException exception = null;
             for (Resource r : restoreQ) {
                 LoggerContainer.debug("afterRestore {0}", r);
                 try {
                     r.afterRestore(this);
                 } catch (RestoreException e) {
+                    // Print error early in case the restore process gets stuck
+                    LoggerContainer.error(e, "Failed to restore " + r);
+                    if (exception == null) {
+                        exception = new RestoreException();
+                    }
                     Throwable[] suppressed = e.getSuppressed();
                     if (suppressed.length == 0) {
                         exception.addSuppressed(e);
@@ -153,12 +179,17 @@ public abstract class AbstractContextImpl<R extends Resource, P> extends Context
                         exception.addSuppressed(t);
                     }
                 } catch (Exception e) {
+                    // Print error early in case the restore process gets stuck
+                    LoggerContainer.error(e, "Failed to restore " + r);
+                    if (exception == null) {
+                        exception = new RestoreException();
+                    }
                     exception.addSuppressed(e);
                 }
             }
             restoreQ = null;
 
-            if (0 < exception.getSuppressed().length) {
+            if (exception != null) {
                 throw exception;
             }
         } finally {

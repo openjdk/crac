@@ -18,4 +18,12 @@ public class LoggerContainer {
     }
 
     private LoggerContainer() {}
+
+    public static void error(String msg) {
+        logger.log(System.Logger.Level.ERROR, msg);
+    }
+
+    public static void error(Throwable t, String msg) {
+        logger.log(System.Logger.Level.ERROR, msg, t);
+    }
 }

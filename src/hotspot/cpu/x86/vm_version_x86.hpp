@@ -28,6 +28,9 @@
 #include "memory/universe.hpp"
 #include "runtime/abstract_vm_version.hpp"
 #include "utilities/macros.hpp"
+#include "runtime/java.hpp"
+#include "runtime/globals_extension.hpp"
+#include "jvm_io.h"
 
 class VM_Version : public Abstract_VM_Version {
   friend class VMStructs;
@@ -365,6 +368,7 @@ protected:
     decl(AVX512_VBMI2,      "avx512_vbmi2",      44) /* VBMI2 shift left double instructions */ \
     decl(AVX512_VBMI,       "avx512_vbmi",       45) /* Vector BMI instructions */ \
     decl(HV,                "hv",                46) /* Hypervisor instructions */ \
+    /* FIXME: Move CPU features for libc into a different allocation space. */ \
     decl(FMA4,              "fma4",              47) /* Tracking of a CPU feature for libc */ \
     decl(MOVBE,             "movbe",             48) /* Tracking of a CPU feature for libc */ \
     decl(OSXSAVE,           "osxsave",           49) /* Tracking of a CPU feature for libc */ \
@@ -1072,8 +1076,18 @@ public:
     // up. Assembler::flush calls this routine to check that clflush
     // is allowed. So, we give the caller a free pass if Universe init
     // is still in progress.
-    assert ((!Universe::is_fully_initialized() || (_features & CPU_FLUSH) != 0), "clflush should be available");
-    return true;
+    if (!Universe::is_fully_initialized()) {
+      return true;
+    }
+    if ((_features & CPU_FLUSH) != 0) {
+      return true;
+    }
+    if (FLAG_IS_DEFAULT(CPUFeatures)) {
+      vm_exit_during_initialization("clflush should be available");
+    }
+    char errbuf[512];
+    jio_snprintf(errbuf, sizeof(errbuf), "-XX:CPUFeatures option requires FLUSH flag to be set: 0x%" PRIx64, CPU_FLUSH);
+    vm_exit_during_initialization(errbuf);
   }
 #else
   static bool supports_clflush() { return  ((_features & CPU_FLUSH) != 0); }

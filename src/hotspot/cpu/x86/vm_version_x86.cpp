@@ -1057,6 +1057,11 @@ void VM_Version::get_processor_features() {
 #ifdef _LP64
   // OS should support SSE for x64 and hardware should support at least SSE2.
   if (!VM_Version::supports_sse2()) {
+    if (!FLAG_IS_DEFAULT(CPUFeatures)) {
+      char errbuf[512];
+      jio_snprintf(errbuf, sizeof(errbuf), "-XX:CPUFeatures option requires SSE2 flag to be set: 0x%" PRIx64, CPU_SSE2);
+      vm_exit_during_initialization(errbuf);
+    }
     vm_exit_during_initialization("Unknown x64 processor: SSE2 not supported");
   }
   // in 64 bit the use of SSE2 is the minimum

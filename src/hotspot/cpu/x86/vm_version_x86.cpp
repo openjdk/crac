@@ -626,8 +626,9 @@ uint64_t VM_Version::CPUFeatures_parse(const char *ccstr) {
     return 0
 #ifdef AMD64
       // These options are all in /proc/cpuinfo of one of the first 64-bit CPUs - Atom D2700 (and Opteron 1352): https://superuser.com/q/1572306/1015048
-      | CPU_SSE | CPU_SSE2 // enabled in 'gcc -Q --help=target', used by OpenJDK
-      | CPU_FXSR // enabled in 'gcc -Q --help=target', unused by OpenJDK
+      | CPU_SSE // enabled in 'gcc -Q --help=target', used by OpenJDK
+      | CPU_SSE2 // enabled in 'gcc -Q --help=target', required by OpenJDK
+      | CPU_FXSR // enabled in 'gcc -Q --help=target', not used by OpenJDK
       | CPU_MMX // enabled in 'gcc -Q --help=target', used only by 32-bit x86 OpenJDK
       | CPU_TSC // not used by gcc, used by OpenJDK
       | CPU_CX8 // gcc detects it to set cpu "pentium" (=32-bit only), used by OpenJDK

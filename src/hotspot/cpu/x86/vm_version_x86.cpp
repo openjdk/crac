@@ -658,7 +658,6 @@ enum
 };
 
 void VM_Version::libc_not_using(uint64_t mask) {
-setbuf(stdout,NULL);
   if (!mask)
     return;
 
@@ -703,7 +702,6 @@ setbuf(stdout,NULL);
     if (s[0] != '\n' || s[1] != 0)
       continue;
     active[index][reg] = val;
-fputs(line,stdout);
   }
   if (ferror(f)) {
     jio_snprintf(errbuf, sizeof(errbuf), "Error reading popen-ed " CMD ": %m");
@@ -905,7 +903,6 @@ fputs(line,stdout);
   const char *env = getenv(TUNABLES_NAME);
   if (!env) {
     err = setenv(TUNABLES_NAME, disable_str, 0);
-puts(disable_str);
   } else {
     char buf[strlen(disable_str) + strlen(env) + 100];
     const char *hwcaps = strstr(env, prefix + 1 /* skip ':' */);
@@ -923,7 +920,6 @@ puts(disable_str);
       }
     }
     err = setenv(TUNABLES_NAME, buf, 1);
-puts(buf);
   }
   if (err) {
     jio_snprintf(errbuf, sizeof(errbuf), "setenv " TUNABLES_NAME " error: %m");

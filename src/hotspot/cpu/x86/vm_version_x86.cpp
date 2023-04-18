@@ -658,8 +658,8 @@ enum
   CPUID_INDEX_MAX = CPUID_INDEX_14_ECX_0 + 1
 };
 
-void VM_Version::libc_not_using(uint64_t mask) {
-  if (!mask)
+void VM_Version::libc_not_using(uint64_t excessive) {
+  if (!excessive)
     return;
 
   char errbuf[512];
@@ -723,109 +723,56 @@ void VM_Version::libc_not_using(uint64_t mask) {
 #undef CMD
 
   uint64_t disable = 0;
-  if (mask & CPU_AVX) {
-    mask &= ~CPU_AVX;
-    StdCpuid1Ecx std_cpuid1_ecx;
-    std_cpuid1_ecx.value = active[CPUID_INDEX_1][ecx];
-    if (std_cpuid1_ecx.bits.avx != 0)
-      disable |= CPU_AVX;
-    if (std_cpuid1_ecx.bits.osxsave != 0)
-      disable |= CPU_OSXSAVE;
-    // FIXME: XemXcr0Eax xem_xcr0_eax;
-    // _cpuid_info.xem_xcr0_eax.bits.sse != 0 &&
-    // _cpuid_info.xem_xcr0_eax.bits.ymm != 0)
-  }
-  if (mask & CPU_CX8) {
-    mask &= ~CPU_CX8;
-    StdCpuid1Edx std_cpuid1_edx;
-    std_cpuid1_edx.value = active[CPUID_INDEX_1][edx];
-    if (std_cpuid1_edx.bits.cmpxchg8 != 0)
-      disable |= CPU_CX8;
-  }
-//  if (mask & CPU_FMA) {
-//    mask &= ~CPU_FMA;
-//  }
-//  if (mask & CPU_HTT) {
-//    mask &= ~CPU_HTT;
-//  }
-//  if (mask & CPU_IBT) {
-//    mask &= ~CPU_IBT;
-//  }
-//  if (mask & CPU_RTM) {
-//    mask &= ~CPU_RTM;
-//  }
-//  if (mask & CPU_AVX2) {
-//    mask &= ~CPU_AVX2;
-//  }
-//  if (mask & CPU_BMI1) {
-//    mask &= ~CPU_BMI1;
-//  }
-//  if (mask & CPU_BMI2) {
-//    mask &= ~CPU_BMI2;
-//  }
-//  if (mask & CPU_CMOV) {
-//    mask &= ~CPU_CMOV;
-//  }
-//  if (mask & CPU_ERMS) {
-//    mask &= ~CPU_ERMS;
-//  }
-//  if (mask & CPU_FMA4) {
-//    mask &= ~CPU_FMA4;
-//  }
-//  if (mask & CPU_SSE2) {
-//    mask &= ~CPU_SSE2;
-//  }
-//  if (mask & CPU_LZCNT) {
-//    mask &= ~CPU_LZCNT;
-//  }
-//  if (mask & CPU_MOVBE) {
-//    mask &= ~CPU_MOVBE;
-//  }
-//  if (mask & CPU_SHSTK) {
-//    mask &= ~CPU_SHSTK;
-//  }
-//  if (mask & CPU_SSSE3) {
-//    mask &= ~CPU_SSSE3;
-//  }
-//  if (mask & CPU_XSAVE) {
-//    mask &= ~CPU_XSAVE;
-//  }
-//  if (mask & CPU_POPCNT) {
-//    mask &= ~CPU_POPCNT;
-//  }
-//  if (mask & CPU_SSE4_1) {
-//    mask &= ~CPU_SSE4_1;
-//  }
-//  if (mask & CPU_SSE4_2) {
-//    mask &= ~CPU_SSE4_2;
-//  }
-//  if (mask & CPU_AVX512F) {
-//    mask &= ~CPU_AVX512F;
-//  }
-//  if (mask & CPU_OSXSAVE) {
-//    mask &= ~CPU_OSXSAVE;
-//  }
-//  if (mask & CPU_AVX512CD) {
-//    mask &= ~CPU_AVX512CD;
-//  }
-//  if (mask & CPU_AVX512BW) {
-//    mask &= ~CPU_AVX512BW;
-//  }
-//  if (mask & CPU_AVX512DQ) {
-//    mask &= ~CPU_AVX512DQ;
-//  }
-//  if (mask & CPU_AVX512ER) {
-//    mask &= ~CPU_AVX512ER;
-//  }
-//  if (mask & CPU_AVX512PF) {
-//    mask &= ~CPU_AVX512PF;
-//  }
-//  if (mask & CPU_AVX512VL) {
-//    mask &= ~CPU_AVX512VL;
-//  }
+#define EXCESSIVE5(hotspot_cpu, hotspot_field, hotspot_union, libc_index, libc_reg) do {	\
+    if (excessive & hotspot_cpu) {								\
+      excessive &= ~hotspot_cpu;								\
+      hotspot_union u;										\
+      u.value = active[libc_index][libc_reg];							\
+      if (u.bits.hotspot_field != 0)								\
+	disable |= hotspot_cpu;									\
+    }												\
+  } while (0)
+#define EXCESSIVE(hotspot_cpu, hotspot_field, hotspot_def...) EXCESSIVE5(hotspot_cpu, hotspot_field, hotspot_def)
+#define DEF_ExtCpuid1Ecx ExtCpuid1Ecx, CPUID_INDEX_80000001, ecx
+#define DEF_SefCpuid7Ebx SefCpuid7Ebx, CPUID_INDEX_7       , ebx
+#define DEF_SefCpuid7Ecx SefCpuid7Ecx, CPUID_INDEX_7       , ecx
+#define DEF_SefCpuid7Edx SefCpuid7Edx, CPUID_INDEX_7       , edx
+#define DEF_StdCpuid1Ecx StdCpuid1Ecx, CPUID_INDEX_1       , ecx
+#define DEF_StdCpuid1Edx StdCpuid1Edx, CPUID_INDEX_1       , edx
+  EXCESSIVE(CPU_AVX     , avx     , DEF_StdCpuid1Ecx);
+  EXCESSIVE(CPU_CX8     , cmpxchg8, DEF_StdCpuid1Edx);
+  EXCESSIVE(CPU_FMA     , fma     , DEF_StdCpuid1Ecx);
+  EXCESSIVE(CPU_HT      , ht      , DEF_StdCpuid1Edx);
+  EXCESSIVE(CPU_IBT     , ibt     , DEF_SefCpuid7Edx);
+  EXCESSIVE(CPU_RTM     , rtm     , DEF_SefCpuid7Ebx);
+  EXCESSIVE(CPU_AVX2    , avx2    , DEF_SefCpuid7Ebx);
+  EXCESSIVE(CPU_BMI1    , bmi1    , DEF_SefCpuid7Ebx);
+  EXCESSIVE(CPU_BMI2    , bmi2    , DEF_SefCpuid7Ebx);
+  EXCESSIVE(CPU_CMOV    , cmov    , DEF_StdCpuid1Edx);
+  EXCESSIVE(CPU_ERMS    , erms    , DEF_SefCpuid7Ebx);
+  EXCESSIVE(CPU_FMA4    , fma4    , DEF_ExtCpuid1Ecx);
+  EXCESSIVE(CPU_SSE2    , sse2    , DEF_StdCpuid1Edx);
+  EXCESSIVE(CPU_LZCNT   , fma4    , DEF_ExtCpuid1Ecx);
+  EXCESSIVE(CPU_MOVBE   , movbe   , DEF_StdCpuid1Ecx);
+  EXCESSIVE(CPU_SHSTK   , shstk   , DEF_SefCpuid7Ecx);
+  EXCESSIVE(CPU_SSSE3   , ssse3   , DEF_StdCpuid1Ecx);
+  EXCESSIVE(CPU_XSAVE   , xsave   , DEF_StdCpuid1Ecx);
+  EXCESSIVE(CPU_POPCNT  , popcnt  , DEF_StdCpuid1Ecx);
+  EXCESSIVE(CPU_SSE4_1  , sse4_1  , DEF_StdCpuid1Ecx);
+  EXCESSIVE(CPU_SSE4_2  , sse4_2  , DEF_StdCpuid1Ecx);
+  EXCESSIVE(CPU_AVX512F , avx512f , DEF_SefCpuid7Ebx);
+  EXCESSIVE(CPU_OSXSAVE , osxsave , DEF_StdCpuid1Ecx);
+  EXCESSIVE(CPU_AVX512CD, avx512cd, DEF_SefCpuid7Ebx);
+  EXCESSIVE(CPU_AVX512BW, avx512bw, DEF_SefCpuid7Ebx);
+  EXCESSIVE(CPU_AVX512DQ, avx512dq, DEF_SefCpuid7Ebx);
+  EXCESSIVE(CPU_AVX512ER, avx512er, DEF_SefCpuid7Ebx);
+  EXCESSIVE(CPU_AVX512PF, avx512pf, DEF_SefCpuid7Ebx);
+  EXCESSIVE(CPU_AVX512VL, avx512vl, DEF_SefCpuid7Ebx);
+#undef EXCESSIVE
+#undef EXCESSIVE5
 
-  if (0/*FIXME*/ && mask) {
-    jio_snprintf(errbuf, sizeof(errbuf), "internal error: Unsupported handling CPU_* %" PRIx64, mask);
+  if (excessive) {
+    jio_snprintf(errbuf, sizeof(errbuf), "internal error: Unsupported handling of CPU_* %" PRIx64, excessive);
     vm_exit_during_initialization(errbuf);
   }
 
@@ -882,7 +829,7 @@ void VM_Version::libc_not_using(uint64_t mask) {
 
   assert(disable == 0, "Unsupported disabling CPU_*");
   if (disable) {
-    jio_snprintf(errbuf, sizeof(errbuf), "internal error: Unsupported disabling CPU_* %" PRIx64, disable);
+    jio_snprintf(errbuf, sizeof(errbuf), "internal error: Unsupported disabling of CPU_* %" PRIx64, disable);
     vm_exit_during_initialization(errbuf);
   }
 

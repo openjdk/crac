@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022, Azul Systems, Inc. All rights reserved.
+ * Copyright (c) 2023, Azul Systems, Inc. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -21,37 +21,32 @@
  * questions.
  */
 
-import jdk.crac.*;
+import jdk.crac.Core;
+import jdk.test.lib.Utils;
 import jdk.test.lib.crac.CracBuilder;
-import jdk.test.lib.crac.CracEngine;
 import jdk.test.lib.crac.CracTest;
+import java.nio.file.Path;
+import java.util.*;
 
 /**
  * @test
  * @library /test/lib
- * @build LazyProps
+ * @build CheckpointWithOpenFdsTest
  * @run driver jdk.test.lib.crac.CracTest
  */
-public class LazyProps implements CracTest {
+public class CheckpointWithOpenFdsTest implements CracTest {
+    private static final String EXTRA_FD_WRAPPER = Path.of(Utils.TEST_SRC, "extra_fd_wrapper.sh").toString();
+
     @Override
     public void test() throws Exception {
-        new CracBuilder().engine(CracEngine.SIMULATE)
-                .captureOutput(true)
-                .startCheckpoint().waitForSuccess()
-                .outputAnalyzer().shouldContain("jdk.crac beforeCheckpoint");
+        CracBuilder builder = new CracBuilder();
+        builder.startCheckpoint(Arrays.asList(EXTRA_FD_WRAPPER, CracBuilder.JAVA)).waitForCheckpointed();
+        builder.captureOutput(true).doRestore().outputAnalyzer().shouldContain(RESTORED_MESSAGE);
     }
 
     @Override
-    public void exec() throws RestoreException, CheckpointException {
-        Resource resource = new Resource() {
-            @Override
-            public void beforeCheckpoint(Context<? extends Resource> context) throws Exception { }
-            @Override
-            public void afterRestore(Context<? extends Resource> context) throws Exception { }
-        };
-        Core.getGlobalContext().register(resource);
-
-        System.setProperty("jdk.crac.debug", "true");
+    public void exec() throws Exception {
         Core.checkpointRestore();
+        System.out.println(RESTORED_MESSAGE);
     }
 }

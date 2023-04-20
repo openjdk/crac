@@ -21,6 +21,11 @@
  * questions.
  */
 
+import jdk.test.lib.crac.CracBuilder;
+import jdk.test.lib.crac.CracTest;
+import jdk.test.lib.crac.CracTestArg;
+
+import java.util.concurrent.CountDownLatch;
 /*
  * @test JoinSleepWaitOnCRPauseTest.java
  * @requires (os.family == "linux")
@@ -31,26 +36,21 @@
  *          if their end time fell on the CRaC pause period
  *          (i.e. between the checkpoint and restore)
  *
- * @run main/othervm JoinSleepWaitOnCRPauseTest join_ms
- * @run main/othervm JoinSleepWaitOnCRPauseTest join_ns
- * @run main/othervm JoinSleepWaitOnCRPauseTest sleep_ms
- * @run main/othervm JoinSleepWaitOnCRPauseTest sleep_ns
- * @run main/othervm JoinSleepWaitOnCRPauseTest wait_ms
- * @run main/othervm JoinSleepWaitOnCRPauseTest wait_ns
+ * @build JoinSleepWaitOnCRPauseTest
+ * @run driver jdk.test.lib.crac.CracTest join_ms
+ * @run driver jdk.test.lib.crac.CracTest join_ns
+ * @run driver jdk.test.lib.crac.CracTest sleep_ms
+ * @run driver jdk.test.lib.crac.CracTest sleep_ns
+ * @run driver jdk.test.lib.crac.CracTest wait_ms
+ * @run driver jdk.test.lib.crac.CracTest wait_ns
  */
+public class JoinSleepWaitOnCRPauseTest implements CracTest {
+    private enum TestType {
+        join_ms, join_ns, sleep_ms, sleep_ns, wait_ms, wait_ns
+    }
 
-
-import jdk.test.lib.process.OutputAnalyzer;
-import jdk.test.lib.process.ProcessTools;
-
-import java.util.concurrent.CountDownLatch;
-
-
-public class JoinSleepWaitOnCRPauseTest {
-
-    private static enum TestType {
-        join_ms, join_ns, sleep_ms, sleep_ns, wait_ms, wait_ns};
-    private final TestType testType;
+    @CracTestArg
+    private TestType testType;
 
     private final static long EPS_NS = Long.parseLong(System.getProperty(
         "test.jdk.jdk.crac.java.lang.Thread.crac.JoinSleepWaitOnCRPauseTest.eps",
@@ -65,12 +65,8 @@ public class JoinSleepWaitOnCRPauseTest {
 
     private final CountDownLatch checkpointLatch = new CountDownLatch(1);
 
-
-    private JoinSleepWaitOnCRPauseTest(TestType testType) {
-        this.testType = testType;
-    }
-
-    private void runTest() throws Exception {
+    @Override
+    public void exec() throws Exception {
 
         String op = testType.name();
         op = op.substring(0, op.length() - 3); // remove suffix
@@ -166,37 +162,16 @@ public class JoinSleepWaitOnCRPauseTest {
         }
     }
 
+    @Override
+    public void test() throws Exception {
+        CracBuilder builder = new CracBuilder()
+                .imageDir("cr_" + testType.name());
+        builder.doCheckpoint();
 
-    public static void main(String args[]) throws Exception {
+        // sleep a few seconds to ensure the task execution time
+        // falls within this pause period
+        Thread.sleep(CRPAUSE_MS);
 
-        if (args.length > 1) {
-
-            new JoinSleepWaitOnCRPauseTest(
-                    TestType.valueOf(args[0])).runTest();
-
-        } else if (args.length > 0) {
-
-            String crImg = "cr_" + args[0];
-
-            ProcessBuilder pb = ProcessTools.createJavaProcessBuilder(
-                "-XX:CRaCCheckpointTo=" + crImg, "JoinSleepWaitOnCRPauseTest",
-                args[0], "runTest");
-            OutputAnalyzer out = new OutputAnalyzer(pb.start());
-            out.shouldContain("CR: Checkpoint");
-            out.shouldHaveExitValue(137);
-
-            // sleep a few seconds to ensure the task execution time
-            // falls within this pause period
-            Thread.sleep(CRPAUSE_MS);
-
-            pb = ProcessTools.createJavaProcessBuilder(
-                "-XX:CRaCRestoreFrom=" + crImg, "JoinSleepWaitOnCRPauseTest");
-            out = new OutputAnalyzer(pb.start());
-            out.shouldHaveExitValue(0);
-
-        } else {
-
-            throw new IllegalArgumentException("please provide a test type");
-        }
+        builder.doRestore();
     }
 }

@@ -26,51 +26,48 @@
 import jdk.crac.*;
 import jdk.crac.management.*;
 
+import jdk.test.lib.crac.CracBuilder;
+import jdk.test.lib.crac.CracEngine;
+import jdk.test.lib.crac.CracTest;
 import jdk.test.lib.process.OutputAnalyzer;
-import jdk.test.lib.process.ProcessTools;
 
-import java.lang.management.ManagementFactory;
 import java.time.Instant;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 
+import static jdk.test.lib.Asserts.assertLT;
+
 /**
  * @test
  * @library /test/lib
- * @run main MXBean
+ * @build MXBean
+ * @run driver jdk.test.lib.crac.CracTest
  */
-public class MXBean {
+public class MXBean implements CracTest {
     static final long TIME_TOLERANCE = 10_000; // ms
 
-    static class Test {
-        public static void main(String[] args) throws CheckpointException, RestoreException {
-            CRaCMXBean cracMXBean = CRaCMXBean.getCRaCMXBean();
+    @Override
+    public void exec() throws CheckpointException, RestoreException {
+        CRaCMXBean cracMXBean = CRaCMXBean.getCRaCMXBean();
 
-            Core.checkpointRestore();
+        Core.checkpointRestore();
 
-            System.out.println("UptimeSinceRestore " + cracMXBean.getUptimeSinceRestore());
+        System.out.println("UptimeSinceRestore " + cracMXBean.getUptimeSinceRestore());
 
-            long restoreTime = cracMXBean.getRestoreTime();
-            System.out.println("RestoreTime " + restoreTime + " " +
-                DateTimeFormatter.ofPattern("E dd LLL yyyy HH:mm:ss.n").format(
-                    Instant.ofEpochMilli(restoreTime)
-                        .atZone(ZoneId.systemDefault())));
-        }
+        long restoreTime = cracMXBean.getRestoreTime();
+        System.out.println("RestoreTime " + restoreTime + " " +
+            DateTimeFormatter.ofPattern("E dd LLL yyyy HH:mm:ss.n").format(
+                Instant.ofEpochMilli(restoreTime)
+                    .atZone(ZoneId.systemDefault())));
     }
 
-    public static void main(String[] args) {
+    @Override
+    public void test() throws Exception {
         long start = System.currentTimeMillis();
 
-        OutputAnalyzer output;
-        try {
-            output = ProcessTools.executeTestJvm(
-                "-XX:CREngine=simengine", "-XX:CRaCCheckpointTo=./cr",
-                "MXBean$Test");
-        } catch (Exception e) {
-            throw new RuntimeException(e);
-        }
-
-        output.shouldHaveExitValue(0);
+        OutputAnalyzer output = new CracBuilder().engine(CracEngine.SIMULATE)
+                .captureOutput(true)
+                .startCheckpoint().waitForSuccess().outputAnalyzer();
 
         long restoreUptime = Long.parseLong(output.firstMatch("UptimeSinceRestore ([0-9-]+)", 1));
         if (restoreUptime < 0 || TIME_TOLERANCE < restoreUptime) {
@@ -80,8 +77,6 @@ public class MXBean {
         long restoreTime = Long.parseLong(output.firstMatch("RestoreTime ([0-9-]+)", 1));
         restoreTime -= start;
 
-        if (restoreTime < -TIME_TOLERANCE || TIME_TOLERANCE < restoreTime) {
-            throw new Error("bad RestoreTime: " + restoreTime);
-        }
+        assertLT(Math.abs(restoreTime), TIME_TOLERANCE, "bad RestoreTime: " + restoreTime);
     }
 }

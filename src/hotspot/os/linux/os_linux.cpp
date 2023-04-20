@@ -1,6 +1,6 @@
 /*
  * Copyright (c) 1999, 2021, Oracle and/or its affiliates. All rights reserved.
- * Copyright (c) 2017, 2021, Azul Systems, Inc. All rights reserved.
+ * Copyright (c) 2017, 2022, Azul Systems, Inc. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -71,6 +71,7 @@
 #include "services/heapDumper.hpp"
 #include "services/memTracker.hpp"
 #include "services/runtimeService.hpp"
+#include "linuxAttachOperation.hpp"
 #include "utilities/align.hpp"
 #include "utilities/decoder.hpp"
 #include "utilities/defaultStream.hpp"
@@ -80,6 +81,7 @@
 #include "utilities/macros.hpp"
 #include "utilities/powerOfTwo.hpp"
 #include "utilities/vmError.hpp"
+#include "attachListener_linux.hpp"
 
 // put OS-includes here
 # include <arpa/inet.h>
@@ -291,6 +293,7 @@ class CracRestoreParameters : public CHeapObj<mtInternal> {
     jlong _restore_time;
     jlong _restore_counter;
     int _nprops;
+    int _env_memory_size;
   };
 
   static bool write_check_error(int fd, const void *buf, int count) {
@@ -311,6 +314,14 @@ class CracRestoreParameters : public CHeapObj<mtInternal> {
     while (props != NULL) {
       ++len;
       props = props->next();
+    }
+    return len;
+  }
+
+  static int env_vars_size(const char* const * env) {
+    int len = 0;
+    for (; *env; ++env) {
+      len += strlen(*env) + 1;
     }
     return len;
   }
@@ -340,7 +351,8 @@ class CracRestoreParameters : public CHeapObj<mtInternal> {
     header hdr = {
       restore_time,
       restore_counter,
-      system_props_length(props)
+      system_props_length(props),
+      env_vars_size(environ)
     };
 
     if (!write_check_error(fd, (void *)&hdr, sizeof(header))) {
@@ -358,6 +370,13 @@ class CracRestoreParameters : public CHeapObj<mtInternal> {
       p = p->next();
     }
 
+    // Write env vars
+    for (char** env = environ; *env; ++env) {
+      if (!write_check_error(fd, *env, strlen(*env) + 1)) {
+        return false;
+      }
+    }
+
     return write_check_error(fd, args, strlen(args)+1); // +1 for null char
   }
 
@@ -370,12 +389,17 @@ class VM_Crac: public VM_Operation {
   bool _ok;
   GrowableArray<CracFailDep>* _failures;
   CracRestoreParameters _restore_parameters;
- public:
-  VM_Crac(bool dry_run) :
+  outputStream* _ostream;
+  LinuxAttachOperation* _attach_op;
+
+public:
+  VM_Crac(bool dry_run, bufferedStream* jcmd_stream) :
     _dry_run(dry_run),
     _ok(false),
     _failures(new (ResourceObj::C_HEAP, mtInternal) GrowableArray<CracFailDep>(0, mtInternal)),
-    _restore_parameters()
+    _restore_parameters(),
+    _ostream(jcmd_stream ? jcmd_stream : tty),
+    _attach_op(jcmd_stream ? LinuxAttachListener::get_current_op() : NULL)
   { }
 
   ~VM_Crac() {
@@ -390,6 +414,12 @@ class VM_Crac: public VM_Operation {
   VMOp_Type type() const { return VMOp_VM_Crac; }
   void doit();
   bool read_shm(int shmid);
+
+private:
+  bool is_socket_from_jcmd(int sock_fd);
+  void report_ok_to_jcmd_if_any();
+  void print_resources(const char* msg, ...);
+  void trace_cr(const char* msg, ...);
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -5697,12 +5727,21 @@ jlong os::Linux::uptime_since_restore() {
   return javaTimeNanos() - _restore_start_counter;
 }
 
-static void trace_cr(const char* msg, ...) {
+void VM_Crac::trace_cr(const char* msg, ...) {
   if (CRTrace) {
     va_list ap;
     va_start(ap, msg);
-    tty->print("CR: ");
-    tty->vprint_cr(msg, ap);
+    _ostream->print("CR: ");
+    _ostream->vprint_cr(msg, ap);
+    va_end(ap);
+  }
+}
+
+void VM_Crac::print_resources(const char* msg, ...) {
+  if (CRPrintResourcesOnCheckpoint) {
+    va_list ap;
+    va_start(ap, msg);
+    _ostream->vprint(msg, ap);
     va_end(ap);
   }
 }
@@ -5711,6 +5750,7 @@ void os::Linux::vm_create_start() {
   if (!CRaCCheckpointTo) {
     return;
   }
+  close_extra_descriptors();
   _vm_inited_fds.initialize();
 }
 
@@ -5982,13 +6022,6 @@ public:
 
 static int checkpoint_restore(int *shmid) {
 
-  if (CRAllowToSkipCheckpoint) {
-    trace_cr("Skip Checkpoint");
-    return JVM_CHECKPOINT_OK;
-  }
-
-  trace_cr("Checkpoint ...");
-
   int cres = call_crengine();
   if (cres < 0) {
     return JVM_CHECKPOINT_ERROR;
@@ -6010,7 +6043,11 @@ static int checkpoint_restore(int *shmid) {
   }
 
   if (info.si_code != SI_QUEUE || info.si_int < 0) {
-    tty->print_cr("JVM: invalid info for restore provided (may be failed checkpoint)");
+    tty->print("JVM: invalid info for restore provided: %s", info.si_code == SI_QUEUE ? "queued" : "not queued");
+    if (info.si_code == SI_QUEUE) {
+      tty->print(" code %d", info.si_int);
+    }
+    tty->cr();
     return JVM_CHECKPOINT_ERROR;
   }
 
@@ -6131,6 +6168,23 @@ bool VM_Crac::read_shm(int shmid) {
   return ret;
 }
 
+// If checkpoint is called throught the API, jcmd operation and jcmd output doesn't exist.
+bool VM_Crac::is_socket_from_jcmd(int sock) {
+  if (_attach_op == NULL)
+    return false;
+  int sock_fd = _attach_op->socket();
+  return sock == sock_fd;
+}
+
+void VM_Crac::report_ok_to_jcmd_if_any() {
+  if (_attach_op == NULL)
+    return;
+  bufferedStream* buf = static_cast<bufferedStream*>(_ostream);
+  _attach_op->effectively_complete_raw(JNI_OK, buf);
+  // redirect any further output to console
+  _ostream = tty;
+}
+
 void VM_Crac::doit() {
 
   AttachListener::abort();
@@ -6149,18 +6203,14 @@ void VM_Crac::doit() {
       continue;
     }
 
-    char detailsbuf[128];
+    char detailsbuf[PATH_MAX];
     int linkret = readfdlink(i, detailsbuf, sizeof(detailsbuf));
     const char* details = 0 < linkret ? detailsbuf : "";
-    if (CRPrintResourcesOnCheckpoint) {
-      tty->print("JVM: FD fd=%d type=%s: details1=\"%s\" ",
-          i, stat2strtype(fds.get_stat(i)->st_mode), details);
-    }
+    print_resources("JVM: FD fd=%d type=%s: details1=\"%s\" ",
+        i, stat2strtype(fds.get_stat(i)->st_mode), details);
 
     if (_vm_inited_fds.get_state(i, FdsInfo::CLOSED) != FdsInfo::CLOSED) {
-      if (CRPrintResourcesOnCheckpoint) {
-        tty->print_cr("OK: inherited from process env");
-      }
+      print_resources("OK: inherited from process env\n");
       continue;
     }
 
@@ -6169,42 +6219,33 @@ void VM_Crac::doit() {
       const int mjr = major(st->st_rdev);
       const int mnr = minor(st->st_rdev);
       if (mjr == 1 && (mnr == 8 || mnr == 9)) {
-        if (CRPrintResourcesOnCheckpoint) {
-          tty->print_cr("OK: always available, random or urandom");
-        }
+        print_resources("OK: always available, random or urandom\n");
         continue;
       }
     }
 
     if (fds.check(i, FdsInfo::M_CLASSPATH) && !fds.check(i, FdsInfo::M_CANT_RESTORE)) {
-      if (CRPrintResourcesOnCheckpoint) {
-        tty->print_cr("OK: in classpath");
-      }
+      print_resources("OK: in classpath\n");
       continue;
     }
 
     if (fds.check(i, FdsInfo::M_PERSISTENT)) {
-      if (CRPrintResourcesOnCheckpoint) {
-        tty->print_cr("OK: assured persistent");
-      }
+      print_resources("OK: assured persistent\n");
       continue;
     }
 
-    if (CRPrintResourcesOnCheckpoint) {
-      tty->print("BAD: opened by application");
+    if (S_ISSOCK(st->st_mode)) {
+      if (is_socket_from_jcmd(i)){
+        print_resources("OK: jcmd socket\n");
+        continue;
+      }
+      details = sock_details(details, detailsbuf, sizeof(detailsbuf));
+      print_resources(" details2=\"%s\" ", details);
     }
+
+    print_resources("BAD: opened by application\n");
     ok = false;
 
-    if (S_ISSOCK(st->st_mode)) {
-      details = sock_details(details, detailsbuf, sizeof(detailsbuf));
-      if (CRPrintResourcesOnCheckpoint) {
-        tty->print(" details2=\"%s\" ", details);
-      }
-    }
-
-    if (CRPrintResourcesOnCheckpoint) {
-      tty->cr();
-    }
     char* msg = NEW_C_HEAP_ARRAY(char, strlen(details) + 1, mtInternal);
     strcpy(msg, details);
     _failures->append(CracFailDep(stat2stfail(st->st_mode & S_IFMT), msg));
@@ -6222,12 +6263,17 @@ void VM_Crac::doit() {
     return;
   }
 
-
   int shmid = 0;
-  int ret = checkpoint_restore(&shmid);
-  if (ret == JVM_CHECKPOINT_ERROR) {
-    PerfMemoryLinux::restore();
-    return;
+  if (CRAllowToSkipCheckpoint) {
+    trace_cr("Skip Checkpoint");
+  } else {
+    trace_cr("Checkpoint ...");
+    report_ok_to_jcmd_if_any();
+    int ret = checkpoint_restore(&shmid);
+    if (ret == JVM_CHECKPOINT_ERROR) {
+      PerfMemoryLinux::restore();
+      return;
+    }
   }
 
   if (shmid <= 0 || !VM_Crac::read_shm(shmid)) {
@@ -6327,7 +6373,7 @@ static Handle ret_cr(int ret, Handle new_args, Handle new_props, Handle err_code
 
 /** Checkpoint main entry.
  */
-Handle os::Linux::checkpoint(bool dry_run, TRAPS) {
+Handle os::Linux::checkpoint(bool dry_run, jlong jcmd_stream, TRAPS) {
   if (!CRaCCheckpointTo) {
     return ret_cr(JVM_CHECKPOINT_NONE, Handle(), Handle(), Handle(), Handle(), THREAD);
   }
@@ -6341,7 +6387,7 @@ Handle os::Linux::checkpoint(bool dry_run, TRAPS) {
   Universe::heap()->collect(GCCause::_full_gc_alot);
   Universe::heap()->set_cleanup_unused(false);
 
-  VM_Crac cr(dry_run);
+  VM_Crac cr(dry_run, (bufferedStream*)jcmd_stream);
   {
     MutexLocker ml(Heap_lock);
     VMThread::execute(&cr);
@@ -6411,6 +6457,69 @@ void os::Linux::restore() {
   }
 }
 
+static char modules_path[JVM_MAXPATHLEN] = { '\0' };
+
+static bool is_fd_ignored(int fd, const char *path) {
+  if (!strcmp(modules_path, path)) {
+    // Path to the modules directory is opened early when JVM is booted up and won't be closed.
+    // We can ignore this for purposes of CRaC.
+    return true;
+  }
+
+  const char *list = CRaCIgnoredFileDescriptors;
+  while (list && *list) {
+    const char *end = strchr(list, ',');
+    if (!end) {
+      end = list + strlen(list);
+    }
+    char *invalid;
+    int ignored_fd = strtol(list, &invalid, 10);
+    if (invalid == end) { // entry was integer -> file descriptor
+      if (fd == ignored_fd) {
+        log_trace(os)("CRaC not closing file descriptor %d (%s) as it is marked as ignored.", fd, path);
+        return true;
+      }
+    } else { // interpret entry as path
+      int path_len = path ? strlen(path) : -1;
+      if (path_len != -1 && path_len == end - list && !strncmp(path, list, end - list)) {
+        log_trace(os)("CRaC not closing file descriptor %d (%s) as it is marked as ignored.", fd, path);
+        return true;
+      }
+    }
+    if (*end) {
+      list = end + 1;
+    } else {
+      break;
+    }
+  }
+  return false;
+}
+
+void os::Linux::close_extra_descriptors() {
+  // Path to the modules directory is opened early when JVM is booted up and won't be closed.
+  // We can ignore this for purposes of CRaC.
+  if (modules_path[0] == '\0') {
+    const char* fileSep = os::file_separator();
+    jio_snprintf(modules_path, JVM_MAXPATHLEN, "%s%slib%smodules", Arguments::get_java_home(), fileSep, fileSep);
+  }
+
+  char path[PATH_MAX];
+  struct dirent *dp;
+
+  DIR *dir = opendir("/proc/self/fd");
+  while (dp = readdir(dir)) {
+    int fd = atoi(dp->d_name);
+    if (fd > 2 && fd != dirfd(dir)) {
+      int r = readfdlink(fd, path, sizeof(path));
+      if (!is_fd_ignored(fd, r != -1 ? path : nullptr)) {
+        log_warning(os)("CRaC closing file descriptor %d: %s\n", fd, path);
+        close(fd);
+      }
+    }
+  }
+  closedir(dir);
+}
+
 bool CracRestoreParameters::read_from(int fd) {
   struct stat st;
   if (fstat(fd, &st)) {
@@ -6440,6 +6549,18 @@ bool CracRestoreParameters::read_from(int fd) {
     int prop_len = strlen(cursor) + 1;
     cursor = cursor + prop_len;
   }
+
+  char* env_mem = NEW_C_HEAP_ARRAY(char, hdr->_env_memory_size, mtArguments); // left this pointer unowned, it is freed when process dies
+  memcpy(env_mem, cursor, hdr->_env_memory_size);
+
+  const char* env_end = env_mem + hdr->_env_memory_size;
+  while (env_mem < env_end) {
+    const size_t s = strlen(env_mem) + 1;
+    assert(env_mem + s <= env_end, "env vars exceed memory buffer, maybe ending 0 is lost");
+    putenv(env_mem);
+    env_mem += s;
+  }
+  cursor += hdr->_env_memory_size;
 
   _args = cursor;
   return true;

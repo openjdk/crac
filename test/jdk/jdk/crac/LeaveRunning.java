@@ -4,7 +4,9 @@
  *
  * This code is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 2 only, as
- * published by the Free Software Foundation.
+ * published by the Free Software Foundation.  Oracle designates this
+ * particular file as subject to the "Classpath" exception as provided
+ * by Oracle in the LICENSE file that accompanied this code.
  *
  * This code is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
@@ -22,36 +24,28 @@
  */
 
 import jdk.crac.*;
+
 import jdk.test.lib.crac.CracBuilder;
-import jdk.test.lib.crac.CracEngine;
 import jdk.test.lib.crac.CracTest;
 
 /**
  * @test
  * @library /test/lib
- * @build LazyProps
+ * @build LeaveRunning
  * @run driver jdk.test.lib.crac.CracTest
  */
-public class LazyProps implements CracTest {
+public class LeaveRunning implements CracTest {
     @Override
     public void test() throws Exception {
-        new CracBuilder().engine(CracEngine.SIMULATE)
-                .captureOutput(true)
-                .startCheckpoint().waitForSuccess()
-                .outputAnalyzer().shouldContain("jdk.crac beforeCheckpoint");
+        CracBuilder builder = new CracBuilder().env("CRAC_CRIU_LEAVE_RUNNING", "")
+                .captureOutput(true);
+        builder.startCheckpoint().waitForSuccess().outputAnalyzer().shouldContain(RESTORED_MESSAGE);
+        builder.doRestore().outputAnalyzer().shouldContain(RESTORED_MESSAGE);
     }
 
     @Override
-    public void exec() throws RestoreException, CheckpointException {
-        Resource resource = new Resource() {
-            @Override
-            public void beforeCheckpoint(Context<? extends Resource> context) throws Exception { }
-            @Override
-            public void afterRestore(Context<? extends Resource> context) throws Exception { }
-        };
-        Core.getGlobalContext().register(resource);
-
-        System.setProperty("jdk.crac.debug", "true");
+    public void exec() throws Exception {
         Core.checkpointRestore();
+        System.out.println(RESTORED_MESSAGE);
     }
 }

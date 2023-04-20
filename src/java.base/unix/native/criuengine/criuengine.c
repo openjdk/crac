@@ -89,6 +89,7 @@ static int checkpoint(pid_t jvm,
         exit(0);
     }
 
+    char* leave_running = getenv("CRAC_CRIU_LEAVE_RUNNING");
 
     char jvmpidchar[32];
     snprintf(jvmpidchar, sizeof(jvmpidchar), "%d", jvm);
@@ -104,6 +105,11 @@ static int checkpoint(pid_t jvm,
             "-v4", "-o", "dump4.log", // -D without -W makes criu cd to image dir for logs
         };
         const char** arg = args + 10;
+
+        if (leave_running) {
+            *arg++ = "-R";
+        }
+
         char *criuopts = getenv("CRAC_CRIU_OPTS");
         if (criuopts) {
             char* criuopt = strtok(criuopts, " ");
@@ -125,6 +131,8 @@ static int checkpoint(pid_t jvm,
     int status;
     if (child != wait(&status) || !WIFEXITED(status) || WEXITSTATUS(status)) {
         kickjvm(jvm, -1);
+    } else if (leave_running) {
+        kickjvm(jvm, 0);
     }
 
     create_cppath(imagedir);
@@ -140,19 +148,28 @@ static int restore(const char *basedir,
         return 1;
     }
 
-    char cppath[PATH_MAX];
-    cppath[0] = '\0';
-    FILE *cppathfile = fopen(cppathpath, "r");
-    if (!cppathfile) {
+    int fd = open(cppathpath, O_RDONLY);
+    if (fd < 0) {
         perror("open cppath");
         return 1;
     }
 
-    if (!fgets(cppath, sizeof(cppath), cppathfile)) {
-        fprintf(stderr, "fgets error\n");
-        return 1;
+    char cppath[PATH_MAX];
+    int cppathlen = 0;
+    int r;
+    while ((r = read(fd, cppath + cppathlen, sizeof(cppath) - cppathlen - 1)) != 0) {
+        if (r < 0 && errno == EINTR) {
+            continue;
+        }
+        if (r < 0) {
+            perror("read cppath");
+            return 1;
+        }
+        cppathlen += r;
     }
-    fclose(cppathfile);
+    cppath[cppathlen] = '\0';
+
+    close(fd);
 
     char *inherit_perfdata = NULL;
     char *perfdatapath;
@@ -293,6 +310,17 @@ static int restorewait(void) {
 
     if (WIFEXITED(status)) {
         return WEXITSTATUS(status);
+    }
+
+    if (WIFSIGNALED(status)) {
+        // Try to terminate the current process with the same signal
+        // as the child process was terminated
+        const int sig = WTERMSIG(status);
+        signal(sig, SIG_DFL);
+        raise(sig);
+        // Signal was ignored, return 128+n as bash does
+        // see https://linux.die.net/man/1/bash
+        return 128+sig;
     }
 
     return 1;

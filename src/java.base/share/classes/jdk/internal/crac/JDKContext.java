@@ -28,23 +28,9 @@ package jdk.internal.crac;
 
 import jdk.crac.impl.AbstractContextImpl;
 
-import java.util.Comparator;
-import java.util.Map;
-
-public class JDKContext extends AbstractContextImpl<JDKResource, Void> {
-    static class ContextComparator implements Comparator<Map.Entry<JDKResource, Void>> {
-        @Override
-        public int compare(Map.Entry<JDKResource, Void> o1, Map.Entry<JDKResource, Void> o2) {
-            return o1.getKey().getPriority().compareTo(o2.getKey().getPriority());
-        }
-    }
-
-    JDKContext() {
-        super(new ContextComparator());
-    }
-
+public class JDKContext extends AbstractContextImpl<JDKResource> {
     @Override
     public void register(JDKResource resource) {
-        register(resource, null);
+        register(resource, resource.getPriority().ordinal());
     }
 }

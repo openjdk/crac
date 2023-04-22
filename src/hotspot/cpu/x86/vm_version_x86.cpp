@@ -959,7 +959,6 @@ void VM_Version::libc_not_using(uint64_t excessive) {
   const char *env = getenv(TUNABLES_NAME);
   int err;
   if (!env) {
-fprintf(stderr,"%s\n",disable_str);
     err = setenv(TUNABLES_NAME, disable_str, 0);
   } else {
     char buf[strlen(disable_str) + strlen(env) + 100];
@@ -978,7 +977,6 @@ fprintf(stderr,"%s\n",disable_str);
       }
     }
     err = setenv(TUNABLES_NAME, buf, 1);
-fprintf(stderr,"%s\n",buf);
   }
   if (err) {
     jio_snprintf(errbuf, sizeof(errbuf), "setenv " TUNABLES_NAME " error: %m");

@@ -959,6 +959,7 @@ void VM_Version::libc_not_using(uint64_t excessive) {
   const char *env = getenv(TUNABLES_NAME);
   int err;
   if (!env) {
+fprintf(stderr,"%s\n",disable_str);
     err = setenv(TUNABLES_NAME, disable_str, 0);
   } else {
     char buf[strlen(disable_str) + strlen(env) + 100];
@@ -977,6 +978,7 @@ void VM_Version::libc_not_using(uint64_t excessive) {
       }
     }
     err = setenv(TUNABLES_NAME, buf, 1);
+fprintf(stderr,"%s\n",buf);
   }
   if (err) {
     jio_snprintf(errbuf, sizeof(errbuf), "setenv " TUNABLES_NAME " error: %m");
@@ -1090,9 +1092,12 @@ void VM_Version::get_processor_features() {
 		  "; missing features of this CPU are 0x" UINT64_FORMAT_X " ",
 		  CPUFeatures_x64, _features, features_missing);
       assert(res > 0, "not enough temporary space allocated");
-      insert_features_names(buf + res, sizeof(buf) - res, features_missing);
-      assert(buf[res] == ',', "unexpeced VM_Version::insert_features_names separator instead of ','");
-      buf[res] = '=';
+      // insert_features_names() does crash for undefined too high-numbered features.
+      insert_features_names(buf + res, sizeof(buf) - res, features_missing & (CPU_MAX - 1));
+      if (buf[res]) {
+	assert(buf[res] == ',', "unexpeced VM_Version::insert_features_names separator instead of ','");
+	buf[res] = '=';
+      }
       vm_exit_during_initialization(buf);
     }
     _features = CPUFeatures_x64;

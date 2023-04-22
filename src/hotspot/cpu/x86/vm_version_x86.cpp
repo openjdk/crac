@@ -956,28 +956,33 @@ void VM_Version::libc_not_using(uint64_t excessive) {
   }
 #undef REEXEC_NAME
 
+  char *env_val = disable_str;
   const char *env = getenv(TUNABLES_NAME);
-  int err;
-  if (!env) {
-    err = setenv(TUNABLES_NAME, disable_str, 0);
-  } else {
-    char buf[strlen(disable_str) + strlen(env) + 100];
+  char env_buf[strlen(disable_str) + strlen(env) + 100];
+  if (env) {
+    if (ShowCPUFeatures) {
+      tty->print_cr("Original environment variable: " TUNABLES_NAME "=%s", env);
+    }
     const char *hwcaps = strstr(env, prefix + 1 /* skip ':' */);
     if (!hwcaps) {
-      strcpy(buf, env);
-      strcat(buf, disable_str);
+      strcpy(env_buf, env);
+      strcat(env_buf, disable_str);
     } else {
       const char *colon = strchr(hwcaps, ':');
       if (!colon) {
-	strcpy(buf, env);
-	strcat(buf, disable_str + prefix_len);
+	strcpy(env_buf, env);
+	strcat(env_buf, disable_str + prefix_len);
       } else {
-	err = jio_snprintf(buf, sizeof(buf), "%.*s%s%s", (int)(colon - env), env, disable_str + prefix_len, colon);
-	assert(err >= 0 && (unsigned)err < sizeof(buf), "internal error: " TUNABLES_NAME " buffer overflow");
+	int err = jio_snprintf(env_buf, sizeof(env_buf), "%.*s%s%s", (int)(colon - env), env, disable_str + prefix_len, colon);
+	assert(err >= 0 && (unsigned)err < sizeof(env_buf), "internal error: " TUNABLES_NAME " buffer overflow");
       }
     }
-    err = setenv(TUNABLES_NAME, buf, 1);
+    env_val = env_buf;
   }
+  if (ShowCPUFeatures) {
+    tty->print_cr("Re-exec of java with new environment variable: " TUNABLES_NAME "=%s", env_val);
+  }
+  int err = setenv(TUNABLES_NAME, env_val, 1);
   if (err) {
     jio_snprintf(errbuf, sizeof(errbuf), "setenv " TUNABLES_NAME " error: %m");
     vm_exit_during_initialization(errbuf);

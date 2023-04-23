@@ -847,6 +847,10 @@ void VM_Version::libc_not_using(uint64_t excessive) {
   EXCESSIVE(AVX512ER, avx512er, DEF_SefCpuid7Ebx);
   EXCESSIVE(AVX512PF, avx512pf, DEF_SefCpuid7Ebx);
   EXCESSIVE(AVX512VL, avx512vl, DEF_SefCpuid7Ebx);
+  EXCESSIVE(FXSR    , fxsr    , DEF_StdCpuid1Edx);
+  EXCESSIVE(MMX     , mmx     , DEF_StdCpuid1Edx);
+  EXCESSIVE(SSE     , sse     , DEF_StdCpuid1Edx);
+  EXCESSIVE(SSE3    , sse3    , DEF_StdCpuid1Ecx);
 #undef EXCESSIVE
 #undef EXCESSIVE5
 
@@ -910,11 +914,7 @@ void VM_Version::libc_not_using(uint64_t excessive) {
 
   // These are not used by libc.
 #define LIBC_UNUSED(hotspot_cpu) EXCESSIVE_HANDLED(hotspot_cpu)
-  LIBC_UNUSED(FXSR             );
-  LIBC_UNUSED(MMX              );
   LIBC_UNUSED(3DNOW_PREFETCH   );
-  LIBC_UNUSED(SSE              );
-  LIBC_UNUSED(SSE3             );
   LIBC_UNUSED(SSE4A            );
   LIBC_UNUSED(TSC              );
   LIBC_UNUSED(TSCINV_BIT       );

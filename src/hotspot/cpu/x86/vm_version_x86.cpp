@@ -39,6 +39,7 @@
 #include "utilities/virtualizationSupport.hpp"
 #include <sys/platform/x86.h>
 #include <sys/wait.h>
+#include <link.h>
 
 #include OS_HEADER_INLINE(os)
 
@@ -659,11 +660,31 @@ enum
   CPUID_INDEX_MAX = CPUID_INDEX_14_ECX_0 + 1
 };
 
-#define ARG0 "/lib64/ld-linux-x86-64.so.2"
-#define ARG1 "--list-diagnostics"
-#define CMD ARG0 " " ARG1
+static int ld_so_name_iterate_phdr(struct dl_phdr_info *info, size_t size, void *data_voidp) {
+  const char **retval_return = (const char **)data_voidp;
+  assert(size >= offsetof(struct dl_phdr_info, dlpi_adds), "missing PHDRs for the java executable");
+  assert(strcmp(info->dlpi_name, "") == 0, "Unexpected name of first dl_phdr_info");
+  for (size_t phdr_ix = 0; phdr_ix < info->dlpi_phnum; ++phdr_ix) {
+    const Elf64_Phdr *phdr = info->dlpi_phdr + phdr_ix;
+    if (phdr->p_type == PT_INTERP) {
+      *retval_return = (const char *)(phdr->p_vaddr + info->dlpi_addr);
+      return 42;
+    }
+  }
+  vm_exit_during_initialization("PT_INTERP not found for the java executable");
+  return -1;
+}
 
-static FILE *popen_r(pid_t *pid_return) {
+static const char *ld_so_name() {
+  const char *retval;
+  int err = dl_iterate_phdr(ld_so_name_iterate_phdr, &retval);
+  assert(err == 42, "internal error 42");
+  return retval;
+}
+
+#define ARG1 "--list-diagnostics"
+
+static FILE *popen_r(const char *arg0, pid_t *pid_return) {
   char errbuf[512];
   union {
     int fds[2];
@@ -693,8 +714,8 @@ static FILE *popen_r(pid_t *pid_return) {
 	jio_snprintf(errbuf, sizeof(errbuf), "Error closing write pipe in child: %m");
 	vm_exit_during_initialization(errbuf);
       }
-      execl(ARG0, ARG0, ARG1, NULL);
-      jio_snprintf(errbuf, sizeof(errbuf), "Error exec-ing " CMD ": %m");
+      execl(arg0, arg0, ARG1, NULL);
+      jio_snprintf(errbuf, sizeof(errbuf), "Error exec-ing %s " ARG1 ": %m", arg0);
       // FIXME: Double vm_exit*()?
       vm_exit_during_initialization(errbuf);
   }
@@ -704,47 +725,49 @@ static FILE *popen_r(pid_t *pid_return) {
   }
   FILE *f = fdopen(fds.readfd, "r");
   if (f == NULL) {
-    jio_snprintf(errbuf, sizeof(errbuf), "Error converting pipe fd to FILE * in parent for " CMD ": %m");
+    jio_snprintf(errbuf, sizeof(errbuf), "Error converting pipe fd to FILE * in parent for %s " ARG1 ": %m", arg0);
     vm_exit_during_initialization(errbuf);
   }
   *pid_return = child;
   return f;
 }
 
-static void pclose_r(FILE *f, pid_t pid) {
+static void pclose_r(const char *arg0, FILE *f, pid_t pid) {
   char errbuf[512];
   if (fclose(f)) {
-    jio_snprintf(errbuf, sizeof(errbuf), "Error closing fdopen-ed " CMD ": %m");
+    jio_snprintf(errbuf, sizeof(errbuf), "Error closing fdopen-ed %s " ARG1 ": %m", arg0);
     vm_exit_during_initialization(errbuf);
   }
   int wstatus;
   pid_t waiterr = waitpid(pid, &wstatus, 0);
   if (waiterr != pid) {
-    jio_snprintf(errbuf, sizeof(errbuf), "Error waiting on " CMD ": %m");
+    jio_snprintf(errbuf, sizeof(errbuf), "Error waiting on %s " ARG1 ": %m", arg0);
     vm_exit_during_initialization(errbuf);
   }
   if (!WIFEXITED(wstatus)) {
-    jio_snprintf(errbuf, sizeof(errbuf), "Child command " CMD " did not properly exit (WIFEXITED): wstatus = %d", wstatus);
+    jio_snprintf(errbuf, sizeof(errbuf), "Child command %s " ARG1 " did not properly exit (WIFEXITED): wstatus = %d", arg0, wstatus);
     vm_exit_during_initialization(errbuf);
   }
   if (WEXITSTATUS(wstatus) != 0) {
-    jio_snprintf(errbuf, sizeof(errbuf), "Child command " CMD " did exit with an error: exit code = %d", WEXITSTATUS(wstatus));
+    jio_snprintf(errbuf, sizeof(errbuf), "Child command %s " ARG1 " did exit with an error: exit code = %d", arg0, WEXITSTATUS(wstatus));
     vm_exit_during_initialization(errbuf);
   }
 }
 
 void VM_Version::libc_not_using(uint64_t excessive) {
+#ifndef ASSERT
   if (!excessive)
     return;
-
+#endif
   char errbuf[512];
   const int index_max = CPUID_INDEX_MAX;
   enum { eax = 0, ebx, ecx, edx, reg_max };
   unsigned active[index_max][reg_max] = { 0 };
+  const char *arg0 = ld_so_name();
   pid_t f_child;
-  FILE *f = popen_r(&f_child);
+  FILE *f = popen_r(arg0, &f_child);
   if (!f) {
-    jio_snprintf(errbuf, sizeof(errbuf), "Cannot popen " CMD ": %m");
+    jio_snprintf(errbuf, sizeof(errbuf), "Cannot popen %s " ARG1 ": %m", arg0);
     vm_exit_during_initialization(errbuf);
   }
   for (;;) {
@@ -779,18 +802,34 @@ void VM_Version::libc_not_using(uint64_t excessive) {
     active[index][reg] = val;
   }
   if (ferror(f)) {
-    jio_snprintf(errbuf, sizeof(errbuf), "Error reading popen-ed " CMD ": %m");
+    jio_snprintf(errbuf, sizeof(errbuf), "Error reading popen-ed %s " ARG1 ": %m", arg0);
     vm_exit_during_initialization(errbuf);
   }
   if (!feof(f)) {
-    vm_exit_during_initialization("EOF not reached on popen-ed " CMD);
+    jio_snprintf(errbuf, sizeof(errbuf), "EOF not reached on popen-ed %s " ARG1, arg0);
+    vm_exit_during_initialization(errbuf);
   }
-  pclose_r(f, f_child);
-#undef CMD
-#undef ARG0
+  pclose_r(arg0, f, f_child);
 #undef ARG1
 
   uint64_t disable = 0;
+// glibc: sysdeps/x86/get-isa-level.h:
+// glibc: if (CPU_FEATURE_USABLE_P (cpu_features, CMOV)
+// glibc:     && CPU_FEATURE_USABLE_P (cpu_features, CX8)
+// glibc:     && CPU_FEATURE_CPU_P (cpu_features, FPU)
+// glibc:     && CPU_FEATURE_USABLE_P (cpu_features, FXSR)
+// glibc:     && CPU_FEATURE_USABLE_P (cpu_features, MMX)
+// glibc:     && CPU_FEATURE_USABLE_P (cpu_features, SSE)
+// glibc:     && CPU_FEATURE_USABLE_P (cpu_features, SSE2))
+  if ((_features & CPU_CMOV) &&
+      (_features & CPU_CX8) &&
+      // FPU is always present on i686+: (_features & CPU_FPU) &&
+      // These cannot be disabled by GLIBC_TUNABLES.
+      (excessive & (CPU_FXSR | CPU_MMX | CPU_SSE | CPU_SSE2))) {
+    assert(!(excessive & CPU_CMOV), "(_features & CPU_CMOV) cannot happen");
+    // CX8 is i586+, CMOV is i686+
+    excessive |= CPU_CMOV;
+  }
 #ifdef ASSERT
   uint64_t excessive_handled = 0;
   uint64_t disable_handled = 0;
@@ -847,10 +886,6 @@ void VM_Version::libc_not_using(uint64_t excessive) {
   EXCESSIVE(AVX512ER, avx512er, DEF_SefCpuid7Ebx);
   EXCESSIVE(AVX512PF, avx512pf, DEF_SefCpuid7Ebx);
   EXCESSIVE(AVX512VL, avx512vl, DEF_SefCpuid7Ebx);
-  EXCESSIVE(FXSR    , fxsr    , DEF_StdCpuid1Edx);
-  EXCESSIVE(MMX     , mmx     , DEF_StdCpuid1Edx);
-  EXCESSIVE(SSE     , sse     , DEF_StdCpuid1Edx);
-  EXCESSIVE(SSE3    , sse3    , DEF_StdCpuid1Ecx);
 #undef EXCESSIVE
 #undef EXCESSIVE5
 
@@ -934,6 +969,8 @@ void VM_Version::libc_not_using(uint64_t excessive) {
   LIBC_UNUSED(AVX512_VBMI2     );
   LIBC_UNUSED(AVX512_VBMI      );
   LIBC_UNUSED(HV               );
+  // These are handled as an exception above. They cannot be disabled by GLIBC_TUNABLES.
+  LIBC_UNUSED(FXSR); LIBC_UNUSED(MMX); LIBC_UNUSED(SSE); LIBC_UNUSED(SSE3);
 #undef LIBC_UNUSED
   if (excessive_handled != CPU_MAX - 1) {
     jio_snprintf(errbuf, sizeof(errbuf), "internal error: Unsupported handling of some CPU_* 0x%" PRIx64 " != full 0x%" PRIx64, excessive_handled, CPU_MAX - 1);
@@ -945,17 +982,6 @@ void VM_Version::libc_not_using(uint64_t excessive) {
     return;
 
 #define TUNABLES_NAME "GLIBC_TUNABLES"
-#define REEXEC_NAME "HOTSPOT_GLIBC_TUNABLES_REEXEC"
-  if (getenv(REEXEC_NAME)) {
-    jio_snprintf(errbuf, sizeof(errbuf), "internal error: " TUNABLES_NAME "=%s had no effect and " REEXEC_NAME " is set", getenv(TUNABLES_NAME));
-    vm_exit_during_initialization(errbuf);
-  }
-  if (setenv(REEXEC_NAME, "1", 1)) {
-    jio_snprintf(errbuf, sizeof(errbuf), "setenv " REEXEC_NAME " error: %m");
-    vm_exit_during_initialization(errbuf);
-  }
-#undef REEXEC_NAME
-
   char *env_val = disable_str;
   const char *env = getenv(TUNABLES_NAME);
   char env_buf[strlen(disable_str) + strlen(env) + 100];
@@ -987,6 +1013,17 @@ void VM_Version::libc_not_using(uint64_t excessive) {
     jio_snprintf(errbuf, sizeof(errbuf), "setenv " TUNABLES_NAME " error: %m");
     vm_exit_during_initialization(errbuf);
   }
+
+#define REEXEC_NAME "HOTSPOT_GLIBC_TUNABLES_REEXEC"
+  if (getenv(REEXEC_NAME)) {
+    jio_snprintf(errbuf, sizeof(errbuf), "internal error: " TUNABLES_NAME "=%s failed and " REEXEC_NAME " is set", disable_str);
+    vm_exit_during_initialization(errbuf);
+  }
+  if (setenv(REEXEC_NAME, "1", 1)) {
+    jio_snprintf(errbuf, sizeof(errbuf), "setenv " REEXEC_NAME " error: %m");
+    vm_exit_during_initialization(errbuf);
+  }
+#undef REEXEC_NAME
 #undef TUNABLES_NAME
 
   char *buf = NULL;

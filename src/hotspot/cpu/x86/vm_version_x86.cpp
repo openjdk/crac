@@ -48,9 +48,11 @@ int VM_Version::_model;
 int VM_Version::_stepping;
 bool VM_Version::_has_intel_jcc_erratum;
 VM_Version::CpuidInfo VM_Version::_cpuid_info = { 0, };
+uint64_t VM_Version::_glibc_features;
 
 #define DECLARE_CPU_FEATURE_NAME(id, name, bit) name,
-const char* VM_Version::_features_names[] = { CPU_FEATURE_FLAGS(DECLARE_CPU_FEATURE_NAME)};
+const char* VM_Version::      _features_names[] = {   CPU_FEATURE_FLAGS(DECLARE_CPU_FEATURE_NAME)};
+const char* VM_Version::_glibc_features_names[] = { GLIBC_FEATURE_FLAGS(DECLARE_CPU_FEATURE_NAME)};
 #undef DECLARE_CPU_FEATURE_FLAG
 
 // Address of instruction which causes SEGV
@@ -618,8 +620,9 @@ class VM_Version_StubGenerator: public StubCodeGenerator {
   };
 };
 
-uint64_t VM_Version::CPUFeatures_parse(const char *ccstr) {
+uint64_t VM_Version::CPUFeatures_parse(const char *ccstr, uint64_t &glibc_features) {
   assert(ccstr, "CPUFeatures_parse NULL");
+  glibc_features = 0;
   if (strcmp(ccstr, "native") == 0) {
     return Abstract_VM_Version::features();
   }
@@ -641,17 +644,23 @@ uint64_t VM_Version::CPUFeatures_parse(const char *ccstr) {
   }
   char *endptr;
   errno = 0;
+  uint64_t retval;
   unsigned long long ull = strtoull(ccstr, &endptr, 0);
-  if (!errno && (!endptr || !*endptr))
-    return ull;
+  retval = ull;
+  if (!errno && *endptr == ',' && retval == ull) {
+    ull = strtoull(endptr + 1, &endptr, 0);
+    glibc_features = ull;
+    if (!errno && !*endptr && glibc_features == ull) {
+      return retval;
+    }
+  }
   char buf[512];
   int res = jio_snprintf(
 	      buf, sizeof(buf),
-	      "Improperly specified VM option 'CPUFeatures=%s'", ccstr);
+	      "VM option 'CPUFeatures=%s' must be of the form: 0xnum,0xnum", ccstr);
   assert(res > 0, "not enough temporary space allocated");
   vm_exit_during_initialization(buf);
-  // NOTREACHED
-  return 0;
+  return -1;
 }
 
 // sysdeps/x86/include/cpu-features.h
@@ -754,9 +763,9 @@ static void pclose_r(const char *arg0, FILE *f, pid_t pid) {
   }
 }
 
-void VM_Version::libc_not_using(uint64_t excessive) {
+void VM_Version::glibc_not_using(uint64_t excessive_CPU, uint64_t excessive_GLIBC) {
 #ifndef ASSERT
-  if (!excessive)
+  if (!excessive_CPU && !excessive_GLIBC)
     return;
 #endif
   char errbuf[512];
@@ -812,7 +821,8 @@ void VM_Version::libc_not_using(uint64_t excessive) {
   pclose_r(arg0, f, f_child);
 #undef ARG1
 
-  uint64_t disable = 0;
+  uint64_t disable_CPU   = 0;
+  uint64_t disable_GLIBC = 0;
 // glibc: sysdeps/x86/get-isa-level.h:
 // glibc: if (CPU_FEATURE_USABLE_P (cpu_features, CMOV)
 // glibc:     && CPU_FEATURE_USABLE_P (cpu_features, CX8)
@@ -825,67 +835,69 @@ void VM_Version::libc_not_using(uint64_t excessive) {
       (_features & CPU_CX8) &&
       // FPU is always present on i686+: (_features & CPU_FPU) &&
       // These cannot be disabled by GLIBC_TUNABLES.
-      (excessive & (CPU_FXSR | CPU_MMX | CPU_SSE | CPU_SSE2))) {
-    assert(!(excessive & CPU_CMOV), "(_features & CPU_CMOV) cannot happen");
+      (excessive_CPU & (CPU_FXSR | CPU_MMX | CPU_SSE | CPU_SSE2))) {
+    assert(!(excessive_CPU & CPU_CMOV), "(_features & CPU_CMOV) cannot happen");
     // CX8 is i586+, CMOV is i686+
-    excessive |= CPU_CMOV;
+    excessive_CPU |= CPU_CMOV;
   }
 #ifdef ASSERT
-  uint64_t excessive_handled = 0;
-  uint64_t disable_handled = 0;
+  uint64_t excessive_handled_CPU   = 0;
+  uint64_t excessive_handled_GLIBC = 0;
+  uint64_t disable_handled_CPU   = 0;
+  uint64_t disable_handled_GLIBC = 0;
 # define IF_ASSERT(x) x
 #else
 # define IF_ASSERT(x)
 #endif
-#define EXCESSIVE_HANDLED(hotspot_cpu) do {							\
-    assert(!(excessive_handled & CPU_##hotspot_cpu), "already used CPU_" #hotspot_cpu );	\
-    IF_ASSERT(excessive_handled |= CPU_##hotspot_cpu);						\
+#define EXCESSIVE_HANDLED(kind, hotspot) do {								\
+    assert(!(excessive_handled_##kind & kind##_##hotspot), "already used " #kind "_" #hotspot );	\
+    IF_ASSERT(excessive_handled_##kind |= kind##_##hotspot);						\
   } while (0)
-#define EXCESSIVE5(hotspot_cpu, hotspot_field, hotspot_union, libc_index, libc_reg) do {	\
-    EXCESSIVE_HANDLED(hotspot_cpu);								\
-    if (excessive & CPU_##hotspot_cpu) {								\
+#define EXCESSIVE5(kind, hotspot, hotspot_field, hotspot_union, glibc_index, glibc_reg) do {	\
+    EXCESSIVE_HANDLED(kind, hotspot);								\
+    if (excessive_##kind & kind##_##hotspot) {							\
       hotspot_union u;										\
-      u.value = active[libc_index][libc_reg];							\
+      u.value = active[glibc_index][glibc_reg];							\
       if (u.bits.hotspot_field != 0)								\
-	disable |= CPU_##hotspot_cpu;									\
+	disable_##kind |= kind##_##hotspot;							\
     }												\
   } while (0)
-#define EXCESSIVE(hotspot_cpu, hotspot_field, hotspot_def...) EXCESSIVE5(hotspot_cpu, hotspot_field, hotspot_def)
+#define EXCESSIVE(kind, hotspot, hotspot_field, hotspot_def...) EXCESSIVE5(kind, hotspot, hotspot_field, hotspot_def)
 #define DEF_ExtCpuid1Ecx ExtCpuid1Ecx, CPUID_INDEX_80000001, ecx
 #define DEF_SefCpuid7Ebx SefCpuid7Ebx, CPUID_INDEX_7       , ebx
 #define DEF_SefCpuid7Ecx SefCpuid7Ecx, CPUID_INDEX_7       , ecx
 #define DEF_SefCpuid7Edx SefCpuid7Edx, CPUID_INDEX_7       , edx
 #define DEF_StdCpuid1Ecx StdCpuid1Ecx, CPUID_INDEX_1       , ecx
 #define DEF_StdCpuid1Edx StdCpuid1Edx, CPUID_INDEX_1       , edx
-  EXCESSIVE(AVX     , avx     , DEF_StdCpuid1Ecx);
-  EXCESSIVE(CX8     , cmpxchg8, DEF_StdCpuid1Edx);
-  EXCESSIVE(FMA     , fma     , DEF_StdCpuid1Ecx);
-  EXCESSIVE(HT      , ht      , DEF_StdCpuid1Edx);
-  EXCESSIVE(IBT     , ibt     , DEF_SefCpuid7Edx);
-  EXCESSIVE(RTM     , rtm     , DEF_SefCpuid7Ebx);
-  EXCESSIVE(AVX2    , avx2    , DEF_SefCpuid7Ebx);
-  EXCESSIVE(BMI1    , bmi1    , DEF_SefCpuid7Ebx);
-  EXCESSIVE(BMI2    , bmi2    , DEF_SefCpuid7Ebx);
-  EXCESSIVE(CMOV    , cmov    , DEF_StdCpuid1Edx);
-  EXCESSIVE(ERMS    , erms    , DEF_SefCpuid7Ebx);
-  EXCESSIVE(FMA4    , fma4    , DEF_ExtCpuid1Ecx);
-  EXCESSIVE(SSE2    , sse2    , DEF_StdCpuid1Edx);
-  EXCESSIVE(LZCNT   , fma4    , DEF_ExtCpuid1Ecx);
-  EXCESSIVE(MOVBE   , movbe   , DEF_StdCpuid1Ecx);
-  EXCESSIVE(SHSTK   , shstk   , DEF_SefCpuid7Ecx);
-  EXCESSIVE(SSSE3   , ssse3   , DEF_StdCpuid1Ecx);
-  EXCESSIVE(XSAVE   , xsave   , DEF_StdCpuid1Ecx);
-  EXCESSIVE(POPCNT  , popcnt  , DEF_StdCpuid1Ecx);
-  EXCESSIVE(SSE4_1  , sse4_1  , DEF_StdCpuid1Ecx);
-  EXCESSIVE(SSE4_2  , sse4_2  , DEF_StdCpuid1Ecx);
-  EXCESSIVE(AVX512F , avx512f , DEF_SefCpuid7Ebx);
-  EXCESSIVE(OSXSAVE , osxsave , DEF_StdCpuid1Ecx);
-  EXCESSIVE(AVX512CD, avx512cd, DEF_SefCpuid7Ebx);
-  EXCESSIVE(AVX512BW, avx512bw, DEF_SefCpuid7Ebx);
-  EXCESSIVE(AVX512DQ, avx512dq, DEF_SefCpuid7Ebx);
-  EXCESSIVE(AVX512ER, avx512er, DEF_SefCpuid7Ebx);
-  EXCESSIVE(AVX512PF, avx512pf, DEF_SefCpuid7Ebx);
-  EXCESSIVE(AVX512VL, avx512vl, DEF_SefCpuid7Ebx);
+  EXCESSIVE(CPU  , AVX     , avx     , DEF_StdCpuid1Ecx);
+  EXCESSIVE(CPU  , CX8     , cmpxchg8, DEF_StdCpuid1Edx);
+  EXCESSIVE(CPU  , FMA     , fma     , DEF_StdCpuid1Ecx);
+  EXCESSIVE(CPU  , HT      , ht      , DEF_StdCpuid1Edx);
+  EXCESSIVE(CPU  , RTM     , rtm     , DEF_SefCpuid7Ebx);
+  EXCESSIVE(CPU  , AVX2    , avx2    , DEF_SefCpuid7Ebx);
+  EXCESSIVE(CPU  , BMI1    , bmi1    , DEF_SefCpuid7Ebx);
+  EXCESSIVE(CPU  , BMI2    , bmi2    , DEF_SefCpuid7Ebx);
+  EXCESSIVE(CPU  , CMOV    , cmov    , DEF_StdCpuid1Edx);
+  EXCESSIVE(CPU  , ERMS    , erms    , DEF_SefCpuid7Ebx);
+  EXCESSIVE(CPU  , SSE2    , sse2    , DEF_StdCpuid1Edx);
+  EXCESSIVE(CPU  , LZCNT   , fma4    , DEF_ExtCpuid1Ecx);
+  EXCESSIVE(CPU  , SSSE3   , ssse3   , DEF_StdCpuid1Ecx);
+  EXCESSIVE(CPU  , POPCNT  , popcnt  , DEF_StdCpuid1Ecx);
+  EXCESSIVE(CPU  , SSE4_1  , sse4_1  , DEF_StdCpuid1Ecx);
+  EXCESSIVE(CPU  , SSE4_2  , sse4_2  , DEF_StdCpuid1Ecx);
+  EXCESSIVE(CPU  , AVX512F , avx512f , DEF_SefCpuid7Ebx);
+  EXCESSIVE(CPU  , AVX512CD, avx512cd, DEF_SefCpuid7Ebx);
+  EXCESSIVE(CPU  , AVX512BW, avx512bw, DEF_SefCpuid7Ebx);
+  EXCESSIVE(CPU  , AVX512DQ, avx512dq, DEF_SefCpuid7Ebx);
+  EXCESSIVE(CPU  , AVX512ER, avx512er, DEF_SefCpuid7Ebx);
+  EXCESSIVE(CPU  , AVX512PF, avx512pf, DEF_SefCpuid7Ebx);
+  EXCESSIVE(CPU  , AVX512VL, avx512vl, DEF_SefCpuid7Ebx);
+  EXCESSIVE(GLIBC, IBT     , ibt     , DEF_SefCpuid7Edx);
+  EXCESSIVE(GLIBC, FMA4    , fma4    , DEF_ExtCpuid1Ecx);
+  EXCESSIVE(GLIBC, MOVBE   , movbe   , DEF_StdCpuid1Ecx);
+  EXCESSIVE(GLIBC, SHSTK   , shstk   , DEF_SefCpuid7Ecx);
+  EXCESSIVE(GLIBC, XSAVE   , xsave   , DEF_StdCpuid1Ecx);
+  EXCESSIVE(GLIBC, OSXSAVE , osxsave , DEF_StdCpuid1Ecx);
 #undef EXCESSIVE
 #undef EXCESSIVE5
 
@@ -895,87 +907,99 @@ void VM_Version::libc_not_using(uint64_t excessive) {
   char disable_str[64 * (10 + 3) + 1] = PREFIX;
 #undef PREFIX
   char *disable_end = disable_str + prefix_len;
-#define DISABLE2(hotspot, libc) do {						\
-    assert(!(disable_handled & CPU_##hotspot), "already used CPU_" #hotspot );	\
-    IF_ASSERT(disable_handled |= CPU_##hotspot);				\
-    if (disable & CPU_##hotspot) {						\
-      const char str[] = ",-" #libc;						\
-      size_t remains = disable_str + sizeof(disable_str) - disable_end;		\
-      strncpy(disable_end, str, remains);					\
-      size_t len = strnlen(disable_end, remains);				\
-      remains -= len;								\
-      assert(remains > 0, "internal error: disable_str overflow");		\
-      disable_end += len;							\
-    }										\
+#define DISABLE2(kind, hotspot, libc) do {							\
+    assert(!(disable_handled_##kind & kind##_##hotspot), "already used " #kind "_" #hotspot );	\
+    IF_ASSERT(disable_handled_##kind |= kind##_##hotspot);					\
+    if (disable_##kind & kind##_##hotspot) {							\
+      const char str[] = ",-" #libc;								\
+      size_t remains = disable_str + sizeof(disable_str) - disable_end;				\
+      strncpy(disable_end, str, remains);							\
+      size_t len = strnlen(disable_end, remains);						\
+      remains -= len;										\
+      assert(remains > 0, "internal error: disable_str overflow");				\
+      disable_end += len;									\
+    }												\
   } while (0);
-#define DISABLE(name) DISABLE2(name, name)
-  DISABLE(AVX)
-  DISABLE(CX8)
-  DISABLE(FMA)
-  DISABLE2(HT, HTT)
-  DISABLE(IBT)
-  DISABLE(RTM)
-  DISABLE(AVX2)
-  DISABLE(BMI1)
-  DISABLE(BMI2)
-  DISABLE(CMOV)
-  DISABLE(ERMS)
-  DISABLE(FMA4)
-  DISABLE(SSE2)
-  DISABLE(LZCNT)
-  DISABLE(MOVBE)
-  DISABLE(SHSTK)
-  DISABLE(SSSE3)
-  DISABLE(XSAVE)
-  DISABLE(POPCNT)
-  DISABLE(SSE4_1)
-  DISABLE(SSE4_2)
-  DISABLE(AVX512F)
-  DISABLE(OSXSAVE)
-  DISABLE(AVX512CD)
-  DISABLE(AVX512BW)
-  DISABLE(AVX512DQ)
-  DISABLE(AVX512ER)
-  DISABLE(AVX512PF)
-  DISABLE(AVX512VL)
+#define DISABLE(kind, name) DISABLE2(kind, name, name)
+  DISABLE (CPU  , AVX)
+  DISABLE (CPU  , CX8)
+  DISABLE (CPU  , FMA)
+  DISABLE2(CPU  , HT, HTT)
+  DISABLE (CPU  , RTM)
+  DISABLE (CPU  , AVX2)
+  DISABLE (CPU  , BMI1)
+  DISABLE (CPU  , BMI2)
+  DISABLE (CPU  , CMOV)
+  DISABLE (CPU  , ERMS)
+  DISABLE (CPU  , SSE2)
+  DISABLE (CPU  , LZCNT)
+  DISABLE (CPU  , SSSE3)
+  DISABLE (CPU  , POPCNT)
+  DISABLE (CPU  , SSE4_1)
+  DISABLE (CPU  , SSE4_2)
+  DISABLE (CPU  , AVX512F)
+  DISABLE (CPU  , AVX512CD)
+  DISABLE (CPU  , AVX512BW)
+  DISABLE (CPU  , AVX512DQ)
+  DISABLE (CPU  , AVX512ER)
+  DISABLE (CPU  , AVX512PF)
+  DISABLE (CPU  , AVX512VL)
+  DISABLE (GLIBC, IBT)
+  DISABLE (GLIBC, FMA4)
+  DISABLE (GLIBC, MOVBE)
+  DISABLE (GLIBC, SHSTK)
+  DISABLE (GLIBC, XSAVE)
+  DISABLE (GLIBC, OSXSAVE)
 #undef DISABLE
   *disable_end = 0;
 
 #ifdef ASSERT
-  if (disable_handled != excessive_handled) {
-    jio_snprintf(errbuf, sizeof(errbuf), "internal error: Unsupported disabling of CPU_* 0x%" PRIx64 " != used 0x%" PRIx64, disable_handled, excessive_handled);
-    vm_exit_during_initialization(errbuf);
-  }
+#define CHECK_KIND(kind) do {																	\
+    if (disable_handled_##kind != excessive_handled_##kind) {													\
+      jio_snprintf(errbuf, sizeof(errbuf),															\
+		   "internal error: Unsupported disabling of " #kind "_* 0x%" PRIx64 " != used 0x%" PRIx64, disable_handled_##kind, excessive_handled_##kind);	\
+      vm_exit_during_initialization(errbuf);															\
+    }																				\
+  } while (0)
+  CHECK_KIND(CPU  );
+  CHECK_KIND(GLIBC);
+#undef CHECK_KIND
 
   // These are not used by libc.
-#define LIBC_UNUSED(hotspot_cpu) EXCESSIVE_HANDLED(hotspot_cpu)
-  LIBC_UNUSED(3DNOW_PREFETCH   );
-  LIBC_UNUSED(SSE4A            );
-  LIBC_UNUSED(TSC              );
-  LIBC_UNUSED(TSCINV_BIT       );
-  LIBC_UNUSED(TSCINV           );
-  LIBC_UNUSED(AES              );
-  LIBC_UNUSED(CLMUL            );
-  LIBC_UNUSED(ADX              );
-  LIBC_UNUSED(SHA              );
-  LIBC_UNUSED(VZEROUPPER       );
-  LIBC_UNUSED(AVX512_VPOPCNTDQ );
-  LIBC_UNUSED(AVX512_VPCLMULQDQ);
-  LIBC_UNUSED(AVX512_VAES      );
-  LIBC_UNUSED(AVX512_VNNI      );
-  LIBC_UNUSED(FLUSH            );
-  LIBC_UNUSED(FLUSHOPT         );
-  LIBC_UNUSED(CLWB             );
-  LIBC_UNUSED(AVX512_VBMI2     );
-  LIBC_UNUSED(AVX512_VBMI      );
-  LIBC_UNUSED(HV               );
+#define GLIBC_UNUSED(hotspot_cpu) EXCESSIVE_HANDLED(CPU, hotspot_cpu)
+  GLIBC_UNUSED(3DNOW_PREFETCH   );
+  GLIBC_UNUSED(SSE4A            );
+  GLIBC_UNUSED(TSC              );
+  GLIBC_UNUSED(TSCINV_BIT       );
+  GLIBC_UNUSED(TSCINV           );
+  GLIBC_UNUSED(AES              );
+  GLIBC_UNUSED(CLMUL            );
+  GLIBC_UNUSED(ADX              );
+  GLIBC_UNUSED(SHA              );
+  GLIBC_UNUSED(VZEROUPPER       );
+  GLIBC_UNUSED(AVX512_VPOPCNTDQ );
+  GLIBC_UNUSED(AVX512_VPCLMULQDQ);
+  GLIBC_UNUSED(AVX512_VAES      );
+  GLIBC_UNUSED(AVX512_VNNI      );
+  GLIBC_UNUSED(FLUSH            );
+  GLIBC_UNUSED(FLUSHOPT         );
+  GLIBC_UNUSED(CLWB             );
+  GLIBC_UNUSED(AVX512_VBMI2     );
+  GLIBC_UNUSED(AVX512_VBMI      );
+  GLIBC_UNUSED(HV               );
   // These are handled as an exception above. They cannot be disabled by GLIBC_TUNABLES.
-  LIBC_UNUSED(FXSR); LIBC_UNUSED(MMX); LIBC_UNUSED(SSE); LIBC_UNUSED(SSE3);
-#undef LIBC_UNUSED
-  if (excessive_handled != CPU_MAX - 1) {
-    jio_snprintf(errbuf, sizeof(errbuf), "internal error: Unsupported handling of some CPU_* 0x%" PRIx64 " != full 0x%" PRIx64, excessive_handled, CPU_MAX - 1);
-    vm_exit_during_initialization(errbuf);
-  }
+  GLIBC_UNUSED(FXSR); GLIBC_UNUSED(MMX); GLIBC_UNUSED(SSE); GLIBC_UNUSED(SSE3);
+#undef GLIBC_UNUSED
+#define CHECK_KIND(kind) do {																	\
+    if (excessive_handled_##kind != kind##_MAX - 1) {														\
+      jio_snprintf(errbuf, sizeof(errbuf),															\
+		   "internal error: Unsupported disabling of some " #kind "_* 0x%" PRIx64 " != full 0x%" PRIx64, excessive_handled_##kind, CPU_MAX - 1);	\
+      vm_exit_during_initialization(errbuf);															\
+    }																				\
+  } while (0)
+  CHECK_KIND(CPU  );
+  CHECK_KIND(GLIBC);
+#undef CHECK_KIND
 #endif
 
   if (disable_end == disable_str + prefix_len)
@@ -1109,6 +1133,7 @@ void VM_Version::get_processor_features() {
 
   if (cpu_family() > 4) { // it supports CPUID
     _features = feature_flags();
+    _glibc_features = glibc_flags();
     // Logical processors are only available on P4s and above,
     // and only if hyperthreading is available.
     _logical_processors_per_package = logical_processor_count();
@@ -1116,34 +1141,41 @@ void VM_Version::get_processor_features() {
   }
 
   if (ShowCPUFeatures) {
-    tty->print_cr("This machine's CPU features are: -XX:CPUFeatures=0x" UINT64_FORMAT_X, _features);
+    tty->print_cr("This machine's CPU features are: -XX:CPUFeatures=0x" UINT64_FORMAT_X ",0x" UINT64_FORMAT_X, _features, _glibc_features);
   }
 
   assert(!CPUFeatures == FLAG_IS_DEFAULT(CPUFeatures), "CPUFeatures parsing");
   if (CPUFeatures) {
-    uint64_t CPUFeatures_x64 = CPUFeatures_parse(CPUFeatures);
-    uint64_t features_missing = CPUFeatures_x64 & ~_features;
-    if (features_missing) {
+    uint64_t GLIBCFeatures_x64;
+    uint64_t   CPUFeatures_x64 = CPUFeatures_parse(CPUFeatures, GLIBCFeatures_x64);
+    uint64_t       features_missing =   CPUFeatures_x64 & ~      _features;
+    uint64_t glibc_features_missing = GLIBCFeatures_x64 & ~_glibc_features;
+    if (features_missing || glibc_features_missing) {
       char buf[512];
       int res = jio_snprintf(
 		  buf, sizeof(buf),
-		  "Specified -XX:CPUFeatures=0x" UINT64_FORMAT_X
-		  "; this machine's CPU features are 0x" UINT64_FORMAT_X
-		  "; missing features of this CPU are 0x" UINT64_FORMAT_X " ",
-		  CPUFeatures_x64, _features, features_missing);
+		  "Specified -XX:CPUFeatures=0x" UINT64_FORMAT_X ",0x" UINT64_FORMAT_X
+		  "; this machine's CPU features are 0x" UINT64_FORMAT_X ",0x" UINT64_FORMAT_X
+		  "; missing features of this CPU are 0x" UINT64_FORMAT_X ",0x" UINT64_FORMAT_X " ",
+		  CPUFeatures_x64, GLIBCFeatures_x64,
+		  _features, _glibc_features,
+		  features_missing, glibc_features_missing);
       assert(res > 0, "not enough temporary space allocated");
       // insert_features_names() does crash for undefined too high-numbered features.
-      insert_features_names(buf + res, sizeof(buf) - res, features_missing & (CPU_MAX - 1));
+      insert_features_names(buf + res , sizeof(buf) - res ,       features_missing & (  CPU_MAX - 1));
+      int res2 = res + strlen(buf + res);
+      insert_features_names(buf + res2, sizeof(buf) - res2, glibc_features_missing & (GLIBC_MAX - 1));
       if (buf[res]) {
 	assert(buf[res] == ',', "unexpeced VM_Version::insert_features_names separator instead of ','");
 	buf[res] = '=';
       }
       vm_exit_during_initialization(buf);
     }
-    _features = CPUFeatures_x64;
+          _features =   CPUFeatures_x64;
+    _glibc_features = GLIBCFeatures_x64;
   }
 
-  libc_not_using((CPU_MAX - 1) & ~_features);
+  glibc_not_using((CPU_MAX - 1) & ~_features, (GLIBC_MAX - 1) & ~_glibc_features);
 
   _supports_cx8 = supports_cmpxchg8();
   // xchg and xadd instructions

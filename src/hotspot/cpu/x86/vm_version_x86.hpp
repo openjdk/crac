@@ -368,21 +368,35 @@ protected:
     decl(AVX512_VBMI2,      "avx512_vbmi2",      44) /* VBMI2 shift left double instructions */ \
     decl(AVX512_VBMI,       "avx512_vbmi",       45) /* Vector BMI instructions */ \
     decl(HV,                "hv",                46) /* Hypervisor instructions */ \
-    /* FIXME: Move CPU features for libc into a different allocation space. */ \
-    decl(FMA4,              "fma4",              47) /* Tracking of a CPU feature for libc */ \
-    decl(MOVBE,             "movbe",             48) /* Tracking of a CPU feature for libc */ \
-    decl(OSXSAVE,           "osxsave",           49) /* Tracking of a CPU feature for libc */ \
-    decl(IBT,               "ibt",               50) /* Tracking of a CPU feature for libc */ \
-    decl(SHSTK,             "shstk",             51) /* Tracking of a CPU feature for libc */ \
-    decl(XSAVE,             "xsave",             52) /* Tracking of a CPU feature for libc */ \
-    decl(MAX,               "max",               53) /* Maximum - unused feature */
+                                                     \
+    decl(MAX,               "max",               47) /* Maximum - this feature must never be used */
 
 #define DECLARE_CPU_FEATURE_FLAG(id, name, bit) CPU_##id = (1ULL << bit),
     CPU_FEATURE_FLAGS(DECLARE_CPU_FEATURE_FLAG)
 #undef DECLARE_CPU_FEATURE_FLAG
   };
 
+  /* Tracking of a CPU feature for glibc */ \
+  enum Glibc_Feature_Flag : uint64_t {
+#define GLIBC_FEATURE_FLAGS(decl) \
+    decl(FMA4,              "fma4",              0) \
+    decl(MOVBE,             "movbe",             1) \
+    decl(OSXSAVE,           "osxsave",           2) \
+    decl(IBT,               "ibt",               3) \
+    decl(SHSTK,             "shstk",             4) \
+    decl(XSAVE,             "xsave",             5) \
+                                                    \
+    decl(MAX,               "max",               6) /* Maximum - this feature must never be used */
+#define DECLARE_GLIBC_FEATURE_FLAG(id, name, bit) GLIBC_##id = (1ULL << bit),
+    GLIBC_FEATURE_FLAGS(DECLARE_GLIBC_FEATURE_FLAG)
+#undef DECLARE_GLIBC_FEATURE_FLAG
+  };
+
+  // glibc feature flags.
+  static uint64_t _glibc_features;
+
   static const char* _features_names[];
+  static const char* _glibc_features_names[];
 
 enum Extended_Family {
     // AMD
@@ -572,14 +586,8 @@ enum Extended_Family {
       result |= CPU_SSE4_1;
     if (_cpuid_info.std_cpuid1_ecx.bits.sse4_2 != 0)
       result |= CPU_SSE4_2;
-    if (_cpuid_info.std_cpuid1_ecx.bits.movbe != 0)
-      result |= CPU_MOVBE;
     if (_cpuid_info.std_cpuid1_ecx.bits.popcnt != 0)
       result |= CPU_POPCNT;
-    if (_cpuid_info.std_cpuid1_ecx.bits.osxsave != 0)
-      result |= CPU_OSXSAVE;
-    if (_cpuid_info.std_cpuid1_ecx.bits.xsave != 0)
-      result |= CPU_XSAVE;
     if (_cpuid_info.std_cpuid1_ecx.bits.avx != 0 &&
         _cpuid_info.std_cpuid1_ecx.bits.osxsave != 0 &&
         _cpuid_info.xem_xcr0_eax.bits.sse != 0 &&
@@ -617,12 +625,8 @@ enum Extended_Family {
           result |= CPU_AVX512_VBMI;
         if (_cpuid_info.sef_cpuid7_ecx.bits.avx512_vbmi2 != 0)
           result |= CPU_AVX512_VBMI2;
-        if (_cpuid_info.sef_cpuid7_ecx.bits.shstk != 0)
-          result |= CPU_SHSTK;
       }
     }
-    if (_cpuid_info.sef_cpuid7_edx.bits.ibt != 0)
-      result |= CPU_IBT;
     if (_cpuid_info.std_cpuid1_ecx.bits.hv != 0)
       result |= CPU_HV;
     if (_cpuid_info.sef_cpuid7_ebx.bits.bmi1 != 0)
@@ -659,8 +663,6 @@ enum Extended_Family {
         result |= CPU_LZCNT;
       if (_cpuid_info.ext_cpuid1_ecx.bits.sse4a != 0)
         result |= CPU_SSE4A;
-      if (_cpuid_info.ext_cpuid1_ecx.bits.fma4 != 0)
-        result |= CPU_FMA4;
     }
 
     // Intel features.
@@ -693,6 +695,36 @@ enum Extended_Family {
       result |= CPU_TSCINV;
     }
 
+    return result;
+  }
+
+  static uint64_t glibc_flags() {
+    uint64_t result = 0;
+    if (_cpuid_info.std_cpuid1_ecx.bits.movbe != 0)
+      result |= GLIBC_MOVBE;
+    if (_cpuid_info.std_cpuid1_ecx.bits.osxsave != 0)
+      result |= GLIBC_OSXSAVE;
+    if (_cpuid_info.std_cpuid1_ecx.bits.xsave != 0)
+      result |= GLIBC_XSAVE;
+    if (_cpuid_info.std_cpuid1_ecx.bits.avx != 0 &&
+        _cpuid_info.std_cpuid1_ecx.bits.osxsave != 0 &&
+        _cpuid_info.xem_xcr0_eax.bits.sse != 0 &&
+        _cpuid_info.xem_xcr0_eax.bits.ymm != 0) {
+      if (_cpuid_info.sef_cpuid7_ebx.bits.avx512f != 0 &&
+          _cpuid_info.xem_xcr0_eax.bits.opmask != 0 &&
+          _cpuid_info.xem_xcr0_eax.bits.zmm512 != 0 &&
+          _cpuid_info.xem_xcr0_eax.bits.zmm32 != 0) {
+        if (_cpuid_info.sef_cpuid7_ecx.bits.shstk != 0)
+          result |= GLIBC_SHSTK;
+      }
+    }
+    if (_cpuid_info.sef_cpuid7_edx.bits.ibt != 0)
+      result |= GLIBC_IBT;
+    // AMD|Hygon features.
+    if (is_amd_family()) {
+      if (_cpuid_info.ext_cpuid1_ecx.bits.fma4 != 0)
+        result |= GLIBC_FMA4;
+    }
     return result;
   }
 
@@ -737,8 +769,8 @@ enum Extended_Family {
 
   static void get_processor_features();
 
-  static uint64_t CPUFeatures_parse(const char *ccstr);
-  static void libc_not_using(uint64_t mask);
+  static uint64_t CPUFeatures_parse(const char *ccstr, uint64_t &glibc_features);
+  static void glibc_not_using(uint64_t excessive_CPU, uint64_t excessive_GLIBC);
 
 public:
   // Offsets for cpuid asm stub
@@ -773,6 +805,9 @@ public:
 
   static void insert_features_names(char* buf, size_t buflen, uint64_t features = _features) {
     Abstract_VM_Version::insert_features_names(buf, buflen, _features_names, features);
+  }
+  static void insert_glibc_features_names(char* buf, size_t buflen, uint64_t glibc_features) {
+    Abstract_VM_Version::insert_features_names(buf, buflen, _glibc_features_names, glibc_features);
   }
 
 

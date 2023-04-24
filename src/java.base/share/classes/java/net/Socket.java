@@ -126,7 +126,10 @@ public class Socket implements java.io.Closeable {
         } catch (Exception e) {
             throw new InternalError(e);
         }
+        initNative();
     }
+
+    private static native int initNative();
 
     /**
      * Creates an unconnected Socket.
@@ -1915,4 +1918,23 @@ public class Socket implements java.io.Closeable {
         }
         return options;
     }
+
+    /**
+     * Returns a pair of [ localAddr, remoteAddr ] used by socket with given descriptor.
+     * When the socket is not bound given element is <code>null</code>. When this does not
+     * represent an IPv4/IPv6 socket this method returns <code>null</code>.
+     *
+     * @param fd File descriptor number.
+     * @return Null or an array with length 2.
+     */
+    public static native InetSocketAddress[] getAddresses(int fd);
+
+    /**
+     * Returns the type of the socket represented by this file descriptor. The most common
+     * values are <code>tcp</code>, <code>tcp6</code>, <code>udp</code> or <code>udp6</code>.
+     *
+     * @param fd File descriptor number.
+     * @return Textual representation of the type.
+     */
+    public static native String getType(int fd);
 }

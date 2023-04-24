@@ -25,6 +25,8 @@
 
 package java.io;
 
+import java.net.InetSocketAddress;
+import java.net.Socket;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
@@ -372,7 +374,31 @@ public final class FileDescriptor {
         if (valid()) {
             JDKContext ctx = jdk.internal.crac.Core.getJDKContext();
             if (ctx.claimFdWeak(this, this)) {
-                String msg = "FileDescriptor " + this.fd + " left open. ";
+                String path = getPath();
+                String type = getType();
+                String info;
+                if ("socket".equals(type)) {
+                    InetSocketAddress[] addresses = Socket.getAddresses(fd);
+                    StringBuilder sb = new StringBuilder(Socket.getType(fd));
+                    if (addresses == null) {
+                        sb.append("not IPv4/IPv6");
+                    } else {
+                        if (addresses[0] != null) {
+                            sb.append(" local ").append(addresses[0]);
+                        } else {
+                            sb.append(" local not bound");
+                        }
+                        if (addresses[1] != null) {
+                            sb.append(" remote ").append(addresses[1]);
+                        } else {
+                            sb.append(" remote not bound");
+                        }
+                    }
+                    info = sb.toString();
+                } else {
+                    info = (path != null ? path : "unknown path") + " (" + (type != null ? type : "unknown") + ")";
+                }
+                String msg = "FileDescriptor " + this.fd + " left open: " + info + " ";
                 if (!JDKContext.Properties.COLLECT_FD_STACKTRACES) {
                     msg += JDKContext.COLLECT_FD_STACKTRACES_HINT;
                 }
@@ -381,10 +407,12 @@ public final class FileDescriptor {
         }
     }
 
+    private native String getPath();
+
+    private native String getType();
+
     private synchronized void afterRestore() {
-
     }
-
 
     /*
      * Close the raw file descriptor or handle, if it has not already been closed

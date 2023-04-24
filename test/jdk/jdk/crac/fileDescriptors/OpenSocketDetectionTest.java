@@ -26,30 +26,45 @@ import jdk.test.lib.crac.CracBuilder;
 import jdk.test.lib.crac.CracProcess;
 import jdk.test.lib.crac.CracTest;
 
-import java.io.FileReader;
+import java.io.IOException;
+import java.net.InetAddress;
+import java.net.ServerSocket;
+import java.net.Socket;
+import java.util.concurrent.CountDownLatch;
 
 /**
  * @test
  * @library /test/lib
- * @build OpenFileDetectionTest
+ * @build OpenSocketDetectionTest
  * @run driver jdk.test.lib.crac.CracTest
  */
-public class OpenFileDetectionTest implements CracTest {
+public class OpenSocketDetectionTest implements CracTest {
     @Override
     public void test() throws Exception {
-        CracProcess cp = new CracBuilder().captureOutput(true)
-                .javaOption("jdk.crac.collect-fd-stacktraces", "true")
+        CracProcess cp = new CracBuilder()
                 .startCheckpoint();
         cp.outputAnalyzer()
                 .shouldHaveExitValue(1)
-                .shouldContain("/etc/passwd")
-                .shouldContain("This file descriptor was created here");
+                .shouldMatch("left open: tcp6? local [/0-9a-f:.]+:[0-9]+ remote [/0-9a-f:.]+:[0-9]+");
     }
 
     @Override
     public void exec() throws Exception {
-        try (var reader = new FileReader("/etc/passwd")) {
-            Core.checkpointRestore();
-        }
+        ServerSocket serverSocket = new ServerSocket(0, 50, InetAddress.getLoopbackAddress());
+        CountDownLatch latch = new CountDownLatch(1);
+        Thread serverThread = new Thread(() -> {
+            try {
+                Socket socket = serverSocket.accept();
+                latch.countDown();
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+        });
+        serverThread.setDaemon(true);
+        serverThread.start();
+        Socket clientSocket = new Socket(InetAddress.getLoopbackAddress(), serverSocket.getLocalPort());
+        latch.await();
+        Core.checkpointRestore();
     }
+
 }

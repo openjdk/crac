@@ -6003,72 +6003,6 @@ static int stat2stfail(mode_t mode) {
   return JVM_CR_FAIL;
 }
 
-static bool find_sock_details(int sockino, const char* base, bool v6, char* buf, size_t sz) {
-  char filename[16];
-  snprintf(filename, sizeof(filename), "/proc/net/%s", base);
-  FILE* f = fopen(filename, "r");
-  if (!f) {
-    return false;
-  }
-  int r = fscanf(f, "%*[^\n]");
-  if (r) {} // suppress warn unused gcc diagnostic
-
-  char la[33], ra[33];
-  int lp, rp;
-  int ino;
-  //   sl  local_address         remote_address        st   tx_queue rx_queue tr tm->when retrnsmt   uid  timeout inode
-  //    0: 0100007F:08AE         00000000:0000         0A   00000000:00000000 00:00000000 00000000  1000        0 2988639
-  //  %4d: %08X%08X%08X%08X:%04X %08X%08X%08X%08X:%04X %02X %08X:%08X         %02X:%08lX  %08X       %5u      %8d %d
-  bool eof;
-  do {
-    eof = EOF == fscanf(f, "%*d: %[^:]:%X %[^:]:%X %*X %*X:%*X %*X:%*X %*X %*d %*d %d%*[^\n]\n",
-        la, &lp, ra, &rp, &ino);
-  } while (ino != sockino && !eof);
-  fclose(f);
-
-  if (ino != sockino) {
-    return false;
-  }
-
-  struct in6_addr a6l, a6r;
-  struct in_addr a4l, a4r;
-  if (v6) {
-    for (int i = 0; i < 4; ++i) {
-      sscanf(la + i * 8, "%8" PRIX32, a6l.s6_addr32 + i);
-      sscanf(ra + i * 8, "%8" PRIX32, a6r.s6_addr32 + i);
-    }
-  } else {
-    sscanf(la, "%" PRIX32, &a4l.s_addr);
-    sscanf(ra, "%" PRIX32, &a4r.s_addr);
-  }
-
-  int const af = v6 ? AF_INET6 : AF_INET;
-  void* const laddr = v6 ? (void*)&a6l : (void*)&a4l;
-  void* const raddr = v6 ? (void*)&a6r : (void*)&a4r;
-  char lstrb[48], rstrb[48];
-  const char* const lstr = ::inet_ntop(af, laddr, lstrb, sizeof(lstrb)) ? lstrb : "NONE";
-  const char* const rstr = ::inet_ntop(af, raddr, rstrb, sizeof(rstrb)) ? rstrb : "NONE";
-  int msgsz = snprintf(buf, sz, "%s localAddr %s localPort %d remoteAddr %s remotePort %d",
-        base, lstr, lp, rstr, rp);
-  return msgsz < (int)sz;
-}
-
-static const char* sock_details(const char* details, char* buf, size_t sz) {
-  int sockino;
-  if (sscanf(details, "socket:[%d]", &sockino) <= 0) {
-    return details;
-  }
-
-  const char* bases[] = { "tcp", "udp", "tcp6", "udp6", NULL };
-  for (const char** b = bases; *b; ++b) {
-    if (find_sock_details(sockino, *b, 2 <= b - bases, buf, sz)) {
-      return buf;
-    }
-  }
-
-  return details;
-}
-
 bool VM_Crac::read_shm(int shmid) {
   CracSHM shm(shmid);
   int shmfd = shm.open(O_RDONLY);
@@ -6124,10 +6058,10 @@ void VM_Crac::doit() {
     }
 
     char detailsbuf[PATH_MAX];
+    const char* type = stat2strtype(fds.get_stat(i)->st_mode);
     int linkret = readfdlink(i, detailsbuf, sizeof(detailsbuf));
     const char* details = 0 < linkret ? detailsbuf : "";
-    print_resources("JVM: FD fd=%d type=%s: details1=\"%s\" ",
-        i, stat2strtype(fds.get_stat(i)->st_mode), details);
+    print_resources("JVM: FD fd=%d type=%s path=\"%s\"", i, type, details);
 
     if (is_claimed_fd(i)) {
       print_resources("OK: claimed by java code\n");
@@ -6145,15 +6079,17 @@ void VM_Crac::doit() {
         print_resources("OK: jcmd socket\n");
         continue;
       }
-      details = sock_details(details, detailsbuf, sizeof(detailsbuf));
-      print_resources(" details2=\"%s\" ", details);
     }
 
     print_resources("BAD: opened by application\n");
     ok = false;
 
-    char* msg = NEW_C_HEAP_ARRAY(char, strlen(details) + 1, mtInternal);
-    strcpy(msg, details);
+    const int maxinfo = 64;
+    size_t buflen = strlen(details) + maxinfo;
+    char* msg = NEW_C_HEAP_ARRAY(char, buflen, mtInternal);
+    int ilen = snprintf(msg, maxinfo, "FD fd=%d type=%s path=", i, type);
+    ilen = ilen > maxinfo ? maxinfo : ilen;
+    strncpy(msg + ilen, detailsbuf, buflen - ilen);
     _failures->append(CracFailDep(stat2stfail(st->st_mode & S_IFMT), msg));
   }
 

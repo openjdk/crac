@@ -37,6 +37,8 @@ public interface Resource {
 
     /**
      * Invoked by a {@code Context} as a notification about checkpoint.
+     * The order of notification is subject to the {@link jdk.crac.Context} implementation,
+     * e.g. for the global context see {@link Core#getGlobalContext()}.
      *
      * @param context {@code Context} providing notification
      * @throws Exception if the method have failed
@@ -45,6 +47,8 @@ public interface Resource {
 
     /**
      * Invoked by a {@code Context} as a notification about restore.
+     * The order of notification is subject to the {@link jdk.crac.Context} implementation,
+     * e.g. for the global context see {@link Core#getGlobalContext()}.
      *
      * @param context {@code Context} providing notification
      * @throws Exception if the method have failed

@@ -1,4 +1,4 @@
-package jdk.crac;
+package jdk.internal.crac;
 
 /**
  * Some classes that could use logging are initialized early during the boot
@@ -7,7 +7,7 @@ package jdk.crac;
  * Therefore, we isolate the logger into a subclass and initialize lazily.
  */
 public class LoggerContainer {
-    public static final System.Logger logger = System.getLogger("jdk.crac");
+    public static final System.Logger logger = System.getLogger("jdk.internal.crac");
 
     public static void info(String msg) {
         logger.log(System.Logger.Level.INFO, msg);

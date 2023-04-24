@@ -37,8 +37,8 @@ public interface Resource {
 
     /**
      * Invoked by a {@code Context} as a notification about checkpoint.
-     * Order of checkpoint notification is the reverse order of
-     * {@link Context#register(Resource) registration}.
+     * The order of notification is subject to the {@link Context} implementation,
+     * e.g. for the global context see {@link Core#getGlobalContext()}.
      *
      * @param context {@code Context} providing notification
      * @throws Exception if the method have failed
@@ -47,9 +47,8 @@ public interface Resource {
 
     /**
      * Invoked by a {@code Context} as a notification about restore.
-     * Order of checkpoint notification is the reverse order of
-     * {@link #beforeCheckpoint(Context) checkpoint notification},
-     * hence the same as the order of {@link Context#register(Resource) registration}.
+     * The order of notification is subject to the {@link Context} implementation,
+     * e.g. for the global context see {@link Core#getGlobalContext()}.
      *
      * @param context {@code Context} providing notification
      * @throws Exception if the method have failed

@@ -103,6 +103,11 @@ public class Core {
 
     /**
      * Gets the global {@code Context} for checkpoint/restore notifications.
+     * Order of invoking {@link Resource#beforeCheckpoint(Context)} is the reverse
+     * of the order of {@link Context#register(Resource) registration}.
+     * Order of invoking {@link Resource#afterRestore(Context)} is the reverse
+     * of the order of {@link Resource#beforeCheckpoint(Context) checkpoint notification},
+     * hence the same as the order of {@link Context#register(Resource) registration}.
      *
      * @return the global {@code Context}
      */

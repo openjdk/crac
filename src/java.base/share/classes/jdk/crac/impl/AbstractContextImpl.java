@@ -23,6 +23,7 @@
 package jdk.crac.impl;
 
 import jdk.crac.*;
+import jdk.internal.crac.LoggerContainer;
 
 import java.util.*;
 import java.util.concurrent.TimeUnit;
@@ -109,7 +110,7 @@ public abstract class AbstractContextImpl<R extends Resource> extends Context<R>
             resources.remove(entry.getKey());
             currentPriority = entry.getKey();
             for (R r : entry.getValue()) {
-                LoggerContainer.debug("beforeCheckpoint {0}", r);
+                jdk.internal.crac.LoggerContainer.debug("beforeCheckpoint {0}", r);
                 try {
                     r.beforeCheckpoint(this);
                     restoreQ.add(r);
@@ -162,12 +163,12 @@ public abstract class AbstractContextImpl<R extends Resource> extends Context<R>
         try {
             RestoreException exception = null;
             for (Resource r : restoreQ) {
-                LoggerContainer.debug("afterRestore {0}", r);
+                jdk.internal.crac.LoggerContainer.debug("afterRestore {0}", r);
                 try {
                     r.afterRestore(this);
                 } catch (RestoreException e) {
                     // Print error early in case the restore process gets stuck
-                    LoggerContainer.error(e, "Failed to restore " + r);
+                    jdk.internal.crac.LoggerContainer.error(e, "Failed to restore " + r);
                     if (exception == null) {
                         exception = new RestoreException();
                     }

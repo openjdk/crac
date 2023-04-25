@@ -37,9 +37,11 @@
 #include "runtime/vm_version.hpp"
 #include "utilities/powerOfTwo.hpp"
 #include "utilities/virtualizationSupport.hpp"
-#include <sys/platform/x86.h>
 #include <sys/wait.h>
 #include <link.h>
+#ifdef __GLIBC__
+# include <sys/platform/x86.h>
+#endif
 
 #include OS_HEADER_INLINE(os)
 
@@ -663,6 +665,8 @@ uint64_t VM_Version::CPUFeatures_parse(const char *ccstr, uint64_t &glibc_featur
   return -1;
 }
 
+#ifdef __GLIBC__
+
 // sysdeps/x86/include/cpu-features.h
 enum
 {
@@ -763,7 +767,10 @@ static void pclose_r(const char *arg0, FILE *f, pid_t pid) {
   }
 }
 
+#endif // __GLIBC__
+
 void VM_Version::glibc_not_using(uint64_t excessive_CPU, uint64_t excessive_GLIBC) {
+#ifdef __GLIBC__
 #ifndef ASSERT
   if (!excessive_CPU && !excessive_GLIBC)
     return;
@@ -1110,6 +1117,7 @@ void VM_Version::glibc_not_using(uint64_t excessive_CPU, uint64_t excessive_GLIB
   jio_snprintf(errbuf, sizeof(errbuf), "Cannot re-execute " EXEC ": %m");
   vm_exit_during_initialization(errbuf);
 #undef EXEC
+#endif // __GLIBC__
 }
 
 void VM_Version::get_processor_features() {

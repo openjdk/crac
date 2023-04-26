@@ -51,16 +51,28 @@ public abstract class PriorityContext<P, R extends Resource> extends AbstractCon
 
     @Override
     protected void runBeforeCheckpoint() {
-        if (categories.isEmpty()) {
-            return;
-        }
-        // This type of iteration should be O(N*log(N)), same as sorting, and does not suffer
-        // from concurrent modifications. We'll track modifications for lower priorities in register()
-        var entry  = categories.firstEntry();
-        while (entry != null) {
+        Map.Entry<P, SubContext> entry;
+        // We will use fine-grained synchronization to allow registration for higher category
+        // in another thread.
+        synchronized (this) {
+            if (categories.isEmpty()) {
+                return;
+            }
+            // This type of iteration should be O(N*log(N)), same as sorting, and does not suffer
+            // from concurrent modifications. We'll track modifications for lower priorities in register()
+            entry = categories.firstEntry();
             lastPriority = entry.getKey();
+        }
+        for (;;) {
             invokeBeforeCheckpoint(entry.getValue());
-            entry = categories.higherEntry(entry.getKey());
+            synchronized (this) {
+                entry = categories.higherEntry(entry.getKey());
+                if (entry != null) {
+                    lastPriority = entry.getKey();
+                } else {
+                    return;
+                }
+            }
         }
     }
 

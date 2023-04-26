@@ -65,7 +65,11 @@ public abstract class AbstractContextImpl<R extends Resource> extends Context<R>
     }
 
     @Override
-    public synchronized void beforeCheckpoint(Context<? extends Resource> context) {
+    public void beforeCheckpoint(Context<? extends Resource> context) {
+        // We won't synchronize access to restoreQ because methods
+        // beforeCheckpoint and afterRestore should be invoked only
+        // by the single thread performing the C/R and other threads should
+        // not touch that.
         restoreQ = new ArrayList<>();
         runBeforeCheckpoint();
         Collections.reverse(restoreQ);
@@ -75,13 +79,8 @@ public abstract class AbstractContextImpl<R extends Resource> extends Context<R>
 
     @Override
     public void afterRestore(Context<? extends Resource> context) {
-        List<Resource> queue;
-        // We do not synchronize the whole process to not prevent further
-        // resources from registering in other threads during afterRestore
-        synchronized (this) {
-            queue = restoreQ;
-            restoreQ = null;
-        }
+        List<Resource> queue = restoreQ;
+        restoreQ = null;
         runAfterRestore(queue);
     }
 

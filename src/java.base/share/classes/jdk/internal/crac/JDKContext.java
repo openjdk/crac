@@ -89,13 +89,13 @@ public class JDKContext extends PriorityContext<JDKResource.Priority, JDKResourc
     }
 
     @Override
-    public synchronized void beforeCheckpoint(Context<? extends Resource> context) {
+    public void beforeCheckpoint(Context<? extends Resource> context) {
         claimedFds = new WeakHashMap<>();
         super.beforeCheckpoint(context);
     }
 
     @Override
-    public synchronized void afterRestore(Context<? extends Resource> context) {
+    public void afterRestore(Context<? extends Resource> context) {
         super.afterRestore(context);
         claimedFds = null;
     }

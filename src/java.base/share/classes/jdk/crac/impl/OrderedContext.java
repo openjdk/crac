@@ -64,13 +64,14 @@ public class OrderedContext<R extends Resource> extends AbstractContextImpl<R> {
 
     @Override
     protected void runBeforeCheckpoint() {
-        checkpointing = true;
-        List<R> resources = this.resources.entrySet().stream()
-                .sorted(Collections.reverseOrder(Map.Entry.comparingByValue()))
-                .map(Map.Entry::getKey)
-                .toList();
-
-        CheckpointException exception = null;
+        List<R> resources;
+        synchronized (this) {
+            checkpointing = true;
+            resources = this.resources.entrySet().stream()
+                    .sorted(Collections.reverseOrder(Map.Entry.comparingByValue()))
+                    .map(Map.Entry::getKey)
+                    .toList();
+        }
         for (R r : resources) {
             invokeBeforeCheckpoint(r);
         }

@@ -216,6 +216,7 @@ jobs:
           - jdk/tier1 part 1
           - jdk/tier1 part 2
           - jdk/tier1 part 3
+          - jdk/crac
           - langtools/tier1
           - hs/tier1 common
           - hs/tier1 compiler
@@ -229,6 +230,9 @@ jobs:
             suites: test/jdk/:tier1_part2
           - test: jdk/tier1 part 3
             suites: test/jdk/:tier1_part3
+          - test: jdk/crac
+            suites: test/jdk/jdk/crac
+            artifact: -debug
           - test: langtools/tier1
             suites: test/langtools/:tier1
           - test: hs/tier1 common
@@ -253,6 +257,9 @@ jobs:
       BOOT_JDK_FILENAME: "${{ fromJson(needs.prerequisites.outputs.dependencies).LINUX_X64_BOOT_JDK_FILENAME }}"
       BOOT_JDK_URL: "${{ fromJson(needs.prerequisites.outputs.dependencies).LINUX_X64_BOOT_JDK_URL }}"
       BOOT_JDK_SHA256: "${{ fromJson(needs.prerequisites.outputs.dependencies).LINUX_X64_BOOT_JDK_SHA256 }}"
+      CRIU_FILENAME: "${{ fromJson(needs.prerequisites.outputs.dependencies).LINUX_X64_CRIU_FILENAME }}"
+      CRIU_URL: "${{ fromJson(needs.prerequisites.outputs.dependencies).LINUX_X64_CRIU_URL }}"
+      CRIU_SHA256: "${{ fromJson(needs.prerequisites.outputs.dependencies).LINUX_X64_CRIU_SHA256 }}"
 
     steps:
       - name: Checkout the source
@@ -273,6 +280,23 @@ jobs:
           tar -xf "${HOME}/bootjdk/${BOOT_JDK_FILENAME}" -C "${HOME}/bootjdk/${BOOT_JDK_VERSION}"
           mv "${HOME}/bootjdk/${BOOT_JDK_VERSION}/"*/* "${HOME}/bootjdk/${BOOT_JDK_VERSION}/"
         if: steps.bootjdk.outputs.cache-hit != 'true'
+
+      - name: Restore CRIU from cache
+        id: criu
+        uses: actions/cache@v3
+        with:
+          path: ~/criu/criu
+          key: criu-${{ runner.os }}-${{ env.CRIU_SHA256 }}
+
+      - name: Download CRIU
+        run: |
+          mkdir -p "${HOME}/criu"
+          wget -O "${HOME}/criu/${CRIU_FILENAME}" "${CRIU_URL}"
+          echo "${CRIU_SHA256} ${HOME}/criu/${CRIU_FILENAME}" | sha256sum -c >/dev/null -
+          tar -xf "${HOME}/criu/${CRIU_FILENAME}" -C "${HOME}/criu"
+          criu=`find $HOME/criu -type f -name criu`
+          mv ${criu} ${HOME}/criu/criu
+        if: steps.criu.outputs.cache-hit != 'true'
 
       - name: Restore jtreg artifact
         id: jtreg_restore
@@ -318,6 +342,14 @@ jobs:
         run: |
           imageroot=`find ${HOME}/jdk-linux-x64${{ matrix.artifact }}/jdk-${{ env.JDK_VERSION }}-internal+0_linux-x64_bin${{ matrix.artifact }} -name release -type f`
           echo "imageroot=`dirname ${imageroot}`" >> $GITHUB_ENV
+
+      - name: Install CRIU into libraries
+        run: |
+          criuengine=`find ${HOME}/jdk-linux-x64${{ matrix.artifact }}/jdk-${{ env.JDK_VERSION }}-internal+0_linux-x64_bin${{ matrix.artifact }} -name criuengine -type f`
+          criu=`dirname ${criuengine}`/criu
+          cp "${HOME}/criu/criu" ${criu}
+          sudo chown root:root ${criu}
+          sudo chmod u+s ${criu}
 
       - name: Run tests
         run: >
@@ -681,6 +713,7 @@ jobs:
           - jdk/tier1 part 1
           - jdk/tier1 part 2
           - jdk/tier1 part 3
+          - jdk/crac
           - langtools/tier1
           - hs/tier1 common
           - hs/tier1 compiler
@@ -694,6 +727,8 @@ jobs:
             suites: test/jdk/:tier1_part2
           - test: jdk/tier1 part 3
             suites: test/jdk/:tier1_part3
+          - test: jdk/crac
+            suites: test/jdk/jdk/crac
           - test: langtools/tier1
             suites: test/langtools/:tier1
           - test: hs/tier1 common

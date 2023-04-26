@@ -26,11 +26,9 @@
 
 package jdk.internal.crac;
 
-import jdk.crac.CheckpointException;
 import jdk.crac.Context;
 import jdk.crac.Resource;
-import jdk.crac.RestoreException;
-import jdk.crac.impl.AbstractContextImpl;
+import jdk.crac.impl.PriorityContext;
 import jdk.internal.access.JavaIOFileDescriptorAccess;
 import jdk.internal.access.SharedSecrets;
 import sun.security.action.GetBooleanAction;
@@ -40,12 +38,22 @@ import java.io.FileDescriptor;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.*;
+import java.util.Comparator;
+import java.util.Map;
+import java.util.WeakHashMap;
 import java.util.stream.Collectors;
 
-public class JDKContext extends AbstractContextImpl<JDKResource, Void> {
+public class JDKContext extends PriorityContext<JDKResource.Priority, JDKResource> {
     public static final String COLLECT_FD_STACKTRACES_PROPERTY = "jdk.crac.collect-fd-stacktraces";
     public static final String COLLECT_FD_STACKTRACES_HINT = "Use -D" + COLLECT_FD_STACKTRACES_PROPERTY + "=true to find the source.";
+
+    // We cannot use method references/lambdas when the context is created
+    public static final Comparator<JDKResource.Priority> PRIORITY_COMPARATOR = new Comparator<>() {
+        @Override
+        public int compare(JDKResource.Priority p1, JDKResource.Priority p2) {
+            return p1.compareTo(p2);
+        }
+    };
 
     // JDKContext by itself is initialized too early when system properties are not set yet
     public static class Properties {
@@ -54,6 +62,10 @@ public class JDKContext extends AbstractContextImpl<JDKResource, Void> {
     }
 
     private WeakHashMap<FileDescriptor, Object> claimedFds;
+
+    public JDKContext() {
+        super(PRIORITY_COMPARATOR);
+    }
 
     public boolean matchClasspath(String path) {
         Path p = Path.of(path);
@@ -76,24 +88,21 @@ public class JDKContext extends AbstractContextImpl<JDKResource, Void> {
         return false;
     }
 
-    JDKContext() {
-    }
-
     @Override
-    public synchronized void beforeCheckpoint(Context<? extends Resource> context) throws CheckpointException {
+    public synchronized void beforeCheckpoint(Context<? extends Resource> context) {
         claimedFds = new WeakHashMap<>();
         super.beforeCheckpoint(context);
     }
 
     @Override
-    public synchronized void afterRestore(Context<? extends Resource> context) throws RestoreException {
+    public synchronized void afterRestore(Context<? extends Resource> context) {
         super.afterRestore(context);
         claimedFds = null;
     }
 
     @Override
     public void register(JDKResource resource) {
-        register(resource, resource.getPriority().ordinal());
+        register(resource, resource.getPriority());
     }
 
     public Map<Integer, Object> getClaimedFds() {

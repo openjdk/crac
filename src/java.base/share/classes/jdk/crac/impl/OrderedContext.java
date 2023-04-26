@@ -26,23 +26,61 @@
 
 package jdk.crac.impl;
 
-import jdk.crac.Resource;
-import jdk.crac.impl.AbstractContextImpl;
+import jdk.crac.*;
 
-import java.util.Comparator;
+import java.util.Collections;
+import java.util.List;
 import java.util.Map;
+import java.util.WeakHashMap;
 
-public class OrderedContext extends AbstractContextImpl<Resource, Long> {
-    private long order;
+public class OrderedContext<R extends Resource> extends AbstractContextImpl<R> {
+    private final String name;
+    private boolean checkpointing = false;
+    protected long order = 0;
+    protected final WeakHashMap<R, Long> resources = new WeakHashMap<>();
 
     public OrderedContext() {
+        this(null);
+    }
+
+    public OrderedContext(String name) {
+        this.name = name;
     }
 
     @Override
-    public synchronized void register(Resource r) {
-        // Priorities are executed from lowest to highest; in order to call
-        // beforeCheckpoint in reverse order compared to registration we use
-        // descending numbers.
-        register(r, Long.MAX_VALUE - (order++));
+    public String toString() {
+        return name != null ? name : super.toString();
+    }
+
+    @Override
+    public synchronized void register(R r) {
+        resources.put(r, order++);
+        // It is possible that something registers to us during restore but before
+        // this context's afterRestore was called.
+        if (checkpointing && !Core.isRestoring()) {
+            setModified(r, null);
+        }
+    }
+
+    @Override
+    protected void runBeforeCheckpoint() {
+        checkpointing = true;
+        List<R> resources = this.resources.entrySet().stream()
+                .sorted(Collections.reverseOrder(Map.Entry.comparingByValue()))
+                .map(Map.Entry::getKey)
+                .toList();
+
+        CheckpointException exception = null;
+        for (R r : resources) {
+            invokeBeforeCheckpoint(r);
+        }
+    }
+
+    @Override
+    public void afterRestore(Context<? extends Resource> context) {
+        synchronized (this) {
+            checkpointing = false;
+        }
+        super.afterRestore(context);
     }
 }

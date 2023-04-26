@@ -23,177 +23,85 @@
 package jdk.crac.impl;
 
 import jdk.crac.*;
+import jdk.internal.crac.LoggerContainer;
 
-import java.util.*;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.locks.ReentrantLock;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
 
-public abstract class AbstractContextImpl<R extends Resource, P> extends Context<R> {
-    private WeakHashMap<R, Long> resources = new WeakHashMap<>();
-    // Queue content is temporary, so we won't mind that it's not a weak reference
-    private Queue<Map.Entry<R, Long>> resourceQueue = new LinkedList<>();
-    private List<R> restoreQ = null;
-    private volatile long currentPriority = -1;
-    // We use two locks: checkpointLock is required for both running the beforeCheckpoint
-    // and registering a new resource, while restoreLock is required for running afterRestore
-    // and beforeCheckpoint (to achieve exclusivity of before and after). It is fine
-    // to acquire checkpointLock and register a new resource during afterRestore.
-    private final ReentrantLock checkpointLock = new ReentrantLock();
-    private final ReentrantLock restoreLock = new ReentrantLock();
+public abstract class AbstractContextImpl<R extends Resource> extends Context<R> {
+    protected List<Resource> restoreQ = null;
 
-    protected void register(R resource, long priority) {
-        assert priority >= 0;
-        boolean locked = false;
-        try {
-            // We don't want to deadlock if the registration happens from another thread
-            while (!checkpointLock.tryLock(10, TimeUnit.MILLISECONDS)) {
-                throwIfCheckpointInProgress(priority);
-            }
-            locked = true;
-            // This is important for the case of recursive registration
-            throwIfCheckpointInProgress(priority);
-            if (currentPriority < 0) {
-                resources.put(resource, priority);
-            } else {
-                resourceQueue.add(Map.entry(resource, priority));
-            }
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-        } finally {
-            if (locked) {
-                checkpointLock.unlock();
-            }
+    protected static <E extends Exception> void recordExceptions(E source) {
+        Throwable[] suppressed = source.getSuppressed();
+        if (suppressed.length == 0) {
+            Core.recordException(source);
+        }
+        for (Throwable t : suppressed) {
+            Core.recordException(t);
         }
     }
 
-    private void throwIfCheckpointInProgress(long priority) {
-        if (priority <= currentPriority) {
-            throw new IllegalStateException("Notifications for an upcoming checkpoint are already in progress (priority "
-                    + currentPriority + "). Please make sure to register this resource earlier or use higher priorty (" + priority + ")");
+    protected void setModified(R resource, String msg) {
+        Core.recordException(new CheckpointException(
+                "Adding resource " + resource + " to " + this + (msg != null ? msg : "")));
+    }
+
+    protected void invokeBeforeCheckpoint(Resource resource) {
+        LoggerContainer.debug("beforeCheckpoint {0}", resource);
+        // Resource.afterRestore is invoked even if Resource.beforeCheckpoint fails
+        restoreQ.add(resource);
+        try {
+            resource.beforeCheckpoint(semanticContext());
+        } catch (CheckpointException e) {
+            recordExceptions(e);
+        } catch (Exception e) {
+            Core.recordException(e);
         }
+    }
+
+    protected Context<? extends Resource> semanticContext() {
+        return this;
     }
 
     @Override
-    public void beforeCheckpoint(Context<? extends Resource> context) throws CheckpointException {
-        // If afterRestore is running we need to delay the beforeCheckpoint
-        restoreLock.lock();
-        try {
-            checkpointLock.lock();
-            try {
-                runBeforeCheckpoint();
-            } finally {
-                if (restoreQ != null) {
-                    Collections.reverse(restoreQ);
-                }
-                currentPriority = -1;
-                checkpointLock.unlock();
-            }
-        } finally {
-            restoreLock.unlock();
-        }
+    public synchronized void beforeCheckpoint(Context<? extends Resource> context) {
+        restoreQ = new ArrayList<>();
+        runBeforeCheckpoint();
+        Collections.reverse(restoreQ);
     }
 
-    private void runBeforeCheckpoint() throws CheckpointException {
-        Map.Entry<R, Long> drained;
-        while ((drained = resourceQueue.poll()) != null) {
-            resources.put(drained.getKey(), drained.getValue());
-        }
-        CheckpointException exception = null;
-        TreeMap<Long, List<R>> resources = this.resources.entrySet().stream().collect(
-                TreeMap::new, (m, e) -> m.computeIfAbsent(e.getValue(), p -> new ArrayList<>()).add(e.getKey()), TreeMap::putAll);
-        restoreQ = new ArrayList<>(this.resources.size());
-
-        // We cannot simply iterate because we could cause mutations
-        while (!resources.isEmpty()) {
-            var entry = resources.firstEntry();
-            resources.remove(entry.getKey());
-            currentPriority = entry.getKey();
-            for (R r : entry.getValue()) {
-                LoggerContainer.debug("beforeCheckpoint {0}", r);
-                try {
-                    r.beforeCheckpoint(this);
-                    restoreQ.add(r);
-                } catch (CheckpointException e) {
-                    enqueueIfContext(r);
-                    if (exception == null) {
-                        exception = new CheckpointException();
-                    }
-                    Throwable[] suppressed = e.getSuppressed();
-                    if (suppressed.length == 0) {
-                        exception.addSuppressed(e);
-                    }
-                    for (Throwable t : suppressed) {
-                        exception.addSuppressed(t);
-                    }
-                } catch (Exception e) {
-                    enqueueIfContext(r);
-                    if (exception == null) {
-                        exception = new CheckpointException();
-                    }
-                    exception.addSuppressed(e);
-                }
-            }
-            while ((drained = resourceQueue.poll()) != null) {
-                if (drained.getValue() <= currentPriority) {
-                    // this should be prevented in register method
-                    throw new IllegalStateException();
-                }
-                resources.computeIfAbsent(drained.getValue(), p -> new ArrayList<>()).add(drained.getKey());
-            }
-        }
-
-        if (exception != null) {
-            throw exception;
-        }
-    }
-
-    private void enqueueIfContext(R r) {
-        // When the resource itself is a context it contains other resources that should
-        // be restored upon unsuccessful checkpoint (if the beforeCheckpoint has thrown
-        // we are going to call afterRestore on all checkpointed resources immediately)
-        if (r instanceof Context<?>) {
-            restoreQ.add(r);
-        }
-    }
+    protected abstract void runBeforeCheckpoint();
 
     @Override
-    public void afterRestore(Context<? extends Resource> context) throws RestoreException {
-        restoreLock.lock();
-        try {
-            RestoreException exception = null;
-            for (Resource r : restoreQ) {
-                LoggerContainer.debug("afterRestore {0}", r);
-                try {
-                    r.afterRestore(this);
-                } catch (RestoreException e) {
-                    // Print error early in case the restore process gets stuck
-                    LoggerContainer.error(e, "Failed to restore " + r);
-                    if (exception == null) {
-                        exception = new RestoreException();
-                    }
-                    Throwable[] suppressed = e.getSuppressed();
-                    if (suppressed.length == 0) {
-                        exception.addSuppressed(e);
-                    }
-                    for (Throwable t : suppressed) {
-                        exception.addSuppressed(t);
-                    }
-                } catch (Exception e) {
-                    // Print error early in case the restore process gets stuck
-                    LoggerContainer.error(e, "Failed to restore " + r);
-                    if (exception == null) {
-                        exception = new RestoreException();
-                    }
-                    exception.addSuppressed(e);
-                }
-            }
+    public void afterRestore(Context<? extends Resource> context) {
+        List<Resource> queue;
+        // We do not synchronize the whole process to not prevent further
+        // resources from registering in other threads during afterRestore
+        synchronized (this) {
+            queue = restoreQ;
             restoreQ = null;
+        }
+        runAfterRestore(queue);
+    }
 
-            if (exception != null) {
-                throw exception;
+    private void runAfterRestore(List<Resource> queue) {
+        if (queue == null) {
+            return;
+        }
+        for (Resource r : queue) {
+            LoggerContainer.debug("afterRestore {0}", r);
+            try {
+                r.afterRestore(semanticContext());
+            } catch (RestoreException e) {
+                // Print error early in case the restore process gets stuck
+                LoggerContainer.error(e, "Failed to restore " + r);
+                recordExceptions(e);
+            } catch (Exception e) {
+                // Print error early in case the restore process gets stuck
+                LoggerContainer.error(e, "Failed to restore " + r);
+                Core.recordException(e);
             }
-        } finally {
-            restoreLock.unlock();
         }
     }
 }

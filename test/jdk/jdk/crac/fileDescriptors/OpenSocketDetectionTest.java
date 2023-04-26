@@ -36,12 +36,12 @@ import java.util.concurrent.CountDownLatch;
  * @test
  * @library /test/lib
  * @build OpenSocketDetectionTest
- * @run driver jdk.test.lib.crac.CracTest
+ * @run driver/timeout=10 jdk.test.lib.crac.CracTest
  */
 public class OpenSocketDetectionTest implements CracTest {
     @Override
     public void test() throws Exception {
-        CracProcess cp = new CracBuilder()
+        CracProcess cp = new CracBuilder().captureOutput(true)
                 .startCheckpoint();
         cp.outputAnalyzer()
                 .shouldHaveExitValue(1)

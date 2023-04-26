@@ -22,6 +22,7 @@
  */
 
 import jdk.crac.*;
+import jdk.test.lib.Utils;
 import jdk.test.lib.crac.CracBuilder;
 import jdk.test.lib.crac.CracEngine;
 import jdk.test.lib.crac.CracTest;
@@ -36,9 +37,10 @@ public class LazyProps implements CracTest {
     @Override
     public void test() throws Exception {
         new CracBuilder().engine(CracEngine.SIMULATE)
+                .javaOption("java.util.logging.config.file", Utils.TEST_SRC + "/logging.properties")
                 .captureOutput(true)
                 .startCheckpoint().waitForSuccess()
-                .outputAnalyzer().shouldContain("jdk.crac beforeCheckpoint");
+                .outputAnalyzer().shouldContain("beforeCheckpoint LazyProps");
     }
 
     @Override
@@ -51,7 +53,6 @@ public class LazyProps implements CracTest {
         };
         Core.getGlobalContext().register(resource);
 
-        System.setProperty("jdk.crac.debug", "true");
         Core.checkpointRestore();
     }
 }

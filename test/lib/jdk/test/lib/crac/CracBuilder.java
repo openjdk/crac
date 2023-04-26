@@ -31,6 +31,7 @@ public class CracBuilder {
     boolean debug = false;
     final List<String> classpathEntries = new ArrayList<>();
     final Map<String, String> env = new HashMap<>();
+    final Map<String, String> javaOptions = new HashMap<>();
     String imageDir = DEFAULT_IMAGE_DIR;
     CracEngine engine;
     boolean printResources;
@@ -96,6 +97,11 @@ public class CracBuilder {
 
     public CracBuilder env(String name, String value) {
         env.put(name, value);
+        return this;
+    }
+
+    public CracBuilder javaOption(String name, String value) {
+        javaOptions.put(name, value);
         return this;
     }
 
@@ -305,7 +311,11 @@ public class CracBuilder {
         }
         if (debug) {
             cmd.add("-agentlib:jdwp=transport=dt_socket,server=y,suspend=y,address=0.0.0.0:5005");
+            cmd.add("-XX:+UnlockExperimentalVMOptions");
             cmd.add("-XX:-CRDoThrowCheckpointException");
+        }
+        for (var entry : javaOptions.entrySet()) {
+            cmd.add("-D" + entry.getKey() + "=" + entry.getValue());
         }
         return cmd;
     }

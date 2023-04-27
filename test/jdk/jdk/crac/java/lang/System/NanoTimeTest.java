@@ -70,7 +70,7 @@ public class NanoTimeTest implements CracTest {
         Path bootIdFile = Files.createTempFile("NanoTimeTest-", "-boot_id");
         try {
             // TODO: use more official image
-            builder.withBaseImage("ghcr.io/rvansa/crac-test-base", "latest")
+            builder.withBaseImage("ghcr.io/crac/test-base", "latest")
                     .dockerOptions("-v", bootIdFile + ":/fake_boot_id")
                     .inDockerImage(imageName);
 

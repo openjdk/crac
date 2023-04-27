@@ -2042,7 +2042,12 @@ void os::record_time_before_checkpoint() {
 void os::update_javaTimeNanos_offset() {
   char buf[UUID_LENGTH + 1];
   // We will change the nanotime offset only if this is not the same boot
-  // to prevent reducing the accuracy of System.nanoTime() unnecessarily
+  // to prevent reducing the accuracy of System.nanoTime() unnecessarily.
+  // It is possible that in a real-world case the boot_id does not change
+  // (containers keep the boot_id) - but the monotonic time changes. We will
+  // only guarantee that the nanotime does not go backwards in that case but
+  // won't offset the time based on wall-clock time as this change in monotonic
+  // time is likely intentional.
   if (!read_bootid(buf, sizeof(buf)) || strncmp(buf, checkpoint_bootid, UUID_LENGTH) != 0) {
     assert(checkpoint_millis >= 0, "Restore without a checkpoint?");
     long diff_millis = javaTimeMillis() - checkpoint_millis;
@@ -2050,8 +2055,15 @@ void os::update_javaTimeNanos_offset() {
     if (diff_millis < 0) {
       diff_millis = 0;
     }
-    // Make the javaTimeNanos() on the next line return true monotonic time
+    // javaTimeNanos() call on the second line below uses the *_offset, so we will zero
+    // it to make the call return true monotonic time rather than the adjusted value.
     javaTimeNanos_offset = 0;
     javaTimeNanos_offset = checkpoint_nanos - javaTimeNanos() + diff_millis * 1000000L;
+  } else {
+    // ensure monotonicity even if this looks like the same boot
+    jlong diff = javaTimeNanos() - checkpoint_nanos;
+    if (diff < 0) {
+      javaTimeNanos_offset -= diff;
+    }
   }
 }

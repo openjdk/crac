@@ -46,15 +46,20 @@ import static jdk.test.lib.Asserts.*;
  * @requires docker.support
  * @library /test/lib
  * @build NanoTimeTest
- * @run driver jdk.test.lib.crac.CracTest 0
- * @run driver jdk.test.lib.crac.CracTest 86400
- * @run driver jdk.test.lib.crac.CracTest -86400
+ * @run driver jdk.test.lib.crac.CracTest      0 true
+ * @run driver jdk.test.lib.crac.CracTest  86400 true
+ * @run driver jdk.test.lib.crac.CracTest -86400 true
+ * @run driver jdk.test.lib.crac.CracTest  86400 false
+ * @run driver jdk.test.lib.crac.CracTest -86400 false
  */
 public class NanoTimeTest implements CracTest {
     private static final String imageName = Common.imageName("system-nanotime");
 
-    @CracTestArg
+    @CracTestArg(0)
     long monotonicOffset;
+
+    @CracTestArg(1)
+    boolean changeBootId;
 
     @Override
     public void test() throws Exception {
@@ -76,7 +81,9 @@ public class NanoTimeTest implements CracTest {
                     "-e", "PATH_MAPPING=/proc/sys/kernel/random/boot_id:/fake_boot_id",
                     CracBuilder.CONTAINER_NAME, CracBuilder.DOCKER_JAVA);
 
-            Files.writeString(bootIdFile, "yyyyyyyy-yyyy-yyyy-yyyy-yyyyyyyyyyyy");
+            if (changeBootId) {
+                Files.writeString(bootIdFile, "yyyyyyyy-yyyy-yyyy-yyyy-yyyyyyyyyyyy");
+            }
 
             builder.doRestore(Container.ENGINE_COMMAND, "exec", CracBuilder.CONTAINER_NAME,
                     "unshare", "--fork", "--time", "--boottime", "86400", "--monotonic", String.valueOf(monotonicOffset),
@@ -99,11 +106,15 @@ public class NanoTimeTest implements CracTest {
         System.out.println("Before: " + before);
         System.out.println("After: " + after);
         assertLTE(before, after, "After < Before");
-        // Even though we have shifted the monotic offset by a day the difference
-        // is adjusted by difference between wall clock time before and after;
-        // the difference in monotonic time is considered "random"
-        assertLT(after, before + TimeUnit.HOURS.toNanos(1), "After too late");
-
+        if (changeBootId || monotonicOffset <= 0) {
+            // Even though we have shifted the monotic offset by a day the difference
+            // is adjusted by difference between wall clock time before and after;
+            // the difference in monotonic time is considered "random"
+            assertLT(after, before + TimeUnit.HOURS.toNanos(1), "After too late");
+        } else {
+            assertGT(after, before + TimeUnit.HOURS.toNanos(1), "After too early");
+            assertLT(after, before + TimeUnit.HOURS.toNanos(25), "After too late");
+        }
         long boottimeAfter = readSystemUptime();
         assertGTE(boottimeAfter, boottimeBefore + 86_400_000, "Boottime was not changed");
         RuntimeMXBean runtimeMX = ManagementFactory.getRuntimeMXBean();

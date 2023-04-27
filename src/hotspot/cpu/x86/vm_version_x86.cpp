@@ -1015,7 +1015,7 @@ void VM_Version::glibc_not_using(uint64_t excessive_CPU, uint64_t excessive_GLIB
 #define TUNABLES_NAME "GLIBC_TUNABLES"
   char *env_val = disable_str;
   const char *env = getenv(TUNABLES_NAME);
-  char env_buf[strlen(disable_str) + strlen(env) + 100];
+  char env_buf[strlen(disable_str) + (!env ? 0 : strlen(env) + 100)];
   if (env) {
     if (ShowCPUFeatures) {
       tty->print_cr("Original environment variable: " TUNABLES_NAME "=%s", env);

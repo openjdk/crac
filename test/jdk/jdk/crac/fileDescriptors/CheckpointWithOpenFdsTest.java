@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022, Azul Systems, Inc. All rights reserved.
+ * Copyright (c) 2023, Azul Systems, Inc. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -21,46 +21,32 @@
  * questions.
  */
 
-import java.io.*;
-import java.lang.ref.Cleaner;
-
-import jdk.crac.*;
+import jdk.crac.Core;
+import jdk.test.lib.Utils;
 import jdk.test.lib.crac.CracBuilder;
-import jdk.test.lib.crac.CracEngine;
 import jdk.test.lib.crac.CracTest;
+import java.nio.file.Path;
+import java.util.*;
 
 /**
  * @test
  * @library /test/lib
- * @build RefQueueTest
+ * @build CheckpointWithOpenFdsTest
  * @run driver jdk.test.lib.crac.CracTest
  */
-public class RefQueueTest implements CracTest {
-    private static final Cleaner cleaner = Cleaner.create();
+public class CheckpointWithOpenFdsTest implements CracTest {
+    private static final String EXTRA_FD_WRAPPER = Path.of(Utils.TEST_SRC, "extra_fd_wrapper.sh").toString();
 
     @Override
     public void test() throws Exception {
-        new CracBuilder().engine(CracEngine.SIMULATE)
-                .startCheckpoint().waitForSuccess();
+        CracBuilder builder = new CracBuilder();
+        builder.startCheckpoint(Arrays.asList(EXTRA_FD_WRAPPER, CracBuilder.JAVA)).waitForCheckpointed();
+        builder.captureOutput(true).doRestore().outputAnalyzer().shouldContain(RESTORED_MESSAGE);
     }
 
     @Override
     public void exec() throws Exception {
-        File badFile = File.createTempFile("jtreg-RefQueueTest", null);
-        OutputStream badStream = new FileOutputStream(badFile);
-        badStream.write('j');
-        badFile.delete();
-
-        // the cleaner would be able to run right away
-        cleaner.register(new Object(), () -> {
-            try {
-                badStream.close();
-            } catch (IOException e) {
-                throw new RuntimeException(e);
-            }
-        });
-
-        // should close the file and only then go to the native checkpoint
         Core.checkpointRestore();
+        System.out.println(RESTORED_MESSAGE);
     }
 }

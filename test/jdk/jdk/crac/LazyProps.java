@@ -22,34 +22,36 @@
  */
 
 import jdk.crac.*;
-import jdk.test.lib.process.ProcessTools;
-import jdk.test.lib.process.OutputAnalyzer;
+import jdk.test.lib.crac.CracBuilder;
+import jdk.test.lib.crac.CracEngine;
+import jdk.test.lib.crac.CracTest;
 
 /**
  * @test
  * @library /test/lib
- * @run main LazyProps
+ * @build LazyProps
+ * @run driver jdk.test.lib.crac.CracTest
  */
-public class LazyProps {
-    static public void main(String[] args) throws Exception {
-        if (args.length == 0) {
-            OutputAnalyzer output = ProcessTools.executeTestJvm(
-                    "-XX:CREngine=simengine", "-XX:CRaCCheckpointTo=./cr",
-                    "LazyProps",
-                    "-runTest");
-            output.shouldHaveExitValue(0);
-            output.shouldContain("jdk.crac beforeCheckpoint");
-        } else {
-            Resource resource = new Resource() {
-                @Override
-                public void beforeCheckpoint(Context<? extends Resource> context) throws Exception { }
-                @Override
-                public void afterRestore(Context<? extends Resource> context) throws Exception { }
-            };
-            Core.getGlobalContext().register(resource);
+public class LazyProps implements CracTest {
+    @Override
+    public void test() throws Exception {
+        new CracBuilder().engine(CracEngine.SIMULATE)
+                .captureOutput(true)
+                .startCheckpoint().waitForSuccess()
+                .outputAnalyzer().shouldContain("jdk.crac beforeCheckpoint");
+    }
 
-            System.setProperty("jdk.crac.debug", "true");
-            Core.checkpointRestore();
-        }
+    @Override
+    public void exec() throws RestoreException, CheckpointException {
+        Resource resource = new Resource() {
+            @Override
+            public void beforeCheckpoint(Context<? extends Resource> context) throws Exception { }
+            @Override
+            public void afterRestore(Context<? extends Resource> context) throws Exception { }
+        };
+        Core.getGlobalContext().register(resource);
+
+        System.setProperty("jdk.crac.debug", "true");
+        Core.checkpointRestore();
     }
 }

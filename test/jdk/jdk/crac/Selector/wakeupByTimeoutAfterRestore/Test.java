@@ -18,18 +18,33 @@
 // CA 94089 USA or visit www.azul.com if you need additional information or
 // have any questions.
 
+import jdk.test.lib.crac.CracBuilder;
+import jdk.test.lib.crac.CracTest;
 
 import java.nio.channels.Selector;
 import java.io.IOException;
 
-public class Test {
+/*
+ * @test Selector/wakeupByTimeoutAfterRestore
+ * @summary check that the Selector selected before the checkpoint,
+ *          will wake up by timeout after the restore
+ * @library /test/lib
+ * @build Test
+ * @run driver jdk.test.lib.crac.CracTest
+ */
+public class Test implements CracTest {
 
     private final static long TIMEOUT = 40_000; // 40 seconds
 
     static boolean awakened = false;
 
-    public static void main(String args[]) throws Exception {
+    @Override
+    public void test() throws Exception {
+        new CracBuilder().doCheckpointAndRestore();
+    }
 
+    @Override
+    public void exec() throws Exception {
         Selector selector = Selector.open();
         Runnable r = new Runnable() {
             @Override

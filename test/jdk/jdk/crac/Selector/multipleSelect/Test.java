@@ -18,6 +18,9 @@
 // CA 94089 USA or visit www.azul.com if you need additional information or
 // have any questions.
 
+import jdk.test.lib.crac.CracBuilder;
+import jdk.test.lib.crac.CracTest;
+import jdk.test.lib.crac.CracTestArg;
 
 import java.nio.channels.Selector;
 import java.io.IOException;
@@ -25,24 +28,52 @@ import java.util.Random;
 
 import java.util.concurrent.atomic.AtomicInteger;
 
-
-public class Test {
+/*
+ * @test Selector/multipleSelect
+ * @summary check work of multiple select() + wakeup() + C/R
+ * @library /test/lib
+ * @build Test
+ * @run driver/timeout=30 jdk.test.lib.crac.CracTest ONLY_TIMEOUTS false
+ * @run driver/timeout=30 jdk.test.lib.crac.CracTest NO_TIMEOUTS false
+ * @run driver/timeout=30 jdk.test.lib.crac.CracTest MIXED false
+ * @run driver/timeout=30 jdk.test.lib.crac.CracTest ONLY_TIMEOUTS true
+ * @run driver/timeout=30 jdk.test.lib.crac.CracTest NO_TIMEOUTS true
+ * @run driver/timeout=30 jdk.test.lib.crac.CracTest MIXED true
+ */
+public class Test implements CracTest {
 
     private final static Random RND = new Random();
 
     private final static long LONG_TIMEOUT = 3600_000;
     private final static long SHORT_TIMEOUT = 3_000;
 
-    public enum testType {
+    public enum TestType {
         NO_TIMEOUTS,    // test only select(), wakeup
         ONLY_TIMEOUTS,  // test only select(timeout), do not call wakeup()
         MIXED};
 
-    private static void test(testType type, boolean skipCR) throws Exception {
+    @CracTestArg(0)
+    TestType type;
 
-        long dt = (type == testType.ONLY_TIMEOUTS) ? SHORT_TIMEOUT : LONG_TIMEOUT;
+    @CracTestArg(1)
+    boolean skipCR;
 
-        int nThreads = (type == testType.ONLY_TIMEOUTS) ? 5 : 20;
+    @Override
+    public void test() throws Exception {
+        CracBuilder builder = new CracBuilder();
+        if (skipCR) {
+            builder.doPlain();
+        } else {
+            builder.doCheckpointAndRestore();
+        }
+    }
+
+    @Override
+    public void exec() throws Exception {
+
+        long dt = (type == TestType.ONLY_TIMEOUTS) ? SHORT_TIMEOUT : LONG_TIMEOUT;
+
+        int nThreads = (type == TestType.ONLY_TIMEOUTS) ? 5 : 20;
 
         AtomicInteger nSelected = new AtomicInteger(0);
 
@@ -53,8 +84,8 @@ public class Test {
         boolean setTimeout[] = new boolean[nThreads];
         for (int i = 0; i < nThreads; ++i) {
             boolean t = false; // NO_TIMEOUTS
-            if (type == testType.ONLY_TIMEOUTS) { t = true; }
-            else if (type == testType.MIXED) { t = RND.nextBoolean(); }
+            if (type == TestType.ONLY_TIMEOUTS) { t = true; }
+            else if (type == TestType.MIXED) { t = RND.nextBoolean(); }
             setTimeout[i] = t;
         }
 
@@ -97,7 +128,7 @@ public class Test {
         t.join();
         Thread.sleep(1000);
 
-        if (type == testType.ONLY_TIMEOUTS) { // do not wake threads up, the timeouts must work
+        if (type == TestType.ONLY_TIMEOUTS) { // do not wake threads up, the timeouts must work
 
             while (nSelected.get() > 0) { Thread.sleep(1000); }
 
@@ -137,36 +168,5 @@ public class Test {
         selector.select(200);
 
         selector.close();
-    }
-
-
-
-    public static void main(String args[]) throws Exception {
-
-        if (args.length < 1) { throw new RuntimeException("test number is missing"); }
-
-        switch (args[0]) {
-            case "1":
-                test(testType.ONLY_TIMEOUTS, false);
-                break;
-            case "2":
-                test(testType.NO_TIMEOUTS, false);
-                break;
-            case "3":
-                test(testType.MIXED, false);
-                break;
-            // 4-6: no C/R
-            case "4":
-                test(testType.ONLY_TIMEOUTS, true);
-                break;
-            case "5":
-                test(testType.NO_TIMEOUTS, true);
-                break;
-            case "6":
-                test(testType.MIXED, true);
-                break;
-            default:
-                throw new RuntimeException("invalid test number");
-        }
     }
 }

@@ -1308,6 +1308,23 @@ Strings introduces the regression
 In both of these scenarios, disabling Compact Strings makes sense.
 .RE
 .TP
+.B \f[CB]\-XX:CRaCCheckpointTo=\f[R]\f[I]directory\f[R]
+The CRaC (Coordinated Restore at Checkpoint) Project provides checkpointing of
+a running Java program into an image directory. Restoring from the image should
+solve some of the problematic start-up and warm-up times.
+.PP
+This option defines a path to the snapshot which is currently a directory. The
+directory will be created if it does not exist, but no parent directories are
+created.
+.RS
+.RE
+.TP
+.B \f[CB]\-XX:CRaCRestoreFrom=\f[R]\f[I]directory\f[R]
+Restores a snapshot created by
+\f[CB]\-XX:CRaCCheckpointTo=\f[R]\f[I]directory\f[R].
+.RS
+.RE
+.TP
 .B \f[CB]\-XX:ErrorFile=\f[R]\f[I]filename\f[R]
 Specifies the path and file name to which error data is written when an
 irrecoverable error occurs.

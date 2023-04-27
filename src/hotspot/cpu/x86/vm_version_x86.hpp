@@ -1123,6 +1123,7 @@ public:
     char errbuf[512];
     jio_snprintf(errbuf, sizeof(errbuf), "-XX:CPUFeatures option requires FLUSH flag to be set: 0x%" PRIx64, CPU_FLUSH);
     vm_exit_during_initialization(errbuf);
+    return false;
   }
 #else
   static bool supports_clflush() { return  ((_features & CPU_FLUSH) != 0); }

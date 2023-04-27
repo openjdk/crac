@@ -18,132 +18,33 @@
 // CA 94089 USA or visit www.azul.com if you need additional information or
 // have any questions.
 
-
 import java.nio.channels.*;
 import java.io.IOException;
 import jdk.crac.*;
+import jdk.test.lib.crac.CracBuilder;
+import jdk.test.lib.crac.CracTest;
+import jdk.test.lib.crac.CracTestArg;
 
-class ChannelResource implements Resource {
+/*
+ * @test Selector/keyAfterRestore
+ * @summary a trivial test for SelectionKey's state after restore
+ * @library /test/lib
+ * @build ChannelResource
+ * @build Test
+ * @run driver/timeout=30 jdk.test.lib.crac.CracTest true
+ * @run driver/timeout=30 jdk.test.lib.crac.CracTest false
+ */
+public class Test implements CracTest {
+    @CracTestArg
+    boolean openSelectorAtFirst;
 
-    private SocketChannel channel;
-    private SelectionKey  key;
-    private Selector      selector;
-
-    private Object        att = new Integer(123);
-
-    public ChannelResource() { Core.getGlobalContext().register(this); }
-
-    public void open() throws IOException {
-        channel = SocketChannel.open();
-        channel.configureBlocking(false);
-    }
-
-    public void register(Selector selector) throws IOException {
-        key = channel.register(selector, SelectionKey.OP_CONNECT);
-        key.attach(att);
-        this.selector = selector;
+    @Override
+    public void test() throws Exception {
+        new CracBuilder().doCheckpointAndRestore();
     }
 
     @Override
-    public void beforeCheckpoint(Context<? extends Resource> context) throws IOException {
-
-        channel.socket().close(); // close the channel => cancel the key
-        check(!channel.isOpen(), "the channel should not be open");
-        selector.select(100); // causes the channel deregistration
-    }
-
-    @Override
-    public void afterRestore(Context<? extends Resource> context) {
-
-        check(key.selector().equals(selector), "invalid key.selector()");
-        check(key.channel().equals(channel), "invalid key.channel()");
-
-        // the key is cancelled
-        check(!key.isValid(), "expected: key.isValid() == false");
-
-        boolean caught = false;
-        try { key.readyOps(); }
-        catch (CancelledKeyException e) { caught = true; }
-        check(caught, "expected CancelledKeyException is missing");
-
-        caught = false;
-        try { key.interestOps(); }
-        catch (CancelledKeyException e) { caught = true; }
-        check(caught, "expected CancelledKeyException is missing");
-
-        caught = false;
-        try { key.interestOps(SelectionKey.OP_CONNECT); }
-        catch (CancelledKeyException e) { caught = true; }
-        check(caught, "expected CancelledKeyException is missing");
-
-        caught = false;
-        try { key.readyOps(); }
-        catch (CancelledKeyException e) { caught = true; }
-        check(caught, "expected CancelledKeyException is missing");
-
-        caught = false;
-        try { key.isReadable(); }
-        catch (CancelledKeyException e) { caught = true; }
-        check(caught, "expected CancelledKeyException is missing");
-
-        caught = false;
-        try { key.isWritable(); }
-        catch (CancelledKeyException e) { caught = true; }
-        check(caught, "expected CancelledKeyException is missing");
-
-        caught = false;
-        try { key.isConnectable(); }
-        catch (CancelledKeyException e) { caught = true; }
-        check(caught, "expected CancelledKeyException is missing");
-
-        caught = false;
-        try { key.isAcceptable(); }
-        catch (CancelledKeyException e) { caught = true; }
-        check(caught, "expected CancelledKeyException is missing");
-
-        check(att.equals(key.attachment()), "invalid key.attachment()");
-
-        key.cancel(); // try just in case
-
-        // register again
-        try {
-            channel = SocketChannel.open();
-            channel.configureBlocking(false);
-            key = channel.register(selector, SelectionKey.OP_READ);
-        }
-        catch (Exception e) { throw new RuntimeException(e); }
-    }
-
-    // to check after restore
-    public void checkKey() {
-
-        check(key.isValid(), "key must be valid");
-
-        check(key.selector().equals(selector), "invalid key.selector()");
-        check(key.channel().equals(channel), "invalid key.channel()");
-
-        key.isReadable(); // just call, cannot set "ready" state manually
-        check( !key.isWritable()   , "invalid key.isWritable()"   );
-        check( !key.isConnectable(), "invalid key.isConnectable()");
-        check( !key.isAcceptable() , "invalid key.isAcceptable()" );
-
-        check(key.interestOps() == SelectionKey.OP_READ, "invalid key.interestOps()");
-
-        System.out.println(">> ready >> " + key.readyOps());
-
-        check(key.attachment() == null, "key.attachment() expected to be null");
-
-        key.cancel(); // try just in case
-    }
-
-    private void check(boolean b, String msg) { if (!b) { throw new RuntimeException(msg); } }
-}
-
-
-public class Test {
-
-    private static void test(boolean openSelectorAtFirst) throws Exception {
-
+    public void exec() throws Exception {
         ChannelResource ch;
         Selector selector = null;
 
@@ -169,22 +70,5 @@ public class Test {
         ch.checkKey();
 
         selector.close();
-    }
-
-    public static void main(String args[]) throws Exception {
-
-        if (args.length < 1) { throw new RuntimeException("test number is missing"); }
-
-        switch (args[0]) {
-            case "1":
-                test(true);
-                break;
-            case "2":
-                test(false);
-                break;
-            default:
-                throw new RuntimeException("invalid test number");
-        }
-
     }
 }

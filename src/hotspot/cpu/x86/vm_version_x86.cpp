@@ -39,7 +39,7 @@
 #include "utilities/virtualizationSupport.hpp"
 #include <sys/wait.h>
 #include <link.h>
-#ifdef __GLIBC__
+#if INCLUDE_CPU_FEATURE_ACTIVE
 # include <sys/platform/x86.h>
 #endif
 
@@ -658,14 +658,14 @@ uint64_t VM_Version::CPUFeatures_parse(const char *ccstr, uint64_t &glibc_featur
   }
   char buf[512];
   int res = jio_snprintf(
-	      buf, sizeof(buf),
-	      "VM option 'CPUFeatures=%s' must be of the form: 0xnum,0xnum", ccstr);
+              buf, sizeof(buf),
+              "VM option 'CPUFeatures=%s' must be of the form: 0xnum,0xnum", ccstr);
   assert(res > 0, "not enough temporary space allocated");
   vm_exit_during_initialization(buf);
   return -1;
 }
 
-#ifdef __GLIBC__
+#if INCLUDE_CPU_FEATURE_ACTIVE
 
 // sysdeps/x86/include/cpu-features.h
 enum
@@ -716,16 +716,16 @@ static FILE *popen_r(const char *arg0, pid_t *pid_return) {
       vm_exit_during_initialization(errbuf);
     case 0:
       if (close(fds.readfd)) {
-	jio_snprintf(errbuf, sizeof(errbuf), "Error closing read pipe in child: %m");
-	vm_exit_during_initialization(errbuf);
+        jio_snprintf(errbuf, sizeof(errbuf), "Error closing read pipe in child: %m");
+        vm_exit_during_initialization(errbuf);
       }
       if (dup2(fds.writefd, STDOUT_FILENO) != STDOUT_FILENO) {
-	jio_snprintf(errbuf, sizeof(errbuf), "Error closing preparing write pipe in child: %m");
-	vm_exit_during_initialization(errbuf);
+        jio_snprintf(errbuf, sizeof(errbuf), "Error closing preparing write pipe in child: %m");
+        vm_exit_during_initialization(errbuf);
       }
       if (close(fds.writefd)) {
-	jio_snprintf(errbuf, sizeof(errbuf), "Error closing write pipe in child: %m");
-	vm_exit_during_initialization(errbuf);
+        jio_snprintf(errbuf, sizeof(errbuf), "Error closing write pipe in child: %m");
+        vm_exit_during_initialization(errbuf);
       }
       execl(arg0, arg0, ARG1, NULL);
       jio_snprintf(errbuf, sizeof(errbuf), "Error exec-ing %s " ARG1 ": %m", arg0);
@@ -767,10 +767,10 @@ static void pclose_r(const char *arg0, FILE *f, pid_t pid) {
   }
 }
 
-#endif // __GLIBC__
+#endif // INCLUDE_CPU_FEATURE_ACTIVE
 
 void VM_Version::glibc_not_using(uint64_t excessive_CPU, uint64_t excessive_GLIBC) {
-#ifdef __GLIBC__
+#if INCLUDE_CPU_FEATURE_ACTIVE
 #ifndef ASSERT
   if (!excessive_CPU && !excessive_GLIBC)
     return;
@@ -847,6 +847,7 @@ void VM_Version::glibc_not_using(uint64_t excessive_CPU, uint64_t excessive_GLIB
     // CX8 is i586+, CMOV is i686+
     excessive_CPU |= CPU_CMOV;
   }
+#define PASTE_TOKENS3(x, y, z) PASTE_TOKENS(x, PASTE_TOKENS(y, z))
 #ifdef ASSERT
   uint64_t excessive_handled_CPU   = 0;
   uint64_t excessive_handled_GLIBC = 0;
@@ -856,18 +857,18 @@ void VM_Version::glibc_not_using(uint64_t excessive_CPU, uint64_t excessive_GLIB
 #else
 # define IF_ASSERT(x)
 #endif
-#define EXCESSIVE_HANDLED(kind, hotspot) do {								\
-    assert(!(excessive_handled_##kind & kind##_##hotspot), "already used " #kind "_" #hotspot );	\
-    IF_ASSERT(excessive_handled_##kind |= kind##_##hotspot);						\
+#define EXCESSIVE_HANDLED(kind, hotspot) do {                                                                                           \
+    assert(!(PASTE_TOKENS(excessive_handled_, kind) & PASTE_TOKENS3(kind, _, hotspot)), "already used " STR(kind) "_" STR(hotspot) );   \
+    IF_ASSERT(PASTE_TOKENS(excessive_handled_, kind) |= PASTE_TOKENS3(kind, _, hotspot));                                               \
   } while (0)
-#define EXCESSIVE5(kind, hotspot, hotspot_field, hotspot_union, glibc_index, glibc_reg) do {	\
-    EXCESSIVE_HANDLED(kind, hotspot);								\
-    if (excessive_##kind & kind##_##hotspot) {							\
-      hotspot_union u;										\
-      u.value = active[glibc_index][glibc_reg];							\
-      if (u.bits.hotspot_field != 0)								\
-	disable_##kind |= kind##_##hotspot;							\
-    }												\
+#define EXCESSIVE5(kind, hotspot, hotspot_field, hotspot_union, glibc_index, glibc_reg) do {    \
+    EXCESSIVE_HANDLED(kind, hotspot);                                                           \
+    if (PASTE_TOKENS(excessive_, kind) & PASTE_TOKENS3(kind, _, hotspot)) {                     \
+      hotspot_union u;                                                                          \
+      u.value = active[glibc_index][glibc_reg];                                                 \
+      if (u.bits.hotspot_field != 0)                                                            \
+        PASTE_TOKENS(disable_, kind) |= PASTE_TOKENS3(kind, _, hotspot);                        \
+    }                                                                                           \
   } while (0)
 #define EXCESSIVE(kind, hotspot, hotspot_field, hotspot_def...) EXCESSIVE5(kind, hotspot, hotspot_field, hotspot_def)
 #define DEF_ExtCpuid1Ecx ExtCpuid1Ecx, CPUID_INDEX_80000001, ecx
@@ -914,18 +915,18 @@ void VM_Version::glibc_not_using(uint64_t excessive_CPU, uint64_t excessive_GLIB
   char disable_str[64 * (10 + 3) + 1] = PREFIX;
 #undef PREFIX
   char *disable_end = disable_str + prefix_len;
-#define DISABLE2(kind, hotspot, libc) do {							\
-    assert(!(disable_handled_##kind & kind##_##hotspot), "already used " #kind "_" #hotspot );	\
-    IF_ASSERT(disable_handled_##kind |= kind##_##hotspot);					\
-    if (disable_##kind & kind##_##hotspot) {							\
-      const char str[] = ",-" #libc;								\
-      size_t remains = disable_str + sizeof(disable_str) - disable_end;				\
-      strncpy(disable_end, str, remains);							\
-      size_t len = strnlen(disable_end, remains);						\
-      remains -= len;										\
-      assert(remains > 0, "internal error: disable_str overflow");				\
-      disable_end += len;									\
-    }												\
+#define DISABLE2(kind, hotspot, libc) do {                                                                                              \
+    assert(!(PASTE_TOKENS(disable_handled_, kind) & PASTE_TOKENS3(kind, _, hotspot)), "already used " STR(kind) "_" STR(hotspot) );     \
+    IF_ASSERT(PASTE_TOKENS(disable_handled_, kind) |= PASTE_TOKENS3(kind, _, hotspot));                                                 \
+    if (PASTE_TOKENS(disable_, kind) & PASTE_TOKENS3(kind, _, hotspot)) {                                                               \
+      const char str[] = ",-" STR(libc);                                                                                                \
+      size_t remains = disable_str + sizeof(disable_str) - disable_end;                                                                 \
+      strncpy(disable_end, str, remains);                                                                                               \
+      size_t len = strnlen(disable_end, remains);                                                                                       \
+      remains -= len;                                                                                                                   \
+      assert(remains > 0, "internal error: disable_str overflow");                                                                      \
+      disable_end += len;                                                                                                               \
+    }                                                                                                                                   \
   } while (0);
 #define DISABLE(kind, name) DISABLE2(kind, name, name)
   DISABLE (CPU  , AVX)
@@ -961,12 +962,13 @@ void VM_Version::glibc_not_using(uint64_t excessive_CPU, uint64_t excessive_GLIB
   *disable_end = 0;
 
 #ifdef ASSERT
-#define CHECK_KIND(kind) do {																	\
-    if (disable_handled_##kind != excessive_handled_##kind) {													\
-      jio_snprintf(errbuf, sizeof(errbuf),															\
-		   "internal error: Unsupported disabling of " #kind "_* 0x%" PRIx64 " != used 0x%" PRIx64, disable_handled_##kind, excessive_handled_##kind);	\
-      vm_exit_during_initialization(errbuf);															\
-    }																				\
+#define CHECK_KIND(kind) do {                                                                                                                                   \
+    if (PASTE_TOKENS(disable_handled_, kind) != PASTE_TOKENS(excessive_handled_, kind)) {                                                                       \
+      jio_snprintf(errbuf, sizeof(errbuf),                                                                                                                      \
+                   "internal error: Unsupported disabling of " STR(kind) "_* 0x%" PRIx64 " != used 0x%" PRIx64,                                                 \
+                   PASTE_TOKENS(disable_handled_, kind), PASTE_TOKENS(excessive_handled_, kind));                                                               \
+      vm_exit_during_initialization(errbuf);                                                                                                                    \
+    }                                                                                                                                                           \
   } while (0)
   CHECK_KIND(CPU  );
   CHECK_KIND(GLIBC);
@@ -997,12 +999,12 @@ void VM_Version::glibc_not_using(uint64_t excessive_CPU, uint64_t excessive_GLIB
   // These are handled as an exception above. They cannot be disabled by GLIBC_TUNABLES.
   GLIBC_UNUSED(FXSR); GLIBC_UNUSED(MMX); GLIBC_UNUSED(SSE); GLIBC_UNUSED(SSE3);
 #undef GLIBC_UNUSED
-#define CHECK_KIND(kind) do {																	\
-    if (excessive_handled_##kind != kind##_MAX - 1) {														\
-      jio_snprintf(errbuf, sizeof(errbuf),															\
-		   "internal error: Unsupported disabling of some " #kind "_* 0x%" PRIx64 " != full 0x%" PRIx64, excessive_handled_##kind, CPU_MAX - 1);	\
-      vm_exit_during_initialization(errbuf);															\
-    }																				\
+#define CHECK_KIND(kind) do {                                                                                                                                                   \
+    if (PASTE_TOKENS(excessive_handled_, kind) != PASTE_TOKENS(kind, _MAX) - 1) {                                                                                                 \
+      jio_snprintf(errbuf, sizeof(errbuf),                                                                                                                                      \
+                   "internal error: Unsupported disabling of some " STR(kind) "_* 0x%" PRIx64 " != full 0x%" PRIx64, PASTE_TOKENS(excessive_handled_, kind), CPU_MAX - 1);      \
+      vm_exit_during_initialization(errbuf);                                                                                                                                    \
+    }                                                                                                                                                                           \
   } while (0)
   CHECK_KIND(CPU  );
   CHECK_KIND(GLIBC);
@@ -1027,11 +1029,11 @@ void VM_Version::glibc_not_using(uint64_t excessive_CPU, uint64_t excessive_GLIB
     } else {
       const char *colon = strchr(hwcaps, ':');
       if (!colon) {
-	strcpy(env_buf, env);
-	strcat(env_buf, disable_str + prefix_len);
+        strcpy(env_buf, env);
+        strcat(env_buf, disable_str + prefix_len);
       } else {
-	int err = jio_snprintf(env_buf, sizeof(env_buf), "%.*s%s%s", (int)(colon - env), env, disable_str + prefix_len, colon);
-	assert(err >= 0 && (unsigned)err < sizeof(env_buf), "internal error: " TUNABLES_NAME " buffer overflow");
+        int err = jio_snprintf(env_buf, sizeof(env_buf), "%.*s%s%s", (int)(colon - env), env, disable_str + prefix_len, colon);
+        assert(err >= 0 && (unsigned)err < sizeof(env_buf), "internal error: " TUNABLES_NAME " buffer overflow");
       }
     }
     env_val = env_buf;
@@ -1072,8 +1074,8 @@ void VM_Version::glibc_not_using(uint64_t excessive_CPU, uint64_t excessive_GLIB
       buf_allocated = MAX2(size_t(4096), 2 * buf_allocated);
       buf = (char *)os::realloc(buf, buf_allocated, mtOther);
       if (buf == NULL) {
-	jio_snprintf(errbuf, sizeof(errbuf), CMDLINE " reading failed allocating %zu bytes", buf_allocated);
-	vm_exit_during_initialization(errbuf);
+        jio_snprintf(errbuf, sizeof(errbuf), CMDLINE " reading failed allocating %zu bytes", buf_allocated);
+        vm_exit_during_initialization(errbuf);
       }
     }
     got = read(fd, buf + buf_used, buf_allocated - buf_used);
@@ -1096,8 +1098,8 @@ void VM_Version::glibc_not_using(uint64_t excessive_CPU, uint64_t excessive_GLIB
       argv_allocated = MAX2(size_t(256), 2 * argv_allocated);
       argv = (char **)os::realloc(argv, argv_allocated * sizeof(*argv), mtOther);
       if (argv == NULL) {
-	jio_snprintf(errbuf, sizeof(errbuf), CMDLINE " reading failed allocating %zu pointers", argv_allocated);
-	vm_exit_during_initialization(errbuf);
+        jio_snprintf(errbuf, sizeof(errbuf), CMDLINE " reading failed allocating %zu pointers", argv_allocated);
+        vm_exit_during_initialization(errbuf);
       }
     }
     if (s == buf + buf_used) {
@@ -1117,7 +1119,7 @@ void VM_Version::glibc_not_using(uint64_t excessive_CPU, uint64_t excessive_GLIB
   jio_snprintf(errbuf, sizeof(errbuf), "Cannot re-execute " EXEC ": %m");
   vm_exit_during_initialization(errbuf);
 #undef EXEC
-#endif // __GLIBC__
+#endif // INCLUDE_CPU_FEATURE_ACTIVE
 }
 
 void VM_Version::get_processor_features() {
@@ -1161,21 +1163,21 @@ void VM_Version::get_processor_features() {
     if (features_missing || glibc_features_missing) {
       char buf[512];
       int res = jio_snprintf(
-		  buf, sizeof(buf),
-		  "Specified -XX:CPUFeatures=0x" UINT64_FORMAT_X ",0x" UINT64_FORMAT_X
-		  "; this machine's CPU features are 0x" UINT64_FORMAT_X ",0x" UINT64_FORMAT_X
-		  "; missing features of this CPU are 0x" UINT64_FORMAT_X ",0x" UINT64_FORMAT_X " ",
-		  CPUFeatures_x64, GLIBCFeatures_x64,
-		  _features, _glibc_features,
-		  features_missing, glibc_features_missing);
+                  buf, sizeof(buf),
+                  "Specified -XX:CPUFeatures=0x" UINT64_FORMAT_X ",0x" UINT64_FORMAT_X
+                  "; this machine's CPU features are 0x" UINT64_FORMAT_X ",0x" UINT64_FORMAT_X
+                  "; missing features of this CPU are 0x" UINT64_FORMAT_X ",0x" UINT64_FORMAT_X " ",
+                  CPUFeatures_x64, GLIBCFeatures_x64,
+                  _features, _glibc_features,
+                  features_missing, glibc_features_missing);
       assert(res > 0, "not enough temporary space allocated");
       // insert_features_names() does crash for undefined too high-numbered features.
       insert_features_names(buf + res , sizeof(buf) - res ,       features_missing & (  CPU_MAX - 1));
       int res2 = res + strlen(buf + res);
       insert_features_names(buf + res2, sizeof(buf) - res2, glibc_features_missing & (GLIBC_MAX - 1));
       if (buf[res]) {
-	assert(buf[res] == ',', "unexpeced VM_Version::insert_features_names separator instead of ','");
-	buf[res] = '=';
+        assert(buf[res] == ',', "unexpeced VM_Version::insert_features_names separator instead of ','");
+        buf[res] = '=';
       }
       vm_exit_during_initialization(buf);
     }

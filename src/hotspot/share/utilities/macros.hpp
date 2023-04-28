@@ -239,6 +239,10 @@
 #define NOT_ZGC_RETURN_(code) { return code; }
 #endif // INCLUDE_ZGC
 
+#ifndef INCLUDE_CPU_FEATURE_ACTIVE
+#define INCLUDE_CPU_FEATURE_ACTIVE 1
+#endif // INCLUDE_CPU_FEATURE_ACTIVE
+
 #ifndef INCLUDE_NMT
 #define INCLUDE_NMT 1
 #endif // INCLUDE_NMT

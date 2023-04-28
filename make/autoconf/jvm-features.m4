@@ -46,7 +46,7 @@ m4_define(jvm_features_valid, m4_normalize( \
     \
     cds compiler1 compiler2 dtrace epsilongc g1gc jfr jni-check \
     jvmci jvmti link-time-opt management minimal nmt opt-size parallelgc \
-    serialgc services shenandoahgc static-build vm-structs zero zgc \
+    serialgc services shenandoahgc static-build vm-structs zero zgc cpu_feature_active \
 ))
 
 # Deprecated JVM features (these are ignored, but with a warning)
@@ -381,6 +381,28 @@ AC_DEFUN_ONCE([JVM_FEATURES_CHECK_ZGC],
 ])
 
 ###############################################################################
+# Check if glibc CPU_FEATURE_ACTIVE is available on this platform.
+#
+AC_DEFUN_ONCE([JVM_FEATURES_CHECK_CPU_FEATURE_ACTIVE],
+[
+  JVM_FEATURES_CHECK_AVAILABILITY(cpu_feature_active, [
+    AC_MSG_CHECKING([if glibc CPU_FEATURE_ACTIVE is supported])
+    AC_COMPILE_IFELSE(
+      [AC_LANG_PROGRAM([[#include <sys/platform/x86.h>]],
+        [[int x = CPU_FEATURE_ACTIVE(SSE2);]])
+      ],
+      [
+        AC_MSG_RESULT([yes])
+      ],
+      [
+        AC_MSG_RESULT([no])
+        AVAILABLE=false
+      ]
+    )
+  ])
+])
+
+###############################################################################
 # Setup JVM_FEATURES_PLATFORM_UNAVAILABLE and JVM_FEATURES_PLATFORM_FILTER
 # to contain those features that are unavailable, or should be off by default,
 # for this platform, regardless of JVM variant.
@@ -397,6 +419,7 @@ AC_DEFUN_ONCE([JVM_FEATURES_PREPARE_PLATFORM],
   JVM_FEATURES_CHECK_SHENANDOAHGC
   JVM_FEATURES_CHECK_STATIC_BUILD
   JVM_FEATURES_CHECK_ZGC
+  JVM_FEATURES_CHECK_CPU_FEATURE_ACTIVE
 
   # Filter out features by default for all variants on certain platforms.
   # Make sure to just add to JVM_FEATURES_PLATFORM_FILTER, since it could

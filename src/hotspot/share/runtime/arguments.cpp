@@ -2358,6 +2358,7 @@ bool Arguments::parse_options_for_restore(const JavaVMInitArgs* args) {
         if (!process_argument(tail, args->ignoreUnrecognized, JVMFlagOrigin::COMMAND_LINE)) {
           return false;
         }
+        build_jvm_flags(tail);
       }
     }
   }

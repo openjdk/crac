@@ -31,6 +31,7 @@ public class CracBuilder {
     boolean debug = false;
     final List<String> classpathEntries = new ArrayList<>();
     final Map<String, String> env = new HashMap<>();
+    final List<String> vmOptions = new ArrayList<>();
     String imageDir = DEFAULT_IMAGE_DIR;
     CracEngine engine;
     boolean printResources;
@@ -86,6 +87,11 @@ public class CracBuilder {
     public CracBuilder imageDir(String imageDir) {
         assertEquals(DEFAULT_IMAGE_DIR, this.imageDir); // set once
         this.imageDir = imageDir;
+        return this;
+    }
+
+    public CracBuilder vmOption(String option) {
+        vmOptions.add(option);
         return this;
     }
 
@@ -307,6 +313,7 @@ public class CracBuilder {
             cmd.add("-agentlib:jdwp=transport=dt_socket,server=y,suspend=y,address=0.0.0.0:5005");
             cmd.add("-XX:-CRDoThrowCheckpointException");
         }
+        cmd.addAll(vmOptions);
         return cmd;
     }
 
@@ -326,5 +333,4 @@ public class CracBuilder {
         // This works for non-docker commands, too
         DockerTestUtils.execute(cmd).shouldHaveExitValue(0);
     }
-
 }

@@ -46,9 +46,10 @@ enum class JVMFlagOrigin : int {
   ATTACH_ON_DEMAND = 6,
   INTERNAL         = 7,
   JIMAGE_RESOURCE  = 8,
+  CRAC_RESTORE     = 9,
 };
 
-ENUMERATOR_RANGE(JVMFlagOrigin, JVMFlagOrigin::DEFAULT, JVMFlagOrigin::JIMAGE_RESOURCE)
+ENUMERATOR_RANGE(JVMFlagOrigin, JVMFlagOrigin::DEFAULT, JVMFlagOrigin::CRAC_RESTORE)
 
 class JVMFlag {
   friend class VMStructs;

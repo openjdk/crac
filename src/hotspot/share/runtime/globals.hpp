@@ -2088,10 +2088,13 @@ const intx ObjectAlignmentInBytes = 8;
   develop(bool, TraceOptimizedUpcallStubs, false,                           \
                 "Trace optimized upcall stub generation")                   \
                                                                             \
-  product(ccstr, CRaCCheckpointTo, NULL, "Path to checkpoint image")        \
+  product(ccstr, CRaCCheckpointTo, NULL, MANAGEABLE,                        \
+        "Path to checkpoint image directory")                               \
                                                                             \
-  product(ccstr, CRaCRestoreFrom, NULL, "Path to image for restore, "       \
-      "replaces the initializing VM on success")                            \
+  /* It does not make sense to change this flag in runtime but we'll tag */ \
+  /* it MANAGEABLE to prevent warnings when setting this on restore. */     \
+  product(ccstr, CRaCRestoreFrom, NULL, MANAGEABLE,                         \
+      "Path to image for restore, replaces the initializing VM on success") \
                                                                             \
   product(ccstr, CREngine, "criuengine", "Path or name of a program "       \
       "implementing checkpoint/restore")                                    \
@@ -2100,10 +2103,11 @@ const intx ObjectAlignmentInBytes = 8;
       "-XX:CRaCRestoreFrom and continue initialization if restore is "      \
       "unavailable")                                                        \
                                                                             \
-  product(ccstr, CRaCIgnoredFileDescriptors, NULL, "Comma-separated list "  \
-      "of file descriptor numbers or paths. All file descriptors greater "  \
-      "than 2 (stdin, stdout and stderr are excluded automatically) not "   \
-      "in this list are closed when the VM is started.")                    \
+  product(ccstr, CRaCIgnoredFileDescriptors, NULL, MANAGEABLE,              \
+      "Comma-separated list of file descriptor numbers or paths. "          \
+      "All file descriptors greater than 2 (stdin, stdout and stderr are "  \
+      "excluded automatically) not in this list are closed when the VM "    \
+      "is started.")                                                        \
                                                                             \
   product(bool, CRAllowToSkipCheckpoint, false, DIAGNOSTIC,                 \
           "Allow implementation to not call Checkpoint if helper not found")\

@@ -82,7 +82,7 @@ public interface CracTest {
         try {
             testClass = Class.forName(testClassName);
         } catch (ClassNotFoundException e) {
-            throw new ClassNotFoundException("Test class " + testClassName + " not found, add jtreg tag @build " + args[0], e);
+            throw new ClassNotFoundException("Test class " + testClassName + " not found, add jtreg tag @build " + testClassName, e);
         }
         if (CracTest.class.isAssignableFrom(testClass)) {
             //noinspection unchecked

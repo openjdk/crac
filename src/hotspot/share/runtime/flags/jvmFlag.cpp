@@ -405,6 +405,8 @@ void JVMFlag::print_origin(outputStream* st, unsigned int width) const {
       st->print("internal"); break;
     case JVMFlagOrigin::JIMAGE_RESOURCE:
       st->print("jimage"); break;
+    case JVMFlagOrigin::CRAC_RESTORE:
+      st->print("crac restore");
   }
   st->print("}");
 }

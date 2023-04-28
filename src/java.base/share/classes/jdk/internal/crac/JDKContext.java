@@ -71,7 +71,7 @@ public class JDKContext extends PriorityContext<JDKResource.Priority, JDKResourc
         Path p = Path.of(path);
         String classpath = System.getProperty("java.class.path");
         int index = 0;
-        while (index >= 0) {
+        do {
             int end = classpath.indexOf(File.pathSeparatorChar, index);
             if (end < 0) {
                 end = classpath.length();
@@ -84,7 +84,8 @@ public class JDKContext extends PriorityContext<JDKResource.Priority, JDKResourc
                 // ignore exception
                 return false;
             }
-        }
+            index = end + 1;
+        } while (index < classpath.length());
         return false;
     }
 

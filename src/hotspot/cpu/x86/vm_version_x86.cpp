@@ -845,7 +845,7 @@ void VM_Version::glibc_not_using(uint64_t excessive_CPU, uint64_t excessive_GLIB
   CHECK_KIND(CPU  );
   CHECK_KIND(GLIBC);
 #undef CHECK_KIND
-#endif
+#endif // ASSERT
 
   if (disable_end == disable_str + prefix_len)
     return;

@@ -686,11 +686,12 @@ void VM_Version::glibc_not_using(uint64_t excessive_CPU, uint64_t excessive_GLIB
   if ((_features & CPU_CMOV) &&
       (_features & CPU_CX8) &&
       // FPU is always present on i686+: (_features & CPU_FPU) &&
+      (_features & CPU_SSE2) &&
       // These cannot be disabled by GLIBC_TUNABLES.
-      (excessive_CPU & (CPU_FXSR | CPU_MMX | CPU_SSE | CPU_SSE2))) {
-    assert(!(excessive_CPU & CPU_CMOV), "(_features & CPU_CMOV) cannot happen");
-    // CX8 is i586+, CMOV is i686+
-    excessive_CPU |= CPU_CMOV;
+      (excessive_CPU & (CPU_FXSR | CPU_MMX | CPU_SSE))) {
+    assert(!(excessive_CPU & CPU_SSE2), "(_features & CPU_SSE2) cannot happen");
+    // CX8 is i586+, CMOV is i686+ 1995+, SSE2 is 2000+
+    excessive_CPU |= CPU_SSE2;
   }
 #define PASTE_TOKENS3(x, y, z) PASTE_TOKENS(x, PASTE_TOKENS(y, z))
 #ifdef ASSERT
@@ -832,8 +833,9 @@ void VM_Version::glibc_not_using(uint64_t excessive_CPU, uint64_t excessive_GLIB
   GLIBC_UNUSED(AVX512_VBMI2     );
   GLIBC_UNUSED(AVX512_VBMI      );
   GLIBC_UNUSED(HV               );
+  GLIBC_UNUSED(SSE3             );
   // These are handled as an exception above. They cannot be disabled by GLIBC_TUNABLES.
-  GLIBC_UNUSED(FXSR); GLIBC_UNUSED(MMX); GLIBC_UNUSED(SSE); GLIBC_UNUSED(SSE3);
+  GLIBC_UNUSED(FXSR); GLIBC_UNUSED(MMX); GLIBC_UNUSED(SSE);
 #undef GLIBC_UNUSED
 #define CHECK_KIND(kind) do {                                                                                                                                              \
     if (PASTE_TOKENS(excessive_handled_, kind) != PASTE_TOKENS(kind, _MAX) - 1) {                                                                                          \

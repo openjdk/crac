@@ -93,7 +93,8 @@ class VM_Version : public Abstract_VM_Version {
                xsave    : 1,
                osxsave  : 1,
                avx      : 1,
-                        : 2,
+               f16c     : 1,
+                        : 1,
                hv       : 1;
     } bits;
   };
@@ -385,8 +386,11 @@ protected:
     decl(IBT,               "ibt",               3) \
     decl(SHSTK,             "shstk",             4) \
     decl(XSAVE,             "xsave",             5) \
+    decl(CMPXCHG16,         "cmpxchg16",         6) \
+    decl(LAHFSAHF,          "lahfsahf",          7) \
+    decl(F16C,              "f16c",              8) \
                                                     \
-    decl(MAX,               "max",               6) /* Maximum - this feature must never be used */
+    decl(MAX,               "max",               9) /* Maximum - this feature must never be used */
 #define DECLARE_GLIBC_FEATURE_FLAG(id, name, bit) GLIBC_##id = (1ULL << bit),
     GLIBC_FEATURE_FLAGS(DECLARE_GLIBC_FEATURE_FLAG)
 #undef DECLARE_GLIBC_FEATURE_FLAG
@@ -706,6 +710,11 @@ enum Extended_Family {
       result |= GLIBC_OSXSAVE;
     if (_cpuid_info.std_cpuid1_ecx.bits.xsave != 0)
       result |= GLIBC_XSAVE;
+    if (_cpuid_info.std_cpuid1_ecx.bits.cmpxchg16 != 0)
+      result |= GLIBC_CMPXCHG16;
+    if (_cpuid_info.std_cpuid1_ecx.bits.f16c != 0)
+      result |= GLIBC_F16C;
+    // FIXME: Check all these conditionals.
     if (_cpuid_info.std_cpuid1_ecx.bits.avx != 0 &&
         _cpuid_info.std_cpuid1_ecx.bits.osxsave != 0 &&
         _cpuid_info.xem_xcr0_eax.bits.sse != 0 &&
@@ -720,11 +729,14 @@ enum Extended_Family {
     }
     if (_cpuid_info.sef_cpuid7_edx.bits.ibt != 0)
       result |= GLIBC_IBT;
+    // FIXME: Check all these conditionals.
     // AMD|Hygon features.
     if (is_amd_family()) {
       if (_cpuid_info.ext_cpuid1_ecx.bits.fma4 != 0)
         result |= GLIBC_FMA4;
     }
+    if (_cpuid_info.ext_cpuid1_ecx.bits.LahfSahf != 0)
+      result |= GLIBC_LAHFSAHF;
     return result;
   }
 

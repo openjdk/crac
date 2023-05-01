@@ -675,23 +675,83 @@ void VM_Version::glibc_not_using(uint64_t excessive_CPU, uint64_t excessive_GLIB
 
   uint64_t disable_CPU   = 0;
   uint64_t disable_GLIBC = 0;
-// glibc: sysdeps/x86/get-isa-level.h:
-// glibc: if (CPU_FEATURE_USABLE_P (cpu_features, CMOV)
-// glibc:     && CPU_FEATURE_USABLE_P (cpu_features, CX8)
-// glibc:     && CPU_FEATURE_CPU_P (cpu_features, FPU)
-// glibc:     && CPU_FEATURE_USABLE_P (cpu_features, FXSR)
-// glibc:     && CPU_FEATURE_USABLE_P (cpu_features, MMX)
-// glibc:     && CPU_FEATURE_USABLE_P (cpu_features, SSE)
-// glibc:     && CPU_FEATURE_USABLE_P (cpu_features, SSE2))
+  // glibc: sysdeps/x86/get-isa-level.h:
+  // glibc: if (CPU_FEATURE_USABLE_P (cpu_features, CMOV)
+  // glibc:     && CPU_FEATURE_USABLE_P (cpu_features, CX8)
+  // glibc:     && CPU_FEATURE_CPU_P (cpu_features, FPU)
+  // glibc:     && CPU_FEATURE_USABLE_P (cpu_features, FXSR)
+  // glibc:     && CPU_FEATURE_USABLE_P (cpu_features, MMX)
+  // glibc:     && CPU_FEATURE_USABLE_P (cpu_features, SSE)
+  // glibc:     && CPU_FEATURE_USABLE_P (cpu_features, SSE2))
+  // glibc:     isa_level = GNU_PROPERTY_X86_ISA_1_BASELINE;
   if ((_features & CPU_CMOV) &&
       (_features & CPU_CX8) &&
       // FPU is always present on i686+: (_features & CPU_FPU) &&
-      (_features & CPU_SSE2) &&
-      // These cannot be disabled by GLIBC_TUNABLES.
-      (excessive_CPU & (CPU_FXSR | CPU_MMX | CPU_SSE))) {
-    assert(!(excessive_CPU & CPU_SSE2), "(_features & CPU_SSE2) cannot happen");
-    // CX8 is i586+, CMOV is i686+ 1995+, SSE2 is 2000+
-    excessive_CPU |= CPU_SSE2;
+      (_features & CPU_SSE2))
+    // These cannot be disabled by GLIBC_TUNABLES.
+    if (excessive_CPU & (CPU_FXSR | CPU_MMX | CPU_SSE)) {
+      assert(!(excessive_CPU & CPU_SSE2), "(_features & CPU_SSE2) cannot happen");
+      // FIXME: The choice should be based on glibc impact, not the feature age.
+      // CX8 is i586+, CMOV is i686+ 1995+, SSE2 is 2000+
+      excessive_CPU |= CPU_SSE2;
+    }
+    if ((_features & CPU_FXSR) &&
+	(_features & CPU_MMX) &&
+	(_features & CPU_SSE)) {
+      // glibc: if (CPU_FEATURE_USABLE_P (cpu_features, CMPXCHG16B)
+      // glibc:     && CPU_FEATURE_USABLE_P (cpu_features, LAHF64_SAHF64)
+      // glibc:     && CPU_FEATURE_USABLE_P (cpu_features, POPCNT)
+      // glibc:     && CPU_FEATURE_USABLE_P (cpu_features, SSE3)
+      // glibc:     && CPU_FEATURE_USABLE_P (cpu_features, SSSE3)
+      // glibc:     && CPU_FEATURE_USABLE_P (cpu_features, SSE4_1)
+      // glibc:     && CPU_FEATURE_USABLE_P (cpu_features, SSE4_2))
+      // glibc:     isa_level |= GNU_PROPERTY_X86_ISA_1_V2;
+      if ((_features & CPU_POPCNT) &&
+          (_features & CPU_SSSE3) &&
+          (_features & CPU_SSE4_1) &&
+          (_features & CPU_SSE4_2)) {
+	if ((excessive_CPU & CPU_SSE3) ||
+	    (excessive_GLIBC & (GLIBC_CMPXCHG16 | GLIBC_LAHFSAHF))) {
+	  assert(!(excessive_CPU & CPU_SSE4_2), "(_features & CPU_SSE4_2) cannot happen");
+	  // POPCNT is 2007+, SSSE3 is 2006+, SSE4_1 is 2007+, SSE4_2 is 2008+.
+	  excessive_CPU |= CPU_SSE4_2;
+	}
+	if ((_features & CPU_SSE3) &&
+	    (_glibc_features & GLIBC_CMPXCHG16) &&
+	    (_glibc_features & GLIBC_LAHFSAHF)) {
+	  // glibc: if (CPU_FEATURE_USABLE_P (cpu_features, AVX)
+	  // glibc:     && CPU_FEATURE_USABLE_P (cpu_features, AVX2)
+	  // glibc:     && CPU_FEATURE_USABLE_P (cpu_features, BMI1)
+	  // glibc:     && CPU_FEATURE_USABLE_P (cpu_features, BMI2)
+	  // glibc:     && CPU_FEATURE_USABLE_P (cpu_features, F16C)
+	  // glibc:     && CPU_FEATURE_USABLE_P (cpu_features, FMA)
+	  // glibc:     && CPU_FEATURE_USABLE_P (cpu_features, LZCNT)
+	  // glibc:     && CPU_FEATURE_USABLE_P (cpu_features, MOVBE)) 
+	  // glibc:     isa_level |= GNU_PROPERTY_X86_ISA_1_V3;
+	  if ((_features & CPU_AVX) &&
+	      (_features & CPU_AVX2) &&
+	      (_features & CPU_BMI1) &&
+	      (_features & CPU_BMI2) &&
+	      (_features & CPU_FMA) &&
+	      (_features & CPU_LZCNT) &&
+	      (_glibc_features & GLIBC_MOVBE)) {
+	  if (excessive_GLIBC & GLIBC_F16C) {
+	    assert(!(excessive_GLIBC & GLIBC_MOVBE), "(_glibc_features & GLIBC_MOVBE) cannot happen");
+	    // FMA is 2012+, AVX2+BMI1+BMI2+LZCNT are 2013+, MOVBE is 2015+
+	    excessive_GLIBC |= GLIBC_MOVBE;
+	  }
+	  if (_glibc_features & GLIBC_F16C) {
+	    // glibc: if (CPU_FEATURE_USABLE_P (cpu_features, AVX512F)
+	    // glibc:     && CPU_FEATURE_USABLE_P (cpu_features, AVX512BW)
+	    // glibc:     && CPU_FEATURE_USABLE_P (cpu_features, AVX512CD)
+	    // glibc:     && CPU_FEATURE_USABLE_P (cpu_features, AVX512DQ)
+	    // glibc:     && CPU_FEATURE_USABLE_P (cpu_features, AVX512VL))
+	    // glibc:   isa_level |= GNU_PROPERTY_X86_ISA_1_V4;
+	    // All these flags are supported by GLIBC_DISABLE below.
+	  }
+	}
+      }
+    }
   }
 #define PASTE_TOKENS3(x, y, z) PASTE_TOKENS(x, PASTE_TOKENS(y, z))
 #ifdef ASSERT
@@ -752,7 +812,7 @@ void VM_Version::glibc_not_using(uint64_t excessive_CPU, uint64_t excessive_GLIB
   char disable_str[64 * (10 + 3) + 1] = PREFIX;
 #undef PREFIX
   char *disable_end = disable_str + prefix_len;
-#define DISABLE2(kind, hotspot, libc) do {                                                                                          \
+#define GLIBC_DISABLE2(kind, hotspot, libc) do {                                                                                          \
     assert(!(PASTE_TOKENS(disable_handled_, kind) & PASTE_TOKENS3(kind, _, hotspot)), "already used " STR(kind) "_" STR(hotspot) ); \
     IF_ASSERT(PASTE_TOKENS(disable_handled_, kind) |= PASTE_TOKENS3(kind, _, hotspot));                                             \
     if (PASTE_TOKENS(disable_, kind) & PASTE_TOKENS3(kind, _, hotspot)) {                                                           \
@@ -765,37 +825,38 @@ void VM_Version::glibc_not_using(uint64_t excessive_CPU, uint64_t excessive_GLIB
       disable_end += len;                                                                                                           \
     }                                                                                                                               \
   } while (0);
-#define DISABLE(kind, name) DISABLE2(kind, name, name)
-  DISABLE2(CPU , HT, HTT)
-  DISABLE(CPU  , AVX)
-  DISABLE(CPU  , CX8)
-  DISABLE(CPU  , FMA)
-  DISABLE(CPU  , RTM)
-  DISABLE(CPU  , AVX2)
-  DISABLE(CPU  , BMI1)
-  DISABLE(CPU  , BMI2)
-  DISABLE(CPU  , CMOV)
-  DISABLE(CPU  , ERMS)
-  DISABLE(CPU  , SSE2)
-  DISABLE(CPU  , LZCNT)
-  DISABLE(CPU  , SSSE3)
-  DISABLE(CPU  , POPCNT)
-  DISABLE(CPU  , SSE4_1)
-  DISABLE(CPU  , SSE4_2)
-  DISABLE(CPU  , AVX512F)
-  DISABLE(CPU  , AVX512CD)
-  DISABLE(CPU  , AVX512BW)
-  DISABLE(CPU  , AVX512DQ)
-  DISABLE(CPU  , AVX512ER)
-  DISABLE(CPU  , AVX512PF)
-  DISABLE(CPU  , AVX512VL)
-  DISABLE(GLIBC, IBT)
-  DISABLE(GLIBC, FMA4)
-  DISABLE(GLIBC, MOVBE)
-  DISABLE(GLIBC, SHSTK)
-  DISABLE(GLIBC, XSAVE)
-  DISABLE(GLIBC, OSXSAVE)
-#undef DISABLE
+#define GLIBC_DISABLE(kind, name) GLIBC_DISABLE2(kind, name, name)
+  GLIBC_DISABLE2(CPU , HT, HTT)
+  GLIBC_DISABLE(CPU  , AVX)
+  GLIBC_DISABLE(CPU  , CX8)
+  GLIBC_DISABLE(CPU  , FMA)
+  GLIBC_DISABLE(CPU  , RTM)
+  GLIBC_DISABLE(CPU  , AVX2)
+  GLIBC_DISABLE(CPU  , BMI1)
+  GLIBC_DISABLE(CPU  , BMI2)
+  GLIBC_DISABLE(CPU  , CMOV)
+  GLIBC_DISABLE(CPU  , ERMS)
+  GLIBC_DISABLE(CPU  , SSE2)
+  GLIBC_DISABLE(CPU  , LZCNT)
+  GLIBC_DISABLE(CPU  , SSSE3)
+  GLIBC_DISABLE(CPU  , POPCNT)
+  GLIBC_DISABLE(CPU  , SSE4_1)
+  GLIBC_DISABLE(CPU  , SSE4_2)
+  GLIBC_DISABLE(CPU  , AVX512F)
+  GLIBC_DISABLE(CPU  , AVX512CD)
+  GLIBC_DISABLE(CPU  , AVX512BW)
+  GLIBC_DISABLE(CPU  , AVX512DQ)
+  GLIBC_DISABLE(CPU  , AVX512ER)
+  GLIBC_DISABLE(CPU  , AVX512PF)
+  GLIBC_DISABLE(CPU  , AVX512VL)
+  GLIBC_DISABLE(GLIBC, IBT)
+  GLIBC_DISABLE(GLIBC, FMA4)
+  GLIBC_DISABLE(GLIBC, MOVBE)
+  GLIBC_DISABLE(GLIBC, SHSTK)
+  GLIBC_DISABLE(GLIBC, XSAVE)
+  GLIBC_DISABLE(GLIBC, OSXSAVE)
+#undef GLIBC_DISABLE
+#undef GLIBC_DISABLE2
   *disable_end = 0;
 
 #ifdef ASSERT
@@ -811,32 +872,37 @@ void VM_Version::glibc_not_using(uint64_t excessive_CPU, uint64_t excessive_GLIB
   CHECK_KIND(GLIBC);
 #undef CHECK_KIND
 
-  // These are not used by libc.
-#define GLIBC_UNUSED(hotspot_cpu) EXCESSIVE_HANDLED(CPU, hotspot_cpu)
-  GLIBC_UNUSED(3DNOW_PREFETCH   );
-  GLIBC_UNUSED(SSE4A            );
-  GLIBC_UNUSED(TSC              );
-  GLIBC_UNUSED(TSCINV_BIT       );
-  GLIBC_UNUSED(TSCINV           );
-  GLIBC_UNUSED(AES              );
-  GLIBC_UNUSED(CLMUL            );
-  GLIBC_UNUSED(ADX              );
-  GLIBC_UNUSED(SHA              );
-  GLIBC_UNUSED(VZEROUPPER       );
-  GLIBC_UNUSED(AVX512_VPOPCNTDQ );
-  GLIBC_UNUSED(AVX512_VPCLMULQDQ);
-  GLIBC_UNUSED(AVX512_VAES      );
-  GLIBC_UNUSED(AVX512_VNNI      );
-  GLIBC_UNUSED(FLUSH            );
-  GLIBC_UNUSED(FLUSHOPT         );
-  GLIBC_UNUSED(CLWB             );
-  GLIBC_UNUSED(AVX512_VBMI2     );
-  GLIBC_UNUSED(AVX512_VBMI      );
-  GLIBC_UNUSED(HV               );
-  GLIBC_UNUSED(SSE3             );
-  // These are handled as an exception above. They cannot be disabled by GLIBC_TUNABLES.
-  GLIBC_UNUSED(FXSR); GLIBC_UNUSED(MMX); GLIBC_UNUSED(SSE);
-#undef GLIBC_UNUSED
+  // These cannot be disabled by GLIBC_TUNABLES interface.
+#define GLIBC_UNSUPPORTED(kind, hotspot) EXCESSIVE_HANDLED(kind, hotspot)
+  GLIBC_UNSUPPORTED(CPU  , 3DNOW_PREFETCH   );
+  GLIBC_UNSUPPORTED(CPU  , SSE4A            );
+  GLIBC_UNSUPPORTED(CPU  , TSC              );
+  GLIBC_UNSUPPORTED(CPU  , TSCINV_BIT       );
+  GLIBC_UNSUPPORTED(CPU  , TSCINV           );
+  GLIBC_UNSUPPORTED(CPU  , AES              );
+  GLIBC_UNSUPPORTED(CPU  , CLMUL            );
+  GLIBC_UNSUPPORTED(CPU  , ADX              );
+  GLIBC_UNSUPPORTED(CPU  , SHA              );
+  GLIBC_UNSUPPORTED(CPU  , VZEROUPPER       );
+  GLIBC_UNSUPPORTED(CPU  , AVX512_VPOPCNTDQ );
+  GLIBC_UNSUPPORTED(CPU  , AVX512_VPCLMULQDQ);
+  GLIBC_UNSUPPORTED(CPU  , AVX512_VAES      );
+  GLIBC_UNSUPPORTED(CPU  , AVX512_VNNI      );
+  GLIBC_UNSUPPORTED(CPU  , FLUSH            );
+  GLIBC_UNSUPPORTED(CPU  , FLUSHOPT         );
+  GLIBC_UNSUPPORTED(CPU  , CLWB             );
+  GLIBC_UNSUPPORTED(CPU  , AVX512_VBMI2     );
+  GLIBC_UNSUPPORTED(CPU  , AVX512_VBMI      );
+  GLIBC_UNSUPPORTED(CPU  , HV               );
+  GLIBC_UNSUPPORTED(CPU  , SSE3             );
+  // These are handled as an exception above.
+  GLIBC_UNSUPPORTED(CPU  , FXSR             );
+  GLIBC_UNSUPPORTED(CPU  , MMX              );
+  GLIBC_UNSUPPORTED(CPU  , SSE              );
+  GLIBC_UNSUPPORTED(GLIBC, CMPXCHG16        );
+  GLIBC_UNSUPPORTED(GLIBC, LAHFSAHF         );
+  GLIBC_UNSUPPORTED(GLIBC, F16C             );
+#undef GLIBC_UNSUPPORTED
 #define CHECK_KIND(kind) do {                                                                                                                                              \
     if (PASTE_TOKENS(excessive_handled_, kind) != PASTE_TOKENS(kind, _MAX) - 1) {                                                                                          \
       jio_snprintf(errbuf, sizeof(errbuf),                                                                                                                                 \

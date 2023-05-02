@@ -34,6 +34,10 @@ import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Function;
 
+import jdk.crac.CheckpointException;
+import jdk.crac.Context;
+import jdk.crac.Resource;
+import jdk.internal.crac.JDKResource;
 import jdk.internal.misc.InnocuousThread;
 
 /**
@@ -151,7 +155,7 @@ public final class CleanerImpl implements Runnable {
     /**
      * Perform cleaning on an unreachable PhantomReference.
      */
-    public static final class PhantomCleanableRef extends PhantomCleanable<Object> {
+    public static final class PhantomCleanableRef extends PhantomCleanable<Object> implements JDKResource {
         private final Runnable action;
 
         /**
@@ -163,6 +167,7 @@ public final class CleanerImpl implements Runnable {
         public PhantomCleanableRef(Object obj, Cleaner cleaner, Runnable action) {
             super(obj, cleaner);
             this.action = action;
+            jdk.internal.crac.Core.getJDKContext().register(this);
         }
 
         /**
@@ -196,6 +201,23 @@ public final class CleanerImpl implements Runnable {
         @Override
         public void clear() {
             throw new UnsupportedOperationException("clear");
+        }
+
+        @Override
+        public Priority getPriority() {
+            return Priority.CLEANERS;
+        }
+
+        @Override
+        public void beforeCheckpoint(Context<? extends Resource> context) throws Exception {
+            if (refersTo(null)) {
+                 clean();
+            }
+        }
+
+        @Override
+        public void afterRestore(Context<? extends Resource> context) throws Exception {
+
         }
     }
 

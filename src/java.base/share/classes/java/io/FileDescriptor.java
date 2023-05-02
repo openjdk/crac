@@ -27,9 +27,8 @@ package java.io;
 
 import java.net.InetSocketAddress;
 import java.net.Socket;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Objects;
+import java.text.SimpleDateFormat;
+import java.util.*;
 
 import jdk.crac.Context;
 import jdk.crac.impl.CheckpointOpenFileException;
@@ -70,7 +69,11 @@ public final class FileDescriptor {
             JDKContext jdkContext = Core.getJDKContext();
             jdkContext.register(this);
             if (JDKContext.Properties.COLLECT_FD_STACKTRACES) {
-                stackTraceHolder = new Exception("This file descriptor was created here");
+                // About the timestamp: we cannot format it nicely since this
+                // exception is sometimes created too early in the VM lifecycle
+                // (but it's hard to detect when it would be safe to do).
+                stackTraceHolder = new Exception("This file descriptor was created by "
+                        + Thread.currentThread().getName() + " at epoch:" + System.currentTimeMillis() + " here");
             } else {
                 stackTraceHolder = null;
             }

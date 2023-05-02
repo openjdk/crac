@@ -68,7 +68,21 @@ public interface JDKResource extends Resource {
          * Priority of the
          * sun.security.provider.SecureRandom.SeederHolder resource
          */
-        SEEDER_HOLDER
+        SEEDER_HOLDER,
+
+        /* Keep next priorities last to ensure handling of pending References
+         * appeared on earlier priorities. */
+
+        /**
+         * Priority of the
+         * java.lan.ref.Reference static resource
+         */
+        REFERENCE_HANDLER,
+        /**
+         * Priority of the
+         * jdk.internal.ref.CleanerImpl resources
+         */
+        CLEANERS,
     };
 
     Priority getPriority();

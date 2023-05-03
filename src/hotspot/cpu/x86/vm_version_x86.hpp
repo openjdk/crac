@@ -384,10 +384,10 @@ protected:
     decl(MOVBE,             "movbe",             1) \
     decl(OSXSAVE,           "osxsave",           2) \
     decl(IBT,               "ibt",               3) \
-    decl(SHSTK,             "shstk",             4) \
+    decl(SHSTK,             "shstk",             4) /* Also known as cet_ss */ \
     decl(XSAVE,             "xsave",             5) \
-    decl(CMPXCHG16,         "cmpxchg16",         6) \
-    decl(LAHFSAHF,          "lahfsahf",          7) \
+    decl(CMPXCHG16,         "cmpxchg16",         6) /* Also known in cpuinfo as cx16 and in glibc as cmpxchg16b */ \
+    decl(LAHFSAHF,          "lahfsahf",          7) /* Also known in cpuinfo as lahf_lm and in glibc as lahf64_sahf64 */ \
     decl(F16C,              "f16c",              8) \
                                                     \
     decl(MAX,               "max",               9) /* Maximum - this feature must never be used */
@@ -714,27 +714,12 @@ enum Extended_Family {
       result |= GLIBC_CMPXCHG16;
     if (_cpuid_info.std_cpuid1_ecx.bits.f16c != 0)
       result |= GLIBC_F16C;
-    // FIXME: Check all these conditionals.
-    if (_cpuid_info.std_cpuid1_ecx.bits.avx != 0 &&
-        _cpuid_info.std_cpuid1_ecx.bits.osxsave != 0 &&
-        _cpuid_info.xem_xcr0_eax.bits.sse != 0 &&
-        _cpuid_info.xem_xcr0_eax.bits.ymm != 0) {
-      if (_cpuid_info.sef_cpuid7_ebx.bits.avx512f != 0 &&
-          _cpuid_info.xem_xcr0_eax.bits.opmask != 0 &&
-          _cpuid_info.xem_xcr0_eax.bits.zmm512 != 0 &&
-          _cpuid_info.xem_xcr0_eax.bits.zmm32 != 0) {
-        if (_cpuid_info.sef_cpuid7_ecx.bits.shstk != 0)
-          result |= GLIBC_SHSTK;
-      }
-    }
+    if (_cpuid_info.sef_cpuid7_ecx.bits.shstk != 0)
+      result |= GLIBC_SHSTK;
     if (_cpuid_info.sef_cpuid7_edx.bits.ibt != 0)
       result |= GLIBC_IBT;
-    // FIXME: Check all these conditionals.
-    // AMD|Hygon features.
-    if (is_amd_family()) {
-      if (_cpuid_info.ext_cpuid1_ecx.bits.fma4 != 0)
-        result |= GLIBC_FMA4;
-    }
+    if (_cpuid_info.ext_cpuid1_ecx.bits.fma4 != 0)
+      result |= GLIBC_FMA4;
     if (_cpuid_info.ext_cpuid1_ecx.bits.LahfSahf != 0)
       result |= GLIBC_LAHFSAHF;
     return result;

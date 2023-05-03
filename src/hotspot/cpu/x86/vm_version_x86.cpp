@@ -632,7 +632,7 @@ uint64_t VM_Version::CPUFeatures_parse(const char *ccstr, uint64_t &glibc_featur
     // 32-bit x86 cannot rely on anything.
     return 0
 #ifdef AMD64
-      // These options are all in /proc/cpuinfo of one of the first 64-bit CPUs - Atom D2700 (and Opteron 1352): https://superuser.com/q/1572306/1015048
+      // The following options are all in /proc/cpuinfo of one of the first 64-bit CPUs - Atom D2700 (and Opteron 1352): https://superuser.com/q/1572306/1015048
       | CPU_SSE // enabled in 'gcc -Q --help=target', used by OpenJDK
       | CPU_SSE2 // enabled in 'gcc -Q --help=target', required by OpenJDK
       | CPU_FXSR // enabled in 'gcc -Q --help=target', not used by OpenJDK
@@ -641,6 +641,8 @@ uint64_t VM_Version::CPUFeatures_parse(const char *ccstr, uint64_t &glibc_featur
       | CPU_CX8 // gcc detects it to set cpu "pentium" (=32-bit only), used by OpenJDK
       | CPU_CMOV // gcc detects it to set cpu "pentiumpro" (=32-bit only), used by OpenJDK
       | CPU_FLUSH // ="clflush" in cpuinfo, not used by gcc, required by OpenJDK
+      // GLIBC_MOVBE is disabled in 'gcc -Q --help=target' and some CPUs do not support it: https://stackoverflow.com/a/5246553/2995591
+      // GLIBC_LAHFSAHF is disabled in 'gcc -Q --help=target' and "Early Intel Pentium 4 CPUs with Intel 64 support ... lacked the LAHF and SAHF instructions"
 #endif
     ;
   }
@@ -696,8 +698,8 @@ void VM_Version::glibc_not_using(uint64_t excessive_CPU, uint64_t excessive_GLIB
       excessive_CPU |= CPU_SSE2;
     }
     if ((_features & CPU_FXSR) &&
-	(_features & CPU_MMX) &&
-	(_features & CPU_SSE)) {
+        (_features & CPU_MMX) &&
+        (_features & CPU_SSE)) {
       // glibc: if (CPU_FEATURE_USABLE_P (cpu_features, CMPXCHG16B)
       // glibc:     && CPU_FEATURE_USABLE_P (cpu_features, LAHF64_SAHF64)
       // glibc:     && CPU_FEATURE_USABLE_P (cpu_features, POPCNT)
@@ -710,46 +712,46 @@ void VM_Version::glibc_not_using(uint64_t excessive_CPU, uint64_t excessive_GLIB
           (_features & CPU_SSSE3) &&
           (_features & CPU_SSE4_1) &&
           (_features & CPU_SSE4_2)) {
-	if ((excessive_CPU & CPU_SSE3) ||
-	    (excessive_GLIBC & (GLIBC_CMPXCHG16 | GLIBC_LAHFSAHF))) {
-	  assert(!(excessive_CPU & CPU_SSE4_2), "(_features & CPU_SSE4_2) cannot happen");
-	  // POPCNT is 2007+, SSSE3 is 2006+, SSE4_1 is 2007+, SSE4_2 is 2008+.
-	  excessive_CPU |= CPU_SSE4_2;
-	}
-	if ((_features & CPU_SSE3) &&
-	    (_glibc_features & GLIBC_CMPXCHG16) &&
-	    (_glibc_features & GLIBC_LAHFSAHF)) {
-	  // glibc: if (CPU_FEATURE_USABLE_P (cpu_features, AVX)
-	  // glibc:     && CPU_FEATURE_USABLE_P (cpu_features, AVX2)
-	  // glibc:     && CPU_FEATURE_USABLE_P (cpu_features, BMI1)
-	  // glibc:     && CPU_FEATURE_USABLE_P (cpu_features, BMI2)
-	  // glibc:     && CPU_FEATURE_USABLE_P (cpu_features, F16C)
-	  // glibc:     && CPU_FEATURE_USABLE_P (cpu_features, FMA)
-	  // glibc:     && CPU_FEATURE_USABLE_P (cpu_features, LZCNT)
-	  // glibc:     && CPU_FEATURE_USABLE_P (cpu_features, MOVBE)) 
-	  // glibc:     isa_level |= GNU_PROPERTY_X86_ISA_1_V3;
-	  if ((_features & CPU_AVX) &&
-	      (_features & CPU_AVX2) &&
-	      (_features & CPU_BMI1) &&
-	      (_features & CPU_BMI2) &&
-	      (_features & CPU_FMA) &&
-	      (_features & CPU_LZCNT) &&
-	      (_glibc_features & GLIBC_MOVBE)) {
-	  if (excessive_GLIBC & GLIBC_F16C) {
-	    assert(!(excessive_GLIBC & GLIBC_MOVBE), "(_glibc_features & GLIBC_MOVBE) cannot happen");
-	    // FMA is 2012+, AVX2+BMI1+BMI2+LZCNT are 2013+, MOVBE is 2015+
-	    excessive_GLIBC |= GLIBC_MOVBE;
-	  }
-	  if (_glibc_features & GLIBC_F16C) {
-	    // glibc: if (CPU_FEATURE_USABLE_P (cpu_features, AVX512F)
-	    // glibc:     && CPU_FEATURE_USABLE_P (cpu_features, AVX512BW)
-	    // glibc:     && CPU_FEATURE_USABLE_P (cpu_features, AVX512CD)
-	    // glibc:     && CPU_FEATURE_USABLE_P (cpu_features, AVX512DQ)
-	    // glibc:     && CPU_FEATURE_USABLE_P (cpu_features, AVX512VL))
-	    // glibc:   isa_level |= GNU_PROPERTY_X86_ISA_1_V4;
-	    // All these flags are supported by GLIBC_DISABLE below.
-	  }
-	}
+        if ((excessive_CPU & CPU_SSE3) ||
+            (excessive_GLIBC & (GLIBC_CMPXCHG16 | GLIBC_LAHFSAHF))) {
+          assert(!(excessive_CPU & CPU_SSE4_2), "(_features & CPU_SSE4_2) cannot happen");
+          // POPCNT is 2007+, SSSE3 is 2006+, SSE4_1 is 2007+, SSE4_2 is 2008+.
+          excessive_CPU |= CPU_SSE4_2;
+        }
+        if ((_features & CPU_SSE3) &&
+            (_glibc_features & GLIBC_CMPXCHG16) &&
+            (_glibc_features & GLIBC_LAHFSAHF)) {
+          // glibc: if (CPU_FEATURE_USABLE_P (cpu_features, AVX)
+          // glibc:     && CPU_FEATURE_USABLE_P (cpu_features, AVX2)
+          // glibc:     && CPU_FEATURE_USABLE_P (cpu_features, BMI1)
+          // glibc:     && CPU_FEATURE_USABLE_P (cpu_features, BMI2)
+          // glibc:     && CPU_FEATURE_USABLE_P (cpu_features, F16C)
+          // glibc:     && CPU_FEATURE_USABLE_P (cpu_features, FMA)
+          // glibc:     && CPU_FEATURE_USABLE_P (cpu_features, LZCNT)
+          // glibc:     && CPU_FEATURE_USABLE_P (cpu_features, MOVBE)) 
+          // glibc:     isa_level |= GNU_PROPERTY_X86_ISA_1_V3;
+          if ((_features & CPU_AVX) &&
+              (_features & CPU_AVX2) &&
+              (_features & CPU_BMI1) &&
+              (_features & CPU_BMI2) &&
+              (_features & CPU_FMA) &&
+              (_features & CPU_LZCNT) &&
+              (_glibc_features & GLIBC_MOVBE)) {
+          if (excessive_GLIBC & GLIBC_F16C) {
+            assert(!(excessive_GLIBC & GLIBC_MOVBE), "(_glibc_features & GLIBC_MOVBE) cannot happen");
+            // FMA is 2012+, AVX2+BMI1+BMI2+LZCNT are 2013+, MOVBE is 2015+
+            excessive_GLIBC |= GLIBC_MOVBE;
+          }
+          if (_glibc_features & GLIBC_F16C) {
+            // glibc: if (CPU_FEATURE_USABLE_P (cpu_features, AVX512F)
+            // glibc:     && CPU_FEATURE_USABLE_P (cpu_features, AVX512BW)
+            // glibc:     && CPU_FEATURE_USABLE_P (cpu_features, AVX512CD)
+            // glibc:     && CPU_FEATURE_USABLE_P (cpu_features, AVX512DQ)
+            // glibc:     && CPU_FEATURE_USABLE_P (cpu_features, AVX512VL))
+            // glibc:   isa_level |= GNU_PROPERTY_X86_ISA_1_V4;
+            // All these flags are supported by GLIBC_DISABLE below.
+          }
+        }
       }
     }
   }

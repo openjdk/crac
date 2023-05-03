@@ -530,9 +530,10 @@ const int NOTPROD_KIND     = JVMFlag::KIND_NOT_PRODUCT;
 #define INITIALIZE_NOTPROD_FLAG(   type, name, value, ...) JVMFlag(FLAG_MEMBER_ENUM(name), FLAG_TYPE(type), XSTR(name), (void*)&name, NOTPROD_KIND,    __VA_ARGS__),
 
 // Handy aliases to match the symbols used in the flag specification macros.
-const int DIAGNOSTIC   = JVMFlag::KIND_DIAGNOSTIC;
-const int MANAGEABLE   = JVMFlag::KIND_MANAGEABLE;
-const int EXPERIMENTAL = JVMFlag::KIND_EXPERIMENTAL;
+const int DIAGNOSTIC       = JVMFlag::KIND_DIAGNOSTIC;
+const int MANAGEABLE       = JVMFlag::KIND_MANAGEABLE;
+const int EXPERIMENTAL     = JVMFlag::KIND_EXPERIMENTAL;
+const int RESTORE_SETTABLE = JVMFlag::KIND_RESTORE_SETTABLE;
 
 #define MATERIALIZE_ALL_FLAGS      \
   ALL_FLAGS(INITIALIZE_DEVELOP_FLAG,     \

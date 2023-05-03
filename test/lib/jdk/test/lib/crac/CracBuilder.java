@@ -40,6 +40,7 @@ public class CracBuilder {
     boolean captureOutput;
     String dockerImageName;
     private String[] dockerOptions;
+    // make sure to update copy() when adding another field here
 
     boolean containerStarted;
 
@@ -57,6 +58,24 @@ public class CracBuilder {
     }
 
     public CracBuilder() {
+    }
+
+    public CracBuilder copy() {
+        CracBuilder other = new CracBuilder();
+        other.verbose = verbose;
+        other.debug = debug;
+        other.classpathEntries.addAll(classpathEntries);
+        other.env.putAll(env);
+        other.vmOptions.addAll(vmOptions);
+        other.imageDir = imageDir;
+        other.engine = engine;
+        other.printResources = printResources;
+        other.main = main;
+        other.args = args == null ? null : Arrays.copyOf(args, args.length);
+        other.captureOutput = captureOutput;
+        other.dockerImageName = dockerImageName;
+        other.dockerOptions = dockerOptions == null ? null : Arrays.copyOf(dockerOptions, dockerOptions.length);
+        return other;
     }
 
     public CracBuilder verbose(boolean verbose) {
@@ -152,7 +171,7 @@ public class CracBuilder {
 
     public CracProcess startCheckpoint(List<String> javaPrefix) throws Exception {
         ensureContainerStarted();
-        List<String> cmd = prepareCommand(javaPrefix);
+        List<String> cmd = prepareCommand(javaPrefix, false);
         cmd.add("-XX:CRaCCheckpointTo=" + imageDir);
         cmd.add(main().getName());
         cmd.addAll(Arrays.asList(args()));
@@ -246,7 +265,7 @@ public class CracBuilder {
     }
     public CracProcess startRestore(List<String> prefixJava) throws Exception {
         ensureContainerStarted();
-        List<String> cmd = prepareCommand(prefixJava);
+        List<String> cmd = prepareCommand(prefixJava, true);
         cmd.add("-XX:CRaCRestoreFrom=" + imageDir);
         log("Starting restored process:");
         log(String.join(" ", cmd));
@@ -289,7 +308,7 @@ public class CracBuilder {
         return startPlain().waitForSuccess();
     }
 
-    private List<String> prepareCommand(List<String> javaPrefix) {
+    private List<String> prepareCommand(List<String> javaPrefix, boolean isRestore) {
         List<String> cmd = new ArrayList<>();
         if (javaPrefix != null) {
             cmd.addAll(javaPrefix);
@@ -300,18 +319,23 @@ public class CracBuilder {
             cmd.add(JAVA);
         }
         cmd.add("-ea");
-        cmd.add("-cp");
-        cmd.add(getClassPath());
-        if (engine != null) {
-            cmd.add("-XX:CREngine=" + engine.engine);
-        }
-        if (printResources) {
-            cmd.add("-XX:+UnlockDiagnosticVMOptions");
-            cmd.add("-XX:+CRPrintResourcesOnCheckpoint");
+        if (!isRestore) {
+            cmd.add("-cp");
+            cmd.add(getClassPath());
+            if (engine != null) {
+                cmd.add("-XX:CREngine=" + engine.engine);
+            }
+            if (printResources) {
+                cmd.add("-XX:+UnlockDiagnosticVMOptions");
+                cmd.add("-XX:+CRPrintResourcesOnCheckpoint");
+            }
         }
         if (debug) {
             cmd.add("-agentlib:jdwp=transport=dt_socket,server=y,suspend=y,address=0.0.0.0:5005");
-            cmd.add("-XX:-CRDoThrowCheckpointException");
+            if (!isRestore) {
+                cmd.add("-XX:+UnlockExperimentalVMOptions");
+                cmd.add("-XX:-CRDoThrowCheckpointException");
+            }
         }
         cmd.addAll(vmOptions);
         return cmd;

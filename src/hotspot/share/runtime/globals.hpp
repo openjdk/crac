@@ -54,8 +54,8 @@
 // only in this file, because the macrology requires single-token type names.
 
 // The optional extra_attrs parameter may have one of the following values:
-// DIAGNOSTIC, EXPERIMENTAL, or MANAGEABLE. Currently extra_attrs can be used
-// only with product/product_pd flags.
+// DIAGNOSTIC, EXPERIMENTAL, MANAGEABLE and RESTORE_SETTABLE. Currently
+// extra_attrs can be used only with product/product_pd flags.
 //
 // DIAGNOSTIC options are not meant for VM tuning or for product modes.
 //    They are to be used for VM quality assurance or field diagnosis
@@ -97,6 +97,9 @@
 //      and not reuse state related to the flag state at any given time.
 //    - you want the flag to be queried programmatically by the customers.
 //
+// RESTORE_SETTABLE are flags that can be set during restore from a snapshot.
+//    All MANAGEABLE flags are implicitly RESTORE_SETTABLE but
+//    RESTORE_SETTABLE are not MANAGEABLE.
 
 //
 // range is a macro that will expand to min and max arguments for range
@@ -2091,19 +2094,17 @@ const intx ObjectAlignmentInBytes = 8;
   product(ccstr, CRaCCheckpointTo, NULL, MANAGEABLE,                        \
         "Path to checkpoint image directory")                               \
                                                                             \
-  /* It does not make sense to change this flag in runtime but we'll tag */ \
-  /* it MANAGEABLE to prevent warnings when setting this on restore. */     \
-  product(ccstr, CRaCRestoreFrom, NULL, MANAGEABLE,                         \
+  product(ccstr, CRaCRestoreFrom, NULL, RESTORE_SETTABLE,                   \
       "Path to image for restore, replaces the initializing VM on success") \
                                                                             \
   product(ccstr, CREngine, "criuengine", "Path or name of a program "       \
       "implementing checkpoint/restore")                                    \
                                                                             \
-  product(bool, CRaCIgnoreRestoreIfUnavailable, false, "Ignore "            \
-      "-XX:CRaCRestoreFrom and continue initialization if restore is "      \
-      "unavailable")                                                        \
+  product(bool, CRaCIgnoreRestoreIfUnavailable, false, RESTORE_SETTABLE,    \
+      "Ignore -XX:CRaCRestoreFrom and continue initialization if restore "  \
+      "is unavailable")                                                     \
                                                                             \
-  product(ccstr, CRaCIgnoredFileDescriptors, NULL, MANAGEABLE,              \
+  product(ccstr, CRaCIgnoredFileDescriptors, NULL, RESTORE_SETTABLE,        \
       "Comma-separated list of file descriptor numbers or paths. "          \
       "All file descriptors greater than 2 (stdin, stdout and stderr are "  \
       "excluded automatically) not in this list are closed when the VM "    \
@@ -2125,7 +2126,7 @@ const intx ObjectAlignmentInBytes = 8;
   product(bool, CRDoThrowCheckpointException, true, EXPERIMENTAL,           \
       "Throw CheckpointException if uncheckpointable resource handle found")\
                                                                             \
-  product(bool, CRTrace, true, "Minimal C/R tracing")                       \
+  product(bool, CRTrace, true, MANAGEABLE, "Minimal C/R tracing")           \
 
 // end of RUNTIME_FLAGS
 

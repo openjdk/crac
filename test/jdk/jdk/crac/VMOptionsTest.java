@@ -25,7 +25,6 @@ import com.sun.management.HotSpotDiagnosticMXBean;
 import com.sun.management.VMOption;
 import jdk.crac.*;
 import jdk.test.lib.crac.CracBuilder;
-import jdk.test.lib.crac.CracEngine;
 import jdk.test.lib.crac.CracTest;
 
 import java.lang.management.ManagementFactory;
@@ -43,9 +42,12 @@ public class VMOptionsTest implements CracTest {
     public void test() throws Exception {
         CracBuilder builder = new CracBuilder();
         builder.doCheckpoint();
-        builder.vmOption("-XX:CRaCCheckpointTo=another");
-        builder.vmOption("-XX:NativeMemoryTracking=summary");
+        builder.vmOption("-XX:CRaCCheckpointTo=another"); // manageable
+        builder.vmOption("-XX:CRaCIgnoredFileDescriptors=42,43"); // restore_settable
         builder.doRestore();
+        // Setting non-manageable option
+        builder.vmOption("-XX:NativeMemoryTracking=summary");
+        assertEquals(1, builder.startRestore().waitFor());
     }
 
     @Override
@@ -63,6 +65,9 @@ public class VMOptionsTest implements CracTest {
         VMOption checkpointTo2 = bean.getVMOption("CRaCCheckpointTo");
         assertEquals("another", checkpointTo2.getValue());
         assertEquals(VMOption.Origin.OTHER, checkpointTo2.getOrigin());
+        VMOption ignoredFileDescriptors = bean.getVMOption("CRaCIgnoredFileDescriptors");
+        assertEquals("42,43", ignoredFileDescriptors.getValue());
+        assertEquals(VMOption.Origin.OTHER, ignoredFileDescriptors.getOrigin());
         VMOption nmt = bean.getVMOption("NativeMemoryTracking");
         assertEquals("off", nmt.getValue());
         assertEquals(VMOption.Origin.DEFAULT, nmt.getOrigin());

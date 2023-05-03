@@ -72,7 +72,7 @@ public:
     KIND_ARCH               = 1 << 13,
     KIND_LP64_PRODUCT       = 1 << 14,
     KIND_JVMCI              = 1 << 15,
-
+    KIND_RESTORE_SETTABLE   = 1 << 16,
     // Note the difference:
     // f->get_origin() == COMMAND_LINE
     //    f was mostly recently set by the command-line
@@ -251,6 +251,7 @@ public:
   bool is_experimental() const    { return (_flags & KIND_EXPERIMENTAL) != 0;                 }
   bool is_notproduct() const      { return (_flags & KIND_NOT_PRODUCT) != 0;                  }
   bool is_develop() const         { return (_flags & KIND_DEVELOP) != 0;                      }
+  bool is_restore_settable() const { return (_flags & (KIND_RESTORE_SETTABLE | KIND_MANAGEABLE)) != 0; }
 
   bool is_constant_in_binary() const;
 

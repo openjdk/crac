@@ -148,19 +148,28 @@ static int restore(const char *basedir,
         return 1;
     }
 
-    char cppath[PATH_MAX];
-    cppath[0] = '\0';
-    FILE *cppathfile = fopen(cppathpath, "r");
-    if (!cppathfile) {
+    int fd = open(cppathpath, O_RDONLY);
+    if (fd < 0) {
         perror("open cppath");
         return 1;
     }
 
-    if (!fgets(cppath, sizeof(cppath), cppathfile)) {
-        fprintf(stderr, "fgets error\n");
-        return 1;
+    char cppath[PATH_MAX];
+    int cppathlen = 0;
+    int r;
+    while ((r = read(fd, cppath + cppathlen, sizeof(cppath) - cppathlen - 1)) != 0) {
+        if (r < 0 && errno == EINTR) {
+            continue;
+        }
+        if (r < 0) {
+            perror("read cppath");
+            return 1;
+        }
+        cppathlen += r;
     }
-    fclose(cppathfile);
+    cppath[cppathlen] = '\0';
+
+    close(fd);
 
     char *inherit_perfdata = NULL;
     char *perfdatapath;

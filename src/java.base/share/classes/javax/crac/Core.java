@@ -43,12 +43,26 @@ public class Core {
     }
 
     /**
-     * Gets the global {@code Context} for checkpoint/restore notifications.
-     * Order of invoking {@link Resource#beforeCheckpoint(Context)} is the reverse
-     * of the order of {@link Context#register(Resource) registration}.
-     * Order of invoking {@link Resource#afterRestore(Context)} is the reverse
-     * of the order of {@link Resource#beforeCheckpoint(Context) checkpoint notification},
-     * hence the same as the order of {@link Context#register(Resource) registration}.
+     * Gets the global {@code Context} for checkpoint/restore notifications
+     * with the following properties:
+     * <li>The context maintains a weak reference to registered {@link jdk.crac.Resource}.
+     *     Therefore, it is important for the registrar to keep another strong
+     *     reference to the resource - otherwise the garbage collector
+     *     is free to trash the resource and notifications on this resource
+     *     will not be invoked.
+     * <li>Order of invoking {@link jdk.crac.Resource#beforeCheckpoint(jdk.crac.Context)} is
+     *     the reverse of the order of {@linkplain jdk.crac.Context#register(jdk.crac.Resource)
+     *     registration}.
+     * <li>Order of invoking {@link jdk.crac.Resource#afterRestore(jdk.crac.Context)} is
+     *     the reverse of the order of {@linkplain jdk.crac.Resource#beforeCheckpoint(jdk.crac.Context)
+     *     checkpoint notification}, hence the same as the order of
+     *     {@link jdk.crac.Context#register(jdk.crac.Resource) registration}.
+     * <li>{@code Resource} is always notified of checkpoint or restore,
+     *     regardless of whether other {@code Resource} notifications have
+     *     thrown an exception or not,
+     * <li>When an exception is thrown during notification it is caught by
+     *     the {@code Context} and is suppressed by a {@link jdk.crac.CheckpointException}
+     *     or {@link jdk.crac.RestoreException}, depends on the throwing method.
      *
      * @return the global {@code Context}
      */

@@ -96,12 +96,26 @@ public class Core {
     }
 
     /**
-     * Gets the global {@code Context} for checkpoint/restore notifications.
-     * Order of invoking {@link Resource#beforeCheckpoint(Context)} is the reverse
-     * of the order of {@link Context#register(Resource) registration}.
-     * Order of invoking {@link Resource#afterRestore(Context)} is the reverse
-     * of the order of {@link Resource#beforeCheckpoint(Context) checkpoint notification},
-     * hence the same as the order of {@link Context#register(Resource) registration}.
+     * Gets the global {@code Context} for checkpoint/restore notifications
+     * with the following properties:
+     * <li>The context maintains a weak reference to registered {@link Resource}.
+     *     Therefore, it is important for the registrar to keep another strong
+     *     reference to the resource - otherwise the garbage collector
+     *     is free to trash the resource and notifications on this resource
+     *     will not be invoked.
+     * <li>Order of invoking {@link Resource#beforeCheckpoint(Context)} is
+     *     the reverse of the order of {@linkplain Context#register(Resource)
+     *     registration}.
+     * <li>Order of invoking {@link Resource#afterRestore(Context)} is
+     *     the reverse of the order of {@linkplain Resource#beforeCheckpoint(Context)
+     *     checkpoint notification}, hence the same as the order of
+     *     {@link Context#register(Resource) registration}.
+     * <li>{@code Resource} is always notified of checkpoint or restore,
+     *     regardless of whether other {@code Resource} notifications have
+     *     thrown an exception or not,
+     * <li>When an exception is thrown during notification it is caught by
+     *     the {@code Context} and is suppressed by a {@link CheckpointException}
+     *     or {@link RestoreException}, depends on the throwing method.
      *
      * @return the global {@code Context}
      */
@@ -113,6 +127,15 @@ public class Core {
         checkpointExceptions.add(e);
     }
 
+    /**
+     * Checks if we are currently invoking {@link Resource#afterRestore(Context)}
+     * notifications (whether this is after a successful checkpoint or
+     * compensating for a failed one). Calling this from a different thread
+     * than the one performing the restore is subject to races.
+     *
+     * @return True if invoking <code>afterRestore</code>, false if the C/R
+     * is not in progress, or it is yet in the checkpoint phase.
+     */
     public static synchronized boolean isRestoring() {
         return restoring;
     }

@@ -30,15 +30,18 @@ import java.util.Collections;
 import java.util.List;
 
 public abstract class AbstractContextImpl<R extends Resource> extends Context<R> {
-    protected List<Resource> restoreQ = null;
+    private List<Resource> restoreQ = null;
 
-    protected static <E extends Exception> void recordExceptions(E source) {
-        Throwable[] suppressed = source.getSuppressed();
-        if (suppressed.length == 0) {
-            Core.recordException(source);
-        }
-        for (Throwable t : suppressed) {
-            Core.recordException(t);
+    protected static <E extends Exception> void recordExceptions(E exception) {
+        assert exception instanceof CheckpointException || exception instanceof RestoreException;
+        Throwable[] suppressed = exception.getSuppressed();
+        if (suppressed.length == 0 || exception.getMessage() != null) {
+            Core.recordException(exception);
+        } else {
+            // the exception is only wrapping actual ones...
+            for (Throwable t : suppressed) {
+                Core.recordException(t);
+            }
         }
     }
 
@@ -80,27 +83,28 @@ public abstract class AbstractContextImpl<R extends Resource> extends Context<R>
     @Override
     public void afterRestore(Context<? extends Resource> context) {
         List<Resource> queue = restoreQ;
-        restoreQ = null;
-        runAfterRestore(queue);
-    }
-
-    private void runAfterRestore(List<Resource> queue) {
         if (queue == null) {
             return;
         }
+        restoreQ = null;
         for (Resource r : queue) {
-            LoggerContainer.debug("afterRestore {0}", r);
-            try {
-                r.afterRestore(semanticContext());
-            } catch (RestoreException e) {
-                // Print error early in case the restore process gets stuck
-                LoggerContainer.error(e, "Failed to restore " + r);
-                recordExceptions(e);
-            } catch (Exception e) {
-                // Print error early in case the restore process gets stuck
-                LoggerContainer.error(e, "Failed to restore " + r);
-                Core.recordException(e);
-            }
+            invokeAfterRestore(r);
         }
     }
+
+    protected void invokeAfterRestore(Resource resource) {
+        LoggerContainer.debug("afterRestore {0}", resource);
+        try {
+            resource.afterRestore(semanticContext());
+        } catch (RestoreException e) {
+            // Print error early in case the restore process gets stuck
+            LoggerContainer.error(e, "Failed to restore " + resource);
+            recordExceptions(e);
+        } catch (Exception e) {
+            // Print error early in case the restore process gets stuck
+            LoggerContainer.error(e, "Failed to restore " + resource);
+            Core.recordException(e);
+        }
+    }
+
 }

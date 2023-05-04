@@ -240,18 +240,50 @@ public class Core {
             // checkpointInProgress protects against recursive
             // checkpointRestore from resource's
             // beforeCheckpoint/afterRestore methods
-            if (!checkpointInProgress) {
-                checkpointInProgress = true;
-                try {
-                    checkpointRestore1(jcmdStream);
-                } finally {
-                    if (FlagsHolder.TRACE_STARTUP_TIME) {
-                        System.out.println("STARTUPTIME " + System.nanoTime() + " restore-finish");
-                    }
-                    checkpointInProgress = false;
-                }
-            } else {
+            if (checkpointInProgress) {
                 throw new CheckpointException("Recursive checkpoint is not allowed");
+            }
+            checkpointInProgress = true;
+            try {
+                if (!Thread.currentThread().isDaemon()) {
+                    checkpointRestore1(jcmdStream);
+                } else {
+                    // Don't run on the daemon thread in case all non-daemon threads
+                    // are finished during notification. A temporary non-daemon thread
+                    // will keep JVM until all afterRestore complete.
+                    final CheckpointException[] checkpointException = {null};
+                    final RestoreException[] restoreException = {null};
+
+                    Thread t = new Thread(() -> {
+                        try {
+                            checkpointRestore1(jcmdStream);
+                        } catch (CheckpointException e) {
+                            checkpointException[0] = e;
+                        } catch (RestoreException e) {
+                            restoreException[0] = e;
+                        }
+                    });
+                    t.setDaemon(false);
+                    t.start();
+
+                    try {
+                        t.join();
+                    } catch (InterruptedException e) {
+                        throw new RuntimeException(e);
+                    }
+
+                    if (checkpointException[0] != null) {
+                        throw checkpointException[0];
+                    }
+                    if (restoreException[0] != null) {
+                        throw restoreException[0];
+                    }
+                }
+            } finally {
+                if (FlagsHolder.TRACE_STARTUP_TIME) {
+                    System.out.println("STARTUPTIME " + System.nanoTime() + " restore-finish");
+                }
+                checkpointInProgress = false;
             }
         }
     }

@@ -54,7 +54,7 @@
 // only in this file, because the macrology requires single-token type names.
 
 // The optional extra_attrs parameter may have one of the following values:
-// DIAGNOSTIC, EXPERIMENTAL, MANAGEABLE and RESTORE_SETTABLE. Currently
+// DIAGNOSTIC, EXPERIMENTAL, MANAGEABLE or RESTORE_SETTABLE. Currently
 // extra_attrs can be used only with product/product_pd flags.
 //
 // DIAGNOSTIC options are not meant for VM tuning or for product modes.
@@ -2091,14 +2091,17 @@ const intx ObjectAlignmentInBytes = 8;
   develop(bool, TraceOptimizedUpcallStubs, false,                           \
                 "Trace optimized upcall stub generation")                   \
                                                                             \
-  product(ccstr, CRaCCheckpointTo, NULL, MANAGEABLE,                        \
+  product(ccstr, CRaCCheckpointTo, NULL, RESTORE_SETTABLE,                  \
         "Path to checkpoint image directory")                               \
                                                                             \
   product(ccstr, CRaCRestoreFrom, NULL, RESTORE_SETTABLE,                   \
       "Path to image for restore, replaces the initializing VM on success") \
                                                                             \
-  product(ccstr, CREngine, "criuengine", "Path or name of a program "       \
-      "implementing checkpoint/restore")                                    \
+  /* It is usually not possible to use a different engine for checkpoint */ \
+  /* and restore but when we use a non-default engine this must be set   */ \
+  /* on restore, too. */                                                    \
+  product(ccstr, CREngine, "criuengine", RESTORE_SETTABLE,                  \
+      "Path or name of a program implementing checkpoint/restore")          \
                                                                             \
   product(bool, CRaCIgnoreRestoreIfUnavailable, false, RESTORE_SETTABLE,    \
       "Ignore -XX:CRaCRestoreFrom and continue initialization if restore "  \

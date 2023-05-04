@@ -319,12 +319,12 @@ public class CracBuilder {
             cmd.add(JAVA);
         }
         cmd.add("-ea");
+        if (engine != null) {
+            cmd.add("-XX:CREngine=" + engine.engine);
+        }
         if (!isRestore) {
             cmd.add("-cp");
             cmd.add(getClassPath());
-            if (engine != null) {
-                cmd.add("-XX:CREngine=" + engine.engine);
-            }
             if (printResources) {
                 cmd.add("-XX:+UnlockDiagnosticVMOptions");
                 cmd.add("-XX:+CRPrintResourcesOnCheckpoint");

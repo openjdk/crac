@@ -6575,10 +6575,8 @@ bool CracRestoreParameters::read_from(int fd) {
         cursor = value + strlen(value) + 1;
       }
     }
-    if (result != JVMFlag::Error::SUCCESS) {
-      warning("VM Option '%s' cannot be changed, ignoring: %s",
+    guarantee(result == JVMFlag::Error::SUCCESS, "VM Option '%s' cannot be changed: %s",
         name, JVMFlag::flag_error_str(result));
-    }
   }
 
   for (int i = 0; i < hdr->_nprops; i++) {

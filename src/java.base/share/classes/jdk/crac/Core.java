@@ -100,9 +100,12 @@ public class Core {
      * with the following properties:
      * <ul>
      * <li>The context maintains a weak reference to registered {@link Resource}.
-     *     Therefore, it is important for the registrar to keep another strong
-     *     reference to the resource - otherwise the garbage collector
-     *     is free to trash the resource and notifications on this resource
+     *     The lifecycle of the resource should be bound to the lifecycle of
+     *     the component (registrar) through a strong reference to the resource
+     *     (if these are not the same instance). That way the resource receives
+     *     notifications only until the component ceases to exist.
+     *     When the registrar does not keep a strong reference to the resource
+     *     the garbage collector is free to trash the resource and notifications
      *     will not be invoked.
      * <li>Order of invoking {@link Resource#beforeCheckpoint(Context)} is
      *     the reverse of the order of {@linkplain Context#register(Resource)

@@ -52,10 +52,9 @@ public abstract class AbstractContextImpl<R extends Resource> extends Context<R>
 
     protected void invokeBeforeCheckpoint(Resource resource) {
         LoggerContainer.debug("beforeCheckpoint {0}", resource);
-        // Resource.afterRestore is invoked even if Resource.beforeCheckpoint fails
-        restoreQ.add(resource);
+        recordResource(resource);
         try {
-            resource.beforeCheckpoint(semanticContext());
+            resource.beforeCheckpoint(this);
         } catch (CheckpointException e) {
             recordExceptions(e);
         } catch (Exception e) {
@@ -63,8 +62,9 @@ public abstract class AbstractContextImpl<R extends Resource> extends Context<R>
         }
     }
 
-    protected Context<? extends Resource> semanticContext() {
-        return this;
+    protected void recordResource(Resource resource) {
+        // Resource.afterRestore is invoked even if Resource.beforeCheckpoint fails
+        restoreQ.add(resource);
     }
 
     @Override
@@ -95,7 +95,7 @@ public abstract class AbstractContextImpl<R extends Resource> extends Context<R>
     protected void invokeAfterRestore(Resource resource) {
         LoggerContainer.debug("afterRestore {0}", resource);
         try {
-            resource.afterRestore(semanticContext());
+            resource.afterRestore(this);
         } catch (RestoreException e) {
             // Print error early in case the restore process gets stuck
             LoggerContainer.error(e, "Failed to restore " + resource);

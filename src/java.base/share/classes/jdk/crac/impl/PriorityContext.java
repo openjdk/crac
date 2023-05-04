@@ -25,6 +25,7 @@
 package jdk.crac.impl;
 
 import jdk.crac.*;
+import jdk.internal.crac.LoggerContainer;
 
 import java.util.*;
 
@@ -95,9 +96,37 @@ public abstract class PriorityContext<P, R extends Resource> extends AbstractCon
             resources.put(r, order++);
         }
 
+        // This method differs from the super method only by the
+        // parameter to the beforeCheckpoint method
         @Override
-        protected Context<? extends Resource> semanticContext() {
-            return PriorityContext.this;
+        protected void invokeBeforeCheckpoint(Resource resource) {
+            LoggerContainer.debug("beforeCheckpoint {0}", resource);
+            recordResource(resource);
+            try {
+                resource.beforeCheckpoint(PriorityContext.this);
+            } catch (CheckpointException e) {
+                recordExceptions(e);
+            } catch (Exception e) {
+                Core.recordException(e);
+            }
+        }
+
+        // This method differs from the super method only by the
+        // parameter to the afterRestore method
+        @Override
+        protected void invokeAfterRestore(Resource resource) {
+            LoggerContainer.debug("afterRestore {0}", resource);
+            try {
+                resource.afterRestore(PriorityContext.this);
+            } catch (RestoreException e) {
+                // Print error early in case the restore process gets stuck
+                LoggerContainer.error(e, "Failed to restore " + resource);
+                recordExceptions(e);
+            } catch (Exception e) {
+                // Print error early in case the restore process gets stuck
+                LoggerContainer.error(e, "Failed to restore " + resource);
+                Core.recordException(e);
+            }
         }
     }
 }

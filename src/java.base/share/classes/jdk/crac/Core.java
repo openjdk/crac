@@ -128,7 +128,18 @@ public class Core {
         return globalContext;
     }
 
-    public static void recordException(Throwable e) {
+    /**
+     * Records an exception thrown from a {@link Resource} during checkpoint
+     * or restore, captured by the parent {@link Context}. As the failure from
+     * resource notification does not affect notifications on other resources
+     * this serves as the point for aggregation of all failures. These are
+     * later reported as suppressed exceptions in a {@link CheckpointException}
+     * or {@link RestoreException} thrown from {@link #checkpointRestore()}.
+     *
+     * @param e Exception to be aggregated.
+     */
+    public static synchronized void recordException(Throwable e) {
+        assert checkpointInProgress;
         checkpointExceptions.add(e);
     }
 

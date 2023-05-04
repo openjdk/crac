@@ -98,6 +98,7 @@ public class Core {
     /**
      * Gets the global {@code Context} for checkpoint/restore notifications
      * with the following properties:
+     * <ul>
      * <li>The context maintains a weak reference to registered {@link Resource}.
      *     Therefore, it is important for the registrar to keep another strong
      *     reference to the resource - otherwise the garbage collector
@@ -116,6 +117,7 @@ public class Core {
      * <li>When an exception is thrown during notification it is caught by
      *     the {@code Context} and is suppressed by a {@link CheckpointException}
      *     or {@link RestoreException}, depends on the throwing method.
+     * </ul>
      *
      * @return the global {@code Context}
      */

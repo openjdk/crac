@@ -2094,7 +2094,10 @@ const intx ObjectAlignmentInBytes = 8;
       "replaces the initializing VM on success")                            \
                                                                             \
   product(ccstr, CREngine, "criuengine", "Path or name of a program "       \
-      "implementing checkpoint/restore")                                    \
+      "implementing checkpoint/restore and optional extra parameters "      \
+      "as a comma-separated list of key[=value] pairs; "                    \
+      "-XX:CREngine=program,key=value,anotherkey results in calling "       \
+      "'program --key value --anotherkey'")                                 \
                                                                             \
   product(bool, CRaCIgnoreRestoreIfUnavailable, false, "Ignore "            \
       "-XX:CRaCRestoreFrom and continue initialization if restore is "      \

@@ -61,7 +61,7 @@ public class DaemonAfterRestore implements CracTest {
         builder.checkpointViaJcmd();
         checkpointProcess.waitForCheckpointed();
 
-       builder.startRestore().waitForSuccess()
+        builder.startRestore().waitForSuccess()
             .outputAnalyzer().shouldContain(AFTER_RESTORE_MESSAGE);
     }
 
@@ -96,7 +96,6 @@ public class DaemonAfterRestore implements CracTest {
             @Override
             public void afterRestore(Context<? extends Resource> context) throws Exception {
                 Thread.sleep(3000);
-                // This message should appear regardless how big
                 System.out.println(AFTER_RESTORE_MESSAGE);
             }
         };

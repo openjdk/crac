@@ -232,6 +232,34 @@ public class Core {
         checkpointRestore(JCMD_STREAM_NULL);
     }
 
+    /**
+     * Keeps VM alive by at least one non-daemon thread.
+     */
+    private static class KeepAlive {
+        private final CountDownLatch start = new CountDownLatch(1);
+        private final CountDownLatch finish = new CountDownLatch(1);
+
+        private final Thread thread = new Thread(() -> {
+            start.countDown();
+            try {
+                finish.await();
+            } catch (InterruptedException e) {
+                throw new RuntimeException(e);
+            }
+        });
+
+        KeepAlive() throws InterruptedException {
+            thread.setDaemon(false);
+            thread.start();
+            start.await();
+        }
+
+        public void stop() throws InterruptedException {
+            finish.countDown();
+            thread.join();
+        }
+    }
+
     private static void checkpointRestore(long jcmdStream) throws
             CheckpointException,
             RestoreException {
@@ -245,8 +273,7 @@ public class Core {
                 throw new CheckpointException("Recursive checkpoint is not allowed");
             }
 
-            Thread keepAliveThread = null;
-            CountDownLatch finishCleanup = null;
+            KeepAlive keepAlive = null;
 
             try {
                 checkpointInProgress = true;
@@ -255,19 +282,11 @@ public class Core {
                 // to avoid VM exit. The notifications are done on the original
                 // thread.
                 if (Thread.currentThread().isDaemon()) {
-                    CountDownLatch start = new CountDownLatch(1);
-                    CountDownLatch finish = new CountDownLatch(1);
-                    finishCleanup = finish;
-                    keepAliveThread = new Thread(() -> {
-                        start.countDown();
-                        try {
-                            finish.await();
-                        } catch (InterruptedException e) {
-                            throw new RuntimeException(e);
-                        }
-                    });
-                    keepAliveThread.setDaemon(false);
-                    keepAliveThread.start();
+                    try {
+                        keepAlive = new KeepAlive();
+                    } catch (InterruptedException e) {
+                        throw new RuntimeException(e);
+                    }
                 }
 
                 checkpointRestore1(jcmdStream);
@@ -276,10 +295,9 @@ public class Core {
                     System.out.println("STARTUPTIME " + System.nanoTime() + " restore-finish");
                 }
 
-                if (finishCleanup != null) {
-                    finishCleanup.countDown();
+                if (keepAlive != null) {
                     try {
-                        keepAliveThread.join();
+                        keepAlive.stop();
                     } catch (InterruptedException e) {
                     }
                 }

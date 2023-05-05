@@ -26,62 +26,28 @@
 
 package jdk.crac.impl;
 
-import jdk.crac.*;
+import jdk.crac.Resource;
+import jdk.crac.impl.AbstractContextImpl;
 
-import java.util.Collections;
-import java.util.List;
+import java.util.Comparator;
 import java.util.Map;
-import java.util.WeakHashMap;
 
-public class OrderedContext<R extends Resource> extends AbstractContextImpl<R> {
-    private final String name;
-    private boolean checkpointing = false;
-    protected long order = 0;
-    protected final WeakHashMap<R, Long> resources = new WeakHashMap<>();
+public class OrderedContext extends AbstractContextImpl<Resource, Long> {
+    private long order;
+
+    static class ContextComparator implements Comparator<Map.Entry<Resource, Long>> {
+        @Override
+        public int compare(Map.Entry<Resource, Long> o1, Map.Entry<Resource, Long> o2) {
+            return (int)(o2.getValue() - o1.getValue());
+        }
+    }
 
     public OrderedContext() {
-        this(null);
-    }
-
-    public OrderedContext(String name) {
-        this.name = name;
+        super(new ContextComparator());
     }
 
     @Override
-    public String toString() {
-        return name != null ? name : super.toString();
-    }
-
-    @Override
-    public synchronized void register(R r) {
-        resources.put(r, order++);
-        // It is possible that something registers to us during restore but before
-        // this context's afterRestore was called.
-        if (checkpointing && !Core.isRestoring()) {
-            setModified(r, null);
-        }
-    }
-
-    @Override
-    protected void runBeforeCheckpoint() {
-        List<R> resources;
-        synchronized (this) {
-            checkpointing = true;
-            resources = this.resources.entrySet().stream()
-                    .sorted(Collections.reverseOrder(Map.Entry.comparingByValue()))
-                    .map(Map.Entry::getKey)
-                    .toList();
-        }
-        for (R r : resources) {
-            invokeBeforeCheckpoint(r);
-        }
-    }
-
-    @Override
-    public void afterRestore(Context<? extends Resource> context) {
-        synchronized (this) {
-            checkpointing = false;
-        }
-        super.afterRestore(context);
+    public synchronized void register(Resource r) {
+        register(r, order++);
     }
 }

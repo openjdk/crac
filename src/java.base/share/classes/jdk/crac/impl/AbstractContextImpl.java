@@ -22,85 +22,86 @@
 
 package jdk.crac.impl;
 
-import jdk.crac.*;
-import jdk.internal.crac.LoggerContainer;
+import jdk.crac.CheckpointException;
+import jdk.crac.Context;
+import jdk.crac.Resource;
+import jdk.crac.RestoreException;
+import sun.security.action.GetBooleanAction;
 
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.List;
+import java.util.*;
+import java.util.stream.Collectors;
 
-public abstract class AbstractContextImpl<R extends Resource> extends Context<R> {
-    protected List<Resource> restoreQ = null;
+public abstract class AbstractContextImpl<R extends Resource, P> extends Context<R> {
 
-    protected static <E extends Exception> void recordExceptions(E source) {
-        Throwable[] suppressed = source.getSuppressed();
-        if (suppressed.length == 0) {
-            Core.recordException(source);
-        }
-        for (Throwable t : suppressed) {
-            Core.recordException(t);
-        }
+    private static class FlagsHolder {
+        public static final boolean DEBUG =
+            GetBooleanAction.privilegedGetProperty("jdk.crac.debug");
     }
 
-    protected void setModified(R resource, String msg) {
-        Core.recordException(new CheckpointException(
-                "Adding resource " + resource + " to " + this + (msg != null ? msg : "")));
+    private WeakHashMap<R, P> checkpointQ = new WeakHashMap<>();
+    private List<R> restoreQ = null;
+    private Comparator<Map.Entry<R, P>> comparator;
+
+    protected AbstractContextImpl(Comparator<Map.Entry<R, P>> comparator) {
+        this.comparator = comparator;
     }
 
-    protected void invokeBeforeCheckpoint(Resource resource) {
-        LoggerContainer.debug("beforeCheckpoint {0}", resource);
-        // Resource.afterRestore is invoked even if Resource.beforeCheckpoint fails
-        restoreQ.add(resource);
-        try {
-            resource.beforeCheckpoint(semanticContext());
-        } catch (CheckpointException e) {
-            recordExceptions(e);
-        } catch (Exception e) {
-            Core.recordException(e);
-        }
-    }
-
-    protected Context<? extends Resource> semanticContext() {
-        return this;
+    protected synchronized void register(R resource, P payload) {
+        checkpointQ.put(resource, payload);
     }
 
     @Override
-    public void beforeCheckpoint(Context<? extends Resource> context) {
-        // We won't synchronize access to restoreQ because methods
-        // beforeCheckpoint and afterRestore should be invoked only
-        // by the single thread performing the C/R and other threads should
-        // not touch that.
-        restoreQ = new ArrayList<>();
-        runBeforeCheckpoint();
-        Collections.reverse(restoreQ);
-    }
+    public synchronized void beforeCheckpoint(Context<? extends Resource> context) throws CheckpointException {
+        List<R> resources = checkpointQ.entrySet().stream()
+            .sorted(comparator)
+            .map(Map.Entry::getKey)
+            .collect(Collectors.toList());
 
-    protected abstract void runBeforeCheckpoint();
-
-    @Override
-    public void afterRestore(Context<? extends Resource> context) {
-        List<Resource> queue = restoreQ;
-        restoreQ = null;
-        runAfterRestore(queue);
-    }
-
-    private void runAfterRestore(List<Resource> queue) {
-        if (queue == null) {
-            return;
-        }
-        for (Resource r : queue) {
-            LoggerContainer.debug("afterRestore {0}", r);
-            try {
-                r.afterRestore(semanticContext());
-            } catch (RestoreException e) {
-                // Print error early in case the restore process gets stuck
-                LoggerContainer.error(e, "Failed to restore " + r);
-                recordExceptions(e);
-            } catch (Exception e) {
-                // Print error early in case the restore process gets stuck
-                LoggerContainer.error(e, "Failed to restore " + r);
-                Core.recordException(e);
+        CheckpointException exception = new CheckpointException();
+        for (Resource r : resources) {
+            if (FlagsHolder.DEBUG) {
+                System.err.println("jdk.crac beforeCheckpoint " + r.toString());
             }
+            try {
+                r.beforeCheckpoint(this);
+            } catch (CheckpointException e) {
+                for (Throwable t : e.getSuppressed()) {
+                    exception.addSuppressed(t);
+                }
+            } catch (Exception e) {
+                exception.addSuppressed(e);
+            }
+        }
+
+        Collections.reverse(resources);
+        restoreQ = resources;
+
+        if (0 < exception.getSuppressed().length) {
+            throw exception;
+        }
+    }
+
+    @Override
+    public synchronized void afterRestore(Context<? extends Resource> context) throws RestoreException {
+        RestoreException exception = new RestoreException();
+        for (Resource r : restoreQ) {
+            if (FlagsHolder.DEBUG) {
+                System.err.println("jdk.crac afterRestore " + r.toString());
+            }
+            try {
+                r.afterRestore(this);
+            } catch (RestoreException e) {
+                for (Throwable t : e.getSuppressed()) {
+                    exception.addSuppressed(t);
+                }
+            } catch (Exception e) {
+                exception.addSuppressed(e);
+            }
+        }
+        restoreQ = null;
+
+        if (0 < exception.getSuppressed().length) {
+            throw exception;
         }
     }
 }

@@ -91,9 +91,7 @@ public class DaemonAfterRestore implements CracTest {
         Resource resource = new Resource() {
             @Override
             public void beforeCheckpoint(Context<? extends Resource> context) throws Exception {
-                if (!Thread.currentThread().isDaemon()) {
-                    throw new RuntimeException("beforeCheckpoint called from non-daemon thread");
-                }
+                assert Thread.currentThread().isDaemon() : "beforeCheckpoint is expected to be called from daemon thread";
                 finish.countDown();
             }
             @Override

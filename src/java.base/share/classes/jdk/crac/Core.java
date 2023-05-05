@@ -244,40 +244,47 @@ public class Core {
             if (checkpointInProgress) {
                 throw new CheckpointException("Recursive checkpoint is not allowed");
             }
-            checkpointInProgress = true;
-            CountDownLatch finishCleanup = null;
+
             Thread keepAliveThread = null;
-            if (Thread.currentThread().isDaemon()) {
-                // Create a non-daemon thread while notification is performed.
-                // The notifications are done on the original thread.
-                CountDownLatch start = new CountDownLatch(1);
-                CountDownLatch finish = new CountDownLatch(1);
-                finishCleanup = finish;
-                keepAliveThread = new Thread(() -> {
-                    start.countDown();
-                    try {
-                        finish.await();
-                    } catch (InterruptedException e) {
-                        throw new RuntimeException(e);
-                    }
-                });
-                keepAliveThread.setDaemon(false);
-                keepAliveThread.start();
-            }
+            CountDownLatch finishCleanup = null;
+
             try {
+                checkpointInProgress = true;
+
+                // Create a non-daemon thread while notification is performed
+                // to avoid VM exit. The notifications are done on the original
+                // thread.
+                if (Thread.currentThread().isDaemon()) {
+                    CountDownLatch start = new CountDownLatch(1);
+                    CountDownLatch finish = new CountDownLatch(1);
+                    finishCleanup = finish;
+                    keepAliveThread = new Thread(() -> {
+                        start.countDown();
+                        try {
+                            finish.await();
+                        } catch (InterruptedException e) {
+                            throw new RuntimeException(e);
+                        }
+                    });
+                    keepAliveThread.setDaemon(false);
+                    keepAliveThread.start();
+                }
+
                 checkpointRestore1(jcmdStream);
             } finally {
                 if (FlagsHolder.TRACE_STARTUP_TIME) {
                     System.out.println("STARTUPTIME " + System.nanoTime() + " restore-finish");
                 }
+
                 if (finishCleanup != null) {
                     finishCleanup.countDown();
                     try {
                         keepAliveThread.join();
                     } catch (InterruptedException e) {
-                        throw new RuntimeException(e);
                     }
                 }
+
+                checkpointInProgress = false;
             }
         }
     }

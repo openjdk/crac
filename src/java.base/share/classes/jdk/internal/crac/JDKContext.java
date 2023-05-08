@@ -26,14 +26,12 @@
 
 package jdk.internal.crac;
 
-import jdk.crac.CheckpointException;
-import jdk.crac.Context;
-import jdk.crac.Resource;
-import jdk.crac.RestoreException;
+import jdk.crac.*;
 import jdk.crac.impl.AbstractContextImpl;
 import jdk.internal.access.JavaIOFileDescriptorAccess;
 import jdk.internal.access.SharedSecrets;
 import sun.security.action.GetBooleanAction;
+import sun.security.action.GetPropertyAction;
 
 import java.io.File;
 import java.io.FileDescriptor;
@@ -44,33 +42,26 @@ import java.util.*;
 import java.util.stream.Collectors;
 
 public class JDKContext extends AbstractContextImpl<JDKResource, Void> {
-    public static final String COLLECT_FD_STACKTRACES_PROPERTY = "jdk.crac.collect-fd-stacktraces";
-    public static final String COLLECT_FD_STACKTRACES_HINT = "Use -D" + COLLECT_FD_STACKTRACES_PROPERTY + "=true to find the source.";
+    private static final String COLLECT_FD_STACKTRACES_PROPERTY = "jdk.crac.collect-fd-stacktraces";
+    private static final String COLLECT_FD_STACKTRACES_HINT =
+        "Set System Property " + COLLECT_FD_STACKTRACES_PROPERTY + "=true to get stack traces of JDK Resources";
 
     // JDKContext by itself is initialized too early when system properties are not set yet
     public static class Properties {
         public static final boolean COLLECT_FD_STACKTRACES =
                 GetBooleanAction.privilegedGetProperty(JDKContext.COLLECT_FD_STACKTRACES_PROPERTY);
+
+        public static final String[] classpathEntries =
+                GetPropertyAction.privilegedGetProperty("java.class.path")
+                .split(File.pathSeparator);
     }
 
     private WeakHashMap<FileDescriptor, Object> claimedFds;
 
     public boolean matchClasspath(String path) {
-        Path p = Path.of(path);
-        String classpath = System.getProperty("java.class.path");
-        int index = 0;
-        while (index >= 0) {
-            int end = classpath.indexOf(File.pathSeparatorChar, index);
-            if (end < 0) {
-                end = classpath.length();
-            }
-            try {
-                if (Files.isSameFile(p, Path.of(classpath.substring(index, end)))) {
-                    return true;
-                }
-            } catch (IOException e) {
-                // ignore exception
-                return false;
+        for (String cp : Properties.classpathEntries) {
+            if (cp.equals(path)) {
+                return true;
             }
         }
         return false;
@@ -82,7 +73,14 @@ public class JDKContext extends AbstractContextImpl<JDKResource, Void> {
     @Override
     public synchronized void beforeCheckpoint(Context<? extends Resource> context) throws CheckpointException {
         claimedFds = new WeakHashMap<>();
-        super.beforeCheckpoint(context);
+        try {
+            super.beforeCheckpoint(context);
+        } catch (CheckpointException ce) {
+            if (!Properties.COLLECT_FD_STACKTRACES) {
+                LoggerContainer.info(COLLECT_FD_STACKTRACES_HINT);
+            }
+            throw ce;
+        }
     }
 
     @Override

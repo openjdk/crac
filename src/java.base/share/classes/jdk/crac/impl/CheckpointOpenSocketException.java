@@ -26,11 +26,14 @@
 
 package jdk.crac.impl;
 
+import jdk.internal.crac.JDKResource;
+import jdk.internal.crac.JDKResourceImpl;
+
 public class CheckpointOpenSocketException extends
         CheckpointOpenResourceException {
     private static final long serialVersionUID = 4778540502218641776L;
 
-    public CheckpointOpenSocketException(String details) {
-        super(details, null);
+    public CheckpointOpenSocketException(String details, Throwable cause) {
+        super(details, cause);
     }
 }

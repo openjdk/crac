@@ -90,7 +90,7 @@ public class Core {
                     break;
                 case JVM_CR_FAIL_SOCK:
                     exception.addSuppressed(
-                            new CheckpointOpenSocketException(messages[i]));
+                            new CheckpointOpenSocketException(messages[i], null));
                     break;
                 case JVM_CR_FAIL_PIPE:
                     // FALLTHROUGH

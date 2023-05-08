@@ -39,6 +39,7 @@ import jdk.internal.access.SharedSecrets;
 import jdk.internal.crac.Core;
 import jdk.internal.crac.JDKContext;
 import jdk.internal.crac.JDKResource;
+import jdk.internal.crac.JDKResourceImpl;
 import jdk.internal.ref.PhantomCleanable;
 
 /**
@@ -63,30 +64,23 @@ public final class FileDescriptor {
     private List<Closeable> otherParents;
     private boolean closed;
 
-    class Resource implements jdk.internal.crac.JDKResource {
+    class Resource extends JDKResourceImpl {
         private boolean closedByNIO;
-        final Exception stackTraceHolder;
-
-        Resource() {
-            JDKContext jdkContext = Core.getJDKContext();
-            jdkContext.register(this);
-            if (JDKContext.Properties.COLLECT_FD_STACKTRACES) {
-                stackTraceHolder = new Exception("This file descriptor was created here");
-            } else {
-                stackTraceHolder = null;
-            }
-        }
 
         @Override
         public void beforeCheckpoint(Context<? extends jdk.crac.Resource> context) throws Exception {
-            if (!closedByNIO) {
-                FileDescriptor.this.beforeCheckpoint();
+            if (!closedByNIO && valid()) {
+                JDKContext ctx = (JDKContext)context;
+                if (ctx.claimFdWeak(FileDescriptor.this, this)) {
+                    throw new CheckpointOpenResourceException(
+                        FileDescriptor.class.getSimpleName() + " " + fd + ": " + nativeDescription0(),
+                        getStackTraceHolder());
+                }
             }
         }
 
         @Override
         public void afterRestore(Context<? extends jdk.crac.Resource> context) throws Exception {
-            FileDescriptor.this.afterRestore();
         }
 
         @Override
@@ -371,27 +365,7 @@ public final class FileDescriptor {
         close0();
     }
 
-    private synchronized void beforeCheckpoint() throws CheckpointOpenResourceException {
-        if (valid()) {
-            JDKContext ctx = jdk.internal.crac.Core.getJDKContext();
-            if (ctx.claimFdWeak(this, this)) {
-                throw new CheckpointOpenResourceException(nativeDescription(), resource.stackTraceHolder);
-            }
-        }
-    }
-
-    private String nativeDescription() {
-        String msg = "FileDescriptor " + this.fd + " left open: " + nativeDescription0();
-        if (!JDKContext.Properties.COLLECT_FD_STACKTRACES) {
-            msg += " " + JDKContext.COLLECT_FD_STACKTRACES_HINT;
-        }
-        return msg;
-    }
-
     private native String nativeDescription0();
-
-    private synchronized void afterRestore() {
-    }
 
     /*
      * Close the raw file descriptor or handle, if it has not already been closed

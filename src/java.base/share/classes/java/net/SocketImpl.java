@@ -41,6 +41,7 @@ import jdk.crac.impl.CheckpointOpenSocketException;
 import jdk.internal.crac.Core;
 import jdk.internal.crac.JDKContext;
 import jdk.internal.crac.JDKResource;
+import jdk.internal.crac.JDKResourceImpl;
 import sun.net.NetProperties;
 import sun.net.PlatformSocketImpl;
 import sun.nio.ch.NioSocketImpl;
@@ -111,7 +112,7 @@ public abstract class SocketImpl implements SocketOptions {
      */
     protected int localport;
 
-    private class SocketResource implements JDKResource {
+    private class SocketResource extends JDKResourceImpl {
         SocketResource() {
             Core.getJDKContext().register(this);
         }
@@ -125,7 +126,9 @@ public abstract class SocketImpl implements SocketOptions {
         public void beforeCheckpoint(Context<? extends Resource> context) throws Exception {
             JDKContext ctx = (JDKContext)context;
             if (ctx.claimFdWeak(fd, this)) {
-                throw new CheckpointOpenSocketException(SocketImpl.this.toString());
+                throw new CheckpointOpenSocketException(
+                    SocketImpl.this.toString(),
+                    getStackTraceHolder());
             }
         }
 

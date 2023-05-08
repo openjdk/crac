@@ -42,10 +42,11 @@ public class OpenSocketDetectionTest implements CracTest {
     @Override
     public void test() throws Exception {
         CracProcess cp = new CracBuilder()
+                .captureOutput(true)
                 .startCheckpoint();
         cp.outputAnalyzer()
                 .shouldHaveExitValue(1)
-                .shouldMatch("left open: tcp6? local [/0-9a-f:.]+:[0-9]+ remote [/0-9a-f:.]+:[0-9]+");
+                .shouldMatch("CheckpointOpenSocketException: [A-Za-z0-9.$]+\\[addr=[/0-9a-f:.]+,port=[0-9]+,localport=[0-9]+\\]");
     }
 
     @Override

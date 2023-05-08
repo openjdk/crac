@@ -34,6 +34,13 @@ import java.security.PrivilegedAction;
 import java.util.Objects;
 import java.util.Set;
 
+import jdk.crac.Context;
+import jdk.crac.Resource;
+import jdk.crac.impl.CheckpointOpenResourceException;
+import jdk.crac.impl.CheckpointOpenSocketException;
+import jdk.internal.crac.Core;
+import jdk.internal.crac.JDKContext;
+import jdk.internal.crac.JDKResource;
 import sun.net.NetProperties;
 import sun.net.PlatformSocketImpl;
 import sun.nio.ch.NioSocketImpl;
@@ -103,6 +110,32 @@ public abstract class SocketImpl implements SocketOptions {
      * The local port number to which this socket is connected.
      */
     protected int localport;
+
+    private class SocketResource implements JDKResource {
+        SocketResource() {
+            Core.getJDKContext().register(this);
+        }
+
+        @Override
+        public Priority getPriority() {
+            return Priority.PRE_FILE_DESRIPTORS;
+        }
+
+        @Override
+        public void beforeCheckpoint(Context<? extends Resource> context) throws Exception {
+            JDKContext ctx = (JDKContext)context;
+            if (ctx.claimFdWeak(fd, this)) {
+                throw new CheckpointOpenSocketException(SocketImpl.this.toString());
+            }
+        }
+
+        @Override
+        public void afterRestore(Context<? extends Resource> context) throws Exception {
+
+        }
+    };
+
+    private final SocketResource socketResource = new SocketResource();
 
     /**
      * Initialize a new instance of this class

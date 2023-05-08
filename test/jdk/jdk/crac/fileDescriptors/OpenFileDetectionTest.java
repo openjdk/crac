@@ -50,6 +50,7 @@ public class OpenFileDetectionTest implements CracTest {
     public void exec() throws Exception {
         try (var reader = new FileReader("/etc/passwd")) {
             Core.checkpointRestore();
+
         }
     }
 }

@@ -33,6 +33,7 @@ import java.util.Objects;
 
 import jdk.crac.Context;
 import jdk.crac.impl.CheckpointOpenFileException;
+import jdk.crac.impl.CheckpointOpenResourceException;
 import jdk.internal.access.JavaIOFileDescriptorAccess;
 import jdk.internal.access.SharedSecrets;
 import jdk.internal.crac.Core;
@@ -370,46 +371,24 @@ public final class FileDescriptor {
         close0();
     }
 
-    private synchronized void beforeCheckpoint() throws CheckpointOpenFileException {
+    private synchronized void beforeCheckpoint() throws CheckpointOpenResourceException {
         if (valid()) {
             JDKContext ctx = jdk.internal.crac.Core.getJDKContext();
             if (ctx.claimFdWeak(this, this)) {
-                String path = getPath();
-                String type = getType();
-                String info;
-                if ("socket".equals(type)) {
-                    InetSocketAddress[] addresses = Socket.getAddresses(fd);
-                    StringBuilder sb = new StringBuilder(Socket.getType(fd));
-                    if (addresses == null) {
-                        sb.append("not IPv4/IPv6");
-                    } else {
-                        if (addresses[0] != null) {
-                            sb.append(" local ").append(addresses[0]);
-                        } else {
-                            sb.append(" local not bound");
-                        }
-                        if (addresses[1] != null) {
-                            sb.append(" remote ").append(addresses[1]);
-                        } else {
-                            sb.append(" remote not bound");
-                        }
-                    }
-                    info = sb.toString();
-                } else {
-                    info = (path != null ? path : "unknown path") + " (" + (type != null ? type : "unknown") + ")";
-                }
-                String msg = "FileDescriptor " + this.fd + " left open: " + info + " ";
-                if (!JDKContext.Properties.COLLECT_FD_STACKTRACES) {
-                    msg += JDKContext.COLLECT_FD_STACKTRACES_HINT;
-                }
-                throw new CheckpointOpenFileException(msg, resource.stackTraceHolder);
+                throw new CheckpointOpenResourceException(nativeDescription(), resource.stackTraceHolder);
             }
         }
     }
 
-    private native String getPath();
+    private String nativeDescription() {
+        String msg = "FileDescriptor " + this.fd + " left open: " + nativeDescription0();
+        if (!JDKContext.Properties.COLLECT_FD_STACKTRACES) {
+            msg += " " + JDKContext.COLLECT_FD_STACKTRACES_HINT;
+        }
+        return msg;
+    }
 
-    private native String getType();
+    private native String nativeDescription0();
 
     private synchronized void afterRestore() {
     }

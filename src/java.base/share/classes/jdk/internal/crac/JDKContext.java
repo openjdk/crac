@@ -113,7 +113,7 @@ public class JDKContext extends AbstractContextImpl<JDKResource, Void> {
     }
 
     public boolean claimFdWeak(FileDescriptor fd, Object obj) {
-        if (!fd.valid()) {
+        if (fd == null || !fd.valid()) {
             return false;
         }
         return claimedFds.putIfAbsent(fd, obj) == null;

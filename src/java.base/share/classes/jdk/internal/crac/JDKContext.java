@@ -42,6 +42,13 @@ import java.util.*;
 import java.util.stream.Collectors;
 
 public class JDKContext extends AbstractContextImpl<JDKResource, Void> {
+    private static class ContextComparator implements Comparator<Map.Entry<JDKResource, Void>> {
+        @Override
+        public int compare(Map.Entry<JDKResource, Void> o1, Map.Entry<JDKResource, Void> o2) {
+            return o1.getKey().getPriority().compareTo(o2.getKey().getPriority());
+        }
+    }
+
     private static final String COLLECT_FD_STACKTRACES_PROPERTY = "jdk.crac.collect-fd-stacktraces";
     private static final String COLLECT_FD_STACKTRACES_HINT =
         "Set System Property " + COLLECT_FD_STACKTRACES_PROPERTY + "=true to get stack traces of JDK Resources";
@@ -68,6 +75,7 @@ public class JDKContext extends AbstractContextImpl<JDKResource, Void> {
     }
 
     JDKContext() {
+        super(new ContextComparator());
     }
 
     @Override
@@ -91,7 +99,7 @@ public class JDKContext extends AbstractContextImpl<JDKResource, Void> {
 
     @Override
     public void register(JDKResource resource) {
-        register(resource, resource.getPriority().ordinal());
+        register(resource, null);
     }
 
     public Map<Integer, Object> getClaimedFds() {

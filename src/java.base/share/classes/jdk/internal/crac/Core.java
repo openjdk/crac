@@ -26,11 +26,9 @@
 
 package jdk.internal.crac;
 
-import java.io.FileDescriptor;
-import java.util.WeakHashMap;
-
 public class Core {
-    private static JDKContext JDKContext;
+    private static final JDKContext JDKContext;
+
     static {
         JDKContext = new JDKContext();
         jdk.crac.Core.getGlobalContext().register(JDKContext);

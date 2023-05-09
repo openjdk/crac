@@ -43,8 +43,7 @@ public class OpenFileDetectionTest implements CracTest {
         cp.outputAnalyzer()
                 .shouldHaveExitValue(1)
                 .shouldMatch("CheckpointOpenFileException: /etc/passwd")
-                .shouldContain("Resource Stack Trace");
-
+                .shouldContain("This file descriptor was created by "); // <thread> at <time> here
     }
 
     @Override

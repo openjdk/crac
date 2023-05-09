@@ -53,6 +53,10 @@ public class RefQueueTest implements CracTest {
 
         // the cleaner would be able to run right away
         cleaner.register(new Object(), () -> {
+            // FIXME: This test can still spuriously fail when this starts running
+            // before C/R, voiding the PhantomCleanableRef.beforeCheckpoint, but
+            // does not finish the close before FileDescriptor finds itself not closed
+            // and rightfully throws CheckpointOpenFileException.
             try {
                 badStream.close();
             } catch (IOException e) {

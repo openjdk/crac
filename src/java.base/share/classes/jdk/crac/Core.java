@@ -42,7 +42,9 @@ import java.security.AccessController;
 import java.security.PrivilegedAction;
 import java.security.PrivilegedActionException;
 import java.security.PrivilegedExceptionAction;
-import java.util.*;
+import java.util.Arrays;
+import java.util.List;
+import java.util.Map;
 import java.util.function.Supplier;
 
 /**
@@ -85,29 +87,18 @@ public class Core {
         final int length = codes.length;
 
         for (int i = 0; i < length; ++i) {
-            switch(codes[i]) {
-                case JVM_CR_FAIL_FILE:
-                    exception.addSuppressed(
-                            new CheckpointOpenFileException(messages[i], null));
-                    break;
-                case JVM_CR_FAIL_SOCK:
-                    exception.addSuppressed(
-                            new CheckpointOpenSocketException(messages[i], null));
-                    break;
-                case JVM_CR_FAIL_PIPE:
-                    // FALLTHROUGH
-                default:
-                    exception.addSuppressed(
-                            new CheckpointOpenResourceException(messages[i], null));
-                    break;
-            }
+            Throwable ex = switch (codes[i]) {
+                case JVM_CR_FAIL_FILE -> new CheckpointOpenFileException(messages[i], null);
+                case JVM_CR_FAIL_SOCK -> new CheckpointOpenSocketException(messages[i], null);
+                case JVM_CR_FAIL_PIPE -> new CheckpointOpenResourceException(messages[i], null);
+                default -> new CheckpointOpenResourceException(messages[i], null);
+            };
+            exception.addSuppressed(ex);
         }
     }
 
     /**
      * Gets the global {@code Context} for checkpoint/restore notifications.
-     *
-     * @return the global {@code Context}
      */
     public static Context<Resource> getGlobalContext() {
         return globalContext;
@@ -118,6 +109,8 @@ public class Core {
             CheckpointException,
             RestoreException {
         final CheckpointException[] checkpointException = {null};
+        // This log is here to initialize call sites in logger formatters.
+        LoggerContainer.debug("Starting checkpoint at epoch:{0}", System.currentTimeMillis());
 
         try {
             globalContext.beforeCheckpoint(null);
@@ -146,7 +139,7 @@ public class Core {
         LoggerContainer.debug("Claimed open file descriptors:");
         for (int i = 0; i < claimedPairs.size(); ++i) {
             fdArr[i] = claimedPairs.get(i).getKey();
-            LoggerContainer.debug("\t%d", fdArr[i]);
+            LoggerContainer.debug("\t{0}", fdArr[i]);
         }
 
         final Object[] bundle = checkpointRestore0(fdArr, null, checkpointException[0] != null, jcmdStream);
@@ -165,16 +158,9 @@ public class Core {
                 checkpointException[0] = new CheckpointException();
             }
             switch (retCode) {
-                case JVM_CHECKPOINT_ERROR:
-                    translateJVMExceptions(codes, messages, checkpointException[0]);
-                    break;
-                case JVM_CHECKPOINT_NONE:
-                    checkpointException[0].addSuppressed(
-                            new RuntimeException("C/R is not configured"));
-                    break;
-                default:
-                    checkpointException[0].addSuppressed(
-                            new RuntimeException("Unknown C/R result: " + retCode));
+                case JVM_CHECKPOINT_ERROR -> translateJVMExceptions(codes, messages, checkpointException[0]);
+                case JVM_CHECKPOINT_NONE -> checkpointException[0].addSuppressed(new RuntimeException("C/R is not configured"));
+                default -> checkpointException[0].addSuppressed(new RuntimeException("Unknown C/R result: " + retCode));
             }
         }
 

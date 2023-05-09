@@ -9,7 +9,11 @@ public abstract class JDKResourceImpl implements JDKResource {
 
     public JDKResourceImpl() {
         stackTraceHolder = JDKContext.Properties.COLLECT_FD_STACKTRACES ?
-            new Exception("Resource Stack Trace") :
+            // About the timestamp: we cannot format it nicely since this
+            // exception is sometimes created too early in the VM lifecycle
+            // (but it's hard to detect when it would be safe to do).
+            new Exception("This file descriptor was created by " + Thread.currentThread().getName()
+                + " at epoch:" + System.currentTimeMillis() + " here") :
             null;
 
         Core.getJDKContext().register(this);

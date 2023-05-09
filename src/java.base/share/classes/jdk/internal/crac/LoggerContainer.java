@@ -1,4 +1,4 @@
-package jdk.crac;
+package jdk.internal.crac;
 
 /**
  * Some classes that could use logging are initialized early during the boot

@@ -31,6 +31,7 @@ import jdk.crac.impl.CheckpointOpenResourceException;
 import jdk.crac.impl.CheckpointOpenSocketException;
 import jdk.crac.impl.OrderedContext;
 import jdk.internal.crac.JDKContext;
+import jdk.internal.crac.LoggerContainer;
 import sun.security.action.GetBooleanAction;
 
 import java.io.PrintWriter;

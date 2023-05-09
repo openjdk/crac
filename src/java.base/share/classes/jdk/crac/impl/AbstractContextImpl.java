@@ -38,9 +38,10 @@ public abstract class AbstractContextImpl<R extends Resource, P> extends Context
             GetBooleanAction.privilegedGetProperty("jdk.crac.debug");
     }
 
+    private final Comparator<Map.Entry<R, P>> comparator;
+
     private WeakHashMap<R, P> checkpointQ = new WeakHashMap<>();
     private List<R> restoreQ = null;
-    private Comparator<Map.Entry<R, P>> comparator;
 
     protected AbstractContextImpl(Comparator<Map.Entry<R, P>> comparator) {
         this.comparator = comparator;
@@ -50,12 +51,25 @@ public abstract class AbstractContextImpl<R extends Resource, P> extends Context
         checkpointQ.put(resource, payload);
     }
 
-    @Override
-    public synchronized void beforeCheckpoint(Context<? extends Resource> context) throws CheckpointException {
+    private synchronized List<R> checkpointSnapshot() {
         List<R> resources = checkpointQ.entrySet().stream()
             .sorted(comparator)
             .map(Map.Entry::getKey)
             .collect(Collectors.toList());
+        restoreQ = new ArrayList<>(resources);
+        Collections.reverse(restoreQ);
+        return resources;
+    }
+
+    private synchronized List<R> restoreSnapshot() {
+        List<R> resources = restoreQ;
+        restoreQ = null;
+        return resources;
+    }
+
+    @Override
+    public void beforeCheckpoint(Context<? extends Resource> context) throws CheckpointException {
+        List<R> resources = checkpointSnapshot();
 
         CheckpointException exception = new CheckpointException();
         for (Resource r : resources) {
@@ -73,18 +87,16 @@ public abstract class AbstractContextImpl<R extends Resource, P> extends Context
             }
         }
 
-        Collections.reverse(resources);
-        restoreQ = resources;
-
         if (0 < exception.getSuppressed().length) {
             throw exception;
         }
     }
 
     @Override
-    public synchronized void afterRestore(Context<? extends Resource> context) throws RestoreException {
+    public void afterRestore(Context<? extends Resource> context) throws RestoreException {
+        List<R> resources = restoreSnapshot();
         RestoreException exception = new RestoreException();
-        for (Resource r : restoreQ) {
+        for (Resource r : resources) {
             if (FlagsHolder.DEBUG) {
                 System.err.println("jdk.crac afterRestore " + r.toString());
             }
@@ -98,7 +110,6 @@ public abstract class AbstractContextImpl<R extends Resource, P> extends Context
                 exception.addSuppressed(e);
             }
         }
-        restoreQ = null;
 
         if (0 < exception.getSuppressed().length) {
             throw exception;

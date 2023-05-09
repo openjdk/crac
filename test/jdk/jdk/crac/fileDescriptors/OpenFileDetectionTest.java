@@ -43,7 +43,7 @@ public class OpenFileDetectionTest implements CracTest {
         cp.outputAnalyzer()
                 .shouldHaveExitValue(1)
                 .shouldContain("/etc/passwd")
-                .shouldContain("This file descriptor was created here");
+                .shouldContain("This file descriptor was created by "); // <thread> at <time> here
     }
 
     @Override

@@ -25,7 +25,6 @@ import java.io.*;
 import java.lang.ref.Cleaner;
 
 import jdk.crac.*;
-import jdk.test.lib.Utils;
 import jdk.test.lib.crac.CracBuilder;
 import jdk.test.lib.crac.CracEngine;
 import jdk.test.lib.crac.CracTest;
@@ -42,8 +41,6 @@ public class RefQueueTest implements CracTest {
     @Override
     public void test() throws Exception {
         new CracBuilder().engine(CracEngine.SIMULATE)
-//                .javaOption("java.util.logging.config.file", Utils.TEST_SRC + "/logging.properties")
-//                .debug(true)
                 .startCheckpoint().waitForSuccess();
     }
 

@@ -42,7 +42,6 @@ import java.security.PrivilegedActionException;
 import java.security.PrivilegedExceptionAction;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.List;
 
 /**
  * The coordination service.
@@ -62,8 +61,6 @@ public class Core {
     private static native Object[] checkpointRestore0(boolean dryRun, long jcmdStream);
     private static final Object checkpointRestoreLock = new Object();
     private static boolean checkpointInProgress = false;
-    private static boolean restoring = false;
-    private static List<Throwable> checkpointExceptions;
 
     private static class FlagsHolder {
         public static final boolean TRACE_STARTUP_TIME =
@@ -80,7 +77,8 @@ public class Core {
     private Core() {
     }
 
-    private static void translateJVMExceptions(int[] codes, String[] messages) {
+    private static void translateJVMExceptions(int[] codes, String[] messages,
+                                               CheckpointException exception) {
         assert codes.length == messages.length;
         final int length = codes.length;
 
@@ -91,7 +89,7 @@ public class Core {
                 case JVM_CR_FAIL_PIPE -> new CheckpointOpenResourceException(messages[i]);
                 default -> new CheckpointOpenResourceException(messages[i]);
             };
-            recordException(ex);
+            exception.addSuppressed(ex);
         }
     }
 
@@ -128,51 +126,22 @@ public class Core {
         return globalContext;
     }
 
-    /**
-     * Records an exception thrown from a {@link Resource} during checkpoint
-     * or restore, captured by the parent {@link Context}. As the failure from
-     * resource notification does not affect notifications on other resources
-     * this serves as the point for aggregation of all failures. These are
-     * later reported as suppressed exceptions in a {@link CheckpointException}
-     * or {@link RestoreException} thrown from {@link #checkpointRestore()}.
-     *
-     * @param e Exception to be aggregated.
-     */
-    public static synchronized void recordException(Throwable e) {
-        assert checkpointInProgress;
-        checkpointExceptions.add(e);
-    }
-
-    /**
-     * Checks if we are currently invoking {@link Resource#afterRestore(Context)}
-     * notifications (whether this is after a successful checkpoint or
-     * compensating for a failed one). Calling this from a different thread
-     * than the one performing the restore is subject to races.
-     *
-     * @return True if invoking <code>afterRestore</code>, false if the C/R
-     * is not in progress, or it is yet in the checkpoint phase.
-     */
-    public static synchronized boolean isRestoring() {
-        return restoring;
-    }
-
     @SuppressWarnings("removal")
     private static void checkpointRestore1(long jcmdStream) throws
             CheckpointException,
             RestoreException {
+        CheckpointException checkpointException = null;
 
         try {
             globalContext.beforeCheckpoint(null);
         } catch (CheckpointException ce) {
+            checkpointException = new CheckpointException();
             for (Throwable t : ce.getSuppressed()) {
-                recordException(t);
+                checkpointException.addSuppressed(t);
             }
         }
 
-        boolean checkpointHasExceptions = !checkpointExceptions.isEmpty();
-        restoring = true;
-
-        final Object[] bundle = checkpointRestore0(checkpointHasExceptions, jcmdStream);
+        final Object[] bundle = checkpointRestore0(checkpointException != null, jcmdStream);
         final int retCode = (Integer)bundle[0];
         final String newArguments = (String)bundle[1];
         final String[] newProperties = (String[])bundle[2];
@@ -184,10 +153,13 @@ public class Core {
         }
 
         if (retCode != JVM_CHECKPOINT_OK) {
+            if (checkpointException == null) {
+                checkpointException = new CheckpointException();
+            }
             switch (retCode) {
-                case JVM_CHECKPOINT_ERROR -> translateJVMExceptions(codes, messages);
-                case JVM_CHECKPOINT_NONE -> recordException(new RuntimeException("C/R is not configured"));
-                default -> recordException(new RuntimeException("Unknown C/R result: " + retCode));
+                case JVM_CHECKPOINT_ERROR -> translateJVMExceptions(codes, messages, checkpointException);
+                case JVM_CHECKPOINT_NONE -> checkpointException.addSuppressed(new RuntimeException("C/R is not configured"));
+                default -> checkpointException.addSuppressed(new RuntimeException("Unknown C/R result: " + retCode));
             }
         }
 
@@ -199,14 +171,15 @@ public class Core {
             });
         }
 
+        RestoreException restoreException = null;
         try {
             globalContext.afterRestore(null);
         } catch (RestoreException re) {
-            if (re.getSuppressed().length == 0) {
-                recordException(re);
+            if (checkpointException == null) {
+                restoreException = re;
             } else {
                 for (Throwable t : re.getSuppressed()) {
-                    recordException(t);
+                    checkpointException.addSuppressed(t);
                 }
             }
         }
@@ -231,25 +204,21 @@ public class Core {
                 } catch (PrivilegedActionException |
                          InvocationTargetException |
                          IllegalAccessException e) {
-                    recordException(e);
+                    assert checkpointException == null :
+                        "should not have new arguments";
+                    if (restoreException == null) {
+                        restoreException = new RestoreException();
+                    }
+                    restoreException.addSuppressed(e);
                 }
             }
         }
 
-        if (!checkpointExceptions.isEmpty()) {
-            if (checkpointHasExceptions) {
-                CheckpointException ce = new CheckpointException();
-                for (Throwable checkpointException : checkpointExceptions) {
-                    ce.addSuppressed(checkpointException);
-                }
-                throw ce;
-            } else {
-                RestoreException re = new RestoreException();
-                for (Throwable checkpointException : checkpointExceptions) {
-                    re.addSuppressed(checkpointException);
-                }
-                throw re;
-            }
+        assert checkpointException == null || restoreException == null;
+        if (checkpointException != null) {
+            throw checkpointException;
+        } else if (restoreException != null) {
+            throw restoreException;
         }
     }
 
@@ -282,8 +251,6 @@ public class Core {
             // beforeCheckpoint/afterRestore methods
             if (!checkpointInProgress) {
                 checkpointInProgress = true;
-                assert !restoring;
-                checkpointExceptions = new ArrayList<>();
                 try {
                     checkpointRestore1(jcmdStream);
                 } finally {
@@ -291,7 +258,6 @@ public class Core {
                         System.out.println("STARTUPTIME " + System.nanoTime() + " restore-finish");
                     }
                     checkpointInProgress = false;
-                    restoring = false;
                 }
             } else {
                 throw new CheckpointException("Recursive checkpoint is not allowed");

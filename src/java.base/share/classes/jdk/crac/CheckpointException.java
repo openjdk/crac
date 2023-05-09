@@ -36,7 +36,7 @@ public class CheckpointException extends Exception {
      * Creates a {@code CheckpointException}.
      */
     public CheckpointException() {
-        super();
+        super(null, null, true, false);
     }
 
     /**

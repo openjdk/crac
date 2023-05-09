@@ -40,16 +40,16 @@ public abstract class PriorityContext<P, R extends Resource> extends AbstractCon
     }
 
     protected synchronized void register(R resource, P priority) {
+        while (lastPriority != null && comparator.compare(lastPriority, priority) >= 0) {
+            waitWhileCheckpointIsInProgress(resource);
+        }
         // computeIfAbsent does not work well here with lambda
         SubContext category = categories.get(priority);
         if (category == null) {
-            category = new SubContext(getClass().getSimpleName() + "." + priority);
+            category = new SubContext(getClass().getSimpleName() + "[" + priority + "]");
             categories.put(priority, category);
         }
         category.registerInSub(resource);
-        if (lastPriority != null && comparator.compare(lastPriority, priority) >= 0 && !Core.isRestoring()) {
-            setModified(resource, ": resource priority " + priority + ", currently processing " + lastPriority);
-        }
     }
 
     @Override
@@ -80,9 +80,10 @@ public abstract class PriorityContext<P, R extends Resource> extends AbstractCon
     }
 
     @Override
-    public void afterRestore(Context<? extends Resource> context) {
+    public void afterRestore(Context<? extends Resource> context) throws RestoreException {
         synchronized (this) {
             lastPriority = null;
+            notifyAll();
         }
         super.afterRestore(context);
     }
@@ -105,9 +106,12 @@ public abstract class PriorityContext<P, R extends Resource> extends AbstractCon
             try {
                 resource.beforeCheckpoint(PriorityContext.this);
             } catch (CheckpointException e) {
-                recordExceptions(e);
+                handleCheckpointException(e);
             } catch (Exception e) {
-                Core.recordException(e);
+                if (e instanceof InterruptedException) {
+                    Thread.currentThread().interrupt();
+                }
+                ensureCheckpointException().addSuppressed(e);
             }
         }
 
@@ -121,11 +125,13 @@ public abstract class PriorityContext<P, R extends Resource> extends AbstractCon
             } catch (RestoreException e) {
                 // Print error early in case the restore process gets stuck
                 LoggerContainer.error(e, "Failed to restore " + resource);
-                recordExceptions(e);
+                handleRestoreException(e);
             } catch (Exception e) {
-                // Print error early in case the restore process gets stuck
+                if (e instanceof InterruptedException) {
+                    Thread.currentThread().interrupt();
+                }
                 LoggerContainer.error(e, "Failed to restore " + resource);
-                Core.recordException(e);
+                ensureRestoreException().addSuppressed(e);
             }
         }
     }

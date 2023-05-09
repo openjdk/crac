@@ -39,10 +39,6 @@ public class OrderedContext<R extends Resource> extends AbstractContextImpl<R> {
     protected long order = 0;
     protected final WeakHashMap<R, Long> resources = new WeakHashMap<>();
 
-    public OrderedContext() {
-        this(null);
-    }
-
     public OrderedContext(String name) {
         this.name = name;
     }
@@ -53,13 +49,11 @@ public class OrderedContext<R extends Resource> extends AbstractContextImpl<R> {
     }
 
     @Override
-    public synchronized void register(R r) {
-        resources.put(r, order++);
-        // It is possible that something registers to us during restore but before
-        // this context's afterRestore was called.
-        if (checkpointing && !Core.isRestoring()) {
-            setModified(r, null);
+    public synchronized void register(R resource) {
+        while (checkpointing) {
+            waitWhileCheckpointIsInProgress(resource);
         }
+        resources.put(resource, order++);
     }
 
     @Override
@@ -78,9 +72,11 @@ public class OrderedContext<R extends Resource> extends AbstractContextImpl<R> {
     }
 
     @Override
-    public void afterRestore(Context<? extends Resource> context) {
+    public void afterRestore(Context<? extends Resource> context) throws RestoreException {
+        // Note: a resource might attempt to
         synchronized (this) {
             checkpointing = false;
+            notifyAll();
         }
         super.afterRestore(context);
     }

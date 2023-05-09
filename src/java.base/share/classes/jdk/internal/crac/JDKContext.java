@@ -96,13 +96,14 @@ public class JDKContext extends AbstractContextImpl<JDKResource, Void> {
     public Map<Integer, Supplier<Exception>> getClaimedFds() {
         JavaIOFileDescriptorAccess fileDescriptorAccess = SharedSecrets.getJavaIOFileDescriptorAccess();
         return claimedFds.entrySet().stream()
-                .collect(Collectors.toMap(entry -> fileDescriptorAccess.get(entry.getKey()), Map.Entry::getValue));
+            .filter((var e) -> e.getKey().valid())
+            .collect(Collectors.toMap(entry -> fileDescriptorAccess.get(entry.getKey()), Map.Entry::getValue));
     }
 
     public void claimFd(FileDescriptor fd, Supplier<Exception> supplier, Class<?>... supresses) {
         Objects.requireNonNull(supplier);
 
-        if (fd == null || !fd.valid()) {
+        if (fd == null) {
             return;
         }
 

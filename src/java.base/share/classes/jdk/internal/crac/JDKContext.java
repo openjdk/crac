@@ -30,7 +30,7 @@ import jdk.crac.CheckpointException;
 import jdk.crac.Context;
 import jdk.crac.Resource;
 import jdk.crac.RestoreException;
-import jdk.crac.impl.AbstractContextImpl;
+import jdk.crac.impl.PriorityContext;
 import jdk.internal.access.JavaIOFileDescriptorAccess;
 import jdk.internal.access.SharedSecrets;
 import sun.security.action.GetBooleanAction;
@@ -41,20 +41,22 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.Map;
 import java.util.WeakHashMap;
 import java.util.stream.Collectors;
 
-public class JDKContext extends AbstractContextImpl<JDKResource, Void> {
+public class JDKContext extends PriorityContext<JDKResource.Priority, JDKResource> {
     public static final String COLLECT_FD_STACKTRACES_PROPERTY = "jdk.crac.collect-fd-stacktraces";
     public static final String COLLECT_FD_STACKTRACES_HINT = "Use -D" + COLLECT_FD_STACKTRACES_PROPERTY + "=true to find the source.";
 
-    static class ContextComparator implements Comparator<Map.Entry<JDKResource, Void>> {
+    // We cannot use method references/lambdas when the context is created
+    public static final Comparator<JDKResource.Priority> PRIORITY_COMPARATOR = new Comparator<>() {
         @Override
-        public int compare(Map.Entry<JDKResource, Void> o1, Map.Entry<JDKResource, Void> o2) {
-            return o1.getKey().getPriority().compareTo(o2.getKey().getPriority());
+        public int compare(JDKResource.Priority p1, JDKResource.Priority p2) {
+            return p1.compareTo(p2);
         }
-    }
+    };
 
     // JDKContext by itself is initialized too early when system properties are not set yet
     public static class Properties {
@@ -64,8 +66,8 @@ public class JDKContext extends AbstractContextImpl<JDKResource, Void> {
 
     private WeakHashMap<FileDescriptor, Object> claimedFds;
 
-    JDKContext() {
-        super(new ContextComparator());
+    public JDKContext() {
+        super(PRIORITY_COMPARATOR);
     }
 
     public boolean matchClasspath(String path) {
@@ -104,13 +106,19 @@ public class JDKContext extends AbstractContextImpl<JDKResource, Void> {
 
     @Override
     public void register(JDKResource resource) {
-        register(resource, null);
+        register(resource, resource.getPriority());
     }
 
     public Map<Integer, Object> getClaimedFds() {
         JavaIOFileDescriptorAccess fileDescriptorAccess = SharedSecrets.getJavaIOFileDescriptorAccess();
-        return claimedFds.entrySet().stream()
-                .collect(Collectors.toMap(entry -> fileDescriptorAccess.get(entry.getKey()), Map.Entry::getValue));
+        // Using streams+lambdas here would create a new Cleaner, therefore registering a resource
+        Map<Integer, Object> map = new HashMap<>();
+        for (Map.Entry<FileDescriptor, Object> entry : claimedFds.entrySet()) {
+            if (map.put(fileDescriptorAccess.get(entry.getKey()), entry.getValue()) != null) {
+                throw new IllegalStateException("Duplicate key");
+            }
+        }
+        return map;
     }
 
     public void claimFd(FileDescriptor fd, Object obj) {

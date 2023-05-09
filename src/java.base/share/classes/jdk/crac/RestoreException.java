@@ -36,7 +36,7 @@ public class RestoreException extends Exception {
      * Creates a {@code RestoreException}.
      */
     public RestoreException() {
-        super();
+        super(null, null, true, false);
     }
 
     /**

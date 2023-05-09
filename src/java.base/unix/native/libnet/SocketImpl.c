@@ -100,18 +100,16 @@ Java_java_net_Socket_getAddresses(JNIEnv *env, jclass cl, jint fd) {
         return NULL;
     }
 
-    jobject localAddr;
     SOCKETADDRESS local;
     socklen_t llen = sizeof(SOCKETADDRESS);
     if (getsockname(fd, &local.sa, &llen) != 0) {
         JNU_ThrowIllegalArgumentException(env, strerror(errno));
         return NULL;
-    } else {
-        localAddr = create_isa(env, isa_class, isa_ctor, &local);
-        if (localAddr == NULL) {
-           JNU_ThrowOutOfMemoryError(env, "java.net.InetSocketAddres");
-           return NULL;
-        }
+    }
+    jobject localAddr = create_isa(env, isa_class, isa_ctor, &local);
+    if (localAddr == NULL) {
+        JNU_ThrowOutOfMemoryError(env, "java.net.InetSocketAddres");
+        return NULL;
     }
 
     jobject remoteAddr;

@@ -37,18 +37,37 @@ public class Core {
     private Core() {
     }
 
-    private static final Context<Resource> globalContext = new ContextWrapper(new OrderedContext());
+    private static final Context<Resource> globalContext = new ContextWrapper(new OrderedContext<>("Global Context (javax)"));
     static {
         jdk.crac.Core.getGlobalContext().register(new ResourceWrapper(null, globalContext));
     }
 
     /**
-     * Gets the global {@code Context} for checkpoint/restore notifications.
-     * Order of invoking {@link Resource#beforeCheckpoint(Context)} is the reverse
-     * of the order of {@link Context#register(Resource) registration}.
-     * Order of invoking {@link Resource#afterRestore(Context)} is the reverse
-     * of the order of {@link Resource#beforeCheckpoint(Context) checkpoint notification},
-     * hence the same as the order of {@link Context#register(Resource) registration}.
+     * Gets the global {@code Context} for checkpoint/restore notifications
+     * with the following properties:
+     * <ul>
+     * <li>The context maintains a weak reference to registered {@link jdk.crac.Resource}.
+     *     The lifecycle of the resource should be bound to the lifecycle of
+     *     the component (registrar) through a strong reference to the resource
+     *     (if these are not the same instance). That way the resource receives
+     *     notifications only until the component ceases to exist.
+     *     When the registrar does not keep a strong reference to the resource
+     *     the garbage collector is free to trash the resource and notifications
+     *     will not be invoked.
+     * <li>Order of invoking {@link jdk.crac.Resource#beforeCheckpoint(jdk.crac.Context)} is
+     *     the reverse of the order of {@linkplain jdk.crac.Context#register(jdk.crac.Resource)
+     *     registration}.
+     * <li>Order of invoking {@link jdk.crac.Resource#afterRestore(jdk.crac.Context)} is
+     *     the reverse of the order of {@linkplain jdk.crac.Resource#beforeCheckpoint(jdk.crac.Context)
+     *     checkpoint notification}, hence the same as the order of
+     *     {@link jdk.crac.Context#register(jdk.crac.Resource) registration}.
+     * <li>{@code Resource} is always notified of checkpoint or restore,
+     *     regardless of whether other {@code Resource} notifications have
+     *     thrown an exception or not,
+     * <li>When an exception is thrown during notification it is caught by
+     *     the {@code Context} and is suppressed by a {@link jdk.crac.CheckpointException}
+     *     or {@link jdk.crac.RestoreException}, depends on the throwing method.
+     * </ul>
      *
      * @return the global {@code Context}
      */

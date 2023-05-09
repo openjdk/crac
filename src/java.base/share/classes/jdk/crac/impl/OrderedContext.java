@@ -26,28 +26,58 @@
 
 package jdk.crac.impl;
 
-import jdk.crac.Resource;
-import jdk.crac.impl.AbstractContextImpl;
+import jdk.crac.*;
 
-import java.util.Comparator;
+import java.util.Collections;
+import java.util.List;
 import java.util.Map;
+import java.util.WeakHashMap;
 
-public class OrderedContext extends AbstractContextImpl<Resource, Long> {
-    private long order;
+public class OrderedContext<R extends Resource> extends AbstractContextImpl<R> {
+    private final String name;
+    private boolean checkpointing = false;
+    protected long order = 0;
+    protected final WeakHashMap<R, Long> resources = new WeakHashMap<>();
 
-    static class ContextComparator implements Comparator<Map.Entry<Resource, Long>> {
-        @Override
-        public int compare(Map.Entry<Resource, Long> o1, Map.Entry<Resource, Long> o2) {
-            return (int)(o2.getValue() - o1.getValue());
-        }
-    }
-
-    public OrderedContext() {
-        super(new ContextComparator());
+    public OrderedContext(String name) {
+        this.name = name;
     }
 
     @Override
-    public synchronized void register(Resource r) {
-        register(r, order++);
+    public String toString() {
+        return name != null ? name : super.toString();
+    }
+
+    @Override
+    public synchronized void register(R resource) {
+        while (checkpointing) {
+            waitWhileCheckpointIsInProgress(resource);
+        }
+        resources.put(resource, order++);
+    }
+
+    @Override
+    protected void runBeforeCheckpoint() {
+        List<R> resources;
+        synchronized (this) {
+            checkpointing = true;
+            resources = this.resources.entrySet().stream()
+                    .sorted(Collections.reverseOrder(Map.Entry.comparingByValue()))
+                    .map(Map.Entry::getKey)
+                    .toList();
+        }
+        for (R r : resources) {
+            invokeBeforeCheckpoint(r);
+        }
+    }
+
+    @Override
+    public void afterRestore(Context<? extends Resource> context) throws RestoreException {
+        // Note: a resource might attempt to
+        synchronized (this) {
+            checkpointing = false;
+            notifyAll();
+        }
+        super.afterRestore(context);
     }
 }

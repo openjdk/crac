@@ -31,6 +31,7 @@ import jdk.crac.impl.CheckpointOpenResourceException;
 import jdk.crac.impl.CheckpointOpenSocketException;
 import jdk.crac.impl.OrderedContext;
 import jdk.internal.crac.JDKContext;
+import jdk.internal.crac.LoggerContainer;
 
 import sun.security.action.GetBooleanAction;
 
@@ -70,7 +71,7 @@ public class Core {
             GetBooleanAction.privilegedGetProperty("jdk.crac.trace-startup-time");
     }
 
-    private static final Context<Resource> globalContext = new OrderedContext();
+    private static final Context<Resource> globalContext = new OrderedContext<>("GlobalContext");
     static {
         // force JDK context initialization
         jdk.internal.crac.Core.getJDKContext();
@@ -80,32 +81,48 @@ public class Core {
     private Core() {
     }
 
-    private static void translateJVMExceptions(int[] codes, String[] messages, CheckpointException exception) {
+    private static void translateJVMExceptions(int[] codes, String[] messages,
+                                               CheckpointException exception) {
         assert codes.length == messages.length;
         final int length = codes.length;
 
         for (int i = 0; i < length; ++i) {
-            switch(codes[i]) {
-                case JVM_CR_FAIL_FILE:
-                    exception.addSuppressed(
-                            new CheckpointOpenFileException(messages[i], null));
-                    break;
-                case JVM_CR_FAIL_SOCK:
-                    exception.addSuppressed(
-                            new CheckpointOpenSocketException(messages[i]));
-                    break;
-                case JVM_CR_FAIL_PIPE:
-                    // FALLTHROUGH
-                default:
-                    exception.addSuppressed(
-                            new CheckpointOpenResourceException(messages[i], null));
-                    break;
-            }
+            Throwable ex = switch (codes[i]) {
+                case JVM_CR_FAIL_FILE -> new CheckpointOpenFileException(messages[i], null);
+                case JVM_CR_FAIL_SOCK -> new CheckpointOpenSocketException(messages[i]);
+                case JVM_CR_FAIL_PIPE -> new CheckpointOpenResourceException(messages[i], null);
+                default -> new CheckpointOpenResourceException(messages[i], null);
+            };
+            exception.addSuppressed(ex);
         }
     }
 
     /**
-     * Gets the global {@code Context} for checkpoint/restore notifications.
+     * Gets the global {@code Context} for checkpoint/restore notifications
+     * with the following properties:
+     * <ul>
+     * <li>The context maintains a weak reference to registered {@link Resource}.
+     *     The lifecycle of the resource should be bound to the lifecycle of
+     *     the component (registrar) through a strong reference to the resource
+     *     (if these are not the same instance). That way the resource receives
+     *     notifications only until the component ceases to exist.
+     *     When the registrar does not keep a strong reference to the resource
+     *     the garbage collector is free to trash the resource and notifications
+     *     will not be invoked.
+     * <li>Order of invoking {@link Resource#beforeCheckpoint(Context)} is
+     *     the reverse of the order of {@linkplain Context#register(Resource)
+     *     registration}.
+     * <li>Order of invoking {@link Resource#afterRestore(Context)} is
+     *     the reverse of the order of {@linkplain Resource#beforeCheckpoint(Context)
+     *     checkpoint notification}, hence the same as the order of
+     *     {@link Context#register(Resource) registration}.
+     * <li>{@code Resource} is always notified of checkpoint or restore,
+     *     regardless of whether other {@code Resource} notifications have
+     *     thrown an exception or not,
+     * <li>When an exception is thrown during notification it is caught by
+     *     the {@code Context} and is suppressed by a {@link CheckpointException}
+     *     or {@link RestoreException}, depends on the throwing method.
+     * </ul>
      *
      * @return the global {@code Context}
      */
@@ -118,6 +135,8 @@ public class Core {
             CheckpointException,
             RestoreException {
         CheckpointException checkpointException = null;
+        // This log is here to initialize call sites in logger formatters.
+        LoggerContainer.debug("Starting checkpoint at epoch:{0}", System.currentTimeMillis());
 
         try {
             globalContext.beforeCheckpoint(null);
@@ -136,7 +155,7 @@ public class Core {
         for (int i = 0; i < claimedPairs.size(); ++i) {
             fdArr[i] = claimedPairs.get(i).getKey();
             objArr[i] = claimedPairs.get(i).getValue();
-            LoggerContainer.debug( "\t%d %s\n", fdArr[i], objArr[i]);
+            LoggerContainer.debug( "\t{0} {1}", fdArr[i], objArr[i]);
         }
 
         final Object[] bundle = checkpointRestore0(fdArr, objArr, checkpointException != null, jcmdStream);
@@ -155,16 +174,9 @@ public class Core {
                 checkpointException = new CheckpointException();
             }
             switch (retCode) {
-                case JVM_CHECKPOINT_ERROR:
-                    translateJVMExceptions(codes, messages, checkpointException);
-                    break;
-                case JVM_CHECKPOINT_NONE:
-                    checkpointException.addSuppressed(
-                            new RuntimeException("C/R is not configured"));
-                    break;
-                default:
-                    checkpointException.addSuppressed(
-                            new RuntimeException("Unknown C/R result: " + retCode));
+                case JVM_CHECKPOINT_ERROR -> translateJVMExceptions(codes, messages, checkpointException);
+                case JVM_CHECKPOINT_NONE -> checkpointException.addSuppressed(new RuntimeException("C/R is not configured"));
+                default -> checkpointException.addSuppressed(new RuntimeException("Unknown C/R result: " + retCode));
             }
         }
 

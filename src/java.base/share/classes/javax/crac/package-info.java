@@ -67,29 +67,6 @@ restoring instances from the image.
  * <p>
  * {@code UnsupportedOperationException} is thrown if the service is not supported.
  * No notification is performed in this case.
- * <h2>Global Context Properties</h2>
- * Java Runtime maintains the global {@code Context} with following properties.
- * An implementor is encouraged to define {@code Context} with the properties of the global {@code Context}.
- * <ul>
- * <li>The {@code Context} maintains a weak reference to registered {@code Resource}.
- * </li>
- * <li>Order of checkpoint notification is the reverse order of registration.
- * Restore notification order is the reverse of checkpoint one, that is, forward order of registration.
- * </li>
- * <li>For single {@code Resource} registered in this {@code Context}:
- * <ul>
- *   <li>{@code Resource} is always notified of checkpoint, regardless of other {@code Resource} notifications have thrown an exception or not,
- *   </li>
- *   <li>{@code Resource} is always notified of restore, regardless of its checkpoint or others' restore notification have thrown an exception or not.
- *   </li>
- *   <li>When an exception is thrown during notificaion, it is caught by the {@code Context} and is suppressed by a {@code CheckpointException} or {@code RestoreException}, depends on the throwing method.
- *   </li>
- *   <li>When the {@code Resource} is a {@code Context} and it throws {@code CheckpointException} or {@code RestoreException}, exceptions suppressed by the original exception are suppressed by another {@code CheckpointException} or {@code RestoreException}, depends on the throwing method.
- *   </li>
- * </ul>
- * <li>All exceptions thrown by {@code Resource} are suppressed by {@code CheckpointException} or {@code RestoreException} thrown by the {@code Context}.
- * </li>
- * </ul>
  *
  * @since TBD
  */

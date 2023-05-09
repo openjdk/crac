@@ -47,8 +47,8 @@ public class JDKContext extends AbstractContextImpl<JDKResource, Void> {
         }
     }
 
-    private static final String COLLECT_FD_STACKTRACES_PROPERTY = "jdk.crac.collect-fd-stacktraces";
-    private static final String COLLECT_FD_STACKTRACES_HINT =
+    public static final String COLLECT_FD_STACKTRACES_PROPERTY = "jdk.crac.collect-fd-stacktraces";
+    public static final String COLLECT_FD_STACKTRACES_HINT =
         "Set System Property " + COLLECT_FD_STACKTRACES_PROPERTY + "=true to get stack traces of JDK Resources";
 
     // JDKContext by itself is initialized too early when system properties are not set yet
@@ -79,14 +79,7 @@ public class JDKContext extends AbstractContextImpl<JDKResource, Void> {
     @Override
     public void beforeCheckpoint(Context<? extends Resource> context) throws CheckpointException {
         claimedFds = new WeakHashMap<>();
-        try {
-            super.beforeCheckpoint(context);
-        } catch (CheckpointException ce) {
-            if (!Properties.COLLECT_FD_STACKTRACES) {
-                LoggerContainer.info(COLLECT_FD_STACKTRACES_HINT);
-            }
-            throw ce;
-        }
+        super.beforeCheckpoint(context);
     }
 
     @Override

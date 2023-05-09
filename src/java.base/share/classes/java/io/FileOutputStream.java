@@ -28,6 +28,7 @@ package java.io;
 import java.nio.channels.FileChannel;
 import jdk.internal.access.SharedSecrets;
 import jdk.internal.access.JavaIOFileDescriptorAccess;
+import jdk.internal.crac.JDKFileResource;
 import sun.nio.ch.FileChannelImpl;
 
 
@@ -455,4 +456,16 @@ public class FileOutputStream extends OutputStream
     static {
         initIDs();
     }
+
+    JDKFileResource resource = new JDKFileResource() {
+        @Override
+        protected FileDescriptor getFD() {
+            return fd;
+        }
+
+        @Override
+        protected String getPath() {
+            return path;
+        }
+    };
 }

@@ -27,15 +27,9 @@ package java.io;
 
 import java.nio.channels.FileChannel;
 
-import jdk.crac.Context;
-import jdk.crac.impl.CheckpointOpenFileException;
-import jdk.internal.access.JavaIOFileDescriptorAccess;
 import jdk.internal.access.JavaIORandomAccessFileAccess;
 import jdk.internal.access.SharedSecrets;
-import jdk.internal.crac.Core;
-import jdk.internal.crac.JDKContext;
-import jdk.internal.crac.JDKResource;
-import jdk.internal.crac.JDKResourceImpl;
+import jdk.internal.crac.JDKFileResource;
 import sun.nio.ch.FileChannelImpl;
 
 
@@ -87,34 +81,17 @@ public class RandomAccessFile implements DataOutput, DataInput, Closeable {
     private static final int O_DSYNC =  8;
     private static final int O_TEMPORARY =  16;
 
-    private class Resource extends JDKResourceImpl {
-        private static final JavaIOFileDescriptorAccess fdAccess = SharedSecrets.getJavaIOFileDescriptorAccess();
-
+    JDKFileResource resource = new JDKFileResource() {
         @Override
-        public void beforeCheckpoint(Context<? extends jdk.crac.Resource> context) throws Exception {
-            Core.getJDKContext().claimFd(fd, () -> {
-                if (Core.getJDKContext().matchClasspath(path)) {
-                    // Files on the classpath are considered persistent, exception is not thrown
-                    return null;
-                }
-                return new CheckpointOpenFileException(
-                    path,
-                    getStackTraceHolder());
-            }, FileDescriptor.class);
+        protected FileDescriptor getFD() {
+            return fd;
         }
 
         @Override
-        public void afterRestore(Context<? extends jdk.crac.Resource> context) throws Exception {
-
+        protected String getPath() {
+            return path;
         }
-
-        @Override
-        public Priority getPriority() {
-            return Priority.FILE_DESCRIPTORS;
-        }
-    }
-
-    Resource resource = new Resource();
+    };
 
     /**
      * Creates a random access file stream to read from, and optionally

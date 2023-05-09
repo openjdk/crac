@@ -129,6 +129,7 @@ public abstract class SocketImpl implements SocketOptions {
                 () -> new CheckpointOpenSocketException(
                     SocketImpl.this.toString(),
                     getStackTraceHolder()),
+                SocketImpl.class,
                 FileDescriptor.class);
         }
 

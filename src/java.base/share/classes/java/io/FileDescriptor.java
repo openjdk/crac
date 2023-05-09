@@ -80,7 +80,7 @@ public final class FileDescriptor {
                     return new CheckpointOpenResourceException(
                         FileDescriptor.class.getSimpleName() + " " + fd + ": " + nativeDescription0(),
                         getStackTraceHolder());
-                });
+                }, FileDescriptor.class);
             }
         }
 

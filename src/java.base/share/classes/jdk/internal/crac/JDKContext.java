@@ -61,7 +61,8 @@ public class JDKContext extends AbstractContextImpl<JDKResource, Void> {
                 .split(File.pathSeparator);
     }
 
-    private WeakHashMap<FileDescriptor, Supplier<Exception>> claimedFds;
+    private WeakHashMap<FileDescriptor, Supplier<Exception>> fdToExceptionSupplier;
+    private WeakHashMap<FileDescriptor, Class<?>> fdToClass;
 
     public boolean matchClasspath(String path) {
         for (String cp : Properties.classpathEntries) {
@@ -78,14 +79,16 @@ public class JDKContext extends AbstractContextImpl<JDKResource, Void> {
 
     @Override
     public void beforeCheckpoint(Context<? extends Resource> context) throws CheckpointException {
-        claimedFds = new WeakHashMap<>();
+        fdToClass = new WeakHashMap<>();
+        fdToExceptionSupplier = new WeakHashMap<>();
         super.beforeCheckpoint(context);
     }
 
     @Override
     public void afterRestore(Context<? extends Resource> context) throws RestoreException {
         super.afterRestore(context);
-        claimedFds = null;
+        fdToExceptionSupplier = null;
+        fdToClass = null;
     }
 
     @Override
@@ -95,27 +98,29 @@ public class JDKContext extends AbstractContextImpl<JDKResource, Void> {
 
     public Map<Integer, Supplier<Exception>> getClaimedFds() {
         JavaIOFileDescriptorAccess fileDescriptorAccess = SharedSecrets.getJavaIOFileDescriptorAccess();
-        return claimedFds.entrySet().stream()
+        return fdToExceptionSupplier.entrySet().stream()
             .filter((var e) -> e.getKey().valid())
             .collect(Collectors.toMap(entry -> fileDescriptorAccess.get(entry.getKey()), Map.Entry::getValue));
     }
 
-    public void claimFd(FileDescriptor fd, Supplier<Exception> supplier, Class<?>... supresses) {
+    public void claimFd(FileDescriptor fd, Supplier<Exception> supplier, Class<?> who, Class<?>... suppressed) {
         Objects.requireNonNull(supplier);
 
         if (fd == null) {
             return;
         }
 
-        Object old = claimedFds.putIfAbsent(fd, supplier);
+        Class<?> old = fdToClass.putIfAbsent(fd, who);
         if (old == null) {
+            fdToExceptionSupplier.put(fd, supplier);
             return;
         }
 
-        for (Class<?> c : supresses) {
+        for (Class<?> c : suppressed) {
             // if C is subclass of Old
-            if (old.getClass().isAssignableFrom(c)) {
-                claimedFds.put(fd, supplier);
+            if (old.isAssignableFrom(c)) {
+                fdToClass.put(fd, who);
+                fdToExceptionSupplier.put(fd, supplier);
                 break;
             }
         }

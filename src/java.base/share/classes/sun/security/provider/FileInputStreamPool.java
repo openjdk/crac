@@ -168,6 +168,7 @@ class FileInputStreamPool {
             ((JDKContext)context).claimFd(
                 ((FileInputStream)in).getFD(),
                 () -> null,
+                FileInputStreamPool.class,
                 FileDescriptor.class);
         }
 

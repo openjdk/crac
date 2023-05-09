@@ -602,6 +602,7 @@ public final class NativePRNG extends SecureRandomSpi {
                     Core.getJDKContext().claimFd(
                         ((FileOutputStream)seedOut).getFD(),
                         () -> null,
+                        NativePRNG.class,
                         FileDescriptor.class);
                 }
             }

@@ -1801,7 +1801,7 @@ public class ZipFile implements ZipConstants, Closeable {
                 } catch (IOException e) {
                 }
                 if (fd != null) {
-                    Core.getJDKContext().claimFd(fd, () -> null);
+                    Core.getJDKContext().claimFd(fd, () -> null, ZipFile.class, FileDescriptor.class);
                 }
             }
         }

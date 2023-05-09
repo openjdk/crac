@@ -6062,7 +6062,7 @@ void VM_Crac::doit() {
     const char* type = stat2strtype(fds.get_stat(i)->st_mode);
     int linkret = readfdlink(i, detailsbuf, sizeof(detailsbuf));
     const char* details = 0 < linkret ? detailsbuf : "";
-    print_resources("JVM: FD fd=%d type=%s path=\"%s\"", i, type, details);
+    print_resources("JVM: FD fd=%d type=%s details=\"%s\" ", i, type, details);
 
     if (is_claimed_fd(i)) {
       print_resources("OK: claimed by java code\n");

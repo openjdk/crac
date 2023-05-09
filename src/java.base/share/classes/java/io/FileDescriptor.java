@@ -189,9 +189,6 @@ public final class FileDescriptor {
         this.append = getAppend(fd);
     }
 
-    private static class StandardFileDescriptor {
-    }
-
     /**
      * A handle to the standard input stream. Usually, this file
      * descriptor is not used directly, but rather via the input stream

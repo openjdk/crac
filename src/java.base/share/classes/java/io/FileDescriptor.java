@@ -71,11 +71,16 @@ public final class FileDescriptor {
         public void beforeCheckpoint(Context<? extends jdk.crac.Resource> context) throws Exception {
             if (!closedByNIO && valid()) {
                 JDKContext ctx = (JDKContext)context;
-                if (ctx.claimFdWeak(FileDescriptor.this, this)) {
-                    throw new CheckpointOpenResourceException(
+                FileDescriptor self = FileDescriptor.this;
+
+                ctx.claimFd(self, () ->  {
+                    if (self == in || self == out || self == err) {
+                        return null;
+                    }
+                    return new CheckpointOpenResourceException(
                         FileDescriptor.class.getSimpleName() + " " + fd + ": " + nativeDescription0(),
                         getStackTraceHolder());
-                }
+                });
             }
         }
 
@@ -103,25 +108,6 @@ public final class FileDescriptor {
 
     static {
         initIDs();
-
-        Core.getJDKContext().register(checkpointListener = new JDKResource() {
-            @Override
-            public Priority getPriority() {
-                return Priority.NORMAL;
-            }
-
-            @Override
-            public void beforeCheckpoint(Context<? extends jdk.crac.Resource> context) {
-                JDKContext ctx = (JDKContext) context;
-                ctx.claimFd(in, "System.in");
-                ctx.claimFd(out, "System.out");
-                ctx.claimFd(err, "System.err");
-            }
-
-            @Override
-            public void afterRestore(Context<? extends jdk.crac.Resource> context) {
-            }
-        });
     }
 
     // Set up JavaIOFileDescriptorAccess in SharedSecrets
@@ -205,6 +191,9 @@ public final class FileDescriptor {
         this.append = getAppend(fd);
     }
 
+    private static class StandardFileDescriptor {
+    }
+
     /**
      * A handle to the standard input stream. Usually, this file
      * descriptor is not used directly, but rather via the input stream
@@ -241,9 +230,6 @@ public final class FileDescriptor {
     public boolean valid() {
         return (handle != -1) || (fd != -1);
     }
-
-    private static final JDKResource checkpointListener;
-
 
     /**
      * Force all system buffers to synchronize with the underlying

@@ -43,6 +43,7 @@ import java.security.PrivilegedAction;
 import java.security.PrivilegedActionException;
 import java.security.PrivilegedExceptionAction;
 import java.util.*;
+import java.util.function.Supplier;
 
 /**
  * The coordination service.
@@ -116,29 +117,39 @@ public class Core {
     private static void checkpointRestore1(long jcmdStream) throws
             CheckpointException,
             RestoreException {
-        CheckpointException checkpointException = null;
+        final CheckpointException[] checkpointException = {null};
 
         try {
             globalContext.beforeCheckpoint(null);
         } catch (CheckpointException ce) {
-            checkpointException = new CheckpointException();
+            checkpointException[0] = new CheckpointException();
             for (Throwable t : ce.getSuppressed()) {
-                checkpointException.addSuppressed(t);
+                checkpointException[0].addSuppressed(t);
             }
         }
 
         JDKContext jdkContext = jdk.internal.crac.Core.getJDKContext();
-        List<Map.Entry<Integer, Object>> claimedPairs = jdkContext.getClaimedFds().entrySet().stream().toList();
+        jdkContext.getClaimedFds().forEach((integer, exceptionSupplier) -> {
+            if (exceptionSupplier != null) {
+                Exception e = exceptionSupplier.get();
+                if (e != null) {
+                    if (checkpointException[0] == null) {
+                        checkpointException[0] = new CheckpointException();
+                    }
+                    checkpointException[0].addSuppressed(e);
+                }
+            }
+        });
+
+        List<Map.Entry<Integer, Supplier<Exception>>> claimedPairs = jdkContext.getClaimedFds().entrySet().stream().toList();
         int[] fdArr = new int[claimedPairs.size()];
-        Object[] objArr = new Object[claimedPairs.size()];
         LoggerContainer.debug("Claimed open file descriptors:");
         for (int i = 0; i < claimedPairs.size(); ++i) {
             fdArr[i] = claimedPairs.get(i).getKey();
-            objArr[i] = claimedPairs.get(i).getValue();
-            LoggerContainer.debug( "\t%d %s\n", fdArr[i], objArr[i]);
+            LoggerContainer.debug("\t%d", fdArr[i]);
         }
 
-        final Object[] bundle = checkpointRestore0(fdArr, objArr, checkpointException != null, jcmdStream);
+        final Object[] bundle = checkpointRestore0(fdArr, null, checkpointException[0] != null, jcmdStream);
         final int retCode = (Integer)bundle[0];
         final String newArguments = (String)bundle[1];
         final String[] newProperties = (String[])bundle[2];
@@ -150,19 +161,19 @@ public class Core {
         }
 
         if (retCode != JVM_CHECKPOINT_OK) {
-            if (checkpointException == null) {
-                checkpointException = new CheckpointException();
+            if (checkpointException[0] == null) {
+                checkpointException[0] = new CheckpointException();
             }
             switch (retCode) {
                 case JVM_CHECKPOINT_ERROR:
-                    translateJVMExceptions(codes, messages, checkpointException);
+                    translateJVMExceptions(codes, messages, checkpointException[0]);
                     break;
                 case JVM_CHECKPOINT_NONE:
-                    checkpointException.addSuppressed(
+                    checkpointException[0].addSuppressed(
                             new RuntimeException("C/R is not configured"));
                     break;
                 default:
-                    checkpointException.addSuppressed(
+                    checkpointException[0].addSuppressed(
                             new RuntimeException("Unknown C/R result: " + retCode));
             }
         }
@@ -179,11 +190,11 @@ public class Core {
         try {
             globalContext.afterRestore(null);
         } catch (RestoreException re) {
-            if (checkpointException == null) {
+            if (checkpointException[0] == null) {
                 restoreException = re;
             } else {
                 for (Throwable t : re.getSuppressed()) {
-                    checkpointException.addSuppressed(t);
+                    checkpointException[0].addSuppressed(t);
                 }
             }
         }
@@ -208,7 +219,7 @@ public class Core {
                 } catch (PrivilegedActionException |
                          InvocationTargetException |
                          IllegalAccessException e) {
-                    assert checkpointException == null :
+                    assert checkpointException[0] == null :
                         "should not have new arguments";
                     if (restoreException == null) {
                         restoreException = new RestoreException();
@@ -218,9 +229,9 @@ public class Core {
             }
         }
 
-        assert checkpointException == null || restoreException == null;
-        if (checkpointException != null) {
-            throw checkpointException;
+        assert checkpointException[0] == null || restoreException == null;
+        if (checkpointException[0] != null) {
+            throw checkpointException[0];
         } else if (restoreException != null) {
             throw restoreException;
         }

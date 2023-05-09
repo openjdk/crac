@@ -119,17 +119,17 @@ public abstract class SocketImpl implements SocketOptions {
 
         @Override
         public Priority getPriority() {
-            return Priority.PRE_FILE_DESRIPTORS;
+            return Priority.FILE_DESCRIPTORS;
         }
 
         @Override
         public void beforeCheckpoint(Context<? extends Resource> context) throws Exception {
             JDKContext ctx = (JDKContext)context;
-            if (ctx.claimFdWeak(fd, this)) {
-                throw new CheckpointOpenSocketException(
+            ctx.claimFd(fd,
+                () -> new CheckpointOpenSocketException(
                     SocketImpl.this.toString(),
-                    getStackTraceHolder());
-            }
+                    getStackTraceHolder()),
+                FileDescriptor.class);
         }
 
         @Override

@@ -36,6 +36,7 @@ import sun.security.action.GetPropertyAction;
 import java.io.File;
 import java.io.FileDescriptor;
 import java.util.*;
+import java.util.function.Supplier;
 import java.util.stream.Collectors;
 
 public class JDKContext extends AbstractContextImpl<JDKResource, Void> {
@@ -60,7 +61,7 @@ public class JDKContext extends AbstractContextImpl<JDKResource, Void> {
                 .split(File.pathSeparator);
     }
 
-    private WeakHashMap<FileDescriptor, Object> claimedFds;
+    private WeakHashMap<FileDescriptor, Supplier<Exception>> claimedFds;
 
     public boolean matchClasspath(String path) {
         for (String cp : Properties.classpathEntries) {
@@ -76,7 +77,7 @@ public class JDKContext extends AbstractContextImpl<JDKResource, Void> {
     }
 
     @Override
-    public synchronized void beforeCheckpoint(Context<? extends Resource> context) throws CheckpointException {
+    public void beforeCheckpoint(Context<? extends Resource> context) throws CheckpointException {
         claimedFds = new WeakHashMap<>();
         try {
             super.beforeCheckpoint(context);
@@ -89,7 +90,7 @@ public class JDKContext extends AbstractContextImpl<JDKResource, Void> {
     }
 
     @Override
-    public synchronized void afterRestore(Context<? extends Resource> context) throws RestoreException {
+    public void afterRestore(Context<? extends Resource> context) throws RestoreException {
         super.afterRestore(context);
         claimedFds = null;
     }
@@ -99,26 +100,30 @@ public class JDKContext extends AbstractContextImpl<JDKResource, Void> {
         register(resource, null);
     }
 
-    public Map<Integer, Object> getClaimedFds() {
+    public Map<Integer, Supplier<Exception>> getClaimedFds() {
         JavaIOFileDescriptorAccess fileDescriptorAccess = SharedSecrets.getJavaIOFileDescriptorAccess();
         return claimedFds.entrySet().stream()
                 .collect(Collectors.toMap(entry -> fileDescriptorAccess.get(entry.getKey()), Map.Entry::getValue));
     }
 
-    public void claimFd(FileDescriptor fd, Object obj) {
-        if (!fd.valid()) {
+    public void claimFd(FileDescriptor fd, Supplier<Exception> supplier, Class<?>... supresses) {
+        Objects.requireNonNull(supplier);
+
+        if (fd == null || !fd.valid()) {
             return;
         }
-        Object e = claimedFds.put(fd, obj);
-        if (e != null) {
-            throw new AssertionError(fd + " was already claimed by " + e);
-        }
-    }
 
-    public boolean claimFdWeak(FileDescriptor fd, Object obj) {
-        if (fd == null || !fd.valid()) {
-            return false;
+        Object old = claimedFds.putIfAbsent(fd, supplier);
+        if (old == null) {
+            return;
         }
-        return claimedFds.putIfAbsent(fd, obj) == null;
+
+        for (Class<?> c : supresses) {
+            // if C is subclass of Old
+            if (old.getClass().isAssignableFrom(c)) {
+                claimedFds.put(fd, supplier);
+                break;
+            }
+        }
     }
 }

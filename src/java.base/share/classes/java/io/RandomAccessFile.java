@@ -92,15 +92,15 @@ public class RandomAccessFile implements DataOutput, DataInput, Closeable {
 
         @Override
         public void beforeCheckpoint(Context<? extends jdk.crac.Resource> context) throws Exception {
-            if (Core.getJDKContext().claimFdWeak(fd, this)) {
+            Core.getJDKContext().claimFd(fd, () -> {
                 if (Core.getJDKContext().matchClasspath(path)) {
                     // Files on the classpath are considered persistent, exception is not thrown
-                    return;
+                    return null;
                 }
-                throw new CheckpointOpenFileException(
+                return new CheckpointOpenFileException(
                     path,
                     getStackTraceHolder());
-            }
+            }, FileDescriptor.class);
         }
 
         @Override
@@ -110,7 +110,7 @@ public class RandomAccessFile implements DataOutput, DataInput, Closeable {
 
         @Override
         public Priority getPriority() {
-            return Priority.PRE_FILE_DESRIPTORS;
+            return Priority.FILE_DESCRIPTORS;
         }
     }
 

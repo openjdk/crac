@@ -33,11 +33,8 @@ package jdk.crac;
  * implements this interface, and the object created with that class is
  * registered with a {@code Context}, using {@code register} method.
  * <p>
- * All notifications before checkpoint and after restore are performed in a
- * single thread, therefore the resource does not have to guard against
- * concurrent invocations of these methods. However, other threads might be
- * running during these notifications, therefore it is up to the implementation
- * to protect against concurrent access.
+ * Note that other application threads might be running during these notifications,
+ * therefore it is up to the implementation to protect against concurrent access.
  */
 public interface Resource {
 

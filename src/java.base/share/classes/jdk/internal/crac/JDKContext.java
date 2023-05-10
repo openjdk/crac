@@ -32,7 +32,7 @@ import java.util.Comparator;
 
 public class JDKContext extends PriorityContext<JDKResource.Priority, JDKResource> {
     // We cannot use method references/lambdas when the context is created
-    public static final Comparator<JDKResource.Priority> PRIORITY_COMPARATOR = new Comparator<>() {
+    private static final Comparator<JDKResource.Priority> PRIORITY_COMPARATOR = new Comparator<>() {
         @Override
         public int compare(JDKResource.Priority p1, JDKResource.Priority p2) {
             return p1.compareTo(p2);

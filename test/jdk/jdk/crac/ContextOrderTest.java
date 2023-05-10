@@ -51,10 +51,10 @@ public class ContextOrderTest {
     public static void main(String[] args) throws Exception {
         System.setProperty("java.util.logging.config.file", Utils.TEST_SRC + "/logging.properties");
 
-//        testOrder();
-//        testRegisterBlocks();
-//        testThrowing();
-//        testRegisterToCompleted();
+        testOrder();
+        testRegisterBlocks();
+        testThrowing();
+        testRegisterToCompleted();
         testRegisterFromOtherThread();
     }
 

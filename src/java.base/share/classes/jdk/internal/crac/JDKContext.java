@@ -39,7 +39,7 @@ public class JDKContext extends PriorityContext<JDKResource.Priority, JDKResourc
         }
     };
 
-    public JDKContext() {
+    JDKContext() {
         super(PRIORITY_COMPARATOR);
     }
 

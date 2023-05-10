@@ -66,7 +66,7 @@ public class Core {
             GetBooleanAction.privilegedGetProperty("jdk.crac.trace-startup-time");
     }
 
-    private static final Context<Resource> globalContext = new OrderedContext();
+    private static final Context<Resource> globalContext = new OrderedContext<>("GlobalContext");
     static {
         // force JDK context initialization
         jdk.internal.crac.Core.getJDKContext();

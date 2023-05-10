@@ -26,25 +26,25 @@
 
 package jdk.internal.crac;
 
-import jdk.crac.impl.AbstractContextImpl;
+import jdk.crac.impl.PriorityContext;
 
 import java.util.Comparator;
-import java.util.Map;
 
-public class JDKContext extends AbstractContextImpl<JDKResource, Void> {
-    static class ContextComparator implements Comparator<Map.Entry<JDKResource, Void>> {
+public class JDKContext extends PriorityContext<JDKResource.Priority, JDKResource> {
+    // We cannot use method references/lambdas when the context is created
+    private static final Comparator<JDKResource.Priority> PRIORITY_COMPARATOR = new Comparator<>() {
         @Override
-        public int compare(Map.Entry<JDKResource, Void> o1, Map.Entry<JDKResource, Void> o2) {
-            return o1.getKey().getPriority().compareTo(o2.getKey().getPriority());
+        public int compare(JDKResource.Priority p1, JDKResource.Priority p2) {
+            return p1.compareTo(p2);
         }
-    }
+    };
 
     JDKContext() {
-        super(new ContextComparator());
+        super(PRIORITY_COMPARATOR);
     }
 
     @Override
     public void register(JDKResource resource) {
-        register(resource, null);
+        register(resource, resource.getPriority());
     }
 }

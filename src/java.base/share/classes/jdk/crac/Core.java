@@ -82,22 +82,13 @@ public class Core {
         final int length = codes.length;
 
         for (int i = 0; i < length; ++i) {
-            switch(codes[i]) {
-                case JVM_CR_FAIL_FILE:
-                    exception.addSuppressed(
-                            new CheckpointOpenFileException(messages[i]));
-                    break;
-                case JVM_CR_FAIL_SOCK:
-                    exception.addSuppressed(
-                            new CheckpointOpenSocketException(messages[i]));
-                    break;
-                case JVM_CR_FAIL_PIPE:
-                    // FALLTHROUGH
-                default:
-                    exception.addSuppressed(
-                            new CheckpointOpenResourceException(messages[i]));
-                    break;
-            }
+            Throwable ex = switch (codes[i]) {
+                case JVM_CR_FAIL_FILE -> new CheckpointOpenFileException(messages[i]);
+                case JVM_CR_FAIL_SOCK -> new CheckpointOpenSocketException(messages[i]);
+                case JVM_CR_FAIL_PIPE -> new CheckpointOpenResourceException(messages[i]);
+                default -> new CheckpointOpenResourceException(messages[i]);
+            };
+            exception.addSuppressed(ex);
         }
     }
 
@@ -138,19 +129,16 @@ public class Core {
 
         if (retCode != JVM_CHECKPOINT_OK) {
             if (checkpointException == null) {
-                checkpointException = new CheckpointException();
+                if (messages.length == 0) {
+                    checkpointException = new CheckpointException("Native checkpoint failed");
+                } else {
+                    checkpointException = new CheckpointException();
+                }
             }
             switch (retCode) {
-                case JVM_CHECKPOINT_ERROR:
-                    translateJVMExceptions(codes, messages, checkpointException);
-                    break;
-                case JVM_CHECKPOINT_NONE:
-                    checkpointException.addSuppressed(
-                            new RuntimeException("C/R is not configured"));
-                    break;
-                default:
-                    checkpointException.addSuppressed(
-                            new RuntimeException("Unknown C/R result: " + retCode));
+                case JVM_CHECKPOINT_ERROR -> translateJVMExceptions(codes, messages, checkpointException);
+                case JVM_CHECKPOINT_NONE -> checkpointException.addSuppressed(new RuntimeException("C/R is not configured"));
+                default -> checkpointException.addSuppressed(new RuntimeException("Unknown C/R result: " + retCode));
             }
         }
 

@@ -36,7 +36,9 @@ public class RestoreException extends Exception {
      * Creates a {@code RestoreException}.
      */
     public RestoreException() {
-        super();
+        // This exception is used as an aggregate for other (suppressed)
+        // exceptions; no point in recording and printing the stack trace.
+        super(null, null, true, false);
     }
 
     /**

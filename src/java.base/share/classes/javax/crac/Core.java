@@ -69,13 +69,18 @@ public class Core {
         try {
             jdk.crac.Core.checkpointRestore();
         } catch (jdk.crac.CheckpointException e) {
-            CheckpointException newException = new CheckpointException();
+            // We will lose the stack trace information but not the detailed message
+            // Since the exception received here will originate from jdk.crac.Core
+            // anyway the actual stack trace is not that important.
+            CheckpointException newException = e.getMessage() == null ?
+                    new CheckpointException() : new CheckpointException(e.getMessage());
             for (Throwable t : e.getSuppressed()) {
                 newException.addSuppressed(t);
             }
             throw newException;
         } catch (jdk.crac.RestoreException e) {
-            RestoreException newException = new RestoreException();
+            RestoreException newException = e.getMessage() == null ?
+                    new RestoreException() : new RestoreException(e.getMessage());
             for (Throwable t : e.getSuppressed()) {
                 newException.addSuppressed(t);
             }

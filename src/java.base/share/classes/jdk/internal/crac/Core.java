@@ -29,7 +29,7 @@ package jdk.internal.crac;
 import java.io.FileDescriptor;
 
 public class Core {
-    private static JDKContext JDKContext;
+    private static final JDKContext JDKContext;
 
     private static native void registerPersistent0(FileDescriptor fd);
 

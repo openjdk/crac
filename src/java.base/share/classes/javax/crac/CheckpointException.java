@@ -36,6 +36,18 @@ public class CheckpointException extends Exception {
      * Creates a {@code CheckpointException}.
      */
     public CheckpointException() {
-        super();
+        // This exception is used as an aggregate for other (suppressed)
+        // exceptions; no point in recording and printing the stack trace.
+        super(null, null, true, false);
+    }
+
+    /**
+     * Constructs a {@code CheckpointException} with the specified
+     * detail message.
+     *
+     * @param message the detail message.
+     */
+    public CheckpointException(String message) {
+        super(message);
     }
 }

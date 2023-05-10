@@ -118,6 +118,11 @@ public class Core {
      * <li>When an exception is thrown during notification it is caught by
      *     the {@code Context} and is suppressed by a {@link CheckpointException}
      *     or {@link RestoreException}, depends on the throwing method.
+     * <li>When the {@code Resource} throws a {@link CheckpointException} or
+     *     {@link RestoreException} with suppressed exceptions (this happens
+     *     e.g. when the {@code Resource} is a {@code Context}), this context
+     *     throws a new exception of the same type, with suppressed exceptions
+     *     from the original exception moved over to the new exception.
      * </ul>
      *
      * @return the global {@code Context}

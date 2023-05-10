@@ -60,11 +60,10 @@ public interface Resource {
     /**
      * Invoked by a {@code Context} both as a notification about restore or
      * when the checkpoint cannot be performed (e.g. due to this or some other
-     * resource throwing an exception when {@link #beforeCheckpoint(Context)
-     * beforeCheckpoint}.
-     * Therefore, the resource should not have assumptions about it state; it
-     * can be partially de-initialized if the previous invocation of
-     * {@link #beforeCheckpoint(Context) beforeCheckpoint} was not successful.
+     * resource throwing an exception from {@link #beforeCheckpoint(Context)
+     * beforeCheckpoint}). As in the latter case the resource might be partially
+     * de-initialized this method should validate its assumptions about resource
+     * state and restore it to a valid state.
      * <p>
      * The order of notification is subject to the {@link Context}
      * implementation, e.g. for the global context see

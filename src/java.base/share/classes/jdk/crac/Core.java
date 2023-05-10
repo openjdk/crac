@@ -40,7 +40,6 @@ import java.security.AccessController;
 import java.security.PrivilegedAction;
 import java.security.PrivilegedActionException;
 import java.security.PrivilegedExceptionAction;
-import java.util.ArrayList;
 import java.util.Arrays;
 
 /**
@@ -83,47 +82,27 @@ public class Core {
         final int length = codes.length;
 
         for (int i = 0; i < length; ++i) {
-            Throwable ex = switch (codes[i]) {
-                case JVM_CR_FAIL_FILE -> new CheckpointOpenFileException(messages[i]);
-                case JVM_CR_FAIL_SOCK -> new CheckpointOpenSocketException(messages[i]);
-                case JVM_CR_FAIL_PIPE -> new CheckpointOpenResourceException(messages[i]);
-                default -> new CheckpointOpenResourceException(messages[i]);
-            };
-            exception.addSuppressed(ex);
+            switch(codes[i]) {
+                case JVM_CR_FAIL_FILE:
+                    exception.addSuppressed(
+                            new CheckpointOpenFileException(messages[i]));
+                    break;
+                case JVM_CR_FAIL_SOCK:
+                    exception.addSuppressed(
+                            new CheckpointOpenSocketException(messages[i]));
+                    break;
+                case JVM_CR_FAIL_PIPE:
+                    // FALLTHROUGH
+                default:
+                    exception.addSuppressed(
+                            new CheckpointOpenResourceException(messages[i]));
+                    break;
+            }
         }
     }
 
     /**
-     * Gets the global {@code Context} for checkpoint/restore notifications
-     * with the following properties:
-     * <ul>
-     * <li>The context maintains a weak reference to registered {@link Resource}.
-     *     The lifecycle of the resource should be bound to the lifecycle of
-     *     the component (registrar) through a strong reference to the resource
-     *     (if these are not the same instance). That way the resource receives
-     *     notifications only until the component ceases to exist.
-     *     When the registrar does not keep a strong reference to the resource
-     *     the garbage collector is free to trash the resource and notifications
-     *     will not be invoked.
-     * <li>Order of invoking {@link Resource#beforeCheckpoint(Context)} is
-     *     the reverse of the order of {@linkplain Context#register(Resource)
-     *     registration}.
-     * <li>Order of invoking {@link Resource#afterRestore(Context)} is
-     *     the reverse of the order of {@linkplain Resource#beforeCheckpoint(Context)
-     *     checkpoint notification}, hence the same as the order of
-     *     {@link Context#register(Resource) registration}.
-     * <li>{@code Resource} is always notified of checkpoint or restore,
-     *     regardless of whether other {@code Resource} notifications have
-     *     thrown an exception or not,
-     * <li>When an exception is thrown during notification it is caught by
-     *     the {@code Context} and is suppressed by a {@link CheckpointException}
-     *     or {@link RestoreException}, depends on the throwing method.
-     * <li>When the {@code Resource} throws a {@link CheckpointException} or
-     *     {@link RestoreException} with suppressed exceptions (this happens
-     *     e.g. when the {@code Resource} is a {@code Context}), this context
-     *     throws a new exception of the same type, with suppressed exceptions
-     *     from the original exception moved over to the new exception.
-     * </ul>
+     * Gets the global {@code Context} for checkpoint/restore notifications.
      *
      * @return the global {@code Context}
      */
@@ -162,9 +141,16 @@ public class Core {
                 checkpointException = new CheckpointException();
             }
             switch (retCode) {
-                case JVM_CHECKPOINT_ERROR -> translateJVMExceptions(codes, messages, checkpointException);
-                case JVM_CHECKPOINT_NONE -> checkpointException.addSuppressed(new RuntimeException("C/R is not configured"));
-                default -> checkpointException.addSuppressed(new RuntimeException("Unknown C/R result: " + retCode));
+                case JVM_CHECKPOINT_ERROR:
+                    translateJVMExceptions(codes, messages, checkpointException);
+                    break;
+                case JVM_CHECKPOINT_NONE:
+                    checkpointException.addSuppressed(
+                            new RuntimeException("C/R is not configured"));
+                    break;
+                default:
+                    checkpointException.addSuppressed(
+                            new RuntimeException("Unknown C/R result: " + retCode));
             }
         }
 

@@ -28,26 +28,15 @@ package jdk.crac;
 
 /**
  * An interface for receiving checkpoint/restore notifications.
- * <p>
- * The class that is interested in receiving a checkpoint/restore notification
+ *
+ * <p>The class that is interested in receiving a checkpoint/restore notification
  * implements this interface, and the object created with that class is
  * registered with a {@code Context}, using {@code register} method.
- * <p>
- * Note that other application threads might be running during these notifications,
- * therefore it is up to the implementation to protect against concurrent access.
  */
 public interface Resource {
 
     /**
      * Invoked by a {@code Context} as a notification about checkpoint.
-     * The resource should not depend on the state of any other resource; when
-     * this method is invoked it is possible that some other resource's
-     * notification has thrown an error and/or its
-     * {@link #afterRestore(Context)} method has been already called.
-     * <p>
-     * The order of notification is subject to the {@link Context}
-     * implementation, e.g. for the global context see
-     * {@link Core#getGlobalContext()}.
      *
      * @param context {@code Context} providing notification
      * @throws Exception if the method have failed
@@ -55,19 +44,7 @@ public interface Resource {
     void beforeCheckpoint(Context<? extends Resource> context) throws Exception;
 
     /**
-     * Invoked by a {@code Context} both as a notification about restore or
-     * when the checkpoint cannot be performed (e.g. due to this or some other
-     * resource throwing an exception from {@link #beforeCheckpoint(Context)
-     * beforeCheckpoint}). As in the latter case the resource might be partially
-     * de-initialized this method should validate its assumptions about resource
-     * state and restore it to a valid state.
-     * <p>
-     * The order of notification is subject to the {@link Context}
-     * implementation, e.g. for the global context see
-     * {@link Core#getGlobalContext()}.
-     * <p>
-     * The resource can assume that this method is called from the same thread
-     * as {@link #beforeCheckpoint(Context)} was.
+     * Invoked by a {@code Context} as a notification about restore.
      *
      * @param context {@code Context} providing notification
      * @throws Exception if the method have failed

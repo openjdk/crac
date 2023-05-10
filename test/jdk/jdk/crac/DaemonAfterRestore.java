@@ -30,6 +30,8 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 
+import static jdk.test.lib.Asserts.assertFalse;
+
 /**
  * @test
  * @summary All afterRestore's should complete, even if there are only daemon threads (in case one of the afterRestore's finally creates non-daemon thread that will be responsible to keep VM alive)
@@ -79,7 +81,7 @@ public class DaemonAfterRestore implements CracTest {
             }
             System.out.println("worker thread finish");
         });
-        workerThread.setDaemon(false);
+        assertFalse(workerThread.isDaemon());
         workerThread.start();
 
         try {

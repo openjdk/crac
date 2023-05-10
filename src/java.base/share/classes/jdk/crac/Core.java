@@ -26,10 +26,8 @@
 
 package jdk.crac;
 
-import jdk.crac.impl.CheckpointOpenFileException;
-import jdk.crac.impl.CheckpointOpenResourceException;
-import jdk.crac.impl.CheckpointOpenSocketException;
-import jdk.crac.impl.OrderedContext;
+import jdk.crac.impl.*;
+
 import java.io.StringWriter;
 import java.io.PrintWriter;
 import sun.security.action.GetBooleanAction;
@@ -41,7 +39,6 @@ import java.security.PrivilegedAction;
 import java.security.PrivilegedActionException;
 import java.security.PrivilegedExceptionAction;
 import java.util.Arrays;
-import java.util.concurrent.CountDownLatch;
 
 /**
  * The coordination service.
@@ -232,34 +229,7 @@ public class Core {
         checkpointRestore(JCMD_STREAM_NULL);
     }
 
-    /**
-     * Keeps VM alive by at least one non-daemon thread.
-     */
-    private static class KeepAlive {
-        private final CountDownLatch start = new CountDownLatch(1);
-        private final CountDownLatch finish = new CountDownLatch(1);
-
-        private final Thread thread = new Thread(() -> {
-            start.countDown();
-            try {
-                finish.await();
-            } catch (InterruptedException e) {
-                throw new RuntimeException(e);
-            }
-        });
-
-        KeepAlive() throws InterruptedException {
-            thread.setDaemon(false);
-            thread.start();
-            start.await();
-        }
-
-        public void stop() throws InterruptedException {
-            finish.countDown();
-            thread.join();
-        }
-    }
-
+    @SuppressWarnings("try")
     private static void checkpointRestore(long jcmdStream) throws
             CheckpointException,
             RestoreException {
@@ -273,35 +243,13 @@ public class Core {
                 throw new CheckpointException("Recursive checkpoint is not allowed");
             }
 
-            KeepAlive keepAlive = null;
-
-            try {
+            try (@SuppressWarnings("unused") var keepAlive = new KeepAlive()) {
                 checkpointInProgress = true;
-
-                // Create a non-daemon thread while notification is performed
-                // to avoid VM exit. The notifications are done on the original
-                // thread.
-                if (Thread.currentThread().isDaemon()) {
-                    try {
-                        keepAlive = new KeepAlive();
-                    } catch (InterruptedException e) {
-                        throw new RuntimeException(e);
-                    }
-                }
-
                 checkpointRestore1(jcmdStream);
             } finally {
                 if (FlagsHolder.TRACE_STARTUP_TIME) {
                     System.out.println("STARTUPTIME " + System.nanoTime() + " restore-finish");
                 }
-
-                if (keepAlive != null) {
-                    try {
-                        keepAlive.stop();
-                    } catch (InterruptedException e) {
-                    }
-                }
-
                 checkpointInProgress = false;
             }
         }

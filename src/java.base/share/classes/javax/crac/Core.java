@@ -43,7 +43,36 @@ public class Core {
     }
 
     /**
-     * Gets the global {@code Context} for checkpoint/restore notifications.
+     * Gets the global {@code Context} for checkpoint/restore notifications
+     * with the following properties:
+     * <ul>
+     * <li>The context maintains a weak reference to registered {@link jdk.crac.Resource}.
+     *     The lifecycle of the resource should be bound to the lifecycle of
+     *     the component (registrar) through a strong reference to the resource
+     *     (if these are not the same instance). That way the resource receives
+     *     notifications only until the component ceases to exist.
+     *     When the registrar does not keep a strong reference to the resource
+     *     the garbage collector is free to trash the resource and notifications
+     *     will not be invoked.
+     * <li>Order of invoking {@link jdk.crac.Resource#beforeCheckpoint(jdk.crac.Context)} is
+     *     the reverse of the order of {@linkplain jdk.crac.Context#register(jdk.crac.Resource)
+     *     registration}.
+     * <li>Order of invoking {@link jdk.crac.Resource#afterRestore(jdk.crac.Context)} is
+     *     the reverse of the order of {@linkplain jdk.crac.Resource#beforeCheckpoint(jdk.crac.Context)
+     *     checkpoint notification}, hence the same as the order of
+     *     {@link jdk.crac.Context#register(jdk.crac.Resource) registration}.
+     * <li>{@code Resource} is always notified of checkpoint or restore,
+     *     regardless of whether other {@code Resource} notifications have
+     *     thrown an exception or not,
+     * <li>When an exception is thrown during notification it is caught by
+     *     the {@code Context} and is suppressed by a {@link jdk.crac.CheckpointException}
+     *     or {@link jdk.crac.RestoreException}, depends on the throwing method.
+     * <li>When the {@code Resource} throws a {@link jdk.crac.CheckpointException} or
+     *     {@link RestoreException} with suppressed exceptions (this happens
+     *     e.g. when the {@code Resource} is a {@code Context}), this context
+     *     throws a new exception of the same type, with suppressed exceptions
+     *     from the original exception moved over to the new exception.
+     * </ul>
      *
      * @return the global {@code Context}
      */

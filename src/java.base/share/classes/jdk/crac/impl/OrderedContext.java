@@ -73,7 +73,6 @@ public class OrderedContext<R extends Resource> extends AbstractContextImpl<R> {
 
     @Override
     public void afterRestore(Context<? extends Resource> context) throws RestoreException {
-        // Note: a resource might attempt to
         synchronized (this) {
             checkpointing = false;
             notifyAll();

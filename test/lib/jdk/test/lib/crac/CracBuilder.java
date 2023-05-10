@@ -311,7 +311,6 @@ public class CracBuilder {
         }
         if (debug) {
             cmd.add("-agentlib:jdwp=transport=dt_socket,server=y,suspend=y,address=0.0.0.0:5005");
-            cmd.add("-XX:+UnlockExperimentalVMOptions");
             cmd.add("-XX:-CRDoThrowCheckpointException");
         }
         for (var entry : javaOptions.entrySet()) {

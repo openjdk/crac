@@ -27,7 +27,7 @@
 package jdk.internal.crac;
 
 public class Core {
-    private static final JDKContext JDKContext;
+    private static JDKContext JDKContext;
 
     static {
         JDKContext = new JDKContext();

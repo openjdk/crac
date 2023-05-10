@@ -44,14 +44,13 @@ import java.util.Comparator;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.WeakHashMap;
-import java.util.stream.Collectors;
 
 public class JDKContext extends PriorityContext<JDKResource.Priority, JDKResource> {
     public static final String COLLECT_FD_STACKTRACES_PROPERTY = "jdk.crac.collect-fd-stacktraces";
     public static final String COLLECT_FD_STACKTRACES_HINT = "Use -D" + COLLECT_FD_STACKTRACES_PROPERTY + "=true to find the source.";
 
     // We cannot use method references/lambdas when the context is created
-    public static final Comparator<JDKResource.Priority> PRIORITY_COMPARATOR = new Comparator<>() {
+    private static final Comparator<JDKResource.Priority> PRIORITY_COMPARATOR = new Comparator<>() {
         @Override
         public int compare(JDKResource.Priority p1, JDKResource.Priority p2) {
             return p1.compareTo(p2);
@@ -66,7 +65,7 @@ public class JDKContext extends PriorityContext<JDKResource.Priority, JDKResourc
 
     private WeakHashMap<FileDescriptor, Object> claimedFds;
 
-    public JDKContext() {
+    JDKContext() {
         super(PRIORITY_COMPARATOR);
     }
 

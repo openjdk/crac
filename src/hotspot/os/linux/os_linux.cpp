@@ -25,6 +25,7 @@
 
 // no precompiled headers
 #include "jvm.h"
+#include "classfile/classLoader.hpp"
 #include "classfile/vmSymbols.hpp"
 #include "code/icBuffer.hpp"
 #include "code/vtableStubs.hpp"
@@ -6465,12 +6466,6 @@ void os::Linux::restore() {
 static char modules_path[JVM_MAXPATHLEN] = { '\0' };
 
 static bool is_fd_ignored(int fd, const char *path) {
-  if (!strcmp(modules_path, path)) {
-    // Path to the modules directory is opened early when JVM is booted up and won't be closed.
-    // We can ignore this for purposes of CRaC.
-    return true;
-  }
-
   const char *list = CRaCIgnoredFileDescriptors;
   while (list && *list) {
     const char *end = strchr(list, ',');
@@ -6497,6 +6492,13 @@ static bool is_fd_ignored(int fd, const char *path) {
       break;
     }
   }
+
+  if (os::same_files(modules_path, path)) {
+    // Path to the modules directory is opened early when JVM is booted up and won't be closed.
+    // We can ignore this for purposes of CRaC.
+    return true;
+  }
+
   return false;
 }
 
@@ -6505,7 +6507,7 @@ void os::Linux::close_extra_descriptors() {
   // We can ignore this for purposes of CRaC.
   if (modules_path[0] == '\0') {
     const char* fileSep = os::file_separator();
-    jio_snprintf(modules_path, JVM_MAXPATHLEN, "%s%slib%smodules", Arguments::get_java_home(), fileSep, fileSep);
+    jio_snprintf(modules_path, JVM_MAXPATHLEN, "%s%slib%s" MODULES_IMAGE_NAME, Arguments::get_java_home(), fileSep, fileSep);
   }
 
   char path[PATH_MAX];
@@ -6517,7 +6519,7 @@ void os::Linux::close_extra_descriptors() {
     if (fd > 2 && fd != dirfd(dir)) {
       int r = readfdlink(fd, path, sizeof(path));
       if (!is_fd_ignored(fd, r != -1 ? path : nullptr)) {
-        log_warning(os)("CRaC closing file descriptor %d: %s\n", fd, path);
+        log_warning(os)("CRaC closing file descriptor %d: %s", fd, path);
         close(fd);
       }
     }

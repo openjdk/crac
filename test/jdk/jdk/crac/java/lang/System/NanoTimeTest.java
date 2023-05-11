@@ -118,7 +118,7 @@ public class NanoTimeTest implements CracTest {
         long boottimeAfter = readSystemUptime();
         assertGTE(boottimeAfter, boottimeBefore + 86_400_000, "Boottime was not changed");
         RuntimeMXBean runtimeMX = ManagementFactory.getRuntimeMXBean();
-        assertGTE(runtimeMX.getUptime(), 0L,"VM Uptime is negative!");
+        assertGTE(runtimeMX.getUptime(), 0L, "VM Uptime is negative!");
         CRaCMXBean cracBean = CRaCMXBean.getCRaCMXBean();
         assertLT(cracBean.getUptimeSinceRestore(), 60_000L);
         assertGTE(cracBean.getUptimeSinceRestore(), 0L);

@@ -34,6 +34,4 @@ public class LoggerContainer {
     public static void error(Throwable t, String msg) {
         logger.log(System.Logger.Level.ERROR, msg, t);
     }
-
-
 }

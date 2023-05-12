@@ -19,11 +19,21 @@ public class LoggerContainer {
 
     private LoggerContainer() {}
 
+    public static void warn(String fmt, Object... params) {
+        logger.log(System.Logger.Level.WARNING, fmt, params);
+    }
+
     public static void error(String msg) {
         logger.log(System.Logger.Level.ERROR, msg);
+    }
+
+    public static void error(String fmt, Object... params) {
+        logger.log(System.Logger.Level.ERROR, fmt, params);
     }
 
     public static void error(Throwable t, String msg) {
         logger.log(System.Logger.Level.ERROR, msg, t);
     }
+
+
 }

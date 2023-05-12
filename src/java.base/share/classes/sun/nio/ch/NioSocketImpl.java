@@ -128,6 +128,11 @@ public final class NioSocketImpl extends SocketImpl implements PlatformSocketImp
     private boolean readEOF;
     private boolean connectionReset;
 
+    static {
+        // Force initialization before checkpoint starts
+        new FileDispatcherImpl();
+    }
+
     /**
      * Creates an instance of this SocketImpl.
      * @param server true if this is a SocketImpl for a ServerSocket

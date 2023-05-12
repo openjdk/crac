@@ -25,17 +25,16 @@
 
 package java.io;
 
-import java.net.InetSocketAddress;
 import java.net.Socket;
 import java.util.*;
 
 import jdk.crac.Context;
+import jdk.crac.RestoreException;
+import jdk.crac.impl.OpenFDPolicies;
 import jdk.crac.impl.CheckpointOpenFileException;
 import jdk.internal.access.JavaIOFileDescriptorAccess;
 import jdk.internal.access.SharedSecrets;
-import jdk.internal.crac.Core;
-import jdk.internal.crac.JDKContext;
-import jdk.internal.crac.JDKResource;
+import jdk.internal.crac.*;
 import jdk.internal.ref.PhantomCleanable;
 
 /**
@@ -61,6 +60,11 @@ public final class FileDescriptor {
     private boolean closed;
 
     class Resource implements jdk.internal.crac.JDKResource {
+        private int originalFd = -1;
+        private String originalType;
+        private String originalPath;
+        private int originalFlags;
+        private long originalOffset;
         private boolean closedByNIO;
         final Exception stackTraceHolder;
 
@@ -111,12 +115,7 @@ public final class FileDescriptor {
     static {
         initIDs();
 
-        Core.getJDKContext().register(checkpointListener = new JDKResource() {
-            @Override
-            public Priority getPriority() {
-                return Priority.NORMAL;
-            }
-
+        Core.getJDKContext().register(checkpointListener = new JDKResourceStub(JDKResource.Priority.NORMAL) {
             @Override
             public void beforeCheckpoint(Context<? extends jdk.crac.Resource> context) {
                 JDKContext ctx = (JDKContext) context;
@@ -124,11 +123,8 @@ public final class FileDescriptor {
                 ctx.claimFd(out, "System.out");
                 ctx.claimFd(err, "System.err");
             }
-
-            @Override
-            public void afterRestore(Context<? extends jdk.crac.Resource> context) {
-            }
         });
+        OpenFDPolicies.ensureRegistered();
     }
 
     // Set up JavaIOFileDescriptorAccess in SharedSecrets
@@ -372,23 +368,52 @@ public final class FileDescriptor {
         close0();
     }
 
+    @SuppressWarnings("fallthrough")
     private synchronized void beforeCheckpoint() throws CheckpointOpenFileException {
         if (valid()) {
             JDKContext ctx = jdk.internal.crac.Core.getJDKContext();
-            if (ctx.claimFdWeak(this, this)) {
-                String path = getPath();
-                String type = getType();
-                String info;
-                if ("socket".equals(type)) {
-                    info = Socket.getDescription(this);
-                } else {
-                    info = (path != null ? path : "unknown path") + " (" + (type != null ? type : "unknown") + ")";
-                }
-                String msg = "FileDescriptor " + this.fd + " left open: " + info + " ";
-                if (!JDKContext.Properties.COLLECT_FD_STACKTRACES) {
-                    msg += JDKContext.COLLECT_FD_STACKTRACES_HINT;
-                }
-                throw new CheckpointOpenFileException(msg, resource.stackTraceHolder);
+            String path = getPath();
+            String type = getType();
+            OpenFDPolicies.BeforeCheckpoint policy = OpenFDPolicies.CHECKPOINT.get(fd, type, path);
+            switch (policy) {
+                case ERROR:
+                    if (ctx.claimFdWeak(this, this)) {
+                        String info;
+                        if ("socket".equals(type)) {
+                            info = Socket.getDescription(this);
+                        } else {
+                            info = (path != null ? path : "unknown path") + " (" + (type != null ? type : "unknown") + ")";
+                        }
+                        String msg = "FileDescriptor " + this.fd + " left open: " + info + " ";
+                        if (!JDKContext.Properties.COLLECT_FD_STACKTRACES) {
+                            msg += JDKContext.COLLECT_FD_STACKTRACES_HINT;
+                        }
+                        throw new CheckpointOpenFileException(msg, resource.stackTraceHolder);
+                    }
+                    break;
+                case WARN_CLOSE:
+                    LoggerContainer.warn("CRaC: File descriptor {0} ({1}) was not closed by the application!", fd, path);
+                    // intentional fallthrough
+                case CLOSE:
+                    resource.originalFd = fd;
+                    resource.originalType = type;
+                    resource.originalPath = path;
+                    resource.originalFlags = getFlags();
+                    resource.originalOffset = getOffset();
+                    if (resource.originalOffset < 0) {
+                        throw new CheckpointOpenFileException("Cannot find current offset of descriptor " + fd + "(" + path + ")", null);
+                    }
+                    try {
+                        close0(); // do not unregister any handlers
+                    } catch (IOException e) {
+                        throw new CheckpointOpenFileException("Cannot close file descriptor " + fd + " (" + path + ") before checkpoint", e);
+                    }
+                    LoggerContainer.debug("Closed FD {0} ({1}, offset {2} with flags 0x{3}%n",
+                            resource.originalFd, resource.originalPath, resource.originalOffset,
+                            Integer.toHexString(resource.originalFlags).toUpperCase());
+                    break;
+                default:
+                    throw new IllegalArgumentException("Unknown policy " + policy);
             }
         }
     }
@@ -397,8 +422,61 @@ public final class FileDescriptor {
 
     private native String getType();
 
-    private synchronized void afterRestore() {
+    private native int getFlags();
+
+    private native long getOffset();
+
+    private synchronized void afterRestore() throws RestoreException {
+        if (!valid() && resource.originalFd >= 0) {
+            OpenFDPolicies.AfterRestorePolicy policy =
+                    OpenFDPolicies.RESTORE.get(resource.originalFd, resource.originalType, resource.originalPath);
+            if (policy.type == OpenFDPolicies.AfterRestore.KEEP_CLOSED) {
+                LoggerContainer.debug("FD %d (%s) is not reopened per policy%n",
+                            resource.originalFd, resource.originalPath);
+                resource.originalPath = null;
+                resource.originalType = null;
+                return;
+            }
+            String path;
+            if (policy.type == OpenFDPolicies.AfterRestore.OPEN_OTHER) {
+                path = policy.param;
+            } else {
+                if (resource.originalPath == null) {
+                    throw new RestoreException("Cannot reopen file descriptor " +
+                            resource.originalFd + ": invalid path: " + resource.originalPath);
+                } else if (resource.originalType.equals("socket")) {
+                    throw new RestoreException("Cannot reopen file descriptor " +
+                            resource.originalFd + ": cannot restore socket");
+                }
+                path = resource.originalPath;
+            }
+            // We will attempt to open at the original offset even if the path changed;
+            // this is used probably as the file moved on the filesystem but the contents
+            // are the same.
+            if (!reopen(resource.originalFd, path, resource.originalFlags, resource.originalOffset)) {
+                if (policy.type == OpenFDPolicies.AfterRestore.REOPEN_OR_NULL) {
+                    if (!reopenNull(resource.originalFd)) {
+                        throw new RestoreException("Cannot reopen file descriptor " +
+                                resource.originalFd + " to null device");
+                    }
+                } else {
+                    throw new RestoreException("Cannot reopen file descriptor " +
+                            resource.originalFd + " to " + path);
+                }
+            } else {
+                LoggerContainer.debug("Reopened FD %d (%s, offset %d) with flags 0x%08X%n",
+                        resource.originalFd, resource.originalPath, resource.originalOffset, resource.originalFlags);
+            }
+            this.fd = resource.originalFd;
+        }
+        // let GC collect the path and type
+        resource.originalPath = null;
+        resource.originalType = null;
     }
+
+    private native boolean reopen(int fd, String path, int flags, long offset);
+
+    private native boolean reopenNull(int fd);
 
     /*
      * Close the raw file descriptor or handle, if it has not already been closed

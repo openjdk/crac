@@ -31,6 +31,7 @@ import java.io.StringWriter;
 import java.lang.StackWalker.StackFrame;
 import java.security.AccessController;
 import java.security.PrivilegedAction;
+import java.text.MessageFormat;
 import java.time.ZonedDateTime;
 import java.util.Optional;
 import java.util.MissingResourceException;
@@ -54,6 +55,16 @@ public class SimpleConsoleLogger extends LoggerConfiguration
     static final Level DEFAULT_LEVEL = getDefaultLevel();
     static final PlatformLogger.Level DEFAULT_PLATFORM_LEVEL =
             PlatformLogger.toPlatformLevel(DEFAULT_LEVEL);
+
+    static {
+        // It is possible that CRaC would print first logging message after
+        // JDKContext calls beforeCheckpoint on all CLEANERS. Registering a CallSite
+        // as resource at this point would hang the checkpoint, therefore we perform
+        // all the initialization eagerly.
+        new SimpleConsoleLogger(null, false).getCallerInfo();
+        String.format("%tc",ZonedDateTime.now());
+        MessageFormat.format("{0} {1}", 0, "1");
+    }
 
     static Level getDefaultLevel() {
         String levelName = GetPropertyAction

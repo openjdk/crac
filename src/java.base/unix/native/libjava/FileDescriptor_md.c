@@ -22,9 +22,12 @@
  * or visit www.oracle.com if you need additional information or have any
  * questions.
  */
+
 #include <fcntl.h>
 #include <inttypes.h>
+#include <limits.h>
 #include <stdbool.h>
+#include <string.h>
 #include <unistd.h>
 
 #include "jni.h"
@@ -104,7 +107,6 @@ Java_java_io_FileDescriptor_getPath(JNIEnv *env, jobject obj) {
     return NULL;
 }
 
-
 JNIEXPORT jstring JNICALL
 Java_java_io_FileDescriptor_getType(JNIEnv *env, jobject obj) {
     int fd = (*env)->GetIntField(env, obj, IO_fd_fdID);
@@ -114,6 +116,82 @@ Java_java_io_FileDescriptor_getType(JNIEnv *env, jobject obj) {
     } else {
         return NULL;
     }
+}
+
+JNIEXPORT jlong JNICALL
+Java_java_io_FileDescriptor_getOffset(JNIEnv *env, jobject obj) {
+    int fd = (*env)->GetIntField(env, obj, IO_fd_fdID);
+    jlong offset = lseek(fd, 0, SEEK_CUR);
+    if (offset < 0) {
+        if (errno == ESPIPE) {
+            return 0;
+        } else {
+            perror("CRaC: cannot find file descriptor offset");
+            return offset;
+        }
+    }
+    return offset;
+}
+
+JNIEXPORT jint JNICALL
+Java_java_io_FileDescriptor_getFlags(JNIEnv *env, jobject obj) {
+    int fd = (*env)->GetIntField(env, obj, IO_fd_fdID);
+    return fcntl(fd, F_GETFL);
+}
+
+JNIEXPORT jboolean JNICALL
+Java_java_io_FileDescriptor_reopen(JNIEnv *env, jobject obj, jint fd, jstring path, jint flags, jlong offset) {
+    if (fcntl(fd, F_GETFD) != -1) {
+        JNU_ThrowByName(env, "jdk/crac/impl/CheckpointOpenFileException", "File descriptor is already open");
+    }
+    // assert errno is EBADF?
+    jboolean copy;
+    const char *cpath = (*env)->GetStringUTFChars(env, path, &copy);
+    int firstFd = open(cpath, flags);
+    (*env)->ReleaseStringUTFChars(env, path, cpath);
+    jboolean result = JNI_TRUE;
+    if (firstFd < 0) {
+        perror("CRaC: Failed to reopen file descriptor");
+        return JNI_FALSE;
+    } else if (firstFd != fd) {
+        if (dup2(firstFd, fd) < 0) {
+            perror("CRaC: Failed to dup2 new file descriptor to original one");
+            result = JNI_FALSE;
+        }
+        if (close(firstFd) < 0) {
+            perror("CRaC: failed to close opened file descriptor");
+        }
+    }
+    if (result && offset != 0 && lseek(fd, offset, SEEK_SET) < 0) {
+        perror("CRaC: Failed to lseek reopened file descriptor");
+        close(fd);
+        return JNI_FALSE;
+    }
+    return result;
+}
+
+JNIEXPORT jboolean JNICALL
+Java_java_io_FileDescriptor_reopenNull(JNIEnv *env, jobject obj, jint fd) {
+    if (fcntl(fd, F_GETFD) != -1) {
+        JNU_ThrowByName(env, "jdk/crac/impl/CheckpointOpenFileException", "File descriptor is already open");
+    }
+    // assert errno is EBADF?
+    int firstFd = open("/dev/null", O_WRONLY);
+    if (firstFd < 0) {
+        perror("CRaC: Failed to reopen file descriptor using /dev/null");
+        return JNI_FALSE;
+    } else if (firstFd == fd) {
+        return JNI_TRUE;
+    }
+    jboolean result = JNI_TRUE;
+    if (dup2(firstFd, fd) < 0) {
+        perror("CRaC: Failed to dup2 new file descriptor to original one");
+        result = JNI_FALSE;
+    }
+    if (close(firstFd) < 0) {
+        perror("CRaC: failed to close opened file descriptor");
+    }
+    return result;
 }
 
 // instance method close0 for FileDescriptor

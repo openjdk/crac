@@ -156,7 +156,9 @@ public final class CleanerImpl implements Runnable {
      * Perform cleaning on an unreachable PhantomReference.
      */
     public static final class PhantomCleanableRef extends PhantomCleanable<Object> implements JDKResource {
-        private final Runnable action;
+        // We are setting this to null when the object is cleaned - using a boolean instead would
+        // increase object size by 8 bytes.
+        private Runnable action;
         private final JDKResource.Priority priority;
 
         /**
@@ -185,6 +187,10 @@ public final class CleanerImpl implements Runnable {
         @Override
         protected void performCleanup() {
             action.run();
+            synchronized (this) {
+                action = null;
+                notifyAll();
+            }
         }
 
         /**
@@ -216,6 +222,11 @@ public final class CleanerImpl implements Runnable {
         public void beforeCheckpoint(Context<? extends Resource> context) throws Exception {
             if (refersTo(null)) {
                  clean();
+                 synchronized (this) {
+                     while (action != null) {
+                         wait();
+                     }
+                 }
             }
         }
 

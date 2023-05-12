@@ -86,6 +86,14 @@ public interface JDKResource extends Resource {
 
         PRE_FILE_DESRIPTORS,
         FILE_DESCRIPTORS,
+
+        /**
+         * Cleaners for CallSites cannot be registered with regular CLEANERS
+         * priority as this would hang/throw exceptions any time a lambda
+         * or method reference is used during or after processing this resource
+         * priority class; therefore we postpone as the last priority.
+         */
+        CALL_SITES,
     };
 
     Priority getPriority();

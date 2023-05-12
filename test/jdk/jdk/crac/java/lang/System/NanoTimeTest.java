@@ -79,14 +79,20 @@ public class NanoTimeTest implements CracTest {
             builder.doCheckpoint(Container.ENGINE_COMMAND, "exec",
                     "-e", "LD_PRELOAD=/opt/path-mapping-quiet.so",
                     "-e", "PATH_MAPPING=/proc/sys/kernel/random/boot_id:/fake_boot_id",
-                    CracBuilder.CONTAINER_NAME, CracBuilder.DOCKER_JAVA);
+                    CracBuilder.CONTAINER_NAME,
+                    // In case we are trying to use negative monotonic offset we could
+                    // run into situation where we'd set it to negative value (prohibited).
+                    // Therefore, we'll rather offset it to the future before checkpoint
+                    // and set to 0 for restore.
+                    "unshare", "--fork", "--time", "--monotonic", String.valueOf(Math.max(-monotonicOffset, 0)),
+                    CracBuilder.DOCKER_JAVA);
 
             if (changeBootId) {
                 Files.writeString(bootIdFile, "yyyyyyyy-yyyy-yyyy-yyyy-yyyyyyyyyyyy");
             }
 
             builder.doRestore(Container.ENGINE_COMMAND, "exec", CracBuilder.CONTAINER_NAME,
-                    "unshare", "--fork", "--time", "--boottime", "86400", "--monotonic", String.valueOf(monotonicOffset),
+                    "unshare", "--fork", "--time", "--boottime", "86400", "--monotonic", String.valueOf(Math.max(monotonicOffset, 0)),
                     CracBuilder.DOCKER_JAVA);
         } finally {
             builder.ensureContainerKilled();

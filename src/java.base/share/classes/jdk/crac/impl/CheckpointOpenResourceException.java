@@ -29,7 +29,7 @@ package jdk.crac.impl;
 public class CheckpointOpenResourceException extends Exception {
     private static final long serialVersionUID = -3858375642480846931L;
 
-    public CheckpointOpenResourceException(String details) {
-        super(details);
+    public CheckpointOpenResourceException(String details, Throwable cause) {
+        super(details, cause);
     }
 }

@@ -83,6 +83,9 @@ public interface JDKResource extends Resource {
          * jdk.internal.ref.CleanerImpl resources
          */
         CLEANERS,
+
+        PRE_FILE_DESRIPTORS,
+        FILE_DESCRIPTORS,
     };
 
     Priority getPriority();

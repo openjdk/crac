@@ -219,6 +219,11 @@ public final class CleanerImpl implements Runnable {
         public void afterRestore(Context<? extends Resource> context) throws Exception {
 
         }
+
+        @Override
+        public String toString() {
+            return "PhantomCleanableRef:"  + action;
+        }
     }
 
     /**

@@ -22,9 +22,10 @@
  * or visit www.oracle.com if you need additional information or have any
  * questions.
  */
-
-#include <unistd.h>
 #include <fcntl.h>
+#include <inttypes.h>
+#include <stdbool.h>
+#include <unistd.h>
 
 #include "jni.h"
 #include "jni_util.h"
@@ -73,6 +74,46 @@ JNIEXPORT jboolean JNICALL
 Java_java_io_FileDescriptor_getAppend(JNIEnv *env, jclass fdClass, jint fd) {
     int flags = fcntl(fd, F_GETFL);
     return ((flags & O_APPEND) == 0) ? JNI_FALSE : JNI_TRUE;
+}
+
+static const char* stat2strtype(mode_t mode) {
+    switch (mode & S_IFMT) {
+        case S_IFSOCK: return "socket";
+        case S_IFLNK:  return "symlink";
+        case S_IFREG:  return "regular";
+        case S_IFBLK:  return "block";
+        case S_IFDIR:  return "directory";
+        case S_IFCHR:  return "character";
+        case S_IFIFO:  return "fifo";
+        default:       break;
+    }
+    return "unknown";
+}
+
+JNIEXPORT jstring JNICALL
+Java_java_io_FileDescriptor_getPath(JNIEnv *env, jobject obj) {
+    int fd = (*env)->GetIntField(env, obj, IO_fd_fdID);
+    char fdpath[64];
+    snprintf(fdpath, sizeof(fdpath), "/proc/self/fd/%d", fd);
+    char link[PATH_MAX];
+    int ret = readlink(fdpath, link, PATH_MAX);
+    if (ret >= 0) {
+        link[(unsigned)ret < PATH_MAX ? ret : PATH_MAX - 1] = '\0';
+        return (*env)->NewStringUTF(env, link);
+    }
+    return NULL;
+}
+
+
+JNIEXPORT jstring JNICALL
+Java_java_io_FileDescriptor_getType(JNIEnv *env, jobject obj) {
+    int fd = (*env)->GetIntField(env, obj, IO_fd_fdID);
+    struct stat st;
+    if (fstat(fd, &st) == 0) {
+        return (*env)->NewStringUTF(env, stat2strtype(st.st_mode));
+    } else {
+        return NULL;
+    }
 }
 
 // instance method close0 for FileDescriptor

@@ -761,13 +761,10 @@ void VM_Version::glibc_not_using(uint64_t excessive_CPU, uint64_t excessive_GLIB
   uint64_t excessive_handled_GLIBC = 0;
   uint64_t disable_handled_CPU   = 0;
   uint64_t disable_handled_GLIBC = 0;
-# define IF_ASSERT(x) x
-#else
-# define IF_ASSERT(x)
 #endif
 #define EXCESSIVE_HANDLED(kind, hotspot) do {                                                                                         \
     assert(!(PASTE_TOKENS(excessive_handled_, kind) & PASTE_TOKENS3(kind, _, hotspot)), "already used " STR(kind) "_" STR(hotspot) ); \
-    IF_ASSERT(PASTE_TOKENS(excessive_handled_, kind) |= PASTE_TOKENS3(kind, _, hotspot));                                             \
+    DEBUG_ONLY(PASTE_TOKENS(excessive_handled_, kind) |= PASTE_TOKENS3(kind, _, hotspot));                                            \
   } while (0)
 #define EXCESSIVE2(kind, hotspot, glibc, hotspot_union, hotspot_field) do {                              \
     EXCESSIVE_HANDLED(kind, hotspot);                                                                    \
@@ -814,9 +811,9 @@ void VM_Version::glibc_not_using(uint64_t excessive_CPU, uint64_t excessive_GLIB
   char disable_str[64 * (10 + 3) + 1] = PREFIX;
 #undef PREFIX
   char *disable_end = disable_str + prefix_len;
-#define GLIBC_DISABLE2(kind, hotspot, libc) do {                                                                                          \
+#define GLIBC_DISABLE2(kind, hotspot, libc) do {                                                                                    \
     assert(!(PASTE_TOKENS(disable_handled_, kind) & PASTE_TOKENS3(kind, _, hotspot)), "already used " STR(kind) "_" STR(hotspot) ); \
-    IF_ASSERT(PASTE_TOKENS(disable_handled_, kind) |= PASTE_TOKENS3(kind, _, hotspot));                                             \
+    DEBUG_ONLY(PASTE_TOKENS(disable_handled_, kind) |= PASTE_TOKENS3(kind, _, hotspot));                                            \
     if (PASTE_TOKENS(disable_, kind) & PASTE_TOKENS3(kind, _, hotspot)) {                                                           \
       const char str[] = ",-" STR(libc);                                                                                            \
       size_t remains = disable_str + sizeof(disable_str) - disable_end;                                                             \

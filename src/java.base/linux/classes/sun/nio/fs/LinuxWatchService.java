@@ -25,9 +25,14 @@
 
 package sun.nio.fs;
 
+import java.nio.channels.IllegalSelectorException;
 import java.nio.file.*;
 import java.util.*;
 import java.io.IOException;
+
+import jdk.crac.Context;
+import jdk.crac.Resource;
+import jdk.internal.crac.JDKResource;
 import jdk.internal.misc.Unsafe;
 
 import static sun.nio.fs.UnixNativeDispatcher.*;
@@ -51,30 +56,7 @@ class LinuxWatchService
     private final Poller poller;
 
     LinuxWatchService(UnixFileSystem fs) throws IOException {
-        // initialize inotify
-        int ifd = - 1;
-        try {
-            ifd = inotifyInit();
-        } catch (UnixException x) {
-            String msg = (x.errno() == EMFILE) ?
-                "User limit of inotify instances reached or too many open files" :
-                x.errorString();
-            throw new IOException(msg);
-        }
-
-        // configure inotify to be non-blocking
-        // create socketpair used in the close mechanism
-        int sp[] = new int[2];
-        try {
-            configureBlocking(ifd, false);
-            socketpair(sp);
-            configureBlocking(sp[0], false);
-        } catch (UnixException x) {
-            UnixNativeDispatcher.close(ifd);
-            throw new IOException(x.errorString());
-        }
-
-        this.poller = new Poller(fs, this, ifd, sp);
+        this.poller = new Poller(fs, this);
         this.poller.start();
     }
 
@@ -141,7 +123,7 @@ class LinuxWatchService
     /**
      * Background thread to read from inotify
      */
-    private static class Poller extends AbstractPoller {
+    private static class Poller extends AbstractPoller implements JDKResource {
         /**
          * struct inotify_event {
          *     int          wd;
@@ -171,25 +153,95 @@ class LinuxWatchService
         // sizeof buffer for when polling inotify
         private static final int BUFFER_SIZE = 8192;
 
+        private enum CheckpointRestoreState {
+            NORMAL_OPERATION,
+            CHECKPOINT_TRANSITION,
+            CHECKPOINTED,
+            CHECKPOINT_ERROR,
+            RESTORE_TRANSITION,
+        }
+
         private final UnixFileSystem fs;
         private final LinuxWatchService watcher;
 
         // inotify file descriptor
-        private final int ifd;
+        private int ifd;
         // socketpair used to shutdown polling thread
-        private final int socketpair[];
+        private int socketpair[];
         // maps watch descriptor to Key
         private final Map<Integer,LinuxWatchKey> wdToKey;
         // address of read buffer
         private final long address;
+        private volatile CheckpointRestoreState checkpointState = CheckpointRestoreState.NORMAL_OPERATION;
+        private final Object checkpointLock = new Object();
 
-        Poller(UnixFileSystem fs, LinuxWatchService watcher, int ifd, int[] sp) {
+
+        Poller(UnixFileSystem fs, LinuxWatchService watcher) throws IOException {
             this.fs = fs;
             this.watcher = watcher;
-            this.ifd = ifd;
-            this.socketpair = sp;
             this.wdToKey = new HashMap<>();
             this.address = unsafe.allocateMemory(BUFFER_SIZE);
+            this.socketpair = new int[2];
+            initFDs();
+            jdk.internal.crac.Core.getJDKContext().register(this);
+        }
+
+        private void initFDs() throws IOException {
+            // initialize inotify
+            try {
+                this.ifd = inotifyInit();
+            } catch (UnixException x) {
+                String msg = (x.errno() == EMFILE) ?
+                        "User limit of inotify instances reached or too many open files" :
+                        x.errorString();
+                throw new IOException(msg);
+            }
+
+            // configure inotify to be non-blocking
+            // create socketpair used in the close mechanism
+            try {
+                configureBlocking(ifd, false);
+                socketpair(this.socketpair);
+                configureBlocking(this.socketpair[0], false);
+            } catch (UnixException x) {
+                UnixNativeDispatcher.close(ifd);
+                throw new IOException(x.errorString());
+            }
+        }
+
+        private boolean processCheckpointRestore() throws IOException {
+            if (checkpointState != CheckpointRestoreState.CHECKPOINT_TRANSITION) {
+                return false;
+            }
+
+            synchronized (checkpointLock) {
+                CheckpointRestoreState thisState;
+                if (wdToKey.size() == 0) {
+                    unsafe.freeMemory(address);
+                    UnixNativeDispatcher.close(socketpair[0]);
+                    UnixNativeDispatcher.close(socketpair[1]);
+                    UnixNativeDispatcher.close(ifd);
+                    thisState = CheckpointRestoreState.CHECKPOINTED;
+                } else {
+                    thisState = CheckpointRestoreState.CHECKPOINT_ERROR;
+                }
+
+                checkpointState = thisState;
+                checkpointLock.notifyAll();
+                while (checkpointState == thisState) {
+                    try {
+                        checkpointLock.wait();
+                    } catch (InterruptedException e) {
+                    }
+                }
+                assert checkpointState == CheckpointRestoreState.RESTORE_TRANSITION;
+                if (thisState == CheckpointRestoreState.CHECKPOINTED) {
+                    initFDs();
+                }
+                checkpointState = CheckpointRestoreState.NORMAL_OPERATION;
+                checkpointLock.notifyAll();
+            }
+            return true;
         }
 
         @Override
@@ -311,7 +363,13 @@ class LinuxWatchService
                     int nReady, bytesRead;
 
                     // wait for close or inotify event
-                    nReady = poll(ifd, socketpair[0]);
+                    try {
+                        do {
+                            nReady = poll(ifd, socketpair[0]);
+                        } while (processCheckpointRestore());
+                    } catch (IOException e) {
+                        throw new Error("IOException in inotify processCheckpointRestore", e);
+                    }
 
                     // read from inotify
                     try {
@@ -430,6 +488,49 @@ class LinuxWatchService
             if (kind != null) {
                 key.signalEvent(kind, name);
             }
+        }
+
+        @Override
+        public void beforeCheckpoint(Context<? extends Resource> context) throws Exception {
+            if (!watcher.isOpen()) {
+                return;
+            }
+
+            synchronized (checkpointLock) {
+                checkpointState = CheckpointRestoreState.CHECKPOINT_TRANSITION;
+                write(socketpair[1], address, 1);
+                while (checkpointState == CheckpointRestoreState.CHECKPOINT_TRANSITION) {
+                    try {
+                        checkpointLock.wait();
+                    } catch (InterruptedException e) {
+                    }
+                }
+                if (checkpointState == CheckpointRestoreState.CHECKPOINT_ERROR) {
+                    throw new IllegalSelectorException();
+                }
+            }
+        }
+
+        @Override
+        public void afterRestore(Context<? extends Resource> context) throws Exception {
+            if (!watcher.isOpen()) {
+                return;
+            }
+            synchronized (checkpointLock) {
+                checkpointState = CheckpointRestoreState.RESTORE_TRANSITION;
+                checkpointLock.notifyAll();
+                while (checkpointState == CheckpointRestoreState.RESTORE_TRANSITION) {
+                    try {
+                        checkpointLock.wait();
+                    } catch (InterruptedException e) {
+                    }
+                }
+            }
+        }
+
+        @Override
+        public Priority getPriority() {
+            return Priority.NORMAL;
         }
     }
 

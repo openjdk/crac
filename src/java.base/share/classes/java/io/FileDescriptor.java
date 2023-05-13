@@ -25,12 +25,17 @@
 
 package java.io;
 
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Objects;
+import java.net.InetSocketAddress;
+import java.net.Socket;
+import java.util.*;
 
+import jdk.crac.Context;
+import jdk.crac.impl.CheckpointOpenFileException;
 import jdk.internal.access.JavaIOFileDescriptorAccess;
 import jdk.internal.access.SharedSecrets;
+import jdk.internal.crac.Core;
+import jdk.internal.crac.JDKContext;
+import jdk.internal.crac.JDKResource;
 import jdk.internal.ref.PhantomCleanable;
 
 /**
@@ -55,6 +60,49 @@ public final class FileDescriptor {
     private List<Closeable> otherParents;
     private boolean closed;
 
+    class Resource implements jdk.internal.crac.JDKResource {
+        private boolean closedByNIO;
+        final Exception stackTraceHolder;
+
+        Resource() {
+            JDKContext jdkContext = Core.getJDKContext();
+            jdkContext.register(this);
+            if (JDKContext.Properties.COLLECT_FD_STACKTRACES) {
+                // About the timestamp: we cannot format it nicely since this
+                // exception is sometimes created too early in the VM lifecycle
+                // (but it's hard to detect when it would be safe to do).
+                stackTraceHolder = new Exception("This file descriptor was created by "
+                        + Thread.currentThread().getName() + " at epoch:" + System.currentTimeMillis() + " here");
+            } else {
+                stackTraceHolder = null;
+            }
+        }
+
+        @Override
+        public void beforeCheckpoint(Context<? extends jdk.crac.Resource> context) throws Exception {
+            if (!closedByNIO) {
+                FileDescriptor.this.beforeCheckpoint();
+            }
+        }
+
+        @Override
+        public void afterRestore(Context<? extends jdk.crac.Resource> context) throws Exception {
+            FileDescriptor.this.afterRestore();
+        }
+
+        @Override
+        public Priority getPriority() {
+            return Priority.FILE_DESCRIPTORS;
+        }
+
+        @Override
+        public String toString() {
+            return getClass().getName() + "(FD " + fd + ")";
+        }
+    }
+
+    Resource resource = new Resource();
+
     /**
      * true, if file is opened for appending.
      */
@@ -62,6 +110,25 @@ public final class FileDescriptor {
 
     static {
         initIDs();
+
+        Core.getJDKContext().register(checkpointListener = new JDKResource() {
+            @Override
+            public Priority getPriority() {
+                return Priority.NORMAL;
+            }
+
+            @Override
+            public void beforeCheckpoint(Context<? extends jdk.crac.Resource> context) {
+                JDKContext ctx = (JDKContext) context;
+                ctx.claimFd(in, "System.in");
+                ctx.claimFd(out, "System.out");
+                ctx.claimFd(err, "System.err");
+            }
+
+            @Override
+            public void afterRestore(Context<? extends jdk.crac.Resource> context) {
+            }
+        });
     }
 
     // Set up JavaIOFileDescriptorAccess in SharedSecrets
@@ -86,6 +153,11 @@ public final class FileDescriptor {
 
                     public void close(FileDescriptor fdo) throws IOException {
                         fdo.close();
+                    }
+
+                    @Override
+                    public void markClosed(FileDescriptor fdo) {
+                        fdo.resource.closedByNIO = true;
                     }
 
                     /* Register for a normal FileCleanable fd/handle cleanup. */
@@ -176,6 +248,9 @@ public final class FileDescriptor {
     public boolean valid() {
         return (handle != -1) || (fd != -1);
     }
+
+    private static final JDKResource checkpointListener;
+
 
     /**
      * Force all system buffers to synchronize with the underlying
@@ -295,6 +370,34 @@ public final class FileDescriptor {
     synchronized void close() throws IOException {
         unregisterCleanup();
         close0();
+    }
+
+    private synchronized void beforeCheckpoint() throws CheckpointOpenFileException {
+        if (valid()) {
+            JDKContext ctx = jdk.internal.crac.Core.getJDKContext();
+            if (ctx.claimFdWeak(this, this)) {
+                String path = getPath();
+                String type = getType();
+                String info;
+                if ("socket".equals(type)) {
+                    info = Socket.getDescription(this);
+                } else {
+                    info = (path != null ? path : "unknown path") + " (" + (type != null ? type : "unknown") + ")";
+                }
+                String msg = "FileDescriptor " + this.fd + " left open: " + info + " ";
+                if (!JDKContext.Properties.COLLECT_FD_STACKTRACES) {
+                    msg += JDKContext.COLLECT_FD_STACKTRACES_HINT;
+                }
+                throw new CheckpointOpenFileException(msg, resource.stackTraceHolder);
+            }
+        }
+    }
+
+    private native String getPath();
+
+    private native String getType();
+
+    private synchronized void afterRestore() {
     }
 
     /*

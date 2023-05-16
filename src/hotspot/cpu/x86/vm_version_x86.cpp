@@ -675,8 +675,6 @@ void VM_Version::glibc_not_using(uint64_t excessive_CPU, uint64_t excessive_GLIB
 #endif
   char errbuf[512];
 
-  uint64_t disable_CPU   = 0;
-  uint64_t disable_GLIBC = 0;
   // glibc: sysdeps/x86/get-isa-level.h:
   // glibc: if (CPU_FEATURE_USABLE_P (cpu_features, CMOV)
   // glibc:     && CPU_FEATURE_USABLE_P (cpu_features, CX8)
@@ -755,6 +753,8 @@ void VM_Version::glibc_not_using(uint64_t excessive_CPU, uint64_t excessive_GLIB
       }
     }
   }
+  uint64_t disable_CPU   = 0;
+  uint64_t disable_GLIBC = 0;
 #define PASTE_TOKENS3(x, y, z) PASTE_TOKENS(x, PASTE_TOKENS(y, z))
 #ifdef ASSERT
   uint64_t excessive_handled_CPU   = 0;

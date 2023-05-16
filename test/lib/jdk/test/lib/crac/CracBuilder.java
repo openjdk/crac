@@ -32,6 +32,7 @@ public class CracBuilder {
     final List<String> classpathEntries = new ArrayList<>();
     final Map<String, String> env = new HashMap<>();
     final List<String> vmOptions = new ArrayList<>();
+    final Map<String, String> javaOptions = new HashMap<>();
     String imageDir = DEFAULT_IMAGE_DIR;
     CracEngine engine;
     boolean printResources;
@@ -67,6 +68,7 @@ public class CracBuilder {
         other.classpathEntries.addAll(classpathEntries);
         other.env.putAll(env);
         other.vmOptions.addAll(vmOptions);
+        other.javaOptions = new HashMap<>(javaOptions);
         other.imageDir = imageDir;
         other.engine = engine;
         other.printResources = printResources;
@@ -121,6 +123,11 @@ public class CracBuilder {
 
     public CracBuilder env(String name, String value) {
         env.put(name, value);
+        return this;
+    }
+
+    public CracBuilder javaOption(String name, String value) {
+        javaOptions.put(name, value);
         return this;
     }
 
@@ -338,6 +345,9 @@ public class CracBuilder {
             }
         }
         cmd.addAll(vmOptions);
+        for (var entry : javaOptions.entrySet()) {
+            cmd.add("-D" + entry.getKey() + "=" + entry.getValue());
+        }
         return cmd;
     }
 

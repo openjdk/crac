@@ -30,10 +30,13 @@ import jdk.crac.impl.CheckpointOpenFileException;
 import jdk.crac.impl.CheckpointOpenResourceException;
 import jdk.crac.impl.CheckpointOpenSocketException;
 import jdk.crac.impl.OrderedContext;
-import java.io.StringWriter;
-import java.io.PrintWriter;
+import jdk.internal.crac.JDKContext;
+import jdk.internal.crac.LoggerContainer;
+
 import sun.security.action.GetBooleanAction;
 
+import java.io.PrintWriter;
+import java.io.StringWriter;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.security.AccessController;
@@ -41,6 +44,8 @@ import java.security.PrivilegedAction;
 import java.security.PrivilegedActionException;
 import java.security.PrivilegedExceptionAction;
 import java.util.Arrays;
+import java.util.List;
+import java.util.Map;
 
 /**
  * The coordination service.
@@ -56,17 +61,17 @@ public class Core {
     private static final int JVM_CR_FAIL_PIPE = 3;
 
     private static final long JCMD_STREAM_NULL = 0;
-
-    private static native Object[] checkpointRestore0(boolean dryRun, long jcmdStream);
+    private static native Object[] checkpointRestore0(int[] fdArr, Object[] objArr, boolean dryRun, long jcmdStream);
     private static final Object checkpointRestoreLock = new Object();
     private static boolean checkpointInProgress = false;
 
     private static class FlagsHolder {
+        private FlagsHolder() {}
         public static final boolean TRACE_STARTUP_TIME =
             GetBooleanAction.privilegedGetProperty("jdk.crac.trace-startup-time");
     }
 
-    private static final Context<Resource> globalContext = new OrderedContext();
+    private static final Context<Resource> globalContext = new OrderedContext<>("GlobalContext");
     static {
         // force JDK context initialization
         jdk.internal.crac.Core.getJDKContext();
@@ -85,7 +90,7 @@ public class Core {
             switch(codes[i]) {
                 case JVM_CR_FAIL_FILE:
                     exception.addSuppressed(
-                            new CheckpointOpenFileException(messages[i]));
+                            new CheckpointOpenFileException(messages[i], null));
                     break;
                 case JVM_CR_FAIL_SOCK:
                     exception.addSuppressed(
@@ -95,7 +100,7 @@ public class Core {
                     // FALLTHROUGH
                 default:
                     exception.addSuppressed(
-                            new CheckpointOpenResourceException(messages[i]));
+                            new CheckpointOpenResourceException(messages[i], null));
                     break;
             }
         }
@@ -115,6 +120,8 @@ public class Core {
             CheckpointException,
             RestoreException {
         CheckpointException checkpointException = null;
+        // This log is here to initialize call sites in logger formatters.
+        LoggerContainer.debug("Starting checkpoint at epoch:{0}", System.currentTimeMillis());
 
         try {
             globalContext.beforeCheckpoint(null);
@@ -125,7 +132,18 @@ public class Core {
             }
         }
 
-        final Object[] bundle = checkpointRestore0(checkpointException != null, jcmdStream);
+        JDKContext jdkContext = jdk.internal.crac.Core.getJDKContext();
+        List<Map.Entry<Integer, Object>> claimedPairs = jdkContext.getClaimedFds().entrySet().stream().toList();
+        int[] fdArr = new int[claimedPairs.size()];
+        Object[] objArr = new Object[claimedPairs.size()];
+        LoggerContainer.debug("Claimed open file descriptors:");
+        for (int i = 0; i < claimedPairs.size(); ++i) {
+            fdArr[i] = claimedPairs.get(i).getKey();
+            objArr[i] = claimedPairs.get(i).getValue();
+            LoggerContainer.debug( "\t{0} {1}", fdArr[i], objArr[i]);
+        }
+
+        final Object[] bundle = checkpointRestore0(fdArr, objArr, checkpointException != null, jcmdStream);
         final int retCode = (Integer)bundle[0];
         final String newArguments = (String)bundle[1];
         final String[] newProperties = (String[])bundle[2];

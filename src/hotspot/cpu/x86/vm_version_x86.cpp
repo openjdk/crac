@@ -726,7 +726,7 @@ void VM_Version::glibc_not_using(uint64_t excessive_CPU, uint64_t excessive_GLIB
           // glibc:     && CPU_FEATURE_USABLE_P (cpu_features, F16C)
           // glibc:     && CPU_FEATURE_USABLE_P (cpu_features, FMA)
           // glibc:     && CPU_FEATURE_USABLE_P (cpu_features, LZCNT)
-          // glibc:     && CPU_FEATURE_USABLE_P (cpu_features, MOVBE)) 
+          // glibc:     && CPU_FEATURE_USABLE_P (cpu_features, MOVBE))
           // glibc:     isa_level |= GNU_PROPERTY_X86_ISA_1_V3;
           if ((_features & CPU_AVX) &&
               (_features & CPU_AVX2) &&

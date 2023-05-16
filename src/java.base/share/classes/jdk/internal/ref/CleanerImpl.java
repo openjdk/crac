@@ -28,15 +28,13 @@ package jdk.internal.ref;
 import java.lang.ref.Cleaner;
 import java.lang.ref.Cleaner.Cleanable;
 import java.lang.ref.ReferenceQueue;
-import java.security.AccessController;
-import java.security.PrivilegedAction;
 import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Function;
 
-import jdk.crac.CheckpointException;
 import jdk.crac.Context;
 import jdk.crac.Resource;
+import jdk.internal.crac.Core;
 import jdk.internal.crac.JDKResource;
 import jdk.internal.misc.InnocuousThread;
 
@@ -44,7 +42,7 @@ import jdk.internal.misc.InnocuousThread;
  * CleanerImpl manages a set of object references and corresponding cleaning actions.
  * CleanerImpl provides the functionality of {@link java.lang.ref.Cleaner}.
  */
-public final class CleanerImpl implements Runnable {
+public final class CleanerImpl implements Runnable, JDKResource {
 
     /**
      * An object to access the CleanerImpl from a Cleaner; set by Cleaner init.
@@ -58,6 +56,10 @@ public final class CleanerImpl implements Runnable {
 
     // The ReferenceQueue of pending cleaning actions
     final ReferenceQueue<Object> queue;
+
+    Thread thread;
+    volatile boolean blockForCheckpoint = false;
+    boolean waitingForCheckpoint = false;
 
     /**
      * Called by Cleaner static initialization to provide the function
@@ -111,9 +113,10 @@ public final class CleanerImpl implements Runnable {
         // now that there's at least one cleaning action, for the cleaner,
         // we can start the associated thread, which runs until
         // all cleaning actions have been run.
-        Thread thread = threadFactory.newThread(this);
+        thread = threadFactory.newThread(this);
         thread.setDaemon(true);
         thread.start();
+        Core.getJDKContext().register(this);
     }
 
     /**
@@ -138,6 +141,20 @@ public final class CleanerImpl implements Runnable {
                 // Clear the thread locals
                 mlThread.eraseThreadLocals();
             }
+            if (blockForCheckpoint) {
+                try {
+                    synchronized (this) {
+                        waitingForCheckpoint = true;
+                        notify();
+                        while (blockForCheckpoint) {
+                            wait();
+                        }
+                        waitingForCheckpoint = false;
+                    }
+                } catch (InterruptedException ignored) {
+                    // interruptions are ignored below as well
+                }
+            }
             try {
                 // Wait for a Ref, with a timeout to avoid getting hung
                 // due to a race with clear/clean
@@ -150,6 +167,33 @@ public final class CleanerImpl implements Runnable {
                 // (including interruption of cleanup thread)
             }
         }
+    }
+
+    @Override
+    public synchronized void beforeCheckpoint(Context<? extends Resource> context) throws Exception {
+        // We block the cleaner thread to prevent race conditions between this
+        // thread and checkpointing thread invoking clean().
+        // When the cleanup starts in cleaner thread the checkpoint will skip
+        // it, but without waiting for the cleanup to finish (which might be
+        // critical for the checkpoint, e.g. closing FDs).
+        // The limitation is that code performing C/R must not wait on any task
+        // completed by the cleaner.
+        blockForCheckpoint = true;
+        thread.interrupt();
+        while (!waitingForCheckpoint) {
+            wait();
+        }
+    }
+
+    @Override
+    public synchronized void afterRestore(Context<? extends Resource> context) throws Exception {
+        blockForCheckpoint = false;
+        notify();
+    }
+
+    @Override
+    public Priority getPriority() {
+        return Priority.REFERENCE_HANDLER;
     }
 
     /**

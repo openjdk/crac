@@ -692,7 +692,7 @@ void VM_Version::glibc_not_using(uint64_t excessive_CPU, uint64_t excessive_GLIB
       (_features & CPU_SSE2))
     // These cannot be disabled by GLIBC_TUNABLES.
     if (excessive_CPU & (CPU_FXSR | CPU_MMX | CPU_SSE)) {
-      assert(!(excessive_CPU & CPU_SSE2), "(_features & CPU_SSE2) cannot happen");
+      assert(!(excessive_CPU & CPU_SSE2), "CPU_SSE2 in both _features and excessive_CPU cannot happen");
       // FIXME: The choice should be based on glibc impact, not the feature age.
       // CX8 is i586+, CMOV is i686+ 1995+, SSE2 is 2000+
       excessive_CPU |= CPU_SSE2;
@@ -714,7 +714,7 @@ void VM_Version::glibc_not_using(uint64_t excessive_CPU, uint64_t excessive_GLIB
           (_features & CPU_SSE4_2)) {
         if ((excessive_CPU & CPU_SSE3) ||
             (excessive_GLIBC & (GLIBC_CMPXCHG16 | GLIBC_LAHFSAHF))) {
-          assert(!(excessive_CPU & CPU_SSE4_2), "(_features & CPU_SSE4_2) cannot happen");
+          assert(!(excessive_CPU & CPU_SSE4_2), "CPU_SSE4_2 in both _features and excessive_CPU cannot happen");
           // POPCNT is 2007+, SSSE3 is 2006+, SSE4_1 is 2007+, SSE4_2 is 2008+.
           excessive_CPU |= CPU_SSE4_2;
         }
@@ -738,7 +738,7 @@ void VM_Version::glibc_not_using(uint64_t excessive_CPU, uint64_t excessive_GLIB
               (_features & CPU_LZCNT) &&
               (_glibc_features & GLIBC_MOVBE)) {
           if (excessive_GLIBC & GLIBC_F16C) {
-            assert(!(excessive_GLIBC & GLIBC_MOVBE), "(_glibc_features & GLIBC_MOVBE) cannot happen");
+            assert(!(excessive_GLIBC & GLIBC_MOVBE), "GLIBC_MOVBE in both _glibc_features and excessive_GLIBC cannot happen");
             // FMA is 2012+, AVX2+BMI1+BMI2+LZCNT are 2013+, MOVBE is 2015+
             excessive_GLIBC |= GLIBC_MOVBE;
           }

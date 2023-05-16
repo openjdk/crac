@@ -254,11 +254,17 @@ public class Core {
                 checkpointInProgress = true;
                 try {
                     checkpointRestore1(jcmdStream);
-                } finally {
-                    LoggerContainer.debug("Java part of restore took {0} ms",
+                    // Don't print anything on unsuccessful checkpoint
+                    long restoreStartTime = restoreStartTime();
+                    if (restoreStartTime >= 0) {
+                        LoggerContainer.debug("Java part of restore took {0} ms",
                                 TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - javaRestoreStartNanos));
-                    LoggerContainer.debug("Complete restore took {0} ms",
-                                System.currentTimeMillis() - restoreStartTime());
+                        LoggerContainer.debug("Complete restore took {0} ms",
+                                System.currentTimeMillis() - restoreStartTime);
+                    } else {
+                        LoggerContainer.error("Restore start time was not recorded!");
+                    }
+                } finally {
                     checkpointInProgress = false;
                 }
             } else {

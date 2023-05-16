@@ -74,7 +74,7 @@ public class NanoTimeTest implements CracTest {
                     .dockerOptions("-v", bootIdFile + ":/fake_boot_id")
                     .inDockerImage(imageName);
 
-            Files.writeString(bootIdFile, "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx");
+            Files.writeString(bootIdFile, "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx\n");
             // We need to preload the library before checkpoint
             builder.doCheckpoint(Container.ENGINE_COMMAND, "exec",
                     "-e", "LD_PRELOAD=/opt/path-mapping-quiet.so",
@@ -88,7 +88,7 @@ public class NanoTimeTest implements CracTest {
                     CracBuilder.DOCKER_JAVA);
 
             if (changeBootId) {
-                Files.writeString(bootIdFile, "yyyyyyyy-yyyy-yyyy-yyyy-yyyyyyyyyyyy");
+                Files.writeString(bootIdFile, "yyyyyyyy-yyyy-yyyy-yyyy-yyyyyyyyyyyy\n");
             }
 
             builder.doRestore(Container.ENGINE_COMMAND, "exec", CracBuilder.CONTAINER_NAME,

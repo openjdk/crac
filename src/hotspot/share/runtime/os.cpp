@@ -85,7 +85,7 @@ os::PageSizes     os::_page_sizes;
 // Timestamps recorded before checkpoint
 jlong os::checkpoint_millis;
 jlong os::checkpoint_nanos;
-char os::checkpoint_bootid[UUID_LENGTH + 1];
+char os::checkpoint_bootid[UUID_LENGTH];
 // Value based on wall clock time difference that will guarantee monotonic
 // System.nanoTime() close to actual wall-clock time difference.
 jlong os::javaTimeNanos_offset = 0;
@@ -2035,12 +2035,12 @@ void os::PageSizes::print_on(outputStream* st) const {
 void os::record_time_before_checkpoint() {
   checkpoint_millis = javaTimeMillis();
   checkpoint_nanos = javaTimeNanos();
-  memset(checkpoint_bootid, 0, sizeof(checkpoint_bootid));
-  read_bootid(checkpoint_bootid, sizeof(checkpoint_bootid));
+  memset(checkpoint_bootid, 0, UUID_LENGTH);
+  read_bootid(checkpoint_bootid);
 }
 
 void os::update_javaTimeNanos_offset() {
-  char buf[UUID_LENGTH + 1];
+  char buf[UUID_LENGTH];
   // We will change the nanotime offset only if this is not the same boot
   // to prevent reducing the accuracy of System.nanoTime() unnecessarily.
   // It is possible that in a real-world case the boot_id does not change
@@ -2048,7 +2048,7 @@ void os::update_javaTimeNanos_offset() {
   // only guarantee that the nanotime does not go backwards in that case but
   // won't offset the time based on wall-clock time as this change in monotonic
   // time is likely intentional.
-  if (!read_bootid(buf, sizeof(buf)) || strncmp(buf, checkpoint_bootid, UUID_LENGTH) != 0) {
+  if (!read_bootid(buf) || memcmp(buf, checkpoint_bootid, UUID_LENGTH) != 0) {
     assert(checkpoint_millis >= 0, "Restore without a checkpoint?");
     long diff_millis = javaTimeMillis() - checkpoint_millis;
     // If the wall clock has gone backwards we won't add it to the offset

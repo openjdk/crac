@@ -135,7 +135,7 @@ class os: AllStatic {
 
   static jlong checkpoint_millis;
   static jlong checkpoint_nanos;
-  static char checkpoint_bootid[UUID_LENGTH + 1];
+  static char checkpoint_bootid[UUID_LENGTH];
   static jlong javaTimeNanos_offset;
 
   static char*  pd_reserve_memory(size_t bytes, bool executable);
@@ -182,7 +182,7 @@ class os: AllStatic {
 
   LINUX_ONLY(static void pd_init_container_support();)
 
-  static bool read_bootid(char *dest, size_t size);
+  static bool read_bootid(char *dest);
 
  public:
   static void init(void);                      // Called before command line parsing

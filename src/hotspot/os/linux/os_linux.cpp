@@ -6397,29 +6397,40 @@ void os::print_memory_mappings(char* addr, size_t bytes, outputStream* st) {
   }
 }
 
-bool os::read_bootid(char *dest, size_t size) {
-  int fd = ::open("/proc/sys/kernel/random/boot_id", O_RDONLY);
-  if (fd < 0) {
-    perror("CRaC: Cannot read system boot ID");
-    return false;
-  }
+static bool read_all(int fd, char *dest, size_t n) {
   size_t rd = 0;
-  bool success = true;
   do {
-    ssize_t r = read(fd, dest + rd, size - rd - 1);
+    ssize_t r = ::read(fd, dest + rd, n - rd);
     if (r == 0) {
-      break;
+      return false;
     } else if (r < 0) {
       if (errno == EINTR) {
         continue;
       }
-      success = false;
-      perror("CRaC: Cannot read system boot ID");
-      break;
+      return false;
     }
     rd += r;
-  } while (rd < size - 1);
-  dest[size - 1] = '\0';
-  ::close(fd);
-  return success;
+  } while (rd < n);
+  return true;
+}
+
+bool os::read_bootid(char *dest) {
+  int fd = ::open("/proc/sys/kernel/random/boot_id", O_RDONLY);
+  if (fd < 0 || !read_all(fd, dest, UUID_LENGTH)) {
+    perror("CRaC: Cannot read system boot ID");
+    return false;
+  }
+  char c;
+  if (!read_all(fd, &c, 1) || c != '\n') {
+    perror("CRaC: system boot ID does not end with newline");
+    return false;
+  }
+  if (::read(fd, &c, 1) != 0) {
+    perror("CRaC: Unexpected data/error reading system boot ID");
+    return false;
+  }
+  if (::close(fd) != 0) {
+    perror("CRaC: Cannot close system boot ID file");
+  }
+  return true;
 }

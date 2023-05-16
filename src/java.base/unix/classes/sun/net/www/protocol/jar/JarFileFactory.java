@@ -30,11 +30,11 @@ import java.io.FileNotFoundException;
 import java.net.URL;
 import java.net.URLConnection;
 import java.util.HashMap;
-import java.util.Map;
 import java.util.WeakHashMap;
 import java.util.jar.JarFile;
 import java.security.Permission;
 
+import jdk.internal.crac.JDKResource;
 import sun.net.util.URLUtil;
 import jdk.crac.Context;
 import jdk.crac.Resource;
@@ -55,11 +55,9 @@ class JarFileFactory implements URLJarFile.URLJarFileCloseController, jdk.intern
 
     private static final JarFileFactory instance = new JarFileFactory();
 
-    static {
-        jdk.internal.crac.Core.getJDKContext().register(instance);
+    private JarFileFactory() {
+        Priority.NORMAL.getContext().register(this);
     }
-
-    private JarFileFactory() { }
 
     public static JarFileFactory getInstance() {
         return instance;
@@ -244,11 +242,6 @@ class JarFileFactory implements URLJarFile.URLJarFileCloseController, jdk.intern
         }
 
         return null;
-    }
-
-    @Override
-    public Priority getPriority() {
-        return Priority.NORMAL;
     }
 
     @Override

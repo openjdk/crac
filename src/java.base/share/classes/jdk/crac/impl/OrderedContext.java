@@ -28,55 +28,38 @@ package jdk.crac.impl;
 
 import jdk.crac.*;
 
-import java.util.Collections;
-import java.util.List;
-import java.util.Map;
-import java.util.WeakHashMap;
+import java.util.*;
 
-public class OrderedContext<R extends Resource> extends AbstractContextImpl<R> {
-    private final String name;
-    private boolean checkpointing = false;
-    protected long order = 0;
-    protected final WeakHashMap<R, Long> resources = new WeakHashMap<>();
+public class OrderedContext<R extends Resource> extends AbstractContext<R> {
+    private final WeakHashMap<R, Long> resources = new WeakHashMap<>();
+    private long order = 0;
+    private List<R> restoreSnapshot = null;
 
-    public OrderedContext(String name) {
-        this.name = name;
+    protected List<R> checkpointSnapshot() {
+        List<R> snapshot;
+        synchronized (this) {
+            snapshot = this.resources.entrySet().stream()
+                .sorted(Collections.reverseOrder(Map.Entry.comparingByValue()))
+                .map(Map.Entry::getKey)
+                .toList();
+        }
+        restoreSnapshot = new ArrayList<>(snapshot);
+        Collections.reverse(restoreSnapshot);
+        return snapshot;
     }
 
-    @Override
-    public String toString() {
-        return name != null ? name : super.toString();
+    // We won't synchronize access to restoreSnapshot because methods
+    // beforeCheckpoint and afterRestore should be invoked only
+    // by the single thread performing the C/R and other threads should
+    // not touch that.
+    protected List<R> restoreSnapshot() {
+        List<R> snapshot = restoreSnapshot;
+        restoreSnapshot = null;
+        return snapshot;
     }
 
     @Override
     public synchronized void register(R resource) {
-        while (checkpointing) {
-            waitWhileCheckpointIsInProgress(resource);
-        }
         resources.put(resource, order++);
-    }
-
-    @Override
-    protected void runBeforeCheckpoint() {
-        List<R> resources;
-        synchronized (this) {
-            checkpointing = true;
-            resources = this.resources.entrySet().stream()
-                    .sorted(Collections.reverseOrder(Map.Entry.comparingByValue()))
-                    .map(Map.Entry::getKey)
-                    .toList();
-        }
-        for (R r : resources) {
-            invokeBeforeCheckpoint(r);
-        }
-    }
-
-    @Override
-    public void afterRestore(Context<? extends Resource> context) throws RestoreException {
-        synchronized (this) {
-            checkpointing = false;
-            notifyAll();
-        }
-        super.afterRestore(context);
     }
 }

@@ -29,7 +29,6 @@ import jdk.crac.Context;
 import jdk.internal.crac.LoggerContainer;
 import jdk.crac.Resource;
 import jdk.internal.access.SharedSecrets;
-import jdk.internal.crac.Core;
 import jdk.internal.crac.JDKResource;
 
 import java.io.File;
@@ -40,7 +39,7 @@ public class PersistentJarFile extends JarFile implements JDKResource {
 
     public PersistentJarFile(File file, boolean b, int openRead, Runtime.Version runtimeVersion) throws IOException {
         super(file, b, openRead, runtimeVersion);
-        Core.getJDKContext().register(this);
+        Priority.NORMAL.getContext().register(this);
     }
 
     @Override
@@ -52,10 +51,5 @@ public class PersistentJarFile extends JarFile implements JDKResource {
     @Override
     public void afterRestore(Context<? extends Resource> context) throws Exception {
         // do nothing, no fixup required
-    }
-
-    @Override
-    public Priority getPriority() {
-        return Priority.NORMAL;
     }
 }

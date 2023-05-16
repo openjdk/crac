@@ -335,11 +335,6 @@ public abstract class Reference<T> {
 
         referenceHandlerResource = new JDKResource() {
             @Override
-            public Priority getPriority() {
-                return Priority.REFERENCE_HANDLER;
-            }
-
-            @Override
             public void beforeCheckpoint(Context<? extends Resource> context) throws Exception {
                 System.gc();
                 // TODO ensure GC done processing all References
@@ -350,7 +345,7 @@ public abstract class Reference<T> {
             public void afterRestore(Context<? extends Resource> context) throws Exception {
             }
         };
-        jdk.internal.crac.Core.getJDKContext().register(referenceHandlerResource);
+        JDKResource.Priority.REFERENCE_HANDLER.getContext().register(referenceHandlerResource);
     }
 
     /* -- Referent accessor and setters -- */

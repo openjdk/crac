@@ -28,13 +28,10 @@ package jdk.internal.ref;
 import java.lang.ref.Cleaner;
 import java.lang.ref.Cleaner.Cleanable;
 import java.lang.ref.ReferenceQueue;
-import java.security.AccessController;
-import java.security.PrivilegedAction;
 import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Function;
 
-import jdk.crac.CheckpointException;
 import jdk.crac.Context;
 import jdk.crac.Resource;
 import jdk.internal.crac.JDKResource;
@@ -170,7 +167,7 @@ public final class CleanerImpl implements Runnable {
             super(obj, cleaner);
             this.action = action;
             this.priority = priority;
-            jdk.internal.crac.Core.getJDKContext().register(this);
+            priority.getContext().register(this);
         }
 
         /**
@@ -205,11 +202,6 @@ public final class CleanerImpl implements Runnable {
         @Override
         public void clear() {
             throw new UnsupportedOperationException("clear");
-        }
-
-        @Override
-        public Priority getPriority() {
-            return priority;
         }
 
         @Override

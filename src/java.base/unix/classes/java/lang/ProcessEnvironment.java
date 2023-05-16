@@ -57,8 +57,8 @@ package java.lang;
 
 import jdk.crac.Context;
 import jdk.crac.Resource;
+import jdk.internal.crac.JDKResource;
 
-import java.io.*;
 import java.util.*;
 
 
@@ -67,6 +67,10 @@ final class ProcessEnvironment
     private static class CracSubscriber
             implements jdk.internal.crac.JDKResource {
 
+        CracSubscriber() {
+            Priority.NORMAL.getContext().register(this);
+        }
+
         @Override
         public void beforeCheckpoint(Context<? extends Resource> context) throws Exception {
         }
@@ -74,11 +78,6 @@ final class ProcessEnvironment
         @Override
         public void afterRestore(Context<? extends Resource> context) throws Exception {
             ProcessEnvironment.updateEnvironment();
-        }
-
-        @Override
-        public Priority getPriority() {
-            return Priority.NORMAL;
         }
     }
 
@@ -103,7 +102,6 @@ final class ProcessEnvironment
             (new StringEnvironment(theEnvironment));
 
         theCracSubscriber = new CracSubscriber();
-        jdk.internal.crac.Core.getJDKContext().register(theCracSubscriber);
     }
 
     /* Only for use by System.getenv(String) */

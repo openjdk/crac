@@ -28,7 +28,6 @@ package sun.security.provider;
 import jdk.crac.Context;
 import jdk.crac.Resource;
 import jdk.internal.crac.Core;
-import jdk.internal.crac.JDKContext;
 import jdk.internal.crac.JDKResource;
 
 import java.io.*;
@@ -151,7 +150,7 @@ class FileInputStreamPool {
     private static final class UnclosableInputStream extends FilterInputStream implements JDKResource {
         UnclosableInputStream(FileInputStream in) {
             super(in);
-            Core.getJDKContext().register(this);
+            Priority.NORMAL.getContext().register(this);
         }
 
         @Override
@@ -165,17 +164,12 @@ class FileInputStreamPool {
 
         @Override
         public void beforeCheckpoint(Context<? extends Resource> context) throws Exception {
-            ((JDKContext)context).claimFd(((FileInputStream)in).getFD(), this);
+            Core.getJDKContext().claimFd(((FileInputStream)in).getFD(), this);
         }
 
         @Override
         public void afterRestore(Context<? extends Resource> context) throws Exception {
 
-        }
-
-        @Override
-        public Priority getPriority() {
-            return Priority.NORMAL;
         }
     }
 }

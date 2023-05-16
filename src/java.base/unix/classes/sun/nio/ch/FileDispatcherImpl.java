@@ -32,7 +32,6 @@ import jdk.crac.Context;
 import jdk.crac.Resource;
 import jdk.internal.access.JavaIOFileDescriptorAccess;
 import jdk.internal.access.SharedSecrets;
-import jdk.internal.crac.Core;
 import jdk.internal.crac.JDKResource;
 
 class FileDispatcherImpl extends FileDispatcher {
@@ -47,11 +46,6 @@ class FileDispatcherImpl extends FileDispatcher {
                 throws IOException {
             FileDispatcherImpl.afterRestore();
         }
-
-        @Override
-        public Priority getPriority() {
-            return Priority.NORMAL;
-        }
     }
 
     static Object closeLock = new Object();
@@ -63,7 +57,7 @@ class FileDispatcherImpl extends FileDispatcher {
     static {
         IOUtil.load();
         init();
-        Core.getJDKContext().register(resourceProxy);
+        JDKResource.Priority.NORMAL.getContext().register(resourceProxy);
     }
 
     private static final JavaIOFileDescriptorAccess fdAccess =

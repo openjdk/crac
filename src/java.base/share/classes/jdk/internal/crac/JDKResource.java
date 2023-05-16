@@ -26,7 +26,10 @@
 
 package jdk.internal.crac;
 
+import jdk.crac.Context;
 import jdk.crac.Resource;
+import jdk.crac.impl.BlockingOrderedContext;
+import jdk.crac.impl.CriticalUnorderedContext;
 
 public interface JDKResource extends Resource {
     /**
@@ -45,48 +48,25 @@ public interface JDKResource extends Resource {
      * in the direct order of registration.
      */
     enum Priority {
-        /**
-         * Most resources should use this option.
-         */
-        NORMAL,
-        /**
-         * Priority of the
-         * sun.nio.ch.EPollSelectorImpl resource
-         */
-        EPOLLSELECTOR,
-        /**
-         * Priority of the
-         * sun.security.provider.NativePRNG resource
-         */
-        NATIVE_PRNG,
-        /**
-         * Priority of the
-         * sun.security.provider.SecureRandom resource
-         */
-        SECURE_RANDOM,
-        /**
-         * Priority of the
-         * sun.security.provider.SecureRandom.SeederHolder resource
-         */
-        SEEDER_HOLDER,
+        FILE_DESCRIPTORS(new BlockingOrderedContext<>()),
+        PRE_FILE_DESRIPTORS(new BlockingOrderedContext<>()),
+        CLEANERS(new BlockingOrderedContext<>()),
+        REFERENCE_HANDLER(new BlockingOrderedContext<>()),
+        SEEDER_HOLDER(new BlockingOrderedContext<>()),
+        SECURE_RANDOM(new BlockingOrderedContext<>()),
+        NATIVE_PRNG(new BlockingOrderedContext<>()),
+        EPOLLSELECTOR(new BlockingOrderedContext<>()),
+        NORMAL(new BlockingOrderedContext<>());
 
-        /* Keep next priorities last to ensure handling of pending References
-         * appeared on earlier priorities. */
+        private final Context<JDKResource> context;
+        Priority(Context<JDKResource> context) {
+            Core.getJDKContext();
+            jdk.crac.Core.getGlobalContext().register(context);
+            this.context = context;
+        }
 
-        /**
-         * Priority of the
-         * java.lan.ref.Reference static resource
-         */
-        REFERENCE_HANDLER,
-        /**
-         * Priority of the
-         * jdk.internal.ref.CleanerImpl resources
-         */
-        CLEANERS,
-
-        PRE_FILE_DESRIPTORS,
-        FILE_DESCRIPTORS,
-    };
-
-    Priority getPriority();
+        public Context<JDKResource> getContext() {
+            return context;
+        }
+    }
 }

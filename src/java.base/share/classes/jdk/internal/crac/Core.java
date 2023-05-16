@@ -31,7 +31,6 @@ public class Core {
 
     static {
         JDKContext = new JDKContext();
-        jdk.crac.Core.getGlobalContext().register(JDKContext);
     }
 
     public static JDKContext getJDKContext() {

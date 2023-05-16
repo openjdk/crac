@@ -31,7 +31,6 @@ import jdk.crac.Resource;
 import jdk.internal.access.JavaIOFileDescriptorAccess;
 import jdk.internal.access.SharedSecrets;
 import jdk.internal.crac.JDKResource;
-import jdk.internal.crac.JDKResource.Priority;
 
 import java.io.FileDescriptor;
 import java.io.IOException;
@@ -136,7 +135,7 @@ class EPollSelectorImpl extends SelectorImpl implements JDKResource {
         initFDs();
         // trigger FileDispatcherImpl initialization
         new FileDispatcherImpl();
-        jdk.internal.crac.Core.getJDKContext().register(this);
+        Priority.EPOLLSELECTOR.getContext().register(this);
     }
 
     private void ensureOpen() {
@@ -411,10 +410,5 @@ class EPollSelectorImpl extends SelectorImpl implements JDKResource {
                 }
             }
         }
-    }
-
-    @Override
-    public Priority getPriority() {
-        return Priority.EPOLLSELECTOR;
     }
 }

@@ -30,6 +30,11 @@ import jdk.crac.*;
 
 import java.util.*;
 
+/**
+ * Context performing Checkpoint notification in reverse order of registration.
+ * Concurrent registration along notification is silently ignored.
+ * @param <R>
+ */
 public class OrderedContext<R extends Resource> extends AbstractContext<R> {
     private final WeakHashMap<R, Long> resources = new WeakHashMap<>();
     private long order = 0;

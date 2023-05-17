@@ -5,14 +5,19 @@ import jdk.crac.Context;
 import jdk.crac.Resource;
 import jdk.crac.RestoreException;
 
-import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.WeakHashMap;
 
+/**
+ * Context performing Checkpoint notification in unspecified order.
+ * Concurrent registration along beforeCheckpoint notification triggers
+ * immediate notification on being registered resource.
+ * @param <R>
+ */
 public class CriticalUnorderedContext<R extends Resource> extends AbstractContext<R> {
     private final WeakHashMap<R, Void> resources = new WeakHashMap<>();
-    private ExceptionHolder<CheckpointException> exception = null;
+    private ExceptionHolder<CheckpointException> concurrentCheckpointException = null;
 
     private synchronized List<R> snapshot() {
         return this.resources.entrySet().stream()
@@ -21,7 +26,7 @@ public class CriticalUnorderedContext<R extends Resource> extends AbstractContex
     }
 
     @Override
-    protected synchronized List<R> checkpointSnapshot() {
+    protected List<R> checkpointSnapshot() {
         return snapshot();
     }
 
@@ -34,37 +39,38 @@ public class CriticalUnorderedContext<R extends Resource> extends AbstractContex
     @Override
     public void beforeCheckpoint(Context<? extends Resource> context) throws CheckpointException {
         synchronized (this) {
-            exception = new ExceptionHolder<>(CheckpointException::new);
+            concurrentCheckpointException = new ExceptionHolder<>(CheckpointException::new);
         }
 
         try {
             super.beforeCheckpoint(context);
         } catch (CheckpointException e) {
             synchronized (this) {
-                exception.handle(e);
+                concurrentCheckpointException.handle(e);
             }
         }
         synchronized (this) {
-            ExceptionHolder<CheckpointException> e = exception;
-            exception = new ExceptionHolder<>(CheckpointException::new);
+            ExceptionHolder<CheckpointException> e = concurrentCheckpointException;
+            concurrentCheckpointException = new ExceptionHolder<>(CheckpointException::new);
             e.throwIfAny();
         }
     }
 
     @Override
     public void afterRestore(Context<? extends Resource> context) throws RestoreException {
-        ExceptionHolder<CheckpointException> concurrentCheckpointException = exception;
+        CheckpointException racedException;
         synchronized (this) {
-            concurrentCheckpointException = exception;
-            exception = null;
+            racedException = concurrentCheckpointException.getIfAny();
+            concurrentCheckpointException = null;
         }
 
         ExceptionHolder<RestoreException> restoreException = new ExceptionHolder<>(RestoreException::new);
+        restoreException.handle(racedException);
+
         restoreException.runWithHandler(() -> {
             super.afterRestore(context);
         });
 
-        restoreException.handle(concurrentCheckpointException.getIfAny());
         restoreException.throwIfAny();
     }
 
@@ -72,11 +78,11 @@ public class CriticalUnorderedContext<R extends Resource> extends AbstractContex
     public void register(R resource) {
         synchronized (this) {
             resources.put(resource, null);
-            if (exception != null) {
+            if (concurrentCheckpointException != null) {
                 try {
                     invokeBeforeCheckpoint(resource);
                 } catch (Exception e) {
-                    exception.handle(e);
+                    concurrentCheckpointException.handle(e);
                 }
             }
         }

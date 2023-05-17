@@ -31,6 +31,10 @@ import jdk.internal.crac.LoggerContainer;
 
 import java.util.List;
 
+/**
+ * An abstract context with few utilities.
+ * @param <R> Type of Resource managed by the context.
+ */
 public abstract class AbstractContext<R extends Resource> extends Context<R> {
     protected abstract List<R> checkpointSnapshot();
     protected abstract List<R> restoreSnapshot();

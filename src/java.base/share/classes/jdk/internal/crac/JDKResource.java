@@ -26,47 +26,7 @@
 
 package jdk.internal.crac;
 
-import jdk.crac.Context;
 import jdk.crac.Resource;
-import jdk.crac.impl.BlockingOrderedContext;
-import jdk.crac.impl.CriticalUnorderedContext;
 
 public interface JDKResource extends Resource {
-    /**
-     * JDK Resource priorities.
-     * Priorities are defined in the order from lowest to highest.
-     * Most resources should use priority NORMAL (the lowest priority).
-     * Other priorities define sequence of checkpoint notification
-     * for dependent resources.
-     * Checkpoint notification will be processed in the order from the lowest
-     * to the highest priorities.
-     * Restore notification will be processed in the revers order:
-     * from the highest to the lowest priorities.
-     * JDK resources with the same priority will be notified about checkpoint
-     * in the reverse order of registration.
-     * JDK resources with the same priority will be notified about restore
-     * in the direct order of registration.
-     */
-    enum Priority {
-        FILE_DESCRIPTORS(new BlockingOrderedContext<>()),
-        PRE_FILE_DESRIPTORS(new BlockingOrderedContext<>()),
-        CLEANERS(new BlockingOrderedContext<>()),
-        REFERENCE_HANDLER(new BlockingOrderedContext<>()),
-        SEEDER_HOLDER(new BlockingOrderedContext<>()),
-        SECURE_RANDOM(new BlockingOrderedContext<>()),
-        NATIVE_PRNG(new BlockingOrderedContext<>()),
-        EPOLLSELECTOR(new BlockingOrderedContext<>()),
-        NORMAL(new BlockingOrderedContext<>());
-
-        private final Context<JDKResource> context;
-        Priority(Context<JDKResource> context) {
-            Core.getJDKContext();
-            jdk.crac.Core.getGlobalContext().register(context);
-            this.context = context;
-        }
-
-        public Context<JDKResource> getContext() {
-            return context;
-        }
-    }
 }

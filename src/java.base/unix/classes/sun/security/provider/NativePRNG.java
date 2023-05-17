@@ -399,7 +399,7 @@ public final class NativePRNG extends SecureRandomSpi {
             nextIn = FileInputStreamPool.getInputStream(nextFile);
             nextBuffer = new byte[bufferSize];
 
-            Priority.NATIVE_PRNG.getContext().register(this);
+            Core.Priority.NATIVE_PRNG.getContext().register(this);
         }
 
         // get the SHA1PRNG for mixing

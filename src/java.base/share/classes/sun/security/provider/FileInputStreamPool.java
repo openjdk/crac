@@ -150,7 +150,7 @@ class FileInputStreamPool {
     private static final class UnclosableInputStream extends FilterInputStream implements JDKResource {
         UnclosableInputStream(FileInputStream in) {
             super(in);
-            Priority.NORMAL.getContext().register(this);
+            Core.Priority.NORMAL.getContext().register(this);
         }
 
         @Override

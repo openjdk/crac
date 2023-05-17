@@ -27,13 +27,10 @@ package java.lang.invoke;
 
 import jdk.internal.access.JavaLangAccess;
 import jdk.internal.access.SharedSecrets;
-import jdk.internal.crac.JDKResource;
 import jdk.internal.ref.CleanerFactory;
-import jdk.internal.ref.CleanerImpl;
 import sun.invoke.util.Wrapper;
 
 import java.lang.invoke.MethodHandles.Lookup;
-import java.lang.ref.Cleaner;
 import java.lang.reflect.Field;
 
 import static java.lang.invoke.MethodHandleNatives.Constants.*;

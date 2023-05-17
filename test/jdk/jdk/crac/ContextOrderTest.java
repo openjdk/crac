@@ -36,7 +36,7 @@ import java.util.concurrent.atomic.AtomicReference;
 
 import static jdk.crac.Core.getGlobalContext;
 import static jdk.internal.crac.Core.*;
-import static jdk.internal.crac.JDKResource.Priority.*;
+import static jdk.internal.crac.Core.Priority.*;
 import static jdk.test.lib.Asserts.*;
 
 /**
@@ -101,9 +101,12 @@ public class ContextOrderTest {
 
     private static void testRegisterBlocks() throws Exception {
         var recorder = new LinkedList<String>();
+
         // blocks register into the same OrderedContext
-        getGlobalContext().register(new CreatingResource<>(recorder, null, "regular",
-                getGlobalContext()));
+        Context<Resource> context = new BlockingOrderedContext<>();
+        getGlobalContext().register(context);
+        context.register(new CreatingResource<>(recorder, null, "regular",
+                context));
         testWaiting();
 
         // blocks registering with lower priority
@@ -166,7 +169,7 @@ public class ContextOrderTest {
         getGlobalContext().register(new ThrowingResource(recorder, null, "throwing1"));
         getGlobalContext().register(new MockResource(recorder, null, "regular2"));
         JDKResource resource2 = new MockResource(recorder, NORMAL, "jdk1");
-        JDKResource resource1 = new ThrowingResource(recorder, JDKResource.Priority.EPOLLSELECTOR, "throwing2");
+        JDKResource resource1 = new ThrowingResource(recorder, Priority.EPOLLSELECTOR, "throwing2");
         JDKResource resource = new MockResource(recorder, SECURE_RANDOM, "jdk2");
 
         try {

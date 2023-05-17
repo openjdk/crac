@@ -50,6 +50,7 @@ import jdk.crac.Context;
 import jdk.crac.Resource;
 import jdk.internal.access.JavaNetInetAddressAccess;
 import jdk.internal.access.SharedSecrets;
+import jdk.internal.crac.Core;
 import jdk.internal.crac.JDKResource;
 import sun.security.action.*;
 import sun.net.InetAddressCachePolicy;
@@ -360,7 +361,7 @@ public class InetAddress implements java.io.Serializable {
             public void afterRestore(Context<? extends Resource> context) throws Exception {
             }
         };
-       JDKResource.Priority.NORMAL.getContext().register(checkpointListener);
+       Core.Priority.NORMAL.getContext().register(checkpointListener);
     }
 
     /**

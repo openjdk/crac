@@ -90,7 +90,7 @@ public class RandomAccessFile implements DataOutput, DataInput, Closeable {
         private static final JavaIOFileDescriptorAccess fdAccess = SharedSecrets.getJavaIOFileDescriptorAccess();
 
         Resource() {
-            Priority.PRE_FILE_DESRIPTORS.getContext().register(this);
+            Core.Priority.PRE_FILE_DESRIPTORS.getContext().register(this);
         }
 
         @Override

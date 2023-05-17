@@ -24,8 +24,10 @@ public class CriticalUnorderedContext<R extends Resource> extends AbstractContex
     protected synchronized List<R> checkpointSnapshot() {
         return snapshot();
     }
+
     @Override
     protected List<R> restoreSnapshot() {
+        // return updated set, as registration has called beforeCheckpoint()
         return snapshot();
     }
 
@@ -42,15 +44,28 @@ public class CriticalUnorderedContext<R extends Resource> extends AbstractContex
                 exception.handle(e);
             }
         }
-        exception.throwIfAny();
+        synchronized (this) {
+            ExceptionHolder<CheckpointException> e = exception;
+            exception = new ExceptionHolder<>(CheckpointException::new);
+            e.throwIfAny();
+        }
     }
 
     @Override
     public void afterRestore(Context<? extends Resource> context) throws RestoreException {
+        ExceptionHolder<CheckpointException> concurrentCheckpointException = exception;
         synchronized (this) {
+            concurrentCheckpointException = exception;
             exception = null;
         }
-        super.afterRestore(context);
+
+        ExceptionHolder<RestoreException> restoreException = new ExceptionHolder<>(RestoreException::new);
+        restoreException.runWithHandler(() -> {
+            super.afterRestore(context);
+        });
+
+        restoreException.handle(concurrentCheckpointException.getIfAny());
+        restoreException.throwIfAny();
     }
 
     @Override

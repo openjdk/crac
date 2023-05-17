@@ -73,7 +73,7 @@ public final class FileDescriptor {
             } else {
                 stackTraceHolder = null;
             }
-            Priority.FILE_DESCRIPTORS.getContext().register(this);
+            Core.Priority.FILE_DESCRIPTORS.getContext().register(this);
         }
 
         @Override
@@ -118,7 +118,7 @@ public final class FileDescriptor {
             }
         };
         checkpointListener = resource;
-        JDKResource.Priority.NORMAL.getContext().register(resource);
+        Core.Priority.NORMAL.getContext().register(resource);
     }
 
     // Set up JavaIOFileDescriptorAccess in SharedSecrets

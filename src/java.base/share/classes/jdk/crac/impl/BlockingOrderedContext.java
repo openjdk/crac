@@ -40,7 +40,7 @@ public class BlockingOrderedContext<R extends Resource> extends OrderedContext<R
 
     @Override
     public void afterRestore(Context<? extends Resource> context) throws RestoreException {
-        // unblock all registrations before
+        // unblock all registrations before running afterRestore()'s
         synchronized (this) {
             checkpointing = false;
             notifyAll();

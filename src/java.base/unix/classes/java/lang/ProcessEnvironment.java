@@ -57,7 +57,7 @@ package java.lang;
 
 import jdk.crac.Context;
 import jdk.crac.Resource;
-import jdk.internal.crac.JDKResource;
+import jdk.internal.crac.Core;
 
 import java.util.*;
 
@@ -68,7 +68,7 @@ final class ProcessEnvironment
             implements jdk.internal.crac.JDKResource {
 
         CracSubscriber() {
-            Priority.NORMAL.getContext().register(this);
+            Core.Priority.NORMAL.getContext().register(this);
         }
 
         @Override

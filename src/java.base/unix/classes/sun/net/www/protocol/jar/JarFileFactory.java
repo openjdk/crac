@@ -34,7 +34,7 @@ import java.util.WeakHashMap;
 import java.util.jar.JarFile;
 import java.security.Permission;
 
-import jdk.internal.crac.JDKResource;
+import jdk.internal.crac.Core;
 import sun.net.util.URLUtil;
 import jdk.crac.Context;
 import jdk.crac.Resource;
@@ -56,7 +56,7 @@ class JarFileFactory implements URLJarFile.URLJarFileCloseController, jdk.intern
     private static final JarFileFactory instance = new JarFileFactory();
 
     private JarFileFactory() {
-        Priority.NORMAL.getContext().register(this);
+        Core.Priority.NORMAL.getContext().register(this);
     }
 
     public static JarFileFactory getInstance() {

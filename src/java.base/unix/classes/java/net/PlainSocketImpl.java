@@ -28,6 +28,7 @@ import java.io.IOException;
 
 import jdk.crac.Context;
 import jdk.crac.Resource;
+import jdk.internal.crac.Core;
 import jdk.internal.crac.JDKResource;
 
 /*
@@ -58,7 +59,7 @@ class PlainSocketImpl extends AbstractPlainSocketImpl
 
     static {
         initProto();
-        JDKResource.Priority.NORMAL.getContext().register(resourceProxy);
+        Core.Priority.NORMAL.getContext().register(resourceProxy);
     }
 
     /**

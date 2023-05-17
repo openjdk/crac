@@ -23,7 +23,15 @@ public class ExceptionHolder<E extends Exception> {
         }
     }
 
+    public E getIfAny() {
+        return exception;
+    }
+
     public void handle(Exception e) {
+        if (e == null) {
+            return;
+        }
+
         E exception = get();
         if (exception.getClass() == e.getClass()) {
             for (Throwable t : e.getSuppressed()) {

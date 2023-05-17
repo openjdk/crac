@@ -27,13 +27,12 @@ package java.lang.invoke;
 
 import jdk.internal.access.JavaLangAccess;
 import jdk.internal.access.SharedSecrets;
-import jdk.internal.crac.JDKResource;
+import jdk.internal.crac.Core;
 import jdk.internal.ref.CleanerFactory;
 import jdk.internal.ref.CleanerImpl;
 import sun.invoke.util.Wrapper;
 
 import java.lang.invoke.MethodHandles.Lookup;
-import java.lang.ref.Cleaner;
 import java.lang.reflect.Field;
 
 import static java.lang.invoke.MethodHandleNatives.Constants.*;
@@ -91,7 +90,7 @@ class MethodHandleNatives {
             // (which is referenced from Cleaner instance which is referenced from
             // CleanerFactory class) until cleanup is performed.
             new CleanerImpl.PhantomCleanableRef(cs, CleanerFactory.cleaner(),
-                    newContext, JDKResource.Priority.CALL_SITES);
+                    newContext, Core.Priority.CALL_SITES);
             return newContext;
         }
 

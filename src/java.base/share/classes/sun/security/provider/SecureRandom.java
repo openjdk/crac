@@ -27,7 +27,7 @@ package sun.security.provider;
 
 import jdk.crac.Context;
 import jdk.crac.Resource;
-import jdk.internal.crac.JDKResource;
+import jdk.internal.crac.Core;
 
 import java.io.IOException;
 import java.security.MessageDigest;
@@ -127,7 +127,7 @@ implements java.io.Serializable, jdk.internal.crac.JDKResource {
         if (seed != null) {
            engineSetSeed(seed);
         }
-        Priority.SECURE_RANDOM.getContext().register(this);
+        Core.Priority.SECURE_RANDOM.getContext().register(this);
     }
 
     /**
@@ -258,7 +258,7 @@ implements java.io.Serializable, jdk.internal.crac.JDKResource {
             byte[] b = new byte[DIGEST_SIZE];
             SeedGenerator.generateSeed(b);
             seeder.engineSetSeed(b);
-            Priority.SEEDER_HOLDER.getContext().register(this);
+            Core.Priority.SEEDER_HOLDER.getContext().register(this);
         }
 
         public static SecureRandom getSeeder() {

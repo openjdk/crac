@@ -54,8 +54,8 @@
 // only in this file, because the macrology requires single-token type names.
 
 // The optional extra_attrs parameter may have one of the following values:
-// DIAGNOSTIC, EXPERIMENTAL, or MANAGEABLE. Currently extra_attrs can be used
-// only with product/product_pd flags.
+// DIAGNOSTIC, EXPERIMENTAL, MANAGEABLE or RESTORE_SETTABLE. Currently
+// extra_attrs can be used only with product/product_pd flags.
 //
 // DIAGNOSTIC options are not meant for VM tuning or for product modes.
 //    They are to be used for VM quality assurance or field diagnosis
@@ -97,6 +97,9 @@
 //      and not reuse state related to the flag state at any given time.
 //    - you want the flag to be queried programmatically by the customers.
 //
+// RESTORE_SETTABLE are flags that can be set during restore from a snapshot.
+//    All MANAGEABLE flags are implicitly RESTORE_SETTABLE but
+//    RESTORE_SETTABLE are not MANAGEABLE.
 
 //
 // range is a macro that will expand to min and max arguments for range
@@ -2088,22 +2091,27 @@ const intx ObjectAlignmentInBytes = 8;
   develop(bool, TraceOptimizedUpcallStubs, false,                           \
                 "Trace optimized upcall stub generation")                   \
                                                                             \
-  product(ccstr, CRaCCheckpointTo, NULL, "Path to checkpoint image")        \
+  product(ccstr, CRaCCheckpointTo, NULL, RESTORE_SETTABLE,                  \
+        "Path to checkpoint image directory")                               \
                                                                             \
-  product(ccstr, CRaCRestoreFrom, NULL, "Path to image for restore, "       \
-      "replaces the initializing VM on success")                            \
+  product(ccstr, CRaCRestoreFrom, NULL, RESTORE_SETTABLE,                   \
+      "Path to image for restore, replaces the initializing VM on success") \
                                                                             \
-  product(ccstr, CREngine, "criuengine", "Path or name of a program "       \
-      "implementing checkpoint/restore")                                    \
+  /* It is usually not possible to use a different engine for checkpoint */ \
+  /* and restore but when we use a non-default engine this must be set   */ \
+  /* on restore, too. */                                                    \
+  product(ccstr, CREngine, "criuengine", RESTORE_SETTABLE,                  \
+      "Path or name of a program implementing checkpoint/restore")          \
                                                                             \
-  product(bool, CRaCIgnoreRestoreIfUnavailable, false, "Ignore "            \
-      "-XX:CRaCRestoreFrom and continue initialization if restore is "      \
-      "unavailable")                                                        \
+  product(bool, CRaCIgnoreRestoreIfUnavailable, false, RESTORE_SETTABLE,    \
+      "Ignore -XX:CRaCRestoreFrom and continue initialization if restore "  \
+      "is unavailable")                                                     \
                                                                             \
-  product(ccstr, CRaCIgnoredFileDescriptors, NULL, "Comma-separated list "  \
-      "of file descriptor numbers or paths. All file descriptors greater "  \
-      "than 2 (stdin, stdout and stderr are excluded automatically) not "   \
-      "in this list are closed when the VM is started.")                    \
+  product(ccstr, CRaCIgnoredFileDescriptors, NULL, RESTORE_SETTABLE,        \
+      "Comma-separated list of file descriptor numbers or paths. "          \
+      "All file descriptors greater than 2 (stdin, stdout and stderr are "  \
+      "excluded automatically) not in this list are closed when the VM "    \
+      "is started.")                                                        \
                                                                             \
   product(bool, CRAllowToSkipCheckpoint, false, DIAGNOSTIC,                 \
           "Allow implementation to not call Checkpoint if helper not found")\
@@ -2121,7 +2129,7 @@ const intx ObjectAlignmentInBytes = 8;
   product(bool, CRDoThrowCheckpointException, true, EXPERIMENTAL,           \
       "Throw CheckpointException if uncheckpointable resource handle found")\
                                                                             \
-  product(bool, CRTrace, true, "Minimal C/R tracing")                       \
+  product(bool, CRTrace, true, RESTORE_SETTABLE, "Minimal C/R tracing")     \
 
 // end of RUNTIME_FLAGS
 

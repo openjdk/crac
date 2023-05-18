@@ -39,6 +39,7 @@ public interface JavaIOFileDescriptorAccess {
     public void setAppend(FileDescriptor fdo, boolean append);
     public boolean getAppend(FileDescriptor fdo);
     public void close(FileDescriptor fdo) throws IOException;
+    public void markClosed(FileDescriptor fdo);
     public void registerCleanup(FileDescriptor fdo);
     public void registerCleanup(FileDescriptor fdo, PhantomCleanable<FileDescriptor> cleanable);
     public void unregisterCleanup(FileDescriptor fdo);

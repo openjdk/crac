@@ -56,7 +56,7 @@ class DatagramDispatcher extends NativeDispatcher {
     }
 
     void close(FileDescriptor fd) throws IOException {
-        FileDispatcherImpl.close0(fd);
+        FileDispatcherImpl.closeAndMark(fd);
     }
 
     void preClose(FileDescriptor fd) throws IOException {

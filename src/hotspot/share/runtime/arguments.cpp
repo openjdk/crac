@@ -1155,6 +1155,19 @@ void Arguments::print_jvm_args_on(outputStream* st) {
   }
 }
 
+static void parse_argname(const char *arg, const char **argname, size_t *arg_len, bool *has_plus_minus) {
+  // Determine if the flag has '+', '-', or '=' characters.
+  *has_plus_minus = (*arg == '+' || *arg == '-');
+  *argname = *has_plus_minus ? arg + 1 : arg;
+
+  const char* equal_sign = strchr(*argname, '=');
+  if (equal_sign == NULL) {
+    *arg_len = strlen(*argname);
+  } else {
+    *arg_len = equal_sign - *argname;
+  }
+}
+
 bool Arguments::process_argument(const char* arg,
                                  jboolean ignore_unrecognized,
                                  JVMFlagOrigin origin) {
@@ -1164,17 +1177,10 @@ bool Arguments::process_argument(const char* arg,
     return true;
   }
 
-  // Determine if the flag has '+', '-', or '=' characters.
-  bool has_plus_minus = (*arg == '+' || *arg == '-');
-  const char* const argname = has_plus_minus ? arg + 1 : arg;
-
+  const char* argname;
   size_t arg_len;
-  const char* equal_sign = strchr(argname, '=');
-  if (equal_sign == NULL) {
-    arg_len = strlen(argname);
-  } else {
-    arg_len = equal_sign - argname;
-  }
+  bool has_plus_minus;
+  parse_argname(arg, &argname, &arg_len, &has_plus_minus);
 
   // Only make the obsolete check for valid arguments.
   if (arg_len <= BUFLEN) {
@@ -2335,29 +2341,44 @@ bool Arguments::parse_options_for_restore(const JavaVMInitArgs* args) {
 
     const JavaVMOption* option = args->options + index;
 
-    if (!match_option(option, "-Djava.class.path", &tail) &&
-        !match_option(option, "-Dsun.java.launcher", &tail)) {
-      if (match_option(option, "-D", &tail)) {
-        const char* key = NULL;
-        const char* value = NULL;
+    if (match_option(option, "-Djava.class.path", &tail) ||
+        match_option(option, "-Dsun.java.launcher", &tail)) {
+      // These options are already set based on -cp (and aliases), -jar
+      // or even inheriting the CLASSPATH env var; therefore it's too
+      // late to prohibit explicitly setting them at this point.
+    } else if (match_option(option, "-D", &tail)) {
+      const char* key = NULL;
+      const char* value = NULL;
 
-        get_key_value(tail, &key, &value);
+      get_key_value(tail, &key, &value);
 
-        if (strcmp(key, "sun.java.command") == 0) {
-          char *old_java_command = _java_command;
-          _java_command = os::strdup_check_oom(value, mtArguments);
-          if (old_java_command != NULL) {
-            os::free(old_java_command);
-          }
-        } else {
-          add_property(tail);
+      if (strcmp(key, "sun.java.command") == 0) {
+        char *old_java_command = _java_command;
+        _java_command = os::strdup_check_oom(value, mtArguments);
+        if (old_java_command != NULL) {
+          os::free(old_java_command);
         }
-      } else if (match_option(option, "-XX:", &tail)) { // -XX:xxxx
-        // Skip -XX:Flags= and -XX:VMOptionsFile= since those cases have
-        // already been handled
-        if (!process_argument(tail, args->ignoreUnrecognized, JVMFlagOrigin::COMMAND_LINE)) {
+      } else {
+        add_property(tail);
+      }
+    } else if (match_option(option, "-XX:", &tail)) { // -XX:xxxx
+      // Skip -XX:Flags= and -XX:VMOptionsFile= since those cases have
+      // already been handled
+      if (!process_argument(tail, args->ignoreUnrecognized, JVMFlagOrigin::COMMAND_LINE)) {
+        return false;
+      }
+      const char *argname;
+      size_t arg_len;
+      bool ignored_plus_minus;
+      parse_argname(tail, &argname, &arg_len, &ignored_plus_minus);
+      const JVMFlag* flag = JVMFlag::find_declared_flag((const char*)argname, arg_len);
+      if (flag != NULL) {
+        if (!flag->is_restore_settable()) {
+          jio_fprintf(defaultStream::error_stream(),
+            "Flag %.*s cannot be set during restore: %s\n", arg_len, argname, option->optionString);
           return false;
         }
+        build_jvm_flags(tail);
       }
     }
   }

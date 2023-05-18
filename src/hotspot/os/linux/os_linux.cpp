@@ -6116,6 +6116,26 @@ bool VM_Crac::is_claimed_fd(int fd) {
   return false;
 }
 
+static void wakeup_threads_in_timedwait() {
+  SafeThreadsListPtr listPtr(Thread::current(), true);
+  ThreadsList *list = listPtr.list();
+  assert(list != NULL, "Thread list is null");
+  for (uint i = 0; i < list->length(); ++i) {
+    JavaThread* t = list->thread_at(i);
+    assert(t != NULL, "Thread is null");
+    ThreadState state = t->osthread()->get_state();
+    // ThreadState::SLEEPING is not used
+    if (state == ThreadState::CONDVAR_WAIT || state == ThreadState::OBJECT_WAIT) {
+      // We want to cause a wakeup but not interrupted exception
+      t->interrupt();
+      t->osthread()->set_interrupted(false);
+    }
+  }
+
+  MonitorLocker ml(PeriodicTask_lock, Mutex::_no_safepoint_check_flag);
+  WatcherThread::watcher_thread()->unpark();
+}
+
 void VM_Crac::doit() {
 
   AttachListener::abort();
@@ -6200,6 +6220,8 @@ void VM_Crac::doit() {
     _restore_start_nanos += os::monotonic_time_offset();
   }
   PerfMemoryLinux::restore();
+
+  wakeup_threads_in_timedwait();
 
   _ok = true;
 }

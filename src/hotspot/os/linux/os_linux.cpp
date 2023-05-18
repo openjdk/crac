@@ -74,6 +74,7 @@
 #include "services/heapDumper.hpp"
 #include "services/memTracker.hpp"
 #include "services/runtimeService.hpp"
+#include "services/writeableFlags.hpp"
 #include "linuxAttachOperation.hpp"
 #include "utilities/align.hpp"
 #include "utilities/decoder.hpp"
@@ -277,6 +278,7 @@ class CracRestoreParameters : public CHeapObj<mtInternal> {
   struct header {
     jlong _restore_time;
     jlong _restore_counter;
+    int _nflags;
     int _nprops;
     int _env_memory_size;
   };
@@ -329,6 +331,7 @@ class CracRestoreParameters : public CHeapObj<mtInternal> {
   }
 
   static bool write_to(int fd,
+      const char* const* flags, int num_flags,
       const SystemProperty* props,
       const char *args,
       jlong restore_time,
@@ -336,12 +339,19 @@ class CracRestoreParameters : public CHeapObj<mtInternal> {
     header hdr = {
       restore_time,
       restore_counter,
+      num_flags,
       system_props_length(props),
       env_vars_size(environ)
     };
 
     if (!write_check_error(fd, (void *)&hdr, sizeof(header))) {
       return false;
+    }
+
+    for (int i = 0; i < num_flags; ++i) {
+      if (!write_check_error(fd, flags[i], strlen(flags[i]) + 1)) {
+        return false;
+      }
     }
 
     const SystemProperty* p = props;
@@ -6234,6 +6244,7 @@ void os::Linux::restore() {
   if (0 <= shmfd) {
     if (CracRestoreParameters::write_to(
           shmfd,
+          Arguments::jvm_flags_array(), Arguments::num_jvm_flags(),
           Arguments::system_properties(),
           Arguments::java_command() ? Arguments::java_command() : "",
           restore_time,
@@ -6338,6 +6349,31 @@ bool CracRestoreParameters::read_from(int fd) {
 
   ::_restore_start_time = hdr->_restore_time;
   ::_restore_start_counter = hdr->_restore_counter;
+
+  for (int i = 0; i < hdr->_nflags; i++) {
+    FormatBuffer<80> err_msg("%s", "");
+    JVMFlag::Error result;
+    const char *name = cursor;
+    if (*cursor == '+' || *cursor == '-') {
+      name = cursor + 1;
+      result = WriteableFlags::set_flag(name, *cursor == '+' ? "true" : "false",
+        JVMFlagOrigin::CRAC_RESTORE, err_msg);
+      cursor += strlen(cursor) + 1;
+    } else {
+      char* eq = strchrnul(cursor, '=');
+      if (*eq == '\0') {
+        result = JVMFlag::Error::MISSING_VALUE;
+        cursor = eq + 1;
+      } else {
+        *eq = '\0';
+        char* value = eq + 1;
+        result = WriteableFlags::set_flag(cursor, value, JVMFlagOrigin::CRAC_RESTORE, err_msg);
+        cursor = value + strlen(value) + 1;
+      }
+    }
+    guarantee(result == JVMFlag::Error::SUCCESS, "VM Option '%s' cannot be changed: %s",
+        name, JVMFlag::flag_error_str(result));
+  }
 
   for (int i = 0; i < hdr->_nprops; i++) {
     assert((cursor + strlen(cursor) <= contents + st.st_size), "property length exceeds shared memory size");

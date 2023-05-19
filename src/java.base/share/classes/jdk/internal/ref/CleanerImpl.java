@@ -157,16 +157,19 @@ public final class CleanerImpl implements Runnable {
      */
     public static final class PhantomCleanableRef extends PhantomCleanable<Object> implements JDKResource {
         private final Runnable action;
+        private final JDKResource.Priority priority;
 
         /**
          * Constructor for a phantom cleanable reference.
          * @param obj the object to monitor
          * @param cleaner the cleaner
          * @param action the action Runnable
+         * @param priority priority for checkpoint handling
          */
-        public PhantomCleanableRef(Object obj, Cleaner cleaner, Runnable action) {
+        public PhantomCleanableRef(Object obj, Cleaner cleaner, Runnable action, JDKResource.Priority priority) {
             super(obj, cleaner);
             this.action = action;
+            this.priority = priority;
             jdk.internal.crac.Core.getJDKContext().register(this);
         }
 
@@ -176,6 +179,7 @@ public final class CleanerImpl implements Runnable {
         PhantomCleanableRef() {
             super();
             this.action = null;
+            this.priority = Priority.CLEANERS;
         }
 
         @Override
@@ -205,7 +209,7 @@ public final class CleanerImpl implements Runnable {
 
         @Override
         public Priority getPriority() {
-            return Priority.CLEANERS;
+            return priority;
         }
 
         @Override
@@ -218,6 +222,11 @@ public final class CleanerImpl implements Runnable {
         @Override
         public void afterRestore(Context<? extends Resource> context) throws Exception {
 
+        }
+
+        @Override
+        public String toString() {
+            return "PhantomCleanableRef:"  + action;
         }
     }
 

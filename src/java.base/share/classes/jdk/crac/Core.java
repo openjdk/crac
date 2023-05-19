@@ -82,13 +82,12 @@ public class Core {
         final int length = codes.length;
 
         for (int i = 0; i < length; ++i) {
-            Throwable ex = switch (codes[i]) {
+            exception.addSuppressed(switch (codes[i]) {
                 case JVM_CR_FAIL_FILE -> new CheckpointOpenFileException(messages[i]);
                 case JVM_CR_FAIL_SOCK -> new CheckpointOpenSocketException(messages[i]);
                 case JVM_CR_FAIL_PIPE -> new CheckpointOpenResourceException(messages[i]);
                 default -> new CheckpointOpenResourceException(messages[i]);
-            };
-            exception.addSuppressed(ex);
+            });
         }
     }
 
@@ -109,11 +108,11 @@ public class Core {
 
         try {
             globalContext.beforeCheckpoint(null);
+        } catch (CheckpointException.Combined ce) {
+            checkpointException = ce;
         } catch (CheckpointException ce) {
             checkpointException = new CheckpointException.Combined();
-            for (Throwable t : ce.getSuppressed()) {
-                checkpointException.addSuppressed(t);
-            }
+            checkpointException.addSuppressed(ce);
         }
 
         final Object[] bundle = checkpointRestore0(checkpointException != null, jcmdStream);
@@ -156,10 +155,12 @@ public class Core {
         } catch (RestoreException re) {
             if (checkpointException == null) {
                 restoreException = re;
-            } else {
+            } else if (re instanceof RestoreException.Combined) {
                 for (Throwable t : re.getSuppressed()) {
                     checkpointException.addSuppressed(t);
                 }
+            } else {
+                checkpointException.addSuppressed(re);
             }
         }
 

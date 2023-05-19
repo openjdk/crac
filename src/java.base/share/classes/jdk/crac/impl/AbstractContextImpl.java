@@ -57,14 +57,14 @@ public abstract class AbstractContextImpl<R extends Resource, P> extends Context
             .map(Map.Entry::getKey)
             .collect(Collectors.toList());
 
-        CheckpointException exception = new CheckpointException();
+        CheckpointException.Combined exception = new CheckpointException.Combined();
         for (Resource r : resources) {
             if (FlagsHolder.DEBUG) {
                 System.err.println("jdk.crac beforeCheckpoint " + r.toString());
             }
             try {
                 r.beforeCheckpoint(this);
-            } catch (CheckpointException e) {
+            } catch (CheckpointException.Combined e) {
                 for (Throwable t : e.getSuppressed()) {
                     exception.addSuppressed(t);
                 }
@@ -83,14 +83,14 @@ public abstract class AbstractContextImpl<R extends Resource, P> extends Context
 
     @Override
     public synchronized void afterRestore(Context<? extends Resource> context) throws RestoreException {
-        RestoreException exception = new RestoreException();
+        RestoreException exception = new RestoreException.Combined();
         for (Resource r : restoreQ) {
             if (FlagsHolder.DEBUG) {
                 System.err.println("jdk.crac afterRestore " + r.toString());
             }
             try {
                 r.afterRestore(this);
-            } catch (RestoreException e) {
+            } catch (RestoreException.Combined e) {
                 for (Throwable t : e.getSuppressed()) {
                     exception.addSuppressed(t);
                 }

@@ -110,7 +110,7 @@ public class Core {
         try {
             globalContext.beforeCheckpoint(null);
         } catch (CheckpointException ce) {
-            checkpointException = new CheckpointException();
+            checkpointException = new CheckpointException.Combined();
             for (Throwable t : ce.getSuppressed()) {
                 checkpointException.addSuppressed(t);
             }
@@ -132,7 +132,7 @@ public class Core {
                 if (messages.length == 0) {
                     checkpointException = new CheckpointException("Native checkpoint failed");
                 } else {
-                    checkpointException = new CheckpointException();
+                    checkpointException = new CheckpointException.Combined();
                 }
             }
             switch (retCode) {
@@ -186,7 +186,7 @@ public class Core {
                     assert checkpointException == null :
                         "should not have new arguments";
                     if (restoreException == null) {
-                        restoreException = new RestoreException();
+                        restoreException = new RestoreException.Combined();
                     }
                     restoreException.addSuppressed(e);
                 }

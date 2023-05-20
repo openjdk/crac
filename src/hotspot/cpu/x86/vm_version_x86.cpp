@@ -667,13 +667,178 @@ uint64_t VM_Version::CPUFeatures_parse(const char *ccstr, uint64_t &glibc_featur
   return -1;
 }
 
+#if !INCLUDE_CPU_FEATURE_ACTIVE
+
+static int ld_so_name_iterate_phdr(struct dl_phdr_info *info, size_t size, void *data_voidp) {
+  const char **retval_return = (const char **)data_voidp;
+  assert(size >= offsetof(struct dl_phdr_info, dlpi_adds), "missing PHDRs for the java executable");
+  assert(strcmp(info->dlpi_name, "") == 0, "Unexpected name of first dl_phdr_info");
+  for (size_t phdr_ix = 0; phdr_ix < info->dlpi_phnum; ++phdr_ix) {
+    const Elf64_Phdr *phdr = info->dlpi_phdr + phdr_ix;
+    if (phdr->p_type == PT_INTERP) {
+      *retval_return = (const char *)(phdr->p_vaddr + info->dlpi_addr);
+      return 42;
+    }
+  }
+  vm_exit_during_initialization("PT_INTERP not found for the java executable");
+  return -1;
+}
+
+static const char *ld_so_name() {
+  const char *retval;
+  int err = dl_iterate_phdr(ld_so_name_iterate_phdr, &retval);
+  assert(err == 42, "internal error 42");
+  return retval;
+}
+
+#define ARG1 "--list-diagnostics"
+
+static FILE *popen_r(const char *arg0, pid_t *pid_return) {
+  char errbuf[512];
+  union {
+    int fds[2];
+    struct {
+      int readfd, writefd;
+    };
+  } fds;
+  if (pipe(fds.fds)) {
+    jio_snprintf(errbuf, sizeof(errbuf), "Error creating pipe: %m");
+    vm_exit_during_initialization(errbuf);
+  }
+  pid_t child = fork();
+  switch (child) {
+    case -1:
+      jio_snprintf(errbuf, sizeof(errbuf), "Error fork-ing: %m");
+      vm_exit_during_initialization(errbuf);
+    case 0:
+      if (close(fds.readfd)) {
+        jio_snprintf(errbuf, sizeof(errbuf), "Error closing read pipe in child: %m");
+        vm_exit_during_initialization(errbuf);
+      }
+      if (dup2(fds.writefd, STDOUT_FILENO) != STDOUT_FILENO) {
+        jio_snprintf(errbuf, sizeof(errbuf), "Error closing preparing write pipe in child: %m");
+        vm_exit_during_initialization(errbuf);
+      }
+      if (close(fds.writefd)) {
+        jio_snprintf(errbuf, sizeof(errbuf), "Error closing write pipe in child: %m");
+        vm_exit_during_initialization(errbuf);
+      }
+      execl(arg0, arg0, ARG1, NULL);
+      jio_snprintf(errbuf, sizeof(errbuf), "Error exec-ing %s " ARG1 ": %m", arg0);
+      // FIXME: Double vm_exit*()?
+      vm_exit_during_initialization(errbuf);
+  }
+  if (close(fds.writefd)) {
+    jio_snprintf(errbuf, sizeof(errbuf), "Error closing write pipe in parent: %m");
+    vm_exit_during_initialization(errbuf);
+  }
+  FILE *f = fdopen(fds.readfd, "r");
+  if (f == NULL) {
+    jio_snprintf(errbuf, sizeof(errbuf), "Error converting pipe fd to FILE * in parent for %s " ARG1 ": %m", arg0);
+    vm_exit_during_initialization(errbuf);
+  }
+  *pid_return = child;
+  return f;
+}
+
+static void pclose_r(const char *arg0, FILE *f, pid_t pid) {
+  char errbuf[512];
+  if (fclose(f)) {
+    jio_snprintf(errbuf, sizeof(errbuf), "Error closing fdopen-ed %s " ARG1 ": %m", arg0);
+    vm_exit_during_initialization(errbuf);
+  }
+  int wstatus;
+  pid_t waiterr = waitpid(pid, &wstatus, 0);
+  if (waiterr != pid) {
+    jio_snprintf(errbuf, sizeof(errbuf), "Error waiting on %s " ARG1 ": %m", arg0);
+    vm_exit_during_initialization(errbuf);
+  }
+  if (!WIFEXITED(wstatus)) {
+    jio_snprintf(errbuf, sizeof(errbuf), "Child command %s " ARG1 " did not properly exit (WIFEXITED): wstatus = %d", arg0, wstatus);
+    vm_exit_during_initialization(errbuf);
+  }
+  if (WEXITSTATUS(wstatus) != 0) {
+    jio_snprintf(errbuf, sizeof(errbuf), "Child command %s " ARG1 " did exit with an error: exit code = %d", arg0, WEXITSTATUS(wstatus));
+    vm_exit_during_initialization(errbuf);
+  }
+}
+
+#endif // !INCLUDE_CPU_FEATURE_ACTIVE
+
 void VM_Version::glibc_not_using(uint64_t excessive_CPU, uint64_t excessive_GLIBC) {
-#if INCLUDE_CPU_FEATURE_ACTIVE
 #ifndef ASSERT
   if (!excessive_CPU && !excessive_GLIBC)
     return;
 #endif
   char errbuf[512];
+#if !INCLUDE_CPU_FEATURE_ACTIVE
+  // sysdeps/x86/include/cpu-features.h CPUID_INDEX_14_ECX_0 == 8
+  const int CPUID_INDEX_CEIL = 8;
+  // /usr/include/bits/platform/x86.h
+  enum
+  {
+    CPUID_INDEX_1 = 0,
+    CPUID_INDEX_7,
+    CPUID_INDEX_80000001,
+    CPUID_INDEX_D_ECX_1,
+    CPUID_INDEX_80000007,
+    CPUID_INDEX_80000008,
+    CPUID_INDEX_7_ECX_1,
+    CPUID_INDEX_19,
+    CPUID_INDEX_14_ECX_0
+  };
+  const int index_max = CPUID_INDEX_CEIL + 1;
+  enum { eax = 0, ebx, ecx, edx, reg_max };
+  unsigned active[index_max][reg_max] = { 0 };
+  const char *arg0 = ld_so_name();
+  pid_t f_child;
+  FILE *f = popen_r(arg0, &f_child);
+  if (!f) {
+    jio_snprintf(errbuf, sizeof(errbuf), "Cannot popen %s " ARG1 ": %m", arg0);
+    vm_exit_during_initialization(errbuf);
+  }
+  for (;;) {
+    char line[LINE_MAX];
+    char *s = fgets(line, sizeof(line), f);
+    if (!s)
+      break;
+    s = line;
+    // x86.cpu_features.features[0x0].active[0x2]=0x7ed83203
+    const char prefix[] = "x86.cpu_features.features[";
+    if (strncmp(s, prefix, sizeof(prefix) - 1) != 0)
+      continue;
+    s += sizeof(prefix) - 1;
+    unsigned long index = strtoul(s, &s, 0);
+    if (index >= index_max)
+      continue;
+    const char mid[] = "].active[";
+    if (strncmp(s, mid, sizeof(mid) - 1) != 0)
+      continue;
+    s += sizeof(mid) - 1;
+    unsigned long reg = strtoul(s, &s, 0);
+    if (reg >= reg_max)
+      continue;
+    if (s[0] != ']' || s[1] != '=')
+      continue;
+    s += 2;
+    unsigned long val = strtoul(s, &s, 0);
+    if (val > UINT_MAX)
+      continue;
+    if (s[0] != '\n' || s[1] != 0)
+      continue;
+    active[index][reg] = val;
+  }
+  if (ferror(f)) {
+    jio_snprintf(errbuf, sizeof(errbuf), "Error reading popen-ed %s " ARG1 ": %m", arg0);
+    vm_exit_during_initialization(errbuf);
+  }
+  if (!feof(f)) {
+    jio_snprintf(errbuf, sizeof(errbuf), "EOF not reached on popen-ed %s " ARG1, arg0);
+    vm_exit_during_initialization(errbuf);
+  }
+  pclose_r(arg0, f, f_child);
+#undef ARG1
+#endif // !INCLUDE_CPU_FEATURE_ACTIVE
 
   // glibc: sysdeps/x86/get-isa-level.h:
   // glibc: if (CPU_FEATURE_USABLE_P (cpu_features, CMOV)
@@ -766,42 +931,58 @@ void VM_Version::glibc_not_using(uint64_t excessive_CPU, uint64_t excessive_GLIB
     assert(!(PASTE_TOKENS(excessive_handled_, kind) & PASTE_TOKENS3(kind, _, hotspot)), "already used " STR(kind) "_" STR(hotspot) ); \
     DEBUG_ONLY(PASTE_TOKENS(excessive_handled_, kind) |= PASTE_TOKENS3(kind, _, hotspot));                                            \
   } while (0)
-#define EXCESSIVE2(kind, hotspot, glibc, hotspot_union, hotspot_field) do {                              \
-    EXCESSIVE_HANDLED(kind, hotspot);                                                                    \
-    if (PASTE_TOKENS(excessive_, kind) & PASTE_TOKENS3(kind, _, hotspot) && CPU_FEATURE_ACTIVE(glibc)) { \
-      PASTE_TOKENS(disable_, kind) |= PASTE_TOKENS3(kind, _, hotspot);                                   \
-    }                                                                                                    \
+#if INCLUDE_CPU_FEATURE_ACTIVE
+# define FEATURE_ACTIVE(glibc, hotspot_field, hotspot_union, glibc_index, glibc_reg) CPU_FEATURE_ACTIVE(glibc)
+#else
+# define FEATURE_ACTIVE(glibc, hotspot_field, hotspot_union, glibc_index, glibc_reg) ({ \
+    hotspot_union u;                                      \
+    u.value = active[glibc_index][glibc_reg];             \
+    u.bits.hotspot_field != 0;                            \
+  })
+#endif
+#define EXCESSIVE7(kind, hotspot, glibc, hotspot_field, hotspot_union, glibc_index, glibc_reg) do {                                                        \
+    EXCESSIVE_HANDLED(kind, hotspot);                                                                                                                      \
+    if (PASTE_TOKENS(excessive_, kind) & PASTE_TOKENS3(kind, _, hotspot) && FEATURE_ACTIVE(glibc, hotspot_field, hotspot_union, glibc_index, glibc_reg)) { \
+      PASTE_TOKENS(disable_, kind) |= PASTE_TOKENS3(kind, _, hotspot);                                                                                     \
+    }                                                                                                                                                      \
   } while (0)
-#define EXCESSIVE(kind, hotspot, hotspot_union, hotspot_field) EXCESSIVE2(kind, hotspot, hotspot, hotspot_union, hotspot_field)
-  EXCESSIVE(CPU  , AVX     , StdCpuid1Ecx, avx     );
-  EXCESSIVE(CPU  , CX8     , StdCpuid1Edx, cmpxchg8);
-  EXCESSIVE(CPU  , FMA     , StdCpuid1Ecx, fma     );
-  EXCESSIVE2(CPU , HT, HTT , StdCpuid1Edx, ht      );
-  EXCESSIVE(CPU  , RTM     , SefCpuid7Ebx, rtm     );
-  EXCESSIVE(CPU  , AVX2    , SefCpuid7Ebx, avx2    );
-  EXCESSIVE(CPU  , BMI1    , SefCpuid7Ebx, bmi1    );
-  EXCESSIVE(CPU  , BMI2    , SefCpuid7Ebx, bmi2    );
-  EXCESSIVE(CPU  , CMOV    , StdCpuid1Edx, cmov    );
-  EXCESSIVE(CPU  , ERMS    , SefCpuid7Ebx, erms    );
-  EXCESSIVE(CPU  , SSE2    , StdCpuid1Edx, sse2    );
-  EXCESSIVE(CPU  , LZCNT   , ExtCpuid1Ecx, fma4    );
-  EXCESSIVE(CPU  , SSSE3   , StdCpuid1Ecx, ssse3   );
-  EXCESSIVE(CPU  , POPCNT  , StdCpuid1Ecx, popcnt  );
-  EXCESSIVE(CPU  , SSE4_1  , StdCpuid1Ecx, sse4_1  );
-  EXCESSIVE(CPU  , SSE4_2  , StdCpuid1Ecx, sse4_2  );
-  EXCESSIVE(CPU  , AVX512F , SefCpuid7Ebx, avx512f );
-  EXCESSIVE(CPU  , AVX512CD, SefCpuid7Ebx, avx512cd);
-  EXCESSIVE(CPU  , AVX512BW, SefCpuid7Ebx, avx512bw);
-  EXCESSIVE(CPU  , AVX512DQ, SefCpuid7Ebx, avx512dq);
-  EXCESSIVE(CPU  , AVX512ER, SefCpuid7Ebx, avx512er);
-  EXCESSIVE(CPU  , AVX512PF, SefCpuid7Ebx, avx512pf);
-  EXCESSIVE(CPU  , AVX512VL, SefCpuid7Ebx, avx512vl);
-  EXCESSIVE(GLIBC, IBT     , SefCpuid7Edx, ibt     );
-  EXCESSIVE(GLIBC, FMA4    , ExtCpuid1Ecx, fma4    );
-  EXCESSIVE(GLIBC, MOVBE   , StdCpuid1Ecx, movbe   );
-  EXCESSIVE(GLIBC, SHSTK   , SefCpuid7Ecx, shstk   );
-  EXCESSIVE(GLIBC, XSAVE   , StdCpuid1Ecx, xsave   );
-  EXCESSIVE(GLIBC, OSXSAVE , StdCpuid1Ecx, osxsave );
+#define EXCESSIVE5(kind, hotspot, glibc, hotspot_field, def...) EXCESSIVE7(kind, hotspot, glibc, hotspot_field, def)
+#define EXCESSIVE(kind, hotspotglibc, hotspot_union, def...) EXCESSIVE5(kind, hotspotglibc, hotspotglibc, hotspot_union, def)
+#define DEF_ExtCpuid1Ecx ExtCpuid1Ecx, CPUID_INDEX_80000001, ecx
+#define DEF_SefCpuid7Ebx SefCpuid7Ebx, CPUID_INDEX_7       , ebx
+#define DEF_SefCpuid7Ecx SefCpuid7Ecx, CPUID_INDEX_7       , ecx
+#define DEF_SefCpuid7Edx SefCpuid7Edx, CPUID_INDEX_7       , edx
+#define DEF_StdCpuid1Ecx StdCpuid1Ecx, CPUID_INDEX_1       , ecx
+#define DEF_StdCpuid1Edx StdCpuid1Edx, CPUID_INDEX_1       , edx
+  EXCESSIVE(CPU  , AVX     , avx     , DEF_StdCpuid1Ecx);
+  EXCESSIVE(CPU  , CX8     , cmpxchg8, DEF_StdCpuid1Edx);
+  EXCESSIVE(CPU  , FMA     , fma     , DEF_StdCpuid1Ecx);
+  EXCESSIVE5(CPU , HT, HTT , ht      , DEF_StdCpuid1Edx);
+  EXCESSIVE(CPU  , RTM     , rtm     , DEF_SefCpuid7Ebx);
+  EXCESSIVE(CPU  , AVX2    , avx2    , DEF_SefCpuid7Ebx);
+  EXCESSIVE(CPU  , BMI1    , bmi1    , DEF_SefCpuid7Ebx);
+  EXCESSIVE(CPU  , BMI2    , bmi2    , DEF_SefCpuid7Ebx);
+  EXCESSIVE(CPU  , CMOV    , cmov    , DEF_StdCpuid1Edx);
+  EXCESSIVE(CPU  , ERMS    , erms    , DEF_SefCpuid7Ebx);
+  EXCESSIVE(CPU  , SSE2    , sse2    , DEF_StdCpuid1Edx);
+  EXCESSIVE(CPU  , LZCNT   , fma4    , DEF_ExtCpuid1Ecx);
+  EXCESSIVE(CPU  , SSSE3   , ssse3   , DEF_StdCpuid1Ecx);
+  EXCESSIVE(CPU  , POPCNT  , popcnt  , DEF_StdCpuid1Ecx);
+  EXCESSIVE(CPU  , SSE4_1  , sse4_1  , DEF_StdCpuid1Ecx);
+  EXCESSIVE(CPU  , SSE4_2  , sse4_2  , DEF_StdCpuid1Ecx);
+  EXCESSIVE(CPU  , AVX512F , avx512f , DEF_SefCpuid7Ebx);
+  EXCESSIVE(CPU  , AVX512CD, avx512cd, DEF_SefCpuid7Ebx);
+  EXCESSIVE(CPU  , AVX512BW, avx512bw, DEF_SefCpuid7Ebx);
+  EXCESSIVE(CPU  , AVX512DQ, avx512dq, DEF_SefCpuid7Ebx);
+  EXCESSIVE(CPU  , AVX512ER, avx512er, DEF_SefCpuid7Ebx);
+  EXCESSIVE(CPU  , AVX512PF, avx512pf, DEF_SefCpuid7Ebx);
+  EXCESSIVE(CPU  , AVX512VL, avx512vl, DEF_SefCpuid7Ebx);
+  EXCESSIVE(GLIBC, IBT     , ibt     , DEF_SefCpuid7Edx);
+  EXCESSIVE(GLIBC, FMA4    , fma4    , DEF_ExtCpuid1Ecx);
+  EXCESSIVE(GLIBC, MOVBE   , movbe   , DEF_StdCpuid1Ecx);
+  EXCESSIVE(GLIBC, SHSTK   , shstk   , DEF_SefCpuid7Ecx);
+  EXCESSIVE(GLIBC, XSAVE   , xsave   , DEF_StdCpuid1Ecx);
+  EXCESSIVE(GLIBC, OSXSAVE , osxsave , DEF_StdCpuid1Ecx);
 #undef EXCESSIVE
 #undef EXCESSIVE5
 
@@ -1022,7 +1203,6 @@ void VM_Version::glibc_not_using(uint64_t excessive_CPU, uint64_t excessive_GLIB
   jio_snprintf(errbuf, sizeof(errbuf), "Cannot re-execute " EXEC ": %m");
   vm_exit_during_initialization(errbuf);
 #undef EXEC
-#endif // INCLUDE_CPU_FEATURE_ACTIVE
 }
 
 void VM_Version::get_processor_features() {

@@ -37,10 +37,12 @@
 #include "runtime/vm_version.hpp"
 #include "utilities/powerOfTwo.hpp"
 #include "utilities/virtualizationSupport.hpp"
-#include <sys/wait.h>
-#include <link.h>
 #if INCLUDE_CPU_FEATURE_ACTIVE
 # include <sys/platform/x86.h>
+#endif
+#if INCLUDE_LD_SO_LIST_DIAGNOSTICS
+# include <link.h>
+# include <sys/wait.h>
 #endif
 
 #include OS_HEADER_INLINE(os)
@@ -667,12 +669,16 @@ uint64_t VM_Version::CPUFeatures_parse(const char *ccstr, uint64_t &glibc_featur
   return -1;
 }
 
-#if !INCLUDE_CPU_FEATURE_ACTIVE
+#if INCLUDE_LD_SO_LIST_DIAGNOSTICS
 
 static int ld_so_name_iterate_phdr(struct dl_phdr_info *info, size_t size, void *data_voidp) {
   const char **retval_return = (const char **)data_voidp;
   assert(size >= offsetof(struct dl_phdr_info, dlpi_adds), "missing PHDRs for the java executable");
-  assert(strcmp(info->dlpi_name, "") == 0, "Unexpected name of first dl_phdr_info");
+  if (strcmp(info->dlpi_name, "") != 0) {
+    char errbuf[512];
+    jio_snprintf(errbuf, sizeof(errbuf), "Unexpected name of first dl_phdr_info: %s", info->dlpi_name);
+    vm_exit_during_initialization(errbuf);
+  }
   for (size_t phdr_ix = 0; phdr_ix < info->dlpi_phnum; ++phdr_ix) {
     const Elf64_Phdr *phdr = info->dlpi_phdr + phdr_ix;
     if (phdr->p_type == PT_INTERP) {
@@ -763,15 +769,18 @@ static void pclose_r(const char *arg0, FILE *f, pid_t pid) {
   }
 }
 
-#endif // !INCLUDE_CPU_FEATURE_ACTIVE
+#endif // !INCLUDE_LD_SO_LIST_DIAGNOSTICS
 
 void VM_Version::glibc_not_using(uint64_t excessive_CPU, uint64_t excessive_GLIBC) {
+#define TUNABLES_NAME "GLIBC_TUNABLES"
+#if INCLUDE_CPU_FEATURE_ACTIVE || INCLUDE_LD_SO_LIST_DIAGNOSTICS
+
 #ifndef ASSERT
   if (!excessive_CPU && !excessive_GLIBC)
     return;
 #endif
   char errbuf[512];
-#if !INCLUDE_CPU_FEATURE_ACTIVE
+#if INCLUDE_LD_SO_LIST_DIAGNOSTICS
   // sysdeps/x86/include/cpu-features.h CPUID_INDEX_14_ECX_0 == 8
   const int CPUID_INDEX_CEIL = 8;
   // /usr/include/bits/platform/x86.h
@@ -838,7 +847,7 @@ void VM_Version::glibc_not_using(uint64_t excessive_CPU, uint64_t excessive_GLIB
   }
   pclose_r(arg0, f, f_child);
 #undef ARG1
-#endif // !INCLUDE_CPU_FEATURE_ACTIVE
+#endif // INCLUDE_LD_SO_LIST_DIAGNOSTICS
 
   // glibc: sysdeps/x86/get-isa-level.h:
   // glibc: if (CPU_FEATURE_USABLE_P (cpu_features, CMOV)
@@ -933,7 +942,8 @@ void VM_Version::glibc_not_using(uint64_t excessive_CPU, uint64_t excessive_GLIB
   } while (0)
 #if INCLUDE_CPU_FEATURE_ACTIVE
 # define FEATURE_ACTIVE(glibc, hotspot_field, hotspot_union, glibc_index, glibc_reg) CPU_FEATURE_ACTIVE(glibc)
-#else
+#endif
+#if INCLUDE_LD_SO_LIST_DIAGNOSTICS
 # define FEATURE_ACTIVE(glibc, hotspot_field, hotspot_union, glibc_index, glibc_reg) ({ \
     hotspot_union u;                                      \
     u.value = active[glibc_index][glibc_reg];             \
@@ -1098,7 +1108,6 @@ void VM_Version::glibc_not_using(uint64_t excessive_CPU, uint64_t excessive_GLIB
   if (disable_end == disable_str + prefix_len)
     return;
 
-#define TUNABLES_NAME "GLIBC_TUNABLES"
   char *env_val = disable_str;
   const char *env = getenv(TUNABLES_NAME);
   char env_buf[strlen(disable_str) + (!env ? 0 : strlen(env) + 100)];
@@ -1141,7 +1150,6 @@ void VM_Version::glibc_not_using(uint64_t excessive_CPU, uint64_t excessive_GLIB
     vm_exit_during_initialization(errbuf);
   }
 #undef REEXEC_NAME
-#undef TUNABLES_NAME
 
   char *buf = NULL;
   size_t buf_allocated = 0;
@@ -1203,6 +1211,13 @@ void VM_Version::glibc_not_using(uint64_t excessive_CPU, uint64_t excessive_GLIB
   jio_snprintf(errbuf, sizeof(errbuf), "Cannot re-execute " EXEC ": %m");
   vm_exit_during_initialization(errbuf);
 #undef EXEC
+
+#else // !INCLUDE_CPU_FEATURE_ACTIVE && !INCLUDE_LD_SO_LIST_DIAGNOSTICS
+  if (ShowCPUFeatures) {
+    tty->print_cr("-XX:CPUFeatures glibc setting " TUNABLES_NAME " is not supported in this Java build");
+  }
+#endif // !INCLUDE_CPU_FEATURE_ACTIVE && !INCLUDE_LD_SO_LIST_DIAGNOSTICS
+#undef TUNABLES_NAME
 }
 
 void VM_Version::get_processor_features() {

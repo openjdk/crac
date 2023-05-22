@@ -831,6 +831,70 @@ bool VM_Version::glibc_env_set(char *disable_str) {
   return false;
 }
 
+void VM_Version::glibc_reexec() {
+  char *buf = NULL;
+  size_t buf_allocated = 0;
+  size_t buf_used = 0;
+#define CMDLINE "/proc/self/cmdline"
+  char errbuf[512];
+  int fd = open(CMDLINE, O_RDONLY);
+  if (fd == -1) {
+    jio_snprintf(errbuf, sizeof(errbuf), "Cannot open " CMDLINE ": %m");
+    vm_exit_during_initialization(errbuf);
+  }
+  ssize_t got;
+  do {
+    if (buf_used == buf_allocated) {
+      buf_allocated = MAX2(size_t(4096), 2 * buf_allocated);
+      buf = (char *)os::realloc(buf, buf_allocated, mtOther);
+      if (buf == NULL) {
+        jio_snprintf(errbuf, sizeof(errbuf), CMDLINE " reading failed allocating %zu bytes", buf_allocated);
+        vm_exit_during_initialization(errbuf);
+      }
+    }
+    got = read(fd, buf + buf_used, buf_allocated - buf_used);
+    if (got == -1) {
+      jio_snprintf(errbuf, sizeof(errbuf), "Cannot read " CMDLINE ": %m");
+      vm_exit_during_initialization(errbuf);
+    }
+    buf_used += got;
+  } while (got);
+  if (close(fd)) {
+    jio_snprintf(errbuf, sizeof(errbuf), "Cannot close " CMDLINE ": %m");
+    vm_exit_during_initialization(errbuf);
+  }
+  char **argv = NULL;
+  size_t argv_allocated = 0;
+  size_t argv_used = 0;
+  char *s = buf;
+  while (s <= buf + buf_used) {
+    if (argv_used == argv_allocated) {
+      argv_allocated = MAX2(size_t(256), 2 * argv_allocated);
+      argv = (char **)os::realloc(argv, argv_allocated * sizeof(*argv), mtOther);
+      if (argv == NULL) {
+        jio_snprintf(errbuf, sizeof(errbuf), CMDLINE " reading failed allocating %zu pointers", argv_allocated);
+        vm_exit_during_initialization(errbuf);
+      }
+    }
+    if (s == buf + buf_used) {
+      break;
+    }
+    argv[argv_used++] = s;
+    s += strnlen(s, buf + buf_used - s);
+    if (s == buf + buf_used)
+      vm_exit_during_initialization("Missing end of string zero while parsing " CMDLINE);
+    ++s;
+  }
+  argv[argv_used] = NULL;
+#undef CMDLINE
+
+#define EXEC "/proc/self/exe"
+  execv(EXEC, argv);
+  jio_snprintf(errbuf, sizeof(errbuf), "Cannot re-execute " EXEC ": %m");
+  vm_exit_during_initialization(errbuf);
+#undef EXEC
+}
+
 void VM_Version::glibc_not_using(uint64_t excessive_CPU, uint64_t excessive_GLIBC) {
 #ifndef ASSERT
   if (!excessive_CPU && !excessive_GLIBC)
@@ -1164,67 +1228,7 @@ void VM_Version::glibc_not_using(uint64_t excessive_CPU, uint64_t excessive_GLIB
     return;
   if (glibc_env_set(disable_str))
     return;
-
-  char *buf = NULL;
-  size_t buf_allocated = 0;
-  size_t buf_used = 0;
-#define CMDLINE "/proc/self/cmdline"
-  int fd = open(CMDLINE, O_RDONLY);
-  if (fd == -1) {
-    jio_snprintf(errbuf, sizeof(errbuf), "Cannot open " CMDLINE ": %m");
-    vm_exit_during_initialization(errbuf);
-  }
-  ssize_t got;
-  do {
-    if (buf_used == buf_allocated) {
-      buf_allocated = MAX2(size_t(4096), 2 * buf_allocated);
-      buf = (char *)os::realloc(buf, buf_allocated, mtOther);
-      if (buf == NULL) {
-        jio_snprintf(errbuf, sizeof(errbuf), CMDLINE " reading failed allocating %zu bytes", buf_allocated);
-        vm_exit_during_initialization(errbuf);
-      }
-    }
-    got = read(fd, buf + buf_used, buf_allocated - buf_used);
-    if (got == -1) {
-      jio_snprintf(errbuf, sizeof(errbuf), "Cannot read " CMDLINE ": %m");
-      vm_exit_during_initialization(errbuf);
-    }
-    buf_used += got;
-  } while (got);
-  if (close(fd)) {
-    jio_snprintf(errbuf, sizeof(errbuf), "Cannot close " CMDLINE ": %m");
-    vm_exit_during_initialization(errbuf);
-  }
-  char **argv = NULL;
-  size_t argv_allocated = 0;
-  size_t argv_used = 0;
-  char *s = buf;
-  while (s <= buf + buf_used) {
-    if (argv_used == argv_allocated) {
-      argv_allocated = MAX2(size_t(256), 2 * argv_allocated);
-      argv = (char **)os::realloc(argv, argv_allocated * sizeof(*argv), mtOther);
-      if (argv == NULL) {
-        jio_snprintf(errbuf, sizeof(errbuf), CMDLINE " reading failed allocating %zu pointers", argv_allocated);
-        vm_exit_during_initialization(errbuf);
-      }
-    }
-    if (s == buf + buf_used) {
-      break;
-    }
-    argv[argv_used++] = s;
-    s += strnlen(s, buf + buf_used - s);
-    if (s == buf + buf_used)
-      vm_exit_during_initialization("Missing end of string zero while parsing " CMDLINE);
-    ++s;
-  }
-  argv[argv_used] = NULL;
-#undef CMDLINE
-
-#define EXEC "/proc/self/exe"
-  execv(EXEC, argv);
-  jio_snprintf(errbuf, sizeof(errbuf), "Cannot re-execute " EXEC ": %m");
-  vm_exit_during_initialization(errbuf);
-#undef EXEC
+  glibc_reexec();
 }
 
 void VM_Version::get_processor_features() {

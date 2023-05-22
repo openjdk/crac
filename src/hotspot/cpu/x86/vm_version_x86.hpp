@@ -769,6 +769,7 @@ enum Extended_Family {
   static uint64_t CPUFeatures_parse(const char *ccstr, uint64_t &glibc_features);
   static void glibc_not_using(uint64_t excessive_CPU, uint64_t excessive_GLIBC);
   static bool glibc_env_set(char *disable_str);
+  /*[[noreturn]]*/ static void glibc_reexec();
   // C++17: Make glibc_prefix and glibc_prefix_len constexpr.
   static const char glibc_prefix[];
   static const size_t glibc_prefix_len;

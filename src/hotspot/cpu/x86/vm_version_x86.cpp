@@ -772,9 +772,6 @@ static void pclose_r(const char *arg0, FILE *f, pid_t pid) {
 #endif // !INCLUDE_LD_SO_LIST_DIAGNOSTICS
 
 void VM_Version::glibc_not_using(uint64_t excessive_CPU, uint64_t excessive_GLIBC) {
-#define TUNABLES_NAME "GLIBC_TUNABLES"
-#if INCLUDE_CPU_FEATURE_ACTIVE || INCLUDE_LD_SO_LIST_DIAGNOSTICS
-
 #ifndef ASSERT
   if (!excessive_CPU && !excessive_GLIBC)
     return;
@@ -942,13 +939,14 @@ void VM_Version::glibc_not_using(uint64_t excessive_CPU, uint64_t excessive_GLIB
   } while (0)
 #if INCLUDE_CPU_FEATURE_ACTIVE
 # define FEATURE_ACTIVE(glibc, hotspot_field, hotspot_union, glibc_index, glibc_reg) CPU_FEATURE_ACTIVE(glibc)
-#endif
-#if INCLUDE_LD_SO_LIST_DIAGNOSTICS
+#elif INCLUDE_LD_SO_LIST_DIAGNOSTICS
 # define FEATURE_ACTIVE(glibc, hotspot_field, hotspot_union, glibc_index, glibc_reg) ({ \
     hotspot_union u;                                      \
     u.value = active[glibc_index][glibc_reg];             \
     u.bits.hotspot_field != 0;                            \
   })
+#else
+# define FEATURE_ACTIVE(glibc, hotspot_field, hotspot_union, glibc_index, glibc_reg) true
 #endif
 #define EXCESSIVE7(kind, hotspot, glibc, hotspot_field, hotspot_union, glibc_index, glibc_reg) do {                                                        \
     EXCESSIVE_HANDLED(kind, hotspot);                                                                                                                      \
@@ -1108,36 +1106,46 @@ void VM_Version::glibc_not_using(uint64_t excessive_CPU, uint64_t excessive_GLIB
   if (disable_end == disable_str + prefix_len)
     return;
 
+#define TUNABLES_NAME "GLIBC_TUNABLES"
   char *env_val = disable_str;
   const char *env = getenv(TUNABLES_NAME);
-  char env_buf[strlen(disable_str) + (!env ? 0 : strlen(env) + 100)];
-  if (env) {
+  if (env && strcmp(env, env_val) == 0) {
+#if !INCLUDE_CPU_FEATURE_ACTIVE && !INCLUDE_LD_SO_LIST_DIAGNOSTICS
     if (ShowCPUFeatures) {
-      tty->print_cr("Original environment variable: " TUNABLES_NAME "=%s", env);
+      tty->print_cr("Environment variable already set, both glibc CPU_FEATURE_ACTIVE and ld_so --list-diagnostics are unavailable - re-exec suppressed: " TUNABLES_NAME "=%s", env);
     }
-    const char *hwcaps = strstr(env, prefix + 1 /* skip ':' */);
-    if (!hwcaps) {
-      strcpy(env_buf, env);
-      strcat(env_buf, disable_str);
-    } else {
-      const char *colon = strchr(hwcaps, ':');
-      if (!colon) {
-        strcpy(env_buf, env);
-        strcat(env_buf, disable_str + prefix_len);
-      } else {
-        int err = jio_snprintf(env_buf, sizeof(env_buf), "%.*s%s%s", (int)(colon - env), env, disable_str + prefix_len, colon);
-        assert(err >= 0 && (unsigned)err < sizeof(env_buf), "internal error: " TUNABLES_NAME " buffer overflow");
+    return;
+#endif
+  } else {
+    char env_buf[strlen(disable_str) + (!env ? 0 : strlen(env) + 100)];
+    if (env) {
+      if (ShowCPUFeatures) {
+        tty->print_cr("Original environment variable: " TUNABLES_NAME "=%s", env);
       }
+      const char *hwcaps = strstr(env, prefix + 1 /* skip ':' */);
+      if (!hwcaps) {
+        strcpy(env_buf, env);
+        strcat(env_buf, disable_str);
+      } else {
+        const char *colon = strchr(hwcaps, ':');
+        if (!colon) {
+          strcpy(env_buf, env);
+          strcat(env_buf, disable_str + prefix_len);
+        } else {
+          int err = jio_snprintf(env_buf, sizeof(env_buf), "%.*s%s%s", (int)(colon - env), env, disable_str + prefix_len, colon);
+          assert(err >= 0 && (unsigned)err < sizeof(env_buf), "internal error: " TUNABLES_NAME " buffer overflow");
+        }
+      }
+      env_val = env_buf;
     }
-    env_val = env_buf;
-  }
-  if (ShowCPUFeatures) {
-    tty->print_cr("Re-exec of java with new environment variable: " TUNABLES_NAME "=%s", env_val);
-  }
-  int err = setenv(TUNABLES_NAME, env_val, 1);
-  if (err) {
-    jio_snprintf(errbuf, sizeof(errbuf), "setenv " TUNABLES_NAME " error: %m");
-    vm_exit_during_initialization(errbuf);
+    if (ShowCPUFeatures) {
+      tty->print_cr("Re-exec of java with new environment variable: " TUNABLES_NAME "=%s", env_val);
+    }
+    int err = setenv(TUNABLES_NAME, env_val, 1);
+    if (err) {
+      jio_snprintf(errbuf, sizeof(errbuf), "setenv " TUNABLES_NAME " error: %m");
+      vm_exit_during_initialization(errbuf);
+    }
   }
 
 #define REEXEC_NAME "HOTSPOT_GLIBC_TUNABLES_REEXEC"
@@ -1150,6 +1158,7 @@ void VM_Version::glibc_not_using(uint64_t excessive_CPU, uint64_t excessive_GLIB
     vm_exit_during_initialization(errbuf);
   }
 #undef REEXEC_NAME
+#undef TUNABLES_NAME
 
   char *buf = NULL;
   size_t buf_allocated = 0;
@@ -1211,13 +1220,6 @@ void VM_Version::glibc_not_using(uint64_t excessive_CPU, uint64_t excessive_GLIB
   jio_snprintf(errbuf, sizeof(errbuf), "Cannot re-execute " EXEC ": %m");
   vm_exit_during_initialization(errbuf);
 #undef EXEC
-
-#else // !INCLUDE_CPU_FEATURE_ACTIVE && !INCLUDE_LD_SO_LIST_DIAGNOSTICS
-  if (ShowCPUFeatures) {
-    tty->print_cr("-XX:CPUFeatures glibc setting " TUNABLES_NAME " is not supported in this Java build");
-  }
-#endif // !INCLUDE_CPU_FEATURE_ACTIVE && !INCLUDE_LD_SO_LIST_DIAGNOSTICS
-#undef TUNABLES_NAME
 }
 
 void VM_Version::get_processor_features() {

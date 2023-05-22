@@ -771,6 +771,62 @@ static void pclose_r(const char *arg0, FILE *f, pid_t pid) {
 
 #endif // !INCLUDE_LD_SO_LIST_DIAGNOSTICS
 
+static void glibc_env_set(char *disable_str, const char *prefix, const size_t prefix_len) {
+#define TUNABLES_NAME "GLIBC_TUNABLES"
+  char *env_val = disable_str;
+  const char *env = getenv(TUNABLES_NAME);
+  if (env && strcmp(env, env_val) == 0) {
+#if !INCLUDE_CPU_FEATURE_ACTIVE && !INCLUDE_LD_SO_LIST_DIAGNOSTICS
+    if (ShowCPUFeatures) {
+      tty->print_cr("Environment variable already set, both glibc CPU_FEATURE_ACTIVE and ld_so --list-diagnostics are unavailable - re-exec suppressed: " TUNABLES_NAME "=%s", env);
+    }
+    return;
+#endif
+  }
+  char env_buf[strlen(disable_str) + (!env ? 0 : strlen(env) + 100)];
+  if (env) {
+    if (ShowCPUFeatures) {
+      tty->print_cr("Original environment variable: " TUNABLES_NAME "=%s", env);
+    }
+    const char *hwcaps = strstr(env, prefix + 1 /* skip ':' */);
+    if (!hwcaps) {
+      strcpy(env_buf, env);
+      strcat(env_buf, disable_str);
+    } else {
+      const char *colon = strchr(hwcaps, ':');
+      if (!colon) {
+        strcpy(env_buf, env);
+        strcat(env_buf, disable_str + prefix_len);
+      } else {
+        int err = jio_snprintf(env_buf, sizeof(env_buf), "%.*s%s%s", (int)(colon - env), env, disable_str + prefix_len, colon);
+        assert(err >= 0 && (unsigned)err < sizeof(env_buf), "internal error: " TUNABLES_NAME " buffer overflow");
+      }
+    }
+    env_val = env_buf;
+  }
+  if (ShowCPUFeatures) {
+    tty->print_cr("Re-exec of java with new environment variable: " TUNABLES_NAME "=%s", env_val);
+  }
+  char errbuf[512];
+  int err = setenv(TUNABLES_NAME, env_val, 1);
+  if (err) {
+    jio_snprintf(errbuf, sizeof(errbuf), "setenv " TUNABLES_NAME " error: %m");
+    vm_exit_during_initialization(errbuf);
+  }
+
+#define REEXEC_NAME "HOTSPOT_GLIBC_TUNABLES_REEXEC"
+  if (getenv(REEXEC_NAME)) {
+    jio_snprintf(errbuf, sizeof(errbuf), "internal error: " TUNABLES_NAME "=%s failed and " REEXEC_NAME " is set", disable_str);
+    vm_exit_during_initialization(errbuf);
+  }
+  if (setenv(REEXEC_NAME, "1", 1)) {
+    jio_snprintf(errbuf, sizeof(errbuf), "setenv " REEXEC_NAME " error: %m");
+    vm_exit_during_initialization(errbuf);
+  }
+#undef REEXEC_NAME
+#undef TUNABLES_NAME
+}
+
 void VM_Version::glibc_not_using(uint64_t excessive_CPU, uint64_t excessive_GLIBC) {
 #ifndef ASSERT
   if (!excessive_CPU && !excessive_GLIBC)
@@ -1106,59 +1162,7 @@ void VM_Version::glibc_not_using(uint64_t excessive_CPU, uint64_t excessive_GLIB
   if (disable_end == disable_str + prefix_len)
     return;
 
-#define TUNABLES_NAME "GLIBC_TUNABLES"
-  char *env_val = disable_str;
-  const char *env = getenv(TUNABLES_NAME);
-  if (env && strcmp(env, env_val) == 0) {
-#if !INCLUDE_CPU_FEATURE_ACTIVE && !INCLUDE_LD_SO_LIST_DIAGNOSTICS
-    if (ShowCPUFeatures) {
-      tty->print_cr("Environment variable already set, both glibc CPU_FEATURE_ACTIVE and ld_so --list-diagnostics are unavailable - re-exec suppressed: " TUNABLES_NAME "=%s", env);
-    }
-    return;
-#endif
-  } else {
-    char env_buf[strlen(disable_str) + (!env ? 0 : strlen(env) + 100)];
-    if (env) {
-      if (ShowCPUFeatures) {
-        tty->print_cr("Original environment variable: " TUNABLES_NAME "=%s", env);
-      }
-      const char *hwcaps = strstr(env, prefix + 1 /* skip ':' */);
-      if (!hwcaps) {
-        strcpy(env_buf, env);
-        strcat(env_buf, disable_str);
-      } else {
-        const char *colon = strchr(hwcaps, ':');
-        if (!colon) {
-          strcpy(env_buf, env);
-          strcat(env_buf, disable_str + prefix_len);
-        } else {
-          int err = jio_snprintf(env_buf, sizeof(env_buf), "%.*s%s%s", (int)(colon - env), env, disable_str + prefix_len, colon);
-          assert(err >= 0 && (unsigned)err < sizeof(env_buf), "internal error: " TUNABLES_NAME " buffer overflow");
-        }
-      }
-      env_val = env_buf;
-    }
-    if (ShowCPUFeatures) {
-      tty->print_cr("Re-exec of java with new environment variable: " TUNABLES_NAME "=%s", env_val);
-    }
-    int err = setenv(TUNABLES_NAME, env_val, 1);
-    if (err) {
-      jio_snprintf(errbuf, sizeof(errbuf), "setenv " TUNABLES_NAME " error: %m");
-      vm_exit_during_initialization(errbuf);
-    }
-  }
-
-#define REEXEC_NAME "HOTSPOT_GLIBC_TUNABLES_REEXEC"
-  if (getenv(REEXEC_NAME)) {
-    jio_snprintf(errbuf, sizeof(errbuf), "internal error: " TUNABLES_NAME "=%s failed and " REEXEC_NAME " is set", disable_str);
-    vm_exit_during_initialization(errbuf);
-  }
-  if (setenv(REEXEC_NAME, "1", 1)) {
-    jio_snprintf(errbuf, sizeof(errbuf), "setenv " REEXEC_NAME " error: %m");
-    vm_exit_during_initialization(errbuf);
-  }
-#undef REEXEC_NAME
-#undef TUNABLES_NAME
+  glibc_env_set(disable_str, prefix, prefix_len);
 
   char *buf = NULL;
   size_t buf_allocated = 0;

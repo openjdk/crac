@@ -771,16 +771,19 @@ static void pclose_r(const char *arg0, FILE *f, pid_t pid) {
 
 #endif // !INCLUDE_LD_SO_LIST_DIAGNOSTICS
 
-static void glibc_env_set(char *disable_str, const char *prefix, const size_t prefix_len) {
+const char VM_Version::glibc_prefix[] = ":glibc.cpu.hwcaps=";
+const size_t VM_Version::glibc_prefix_len = strlen(glibc_prefix);
+
+bool VM_Version::glibc_env_set(char *disable_str) {
 #define TUNABLES_NAME "GLIBC_TUNABLES"
   char *env_val = disable_str;
   const char *env = getenv(TUNABLES_NAME);
   if (env && strcmp(env, env_val) == 0) {
 #if !INCLUDE_CPU_FEATURE_ACTIVE && !INCLUDE_LD_SO_LIST_DIAGNOSTICS
     if (ShowCPUFeatures) {
-      tty->print_cr("Environment variable already set, both glibc CPU_FEATURE_ACTIVE and ld_so --list-diagnostics are unavailable - re-exec suppressed: " TUNABLES_NAME "=%s", env);
+      tty->print_cr("Environment variable already set, both glibc CPU_FEATURE_ACTIVE and ld.so --list-diagnostics are unavailable - re-exec suppressed: " TUNABLES_NAME "=%s", env);
     }
-    return;
+    return true;
 #endif
   }
   char env_buf[strlen(disable_str) + (!env ? 0 : strlen(env) + 100)];
@@ -788,7 +791,7 @@ static void glibc_env_set(char *disable_str, const char *prefix, const size_t pr
     if (ShowCPUFeatures) {
       tty->print_cr("Original environment variable: " TUNABLES_NAME "=%s", env);
     }
-    const char *hwcaps = strstr(env, prefix + 1 /* skip ':' */);
+    const char *hwcaps = strstr(env, glibc_prefix + 1 /* skip ':' */);
     if (!hwcaps) {
       strcpy(env_buf, env);
       strcat(env_buf, disable_str);
@@ -796,9 +799,9 @@ static void glibc_env_set(char *disable_str, const char *prefix, const size_t pr
       const char *colon = strchr(hwcaps, ':');
       if (!colon) {
         strcpy(env_buf, env);
-        strcat(env_buf, disable_str + prefix_len);
+        strcat(env_buf, disable_str + glibc_prefix_len);
       } else {
-        int err = jio_snprintf(env_buf, sizeof(env_buf), "%.*s%s%s", (int)(colon - env), env, disable_str + prefix_len, colon);
+        int err = jio_snprintf(env_buf, sizeof(env_buf), "%.*s%s%s", (int)(colon - env), env, disable_str + glibc_prefix_len, colon);
         assert(err >= 0 && (unsigned)err < sizeof(env_buf), "internal error: " TUNABLES_NAME " buffer overflow");
       }
     }
@@ -825,6 +828,7 @@ static void glibc_env_set(char *disable_str, const char *prefix, const size_t pr
   }
 #undef REEXEC_NAME
 #undef TUNABLES_NAME
+  return false;
 }
 
 void VM_Version::glibc_not_using(uint64_t excessive_CPU, uint64_t excessive_GLIBC) {
@@ -1050,12 +1054,9 @@ void VM_Version::glibc_not_using(uint64_t excessive_CPU, uint64_t excessive_GLIB
 #undef EXCESSIVE
 #undef EXCESSIVE5
 
-#define PREFIX ":glibc.cpu.hwcaps="
-  const char prefix[] = PREFIX;
-  const size_t prefix_len = sizeof(prefix) - 1;
-  char disable_str[64 * (10 + 3) + 1] = PREFIX;
-#undef PREFIX
-  char *disable_end = disable_str + prefix_len;
+  char disable_str[64 * (10 + 3) + 1];
+  strcpy(disable_str, glibc_prefix);
+  char *disable_end = disable_str + glibc_prefix_len;
 #define GLIBC_DISABLE2(kind, hotspot, libc) do {                                                                                    \
     assert(!(PASTE_TOKENS(disable_handled_, kind) & PASTE_TOKENS3(kind, _, hotspot)), "already used " STR(kind) "_" STR(hotspot) ); \
     DEBUG_ONLY(PASTE_TOKENS(disable_handled_, kind) |= PASTE_TOKENS3(kind, _, hotspot));                                            \
@@ -1159,10 +1160,10 @@ void VM_Version::glibc_not_using(uint64_t excessive_CPU, uint64_t excessive_GLIB
 #undef CHECK_KIND
 #endif // ASSERT
 
-  if (disable_end == disable_str + prefix_len)
+  if (disable_end == disable_str + glibc_prefix_len)
     return;
-
-  glibc_env_set(disable_str, prefix, prefix_len);
+  if (glibc_env_set(disable_str))
+    return;
 
   char *buf = NULL;
   size_t buf_allocated = 0;

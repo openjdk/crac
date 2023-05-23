@@ -26,8 +26,10 @@ import jdk.test.lib.Asserts;
 import jdk.test.lib.crac.CracBuilder;
 import jdk.test.lib.crac.CracTest;
 
-import java.net.ServerSocket;
+import java.io.File;
+import java.io.IOException;
 import java.nio.file.*;
+import java.util.Objects;
 import java.util.concurrent.TimeUnit;
 
 /**
@@ -40,21 +42,46 @@ public class FileWatcherAfterRestoreTest implements CracTest {
     @Override
     public void test() throws Exception {
         CracBuilder builder = new CracBuilder();
-        builder.doCheckpointAndRestore();
+        builder.doCheckpoint();
+        Path checkPath = Paths.get(System.getProperty("user.dir"), "workdir");
+        for (File f : Objects.requireNonNull(checkPath.toFile().listFiles())) {
+            f.delete();
+        }
+        Files.delete(checkPath);
+        builder.doRestore();
     }
 
     @Override
     public void exec() throws Exception {
         WatchService watchService = FileSystems.getDefault().newWatchService();
+        Path directory;
+        WatchKey key;
+
+        directory = Paths.get(System.getProperty("user.dir"), "workdir");
+        directory.toFile().mkdir();
+        key = directory.register(watchService, StandardWatchEventKinds.ENTRY_CREATE);
+        Files.createTempFile(directory, "temp", ".txt");
+        Asserts.assertTrue(isMatchFound(watchService, directory));
+        key.cancel();
 
         Core.checkpointRestore();
 
-        Path directory = Paths.get(System.getProperty("user.dir"));
-        WatchKey key = directory.register(watchService, StandardWatchEventKinds.ENTRY_CREATE);
-        Path tempFilePath = Files.createTempFile(directory, "temp", ".txt");
+        directory = Paths.get(System.getProperty("user.dir"), "workdir");
+        // fix monitor dir after restore
+        if (!directory.toFile().exists()) {
+            directory = Paths.get("/tmp");
+        }
 
-        // other file events might happen, so iterate all to make test stable
-        boolean matchFound = false;
+        Asserts.assertTrue(isMatchFound(watchService, directory));
+        watchService.close();
+    }
+
+    private boolean isMatchFound(WatchService watchService, Path directory) throws IOException, InterruptedException {
+        WatchKey key;
+        boolean matchFound;
+        directory.register(watchService, StandardWatchEventKinds.ENTRY_CREATE);
+        Files.createTempFile(directory, "temp", ".txt");
+        matchFound = false;
         while ((key = watchService.poll(1, TimeUnit.SECONDS)) != null) {
             for (WatchEvent<?> event : key.pollEvents()) {
                 if (event.kind() == StandardWatchEventKinds.ENTRY_CREATE) {
@@ -73,8 +100,6 @@ public class FileWatcherAfterRestoreTest implements CracTest {
                 break;
             }
         }
-
-        Asserts.assertTrue(matchFound);
-        watchService.close();
+        return matchFound;
     }
 }

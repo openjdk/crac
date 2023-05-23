@@ -59,10 +59,8 @@ public class FileWatcherAfterRestoreTest implements CracTest {
 
         directory = Paths.get(System.getProperty("user.dir"), "workdir");
         directory.toFile().mkdir();
-        key = directory.register(watchService, StandardWatchEventKinds.ENTRY_CREATE);
         Files.createTempFile(directory, "temp", ".txt");
         Asserts.assertTrue(isMatchFound(watchService, directory));
-        key.cancel();
 
         Core.checkpointRestore();
 
@@ -79,7 +77,7 @@ public class FileWatcherAfterRestoreTest implements CracTest {
     private boolean isMatchFound(WatchService watchService, Path directory) throws IOException, InterruptedException {
         WatchKey key;
         boolean matchFound;
-        directory.register(watchService, StandardWatchEventKinds.ENTRY_CREATE);
+        WatchKey watchKey = directory.register(watchService, StandardWatchEventKinds.ENTRY_CREATE);
         Files.createTempFile(directory, "temp", ".txt");
         matchFound = false;
         while ((key = watchService.poll(1, TimeUnit.SECONDS)) != null) {
@@ -100,6 +98,7 @@ public class FileWatcherAfterRestoreTest implements CracTest {
                 break;
             }
         }
+        watchKey.cancel();
         return matchFound;
     }
 }

@@ -64,8 +64,8 @@ public class ContextOrderTest {
     private static void testOrder() throws Exception {
         var recorder = new LinkedList<String>();
         getGlobalContext().register(new MockResource(recorder, null, "regular1"));
-        JDKResource resource2 = new MockResource(recorder, NORMAL, "jdk-normal");
-        JDKResource resource1 = new MockResource(recorder, SECURE_RANDOM, "jdk-later");
+        new MockResource(recorder, NORMAL, "jdk-normal");
+        new MockResource(recorder, SECURE_RANDOM, "jdk-later");
         getGlobalContext().register(new CreatingResource<>(recorder, null, "regular2", NORMAL));
         // this child should run as it has higher priority
         JDKResource resource = new CreatingResource<>(recorder, NORMAL, "jdk-create", SEEDER_HOLDER);
@@ -110,7 +110,7 @@ public class ContextOrderTest {
         testWaiting();
 
         // blocks registering with lower priority
-        JDKResource resource1 = new CreatingResource<>(recorder, SECURE_RANDOM, "jdk-lower",
+        new CreatingResource<>(recorder, SECURE_RANDOM, "jdk-lower",
                 NORMAL);
         testWaiting();
 
@@ -165,12 +165,12 @@ public class ContextOrderTest {
 
     private static void testThrowing() throws Exception {
         var recorder = new LinkedList<String>();
-        getGlobalContext().register(new MockResource(recorder, null, "regular1"));
+        getGlobalContext().register(new MockResource(recorder, "regular1"));
         getGlobalContext().register(new ThrowingResource(recorder, null, "throwing1"));
-        getGlobalContext().register(new MockResource(recorder, null, "regular2"));
-        JDKResource resource2 = new MockResource(recorder, NORMAL, "jdk1");
-        JDKResource resource1 = new ThrowingResource(recorder, Priority.EPOLLSELECTOR, "throwing2");
-        JDKResource resource = new MockResource(recorder, SECURE_RANDOM, "jdk2");
+        getGlobalContext().register(new MockResource(recorder, "regular2"));
+        new MockResource(recorder, NORMAL, "jdk1");
+        new ThrowingResource(recorder, Priority.EPOLLSELECTOR, "throwing2");
+        new MockResource(recorder, SECURE_RANDOM, "jdk2");
 
         try {
             Core.checkpointRestore();
@@ -203,7 +203,7 @@ public class ContextOrderTest {
         OrderedContext<Resource> c2 = new BlockingOrderedContext<>();
         getGlobalContext().register(c1);
         getGlobalContext().register(c2);
-        c2.register(new MockResource(recorder, null, "first"));
+        c2.register(new MockResource(recorder, "first"));
         // Logically there's nothing that prevents to register into C2 during C1.<resource>.afterRestore
         // but the implementation of C1 does not know that we're already after C/R and still blocks
         // any registrations.
@@ -243,18 +243,19 @@ public class ContextOrderTest {
 
     private static class MockResource implements JDKResource {
         protected final List<String> recorder;
-        protected final Priority priority;
         protected final String id;
+
+        private MockResource(List<String> recorder, String id) {
+            rememberMe.add(this);
+            this.recorder = recorder;
+            this.id = id;
+        }
 
         private MockResource(List<String> recorder, Priority priority, String id) {
             rememberMe.add(this);
             this.recorder = recorder;
-            this.priority = priority;
             this.id = id;
-
-            if (priority != null) {
-                priority.getContext().register(this);
-            }
+            priority.getContext().register(this);
         }
 
         @Override

@@ -76,14 +76,16 @@ public class CriticalUnorderedContext<R extends Resource> extends AbstractContex
 
     @Override
     public void register(R resource) {
+        ExceptionHolder<CheckpointException> checkpointException = new ExceptionHolder<>(CheckpointException::new);
+        try {
+            invokeBeforeCheckpoint(resource);
+        } catch (Exception e) {
+            checkpointException.handle(e);
+        }
         synchronized (this) {
             resources.put(resource, null);
             if (concurrentCheckpointException != null) {
-                try {
-                    invokeBeforeCheckpoint(resource);
-                } catch (Exception e) {
-                    concurrentCheckpointException.handle(e);
-                }
+                concurrentCheckpointException.handle(checkpointException.getIfAny());
             }
         }
     }

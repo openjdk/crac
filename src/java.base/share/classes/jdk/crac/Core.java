@@ -175,6 +175,8 @@ public class Core {
         }
 
         if (newProperties != null && newProperties.length > 0) {
+            // Do not use lambda here since lambda will introduce registration
+            // during checkpoint, which may cause dead loop.
             Arrays.stream(newProperties).map(new Function<String, String[]>() {
                 @Override
                 public String[] apply(String propStr) {

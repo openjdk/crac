@@ -35,7 +35,7 @@ import java.util.Objects;
 import java.util.concurrent.TimeUnit;
 
 /**
- * @test DryRunTest
+ * @test CracOptionTest
  * @library /test/lib
  * @build CracOptionTest
  * @run driver jdk.test.lib.crac.CracTest
@@ -51,11 +51,6 @@ public class CracOptionTest implements CracTest {
 
     @Override
     public void exec() throws Exception {
-        Path directory;
-        directory = Paths.get(System.getProperty("user.dir"), "workdir");
-        directory.toFile().mkdir();
-        Files.createTempFile(directory, "temp", ".txt");
-
         Core.checkpointRestore();
     }
 }

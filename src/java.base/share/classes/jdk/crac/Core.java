@@ -26,10 +26,7 @@
 
 package jdk.crac;
 
-import jdk.crac.impl.CheckpointOpenFileException;
-import jdk.crac.impl.CheckpointOpenResourceException;
-import jdk.crac.impl.CheckpointOpenSocketException;
-import jdk.crac.impl.OrderedContext;
+import jdk.crac.impl.*;
 import jdk.internal.crac.JDKContext;
 import jdk.internal.crac.LoggerContainer;
 
@@ -249,6 +246,7 @@ public class Core {
         checkpointRestore(JCMD_STREAM_NULL);
     }
 
+    @SuppressWarnings("try")
     private static void checkpointRestore(long jcmdStream) throws
             CheckpointException,
             RestoreException {
@@ -258,18 +256,18 @@ public class Core {
             // checkpointInProgress protects against recursive
             // checkpointRestore from resource's
             // beforeCheckpoint/afterRestore methods
-            if (!checkpointInProgress) {
-                checkpointInProgress = true;
-                try {
-                    checkpointRestore1(jcmdStream);
-                } finally {
-                    if (FlagsHolder.TRACE_STARTUP_TIME) {
-                        System.out.println("STARTUPTIME " + System.nanoTime() + " restore-finish");
-                    }
-                    checkpointInProgress = false;
-                }
-            } else {
+            if (checkpointInProgress) {
                 throw new CheckpointException("Recursive checkpoint is not allowed");
+            }
+
+            try (@SuppressWarnings("unused") var keepAlive = new KeepAlive()) {
+                checkpointInProgress = true;
+                checkpointRestore1(jcmdStream);
+            } finally {
+                if (FlagsHolder.TRACE_STARTUP_TIME) {
+                    System.out.println("STARTUPTIME " + System.nanoTime() + " restore-finish");
+                }
+                checkpointInProgress = false;
             }
         }
     }

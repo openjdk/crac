@@ -90,8 +90,12 @@ class MethodHandleNatives {
             // become unreachable, its Context is retained by the Cleanable instance
             // (which is referenced from Cleaner instance which is referenced from
             // CleanerFactory class) until cleanup is performed.
+            // This PhantomCleanableRef is not registered in any Context as
+            // registration cauesed by the core CRaC code leads to deadlock.
+            // The drawback is native structures may end up in the checkpoint
+            // image and be cleaned shortly after restore, which is neglectable.
             new CleanerImpl.PhantomCleanableRef(cs, CleanerFactory.cleaner(),
-                    newContext, JDKResource.Priority.CALL_SITES);
+                    newContext, null);
             return newContext;
         }
 

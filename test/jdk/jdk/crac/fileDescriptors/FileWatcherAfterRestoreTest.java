@@ -59,7 +59,6 @@ public class FileWatcherAfterRestoreTest implements CracTest {
 
         directory = Paths.get(System.getProperty("user.dir"), "workdir");
         directory.toFile().mkdir();
-        Files.createTempFile(directory, "temp", ".txt");
         Asserts.assertTrue(isMatchFound(watchService, directory));
 
         Core.checkpointRestore();

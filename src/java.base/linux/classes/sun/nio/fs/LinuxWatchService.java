@@ -502,6 +502,8 @@ class LinuxWatchService
                     try {
                         this.wait();
                     } catch (InterruptedException e) {
+                        checkpointState = CheckpointRestoreState.CHECKPOINT_ERROR;
+                        throw e;
                     }
                 }
                 if (checkpointState == CheckpointRestoreState.CHECKPOINT_ERROR) {
@@ -522,6 +524,8 @@ class LinuxWatchService
                     try {
                         this.wait();
                     } catch (InterruptedException e) {
+                        checkpointState = CheckpointRestoreState.CHECKPOINT_ERROR;
+                        throw e;
                     }
                 }
                 if (checkpointState != CheckpointRestoreState.NORMAL_OPERATION) {

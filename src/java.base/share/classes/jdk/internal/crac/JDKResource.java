@@ -26,6 +26,7 @@
 
 package jdk.internal.crac;
 
+import jdk.crac.Context;
 import jdk.crac.Resource;
 
 public interface JDKResource extends Resource {

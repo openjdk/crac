@@ -5,25 +5,14 @@ import java.util.function.Supplier;
 public class ExceptionHolder<E extends Exception> {
     E exception = null;
     final Supplier<E> constructor;
-    final E preConstructedException;
 
     public ExceptionHolder(Supplier<E> constructor) {
         this.constructor = constructor;
-        this.preConstructedException = null;
-    }
-
-    public ExceptionHolder(E preConstructedException) {
-        this.constructor = null;
-        this.preConstructedException = preConstructedException;
     }
 
     public E get() {
         if (exception == null) {
-            if (preConstructedException != null) {
-                exception = preConstructedException;
-            } else {
-                exception = constructor.get();
-            }
+            exception = constructor.get();
         }
         return exception;
     }
@@ -46,7 +35,7 @@ public class ExceptionHolder<E extends Exception> {
         E exception = get();
         if (exception.getClass() == e.getClass()) {
             if (e.getMessage() != null) {
-                exception.addSuppressed(e); // FIXME avoid message / preserve it via a distinct
+                exception.addSuppressed(e); // FIXME avoid message / preserve it via a distinct Exception
             }
             for (Throwable t : e.getSuppressed()) {
                 exception.addSuppressed(t);

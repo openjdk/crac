@@ -205,14 +205,14 @@ public final class CleanerImpl implements Runnable {
         }
 
         @Override
-        public void beforeCheckpoint(Context<? extends Resource> context) throws Exception {
+        public void beforeCheckpoint(Context<? extends Resource> context) {
             if (refersTo(null)) {
                  clean();
             }
         }
 
         @Override
-        public void afterRestore(Context<? extends Resource> context) throws Exception {
+        public void afterRestore(Context<? extends Resource> context) {
 
         }
 

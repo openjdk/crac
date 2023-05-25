@@ -18,6 +18,7 @@ import java.util.WeakHashMap;
 public class CriticalUnorderedContext<R extends Resource> extends AbstractContext<R> {
     private final WeakHashMap<R, Void> resources = new WeakHashMap<>();
     private ExceptionHolder<CheckpointException> concurrentCheckpointException = null;
+    private boolean blocked = false;
 
     private synchronized List<R> snapshot() {
         return this.resources.entrySet().stream()
@@ -50,42 +51,39 @@ public class CriticalUnorderedContext<R extends Resource> extends AbstractContex
             }
         }
         synchronized (this) {
+            blocked = true;
             ExceptionHolder<CheckpointException> e = concurrentCheckpointException;
-            concurrentCheckpointException = new ExceptionHolder<>(CheckpointException::new);
+            concurrentCheckpointException = null;
             e.throwIfAny();
         }
     }
 
     @Override
     public void afterRestore(Context<? extends Resource> context) throws RestoreException {
-        CheckpointException racedException;
         synchronized (this) {
-            racedException = concurrentCheckpointException.getIfAny();
-            concurrentCheckpointException = null;
+            blocked = false;
+            notifyAll();
         }
-
-        ExceptionHolder<RestoreException> restoreException = new ExceptionHolder<>(RestoreException::new);
-        restoreException.handle(racedException);
-
-        restoreException.runWithHandler(() -> {
-            super.afterRestore(context);
-        });
-
-        restoreException.throwIfAny();
+        super.afterRestore(context);
     }
 
     @Override
     public void register(R resource) {
-        ExceptionHolder<CheckpointException> checkpointException = new ExceptionHolder<>(CheckpointException::new);
-        try {
-            invokeBeforeCheckpoint(resource);
-        } catch (Exception e) {
-            checkpointException.handle(e);
-        }
         synchronized (this) {
+            while (blocked) {
+                try {
+                    wait();
+                } catch (InterruptedException e) {
+                    throw new RuntimeException(e);
+                }
+            }
             resources.put(resource, null);
             if (concurrentCheckpointException != null) {
-                concurrentCheckpointException.handle(checkpointException.getIfAny());
+                try {
+                    invokeBeforeCheckpoint(resource);
+                } catch (Exception e) {
+                    concurrentCheckpointException.handle(e);
+                }
             }
         }
     }

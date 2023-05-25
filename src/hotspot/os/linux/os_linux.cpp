@@ -190,7 +190,8 @@ private:
     int flags;
   };
 
-  bool same_fd(int fd1, int fd2);
+  // params are indices into _fdinfos
+  bool same_fd(int i1, int i2);
 
   bool _inited;
   GrowableArray<fdinfo> _fdinfos;
@@ -5806,12 +5807,12 @@ void FdsInfo::initialize() {
   DIR *dir = opendir("/proc/self/fd");
   int dfd = dirfd(dir);
   while (dp = readdir(dir)) {
-    fdinfo info;
-    info.fd = atoi(dp->d_name);
-    if (info.fd == 0 && strcmp(dp->d_name, "0") != 0) {
+    if (dp->d_name[0] == '.') {
       // skip "." and ".."
       continue;
     }
+    fdinfo info;
+    info.fd = atoi(dp->d_name);
     if (info.fd == dfd) {
       continue;
     }

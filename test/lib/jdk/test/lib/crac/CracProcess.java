@@ -34,7 +34,7 @@ public class CracProcess {
     }
 
     public void waitForCheckpointed() throws InterruptedException {
-        if (builder.engine == null || builder.engine == CracEngine.CRIU) {
+        if (builder.engine == null || builder.engine == CracEngine.CRIU || builder.engine == CracEngine.MINICRIU) {
             assertEquals(137, process.waitFor(), "Checkpointed process was not killed as expected.");
             // TODO: we could check that "CR: Checkpoint" was written out
         } else {

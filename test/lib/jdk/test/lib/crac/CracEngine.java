@@ -3,7 +3,8 @@ package jdk.test.lib.crac;
 public enum CracEngine {
     CRIU("criuengine"),
     PAUSE(System.getProperty("os.name").contains("Windows") ? "pauseengine.exe" : "pauseengine"),
-    SIMULATE(System.getProperty("os.name").contains("Windows") ? "simengine.exe" : "simengine");
+    SIMULATE(System.getProperty("os.name").contains("Windows") ? "simengine.exe" : "simengine"),
+    MINICRIU("libminicriu.so");
 
     public final String engine;
 

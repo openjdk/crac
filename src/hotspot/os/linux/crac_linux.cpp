@@ -31,6 +31,10 @@
 #include "logging/log.hpp"
 #include "classfile/classLoader.hpp"
 
+#include <dlfcn.h>
+#include <elf.h>
+#include <string.h>
+
 class FdsInfo {
 public:
 
@@ -456,4 +460,175 @@ bool crac::read_bootid(char *dest) {
     perror("CRaC: Cannot close system boot ID file");
   }
   return true;
+}
+
+bool crac::is_dynamic_library(const char *path) {
+  int fd = open(path, O_RDONLY);
+  if (fd < 0) {
+    fprintf(stderr, "cannot open binary %s: %s\n", path, os::strerror(errno));
+    return false;
+  }
+
+  bool is_library = false;
+
+  char section_names[4096];
+  size_t size;
+
+  Elf64_Ehdr header;
+  Elf64_Shdr section_header;
+
+  if (!read_all(fd, (char *) &header, sizeof(Elf64_Ehdr)) || // cannot read
+      ::memcmp(header.e_ident, ELFMAG, SELFMAG) || // Not an ELF file
+      header.e_ident[EI_CLASS] != ELFCLASS64 || // only 64-bit supported
+      header.e_type != ET_DYN) { // not a library for sure
+    goto close_return;
+  }
+  if (lseek(fd, header.e_shoff + header.e_shentsize * header.e_shstrndx, SEEK_SET) < 0) {
+    perror("cannot lseek in ELF64 file");
+    goto close_return;
+  }
+
+  if (!read_all(fd, (char *) &section_header, sizeof(Elf64_Shdr))) {
+    perror("cannot read string section header");
+    goto close_return;
+  }
+  size = section_header.sh_size;
+  if (size > sizeof(section_names)) {
+    fprintf(stderr, "%s has section header string table bigger (%lu bytes) than buffer size (%lu bytes)",
+      path, size, sizeof(section_names));
+    size = sizeof(section_names);
+  }
+  if (lseek(fd, section_header.sh_offset, SEEK_SET) < 0) {
+    perror("cannot lseek in ELF64 file");
+    goto close_return;
+  }
+  if (!read_all(fd, section_names, size)) {
+    perror("cannot read section header names");
+    goto close_return;
+  }
+  section_names[sizeof(section_names) - 1] = '\0';
+  for (int i = 0; i < header.e_shnum; ++i) {
+    if (lseek(fd, header.e_shoff + i * header.e_shentsize, SEEK_SET) < 0) {
+      perror("cannot lseek in ELF64 file");
+      goto close_return;
+    }
+    if (!read_all(fd, (char *) &section_header, sizeof(Elf64_Shdr))) {
+      perror("cannot read section header");
+      goto close_return;
+    }
+    if (section_header.sh_name < size && strcmp(".dynamic", section_names + section_header.sh_name) == 0) {
+      if (lseek(fd, section_header.sh_offset, SEEK_SET) < 0) {
+          perror("cannot lseek in ELF64 file");
+          goto close_return;
+      }
+      unsigned int max_entries = section_header.sh_size / sizeof(Elf64_Dyn);
+      Elf64_Dyn entry;
+      for (unsigned int j = 0; j < max_entries; ++j) {
+        if (!read_all(fd, (char *) &entry, sizeof(Elf64_Dyn))) {
+          perror("cannot read dynamic section entry");
+          goto close_return;
+        }
+        if (entry.d_tag == DT_FLAGS_1) {
+          is_library = (entry.d_un.d_val & DF_1_PIE) == 0;
+          goto close_return;
+        } else if (entry.d_tag == DT_NULL) {
+          break;
+        }
+      }
+      // When the DT_FLAGS is not present this is a shared library
+      is_library = true;
+      goto close_return;
+    }
+  }
+  // no .dynamic section found, decide on executable bits
+  struct stat st;
+  if (fstat(fd, &st)) {
+    perror("Cannot stat binary");
+    goto close_return;
+  }
+  is_library = (st.st_mode & (S_IXUSR | S_IXGRP | S_IXOTH)) == 0;
+
+close_return:
+  if (close(fd)) {
+    fprintf(stderr, "cannot close binary %s (FD %d): %s\n", path, fd, os::strerror(errno));
+  }
+  return is_library;
+}
+
+static void *_crengine_handle;
+typedef void signal_handler(int);
+static signal_handler *_crengine_signal_handler = NULL;
+static volatile int _crengine_threads_counter = 0;
+
+static void crengine_raise_restore() {
+  int pid = os::current_process_id();
+  union sigval val = {
+    .sival_int = pid
+  };
+  if (sigqueue(pid, RESTORE_SIGNAL, val)) {
+    perror("Cannot raise restore signal");
+  }
+}
+
+// This function should be passed to the 'checkpoint' function from CR engine
+// library to perform refcounting of threads in the actual signal handler.
+static void crengine_signal_wrapper(int signal) {
+  if (_crengine_signal_handler == NULL) {
+    return;
+  }
+  Atomic::inc(&_crengine_threads_counter);
+  _crengine_signal_handler(signal);
+  Atomic::dec(&_crengine_threads_counter);
+}
+
+int crac::call_crengine_library(bool is_checkpoint, const char *path) {
+  _crengine_handle = ::dlopen(_crengine, RTLD_LAZY);
+  if (_crengine_handle == NULL) {
+    fprintf(stderr, "Cannot open criuengine library: %s\n", ::dlerror());
+    return -1;
+  }
+  const char *function = is_checkpoint ? "checkpoint" : "restore";
+  void *symbol = ::dlsym(_crengine_handle, function);
+  if (symbol == NULL) {
+    fprintf(stderr, "Cannot find function %s in %s: %s\n", function, _crengine, ::dlerror());
+    if (::dlclose(_crengine_handle)) {
+      fprintf(stderr, "Cannot close criuengine library %s: %s\n", _crengine, ::dlerror());
+    }
+    _crengine_handle = NULL;
+    return -1;
+  }
+  add_crengine_arg(path);
+  int ret;
+  if (is_checkpoint) {
+    // This code assumes that the library will switch stacks using signal handlers;
+    // other threads will be restored upon exiting from handler. Before unloading
+    // the library we need to ensure, though, that all threads exit the signal handler
+    // (implemented in the library). In order to do that CRaC will wrap the actual
+    // handler with a refcounting handler.
+    // If the library implementation does not use signal handlers it does not need
+    // to use the wrapper or set any handler at all.
+    typedef int checkpoint_funct(const char * const *args, bool stop_current,
+      signal_handler *wrapper, signal_handler **actual_handler);
+    ret = ((checkpoint_funct *) symbol)(&_crengine_args[2], true, crengine_signal_wrapper, &_crengine_signal_handler);
+    // Since some threads might not have an associated Thread instance we cannot
+    // use regular mutexes; we are busy-waiting as it should be short anyway.
+    while (_crengine_threads_counter > 0) {
+      os::naked_short_sleep(1);
+    }
+  } else {
+    typedef void restore_handler();
+    typedef int restore_funct(const char * const *args, restore_handler *on_restore);
+    ret = ((restore_funct *) symbol)(&_crengine_args[2], crengine_raise_restore);
+  }
+  // This is actually called:
+  // 1) when the checkpoint/restore fails
+  // 2) on restore, the handle obtained for checkpoint is closed
+  // The handle obtained to call restore does not need to be closed: it's up to
+  // the restore implementation to clean up anything in the process in a generic way.
+  if (::dlclose(_crengine_handle)) {
+    fprintf(stderr, "Cannot close criuengine library %s: %s\n", _crengine, ::dlerror());
+  }
+  _crengine_handle = nullptr;
+  _crengine_signal_handler = nullptr;
+  return ret;
 }

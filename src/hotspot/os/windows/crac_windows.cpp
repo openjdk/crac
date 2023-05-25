@@ -53,3 +53,11 @@ void CracSHM::unlink() {
 bool crac::read_bootid(char *dest) {
   return true;
 }
+
+bool crac::is_dynamic_library(const char *crengine) {
+  return false;
+}
+
+int crac::call_crengine_library(bool is_checkpoint, const char *image_path) {
+  return -1;
+}

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2023, Azul Systems, Inc. All rights reserved.
+ * Copyright (c) 2022, Azul Systems, Inc. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -21,52 +21,27 @@
  * questions.
  */
 
-// no precompiled headers
-#include "jvm.h"
-#include "runtime/crac_structs.hpp"
+import jdk.crac.*;
+import jdk.test.lib.crac.CracBuilder;
+import jdk.test.lib.crac.CracEngine;
+import jdk.test.lib.crac.CracTest;
 
-#include <sys/mman.h>
+/**
+ * @test
+ * @library /test/lib
+ * @build MinicriuTest
+ * @run driver jdk.test.lib.crac.CracTest
+ */
+public class MinicriuTest implements CracTest {
+    @Override
+    public void test() throws Exception {
+        new CracBuilder().engine(CracEngine.MINICRIU).doCheckpointAndRestore();
+    }
 
-int CracSHM::open(int mode) {
-  int shmfd = shm_open(_path, mode, 0600);
-  if (-1 == shmfd) {
-    perror("shm_open");
-  }
-  return shmfd;
+    @Override
+    public void exec() throws RestoreException, CheckpointException {
+        System.out.println("BEFORE");
+        Core.checkpointRestore();
+        System.out.println("AFTER");
+    }
 }
-
-void CracSHM::unlink() {
-  shm_unlink(_path);
-}
-
-#ifndef LINUX
-void crac::vm_create_start() {
-}
-
-void VM_Crac::report_ok_to_jcmd_if_any() {
-}
-
-bool VM_Crac::check_fds() {
-  return true;
-}
-
-bool VM_Crac::memory_checkpoint() {
-  return true;
-}
-
-void VM_Crac::memory_restore() {
-}
-
-bool crac::read_bootid(char *dest) {
-  return true;
-}
-
-bool crac::is_dynamic_library(const char *crengine) {
-  return false;
-}
-
-int crac::call_crengine_library(bool is_checkpoint, const char *image_path) {
-  return -1;
-}
-
-#endif

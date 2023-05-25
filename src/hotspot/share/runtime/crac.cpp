@@ -41,10 +41,10 @@
 #include "os_linux.hpp"
 #endif
 
-static const char* _crengine = NULL;
+const char* crac::_crengine = NULL;
 static char* _crengine_arg_str = NULL;
-static unsigned int _crengine_argc = 0;
-static const char* _crengine_args[32];
+unsigned int crac::_crengine_argc = 0;
+const char* crac::_crengine_args[32];
 static jlong _restore_start_time;
 static jlong _restore_start_nanos;
 
@@ -122,7 +122,7 @@ static size_t cr_util_path(char* path, int len) {
   return after_elem - path;
 }
 
-static bool compute_crengine() {
+bool crac::compute_crengine() {
   // release possible old copies
   os::free((char *) _crengine); // NULL is allowed
   _crengine = NULL;
@@ -189,7 +189,7 @@ static bool compute_crengine() {
   return true;
 }
 
-static void add_crengine_arg(const char *arg) {
+void crac::add_crengine_arg(const char *arg) {
   if (_crengine_argc >= ARRAY_SIZE(_crengine_args) - 1) {
       warning("Too many options to CREngine; cannot add %s", arg);
       return;
@@ -198,19 +198,19 @@ static void add_crengine_arg(const char *arg) {
   _crengine_args[_crengine_argc] = NULL;
 }
 
-static int call_crengine() {
-  if (!_crengine) {
-    return -1;
-  }
-  _crengine_args[1] = "checkpoint";
-  add_crengine_arg(CRaCCheckpointTo);
-  return os::exec_child_process_and_wait(_crengine, _crengine_args);
-}
-
-static int checkpoint_restore(int *shmid) {
+int crac::checkpoint_restore(int *shmid) {
   crac::record_time_before_checkpoint();
 
-  int cres = call_crengine();
+  int cres = -1;
+  if (_crengine != nullptr) {
+    if (is_dynamic_library(_crengine)) {
+      cres = call_crengine_library(true, CRaCCheckpointTo);
+    } else {
+      _crengine_args[1] = "checkpoint";
+      add_crengine_arg(CRaCCheckpointTo);
+      cres = os::exec_child_process_and_wait(_crengine, _crengine_args);
+    }
+  }
   if (cres < 0) {
     tty->print_cr("CRaC error executing: %s\n", _crengine);
     return JVM_CHECKPOINT_ERROR;
@@ -338,7 +338,7 @@ void VM_Crac::doit() {
   } else {
     trace_cr("Checkpoint ...");
     report_ok_to_jcmd_if_any();
-    int ret = checkpoint_restore(&shmid);
+    int ret = crac::checkpoint_restore(&shmid);
     if (ret == JVM_CHECKPOINT_ERROR) {
       memory_restore();
       return;
@@ -488,10 +488,16 @@ void crac::restore() {
   }
 
   if (_crengine) {
-    _crengine_args[1] = "restore";
-    add_crengine_arg(CRaCRestoreFrom);
-    os::execv(_crengine, _crengine_args);
-    warning("cannot execute \"%s restore ...\" (%s)", _crengine, os::strerror(errno));
+    if (is_dynamic_library(_crengine)) {
+      // This function should not return on success
+      call_crengine_library(false, CRaCRestoreFrom);
+      warning("cannot restore from dynamic library %s", _crengine);
+    } else {
+      _crengine_args[1] = "restore";
+      add_crengine_arg(CRaCRestoreFrom);
+      os::execv(_crengine, _crengine_args);
+      warning("cannot execute \"%s restore ...\" (%s)", _crengine, os::strerror(errno));
+    }
   }
 }
 

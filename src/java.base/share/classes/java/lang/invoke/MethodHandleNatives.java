@@ -94,8 +94,7 @@ class MethodHandleNatives {
             // registration cauesed by the core CRaC code leads to deadlock.
             // The drawback is native structures may end up in the checkpoint
             // image and be cleaned shortly after restore, which is neglectable.
-            new CleanerImpl.PhantomCleanableRef(cs, CleanerFactory.cleaner(),
-                    newContext, null);
+            SharedSecrets.getJavaLangRefAccess().register(CleanerFactory.cleaner(), cs, newContext, null);
             return newContext;
         }
 

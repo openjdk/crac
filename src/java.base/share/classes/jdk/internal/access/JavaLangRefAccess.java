@@ -49,7 +49,7 @@ public interface JavaLangRefAccess {
     void runFinalization();
 
     /**
-     * Registers an object and an action in a cleaner, with action synhronized with a CRaC priority.
+     * Calls package-private {@link Cleaner#register(Object, Runnable, JDKResource.Priority)}.
      */
-    Cleaner.Cleanable register(Cleaner cleaner, Object obj, Runnable action, JDKResource.Priority priority);
+    Cleaner.Cleanable cleanerRegisterWithPriority(Cleaner cleaner, Object obj, Runnable action, JDKResource.Priority priority);
 }

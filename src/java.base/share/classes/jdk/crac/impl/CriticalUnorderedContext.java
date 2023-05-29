@@ -18,12 +18,15 @@ import java.util.WeakHashMap;
 public class CriticalUnorderedContext<R extends Resource> extends AbstractContext<R> {
     private final WeakHashMap<R, Void> resources = new WeakHashMap<>();
     private ExceptionHolder<CheckpointException> concurrentCheckpointException = null;
-    private boolean blocked = false;
 
-    private synchronized List<R> snapshot() {
-        return this.resources.entrySet().stream()
-            .map(Map.Entry::getKey)
-            .toList();
+    BlockingState blockingState = new BlockingState();
+
+    private List<R> snapshot() {
+        synchronized (blockingState) {
+            return resources.entrySet().stream()
+                .map(Map.Entry::getKey)
+                .toList();
+        }
     }
 
     @Override
@@ -39,19 +42,20 @@ public class CriticalUnorderedContext<R extends Resource> extends AbstractContex
 
     @Override
     public void beforeCheckpoint(Context<? extends Resource> context) throws CheckpointException {
-        synchronized (this) {
+        synchronized (blockingState) {
             concurrentCheckpointException = new ExceptionHolder<>(CheckpointException::new);
         }
 
         try {
             super.beforeCheckpoint(context);
         } catch (CheckpointException e) {
-            synchronized (this) {
+            synchronized (blockingState) {
                 concurrentCheckpointException.handle(e);
             }
         }
-        synchronized (this) {
-            blocked = true;
+
+        synchronized (blockingState) {
+            blockingState.block();
             ExceptionHolder<CheckpointException> e = concurrentCheckpointException;
             concurrentCheckpointException = null;
             e.throwIfAny();
@@ -60,24 +64,17 @@ public class CriticalUnorderedContext<R extends Resource> extends AbstractContex
 
     @Override
     public void afterRestore(Context<? extends Resource> context) throws RestoreException {
-        synchronized (this) {
-            blocked = false;
-            notifyAll();
-        }
+        blockingState.unblock();
         super.afterRestore(context);
     }
 
     @Override
     public void register(R resource) {
-        synchronized (this) {
-            while (blocked) {
-                try {
-                    wait();
-                } catch (InterruptedException e) {
-                    throw new RuntimeException(e);
-                }
-            }
+        synchronized (blockingState) {
+            blockingState.test();
+
             resources.put(resource, null);
+
             if (concurrentCheckpointException != null) {
                 try {
                     invokeBeforeCheckpoint(resource);

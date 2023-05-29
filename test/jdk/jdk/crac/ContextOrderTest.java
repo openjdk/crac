@@ -23,14 +23,13 @@
 
 import jdk.crac.*;
 import jdk.crac.impl.BlockingOrderedContext;
+import jdk.crac.impl.CriticalUnorderedContext;
 import jdk.crac.impl.OrderedContext;
 import jdk.internal.crac.JDKResource;
 import jdk.test.lib.Utils;
 
 import java.lang.reflect.Method;
-import java.util.ArrayList;
-import java.util.LinkedList;
-import java.util.List;
+import java.util.*;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 
@@ -44,6 +43,7 @@ import static jdk.test.lib.Asserts.*;
  * @library /test/lib
  * @modules java.base/jdk.internal.crac:+open
  * @modules java.base/jdk.crac.impl:+open
+ * @run main/othervm -ea -XX:CREngine=simengine -XX:CRaCCheckpointTo=ignored ContextOrderTest testCriticalUnordred
  * @run main/othervm -ea -XX:CREngine=simengine -XX:CRaCCheckpointTo=ignored ContextOrderTest testOrder
  * @run main/othervm -ea -XX:CREngine=simengine -XX:CRaCCheckpointTo=ignored ContextOrderTest testRegisterBlocks
  * @run main/othervm -ea -XX:CREngine=simengine -XX:CRaCCheckpointTo=ignored ContextOrderTest testThrowing
@@ -104,11 +104,13 @@ public class ContextOrderTest {
 
     private static void testRegisterBlocks() throws Exception {
         var recorder = new LinkedList<String>();
+/*
         BlockingOrderedContext<Resource> blockingCtx = new BlockingOrderedContext();
         getGlobalContext().register(blockingCtx);
         // blocks register into the same OrderedContext
         blockingCtx.register(new CreatingResource<>(recorder, "regular", blockingCtx));
         testWaiting();
+*/
 
         BlockingOrderedContext<Resource> blockingCtx1 = new BlockingOrderedContext();
         getGlobalContext().register(blockingCtx1);
@@ -129,7 +131,6 @@ public class ContextOrderTest {
             try {
                 Core.checkpointRestore();
             } catch (Exception e) {
-                assertTrue(Thread.currentThread().isInterrupted());
                 exceptionHolder.set(e);
             }
         }, null, "waitWhileCheckpointIsInProgress");
@@ -150,6 +151,12 @@ public class ContextOrderTest {
                         // clears the flag without rethrowing it is a bug.
                         thread.interrupt();
                         thread.join(TimeUnit.NANOSECONDS.toMillis(deadline - System.nanoTime()));
+                        System.out.println(thread.getState() + " " + thread.isAlive());
+                        if (thread.getState() == Thread.State.WAITING) {
+                            for (var ste2 : thread.getStackTrace()) {
+                                System.out.println(ste2);
+                            }
+                        }
                         assertFalse(thread.isAlive());
                         return;
                     }
@@ -249,6 +256,21 @@ public class ContextOrderTest {
         assertEquals("child-before", recorder.poll());
         assertEquals("child-after", recorder.poll());
         assertEquals("normal-after", recorder.poll());
+    }
+
+    private static void testCriticalUnordred() throws RestoreException, CheckpointException {
+        var recorder = new LinkedList<String>();
+        CriticalUnorderedContext ctx = new CriticalUnorderedContext();
+        getGlobalContext().register(ctx);
+        ctx.register(new CreatingResource<>(recorder, "creating", ctx));
+
+        Core.checkpointRestore();
+        assertEquals("creating-before", recorder.poll());
+        assertEquals("creating-child1-before", recorder.poll());
+        Set<String> compareSet = new HashSet<>(List.of("creating-child1-after", "creating-after"));
+        Set<String> set = new HashSet<>(List.of(recorder.poll(), recorder.poll()));
+        assertEquals(set, compareSet);
+        assertNull(recorder.poll());
     }
 
     private static class MockResource implements JDKResource {

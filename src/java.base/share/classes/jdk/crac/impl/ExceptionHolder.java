@@ -23,13 +23,13 @@ public class ExceptionHolder<E extends Exception> {
         }
     }
 
-    public E getIfAny() {
-        return exception;
-    }
-
-    public void handle(Exception e) {
+    public void handle(Exception e) throws RuntimeException {
         if (e == null) {
             return;
+        }
+
+        if (e instanceof InterruptedException) {
+            throw new RuntimeException(e);
         }
 
         E exception = get();
@@ -41,11 +41,6 @@ public class ExceptionHolder<E extends Exception> {
                 exception.addSuppressed(t);
             }
         } else {
-            // FIXME there is no reason to report interruption additionally
-            //  along the exception
-            if (e instanceof InterruptedException) {
-                Thread.currentThread().interrupt();
-            }
             exception.addSuppressed(e);
         }
     }

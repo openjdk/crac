@@ -63,12 +63,12 @@ public class ContextOrderTest {
 
     private static void testOrder() throws Exception {
         var recorder = new LinkedList<String>();
-        getGlobalContext().register(new MockResource(recorder, null, "regular1"));
-        new MockResource(recorder, NORMAL, "jdk-normal");
-        new MockResource(recorder, SECURE_RANDOM, "jdk-later");
-        getGlobalContext().register(new CreatingResource<>(recorder, null, "regular2", NORMAL));
+        getGlobalContext().register(new MockResource(recorder, "regular1"));
+        NORMAL.getContext().register(new MockResource(recorder, "jdk-normal"));
+        SECURE_RANDOM.getContext().register(new MockResource(recorder, "jdk-later"));
+        getGlobalContext().register(new CreatingResource<>(recorder, "regular2", NORMAL.getContext()));
         // this child should run as it has higher priority
-        JDKResource resource = new CreatingResource<>(recorder, NORMAL, "jdk-create", SEEDER_HOLDER);
+        NORMAL.getContext().register(new CreatingResource<>(recorder, "jdk-create", SEEDER_HOLDER.getContext()));
 
         Core.checkpointRestore();
 
@@ -97,26 +97,29 @@ public class ContextOrderTest {
         Core.checkpointRestore();
         assertTrue(recorder.stream().anyMatch("jdk-create-child2-before"::equals));
         assertTrue(recorder.stream().anyMatch("regular2-child2-before"::equals));
+
+        rememberMe.clear();
+        System.gc();
     }
 
     private static void testRegisterBlocks() throws Exception {
         var recorder = new LinkedList<String>();
-
+        BlockingOrderedContext<Resource> blockingCtx = new BlockingOrderedContext();
+        getGlobalContext().register(blockingCtx);
         // blocks register into the same OrderedContext
-        Context<Resource> context = new BlockingOrderedContext<>();
-        getGlobalContext().register(context);
-        context.register(new CreatingResource<>(recorder, null, "regular",
-                context));
+        blockingCtx.register(new CreatingResource<>(recorder, "regular", blockingCtx));
         testWaiting();
 
-        // blocks registering with lower priority
-        new CreatingResource<>(recorder, SECURE_RANDOM, "jdk-lower",
-                NORMAL);
+        BlockingOrderedContext<Resource> blockingCtx1 = new BlockingOrderedContext();
+        getGlobalContext().register(blockingCtx1);
+        BlockingOrderedContext<Resource> blockingCtx2 = new BlockingOrderedContext();
+        getGlobalContext().register(blockingCtx2);
+        // blocks registering to the context done notifications
+        blockingCtx1.register(new CreatingResource<>(recorder, "jdk-lower", blockingCtx2));
         testWaiting();
 
         // blocks registering with the same priority
-        JDKResource resource = new CreatingResource<>(recorder, NORMAL, "jdk-same",
-                NORMAL);
+        NORMAL.getContext().register(new CreatingResource<>(recorder, "jdk-same", NORMAL.getContext()));
         testWaiting();
     }
 
@@ -166,11 +169,11 @@ public class ContextOrderTest {
     private static void testThrowing() throws Exception {
         var recorder = new LinkedList<String>();
         getGlobalContext().register(new MockResource(recorder, "regular1"));
-        getGlobalContext().register(new ThrowingResource(recorder, null, "throwing1"));
+        getGlobalContext().register(new ThrowingResource(recorder, "throwing1"));
         getGlobalContext().register(new MockResource(recorder, "regular2"));
-        new MockResource(recorder, NORMAL, "jdk1");
-        new ThrowingResource(recorder, Priority.EPOLLSELECTOR, "throwing2");
-        new MockResource(recorder, SECURE_RANDOM, "jdk2");
+        NORMAL.getContext().register(new MockResource(recorder, "jdk1"));
+        EPOLLSELECTOR.getContext().register(new ThrowingResource(recorder, "throwing2"));
+        SECURE_RANDOM.getContext().register(new MockResource(recorder, "jdk2"));
 
         try {
             Core.checkpointRestore();
@@ -194,20 +197,27 @@ public class ContextOrderTest {
         assertNull(recorder.poll());
     }
 
+    static class NamedOrderedContext<R extends Resource> extends BlockingOrderedContext {
+        private final String name;
+        NamedOrderedContext(String name) {
+            this.name = name;
+        }
+    }
+
     // Similar to the test above but registers in context that is already done
     // rather than iterating through now.
     private static void testRegisterToCompleted() throws Exception {
         var recorder = new LinkedList<String>();
 
-        OrderedContext<Resource> c1 = new BlockingOrderedContext<>();
-        OrderedContext<Resource> c2 = new BlockingOrderedContext<>();
+        OrderedContext<Resource> c1 = new NamedOrderedContext<>("C1");
+        OrderedContext<Resource> c2 = new NamedOrderedContext<>("C2");
         getGlobalContext().register(c1);
         getGlobalContext().register(c2);
         c2.register(new MockResource(recorder, "first"));
         // Logically there's nothing that prevents to register into C2 during C1.<resource>.afterRestore
         // but the implementation of C1 does not know that we're already after C/R and still blocks
         // any registrations.
-        c1.register(new CreatingResource<>(recorder, null, "second", c2));
+        c1.register(new CreatingResource<>(recorder, "second", c2));
 
         // This is supposed to end up with a deadlock. Even though it would block first
         // for -child1 and then for -child2 the first time we interrupt the thread it will
@@ -222,17 +232,17 @@ public class ContextOrderTest {
     // even in another thread
     private static void testRegisterFromOtherThread() throws RestoreException, CheckpointException {
         var recorder = new LinkedList<String>();
-        JDKResource resource = new MockResource(recorder, NORMAL, "normal") {
+        NORMAL.getContext().register(new MockResource(recorder, "normal") {
             @Override
             public void beforeCheckpoint(Context<? extends Resource> context) throws Exception {
                 super.beforeCheckpoint(context);
                 Thread thread = new Thread(() -> {
-                    JDKResource resource = new MockResource(recorder, CLEANERS, "child");
+                    CLEANERS.getContext().register(new MockResource(recorder, "child"));
                 }, "registrar");
                 thread.start();
                 thread.join();
             }
-        };
+        });
 
         Core.checkpointRestore();
         assertEquals("normal-before", recorder.poll());
@@ -249,13 +259,6 @@ public class ContextOrderTest {
             rememberMe.add(this);
             this.recorder = recorder;
             this.id = id;
-        }
-
-        private MockResource(List<String> recorder, Priority priority, String id) {
-            rememberMe.add(this);
-            this.recorder = recorder;
-            this.id = id;
-            priority.getContext().register(this);
         }
 
         @Override
@@ -280,20 +283,12 @@ public class ContextOrderTest {
     // we can make an exception since it does not conflict with the general order (JDK resources
     // are notified after user resources).
     private static class CreatingResource<R extends Resource> extends MockResource {
-        private final Priority childPriority;
         private final Context<R> childContext;
         private boolean first = true;
 
-        private CreatingResource(List<String> recorder, Priority priority, String id, Priority childPriority) {
-            super(recorder, priority, id);
-            this.childContext = (Context<R>) childPriority.getContext(); // XXX
-            this.childPriority = childPriority;
-        }
-
-        private CreatingResource(List<String> recorder, Priority priority, String id, Context<R> childContext) {
-            super(recorder, priority, id);
+        private CreatingResource(List<String> recorder, String id, Context<R> childContext) {
+            super(recorder, id);
             this.childContext = childContext;
-            this.childPriority = null;
         }
 
         @Override
@@ -301,7 +296,7 @@ public class ContextOrderTest {
             super.beforeCheckpoint(context);
             if (first) {
                 //noinspection unchecked
-                childContext.register((R) new MockResource(recorder, childPriority, id + "-child1"));
+                childContext.register((R) new MockResource(recorder, id + "-child1"));
             }
         }
 
@@ -310,15 +305,15 @@ public class ContextOrderTest {
             super.afterRestore(context);
             if (first) {
                 //noinspection unchecked
-                childContext.register((R) new MockResource(recorder, childPriority, id + "-child2"));
+                childContext.register((R) new MockResource(recorder, id + "-child2"));
             }
             first = false;
         }
     }
 
     private static class ThrowingResource extends MockResource {
-        private ThrowingResource(List<String> recorder, Priority priority, String id) {
-            super(recorder, priority, id);
+        private ThrowingResource(List<String> recorder, String id) {
+            super(recorder, id);
         }
 
         @Override

@@ -28,9 +28,11 @@ package jdk.crac;
 
 import jdk.crac.impl.*;
 import jdk.internal.crac.JDKContext;
+import jdk.internal.crac.JDKResource;
 import jdk.internal.crac.LoggerContainer;
 
 import sun.security.action.GetBooleanAction;
+import sun.security.action.GetPropertyAction;
 
 import java.io.PrintWriter;
 import java.io.StringWriter;
@@ -70,7 +72,7 @@ public class Core {
             GetBooleanAction.privilegedGetProperty("jdk.crac.trace-startup-time");
     }
 
-    private static final Context<Resource> globalContext = new BlockingOrderedContext<>();
+    private static final Context<Resource> globalContext = new OrderedContext<>();
 
     /** This class is not instantiable. */
     private Core() {

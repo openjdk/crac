@@ -55,9 +55,11 @@ public abstract class AbstractContext<R extends Resource> extends Context<R> {
             new ExceptionHolder<>(CheckpointException::new);
         List<R> resources = checkpointSnapshot();
         for (R r : resources) {
-            checkpointException.runWithHandler(() -> {
+            try {
                 invokeBeforeCheckpoint(r);
-            });
+            } catch (Exception e) {
+                checkpointException.handle(e);
+            }
         }
         checkpointException.throwIfAny();
     }
@@ -68,9 +70,11 @@ public abstract class AbstractContext<R extends Resource> extends Context<R> {
             new ExceptionHolder<>(RestoreException::new);
         List<R> resources = restoreSnapshot();
         for (R r : resources) {
-            restoreException.runWithHandler(() -> {
+            try {
                 invokeAfterRestore(r);
-            });
+            } catch (Exception e) {
+                restoreException.handle(e);
+            }
         }
         restoreException.throwIfAny();
     }

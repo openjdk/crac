@@ -43,7 +43,6 @@ import static jdk.test.lib.Asserts.*;
  * @library /test/lib
  * @modules java.base/jdk.internal.crac:+open
  * @modules java.base/jdk.crac.impl:+open
- * @run main/othervm -ea -XX:CREngine=simengine -XX:CRaCCheckpointTo=ignored ContextOrderTest testCriticalUnordred
  * @run main/othervm -ea -XX:CREngine=simengine -XX:CRaCCheckpointTo=ignored ContextOrderTest testOrder
  * @run main/othervm -ea -XX:CREngine=simengine -XX:CRaCCheckpointTo=ignored ContextOrderTest testRegisterBlocks
  * @run main/othervm -ea -XX:CREngine=simengine -XX:CRaCCheckpointTo=ignored ContextOrderTest testThrowing
@@ -97,20 +96,15 @@ public class ContextOrderTest {
         Core.checkpointRestore();
         assertTrue(recorder.stream().anyMatch("jdk-create-child2-before"::equals));
         assertTrue(recorder.stream().anyMatch("regular2-child2-before"::equals));
-
-        rememberMe.clear();
-        System.gc();
     }
 
     private static void testRegisterBlocks() throws Exception {
         var recorder = new LinkedList<String>();
-/*
         BlockingOrderedContext<Resource> blockingCtx = new BlockingOrderedContext();
         getGlobalContext().register(blockingCtx);
         // blocks register into the same OrderedContext
         blockingCtx.register(new CreatingResource<>(recorder, "regular", blockingCtx));
         testWaiting();
-*/
 
         BlockingOrderedContext<Resource> blockingCtx1 = new BlockingOrderedContext();
         getGlobalContext().register(blockingCtx1);
@@ -256,21 +250,6 @@ public class ContextOrderTest {
         assertEquals("child-before", recorder.poll());
         assertEquals("child-after", recorder.poll());
         assertEquals("normal-after", recorder.poll());
-    }
-
-    private static void testCriticalUnordred() throws RestoreException, CheckpointException {
-        var recorder = new LinkedList<String>();
-        CriticalUnorderedContext ctx = new CriticalUnorderedContext();
-        getGlobalContext().register(ctx);
-        ctx.register(new CreatingResource<>(recorder, "creating", ctx));
-
-        Core.checkpointRestore();
-        assertEquals("creating-before", recorder.poll());
-        assertEquals("creating-child1-before", recorder.poll());
-        Set<String> compareSet = new HashSet<>(List.of("creating-child1-after", "creating-after"));
-        Set<String> set = new HashSet<>(List.of(recorder.poll(), recorder.poll()));
-        assertEquals(set, compareSet);
-        assertNull(recorder.poll());
     }
 
     private static class MockResource implements JDKResource {

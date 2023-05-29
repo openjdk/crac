@@ -361,7 +361,7 @@ public class InetAddress implements java.io.Serializable {
             public void afterRestore(Context<? extends Resource> context) throws Exception {
             }
         };
-       Core.Priority.NORMAL.getContext().register(checkpointListener);
+        Core.Priority.NORMAL.getContext().register(checkpointListener);
     }
 
     /**

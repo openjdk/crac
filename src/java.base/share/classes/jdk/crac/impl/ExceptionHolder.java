@@ -28,10 +28,6 @@ public class ExceptionHolder<E extends Exception> {
             return;
         }
 
-        if (e instanceof InterruptedException) {
-            throw new RuntimeException(e);
-        }
-
         E exception = get();
         if (exception.getClass() == e.getClass()) {
             if (e.getMessage() != null) {
@@ -41,20 +37,13 @@ public class ExceptionHolder<E extends Exception> {
                 exception.addSuppressed(t);
             }
         } else {
+            if (e instanceof InterruptedException) {
+                // FIXME interrupt re-set should be up to the Context implementation, as
+                // some implementations may prefer to continue beforeCheckpoint/afterRestore
+                // notification, rather than exiting as soon as possible.
+                Thread.currentThread().interrupt();
+            }
             exception.addSuppressed(e);
-        }
-    }
-
-    @FunctionalInterface
-    interface Block {
-        void run() throws Exception;
-    }
-
-    public void runWithHandler(Block block) {
-        try {
-            block.run();
-        } catch (Exception e) {
-            handle(e);
         }
     }
 }

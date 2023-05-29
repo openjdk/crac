@@ -2159,7 +2159,6 @@ public final class System {
         } catch (Exception | Error e) {
             logInitException(printToStderr, printStackTrace,
                              "Error occurred during initialization of boot layer", e);
-            e.printStackTrace();
             return -1; // JNI_ERR
         }
 

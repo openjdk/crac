@@ -25,9 +25,9 @@
 
 package jdk.internal.access;
 
-import jdk.internal.crac.Core;
-
 import java.lang.ref.Cleaner;
+
+import jdk.internal.crac.Core;
 
 public interface JavaLangRefAccess {
 
@@ -49,7 +49,7 @@ public interface JavaLangRefAccess {
     void runFinalization();
 
     /**
-     * Registers an object and an action in a cleaner, with action synhronized with a CRaC priority.
+     * Calls package-private {@link Cleaner#register(Object, Runnable, Core.Priority)}.
      */
-    Cleaner.Cleanable register(Cleaner cleaner, Object obj, Runnable action, Core.Priority priority);
+    Cleaner.Cleanable cleanerRegisterWithPriority(Cleaner cleaner, Object obj, Runnable action, Core.Priority priority);
 }

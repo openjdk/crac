@@ -88,10 +88,10 @@ class MethodHandleNatives {
             // (which is referenced from Cleaner instance which is referenced from
             // CleanerFactory class) until cleanup is performed.
             // This PhantomCleanableRef is not registered in any Context as
-            // registration cauesed by the core CRaC code leads to deadlock.
+            // registration caused by the core CRaC code leads to deadlock.
             // The drawback is native structures may end up in the checkpoint
             // image and be cleaned shortly after restore, which is neglectable.
-            SharedSecrets.getJavaLangRefAccess().register(CleanerFactory.cleaner(), cs, newContext, null);
+            SharedSecrets.getJavaLangRefAccess().cleanerRegisterWithPriority(CleanerFactory.cleaner(), cs, newContext, null);
             return newContext;
         }
 

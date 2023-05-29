@@ -334,7 +334,7 @@ public abstract class Reference<T> {
             }
 
             @Override
-            public java.lang.ref.Cleaner.Cleanable register(java.lang.ref.Cleaner cleaner, Object obj, Runnable action, Core.Priority priority) {
+            public java.lang.ref.Cleaner.Cleanable cleanerRegisterWithPriority(java.lang.ref.Cleaner cleaner, Object obj, Runnable action, Core.Priority priority) {
                 return cleaner.register(obj, action, priority);
             }
         });

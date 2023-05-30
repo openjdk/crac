@@ -72,7 +72,7 @@ public class Core {
             GetBooleanAction.privilegedGetProperty("jdk.crac.trace-startup-time");
     }
 
-    private static final Context<Resource> globalContext = new OrderedContext<>();
+    private static final Context<Resource> globalContext = new BlockingOrderedContext<>();
 
     /** This class is not instantiable. */
     private Core() {

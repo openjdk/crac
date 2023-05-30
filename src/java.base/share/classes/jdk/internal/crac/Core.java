@@ -30,7 +30,7 @@ import jdk.crac.Context;
 import jdk.crac.impl.BlockingOrderedContext;
 
 public class Core {
-    private static JDKContext jdkContext = new JDKContext();;
+    private static JDKContext jdkContext = new JDKContext();
 
     public static JDKContext getJDKContext() {
         return jdkContext;

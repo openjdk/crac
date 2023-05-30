@@ -23,7 +23,6 @@
 
 import jdk.crac.*;
 import jdk.crac.impl.BlockingOrderedContext;
-import jdk.crac.impl.CriticalUnorderedContext;
 import jdk.crac.impl.OrderedContext;
 import jdk.internal.crac.JDKResource;
 import jdk.test.lib.Utils;

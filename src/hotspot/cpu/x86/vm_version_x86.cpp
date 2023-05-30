@@ -624,10 +624,21 @@ class VM_Version_StubGenerator: public StubCodeGenerator {
   };
 };
 
-uint64_t VM_Version::CPUFeatures_parse(const char *ccstr, uint64_t &glibc_features) {
+uint64_t VM_Version::CPUFeatures_parse(const char *ccstr, uint64_t &glibc_features, bool &verify_glibc_by_reexec) {
   assert(ccstr, "CPUFeatures_parse NULL");
   glibc_features = 0;
   if (strcmp(ccstr, "native") == 0) {
+    return Abstract_VM_Version::features();
+  }
+  if (strcmp(ccstr, "verify") == 0) {
+    tty->print_cr("-XX:CPUFeatures=verify has no effect as glibc "
+#if INCLUDE_CPU_FEATURE_ACTIVE
+                  "CPU_FEATURE_ACTIVE"
+#elif INCLUDE_LD_SO_LIST_DIAGNOSTICS
+                  "ld.so --list-diagnostics"
+#endif
+                  " feature is available");
+    verify_glibc_by_reexec = true;
     return Abstract_VM_Version::features();
   }
   if (strcmp(ccstr, "generic") == 0) {
@@ -1264,9 +1275,12 @@ void VM_Version::get_processor_features() {
   }
 
   assert(!CPUFeatures == FLAG_IS_DEFAULT(CPUFeatures), "CPUFeatures parsing");
+  uint64_t       features_expected =   CPU_MAX - 1;
+  uint64_t glibc_features_expected = GLIBC_MAX - 1;
+  bool verify_glibc_by_reexec = false;
   if (CPUFeatures) {
     uint64_t GLIBCFeatures_x64;
-    uint64_t   CPUFeatures_x64 = CPUFeatures_parse(CPUFeatures, GLIBCFeatures_x64);
+    uint64_t   CPUFeatures_x64 = CPUFeatures_parse(CPUFeatures, GLIBCFeatures_x64, verify_glibc_by_reexec);
     uint64_t       features_missing =   CPUFeatures_x64 & ~      _features;
     uint64_t glibc_features_missing = GLIBCFeatures_x64 & ~_glibc_features;
     if (features_missing || glibc_features_missing) {
@@ -1294,7 +1308,14 @@ void VM_Version::get_processor_features() {
     _glibc_features = GLIBCFeatures_x64;
   }
 
-  glibc_not_using((CPU_MAX - 1) & ~_features, (GLIBC_MAX - 1) & ~_glibc_features);
+#if !INCLUDE_CPU_FEATURE_ACTIVE && !INCLUDE_LD_SO_LIST_DIAGNOSTICS
+  if (!verify_glibc_by_reexec) {
+          features_expected =       _features;
+    glibc_features_expected = _glibc_features;
+  }
+#endif
+  glibc_not_using(      features_expected & ~      _features,
+                  glibc_features_expected & ~_glibc_features);
 
   _supports_cx8 = supports_cmpxchg8();
   // xchg and xadd instructions

@@ -1310,6 +1310,10 @@ void VM_Version::get_processor_features() {
     }
           _features =   CPUFeatures_x64;
     _glibc_features = GLIBCFeatures_x64;
+
+    if (ShowCPUFeatures) {
+      tty->print_cr("CPU features being used are: -XX:CPUFeatures=0x" UINT64_FORMAT_X ",0x" UINT64_FORMAT_X, _features, _glibc_features);
+    }
   }
 
 #if !INCLUDE_CPU_FEATURE_ACTIVE && !INCLUDE_LD_SO_LIST_DIAGNOSTICS

@@ -766,13 +766,16 @@ enum Extended_Family {
 
   static void get_processor_features();
 
-  static uint64_t CPUFeatures_parse(const char *ccstr, uint64_t &glibc_features, bool &verify_glibc_by_reexec);
+  static uint64_t CPUFeatures_parse(const char *ccstr, uint64_t &glibc_features);
   static void glibc_not_using(uint64_t excessive_CPU, uint64_t excessive_GLIBC);
   static bool glibc_env_set(char *disable_str);
   /*[[noreturn]]*/ static void glibc_reexec();
   // C++17: Make glibc_prefix and glibc_prefix_len constexpr.
   static const char glibc_prefix[];
   static const size_t glibc_prefix_len;
+  // C++17: Make verify_glibc_by_reexec and ignore_glibc_not_using inline.
+  static bool verify_glibc_by_reexec;
+  static bool ignore_glibc_not_using;
 
 public:
   // Offsets for cpuid asm stub

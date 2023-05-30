@@ -624,11 +624,10 @@ class VM_Version_StubGenerator: public StubCodeGenerator {
   };
 };
 
-uint64_t VM_Version::CPUFeatures_parse(const char *ccstr, uint64_t &glibc_features, bool &verify_glibc_by_reexec) {
+uint64_t VM_Version::CPUFeatures_parse(const char *ccstr, uint64_t &glibc_features) {
   assert(ccstr, "CPUFeatures_parse NULL");
-  glibc_features = 0;
+  glibc_features = _glibc_features;
   if (strcmp(ccstr, "native") == 0) {
-    glibc_features = _glibc_features;
     return _features;
   }
   if (strcmp(ccstr, "verify") == 0) {
@@ -642,9 +641,12 @@ uint64_t VM_Version::CPUFeatures_parse(const char *ccstr, uint64_t &glibc_featur
 # endif // INCLUDE_LD_SO_LIST_DIAGNOSTICS
                   " feature is available");
 #endif // INCLUDE_CPU_FEATURE_ACTIVE || INCLUDE_LD_SO_LIST_DIAGNOSTICS
-    glibc_features = _glibc_features;
     return Abstract_VM_Version::features();
   }
+  if (strcmp(ccstr, "ignore") == 0) {
+    return _features;
+  }
+  glibc_features = 0;
   if (strcmp(ccstr, "generic") == 0) {
     // 32-bit x86 cannot rely on anything.
     return 0
@@ -788,6 +790,8 @@ static void pclose_r(const char *arg0, FILE *f, pid_t pid) {
 
 const char VM_Version::glibc_prefix[] = ":glibc.cpu.hwcaps=";
 const size_t VM_Version::glibc_prefix_len = strlen(glibc_prefix);
+bool VM_Version::verify_glibc_by_reexec = false;
+bool VM_Version::ignore_glibc_not_using = false;
 
 bool VM_Version::glibc_env_set(char *disable_str) {
 #define TUNABLES_NAME "GLIBC_TUNABLES"
@@ -1281,10 +1285,9 @@ void VM_Version::get_processor_features() {
   assert(!CPUFeatures == FLAG_IS_DEFAULT(CPUFeatures), "CPUFeatures parsing");
   uint64_t       features_expected =   CPU_MAX - 1;
   uint64_t glibc_features_expected = GLIBC_MAX - 1;
-  bool verify_glibc_by_reexec = false;
   if (CPUFeatures) {
     uint64_t GLIBCFeatures_x64;
-    uint64_t   CPUFeatures_x64 = CPUFeatures_parse(CPUFeatures, GLIBCFeatures_x64, verify_glibc_by_reexec);
+    uint64_t   CPUFeatures_x64 = CPUFeatures_parse(CPUFeatures, GLIBCFeatures_x64);
     uint64_t       features_missing =   CPUFeatures_x64 & ~      _features;
     uint64_t glibc_features_missing = GLIBCFeatures_x64 & ~_glibc_features;
     if (features_missing || glibc_features_missing) {
@@ -1312,7 +1315,11 @@ void VM_Version::get_processor_features() {
     _glibc_features = GLIBCFeatures_x64;
 
     if (ShowCPUFeatures) {
-      tty->print_cr("CPU features being used are: -XX:CPUFeatures=0x" UINT64_FORMAT_X ",0x" UINT64_FORMAT_X, _features, _glibc_features);
+      if (ignore_glibc_not_using) {
+	tty->print_cr("CPU features are being kept intact as requested by -XX:CPUFeatures=ignore");
+      } else {
+	tty->print_cr("CPU features being used are: -XX:CPUFeatures=0x" UINT64_FORMAT_X ",0x" UINT64_FORMAT_X, _features, _glibc_features);
+      }
     }
   }
 
@@ -1322,8 +1329,10 @@ void VM_Version::get_processor_features() {
     glibc_features_expected = _glibc_features;
   }
 #endif
-  glibc_not_using(      features_expected & ~      _features,
-                  glibc_features_expected & ~_glibc_features);
+  if (!ignore_glibc_not_using) {
+    glibc_not_using(      features_expected & ~      _features,
+		    glibc_features_expected & ~_glibc_features);
+  }
 
   _supports_cx8 = supports_cmpxchg8();
   // xchg and xadd instructions

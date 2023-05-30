@@ -628,17 +628,21 @@ uint64_t VM_Version::CPUFeatures_parse(const char *ccstr, uint64_t &glibc_featur
   assert(ccstr, "CPUFeatures_parse NULL");
   glibc_features = 0;
   if (strcmp(ccstr, "native") == 0) {
-    return Abstract_VM_Version::features();
+    glibc_features = _glibc_features;
+    return _features;
   }
   if (strcmp(ccstr, "verify") == 0) {
-    tty->print_cr("-XX:CPUFeatures=verify has no effect as glibc "
-#if INCLUDE_CPU_FEATURE_ACTIVE
-                  "CPU_FEATURE_ACTIVE"
-#elif INCLUDE_LD_SO_LIST_DIAGNOSTICS
-                  "ld.so --list-diagnostics"
-#endif
-                  " feature is available");
     verify_glibc_by_reexec = true;
+#if INCLUDE_CPU_FEATURE_ACTIVE || INCLUDE_LD_SO_LIST_DIAGNOSTICS
+    tty->print_cr("-XX:CPUFeatures=verify has no effect as glibc "
+# if INCLUDE_CPU_FEATURE_ACTIVE
+                  "CPU_FEATURE_ACTIVE"
+# elif INCLUDE_LD_SO_LIST_DIAGNOSTICS
+                  "ld.so --list-diagnostics"
+# endif // INCLUDE_LD_SO_LIST_DIAGNOSTICS
+                  " feature is available");
+#endif // INCLUDE_CPU_FEATURE_ACTIVE || INCLUDE_LD_SO_LIST_DIAGNOSTICS
+    glibc_features = _glibc_features;
     return Abstract_VM_Version::features();
   }
   if (strcmp(ccstr, "generic") == 0) {

@@ -151,7 +151,7 @@ class FileInputStreamPool {
     private static final class UnclosableInputStream extends FilterInputStream implements JDKResource {
         UnclosableInputStream(FileInputStream in) {
             super(in);
-            Core.getJDKContext().register(this);
+            Core.Priority.NORMAL.getContext().register(this);
         }
 
         @Override
@@ -165,7 +165,7 @@ class FileInputStreamPool {
 
         @Override
         public void beforeCheckpoint(Context<? extends Resource> context) throws Exception {
-            ((JDKContext)context).claimFd(
+            Core.getJDKContext().claimFd(
                 ((FileInputStream)in).getFD(),
                 () -> null,
                 FileInputStreamPool.class,
@@ -175,11 +175,6 @@ class FileInputStreamPool {
         @Override
         public void afterRestore(Context<? extends Resource> context) throws Exception {
 
-        }
-
-        @Override
-        public Priority getPriority() {
-            return Priority.NORMAL;
         }
     }
 }

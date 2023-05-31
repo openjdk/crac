@@ -1,13 +1,10 @@
 /*
- * Copyright (c) 2017, 2021, Azul Systems, Inc. All rights reserved.
- * Copyright (c) 2021, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2022, Azul Systems, Inc. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 2 only, as
- * published by the Free Software Foundation.  Oracle designates this
- * particular file as subject to the "Classpath" exception as provided
- * by Oracle in the LICENSE file that accompanied this code.
+ * published by the Free Software Foundation.
  *
  * This code is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
@@ -24,27 +21,36 @@
  * questions.
  */
 
-package jdk.crac;
+
+import jdk.crac.*;
+import jdk.test.lib.Asserts;
+import jdk.test.lib.crac.CracBuilder;
+import jdk.test.lib.crac.CracTest;
+
+import java.io.File;
+import java.io.IOException;
+import java.nio.channels.Pipe;
+import java.nio.file.*;
+import java.util.Objects;
+import java.util.concurrent.TimeUnit;
 
 /**
- * Suppresses exceptions thrown during checkpoint notification.
+ * @test CracOptionTest
+ * @library /test/lib
+ * @build CracOptionTest
+ * @run driver jdk.test.lib.crac.CracTest
  */
-public class CheckpointException extends Exception {
-    private static final long serialVersionUID = 8879167591426115859L;
 
-    /**
-     * Creates a {@code CheckpointException}.
-     */
-    public CheckpointException() {
+public class CracOptionTest implements CracTest {
+    @Override
+    public void test() throws Exception {
+        CracBuilder builder = new CracBuilder();
+        builder.javaOption("k","v");
+        builder.doCheckpointAndRestore();
     }
 
-    /**
-     * Constructs a {@code CheckpointException} with the specified
-     * detail message.
-     *
-     * @param message the detail message.
-     */
-    public CheckpointException(String message) {
-        super(message);
+    @Override
+    public void exec() throws Exception {
+        Core.checkpointRestore();
     }
 }

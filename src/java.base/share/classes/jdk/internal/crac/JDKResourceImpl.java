@@ -16,7 +16,7 @@ public abstract class JDKResourceImpl implements JDKResource {
                 + " at epoch:" + System.currentTimeMillis() + " here") :
             null;
 
-        Core.getJDKContext().register(this);
+        Core.Priority.FILE_DESCRIPTORS.getContext().register(this);
     }
 
     protected Exception getStackTraceHolder() {

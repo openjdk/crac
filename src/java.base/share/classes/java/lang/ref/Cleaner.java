@@ -25,6 +25,7 @@
 
 package java.lang.ref;
 
+import jdk.internal.crac.Core;
 import jdk.internal.ref.CleanerImpl;
 
 import java.util.Objects;
@@ -217,7 +218,16 @@ public final class Cleaner {
     public Cleanable register(Object obj, Runnable action) {
         Objects.requireNonNull(obj, "obj");
         Objects.requireNonNull(action, "action");
-        return new CleanerImpl.PhantomCleanableRef(obj, this, action);
+        return new CleanerImpl.PhantomCleanableRef(obj, this, action, Core.Priority.CLEANERS);
+    }
+
+    /**
+     * Register an object and object and also register the underlying Reference with a CRaC priority.
+     */
+    /*non-public*/ Cleanable register(Object obj, Runnable action, Core.Priority priority) {
+        Objects.requireNonNull(obj, "obj");
+        Objects.requireNonNull(action, "action");
+        return new CleanerImpl.PhantomCleanableRef(obj, this, action, priority);
     }
 
     /**

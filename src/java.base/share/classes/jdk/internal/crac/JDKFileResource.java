@@ -39,9 +39,4 @@ public abstract class JDKFileResource extends JDKResourceImpl {
     public void afterRestore(Context<? extends Resource> context) throws Exception {
 
     }
-
-    @Override
-    public Priority getPriority() {
-        return Priority.FILE_DESCRIPTORS;
-    }
 }

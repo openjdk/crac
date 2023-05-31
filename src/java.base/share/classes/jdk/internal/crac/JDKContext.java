@@ -26,8 +26,11 @@
 
 package jdk.internal.crac;
 
-import jdk.crac.*;
-import jdk.crac.impl.AbstractContextImpl;
+import jdk.crac.CheckpointException;
+import jdk.crac.Context;
+import jdk.crac.Resource;
+import jdk.crac.RestoreException;
+import jdk.crac.impl.AbstractContext;
 import jdk.internal.access.JavaIOFileDescriptorAccess;
 import jdk.internal.access.SharedSecrets;
 import sun.security.action.GetBooleanAction;
@@ -35,21 +38,19 @@ import sun.security.action.GetPropertyAction;
 
 import java.io.File;
 import java.io.FileDescriptor;
-import java.util.*;
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.Objects;
+import java.util.WeakHashMap;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
 
-public class JDKContext extends AbstractContextImpl<JDKResource, Void> {
-    private static class ContextComparator implements Comparator<Map.Entry<JDKResource, Void>> {
-        @Override
-        public int compare(Map.Entry<JDKResource, Void> o1, Map.Entry<JDKResource, Void> o2) {
-            return o1.getKey().getPriority().compareTo(o2.getKey().getPriority());
-        }
-    }
-
+public class JDKContext implements JDKResource {
     public static final String COLLECT_FD_STACKTRACES_PROPERTY = "jdk.crac.collect-fd-stacktraces";
-    public static final String COLLECT_FD_STACKTRACES_HINT =
-        "Set System Property " + COLLECT_FD_STACKTRACES_PROPERTY + "=true to get stack traces of JDK Resources";
+    public static final String COLLECT_FD_STACKTRACES_HINT = "Use -D" + COLLECT_FD_STACKTRACES_PROPERTY + "=true to find the source.";
 
     // JDKContext by itself is initialized too early when system properties are not set yet
     public static class Properties {
@@ -73,27 +74,16 @@ public class JDKContext extends AbstractContextImpl<JDKResource, Void> {
         return false;
     }
 
-    JDKContext() {
-        super(new ContextComparator());
-    }
-
     @Override
     public void beforeCheckpoint(Context<? extends Resource> context) throws CheckpointException {
-        fdToClass = new WeakHashMap<>();
         fdToExceptionSupplier = new WeakHashMap<>();
-        super.beforeCheckpoint(context);
+        fdToClass = new WeakHashMap<>();
     }
 
     @Override
     public void afterRestore(Context<? extends Resource> context) throws RestoreException {
-        super.afterRestore(context);
         fdToExceptionSupplier = null;
         fdToClass = null;
-    }
-
-    @Override
-    public void register(JDKResource resource) {
-        register(resource, null);
     }
 
     public Map<Integer, Supplier<Exception>> getClaimedFds() {

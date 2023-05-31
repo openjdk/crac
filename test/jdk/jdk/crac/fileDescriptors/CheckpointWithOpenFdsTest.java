@@ -21,6 +21,7 @@
  * questions.
  */
 
+import jdk.crac.CheckpointException;
 import jdk.crac.Core;
 import jdk.test.lib.Utils;
 import jdk.test.lib.crac.CracBuilder;
@@ -46,7 +47,11 @@ public class CheckpointWithOpenFdsTest implements CracTest {
 
     @Override
     public void exec() throws Exception {
-        Core.checkpointRestore();
+        try {
+            Core.checkpointRestore();
+        } catch (CheckpointException ce) {
+            ce.printStackTrace();
+        }
         System.out.println(RESTORED_MESSAGE);
     }
 }

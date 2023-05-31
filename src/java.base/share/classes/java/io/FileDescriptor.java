@@ -25,12 +25,10 @@
 
 package java.io;
 
-import java.net.InetSocketAddress;
-import java.net.Socket;
 import java.util.*;
 
 import jdk.crac.Context;
-import jdk.crac.impl.CheckpointOpenFileException;
+import jdk.crac.Resource;
 import jdk.crac.impl.CheckpointOpenResourceException;
 import jdk.internal.access.JavaIOFileDescriptorAccess;
 import jdk.internal.access.SharedSecrets;
@@ -62,13 +60,13 @@ public final class FileDescriptor {
     private List<Closeable> otherParents;
     private boolean closed;
 
-    class Resource extends JDKResourceImpl {
+    class ResourceImpl extends JDKResourceImpl {
         private boolean closedByNIO;
 
         @Override
-        public void beforeCheckpoint(Context<? extends jdk.crac.Resource> context) throws Exception {
+        public void beforeCheckpoint(Context<? extends Resource> context) throws Exception {
             if (!closedByNIO && valid()) {
-                JDKContext ctx = (JDKContext)context;
+                JDKContext ctx = Core.getJDKContext();
                 FileDescriptor self = FileDescriptor.this;
 
                 ctx.claimFd(self, () ->  {
@@ -83,12 +81,7 @@ public final class FileDescriptor {
         }
 
         @Override
-        public void afterRestore(Context<? extends jdk.crac.Resource> context) throws Exception {
-        }
-
-        @Override
-        public Priority getPriority() {
-            return Priority.FILE_DESCRIPTORS;
+        public void afterRestore(Context<? extends Resource> context) throws Exception {
         }
 
         @Override
@@ -97,7 +90,7 @@ public final class FileDescriptor {
         }
     }
 
-    Resource resource = new Resource();
+    ResourceImpl resource = new ResourceImpl();
 
     /**
      * true, if file is opened for appending.

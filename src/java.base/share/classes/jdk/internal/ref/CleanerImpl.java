@@ -28,15 +28,13 @@ package jdk.internal.ref;
 import java.lang.ref.Cleaner;
 import java.lang.ref.Cleaner.Cleanable;
 import java.lang.ref.ReferenceQueue;
-import java.security.AccessController;
-import java.security.PrivilegedAction;
 import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Function;
 
-import jdk.crac.CheckpointException;
 import jdk.crac.Context;
 import jdk.crac.Resource;
+import jdk.internal.crac.Core;
 import jdk.internal.crac.JDKResource;
 import jdk.internal.misc.InnocuousThread;
 
@@ -163,11 +161,14 @@ public final class CleanerImpl implements Runnable {
          * @param obj the object to monitor
          * @param cleaner the cleaner
          * @param action the action Runnable
+         * @param priority priority for checkpoint handling
          */
-        public PhantomCleanableRef(Object obj, Cleaner cleaner, Runnable action) {
+        public PhantomCleanableRef(Object obj, Cleaner cleaner, Runnable action, Core.Priority priority) {
             super(obj, cleaner);
             this.action = action;
-            jdk.internal.crac.Core.getJDKContext().register(this);
+            if (priority != null) {
+                priority.getContext().register(this);
+            }
         }
 
         /**
@@ -204,19 +205,14 @@ public final class CleanerImpl implements Runnable {
         }
 
         @Override
-        public Priority getPriority() {
-            return Priority.CLEANERS;
-        }
-
-        @Override
-        public void beforeCheckpoint(Context<? extends Resource> context) throws Exception {
+        public void beforeCheckpoint(Context<? extends Resource> context) {
             if (refersTo(null)) {
                  clean();
             }
         }
 
         @Override
-        public void afterRestore(Context<? extends Resource> context) throws Exception {
+        public void afterRestore(Context<? extends Resource> context) {
 
         }
 

@@ -26,10 +26,8 @@
 
 package jdk.crac;
 
-import jdk.crac.impl.CheckpointOpenFileException;
-import jdk.crac.impl.CheckpointOpenResourceException;
-import jdk.crac.impl.CheckpointOpenSocketException;
-import jdk.crac.impl.OrderedContext;
+
+import jdk.crac.impl.*;
 import jdk.internal.crac.JDKContext;
 import jdk.internal.crac.LoggerContainer;
 import sun.security.action.GetBooleanAction;
@@ -45,6 +43,8 @@ import java.security.PrivilegedExceptionAction;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
+import java.util.function.Consumer;
+import java.util.function.Function;
 import java.util.function.Supplier;
 
 /**
@@ -71,11 +71,7 @@ public class Core {
             GetBooleanAction.privilegedGetProperty("jdk.crac.trace-startup-time");
     }
 
-    private static final Context<Resource> globalContext = new OrderedContext();
-    static {
-        // force JDK context initialization
-        jdk.internal.crac.Core.getJDKContext();
-    }
+    private static final Context<Resource> globalContext = new BlockingOrderedContext<>();
 
     /** This class is not instantiable. */
     private Core() {
@@ -113,6 +109,7 @@ public class Core {
         LoggerContainer.debug("Starting checkpoint at epoch:{0}", System.currentTimeMillis());
 
         try {
+            jdk.internal.crac.Core.getJDKContext().beforeCheckpoint(null);
             globalContext.beforeCheckpoint(null);
         } catch (CheckpointException ce) {
             checkpointException[0] = new CheckpointException();
@@ -165,16 +162,31 @@ public class Core {
         }
 
         if (newProperties != null && newProperties.length > 0) {
-            Arrays.stream(newProperties).map(propStr -> propStr.split("=", 2)).forEach(pair -> {
-                AccessController.doPrivileged(
-                    (PrivilegedAction<String>)() ->
-                        System.setProperty(pair[0], pair.length == 2 ? pair[1] : ""));
+            // Do not use lambda here since lambda will introduce registration
+            // during checkpoint, which may cause dead loop.
+            Arrays.stream(newProperties).map(new Function<String, String[]>() {
+                @Override
+                public String[] apply(String propStr) {
+                    return propStr.split("=", 2);
+                }
+            }).forEach(new Consumer<String[]>() {
+                @Override
+                public void accept(String[] pair) {
+                    AccessController.doPrivileged(
+                            new PrivilegedAction<String>() {
+                                @Override
+                                public String run() {
+                                    return System.setProperty(pair[0], pair.length == 2 ? pair[1] : "");
+                                }
+                            });
+                }
             });
         }
 
         RestoreException restoreException = null;
         try {
             globalContext.afterRestore(null);
+            jdk.internal.crac.Core.getJDKContext().afterRestore(null);
         } catch (RestoreException re) {
             if (checkpointException[0] == null) {
                 restoreException = re;
@@ -241,6 +253,7 @@ public class Core {
         checkpointRestore(JCMD_STREAM_NULL);
     }
 
+    @SuppressWarnings("try")
     private static void checkpointRestore(long jcmdStream) throws
             CheckpointException,
             RestoreException {
@@ -250,18 +263,18 @@ public class Core {
             // checkpointInProgress protects against recursive
             // checkpointRestore from resource's
             // beforeCheckpoint/afterRestore methods
-            if (!checkpointInProgress) {
-                checkpointInProgress = true;
-                try {
-                    checkpointRestore1(jcmdStream);
-                } finally {
-                    if (FlagsHolder.TRACE_STARTUP_TIME) {
-                        System.out.println("STARTUPTIME " + System.nanoTime() + " restore-finish");
-                    }
-                    checkpointInProgress = false;
-                }
-            } else {
+            if (checkpointInProgress) {
                 throw new CheckpointException("Recursive checkpoint is not allowed");
+            }
+
+            try (@SuppressWarnings("unused") var keepAlive = new KeepAlive()) {
+                checkpointInProgress = true;
+                checkpointRestore1(jcmdStream);
+            } finally {
+                if (FlagsHolder.TRACE_STARTUP_TIME) {
+                    System.out.println("STARTUPTIME " + System.nanoTime() + " restore-finish");
+                }
+                checkpointInProgress = false;
             }
         }
     }

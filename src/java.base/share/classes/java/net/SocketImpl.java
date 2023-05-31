@@ -114,17 +114,12 @@ public abstract class SocketImpl implements SocketOptions {
 
     private class SocketResource extends JDKResourceImpl {
         SocketResource() {
-            Core.getJDKContext().register(this);
-        }
-
-        @Override
-        public Priority getPriority() {
-            return Priority.FILE_DESCRIPTORS;
+            Core.Priority.FILE_DESCRIPTORS.getContext().register(this);
         }
 
         @Override
         public void beforeCheckpoint(Context<? extends Resource> context) throws Exception {
-            JDKContext ctx = (JDKContext)context;
+            JDKContext ctx = Core.getJDKContext();
             ctx.claimFd(fd,
                 () -> new CheckpointOpenSocketException(
                     SocketImpl.this.toString(),

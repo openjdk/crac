@@ -222,7 +222,7 @@ public final class Cleaner {
     }
 
     /**
-     * Register an object and object and also register the underlying Reference with a CRaC priority.
+     * Register an object and action and also register the underlying Reference with a CRaC priority.
      */
     /*non-public*/ Cleanable register(Object obj, Runnable action, Core.Priority priority) {
         Objects.requireNonNull(obj, "obj");

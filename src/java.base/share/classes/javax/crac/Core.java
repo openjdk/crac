@@ -26,6 +26,7 @@
 
 package javax.crac;
 
+import jdk.crac.impl.BlockingOrderedContext;
 import jdk.crac.impl.OrderedContext;
 
 /**
@@ -37,7 +38,7 @@ public class Core {
     private Core() {
     }
 
-    private static final Context<Resource> globalContext = new ContextWrapper(new OrderedContext<>());
+    private static final Context<Resource> globalContext = new ContextWrapper(new BlockingOrderedContext<>());
     static {
         jdk.crac.Core.getGlobalContext().register(new ResourceWrapper(null, globalContext));
     }

@@ -144,7 +144,6 @@ public class ContextOrderTest {
                         // clears the flag without rethrowing it is a bug.
                         thread.interrupt();
                         thread.join(TimeUnit.NANOSECONDS.toMillis(deadline - System.nanoTime()));
-                        System.out.println(thread.getState() + " " + thread.isAlive());
                         if (thread.getState() == Thread.State.WAITING) {
                             for (var ste2 : thread.getStackTrace()) {
                                 System.out.println(ste2);

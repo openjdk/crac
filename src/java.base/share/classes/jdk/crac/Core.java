@@ -95,6 +95,8 @@ public class Core {
 
     /**
      * Gets the global {@code Context} for checkpoint/restore notifications.
+     *
+     * @return the global {@code Context}
      */
     public static Context<Resource> getGlobalContext() {
         return globalContext;
@@ -120,17 +122,17 @@ public class Core {
 
         claimedFDs.getClaimedFds().forEach((integer, exceptionSupplier) -> {
             if (exceptionSupplier != null) {
-                Exception e = exceptionSupplier.get();
+                Exception e = exceptionSupplier.second().get();
                 checkpointException.handle(e);
             }
         });
 
-        List<Map.Entry<Integer, Supplier<Exception>>> claimedPairs = claimedFDs.getClaimedFds().entrySet().stream().toList();
+        List<Map.Entry<Integer, ClaimedFDs.Tuple<Object, Supplier<Exception>>>> claimedPairs = claimedFDs.getClaimedFds().entrySet().stream().toList();
         int[] fdArr = new int[claimedPairs.size()];
         LoggerContainer.debug("Claimed open file descriptors:");
         for (int i = 0; i < claimedPairs.size(); ++i) {
             fdArr[i] = claimedPairs.get(i).getKey();
-            LoggerContainer.debug("\t{0}", fdArr[i]);
+            LoggerContainer.debug("\t{0} {1}", fdArr[i], claimedPairs.get(i).getValue().first());
         }
 
         final Object[] bundle = checkpointRestore0(fdArr, null, checkpointException.hasException(), jcmdStream);

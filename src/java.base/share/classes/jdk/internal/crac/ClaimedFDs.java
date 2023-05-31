@@ -42,14 +42,14 @@ import java.util.stream.Collectors;
 public class ClaimedFDs {
     private final WeakHashMap<FileDescriptor, Tuple<Object, Supplier<Exception>>> fds = new WeakHashMap<>();
 
-    public Map<Integer, Supplier<Exception>> getClaimedFds() {
+    public Map<Integer, Tuple<Object, Supplier<Exception>>> getClaimedFds() {
         JavaIOFileDescriptorAccess fileDescriptorAccess = SharedSecrets.getJavaIOFileDescriptorAccess();
         return fds.entrySet().stream()
             .filter((var e) -> e.getKey().valid())
-            .collect(Collectors.toMap(entry -> fileDescriptorAccess.get(entry.getKey()), entry -> entry.getValue().second()));
+            .collect(Collectors.toMap(entry -> fileDescriptorAccess.get(entry.getKey()), Map.Entry::getValue));
     }
 
-    private static class Tuple<T1, T2> {
+    public static class Tuple<T1, T2> {
         private final T1 o1;
         private final T2 o2;
 

@@ -27,10 +27,6 @@
 #include <stdbool.h>
 #include <unistd.h>
 
-#include <sys/socket.h>
-#include <netinet/in.h>
-#include <arpa/inet.h>
-
 #include "jni.h"
 #include "jni_util.h"
 #include "jvm.h"

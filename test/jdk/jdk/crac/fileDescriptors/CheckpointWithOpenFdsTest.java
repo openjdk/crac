@@ -47,11 +47,7 @@ public class CheckpointWithOpenFdsTest implements CracTest {
 
     @Override
     public void exec() throws Exception {
-        try {
-            Core.checkpointRestore();
-        } catch (CheckpointException ce) {
-            ce.printStackTrace();
-        }
+        Core.checkpointRestore();
         System.out.println(RESTORED_MESSAGE);
     }
 }

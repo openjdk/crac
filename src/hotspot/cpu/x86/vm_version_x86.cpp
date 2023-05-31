@@ -631,6 +631,7 @@ uint64_t VM_Version::CPUFeatures_parse(const char *ccstr, uint64_t &glibc_featur
     return _features;
   }
   if (strcmp(ccstr, "ignore") == 0) {
+    ignore_glibc_not_using = true;
     return _features;
   }
   glibc_features = 0;

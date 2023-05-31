@@ -109,21 +109,19 @@ public class Core {
         LoggerContainer.debug("Starting checkpoint at epoch:{0}", System.currentTimeMillis());
 
         ClaimedFDs claimedFDs = new ClaimedFDs();
-        jdk.internal.crac.Core.setClaimedFDs(claimedFDs);
 
+        jdk.internal.crac.Core.setClaimedFDs(claimedFDs);
         try {
             globalContext.beforeCheckpoint(null);
         } catch (CheckpointException ce) {
             checkpointException.handle(ce);
         }
-
         jdk.internal.crac.Core.setClaimedFDs(null);
+
         claimedFDs.getClaimedFds().forEach((integer, exceptionSupplier) -> {
             if (exceptionSupplier != null) {
                 Exception e = exceptionSupplier.get();
-                if (e != null) {
-                    checkpointException.handle(e);
-                }
+                checkpointException.handle(e);
             }
         });
 

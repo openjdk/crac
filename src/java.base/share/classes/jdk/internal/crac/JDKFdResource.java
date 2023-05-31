@@ -1,12 +1,21 @@
 package jdk.internal.crac;
 
+import sun.security.action.GetBooleanAction;
+
 public abstract class JDKFdResource implements JDKResource {
+    private static final String COLLECT_FD_STACKTRACES_PROPERTY = "jdk.crac.collect-fd-stacktraces";
+    private static final String COLLECT_FD_STACKTRACES_HINT =
+        "Use -D" + COLLECT_FD_STACKTRACES_PROPERTY + "=true to find the source.";
+
+    private static final boolean COLLECT_FD_STACKTRACES =
+        GetBooleanAction.privilegedGetProperty(COLLECT_FD_STACKTRACES_PROPERTY);
+
     final Exception stackTraceHolder;
 
     static volatile boolean hintPrinted = false;
 
     public JDKFdResource() {
-        stackTraceHolder = ClaimedFDs.Properties.COLLECT_FD_STACKTRACES ?
+        stackTraceHolder = COLLECT_FD_STACKTRACES ?
             // About the timestamp: we cannot format it nicely since this
             // exception is sometimes created too early in the VM lifecycle
             // (but it's hard to detect when it would be safe to do).
@@ -20,7 +29,7 @@ public abstract class JDKFdResource implements JDKResource {
     protected Exception getStackTraceHolder() {
         if (!hintPrinted && stackTraceHolder == null) {
             hintPrinted = true;
-            LoggerContainer.info(ClaimedFDs.COLLECT_FD_STACKTRACES_HINT);
+            LoggerContainer.info(COLLECT_FD_STACKTRACES_HINT);
         }
         return stackTraceHolder;
     }

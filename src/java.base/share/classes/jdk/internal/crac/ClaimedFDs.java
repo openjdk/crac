@@ -40,29 +40,7 @@ import java.util.function.Supplier;
 import java.util.stream.Collectors;
 
 public class ClaimedFDs {
-    public static final String COLLECT_FD_STACKTRACES_PROPERTY = "jdk.crac.collect-fd-stacktraces";
-    public static final String COLLECT_FD_STACKTRACES_HINT = "Use -D" + COLLECT_FD_STACKTRACES_PROPERTY + "=true to find the source.";
-
-    // JDKContext by itself is initialized too early when system properties are not set yet
-    public static class Properties {
-        public static final boolean COLLECT_FD_STACKTRACES =
-                GetBooleanAction.privilegedGetProperty(ClaimedFDs.COLLECT_FD_STACKTRACES_PROPERTY);
-
-        public static final String[] classpathEntries =
-                GetPropertyAction.privilegedGetProperty("java.class.path")
-                .split(File.pathSeparator);
-    }
-
     private final WeakHashMap<FileDescriptor, Tuple<Object, Supplier<Exception>>> fds = new WeakHashMap<>();
-
-    public boolean matchClasspath(String path) {
-        for (String cp : Properties.classpathEntries) {
-            if (cp.equals(path)) {
-                return true;
-            }
-        }
-        return false;
-    }
 
     public Map<Integer, Supplier<Exception>> getClaimedFds() {
         JavaIOFileDescriptorAccess fileDescriptorAccess = SharedSecrets.getJavaIOFileDescriptorAccess();

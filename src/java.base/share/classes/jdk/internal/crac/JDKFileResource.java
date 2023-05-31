@@ -5,14 +5,27 @@ import jdk.crac.Resource;
 import jdk.crac.impl.CheckpointOpenFileException;
 import jdk.internal.access.JavaIOFileDescriptorAccess;
 import jdk.internal.access.SharedSecrets;
+import sun.security.action.GetPropertyAction;
 
+import java.io.File;
 import java.io.FileDescriptor;
 
 public abstract class JDKFileResource extends JDKFdResource {
-    private static final JavaIOFileDescriptorAccess fdAccess = SharedSecrets.getJavaIOFileDescriptorAccess();
+    private static final String[] CLASSPATH_ENTRIES =
+        GetPropertyAction.privilegedGetProperty("java.class.path")
+            .split(File.pathSeparator);
 
     protected abstract FileDescriptor getFD();
     protected abstract String getPath();
+
+    private boolean matchClasspath(String path) {
+        for (String cp : CLASSPATH_ENTRIES) {
+            if (cp.equals(path)) {
+                return true;
+            }
+        }
+        return false;
+    }
 
     @Override
     public void beforeCheckpoint(Context<? extends Resource> context) throws Exception {
@@ -24,7 +37,7 @@ public abstract class JDKFileResource extends JDKFdResource {
 
         FileDescriptor fd = getFD();
         Core.getClaimedFDs().claimFd(fd, this, fd, () -> {
-            if (Core.getClaimedFDs().matchClasspath(path)) {
+            if (matchClasspath(path)) {
                 // Files on the classpath are considered persistent, exception is not thrown
                 return null;
             }

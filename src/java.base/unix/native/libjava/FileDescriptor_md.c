@@ -95,94 +95,9 @@ Java_java_io_FileCleanable_cleanupClose0(JNIEnv *env, jclass fdClass, jint fd, j
     }
 }
 
-static bool find_sock_details(int sockino, const char* base, bool v6, const char *prefix, char* buf, size_t sz) {
-  char filename[16];
-  snprintf(filename, sizeof(filename), "/proc/net/%s", base);
-  FILE* f = fopen(filename, "r");
-  if (!f) {
-    return false;
-  }
-  int r = fscanf(f, "%*[^\n]");
-  if (r) {} // suppress warn unused gcc diagnostic
-
-  char la[33], ra[33];
-  int lp, rp;
-  int ino;
-  //   sl  local_address         remote_address        st   tx_queue rx_queue tr tm->when retrnsmt   uid  timeout inode
-  //    0: 0100007F:08AE         00000000:0000         0A   00000000:00000000 00:00000000 00000000  1000        0 2988639
-  //  %4d: %08X%08X%08X%08X:%04X %08X%08X%08X%08X:%04X %02X %08X:%08X         %02X:%08lX  %08X       %5u      %8d %d
-  bool eof;
-  do {
-    eof = EOF == fscanf(f, "%*d: %[^:]:%X %[^:]:%X %*X %*X:%*X %*X:%*X %*X %*d %*d %d%*[^\n]\n",
-        la, &lp, ra, &rp, &ino);
-  } while (ino != sockino && !eof);
-  fclose(f);
-
-  if (ino != sockino) {
-    return false;
-  }
-
-  struct in6_addr a6l, a6r;
-  struct in_addr a4l, a4r;
-  if (v6) {
-    for (int i = 0; i < 4; ++i) {
-      sscanf(la + i * 8, "%8" PRIX32, a6l.s6_addr32 + i);
-      sscanf(ra + i * 8, "%8" PRIX32, a6r.s6_addr32 + i);
-    }
-  } else {
-    sscanf(la, "%" PRIX32, &a4l.s_addr);
-    sscanf(ra, "%" PRIX32, &a4r.s_addr);
-  }
-
-  int const af = v6 ? AF_INET6 : AF_INET;
-  void* const laddr = v6 ? (void*)&a6l : (void*)&a4l;
-  void* const raddr = v6 ? (void*)&a6r : (void*)&a4r;
-  char lstrb[48], rstrb[48];
-  const char* const lstr = inet_ntop(af, laddr, lstrb, sizeof(lstrb)) ? lstrb : "NONE";
-  const char* const rstr = inet_ntop(af, raddr, rstrb, sizeof(rstrb)) ? rstrb : "NONE";
-  int msgsz = snprintf(buf, sz, "%s%s localAddr %s localPort %d remoteAddr %s remotePort %d",
-        prefix, base, lstr, lp, rstr, rp);
-  return msgsz < (int)sz;
-}
-
-static const char* sock_details(const char* details, const char *pref, char* buf, size_t sz) {
-  int sockino;
-  if (sscanf(details, "socket:[%d]", &sockino) <= 0) {
-    return details;
-  }
-
-  const char* bases[] = { "tcp", "udp", "tcp6", "udp6", NULL };
-  for (const char** b = bases; *b; ++b) {
-    if (find_sock_details(sockino, *b, 2 <= b - bases, pref, buf, sz)) {
-      return buf;
-    }
-  }
-
-  return details;
-}
-
-static const char* stat2strtype(mode_t mode) {
-    switch (mode & S_IFMT) {
-        case S_IFSOCK: return "socket";
-        case S_IFLNK:  return "symlink";
-        case S_IFREG:  return "regular";
-        case S_IFBLK:  return "block";
-        case S_IFDIR:  return "directory";
-        case S_IFCHR:  return "character";
-        case S_IFIFO:  return "fifo";
-        default:       break;
-    }
-    return "unknown";
-}
-
 JNIEXPORT jstring JNICALL
 Java_java_io_FileDescriptor_nativeDescription0(JNIEnv *env, jobject this) {
     FD fd = (*env)->GetIntField(env, this, IO_fd_fdID);
-
-    struct stat st;
-    if (fstat(fd, &st) != 0) {
-        return (*env)->NewStringUTF(env, "[stat error]");
-    }
 
     char fdpath[64];
     snprintf(fdpath, sizeof(fdpath), "/proc/self/fd/%d", fd);
@@ -192,17 +107,5 @@ Java_java_io_FileDescriptor_nativeDescription0(JNIEnv *env, jobject this) {
         link[(unsigned)linklen < PATH_MAX ? linklen : PATH_MAX - 1] = '\0';
     }
 
-    char details2[PATH_MAX];
-    const char *ret = NULL;
-    if ((st.st_mode & S_IFMT) == S_IFSOCK) {
-        ret = sock_details(link, "socket: ", details2, sizeof(details2));
-    } else {
-        int len = snprintf(details2, sizeof(details2), "%s: %s", stat2strtype(st.st_mode), link);
-        if ((int)sizeof(details2) <= len) {
-            details2[sizeof(details2) - 1] = '\0';
-        }
-        ret = details2;
-    }
-
-    return (*env)->NewStringUTF(env, ret);
+    return (*env)->NewStringUTF(env, link);
 }

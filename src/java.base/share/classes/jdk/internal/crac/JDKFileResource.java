@@ -7,9 +7,8 @@ import jdk.internal.access.JavaIOFileDescriptorAccess;
 import jdk.internal.access.SharedSecrets;
 
 import java.io.FileDescriptor;
-import java.io.RandomAccessFile;
 
-public abstract class JDKFileResource extends JDKResourceImpl {
+public abstract class JDKFileResource extends JDKFdResource {
     private static final JavaIOFileDescriptorAccess fdAccess = SharedSecrets.getJavaIOFileDescriptorAccess();
 
     protected abstract FileDescriptor getFD();
@@ -24,15 +23,15 @@ public abstract class JDKFileResource extends JDKResourceImpl {
         }
 
         FileDescriptor fd = getFD();
-        Core.getJDKContext().claimFd(fd, () -> {
-            if (Core.getJDKContext().matchClasspath(path)) {
+        Core.getClaimedFDs().claimFd(fd, this, fd, () -> {
+            if (Core.getClaimedFDs().matchClasspath(path)) {
                 // Files on the classpath are considered persistent, exception is not thrown
                 return null;
             }
             return new CheckpointOpenFileException(
                 path,
                 getStackTraceHolder());
-        }, this.getClass(), FileDescriptor.class);
+        });
     }
 
     @Override

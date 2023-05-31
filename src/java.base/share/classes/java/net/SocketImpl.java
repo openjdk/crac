@@ -36,12 +36,10 @@ import java.util.Set;
 
 import jdk.crac.Context;
 import jdk.crac.Resource;
-import jdk.crac.impl.CheckpointOpenResourceException;
 import jdk.crac.impl.CheckpointOpenSocketException;
 import jdk.internal.crac.Core;
-import jdk.internal.crac.JDKContext;
-import jdk.internal.crac.JDKResource;
-import jdk.internal.crac.JDKResourceImpl;
+import jdk.internal.crac.ClaimedFDs;
+import jdk.internal.crac.JDKFdResource;
 import sun.net.NetProperties;
 import sun.net.PlatformSocketImpl;
 import sun.nio.ch.NioSocketImpl;
@@ -112,20 +110,14 @@ public abstract class SocketImpl implements SocketOptions {
      */
     protected int localport;
 
-    private class SocketResource extends JDKResourceImpl {
-        SocketResource() {
-            Core.Priority.FILE_DESCRIPTORS.getContext().register(this);
-        }
-
+    private class SocketResource extends JDKFdResource {
         @Override
         public void beforeCheckpoint(Context<? extends Resource> context) throws Exception {
-            JDKContext ctx = Core.getJDKContext();
-            ctx.claimFd(fd,
+            ClaimedFDs ctx = Core.getClaimedFDs();
+            ctx.claimFd(fd, SocketImpl.this, fd,
                 () -> new CheckpointOpenSocketException(
                     SocketImpl.this.toString(),
-                    getStackTraceHolder()),
-                SocketImpl.class,
-                FileDescriptor.class);
+                    getStackTraceHolder()));
         }
 
         @Override

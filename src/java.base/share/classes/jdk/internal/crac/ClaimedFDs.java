@@ -26,11 +26,6 @@
 
 package jdk.internal.crac;
 
-import jdk.crac.CheckpointException;
-import jdk.crac.Context;
-import jdk.crac.Resource;
-import jdk.crac.RestoreException;
-import jdk.crac.impl.AbstractContext;
 import jdk.internal.access.JavaIOFileDescriptorAccess;
 import jdk.internal.access.SharedSecrets;
 import sun.security.action.GetBooleanAction;
@@ -38,32 +33,27 @@ import sun.security.action.GetPropertyAction;
 
 import java.io.File;
 import java.io.FileDescriptor;
-import java.io.IOException;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.util.HashMap;
 import java.util.Map;
 import java.util.Objects;
 import java.util.WeakHashMap;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
 
-public class JDKContext implements JDKResource {
+public class ClaimedFDs {
     public static final String COLLECT_FD_STACKTRACES_PROPERTY = "jdk.crac.collect-fd-stacktraces";
     public static final String COLLECT_FD_STACKTRACES_HINT = "Use -D" + COLLECT_FD_STACKTRACES_PROPERTY + "=true to find the source.";
 
     // JDKContext by itself is initialized too early when system properties are not set yet
     public static class Properties {
         public static final boolean COLLECT_FD_STACKTRACES =
-                GetBooleanAction.privilegedGetProperty(JDKContext.COLLECT_FD_STACKTRACES_PROPERTY);
+                GetBooleanAction.privilegedGetProperty(ClaimedFDs.COLLECT_FD_STACKTRACES_PROPERTY);
 
         public static final String[] classpathEntries =
                 GetPropertyAction.privilegedGetProperty("java.class.path")
                 .split(File.pathSeparator);
     }
 
-    private WeakHashMap<FileDescriptor, Supplier<Exception>> fdToExceptionSupplier;
-    private WeakHashMap<FileDescriptor, Class<?>> fdToClass;
+    private final WeakHashMap<FileDescriptor, Tuple<Object, Supplier<Exception>>> fds = new WeakHashMap<>();
 
     public boolean matchClasspath(String path) {
         for (String cp : Properties.classpathEntries) {
@@ -74,45 +64,35 @@ public class JDKContext implements JDKResource {
         return false;
     }
 
-    @Override
-    public void beforeCheckpoint(Context<? extends Resource> context) throws CheckpointException {
-        fdToExceptionSupplier = new WeakHashMap<>();
-        fdToClass = new WeakHashMap<>();
-    }
-
-    @Override
-    public void afterRestore(Context<? extends Resource> context) throws RestoreException {
-        fdToExceptionSupplier = null;
-        fdToClass = null;
-    }
-
     public Map<Integer, Supplier<Exception>> getClaimedFds() {
         JavaIOFileDescriptorAccess fileDescriptorAccess = SharedSecrets.getJavaIOFileDescriptorAccess();
-        return fdToExceptionSupplier.entrySet().stream()
+        return fds.entrySet().stream()
             .filter((var e) -> e.getKey().valid())
-            .collect(Collectors.toMap(entry -> fileDescriptorAccess.get(entry.getKey()), Map.Entry::getValue));
+            .collect(Collectors.toMap(entry -> fileDescriptorAccess.get(entry.getKey()), entry -> entry.getValue().second()));
     }
 
-    public void claimFd(FileDescriptor fd, Supplier<Exception> supplier, Class<?> who, Class<?>... suppressed) {
+    private static class Tuple<T1, T2> {
+        private final T1 o1;
+        private final T2 o2;
+
+        public Tuple(T1 o1, T2 o2) {
+            this.o1 = o1;
+            this.o2 = o2;
+        }
+        public T1 first() { return o1; }
+        public T2 second() { return o2; }
+    }
+
+    public void claimFd(FileDescriptor fd, Object claimer, Object suppressedClaimer, Supplier<Exception> supplier) {
         Objects.requireNonNull(supplier);
 
         if (fd == null) {
             return;
         }
 
-        Class<?> old = fdToClass.putIfAbsent(fd, who);
-        if (old == null) {
-            fdToExceptionSupplier.put(fd, supplier);
-            return;
-        }
-
-        for (Class<?> c : suppressed) {
-            // if C is subclass of Old
-            if (old.isAssignableFrom(c)) {
-                fdToClass.put(fd, who);
-                fdToExceptionSupplier.put(fd, supplier);
-                break;
-            }
+        Tuple<Object, Supplier<Exception>> record = fds.get(fd);
+        if (record == null || suppressedClaimer == record.first()) {
+            fds.put(fd, new Tuple<>(claimer, supplier));
         }
     }
 }

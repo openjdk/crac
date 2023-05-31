@@ -28,12 +28,24 @@ package jdk.internal.crac;
 
 import jdk.crac.Context;
 import jdk.crac.impl.BlockingOrderedContext;
+import jdk.crac.impl.OrderedContext;
 
 public class Core {
-    private static JDKContext jdkContext = new JDKContext();
+    private static ClaimedFDs claimedFDs;
 
-    public static JDKContext getJDKContext() {
-        return jdkContext;
+    /**
+     * Called by JDK FD resources
+     * @return
+     */
+    public static ClaimedFDs getClaimedFDs() {
+        return claimedFDs;
+    }
+
+    /**
+     * Called by jdk.crac.Core to publish current ClaimedFDs
+     */
+    public static void setClaimedFDs(ClaimedFDs fds) {
+        claimedFDs = fds;
     }
 
     /**
@@ -46,8 +58,7 @@ public class Core {
      * Most resources should use priority NORMAL (the lowest priority).
      */
     public enum Priority {
-        FILE_DESCRIPTORS(new BlockingOrderedContext<>()),
-        PRE_FILE_DESRIPTORS(new BlockingOrderedContext<>()),
+        FILE_DESCRIPTORS(new OrderedContext<>()),
         CLEANERS(new BlockingOrderedContext<>()),
         REFERENCE_HANDLER(new BlockingOrderedContext<>()),
         SEEDER_HOLDER(new BlockingOrderedContext<>()),

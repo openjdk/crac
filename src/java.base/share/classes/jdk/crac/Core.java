@@ -28,7 +28,7 @@ package jdk.crac;
 
 
 import jdk.crac.impl.*;
-import jdk.internal.crac.JDKContext;
+import jdk.internal.crac.ClaimedFDs;
 import jdk.internal.crac.LoggerContainer;
 import sun.security.action.GetBooleanAction;
 
@@ -108,8 +108,10 @@ public class Core {
         // This log is here to initialize call sites in logger formatters.
         LoggerContainer.debug("Starting checkpoint at epoch:{0}", System.currentTimeMillis());
 
+        ClaimedFDs claimedFDs = new ClaimedFDs();
+        jdk.internal.crac.Core.setClaimedFDs(claimedFDs);
+
         try {
-            jdk.internal.crac.Core.getJDKContext().beforeCheckpoint(null);
             globalContext.beforeCheckpoint(null);
         } catch (CheckpointException ce) {
             checkpointException[0] = new CheckpointException();
@@ -118,8 +120,8 @@ public class Core {
             }
         }
 
-        JDKContext jdkContext = jdk.internal.crac.Core.getJDKContext();
-        jdkContext.getClaimedFds().forEach((integer, exceptionSupplier) -> {
+        jdk.internal.crac.Core.setClaimedFDs(null);
+        claimedFDs.getClaimedFds().forEach((integer, exceptionSupplier) -> {
             if (exceptionSupplier != null) {
                 Exception e = exceptionSupplier.get();
                 if (e != null) {
@@ -131,7 +133,7 @@ public class Core {
             }
         });
 
-        List<Map.Entry<Integer, Supplier<Exception>>> claimedPairs = jdkContext.getClaimedFds().entrySet().stream().toList();
+        List<Map.Entry<Integer, Supplier<Exception>>> claimedPairs = claimedFDs.getClaimedFds().entrySet().stream().toList();
         int[] fdArr = new int[claimedPairs.size()];
         LoggerContainer.debug("Claimed open file descriptors:");
         for (int i = 0; i < claimedPairs.size(); ++i) {
@@ -186,7 +188,6 @@ public class Core {
         RestoreException restoreException = null;
         try {
             globalContext.afterRestore(null);
-            jdk.internal.crac.Core.getJDKContext().afterRestore(null);
         } catch (RestoreException re) {
             if (checkpointException[0] == null) {
                 restoreException = re;

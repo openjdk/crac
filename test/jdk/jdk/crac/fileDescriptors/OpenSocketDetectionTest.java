@@ -45,7 +45,7 @@ public class OpenSocketDetectionTest implements CracTest {
                 .startCheckpoint();
         cp.outputAnalyzer()
                 .shouldHaveExitValue(1)
-                .shouldMatch("CheckpointOpenSocketException: [A-Za-z0-9.$]+\\[addr=[/0-9a-f:.]+,port=[0-9]+,localport=[0-9]+\\]");
+                .shouldMatch("CheckpointOpenSocketException: [A-Za-z0-9.$]+\\[addr=[A-Za-z0-9/:.]+,port=[0-9]+,localport=[0-9]+\\]");
     }
 
     @Override

@@ -28,14 +28,12 @@ package java.io;
 import java.util.*;
 
 import jdk.crac.Context;
-import jdk.crac.Resource;
 import jdk.crac.impl.CheckpointOpenResourceException;
 import jdk.internal.access.JavaIOFileDescriptorAccess;
 import jdk.internal.access.SharedSecrets;
 import jdk.internal.crac.Core;
-import jdk.internal.crac.JDKContext;
-import jdk.internal.crac.JDKResource;
-import jdk.internal.crac.JDKResourceImpl;
+import jdk.internal.crac.ClaimedFDs;
+import jdk.internal.crac.JDKFdResource;
 import jdk.internal.ref.PhantomCleanable;
 
 /**
@@ -60,28 +58,28 @@ public final class FileDescriptor {
     private List<Closeable> otherParents;
     private boolean closed;
 
-    class ResourceImpl extends JDKResourceImpl {
+    class Resource extends JDKFdResource {
         private boolean closedByNIO;
 
         @Override
-        public void beforeCheckpoint(Context<? extends Resource> context) throws Exception {
+        public void beforeCheckpoint(Context<? extends jdk.crac.Resource> context) throws Exception {
             if (!closedByNIO && valid()) {
-                JDKContext ctx = Core.getJDKContext();
+                ClaimedFDs ctx = Core.getClaimedFDs();
                 FileDescriptor self = FileDescriptor.this;
 
-                ctx.claimFd(self, () ->  {
+                ctx.claimFd(self, self, null, () ->  {
                     if (self == in || self == out || self == err) {
                         return null;
                     }
                     return new CheckpointOpenResourceException(
                         FileDescriptor.class.getSimpleName() + " " + fd + ": " + nativeDescription0(),
                         getStackTraceHolder());
-                }, FileDescriptor.class);
+                });
             }
         }
 
         @Override
-        public void afterRestore(Context<? extends Resource> context) throws Exception {
+        public void afterRestore(Context<? extends jdk.crac.Resource> context) throws Exception {
         }
 
         @Override
@@ -90,7 +88,7 @@ public final class FileDescriptor {
         }
     }
 
-    ResourceImpl resource = new ResourceImpl();
+    Resource resource = new Resource();
 
     /**
      * true, if file is opened for appending.

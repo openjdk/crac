@@ -597,11 +597,8 @@ public final class NativePRNG extends SecureRandomSpi {
         public void beforeCheckpoint(Context<? extends Resource> context) throws Exception {
             synchronized (LOCK_SET_SEED) {
                 if (seedOut != null) {
-                    Core.getJDKContext().claimFd(
-                        ((FileOutputStream)seedOut).getFD(),
-                        () -> null,
-                        NativePRNG.class,
-                        FileDescriptor.class);
+                    FileDescriptor fd = ((FileOutputStream)seedOut).getFD();
+                    Core.getClaimedFDs().claimFd(fd, this, fd, () -> null);
                 }
             }
 

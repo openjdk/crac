@@ -28,7 +28,6 @@ package sun.security.provider;
 import jdk.crac.Context;
 import jdk.crac.Resource;
 import jdk.internal.crac.Core;
-import jdk.internal.crac.JDKContext;
 import jdk.internal.crac.JDKResource;
 
 import java.io.*;
@@ -165,11 +164,8 @@ class FileInputStreamPool {
 
         @Override
         public void beforeCheckpoint(Context<? extends Resource> context) throws Exception {
-            Core.getJDKContext().claimFd(
-                ((FileInputStream)in).getFD(),
-                () -> null,
-                FileInputStreamPool.class,
-                FileDescriptor.class);
+            FileDescriptor fd = ((FileInputStream)in).getFD();
+            Core.getClaimedFDs().claimFd(fd, this, fd, () -> null);
         }
 
         @Override

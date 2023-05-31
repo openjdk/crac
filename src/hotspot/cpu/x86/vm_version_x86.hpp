@@ -773,8 +773,7 @@ enum Extended_Family {
   // C++17: Make glibc_prefix and glibc_prefix_len constexpr.
   static const char glibc_prefix[];
   static const size_t glibc_prefix_len;
-  // C++17: Make verify_glibc_by_reexec and ignore_glibc_not_using inline.
-  static bool verify_glibc_by_reexec;
+  // C++17: Make ignore_glibc_not_using inline.
   static bool ignore_glibc_not_using;
 
 public:

@@ -630,19 +630,6 @@ uint64_t VM_Version::CPUFeatures_parse(const char *ccstr, uint64_t &glibc_featur
   if (strcmp(ccstr, "native") == 0) {
     return _features;
   }
-  if (strcmp(ccstr, "verify") == 0) {
-    verify_glibc_by_reexec = true;
-#if INCLUDE_CPU_FEATURE_ACTIVE || INCLUDE_LD_SO_LIST_DIAGNOSTICS
-    tty->print_cr("-XX:CPUFeatures=verify has no effect as glibc "
-# if INCLUDE_CPU_FEATURE_ACTIVE
-                  "CPU_FEATURE_ACTIVE"
-# elif INCLUDE_LD_SO_LIST_DIAGNOSTICS
-                  "ld.so --list-diagnostics"
-# endif // INCLUDE_LD_SO_LIST_DIAGNOSTICS
-                  " feature is available");
-#endif // INCLUDE_CPU_FEATURE_ACTIVE || INCLUDE_LD_SO_LIST_DIAGNOSTICS
-    return Abstract_VM_Version::features();
-  }
   if (strcmp(ccstr, "ignore") == 0) {
     return _features;
   }
@@ -790,7 +777,6 @@ static void pclose_r(const char *arg0, FILE *f, pid_t pid) {
 
 const char VM_Version::glibc_prefix[] = ":glibc.cpu.hwcaps=";
 const size_t VM_Version::glibc_prefix_len = strlen(glibc_prefix);
-bool VM_Version::verify_glibc_by_reexec = false;
 bool VM_Version::ignore_glibc_not_using = false;
 
 bool VM_Version::glibc_env_set(char *disable_str) {
@@ -1282,9 +1268,13 @@ void VM_Version::get_processor_features() {
     tty->print_cr("This machine's CPU features are: -XX:CPUFeatures=0x" UINT64_FORMAT_X ",0x" UINT64_FORMAT_X, _features, _glibc_features);
   }
 
-  assert(!CPUFeatures == FLAG_IS_DEFAULT(CPUFeatures), "CPUFeatures parsing");
   uint64_t       features_expected =   CPU_MAX - 1;
   uint64_t glibc_features_expected = GLIBC_MAX - 1;
+#if !INCLUDE_CPU_FEATURE_ACTIVE && !INCLUDE_LD_SO_LIST_DIAGNOSTICS
+        features_expected =       _features;
+  glibc_features_expected = _glibc_features;
+#endif
+  assert(!CPUFeatures == FLAG_IS_DEFAULT(CPUFeatures), "CPUFeatures parsing");
   if (CPUFeatures) {
     uint64_t GLIBCFeatures_x64;
     uint64_t   CPUFeatures_x64 = CPUFeatures_parse(CPUFeatures, GLIBCFeatures_x64);
@@ -1316,22 +1306,16 @@ void VM_Version::get_processor_features() {
 
     if (ShowCPUFeatures) {
       if (ignore_glibc_not_using) {
-	tty->print_cr("CPU features are being kept intact as requested by -XX:CPUFeatures=ignore");
+        tty->print_cr("CPU features are being kept intact as requested by -XX:CPUFeatures=ignore");
       } else {
-	tty->print_cr("CPU features being used are: -XX:CPUFeatures=0x" UINT64_FORMAT_X ",0x" UINT64_FORMAT_X, _features, _glibc_features);
+        tty->print_cr("CPU features being used are: -XX:CPUFeatures=0x" UINT64_FORMAT_X ",0x" UINT64_FORMAT_X, _features, _glibc_features);
       }
     }
   }
 
-#if !INCLUDE_CPU_FEATURE_ACTIVE && !INCLUDE_LD_SO_LIST_DIAGNOSTICS
-  if (!verify_glibc_by_reexec) {
-          features_expected =       _features;
-    glibc_features_expected = _glibc_features;
-  }
-#endif
   if (!ignore_glibc_not_using) {
     glibc_not_using(      features_expected & ~      _features,
-		    glibc_features_expected & ~_glibc_features);
+                    glibc_features_expected & ~_glibc_features);
   }
 
   _supports_cx8 = supports_cmpxchg8();

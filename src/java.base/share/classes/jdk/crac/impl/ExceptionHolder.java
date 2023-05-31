@@ -23,6 +23,17 @@ public class ExceptionHolder<E extends Exception> {
         }
     }
 
+    public boolean hasException() {
+        return exception != null;
+    }
+
+    public void reSuppress(Exception e) {
+        E exception = get();
+        for (Throwable t : e.getSuppressed()) {
+            exception.addSuppressed(t);
+        }
+    }
+
     public void handle(Exception e) throws RuntimeException {
         if (e == null) {
             return;
@@ -33,9 +44,7 @@ public class ExceptionHolder<E extends Exception> {
             if (e.getMessage() != null) {
                 exception.addSuppressed(e); // FIXME avoid message / preserve it via a distinct Exception
             }
-            for (Throwable t : e.getSuppressed()) {
-                exception.addSuppressed(t);
-            }
+            reSuppress(e);
         } else {
             if (e instanceof InterruptedException) {
                 // FIXME interrupt re-set should be up to the Context implementation, as

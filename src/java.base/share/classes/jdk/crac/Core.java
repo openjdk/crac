@@ -78,18 +78,18 @@ public class Core {
     }
 
     private static void translateJVMExceptions(int[] codes, String[] messages,
-                                               CheckpointException exception) {
+                                               ExceptionHolder<CheckpointException> exception) {
         assert codes.length == messages.length;
         final int length = codes.length;
 
         for (int i = 0; i < length; ++i) {
-            Throwable ex = switch (codes[i]) {
+            Exception ex = switch (codes[i]) {
                 case JVM_CR_FAIL_FILE -> new CheckpointOpenFileException(messages[i], null);
                 case JVM_CR_FAIL_SOCK -> new CheckpointOpenSocketException(messages[i], null);
                 case JVM_CR_FAIL_PIPE -> new CheckpointOpenResourceException(messages[i], null);
                 default -> new CheckpointOpenResourceException(messages[i], null);
             };
-            exception.addSuppressed(ex);
+            exception.handle(ex);
         }
     }
 
@@ -104,7 +104,7 @@ public class Core {
     private static void checkpointRestore1(long jcmdStream) throws
             CheckpointException,
             RestoreException {
-        final CheckpointException[] checkpointException = {null};
+        final ExceptionHolder<CheckpointException> checkpointException = new ExceptionHolder<>(CheckpointException::new);
         // This log is here to initialize call sites in logger formatters.
         LoggerContainer.debug("Starting checkpoint at epoch:{0}", System.currentTimeMillis());
 
@@ -114,10 +114,7 @@ public class Core {
         try {
             globalContext.beforeCheckpoint(null);
         } catch (CheckpointException ce) {
-            checkpointException[0] = new CheckpointException();
-            for (Throwable t : ce.getSuppressed()) {
-                checkpointException[0].addSuppressed(t);
-            }
+            checkpointException.handle(ce);
         }
 
         jdk.internal.crac.Core.setClaimedFDs(null);
@@ -125,10 +122,7 @@ public class Core {
             if (exceptionSupplier != null) {
                 Exception e = exceptionSupplier.get();
                 if (e != null) {
-                    if (checkpointException[0] == null) {
-                        checkpointException[0] = new CheckpointException();
-                    }
-                    checkpointException[0].addSuppressed(e);
+                    checkpointException.handle(e);
                 }
             }
         });
@@ -141,7 +135,7 @@ public class Core {
             LoggerContainer.debug("\t{0}", fdArr[i]);
         }
 
-        final Object[] bundle = checkpointRestore0(fdArr, null, checkpointException[0] != null, jcmdStream);
+        final Object[] bundle = checkpointRestore0(fdArr, null, checkpointException.hasException(), jcmdStream);
         final int retCode = (Integer)bundle[0];
         final String newArguments = (String)bundle[1];
         final String[] newProperties = (String[])bundle[2];
@@ -153,13 +147,10 @@ public class Core {
         }
 
         if (retCode != JVM_CHECKPOINT_OK) {
-            if (checkpointException[0] == null) {
-                checkpointException[0] = new CheckpointException();
-            }
             switch (retCode) {
-                case JVM_CHECKPOINT_ERROR -> translateJVMExceptions(codes, messages, checkpointException[0]);
-                case JVM_CHECKPOINT_NONE -> checkpointException[0].addSuppressed(new RuntimeException("C/R is not configured"));
-                default -> checkpointException[0].addSuppressed(new RuntimeException("Unknown C/R result: " + retCode));
+                case JVM_CHECKPOINT_ERROR -> translateJVMExceptions(codes, messages, checkpointException);
+                case JVM_CHECKPOINT_NONE -> checkpointException.handle(new RuntimeException("C/R is not configured"));
+                default ->                  checkpointException.handle(new RuntimeException("Unknown C/R result: " + retCode));
             }
         }
 
@@ -185,16 +176,14 @@ public class Core {
             });
         }
 
-        RestoreException restoreException = null;
+        ExceptionHolder<RestoreException> restoreException = new ExceptionHolder<>(RestoreException::new);
         try {
             globalContext.afterRestore(null);
         } catch (RestoreException re) {
-            if (checkpointException[0] == null) {
-                restoreException = re;
+            if (checkpointException.hasException()) {
+                checkpointException.reSuppress(re);
             } else {
-                for (Throwable t : re.getSuppressed()) {
-                    checkpointException[0].addSuppressed(t);
-                }
+                restoreException.handle(re);
             }
         }
 
@@ -218,22 +207,16 @@ public class Core {
                 } catch (PrivilegedActionException |
                          InvocationTargetException |
                          IllegalAccessException e) {
-                    assert checkpointException[0] == null :
+                    assert !checkpointException.hasException() :
                         "should not have new arguments";
-                    if (restoreException == null) {
-                        restoreException = new RestoreException();
-                    }
-                    restoreException.addSuppressed(e);
+                    restoreException.handle(e);
                 }
             }
         }
 
-        assert checkpointException[0] == null || restoreException == null;
-        if (checkpointException[0] != null) {
-            throw checkpointException[0];
-        } else if (restoreException != null) {
-            throw restoreException;
-        }
+        assert !checkpointException.hasException() || !restoreException.hasException();
+        checkpointException.throwIfAny();
+        restoreException.throwIfAny();
     }
 
     /**

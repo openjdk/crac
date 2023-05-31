@@ -21,7 +21,6 @@
  * questions.
  */
 
-import jdk.crac.CheckpointException;
 import jdk.crac.Core;
 import jdk.test.lib.Utils;
 import jdk.test.lib.crac.CracBuilder;

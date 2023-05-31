@@ -35,16 +35,14 @@ public abstract class JDKFileResource extends JDKFdResource {
             return;
         }
 
+        if (matchClasspath(path)) {
+            // Files on the classpath are considered persistent, exception is not thrown
+            return;
+        }
+
         FileDescriptor fd = getFD();
-        Core.getClaimedFDs().claimFd(fd, this, fd, () -> {
-            if (matchClasspath(path)) {
-                // Files on the classpath are considered persistent, exception is not thrown
-                return null;
-            }
-            return new CheckpointOpenFileException(
-                path,
-                getStackTraceHolder());
-        });
+        Core.getClaimedFDs().claimFd(fd, this, fd,
+            () -> new CheckpointOpenFileException(path, getStackTraceHolder()));
     }
 
     @Override

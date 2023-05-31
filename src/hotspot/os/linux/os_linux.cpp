@@ -6103,7 +6103,7 @@ void VM_Crac::doit() {
     const int maxinfo = 64;
     size_t buflen = strlen(details) + maxinfo;
     char* msg = NEW_C_HEAP_ARRAY(char, buflen, mtInternal);
-    int len = snprintf(msg, buflen, "FD fd=%d type=%s path=%s", fd, type, detailsbuf);
+    int len = snprintf(msg, buflen, "FD fd=%d type=%s details=%s", fd, type, detailsbuf);
     msg[len < 0 ? 0 : ((size_t) len >= buflen ? buflen - 1 : len)] = '\0';
     _failures->append(CracFailDep(stat2stfail(st->st_mode & S_IFMT), msg));
   }

@@ -58,7 +58,7 @@ public class Core {
      * Most resources should use priority NORMAL (the lowest priority).
      */
     public enum Priority {
-        FILE_DESCRIPTORS(new OrderedContext<>()),
+        FILE_DESCRIPTORS(new BlockingOrderedContext<>()),
         CLEANERS(new BlockingOrderedContext<>()),
         REFERENCE_HANDLER(new BlockingOrderedContext<>()),
         SEEDER_HOLDER(new BlockingOrderedContext<>()),

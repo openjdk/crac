@@ -107,8 +107,12 @@ public class Core {
             CheckpointException,
             RestoreException {
         final ExceptionHolder<CheckpointException> checkpointException = new ExceptionHolder<>(CheckpointException::new);
-        // This log is here to initialize call sites in logger formatters.
-        LoggerContainer.debug("Starting checkpoint at epoch:{0}", System.currentTimeMillis());
+
+        // FIXME: log something to complete logger initialization:
+        // - call sites in logger formatters.
+        // - FileDescriptors for resources (sun.util.calendar.ZoneInfoFile)
+        LoggerContainer.info("Starting checkpoint");
+        LoggerContainer.debug("at epoch:{0}", System.currentTimeMillis());
 
         ClaimedFDs claimedFDs = new ClaimedFDs();
 

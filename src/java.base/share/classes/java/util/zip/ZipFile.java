@@ -1800,7 +1800,7 @@ public class ZipFile implements ZipConstants, Closeable {
                 } catch (IOException e) {
                 }
                 if (fd != null) {
-                    Core.getClaimedFDs().claimFd(fd, this, fd, () -> null);
+                    Core.getClaimedFDs().claimFd(fd, this, () -> null, fd);
                 }
             }
         }

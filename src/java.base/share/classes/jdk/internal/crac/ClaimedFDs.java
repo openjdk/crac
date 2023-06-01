@@ -28,16 +28,14 @@ package jdk.internal.crac;
 
 import jdk.internal.access.JavaIOFileDescriptorAccess;
 import jdk.internal.access.SharedSecrets;
-import sun.security.action.GetBooleanAction;
-import sun.security.action.GetPropertyAction;
 
-import java.io.File;
 import java.io.FileDescriptor;
 import java.util.Map;
 import java.util.Objects;
 import java.util.WeakHashMap;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 public class ClaimedFDs {
     private final WeakHashMap<FileDescriptor, Tuple<Object, Supplier<Exception>>> fds = new WeakHashMap<>();
@@ -61,7 +59,7 @@ public class ClaimedFDs {
         public T2 second() { return o2; }
     }
 
-    public void claimFd(FileDescriptor fd, Object claimer, Object suppressedClaimer, Supplier<Exception> supplier) {
+    public void claimFd(FileDescriptor fd, Object claimer, Supplier<Exception> supplier, Object... suppressedClaimers) {
         Objects.requireNonNull(supplier);
 
         if (fd == null) {
@@ -69,7 +67,10 @@ public class ClaimedFDs {
         }
 
         Tuple<Object, Supplier<Exception>> record = fds.get(fd);
-        if (record == null || suppressedClaimer == record.first()) {
+        LoggerContainer.debug("ClaimFD: fd {0} claimer {1} existing {2}",
+            fd, claimer, record != null ? record.first() : "NONE");
+        if (record == null ||
+                Stream.of(suppressedClaimers).anyMatch((supressed) -> supressed == record.first())) {
             fds.put(fd, new Tuple<>(claimer, supplier));
         }
     }

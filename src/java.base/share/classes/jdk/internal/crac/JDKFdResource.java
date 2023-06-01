@@ -1,5 +1,7 @@
 package jdk.internal.crac;
 
+import jdk.crac.Context;
+import jdk.crac.Resource;
 import sun.security.action.GetBooleanAction;
 
 public abstract class JDKFdResource implements JDKResource {
@@ -32,5 +34,10 @@ public abstract class JDKFdResource implements JDKResource {
             LoggerContainer.info(COLLECT_FD_STACKTRACES_HINT);
         }
         return stackTraceHolder;
+    }
+
+    @Override
+    public void afterRestore(Context<? extends Resource> context) throws Exception {
+
     }
 }

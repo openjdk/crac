@@ -3,8 +3,6 @@ package jdk.internal.crac;
 import jdk.crac.Context;
 import jdk.crac.Resource;
 import jdk.crac.impl.CheckpointOpenFileException;
-import jdk.internal.access.JavaIOFileDescriptorAccess;
-import jdk.internal.access.SharedSecrets;
 import sun.security.action.GetPropertyAction;
 
 import java.io.File;
@@ -41,8 +39,7 @@ public abstract class JDKFileResource extends JDKFdResource {
         }
 
         FileDescriptor fd = getFD();
-        Core.getClaimedFDs().claimFd(fd, this, fd,
-            () -> new CheckpointOpenFileException(path, getStackTraceHolder()));
+        Core.getClaimedFDs().claimFd(fd, this, () -> new CheckpointOpenFileException(path, getStackTraceHolder()), fd);
     }
 
     @Override

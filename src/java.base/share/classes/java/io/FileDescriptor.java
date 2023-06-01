@@ -67,7 +67,7 @@ public final class FileDescriptor {
                 ClaimedFDs ctx = Core.getClaimedFDs();
                 FileDescriptor self = FileDescriptor.this;
 
-                ctx.claimFd(self, self, null, () ->  {
+                ctx.claimFd(self, self, () ->  {
                     if (self == in || self == out || self == err) {
                         return null;
                     }
@@ -76,10 +76,6 @@ public final class FileDescriptor {
                         getStackTraceHolder());
                 });
             }
-        }
-
-        @Override
-        public void afterRestore(Context<? extends jdk.crac.Resource> context) throws Exception {
         }
 
         @Override

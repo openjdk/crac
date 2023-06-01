@@ -50,6 +50,12 @@ import java.util.Set;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.ReentrantLock;
 
+import jdk.crac.Context;
+import jdk.crac.Resource;
+import jdk.crac.impl.CheckpointOpenSocketException;
+import jdk.internal.crac.ClaimedFDs;
+import jdk.internal.crac.Core;
+import jdk.internal.crac.JDKFdResource;
 import jdk.internal.ref.CleanerFactory;
 import sun.net.ConnectionResetException;
 import sun.net.NetHooks;
@@ -106,6 +112,7 @@ public final class NioSocketImpl extends SocketImpl implements PlatformSocketImp
     // set by SocketImpl.create, protected by stateLock
     private boolean stream;
     private Cleanable cleaner;
+    private Runnable closer;
 
     // set to true when the socket is in non-blocking mode
     private volatile boolean nonBlocking;
@@ -470,10 +477,11 @@ public final class NioSocketImpl extends SocketImpl implements PlatformSocketImp
                     ResourceManager.afterUdpClose();
                 throw ioe;
             }
-            Runnable closer = closerFor(fd, stream);
+            Runnable closer = closerFor(fd, this, stream);
             this.fd = fd;
             this.stream = stream;
             this.cleaner = CleanerFactory.cleaner().register(this, closer);
+            this.closer = closer;
             this.state = ST_UNCONNECTED;
         }
     }
@@ -713,6 +721,24 @@ public final class NioSocketImpl extends SocketImpl implements PlatformSocketImp
         return n;
     }
 
+    private class AcceptingSocketResource extends JDKFdResource {
+        private final FileDescriptor fd;
+
+        public AcceptingSocketResource(FileDescriptor fd) {
+            super();
+            this.fd = fd;
+        }
+
+        @Override
+        public void beforeCheckpoint(Context<? extends Resource> context) throws Exception {
+            ClaimedFDs ctx = Core.getClaimedFDs();
+            ctx.claimFd(fd, NioSocketImpl.this, () -> new CheckpointOpenSocketException(
+                NioSocketImpl.this.toString(),
+                getStackTraceHolder()), fd
+            );
+        }
+    }
+
     /**
      * Accepts a new connection so that the given SocketImpl is connected to
      * the peer. The SocketImpl must be a newly created NioSocketImpl.
@@ -725,6 +751,9 @@ public final class NioSocketImpl extends SocketImpl implements PlatformSocketImp
 
         FileDescriptor newfd = new FileDescriptor();
         InetSocketAddress[] isaa = new InetSocketAddress[1];
+
+        // This resource claims newfd while this frame is on stack
+        AcceptingSocketResource resource = new AcceptingSocketResource(newfd);
 
         // acquire the lock, adjusting the timeout for cases where several
         // threads are accepting connections and there is a timeout set
@@ -777,11 +806,12 @@ public final class NioSocketImpl extends SocketImpl implements PlatformSocketImp
         }
 
         // set the fields
-        Runnable closer = closerFor(newfd, true);
+        Runnable closer = closerFor(newfd, nsi, true);
         synchronized (nsi.stateLock) {
             nsi.fd = newfd;
             nsi.stream = true;
             nsi.cleaner = CleanerFactory.cleaner().register(nsi, closer);
+            nsi.closer = closer;
             nsi.localport = localAddress.getPort();
             nsi.address = isaa[0].getAddress();
             nsi.port = isaa[0].getPort();
@@ -1196,7 +1226,7 @@ public final class NioSocketImpl extends SocketImpl implements PlatformSocketImp
     /**
      * Returns an action to close the given file descriptor.
      */
-    private static Runnable closerFor(FileDescriptor fd, boolean stream) {
+    private static Runnable closerFor0(FileDescriptor fd, boolean stream) {
         if (stream) {
             return () -> {
                 try {
@@ -1217,6 +1247,38 @@ public final class NioSocketImpl extends SocketImpl implements PlatformSocketImp
                 }
             };
         }
+    }
+
+    private static class UnreachableSocketResource extends JDKFdResource implements Runnable {
+        private Runnable closer;
+        private FileDescriptor fd;
+
+        public UnreachableSocketResource(Runnable closer, FileDescriptor fd) {
+            super();
+            this.closer = closer;
+            this.fd = fd;
+        }
+
+        @Override
+        public void run() {
+            closer.run();
+        }
+
+        @Override
+        public void beforeCheckpoint(Context<? extends Resource> context) throws Exception {
+            Core.getClaimedFDs().claimFd(fd, this,
+                () -> new CheckpointOpenSocketException("About to be collected by GC...", getStackTraceHolder()),
+                fd);
+
+        }
+    }
+
+    private static Runnable closerFor(FileDescriptor fd, SocketImpl socket, boolean stream) {
+        return new UnreachableSocketResource(closerFor0(fd, stream), fd);
+    }
+
+    public Runnable getCloser() {
+        return closer;
     }
 
     /**

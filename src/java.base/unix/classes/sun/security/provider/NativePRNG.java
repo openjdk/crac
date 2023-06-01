@@ -598,7 +598,7 @@ public final class NativePRNG extends SecureRandomSpi {
             synchronized (LOCK_SET_SEED) {
                 if (seedOut != null) {
                     FileDescriptor fd = ((FileOutputStream)seedOut).getFD();
-                    Core.getClaimedFDs().claimFd(fd, this, fd, () -> null);
+                    Core.getClaimedFDs().claimFd(fd, this, () -> null, fd);
                 }
             }
 

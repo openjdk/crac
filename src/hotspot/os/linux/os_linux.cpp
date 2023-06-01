@@ -628,8 +628,13 @@ static const char *unstable_chroot_error = "/proc file system not found.\n"
                      "Java may be unstable running multithreaded in a chroot "
                      "environment on Linux when /proc filesystem is not mounted.";
 
-void os::Linux::initialize_system_info() {
+void os::Linux::initialize_processor_count() {
   set_processor_count(sysconf(_SC_NPROCESSORS_CONF));
+  assert(processor_count() > 0, "linux error");
+}
+
+void os::Linux::initialize_system_info() {
+  initialize_processor_count();
   if (processor_count() == 1) {
     pid_t pid = os::Linux::gettid();
     char fname[32];
@@ -642,7 +647,6 @@ void os::Linux::initialize_system_info() {
     }
   }
   _physical_memory = (julong)sysconf(_SC_PHYS_PAGES) * (julong)sysconf(_SC_PAGESIZE);
-  assert(processor_count() > 0, "linux error");
 }
 
 void os::init_system_properties_values() {
@@ -5935,7 +5939,7 @@ public:
   }
 };
 
-static int checkpoint_restore(int *shmid) {
+int os::Linux::checkpoint_restore(int *shmid) {
 
   int cres = call_crengine();
   if (cres < 0) {
@@ -5952,6 +5956,12 @@ static int checkpoint_restore(int *shmid) {
     sig = sigwaitinfo(&waitmask, &info);
   } while (sig == -1 && errno == EINTR);
   assert(sig == RESTORE_SIGNAL, "got what requested");
+
+  if (CRaCCPUCountInit) {
+    initialize_processor_count();
+    if (_cpu_to_node != NULL)
+      rebuild_cpu_to_node_map();
+  }
 
   if (CRTraceStartupTime) {
     tty->print_cr("STARTUPTIME " JLONG_FORMAT " restore-native", os::javaTimeNanos());
@@ -6164,7 +6174,7 @@ void VM_Crac::doit() {
   } else {
     trace_cr("Checkpoint ...");
     report_ok_to_jcmd_if_any();
-    int ret = checkpoint_restore(&shmid);
+    int ret = os::Linux::checkpoint_restore(&shmid);
     if (ret == JVM_CHECKPOINT_ERROR) {
       PerfMemoryLinux::restore();
       return;

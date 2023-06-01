@@ -64,7 +64,6 @@ class Linux {
   static void set_physical_memory(julong phys_mem) { _physical_memory = phys_mem; }
   static int active_processor_count();
 
-  static void initialize_processor_count();
   static void initialize_system_info();
 
   static int commit_memory_impl(char* addr, size_t bytes, bool exec);
@@ -184,8 +183,6 @@ class Linux {
   // Determine if the vmid is the parent pid for a child in a PID namespace.
   // Return the namespace pid if so, otherwise -1.
   static int get_namespace_pid(int vmid);
-
-  static int checkpoint_restore(int *shmid);
 
   // Stack repair handling
 

@@ -25,6 +25,10 @@
 
 package jdk.internal.access;
 
+import jdk.internal.crac.JDKResource;
+
+import java.lang.ref.Cleaner;
+
 public interface JavaLangRefAccess {
 
     /**
@@ -43,4 +47,9 @@ public interface JavaLangRefAccess {
      * Invoked by Runtime.runFinalization()
      */
     void runFinalization();
+
+    /**
+     * Calls package-private {@link Cleaner#register(Object, Runnable, JDKResource.Priority)}.
+     */
+    Cleaner.Cleanable cleanerRegisterWithPriority(Cleaner cleaner, Object obj, Runnable action, JDKResource.Priority priority);
 }

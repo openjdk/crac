@@ -331,6 +331,11 @@ public abstract class Reference<T> {
             public void runFinalization() {
                 Finalizer.runFinalization();
             }
+
+            @Override
+            public java.lang.ref.Cleaner.Cleanable cleanerRegisterWithPriority(java.lang.ref.Cleaner cleaner, Object obj, Runnable action, JDKResource.Priority priority) {
+                return cleaner.register(obj, action, priority);
+            }
         });
 
         referenceHandlerResource = new JDKResource() {

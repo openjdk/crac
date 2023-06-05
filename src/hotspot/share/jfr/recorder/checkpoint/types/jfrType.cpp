@@ -134,6 +134,7 @@ static const char* flag_value_origin_to_string(JVMFlagOrigin origin) {
     case JVMFlagOrigin::ATTACH_ON_DEMAND: return "Attach on demand";
     case JVMFlagOrigin::INTERNAL: return "Internal";
     case JVMFlagOrigin::JIMAGE_RESOURCE: return "JImage resource";
+    case JVMFlagOrigin::CRAC_RESTORE: return "CRaC restore";
     default: ShouldNotReachHere(); return "";
   }
 }

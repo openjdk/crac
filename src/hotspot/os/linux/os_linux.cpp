@@ -74,6 +74,7 @@
 #include "services/heapDumper.hpp"
 #include "services/memTracker.hpp"
 #include "services/runtimeService.hpp"
+#include "services/writeableFlags.hpp"
 #include "linuxAttachOperation.hpp"
 #include "utilities/align.hpp"
 #include "utilities/decoder.hpp"
@@ -182,6 +183,7 @@ public:
 
 private:
   struct fdinfo {
+    int fd;
     struct stat stat;
     state_t state;
     unsigned mark;
@@ -189,69 +191,57 @@ private:
     int flags;
   };
 
-  bool same_fd(int fd1, int fd2);
+  // params are indices into _fdinfos
+  bool same_fd(int i1, int i2);
 
-  fdinfo *_fdinfos;
-  int _len;
+  bool _inited;
+  GrowableArray<fdinfo> _fdinfos;
 
   void assert_mark(int i) {
-    assert(inited(), "");
-    assert(i < len(), "");
-    assert(_fdinfos[i].state != CLOSED, "");
+    assert(_inited, "");
+    assert(i < _fdinfos.length(), "");
+    assert(_fdinfos.at(i).state != CLOSED, "");
   }
 
 public:
   void initialize();
 
-  bool inited() { return _fdinfos != NULL; }
-  int len() { return _len; }
+  int len() { return _fdinfos.length(); }
 
-  state_t get_state(int i, state_t orstate = INVALID) {
-    assert(inited(), "");
-    if (i < len()) {
-      return _fdinfos[i].state;
+  state_t get_state(int i) {
+    assert(_inited, "");
+    assert(i < _fdinfos.length(), "");
+    return _fdinfos.at(i).state;
+  }
+
+  state_t find_state(int fd, state_t orstate) {
+    for (int i = 0; i < _fdinfos.length(); ++i) {
+      fdinfo *info = _fdinfos.adr_at(i);
+      if (info->fd == fd) {
+        return info->state;
+      }
     }
-    guarantee(orstate != INVALID, "can't use default orstate");
     return orstate;
   }
 
-  void set_state(int i, state_t newst) {
-    assert(inited(), "");
-    assert(i < len(), "");
-    _fdinfos[i].state = newst;
-  }
-
-  void mark(int i, mark_t m) {
-    assert_mark(i);
-    _fdinfos[i].mark |= (unsigned)m;
-  }
-  void clear(int i, mark_t m) {
-    assert_mark(i);
-    _fdinfos[i].mark &= ~(unsigned)m;
-  }
-  bool check(int i, mark_t m) {
-    assert_mark(i);
-    return 0 != (_fdinfos[i].mark & (unsigned)m);
+  int get_fd(int i) {
+    assert(_inited, "");
+    assert(i < _fdinfos.length(), "");
+    return _fdinfos.at(i).fd;
   }
 
   struct stat* get_stat(int i) {
-    assert(inited(), "");
-    assert(i < len(), "");
-    return &_fdinfos[i].stat;
+    assert(_inited, "");
+    assert(i < _fdinfos.length(), "");
+    return &_fdinfos.at(i).stat;
   }
 
   FdsInfo(bool do_init = true) :
-    _fdinfos(NULL),
-    _len(-1)
+    _inited(false),
+    _fdinfos(16, mtInternal)
   {
     if (do_init) {
       initialize();
-    }
-  }
-
-  ~FdsInfo() {
-    if (_fdinfos) {
-      FREE_C_HEAP_ARRAY(fdinfo, _fdinfos);
     }
   }
 };
@@ -277,6 +267,7 @@ class CracRestoreParameters : public CHeapObj<mtInternal> {
   struct header {
     jlong _restore_time;
     jlong _restore_counter;
+    int _nflags;
     int _nprops;
     int _env_memory_size;
   };
@@ -329,6 +320,7 @@ class CracRestoreParameters : public CHeapObj<mtInternal> {
   }
 
   static bool write_to(int fd,
+      const char* const* flags, int num_flags,
       const SystemProperty* props,
       const char *args,
       jlong restore_time,
@@ -336,12 +328,19 @@ class CracRestoreParameters : public CHeapObj<mtInternal> {
     header hdr = {
       restore_time,
       restore_counter,
+      num_flags,
       system_props_length(props),
       env_vars_size(environ)
     };
 
     if (!write_check_error(fd, (void *)&hdr, sizeof(header))) {
       return false;
+    }
+
+    for (int i = 0; i < num_flags; ++i) {
+      if (!write_check_error(fd, flags[i], strlen(flags[i]) + 1)) {
+        return false;
+      }
     }
 
     const SystemProperty* p = props;
@@ -5777,71 +5776,85 @@ static bool same_stat(struct stat* st1, struct stat* st2) {
          st1->st_ino == st2->st_ino;
 }
 
-bool FdsInfo::same_fd(int fd1, int fd2) {
-  if (!same_stat(get_stat(fd1), get_stat(fd2))) {
+bool FdsInfo::same_fd(int i1, int i2) {
+  assert(i1 < _fdinfos.length(), "");
+  assert(i2 < _fdinfos.length(), "");
+  fdinfo *fi1 = _fdinfos.adr_at(i1);
+  fdinfo *fi2 = _fdinfos.adr_at(i2);
+  if (!same_stat(&fi1->stat, &fi2->stat)) {
     return false;
   }
 
-  int flags1 = fcntl(fd1, F_GETFL);
-  int flags2 = fcntl(fd2, F_GETFL);
+  int flags1 = fcntl(fi1->fd, F_GETFL);
+  int flags2 = fcntl(fi2->fd, F_GETFL);
   if (flags1 != flags2) {
     return false;
   }
 
   const int test_flag = O_NONBLOCK;
   const int new_flags1 = flags1 ^ test_flag;
-  fcntl(fd1, F_SETFL, new_flags1);
-  if (fcntl(fd1, F_GETFL) != new_flags1) {
+  fcntl(fi1->fd, F_SETFL, new_flags1);
+  if (fcntl(fi1->fd, F_GETFL) != new_flags1) {
     // flag write ignored or handled differently,
     // don't know what to do
     return false;
   }
 
-  const int new_flags2 = fcntl(fd2, F_GETFL);
+  const int new_flags2 = fcntl(fi2->fd, F_GETFL);
   const bool are_same = new_flags1 == new_flags2;
 
-  fcntl(fd1, flags1);
+  fcntl(fi2->fd, flags1);
 
   return are_same;
 }
 
 void FdsInfo::initialize() {
-  assert(!inited(), "should be called only once");
+  assert(!_inited, "should be called only once");
 
-  const int max_fd = sysconf(_SC_OPEN_MAX);
-  _fdinfos = NEW_C_HEAP_ARRAY(fdinfo, max_fd, mtInternal);
-  int last_fd = -1;
+  char path[PATH_MAX];
+  struct dirent *dp;
 
-  for (int i = 0; i < max_fd; ++i) {
-    fdinfo* info = _fdinfos + i;
-    int r = fstat(i, &info->stat);
-    if (r == -1) {
-      info->state = CLOSED;
+  DIR *dir = opendir("/proc/self/fd");
+  int dfd = dirfd(dir);
+  while (dp = readdir(dir)) {
+    if (dp->d_name[0] == '.') {
+      // skip "." and ".."
       continue;
     }
-    info->state = ROOT; // can be changed to DUP_OF_0 + N below
-    info->mark = 0;
-    last_fd = i;
+    fdinfo info;
+    info.fd = atoi(dp->d_name);
+    if (info.fd == dfd) {
+      continue;
+    }
+    int r = fstat(info.fd, &info.stat);
+    if (r == -1) {
+      info.state = CLOSED;
+      continue;
+    }
+    info.state = ROOT; // can be changed to DUP_OF_0 + N below
+    info.mark = 0;
+    _fdinfos.append(info);
   }
-  _len = last_fd + 1;
-  _fdinfos = REALLOC_C_HEAP_ARRAY(fdinfo, _fdinfos, _len, mtInternal);
+  closedir(dir);
+  _inited = true;
 
-  for (int i = 0; i < _len; ++i) {
+  for (int i = 0; i < _fdinfos.length(); ++i) {
+    fdinfo *info = _fdinfos.adr_at(i);
     for (int j = 0; j < i; ++j) {
       if (get_state(j) == ROOT && same_fd(i, j)) {
-        _fdinfos[i].state = (state_t)(DUP_OF_0 + j);
+        info->state = (state_t)(DUP_OF_0 + j);
         break;
       }
     }
 
-    if (get_state(i) == ROOT) {
+    if (info->state == ROOT) {
       char fdpath[PATH_MAX];
-      int r = readfdlink(i, fdpath, sizeof(fdpath));
+      int r = readfdlink(info->fd, fdpath, sizeof(fdpath));
       guarantee(-1 != r, "can't stat fd");
-      if (get_stat(i)->st_nlink == 0 ||
+      if (info->stat.st_nlink == 0 ||
           strstr(fdpath, "(deleted)") ||
           nfs_silly_rename(fdpath)) {
-        mark(i, FdsInfo::M_CANT_RESTORE);
+        info->mark |= FdsInfo::M_CANT_RESTORE;
       }
     }
   }
@@ -6057,26 +6070,27 @@ void VM_Crac::doit() {
     if (fds.get_state(i) == FdsInfo::CLOSED) {
       continue;
     }
+    int fd = fds.get_fd(i);
 
     char detailsbuf[PATH_MAX];
-    const char* type = stat2strtype(fds.get_stat(i)->st_mode);
-    int linkret = readfdlink(i, detailsbuf, sizeof(detailsbuf));
+    struct stat* st = fds.get_stat(i);
+    const char* type = stat2strtype(st->st_mode);
+    int linkret = readfdlink(fd, detailsbuf, sizeof(detailsbuf));
     const char* details = 0 < linkret ? detailsbuf : "";
-    print_resources("JVM: FD fd=%d type=%s path=\"%s\"", i, type, details);
+    print_resources("JVM: FD fd=%d type=%s path=\"%s\"", fd, type, details);
 
-    if (is_claimed_fd(i)) {
+    if (is_claimed_fd(fd)) {
       print_resources("OK: claimed by java code\n");
       continue;
     }
 
-    if (_vm_inited_fds.get_state(i, FdsInfo::CLOSED) != FdsInfo::CLOSED) {
+    if (_vm_inited_fds.find_state(fd, FdsInfo::CLOSED) != FdsInfo::CLOSED) {
       print_resources("OK: inherited from process env\n");
       continue;
     }
 
-    struct stat* st = fds.get_stat(i);
     if (S_ISSOCK(st->st_mode)) {
-      if (is_socket_from_jcmd(i)){
+      if (is_socket_from_jcmd(fd)){
         print_resources("OK: jcmd socket\n");
         continue;
       }
@@ -6234,6 +6248,7 @@ void os::Linux::restore() {
   if (0 <= shmfd) {
     if (CracRestoreParameters::write_to(
           shmfd,
+          Arguments::jvm_flags_array(), Arguments::num_jvm_flags(),
           Arguments::system_properties(),
           Arguments::java_command() ? Arguments::java_command() : "",
           restore_time,
@@ -6338,6 +6353,31 @@ bool CracRestoreParameters::read_from(int fd) {
 
   ::_restore_start_time = hdr->_restore_time;
   ::_restore_start_counter = hdr->_restore_counter;
+
+  for (int i = 0; i < hdr->_nflags; i++) {
+    FormatBuffer<80> err_msg("%s", "");
+    JVMFlag::Error result;
+    const char *name = cursor;
+    if (*cursor == '+' || *cursor == '-') {
+      name = cursor + 1;
+      result = WriteableFlags::set_flag(name, *cursor == '+' ? "true" : "false",
+        JVMFlagOrigin::CRAC_RESTORE, err_msg);
+      cursor += strlen(cursor) + 1;
+    } else {
+      char* eq = strchrnul(cursor, '=');
+      if (*eq == '\0') {
+        result = JVMFlag::Error::MISSING_VALUE;
+        cursor = eq + 1;
+      } else {
+        *eq = '\0';
+        char* value = eq + 1;
+        result = WriteableFlags::set_flag(cursor, value, JVMFlagOrigin::CRAC_RESTORE, err_msg);
+        cursor = value + strlen(value) + 1;
+      }
+    }
+    guarantee(result == JVMFlag::Error::SUCCESS, "VM Option '%s' cannot be changed: %s",
+        name, JVMFlag::flag_error_str(result));
+  }
 
   for (int i = 0; i < hdr->_nprops; i++) {
     assert((cursor + strlen(cursor) <= contents + st.st_size), "property length exceeds shared memory size");

@@ -222,6 +222,15 @@ public final class Cleaner {
     }
 
     /**
+     * Register an object and action and also register the underlying Reference with a CRaC priority.
+     */
+    /*non-public*/ Cleanable register(Object obj, Runnable action, JDKResource.Priority priority) {
+        Objects.requireNonNull(obj, "obj");
+        Objects.requireNonNull(action, "action");
+        return new CleanerImpl.PhantomCleanableRef(obj, this, action, priority);
+    }
+
+    /**
      * {@code Cleanable} represents an object and a
      * cleaning action registered in a {@code Cleaner}.
      * @since 9

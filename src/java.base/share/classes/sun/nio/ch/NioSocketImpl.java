@@ -30,6 +30,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.io.UncheckedIOException;
+import java.lang.invoke.MethodHandles;
 import java.lang.ref.Cleaner.Cleanable;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
@@ -1274,6 +1275,16 @@ public final class NioSocketImpl extends SocketImpl implements PlatformSocketImp
     }
 
     private static Runnable closerFor(FileDescriptor fd, SocketImpl socket, boolean stream) {
+
+        // FIXME ensure FileDispatcherImpl's Resource is registered before the closer is used,
+        // otherwise the closer during beforeCheckpoint may be the first one to access
+        // FileDescriptor, and then Dispatcher Resource will be blocked for registration.
+        try {
+            MethodHandles.lookup().ensureInitialized(FileDispatcherImpl.class);
+        } catch (IllegalAccessException e) {
+            throw new RuntimeException(e);
+        }
+
         return new UnreachableSocketResource(closerFor0(fd, stream), fd);
     }
 

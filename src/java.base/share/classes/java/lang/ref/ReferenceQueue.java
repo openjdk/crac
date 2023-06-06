@@ -121,6 +121,22 @@ public class ReferenceQueue<T> {
         }
     }
 
+    Reference<? extends T> poll(long timeout) throws InterruptedException {
+        synchronized (lock) {
+            Reference<? extends T> r = reallyPoll();
+            if (r != null) return r;
+            // any wake (including spurious) ends the wait
+            lock.wait(timeout);
+            return reallyPoll();
+        }
+    }
+
+    void wakeup() {
+        synchronized (lock) {
+            lock.notifyAll();
+        }
+    }
+
     /**
      * Removes the next reference object in this queue, blocking until either
      * one becomes available or the given timeout period expires.

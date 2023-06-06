@@ -34,6 +34,8 @@ import java.util.function.Function;
 
 import jdk.crac.Context;
 import jdk.crac.Resource;
+import jdk.internal.access.JavaLangRefAccess;
+import jdk.internal.access.SharedSecrets;
 import jdk.internal.crac.Core;
 import jdk.internal.crac.JDKResource;
 import jdk.internal.misc.InnocuousThread;
@@ -48,6 +50,7 @@ public final class CleanerImpl implements Runnable, JDKResource {
      * An object to access the CleanerImpl from a Cleaner; set by Cleaner init.
      */
     private static Function<Cleaner, CleanerImpl> cleanerImplAccess = null;
+    private static JavaLangRefAccess javaLangRefAccess = SharedSecrets.getJavaLangRefAccess();
 
     /**
      * Heads of a CleanableList for each reference type.
@@ -57,7 +60,6 @@ public final class CleanerImpl implements Runnable, JDKResource {
     // The ReferenceQueue of pending cleaning actions
     final ReferenceQueue<Object> queue;
 
-    Thread thread;
     volatile boolean blockForCheckpoint = false;
     boolean waitingForCheckpoint = false;
 
@@ -113,7 +115,7 @@ public final class CleanerImpl implements Runnable, JDKResource {
         // now that there's at least one cleaning action, for the cleaner,
         // we can start the associated thread, which runs until
         // all cleaning actions have been run.
-        thread = threadFactory.newThread(this);
+        Thread thread = threadFactory.newThread(this);
         thread.setDaemon(true);
         thread.start();
         Core.getJDKContext().register(this);
@@ -143,6 +145,12 @@ public final class CleanerImpl implements Runnable, JDKResource {
             }
             if (blockForCheckpoint) {
                 try {
+                    synchronized (phantomCleanableList) {
+                        PhantomCleanable<?> next = phantomCleanableList;
+                        do {
+                            next = next.cleanIfNull();
+                        } while (next != phantomCleanableList);
+                    }
                     synchronized (this) {
                         waitingForCheckpoint = true;
                         notify();
@@ -158,7 +166,7 @@ public final class CleanerImpl implements Runnable, JDKResource {
             try {
                 // Wait for a Ref, with a timeout to avoid getting hung
                 // due to a race with clear/clean
-                Cleanable ref = (Cleanable) queue.remove(60 * 1000L);
+                Cleanable ref = (Cleanable) javaLangRefAccess.pollReferenceQueue(queue, 60 * 1000L);
                 if (ref != null) {
                     ref.clean();
                 }
@@ -179,7 +187,7 @@ public final class CleanerImpl implements Runnable, JDKResource {
         // The limitation is that code performing C/R must not wait on any task
         // completed by the cleaner.
         blockForCheckpoint = true;
-        thread.interrupt();
+        javaLangRefAccess.wakeupReferenceQueue(queue);
         while (!waitingForCheckpoint) {
             wait();
         }
@@ -193,30 +201,24 @@ public final class CleanerImpl implements Runnable, JDKResource {
 
     @Override
     public Priority getPriority() {
-        return Priority.REFERENCE_HANDLER;
+        return Priority.CLEANERS;
     }
 
     /**
      * Perform cleaning on an unreachable PhantomReference.
      */
-    public static final class PhantomCleanableRef extends PhantomCleanable<Object> implements JDKResource {
+    public static final class PhantomCleanableRef extends PhantomCleanable<Object> {
         private final Runnable action;
-        private final JDKResource.Priority priority;
 
         /**
          * Constructor for a phantom cleanable reference.
          * @param obj the object to monitor
          * @param cleaner the cleaner
          * @param action the action Runnable
-         * @param priority priority for checkpoint handling
          */
-        public PhantomCleanableRef(Object obj, Cleaner cleaner, Runnable action, JDKResource.Priority priority) {
+        public PhantomCleanableRef(Object obj, Cleaner cleaner, Runnable action) {
             super(obj, cleaner);
             this.action = action;
-            this.priority = priority;
-            if (priority != null) {
-                jdk.internal.crac.Core.getJDKContext().register(this);
-            }
         }
 
         /**
@@ -225,7 +227,6 @@ public final class CleanerImpl implements Runnable, JDKResource {
         PhantomCleanableRef() {
             super();
             this.action = null;
-            this.priority = Priority.CLEANERS;
         }
 
         @Override
@@ -251,23 +252,6 @@ public final class CleanerImpl implements Runnable, JDKResource {
         @Override
         public void clear() {
             throw new UnsupportedOperationException("clear");
-        }
-
-        @Override
-        public Priority getPriority() {
-            return priority;
-        }
-
-        @Override
-        public void beforeCheckpoint(Context<? extends Resource> context) throws Exception {
-            if (refersTo(null)) {
-                 clean();
-            }
-        }
-
-        @Override
-        public void afterRestore(Context<? extends Resource> context) throws Exception {
-
         }
 
         @Override

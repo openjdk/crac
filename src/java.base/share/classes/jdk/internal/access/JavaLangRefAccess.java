@@ -25,9 +25,8 @@
 
 package jdk.internal.access;
 
-import jdk.internal.crac.JDKResource;
-
-import java.lang.ref.Cleaner;
+import java.lang.ref.Reference;
+import java.lang.ref.ReferenceQueue;
 
 public interface JavaLangRefAccess {
 
@@ -49,7 +48,12 @@ public interface JavaLangRefAccess {
     void runFinalization();
 
     /**
-     * Calls package-private {@link Cleaner#register(Object, Runnable, JDKResource.Priority)}.
+     * Calls package-private {@link ReferenceQueue#poll(long)}.
      */
-    Cleaner.Cleanable cleanerRegisterWithPriority(Cleaner cleaner, Object obj, Runnable action, JDKResource.Priority priority);
+    <T> Reference<? extends T> pollReferenceQueue(ReferenceQueue<T> queue, long timeout) throws InterruptedException;
+
+    /**
+     * Calls package-private {@link ReferenceQueue#wakeup()}.
+     */
+    void wakeupReferenceQueue(ReferenceQueue<?> queue);
 }

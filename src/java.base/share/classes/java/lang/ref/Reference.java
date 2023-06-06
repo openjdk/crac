@@ -27,6 +27,7 @@ package java.lang.ref;
 
 import jdk.crac.Context;
 import jdk.crac.Resource;
+import jdk.internal.crac.Core;
 import jdk.internal.crac.JDKResource;
 import jdk.internal.vm.annotation.ForceInline;
 import jdk.internal.vm.annotation.IntrinsicCandidate;
@@ -333,17 +334,12 @@ public abstract class Reference<T> {
             }
 
             @Override
-            public java.lang.ref.Cleaner.Cleanable cleanerRegisterWithPriority(java.lang.ref.Cleaner cleaner, Object obj, Runnable action, JDKResource.Priority priority) {
+            public java.lang.ref.Cleaner.Cleanable cleanerRegisterWithPriority(java.lang.ref.Cleaner cleaner, Object obj, Runnable action, Core.Priority priority) {
                 return cleaner.register(obj, action, priority);
             }
         });
 
         referenceHandlerResource = new JDKResource() {
-            @Override
-            public Priority getPriority() {
-                return Priority.REFERENCE_HANDLER;
-            }
-
             @Override
             public void beforeCheckpoint(Context<? extends Resource> context) throws Exception {
                 System.gc();
@@ -355,7 +351,7 @@ public abstract class Reference<T> {
             public void afterRestore(Context<? extends Resource> context) throws Exception {
             }
         };
-        jdk.internal.crac.Core.getJDKContext().register(referenceHandlerResource);
+        Core.Priority.REFERENCE_HANDLER.getContext().register(referenceHandlerResource);
     }
 
     /* -- Referent accessor and setters -- */

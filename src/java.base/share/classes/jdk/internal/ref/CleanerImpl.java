@@ -60,8 +60,8 @@ public final class CleanerImpl implements Runnable, JDKResource {
     // The ReferenceQueue of pending cleaning actions
     final ReferenceQueue<Object> queue;
 
-    volatile boolean blockForCheckpoint = false;
-    boolean waitingForCheckpoint = false;
+    volatile boolean forceCleanup = false;
+    boolean cleanupComplete = false;
 
     /**
      * Called by Cleaner static initialization to provide the function
@@ -143,7 +143,7 @@ public final class CleanerImpl implements Runnable, JDKResource {
                 // Clear the thread locals
                 mlThread.eraseThreadLocals();
             }
-            if (blockForCheckpoint) {
+            if (forceCleanup) {
                 try {
                     synchronized (phantomCleanableList) {
                         PhantomCleanable<?> next = phantomCleanableList;
@@ -152,12 +152,12 @@ public final class CleanerImpl implements Runnable, JDKResource {
                         } while (next != phantomCleanableList);
                     }
                     synchronized (this) {
-                        waitingForCheckpoint = true;
+                        cleanupComplete = true;
                         notify();
-                        while (blockForCheckpoint) {
+                        while (forceCleanup) {
                             wait();
                         }
-                        waitingForCheckpoint = false;
+                        cleanupComplete = false;
                     }
                 } catch (InterruptedException ignored) {
                     // interruptions are ignored below as well
@@ -179,24 +179,17 @@ public final class CleanerImpl implements Runnable, JDKResource {
 
     @Override
     public synchronized void beforeCheckpoint(Context<? extends Resource> context) throws Exception {
-        // We block the cleaner thread to prevent race conditions between this
-        // thread and checkpointing thread invoking clean().
-        // When the cleanup starts in cleaner thread the checkpoint will skip
-        // it, but without waiting for the cleanup to finish (which might be
-        // critical for the checkpoint, e.g. closing FDs).
-        // The limitation is that code performing C/R must not wait on any task
-        // completed by the cleaner.
-        blockForCheckpoint = true;
+        forceCleanup = true;
         javaLangRefAccess.wakeupReferenceQueue(queue);
-        while (!waitingForCheckpoint) {
+        while (!cleanupComplete) {
             wait();
         }
+        forceCleanup = false;
+        notify();
     }
 
     @Override
     public synchronized void afterRestore(Context<? extends Resource> context) throws Exception {
-        blockForCheckpoint = false;
-        notify();
     }
 
     @Override

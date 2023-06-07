@@ -722,24 +722,6 @@ public final class NioSocketImpl extends SocketImpl implements PlatformSocketImp
         return n;
     }
 
-    private class AcceptingSocketResource extends JDKFdResource {
-        private final FileDescriptor fd;
-
-        public AcceptingSocketResource(FileDescriptor fd) {
-            super();
-            this.fd = fd;
-        }
-
-        @Override
-        public void beforeCheckpoint(Context<? extends Resource> context) throws Exception {
-            ClaimedFDs ctx = Core.getClaimedFDs();
-            ctx.claimFd(fd, NioSocketImpl.this, () -> new CheckpointOpenSocketException(
-                NioSocketImpl.this.toString(),
-                getStackTraceHolder()), fd
-            );
-        }
-    }
-
     /**
      * Accepts a new connection so that the given SocketImpl is connected to
      * the peer. The SocketImpl must be a newly created NioSocketImpl.
@@ -752,9 +734,6 @@ public final class NioSocketImpl extends SocketImpl implements PlatformSocketImp
 
         FileDescriptor newfd = new FileDescriptor();
         InetSocketAddress[] isaa = new InetSocketAddress[1];
-
-        // This resource claims newfd while this frame is on stack
-        AcceptingSocketResource resource = new AcceptingSocketResource(newfd);
 
         // acquire the lock, adjusting the timeout for cases where several
         // threads are accepting connections and there is a timeout set

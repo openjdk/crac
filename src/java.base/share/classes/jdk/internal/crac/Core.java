@@ -28,7 +28,6 @@ package jdk.internal.crac;
 
 import jdk.crac.Context;
 import jdk.crac.impl.BlockingOrderedContext;
-import jdk.crac.impl.OrderedContext;
 
 public class Core {
     private static ClaimedFDs claimedFDs;

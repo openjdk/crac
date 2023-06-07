@@ -26,7 +26,6 @@
 
 package jdk.crac;
 
-
 import jdk.crac.impl.*;
 import jdk.internal.crac.ClaimedFDs;
 import jdk.internal.crac.LoggerContainer;

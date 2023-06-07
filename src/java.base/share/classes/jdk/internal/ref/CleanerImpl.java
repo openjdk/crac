@@ -144,23 +144,17 @@ public final class CleanerImpl implements Runnable, JDKResource {
                 mlThread.eraseThreadLocals();
             }
             if (forceCleanup) {
-                try {
-                    synchronized (phantomCleanableList) {
-                        PhantomCleanable<?> next = phantomCleanableList;
-                        do {
-                            next = next.cleanIfNull();
-                        } while (next != phantomCleanableList);
-                    }
-                    synchronized (this) {
-                        cleanupComplete = true;
-                        notify();
-                        while (forceCleanup) {
-                            wait();
-                        }
-                        cleanupComplete = false;
-                    }
-                } catch (InterruptedException ignored) {
-                    // interruptions are ignored below as well
+                synchronized (phantomCleanableList) {
+                    PhantomCleanable<?> next = phantomCleanableList;
+                    do {
+                        next = next.cleanIfNull();
+                    } while (next != phantomCleanableList);
+                }
+                synchronized (this) {
+                    cleanupComplete = true;
+                    // prevent looping in the cleanup
+                    forceCleanup = false;
+                    notify();
                 }
             }
             try {
@@ -179,13 +173,12 @@ public final class CleanerImpl implements Runnable, JDKResource {
 
     @Override
     public synchronized void beforeCheckpoint(Context<? extends Resource> context) throws Exception {
+        cleanupComplete = false;
         forceCleanup = true;
         javaLangRefAccess.wakeupReferenceQueue(queue);
         while (!cleanupComplete) {
             wait();
         }
-        forceCleanup = false;
-        notify();
     }
 
     @Override

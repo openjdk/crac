@@ -118,7 +118,7 @@ public final class CleanerImpl implements Runnable, JDKResource {
         Thread thread = threadFactory.newThread(this);
         thread.setDaemon(true);
         thread.start();
-        Core.getJDKContext().register(this);
+        Core.Priority.CLEANERS.getContext().register(this);
     }
 
     /**
@@ -183,11 +183,6 @@ public final class CleanerImpl implements Runnable, JDKResource {
 
     @Override
     public synchronized void afterRestore(Context<? extends Resource> context) throws Exception {
-    }
-
-    @Override
-    public Priority getPriority() {
-        return Priority.CLEANERS;
     }
 
     /**

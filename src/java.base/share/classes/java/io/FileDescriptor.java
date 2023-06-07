@@ -25,7 +25,6 @@
 
 package java.io;
 
-import java.net.InetSocketAddress;
 import java.net.Socket;
 import java.util.*;
 
@@ -65,8 +64,6 @@ public final class FileDescriptor {
         final Exception stackTraceHolder;
 
         Resource() {
-            JDKContext jdkContext = Core.getJDKContext();
-            jdkContext.register(this);
             if (JDKContext.Properties.COLLECT_FD_STACKTRACES) {
                 // About the timestamp: we cannot format it nicely since this
                 // exception is sometimes created too early in the VM lifecycle
@@ -76,6 +73,7 @@ public final class FileDescriptor {
             } else {
                 stackTraceHolder = null;
             }
+            Core.Priority.FILE_DESCRIPTORS.getContext().register(this);
         }
 
         @Override
@@ -88,11 +86,6 @@ public final class FileDescriptor {
         @Override
         public void afterRestore(Context<? extends jdk.crac.Resource> context) throws Exception {
             FileDescriptor.this.afterRestore();
-        }
-
-        @Override
-        public Priority getPriority() {
-            return Priority.FILE_DESCRIPTORS;
         }
 
         @Override
@@ -111,15 +104,10 @@ public final class FileDescriptor {
     static {
         initIDs();
 
-        Core.getJDKContext().register(checkpointListener = new JDKResource() {
-            @Override
-            public Priority getPriority() {
-                return Priority.NORMAL;
-            }
-
+        JDKResource resource = new JDKResource() {
             @Override
             public void beforeCheckpoint(Context<? extends jdk.crac.Resource> context) {
-                JDKContext ctx = (JDKContext) context;
+                JDKContext ctx = Core.getJDKContext();
                 ctx.claimFd(in, "System.in");
                 ctx.claimFd(out, "System.out");
                 ctx.claimFd(err, "System.err");
@@ -128,7 +116,9 @@ public final class FileDescriptor {
             @Override
             public void afterRestore(Context<? extends jdk.crac.Resource> context) {
             }
-        });
+        };
+        checkpointListener = resource;
+        Core.Priority.NORMAL.getContext().register(resource);
     }
 
     // Set up JavaIOFileDescriptorAccess in SharedSecrets

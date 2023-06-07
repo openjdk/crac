@@ -1,13 +1,10 @@
 /*
- * Copyright (c) 2019, 2021, Azul Systems, Inc. All rights reserved.
- * Copyright (c) 2021, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2022, Azul Systems, Inc. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 2 only, as
- * published by the Free Software Foundation.  Oracle designates this
- * particular file as subject to the "Classpath" exception as provided
- * by Oracle in the LICENSE file that accompanied this code.
+ * published by the Free Software Foundation.
  *
  * This code is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
@@ -24,10 +21,36 @@
  * questions.
  */
 
-package jdk.internal.crac;
 
-import jdk.crac.Context;
-import jdk.crac.Resource;
+import jdk.crac.*;
+import jdk.test.lib.Asserts;
+import jdk.test.lib.crac.CracBuilder;
+import jdk.test.lib.crac.CracTest;
 
-public interface JDKResource extends Resource {
+import java.io.File;
+import java.io.IOException;
+import java.nio.channels.Pipe;
+import java.nio.file.*;
+import java.util.Objects;
+import java.util.concurrent.TimeUnit;
+
+/**
+ * @test CracOptionTest
+ * @library /test/lib
+ * @build CracOptionTest
+ * @run driver jdk.test.lib.crac.CracTest
+ */
+
+public class CracOptionTest implements CracTest {
+    @Override
+    public void test() throws Exception {
+        CracBuilder builder = new CracBuilder();
+        builder.javaOption("k","v");
+        builder.doCheckpointAndRestore();
+    }
+
+    @Override
+    public void exec() throws Exception {
+        Core.checkpointRestore();
+    }
 }

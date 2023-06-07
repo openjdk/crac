@@ -28,15 +28,13 @@ package jdk.internal.ref;
 import java.lang.ref.Cleaner;
 import java.lang.ref.Cleaner.Cleanable;
 import java.lang.ref.ReferenceQueue;
-import java.security.AccessController;
-import java.security.PrivilegedAction;
 import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Function;
 
-import jdk.crac.CheckpointException;
 import jdk.crac.Context;
 import jdk.crac.Resource;
+import jdk.internal.crac.Core;
 import jdk.internal.crac.JDKResource;
 import jdk.internal.misc.InnocuousThread;
 
@@ -157,7 +155,6 @@ public final class CleanerImpl implements Runnable {
      */
     public static final class PhantomCleanableRef extends PhantomCleanable<Object> implements JDKResource {
         private final Runnable action;
-        private final JDKResource.Priority priority;
 
         /**
          * Constructor for a phantom cleanable reference.
@@ -166,11 +163,12 @@ public final class CleanerImpl implements Runnable {
          * @param action the action Runnable
          * @param priority priority for checkpoint handling
          */
-        public PhantomCleanableRef(Object obj, Cleaner cleaner, Runnable action, JDKResource.Priority priority) {
+        public PhantomCleanableRef(Object obj, Cleaner cleaner, Runnable action, Core.Priority priority) {
             super(obj, cleaner);
             this.action = action;
-            this.priority = priority;
-            jdk.internal.crac.Core.getJDKContext().register(this);
+            if (priority != null) {
+                priority.getContext().register(this);
+            }
         }
 
         /**
@@ -179,7 +177,6 @@ public final class CleanerImpl implements Runnable {
         PhantomCleanableRef() {
             super();
             this.action = null;
-            this.priority = Priority.CLEANERS;
         }
 
         @Override
@@ -208,19 +205,14 @@ public final class CleanerImpl implements Runnable {
         }
 
         @Override
-        public Priority getPriority() {
-            return priority;
-        }
-
-        @Override
-        public void beforeCheckpoint(Context<? extends Resource> context) throws Exception {
+        public void beforeCheckpoint(Context<? extends Resource> context) {
             if (refersTo(null)) {
                  clean();
             }
         }
 
         @Override
-        public void afterRestore(Context<? extends Resource> context) throws Exception {
+        public void afterRestore(Context<? extends Resource> context) {
 
         }
 

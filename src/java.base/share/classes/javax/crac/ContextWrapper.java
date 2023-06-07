@@ -45,16 +45,11 @@ class ContextWrapper extends Context<Resource> {
             throws CheckpointException {
         try {
             this.context.beforeCheckpoint(convertContext(context));
-        } catch (jdk.crac.CheckpointException.Combined e) {
-            CheckpointException newException = new CheckpointException.Combined();
+        } catch (jdk.crac.CheckpointException e) {
+            CheckpointException newException = new CheckpointException();
             for (Throwable t : e.getSuppressed()) {
                 newException.addSuppressed(t);
             }
-            throw newException;
-        } catch (jdk.crac.CheckpointException e) {
-            // should we rather use message + cause in here?
-            CheckpointException newException = new CheckpointException.Combined();
-            newException.addSuppressed(e);
             throw newException;
         }
     }
@@ -64,15 +59,11 @@ class ContextWrapper extends Context<Resource> {
             throws RestoreException {
         try {
             this.context.afterRestore(convertContext(context));
-        } catch (jdk.crac.RestoreException.Combined e) {
-            RestoreException newException = new RestoreException.Combined();
+        } catch (jdk.crac.RestoreException e) {
+            RestoreException newException = new RestoreException();
             for (Throwable t : e.getSuppressed()) {
                 newException.addSuppressed(t);
             }
-            throw newException;
-        } catch (jdk.crac.RestoreException e) {
-            RestoreException newException = new RestoreException.Combined();
-            newException.addSuppressed(e);
             throw newException;
         }
     }

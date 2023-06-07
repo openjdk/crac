@@ -35,30 +35,9 @@ public class CheckpointException extends Exception {
     /**
      * Creates a {@code CheckpointException}.
      */
-    private CheckpointException() {
+    public CheckpointException() {
         // This exception is used as an aggregate for other (suppressed)
         // exceptions; no point in recording and printing the stack trace.
         super(null, null, true, false);
-    }
-
-    /**
-     * Constructs a {@code CheckpointException} with the specified
-     * detail message.
-     *
-     * @param message the detail message.
-     */
-    public CheckpointException(String message) {
-        super(message);
-    }
-
-    /**
-     * Exception that combines multiple other exceptions in its suppressed exceptions.
-     */
-    public static class Combined extends CheckpointException {
-        private static final long serialVersionUID = -7949656538310239746L;
-        /**
-         * Constructs a message-less exception, not capturing stack trace.
-         */
-        public Combined() {}
     }
 }

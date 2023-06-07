@@ -115,11 +115,8 @@ public class Core {
 
         try {
             globalContext.beforeCheckpoint(null);
-        } catch (CheckpointException.Combined ce) {
-            checkpointException = ce;
         } catch (CheckpointException ce) {
-            checkpointException = new CheckpointException.Combined();
-            checkpointException.addSuppressed(ce);
+            checkpointException = ce;
         }
 
         JDKContext jdkContext = jdk.internal.crac.Core.getJDKContext();
@@ -146,10 +143,9 @@ public class Core {
 
         if (retCode != JVM_CHECKPOINT_OK) {
             if (checkpointException == null) {
+                checkpointException = new CheckpointException();
                 if (messages.length == 0) {
-                    checkpointException = new CheckpointException("Native checkpoint failed");
-                } else {
-                    checkpointException = new CheckpointException.Combined();
+                    checkpointException.addSuppressed(new RuntimeException("Native checkpoint failed"));
                 }
             }
             switch (retCode) {
@@ -173,12 +169,10 @@ public class Core {
         } catch (RestoreException re) {
             if (checkpointException == null) {
                 restoreException = re;
-            } else if (re instanceof RestoreException.Combined) {
+            } else {
                 for (Throwable t : re.getSuppressed()) {
                     checkpointException.addSuppressed(t);
                 }
-            } else {
-                checkpointException.addSuppressed(re);
             }
         }
 
@@ -205,7 +199,7 @@ public class Core {
                     assert checkpointException == null :
                         "should not have new arguments";
                     if (restoreException == null) {
-                        restoreException = new RestoreException.Combined();
+                        restoreException = new RestoreException();
                     }
                     restoreException.addSuppressed(e);
                 }

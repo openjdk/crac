@@ -105,7 +105,7 @@ public abstract class PriorityContext<P, R extends Resource> extends AbstractCon
             recordResource(resource);
             try {
                 resource.beforeCheckpoint(PriorityContext.this);
-            } catch (CheckpointException.Combined e) {
+            } catch (CheckpointException e) {
                 CheckpointException ce = ensureCheckpointException();
                 for (Throwable t : e.getSuppressed()) {
                     ce.addSuppressed(t);

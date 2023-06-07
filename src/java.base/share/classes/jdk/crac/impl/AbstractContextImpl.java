@@ -39,7 +39,7 @@ public abstract class AbstractContextImpl<R extends Resource> extends Context<R>
         recordResource(resource);
         try {
             resource.beforeCheckpoint(this);
-        } catch (CheckpointException.Combined e) {
+        } catch (CheckpointException e) {
             CheckpointException ce = ensureCheckpointException();
             for (Throwable t : e.getSuppressed()) {
                 ce.addSuppressed(t);
@@ -54,7 +54,7 @@ public abstract class AbstractContextImpl<R extends Resource> extends Context<R>
 
     protected CheckpointException ensureCheckpointException() {
         if (checkpointException == null) {
-            checkpointException = new CheckpointException.Combined();
+            checkpointException = new CheckpointException();
         }
         return checkpointException;
     }
@@ -124,7 +124,7 @@ public abstract class AbstractContextImpl<R extends Resource> extends Context<R>
         LoggerContainer.debug("afterRestore {0}", resource);
         try {
             resource.afterRestore(this);
-        } catch (RestoreException.Combined e) {
+        } catch (RestoreException e) {
             // Print error early in case the restore process gets stuck
             LoggerContainer.error(e, "Failed to restore " + resource);
             RestoreException re = ensureRestoreException();
@@ -142,7 +142,7 @@ public abstract class AbstractContextImpl<R extends Resource> extends Context<R>
 
     protected RestoreException ensureRestoreException() {
         if (restoreException == null) {
-            restoreException = new RestoreException.Combined();
+            restoreException = new RestoreException();
         }
         return restoreException;
     }

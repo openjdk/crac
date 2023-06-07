@@ -35,31 +35,9 @@ public class RestoreException extends Exception {
     /**
      * Creates a {@code RestoreException}.
      */
-    private RestoreException() {
+    public RestoreException() {
         // This exception is used as an aggregate for other (suppressed)
         // exceptions; no point in recording and printing the stack trace.
         super(null, null, true, false);
-    }
-
-    /**
-     * Constructs a {@code RestoreException} with the specified
-     * detail message.
-     *
-     * @param message the detail message.
-     */
-    public RestoreException(String message) {
-        super(message);
-    }
-
-    /**
-     * Exception that combines multiple other exceptions in its suppressed exceptions.
-     */
-    public static class Combined extends RestoreException {
-        private static final long serialVersionUID = -574656804868751049L;
-
-        /**
-         * Constructs a message-less exception, not capturing stack trace.
-         */
-        public Combined() {}
     }
 }

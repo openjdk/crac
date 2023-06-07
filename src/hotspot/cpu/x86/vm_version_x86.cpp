@@ -624,18 +624,17 @@ class VM_Version_StubGenerator: public StubCodeGenerator {
   };
 };
 
-uint64_t VM_Version::CPUFeatures_parse(const char *ccstr, uint64_t &glibc_features) {
-  assert(ccstr, "CPUFeatures_parse NULL");
+uint64_t VM_Version::CPUFeatures_parse(uint64_t &glibc_features) {
   glibc_features = _glibc_features;
-  if (strcmp(ccstr, "native") == 0) {
+  if (CPUFeatures == NULL || strcmp(CPUFeatures, "native") == 0) {
     return _features;
   }
-  if (strcmp(ccstr, "ignore") == 0) {
+  if (strcmp(CPUFeatures, "ignore") == 0) {
     ignore_glibc_not_using = true;
     return _features;
   }
   glibc_features = 0;
-  if (strcmp(ccstr, "generic") == 0) {
+  if (strcmp(CPUFeatures, "generic") == 0) {
     // 32-bit x86 cannot rely on anything.
     return 0
 #ifdef AMD64
@@ -656,7 +655,7 @@ uint64_t VM_Version::CPUFeatures_parse(const char *ccstr, uint64_t &glibc_featur
   char *endptr;
   errno = 0;
   uint64_t retval;
-  unsigned long long ull = strtoull(ccstr, &endptr, 0);
+  unsigned long long ull = strtoull(CPUFeatures, &endptr, 0);
   retval = ull;
   if (!errno && *endptr == ',' && retval == ull) {
     ull = strtoull(endptr + 1, &endptr, 0);
@@ -668,10 +667,60 @@ uint64_t VM_Version::CPUFeatures_parse(const char *ccstr, uint64_t &glibc_featur
   char buf[512];
   int res = jio_snprintf(
               buf, sizeof(buf),
-              "VM option 'CPUFeatures=%s' must be of the form: 0xnum,0xnum", ccstr);
+              "VM option 'CPUFeatures=%s' must be of the form: 0xnum,0xnum", CPUFeatures);
   assert(res > 0, "not enough temporary space allocated");
   vm_exit_during_initialization(buf);
   return -1;
+}
+
+void VM_Version::CPUFeatures_init() {
+  uint64_t       features_expected =   CPU_MAX - 1;
+  uint64_t glibc_features_expected = GLIBC_MAX - 1;
+#if !INCLUDE_CPU_FEATURE_ACTIVE && !INCLUDE_LD_SO_LIST_DIAGNOSTICS
+        features_expected =       _features;
+  glibc_features_expected = _glibc_features;
+#endif
+  assert(!CPUFeatures == FLAG_IS_DEFAULT(CPUFeatures), "CPUFeatures parsing");
+  uint64_t GLIBCFeatures_x64;
+  uint64_t   CPUFeatures_x64 = CPUFeatures_parse(GLIBCFeatures_x64);
+  uint64_t       features_missing =   CPUFeatures_x64 & ~      _features;
+  uint64_t glibc_features_missing = GLIBCFeatures_x64 & ~_glibc_features;
+  if (features_missing || glibc_features_missing) {
+    char buf[512];
+    int res = jio_snprintf(
+		buf, sizeof(buf),
+		"Specified -XX:CPUFeatures=0x" UINT64_FORMAT_X ",0x" UINT64_FORMAT_X
+		"; this machine's CPU features are 0x" UINT64_FORMAT_X ",0x" UINT64_FORMAT_X
+		"; missing features of this CPU are 0x" UINT64_FORMAT_X ",0x" UINT64_FORMAT_X " ",
+		CPUFeatures_x64, GLIBCFeatures_x64,
+		_features, _glibc_features,
+		features_missing, glibc_features_missing);
+    assert(res > 0, "not enough temporary space allocated");
+    // insert_features_names() does crash for undefined too high-numbered features.
+    insert_features_names(buf + res , sizeof(buf) - res ,       features_missing & (  CPU_MAX - 1));
+    int res2 = res + strlen(buf + res);
+    insert_features_names(buf + res2, sizeof(buf) - res2, glibc_features_missing & (GLIBC_MAX - 1));
+    if (buf[res]) {
+      assert(buf[res] == ',', "unexpeced VM_Version::insert_features_names separator instead of ','");
+      buf[res] = '=';
+    }
+    vm_exit_during_initialization(buf);
+  }
+	_features =   CPUFeatures_x64;
+  _glibc_features = GLIBCFeatures_x64;
+
+  if (ShowCPUFeatures) {
+    if (ignore_glibc_not_using) {
+      tty->print_cr("CPU features are being kept intact as requested by -XX:CPUFeatures=ignore");
+    } else {
+      tty->print_cr("CPU features being used are: -XX:CPUFeatures=0x" UINT64_FORMAT_X ",0x" UINT64_FORMAT_X, _features, _glibc_features);
+    }
+  }
+
+  if (!ignore_glibc_not_using) {
+    glibc_not_using(      features_expected & ~      _features,
+                    glibc_features_expected & ~_glibc_features);
+  }
 }
 
 #if INCLUDE_LD_SO_LIST_DIAGNOSTICS
@@ -1237,6 +1286,20 @@ void VM_Version::glibc_not_using(uint64_t excessive_CPU, uint64_t excessive_GLIB
   glibc_reexec();
 }
 
+static void nonlibc_tty_print_uint64(uint64_t num) {
+  static const char prefix[] = "0x";
+  tty->write(prefix, sizeof(prefix) - 1);
+  bool first = true;
+  for (int pos = 64 - 4; pos >= 0; pos -= 4) {
+    unsigned nibble = (num >> pos) & 0xf;
+    if (first && nibble == 0 && pos)
+      continue;
+    first = false;
+    char c = nibble >= 0xa ? 'a' + nibble - 0xa : '0' + nibble;
+    tty->write(&c, sizeof(c));
+  }
+}
+
 void VM_Version::get_processor_features() {
 
   _cpu = 4; // 486 by default
@@ -1266,58 +1329,16 @@ void VM_Version::get_processor_features() {
   }
 
   if (ShowCPUFeatures) {
-    tty->print_cr("This machine's CPU features are: -XX:CPUFeatures=0x" UINT64_FORMAT_X ",0x" UINT64_FORMAT_X, _features, _glibc_features);
+    static const char prefix[] = "This machine's CPU features are: -XX:CPUFeatures=";
+    tty->print_raw(prefix, sizeof(prefix) - 1);
+    nonlibc_tty_print_uint64(_features);
+    static const char comma = ',';
+    tty->print_raw(&comma, sizeof(comma));
+    nonlibc_tty_print_uint64(_glibc_features);
+    tty->cr();
   }
 
-  uint64_t       features_expected =   CPU_MAX - 1;
-  uint64_t glibc_features_expected = GLIBC_MAX - 1;
-#if !INCLUDE_CPU_FEATURE_ACTIVE && !INCLUDE_LD_SO_LIST_DIAGNOSTICS
-        features_expected =       _features;
-  glibc_features_expected = _glibc_features;
-#endif
-  assert(!CPUFeatures == FLAG_IS_DEFAULT(CPUFeatures), "CPUFeatures parsing");
-  if (CPUFeatures) {
-    uint64_t GLIBCFeatures_x64;
-    uint64_t   CPUFeatures_x64 = CPUFeatures_parse(CPUFeatures, GLIBCFeatures_x64);
-    uint64_t       features_missing =   CPUFeatures_x64 & ~      _features;
-    uint64_t glibc_features_missing = GLIBCFeatures_x64 & ~_glibc_features;
-    if (features_missing || glibc_features_missing) {
-      char buf[512];
-      int res = jio_snprintf(
-                  buf, sizeof(buf),
-                  "Specified -XX:CPUFeatures=0x" UINT64_FORMAT_X ",0x" UINT64_FORMAT_X
-                  "; this machine's CPU features are 0x" UINT64_FORMAT_X ",0x" UINT64_FORMAT_X
-                  "; missing features of this CPU are 0x" UINT64_FORMAT_X ",0x" UINT64_FORMAT_X " ",
-                  CPUFeatures_x64, GLIBCFeatures_x64,
-                  _features, _glibc_features,
-                  features_missing, glibc_features_missing);
-      assert(res > 0, "not enough temporary space allocated");
-      // insert_features_names() does crash for undefined too high-numbered features.
-      insert_features_names(buf + res , sizeof(buf) - res ,       features_missing & (  CPU_MAX - 1));
-      int res2 = res + strlen(buf + res);
-      insert_features_names(buf + res2, sizeof(buf) - res2, glibc_features_missing & (GLIBC_MAX - 1));
-      if (buf[res]) {
-        assert(buf[res] == ',', "unexpeced VM_Version::insert_features_names separator instead of ','");
-        buf[res] = '=';
-      }
-      vm_exit_during_initialization(buf);
-    }
-          _features =   CPUFeatures_x64;
-    _glibc_features = GLIBCFeatures_x64;
-
-    if (ShowCPUFeatures) {
-      if (ignore_glibc_not_using) {
-        tty->print_cr("CPU features are being kept intact as requested by -XX:CPUFeatures=ignore");
-      } else {
-        tty->print_cr("CPU features being used are: -XX:CPUFeatures=0x" UINT64_FORMAT_X ",0x" UINT64_FORMAT_X, _features, _glibc_features);
-      }
-    }
-  }
-
-  if (!ignore_glibc_not_using) {
-    glibc_not_using(      features_expected & ~      _features,
-                    glibc_features_expected & ~_glibc_features);
-  }
+  CPUFeatures_init();
 
   _supports_cx8 = supports_cmpxchg8();
   // xchg and xadd instructions

@@ -478,7 +478,7 @@ public final class NioSocketImpl extends SocketImpl implements PlatformSocketImp
                     ResourceManager.afterUdpClose();
                 throw ioe;
             }
-            Runnable closer = closerFor(fd, this, stream);
+            Runnable closer = closerFor(fd, stream);
             this.fd = fd;
             this.stream = stream;
             this.cleaner = CleanerFactory.cleaner().register(this, closer);
@@ -786,7 +786,7 @@ public final class NioSocketImpl extends SocketImpl implements PlatformSocketImp
         }
 
         // set the fields
-        Runnable closer = closerFor(newfd, nsi, true);
+        Runnable closer = closerFor(newfd, true);
         synchronized (nsi.stateLock) {
             nsi.fd = newfd;
             nsi.stream = true;
@@ -1253,7 +1253,7 @@ public final class NioSocketImpl extends SocketImpl implements PlatformSocketImp
         }
     }
 
-    private static Runnable closerFor(FileDescriptor fd, SocketImpl socket, boolean stream) {
+    private static Runnable closerFor(FileDescriptor fd, boolean stream) {
 
         // FIXME ensure FileDispatcherImpl's Resource is registered before the closer is used,
         // otherwise the closer during beforeCheckpoint may be the first one to access

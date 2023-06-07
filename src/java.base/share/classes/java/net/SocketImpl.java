@@ -115,18 +115,13 @@ public abstract class SocketImpl implements SocketOptions {
         public void beforeCheckpoint(Context<? extends Resource> context) throws Exception {
             ClaimedFDs ctx = Core.getClaimedFDs();
             SocketImpl socket = SocketImpl.this;
-            Runnable closer = null;
-            if (socket instanceof NioSocketImpl) {
-                closer = ((NioSocketImpl)socket).getCloser();
-            }
-
             ctx.claimFd(
                 fd,
                 socket,
                 () -> new CheckpointOpenSocketException(
                     socket.toString(),
                     getStackTraceHolder()),
-                fd, closer);
+                fd);
         }
     };
 

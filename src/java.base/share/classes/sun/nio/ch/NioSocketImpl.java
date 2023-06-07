@@ -113,7 +113,6 @@ public final class NioSocketImpl extends SocketImpl implements PlatformSocketImp
     // set by SocketImpl.create, protected by stateLock
     private boolean stream;
     private Cleanable cleaner;
-    private Runnable closer;
 
     // set to true when the socket is in non-blocking mode
     private volatile boolean nonBlocking;
@@ -482,7 +481,6 @@ public final class NioSocketImpl extends SocketImpl implements PlatformSocketImp
             this.fd = fd;
             this.stream = stream;
             this.cleaner = CleanerFactory.cleaner().register(this, closer);
-            this.closer = closer;
             this.state = ST_UNCONNECTED;
         }
     }
@@ -791,7 +789,6 @@ public final class NioSocketImpl extends SocketImpl implements PlatformSocketImp
             nsi.fd = newfd;
             nsi.stream = true;
             nsi.cleaner = CleanerFactory.cleaner().register(nsi, closer);
-            nsi.closer = closer;
             nsi.localport = localAddress.getPort();
             nsi.address = isaa[0].getAddress();
             nsi.port = isaa[0].getPort();
@@ -1229,30 +1226,6 @@ public final class NioSocketImpl extends SocketImpl implements PlatformSocketImp
         }
     }
 
-    private static class UnreachableSocketResource extends JDKFdResource implements Runnable {
-        private Runnable closer;
-        private FileDescriptor fd;
-
-        public UnreachableSocketResource(Runnable closer, FileDescriptor fd) {
-            super();
-            this.closer = closer;
-            this.fd = fd;
-        }
-
-        @Override
-        public void run() {
-            closer.run();
-        }
-
-        @Override
-        public void beforeCheckpoint(Context<? extends Resource> context) throws Exception {
-            Core.getClaimedFDs().claimFd(fd, this,
-                () -> new CheckpointOpenSocketException("About to be collected by GC...", getStackTraceHolder()),
-                fd);
-
-        }
-    }
-
     private static Runnable closerFor(FileDescriptor fd, boolean stream) {
 
         // FIXME ensure FileDispatcherImpl's Resource is registered before the closer is used,
@@ -1264,11 +1237,7 @@ public final class NioSocketImpl extends SocketImpl implements PlatformSocketImp
             throw new RuntimeException(e);
         }
 
-        return new UnreachableSocketResource(closerFor0(fd, stream), fd);
-    }
-
-    public Runnable getCloser() {
-        return closer;
+        return closerFor0(fd, stream);
     }
 
     /**

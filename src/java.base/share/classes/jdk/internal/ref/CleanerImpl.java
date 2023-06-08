@@ -34,6 +34,8 @@ import java.util.function.Function;
 
 import jdk.crac.Context;
 import jdk.crac.Resource;
+import jdk.internal.access.JavaLangRefAccess;
+import jdk.internal.access.SharedSecrets;
 import jdk.internal.crac.Core;
 import jdk.internal.crac.JDKResource;
 import jdk.internal.misc.InnocuousThread;
@@ -42,12 +44,13 @@ import jdk.internal.misc.InnocuousThread;
  * CleanerImpl manages a set of object references and corresponding cleaning actions.
  * CleanerImpl provides the functionality of {@link java.lang.ref.Cleaner}.
  */
-public final class CleanerImpl implements Runnable {
+public final class CleanerImpl implements Runnable, JDKResource {
 
     /**
      * An object to access the CleanerImpl from a Cleaner; set by Cleaner init.
      */
     private static Function<Cleaner, CleanerImpl> cleanerImplAccess = null;
+    private static JavaLangRefAccess javaLangRefAccess = SharedSecrets.getJavaLangRefAccess();
 
     /**
      * Heads of a CleanableList for each reference type.
@@ -56,6 +59,8 @@ public final class CleanerImpl implements Runnable {
 
     // The ReferenceQueue of pending cleaning actions
     final ReferenceQueue<Object> queue;
+
+    volatile boolean forceCleanup = false;
 
     /**
      * Called by Cleaner static initialization to provide the function
@@ -112,6 +117,7 @@ public final class CleanerImpl implements Runnable {
         Thread thread = threadFactory.newThread(this);
         thread.setDaemon(true);
         thread.start();
+        Core.Priority.CLEANERS.getContext().register(this);
     }
 
     /**
@@ -136,10 +142,22 @@ public final class CleanerImpl implements Runnable {
                 // Clear the thread locals
                 mlThread.eraseThreadLocals();
             }
+            if (forceCleanup) {
+                synchronized (phantomCleanableList) {
+                    PhantomCleanable<?> next = phantomCleanableList;
+                    do {
+                        next = next.cleanIfNull();
+                    } while (next != phantomCleanableList);
+                }
+                synchronized (this) {
+                    forceCleanup = false;
+                    notify();
+                }
+            }
             try {
                 // Wait for a Ref, with a timeout to avoid getting hung
                 // due to a race with clear/clean
-                Cleanable ref = (Cleanable) queue.remove(60 * 1000L);
+                Cleanable ref = (Cleanable) javaLangRefAccess.pollReferenceQueue(queue, 60 * 1000L);
                 if (ref != null) {
                     ref.clean();
                 }
@@ -148,12 +166,35 @@ public final class CleanerImpl implements Runnable {
                 // (including interruption of cleanup thread)
             }
         }
+        synchronized (this) {
+            // wakeup the checkpoint thread when we this thread terminates before noticing
+            // the forced cleanup
+            forceCleanup = false;
+            notify();
+        }
+    }
+
+    @Override
+    public synchronized void beforeCheckpoint(Context<? extends Resource> context) throws Exception {
+        if (phantomCleanableList.isListEmpty()) {
+            // The thread is already terminated; don't wait for anything
+            return;
+        }
+        forceCleanup = true;
+        javaLangRefAccess.wakeupReferenceQueue(queue);
+        while (forceCleanup) {
+            wait();
+        }
+    }
+
+    @Override
+    public void afterRestore(Context<? extends Resource> context) {
     }
 
     /**
      * Perform cleaning on an unreachable PhantomReference.
      */
-    public static final class PhantomCleanableRef extends PhantomCleanable<Object> implements JDKResource {
+    public static final class PhantomCleanableRef extends PhantomCleanable<Object> {
         private final Runnable action;
 
         /**
@@ -161,14 +202,10 @@ public final class CleanerImpl implements Runnable {
          * @param obj the object to monitor
          * @param cleaner the cleaner
          * @param action the action Runnable
-         * @param priority priority for checkpoint handling
          */
-        public PhantomCleanableRef(Object obj, Cleaner cleaner, Runnable action, Core.Priority priority) {
+        public PhantomCleanableRef(Object obj, Cleaner cleaner, Runnable action) {
             super(obj, cleaner);
             this.action = action;
-            if (priority != null) {
-                priority.getContext().register(this);
-            }
         }
 
         /**
@@ -202,18 +239,6 @@ public final class CleanerImpl implements Runnable {
         @Override
         public void clear() {
             throw new UnsupportedOperationException("clear");
-        }
-
-        @Override
-        public void beforeCheckpoint(Context<? extends Resource> context) {
-            if (refersTo(null)) {
-                 clean();
-            }
-        }
-
-        @Override
-        public void afterRestore(Context<? extends Resource> context) {
-
         }
 
         @Override

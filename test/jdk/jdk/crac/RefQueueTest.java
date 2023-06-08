@@ -23,11 +23,15 @@
 
 import java.io.*;
 import java.lang.ref.Cleaner;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 
 import jdk.crac.*;
 import jdk.test.lib.crac.CracBuilder;
 import jdk.test.lib.crac.CracEngine;
 import jdk.test.lib.crac.CracTest;
+
+import static jdk.test.lib.Asserts.assertTrue;
 
 /**
  * @test
@@ -53,10 +57,6 @@ public class RefQueueTest implements CracTest {
 
         // the cleaner would be able to run right away
         cleaner.register(new Object(), () -> {
-            // FIXME: This test can still spuriously fail when this starts running
-            // before C/R, voiding the PhantomCleanableRef.beforeCheckpoint, but
-            // does not finish the close before FileDescriptor finds itself not closed
-            // and rightfully throws CheckpointOpenFileException.
             try {
                 badStream.close();
             } catch (IOException e) {
@@ -66,5 +66,13 @@ public class RefQueueTest implements CracTest {
 
         // should close the file and only then go to the native checkpoint
         Core.checkpointRestore();
+
+        // ensure that the cleaner starts working eventually
+        CountDownLatch latch = new CountDownLatch(1);
+        cleaner.register(new Object(), () -> {
+            latch.countDown();
+        });
+        System.gc();
+        assertTrue(latch.await(10, TimeUnit.SECONDS));
     }
 }

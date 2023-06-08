@@ -134,6 +134,26 @@ public abstract class PhantomCleanable<T> extends PhantomReference<T>
         }
     }
 
+    PhantomCleanable<?> cleanIfNull() {
+        if (this == list) {
+            // The reference representing the list itself does not have
+            // a referent, we will skip it.
+            return next;
+        }
+        PhantomCleanable<?> oldNext = next;
+        if (refersTo(null)) {
+            try {
+                clean();
+            } catch (Throwable t) {
+                // This method is called only from CleanerImpl and that one
+                // ignores any exceptions thrown; we will do the same here.
+                // The exception cannot be caught (and ignored) by the caller
+                // since we want to continue traversing the list.
+            }
+        }
+        return oldNext;
+    }
+
     /**
      * Unregister this PhantomCleanable and clear the reference.
      * Due to inherent concurrency, {@link #performCleanup()} may still be invoked.

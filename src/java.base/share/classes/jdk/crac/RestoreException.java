@@ -27,17 +27,17 @@
 package jdk.crac;
 
 /**
- * Suppresses exceptions thrown during restore notification.
+ * This exception works as an aggregate for all errors found during restore;
+ * these are recorded as {@linkplain #getSuppressed() suppressed exceptions}.
+ * The exception does not have any own message, cause nor collects stack trace.
  */
-public class RestoreException extends Exception {
+public final class RestoreException extends Exception {
     private static final long serialVersionUID = 5235124335683732665L;
 
     /**
      * Creates a {@code RestoreException}.
      */
     public RestoreException() {
-        // This exception is used as an aggregate for other (suppressed)
-        // exceptions; no point in recording and printing the stack trace.
         super(null, null, true, false);
     }
 }

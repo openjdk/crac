@@ -81,9 +81,14 @@ public class Core {
     private static void translateJVMExceptions(int[] codes, String[] messages,
                                                CheckpointException exception) {
         assert codes.length == messages.length;
-        final int length = codes.length;
+        // When the CR engine fails (e.g. due to permissions, missing binaries...)
+        // there are no messages recorded, but the user would end up with an empty
+        // CheckpointException without stack trace nor message.
+        if (codes.length == 0) {
+            exception.addSuppressed(new RuntimeException("Native checkpoint failed."));
+        }
 
-        for (int i = 0; i < length; ++i) {
+        for (int i = 0; i < codes.length; ++i) {
             exception.addSuppressed(switch (codes[i]) {
                 case JVM_CR_FAIL_FILE -> new CheckpointOpenFileException(messages[i], null);
                 case JVM_CR_FAIL_SOCK -> new CheckpointOpenSocketException(messages[i]);
@@ -142,9 +147,6 @@ public class Core {
         if (retCode != JVM_CHECKPOINT_OK) {
             if (checkpointException == null) {
                 checkpointException = new CheckpointException();
-                if (messages.length == 0) {
-                    checkpointException.addSuppressed(new RuntimeException("Native checkpoint failed"));
-                }
             }
             switch (retCode) {
                 case JVM_CHECKPOINT_ERROR -> translateJVMExceptions(codes, messages, checkpointException);

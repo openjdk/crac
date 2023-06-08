@@ -61,7 +61,6 @@ public final class CleanerImpl implements Runnable, JDKResource {
     final ReferenceQueue<Object> queue;
 
     volatile boolean forceCleanup = false;
-    boolean cleanupComplete = false;
 
     /**
      * Called by Cleaner static initialization to provide the function
@@ -151,8 +150,6 @@ public final class CleanerImpl implements Runnable, JDKResource {
                     } while (next != phantomCleanableList);
                 }
                 synchronized (this) {
-                    cleanupComplete = true;
-                    // prevent looping in the cleanup
                     forceCleanup = false;
                     notify();
                 }
@@ -169,20 +166,29 @@ public final class CleanerImpl implements Runnable, JDKResource {
                 // (including interruption of cleanup thread)
             }
         }
+        synchronized (this) {
+            // wakeup the checkpoint thread when we this thread terminates before noticing
+            // the forced cleanup
+            forceCleanup = false;
+            notify();
+        }
     }
 
     @Override
     public synchronized void beforeCheckpoint(Context<? extends Resource> context) throws Exception {
-        cleanupComplete = false;
+        if (phantomCleanableList.isListEmpty()) {
+            // The thread is already terminated; don't wait for anything
+            return;
+        }
         forceCleanup = true;
         javaLangRefAccess.wakeupReferenceQueue(queue);
-        while (!cleanupComplete) {
+        while (forceCleanup) {
             wait();
         }
     }
 
     @Override
-    public synchronized void afterRestore(Context<? extends Resource> context) throws Exception {
+    public void afterRestore(Context<? extends Resource> context) {
     }
 
     /**

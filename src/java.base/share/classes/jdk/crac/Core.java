@@ -81,25 +81,20 @@ public class Core {
     private static void translateJVMExceptions(int[] codes, String[] messages,
                                                CheckpointException exception) {
         assert codes.length == messages.length;
-        final int length = codes.length;
+        // When the CR engine fails (e.g. due to permissions, missing binaries...)
+        // there are no messages recorded, but the user would end up with an empty
+        // CheckpointException without stack trace nor message.
+        if (codes.length == 0) {
+            exception.addSuppressed(new RuntimeException("Native checkpoint failed."));
+        }
 
-        for (int i = 0; i < length; ++i) {
-            switch(codes[i]) {
-                case JVM_CR_FAIL_FILE:
-                    exception.addSuppressed(
-                            new CheckpointOpenFileException(messages[i], null));
-                    break;
-                case JVM_CR_FAIL_SOCK:
-                    exception.addSuppressed(
-                            new CheckpointOpenSocketException(messages[i]));
-                    break;
-                case JVM_CR_FAIL_PIPE:
-                    // FALLTHROUGH
-                default:
-                    exception.addSuppressed(
-                            new CheckpointOpenResourceException(messages[i], null));
-                    break;
-            }
+        for (int i = 0; i < codes.length; ++i) {
+            exception.addSuppressed(switch (codes[i]) {
+                case JVM_CR_FAIL_FILE -> new CheckpointOpenFileException(messages[i], null);
+                case JVM_CR_FAIL_SOCK -> new CheckpointOpenSocketException(messages[i]);
+                case JVM_CR_FAIL_PIPE -> new CheckpointOpenResourceException(messages[i], null);
+                default -> new CheckpointOpenResourceException(messages[i], null);
+            });
         }
     }
 
@@ -124,10 +119,7 @@ public class Core {
             jdk.internal.crac.Core.getJDKContext().beforeCheckpoint(null);
             globalContext.beforeCheckpoint(null);
         } catch (CheckpointException ce) {
-            checkpointException = new CheckpointException();
-            for (Throwable t : ce.getSuppressed()) {
-                checkpointException.addSuppressed(t);
-            }
+            checkpointException = ce;
         }
 
         JDKContext jdkContext = jdk.internal.crac.Core.getJDKContext();
@@ -157,16 +149,9 @@ public class Core {
                 checkpointException = new CheckpointException();
             }
             switch (retCode) {
-                case JVM_CHECKPOINT_ERROR:
-                    translateJVMExceptions(codes, messages, checkpointException);
-                    break;
-                case JVM_CHECKPOINT_NONE:
-                    checkpointException.addSuppressed(
-                            new RuntimeException("C/R is not configured"));
-                    break;
-                default:
-                    checkpointException.addSuppressed(
-                            new RuntimeException("Unknown C/R result: " + retCode));
+                case JVM_CHECKPOINT_ERROR -> translateJVMExceptions(codes, messages, checkpointException);
+                case JVM_CHECKPOINT_NONE -> checkpointException.addSuppressed(new RuntimeException("C/R is not configured"));
+                default -> checkpointException.addSuppressed(new RuntimeException("Unknown C/R result: " + retCode));
             }
         }
 
@@ -273,7 +258,9 @@ public class Core {
             // checkpointRestore from resource's
             // beforeCheckpoint/afterRestore methods
             if (checkpointInProgress) {
-                throw new CheckpointException("Recursive checkpoint is not allowed");
+                CheckpointException ex = new CheckpointException();
+                ex.addSuppressed(new IllegalStateException("Recursive checkpoint is not allowed"));
+                throw ex;
             }
 
             try (@SuppressWarnings("unused") var keepAlive = new KeepAlive()) {

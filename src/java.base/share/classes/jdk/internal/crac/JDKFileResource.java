@@ -7,6 +7,7 @@ import sun.security.action.GetPropertyAction;
 
 import java.io.File;
 import java.io.FileDescriptor;
+import java.util.function.Supplier;
 
 public abstract class JDKFileResource extends JDKFdResource {
     private static final String[] CLASSPATH_ENTRIES =
@@ -33,13 +34,16 @@ public abstract class JDKFileResource extends JDKFdResource {
             return;
         }
 
+        Supplier<Exception> exceptionSupplier;
         if (matchClasspath(path)) {
             // Files on the classpath are considered persistent, exception is not thrown
-            return;
+            exceptionSupplier = () -> null;
+        } else {
+            exceptionSupplier = () -> new CheckpointOpenFileException(path, getStackTraceHolder());
         }
 
         FileDescriptor fd = getFD();
-        Core.getClaimedFDs().claimFd(fd, this, () -> new CheckpointOpenFileException(path, getStackTraceHolder()), fd);
+        Core.getClaimedFDs().claimFd(fd, this, exceptionSupplier, fd);
     }
 
     @Override

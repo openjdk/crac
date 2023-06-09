@@ -41,9 +41,6 @@ public class ExceptionHolder<E extends Exception> {
 
         E exception = get();
         if (exception.getClass() == e.getClass()) {
-            if (e.getMessage() != null) {
-                exception.addSuppressed(e); // FIXME avoid message / preserve it via a distinct Exception
-            }
             reSuppress(e);
         } else {
             if (e instanceof InterruptedException) {

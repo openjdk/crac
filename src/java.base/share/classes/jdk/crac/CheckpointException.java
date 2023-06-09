@@ -27,25 +27,17 @@
 package jdk.crac;
 
 /**
- * Suppresses exceptions thrown during checkpoint notification.
+ * This exception works as an aggregate for all errors found during checkpoint;
+ * these are recorded as {@linkplain #getSuppressed() suppressed exceptions}.
+ * The exception does not have any own message, cause nor collects stack trace.
  */
-public class CheckpointException extends Exception {
+public final class CheckpointException extends Exception {
     private static final long serialVersionUID = 8879167591426115859L;
 
     /**
      * Creates a {@code CheckpointException}.
      */
     public CheckpointException() {
-        super();
-    }
-
-    /**
-     * Constructs a {@code CheckpointException} with the specified
-     * detail message.
-     *
-     * @param message the detail message.
-     */
-    public CheckpointException(String message) {
-        super(message);
+        super(null, null, true, false);
     }
 }

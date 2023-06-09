@@ -79,9 +79,14 @@ public class Core {
     private static void translateJVMExceptions(int[] codes, String[] messages,
                                                ExceptionHolder<CheckpointException> exception) {
         assert codes.length == messages.length;
-        final int length = codes.length;
+        // When the CR engine fails (e.g. due to permissions, missing binaries...)
+        // there are no messages recorded, but the user would end up with an empty
+        // CheckpointException without stack trace nor message.
+        if (codes.length == 0) {
+            exception.handle(new RuntimeException("Native checkpoint failed."));
+        }
 
-        for (int i = 0; i < length; ++i) {
+        for (int i = 0; i < codes.length; ++i) {
             Exception ex = switch (codes[i]) {
                 case JVM_CR_FAIL_FILE -> new CheckpointOpenFileException(messages[i], null);
                 case JVM_CR_FAIL_SOCK -> new CheckpointOpenSocketException(messages[i], null);
@@ -251,7 +256,9 @@ public class Core {
             // checkpointRestore from resource's
             // beforeCheckpoint/afterRestore methods
             if (checkpointInProgress) {
-                throw new CheckpointException("Recursive checkpoint is not allowed");
+                CheckpointException ex = new CheckpointException();
+                ex.addSuppressed(new IllegalStateException("Recursive checkpoint is not allowed"));
+                throw ex;
             }
 
             try (@SuppressWarnings("unused") var keepAlive = new KeepAlive()) {

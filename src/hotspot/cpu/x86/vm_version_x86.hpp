@@ -27,6 +27,7 @@
 
 #include "memory/universe.hpp"
 #include "runtime/abstract_vm_version.hpp"
+#include "utilities/formatBuffer.hpp"
 #include "utilities/macros.hpp"
 #include "runtime/java.hpp"
 #include "runtime/globals_extension.hpp"
@@ -1133,9 +1134,7 @@ public:
     if (FLAG_IS_DEFAULT(CPUFeatures)) {
       vm_exit_during_initialization("clflush should be available");
     }
-    char errbuf[512];
-    jio_snprintf(errbuf, sizeof(errbuf), "-XX:CPUFeatures option requires FLUSH flag to be set: 0x%" PRIx64, CPU_FLUSH);
-    vm_exit_during_initialization(errbuf);
+    vm_exit_during_initialization(err_msg("-XX:CPUFeatures option requires FLUSH flag to be set: 0x%" PRIx64, CPU_FLUSH));
     return false;
   }
 #else

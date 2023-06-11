@@ -35,6 +35,7 @@
 #include "runtime/os.hpp"
 #include "runtime/stubCodeGenerator.hpp"
 #include "runtime/vm_version.hpp"
+#include "utilities/formatBuffer.hpp"
 #include "utilities/powerOfTwo.hpp"
 #include "utilities/virtualizationSupport.hpp"
 #if INCLUDE_CPU_FEATURE_ACTIVE
@@ -664,12 +665,7 @@ uint64_t VM_Version::CPUFeatures_parse(uint64_t &glibc_features) {
       return retval;
     }
   }
-  char buf[512];
-  int res = jio_snprintf(
-              buf, sizeof(buf),
-              "VM option 'CPUFeatures=%s' must be of the form: 0xnum,0xnum", CPUFeatures);
-  assert(res > 0, "not enough temporary space allocated");
-  vm_exit_during_initialization(buf);
+  vm_exit_during_initialization(err_msg("VM option 'CPUFeatures=%s' must be of the form: 0xnum,0xnum", CPUFeatures));
   return -1;
 }
 
@@ -678,11 +674,8 @@ uint64_t VM_Version::CPUFeatures_parse(uint64_t &glibc_features) {
 static int ld_so_name_iterate_phdr(struct dl_phdr_info *info, size_t size, void *data_voidp) {
   const char **retval_return = (const char **)data_voidp;
   assert(size >= offsetof(struct dl_phdr_info, dlpi_adds), "missing PHDRs for the java executable");
-  if (strcmp(info->dlpi_name, "") != 0) {
-    char errbuf[512];
-    jio_snprintf(errbuf, sizeof(errbuf), "Unexpected name of first dl_phdr_info: %s", info->dlpi_name);
-    vm_exit_during_initialization(errbuf);
-  }
+  if (strcmp(info->dlpi_name, "") != 0)
+    vm_exit_during_initialization(err_msg("Unexpected name of first dl_phdr_info: %s", info->dlpi_name));
   for (size_t phdr_ix = 0; phdr_ix < info->dlpi_phnum; ++phdr_ix) {
     const Elf64_Phdr *phdr = info->dlpi_phdr + phdr_ix;
     if (phdr->p_type == PT_INTERP) {
@@ -704,73 +697,50 @@ static const char *ld_so_name() {
 #define ARG1 "--list-diagnostics"
 
 static FILE *popen_r(const char *arg0, pid_t *pid_return) {
-  char errbuf[512];
   union {
     int fds[2];
     struct {
       int readfd, writefd;
     };
   } fds;
-  if (pipe(fds.fds)) {
-    jio_snprintf(errbuf, sizeof(errbuf), "Error creating pipe: %m");
-    vm_exit_during_initialization(errbuf);
-  }
+  if (pipe(fds.fds))
+    vm_exit_during_initialization(err_msg("Error creating pipe: %m"));
   pid_t child = fork();
   switch (child) {
     case -1:
-      jio_snprintf(errbuf, sizeof(errbuf), "Error fork-ing: %m");
-      vm_exit_during_initialization(errbuf);
+      vm_exit_during_initialization(err_msg("Error fork-ing: %m"));
     case 0:
-      if (close(fds.readfd)) {
-        jio_snprintf(errbuf, sizeof(errbuf), "Error closing read pipe in child: %m");
-        vm_exit_during_initialization(errbuf);
+      if (close(fds.readfd))
+        vm_exit_during_initialization(err_msgt("Error closing read pipe in child: %m"));
       }
-      if (dup2(fds.writefd, STDOUT_FILENO) != STDOUT_FILENO) {
-        jio_snprintf(errbuf, sizeof(errbuf), "Error closing preparing write pipe in child: %m");
-        vm_exit_during_initialization(errbuf);
-      }
-      if (close(fds.writefd)) {
-        jio_snprintf(errbuf, sizeof(errbuf), "Error closing write pipe in child: %m");
-        vm_exit_during_initialization(errbuf);
-      }
+      if (dup2(fds.writefd, STDOUT_FILENO) != STDOUT_FILENO)
+        vm_exit_during_initialization(err_msg("Error closing preparing write pipe in child: %m"));
+      if (close(fds.writefd))
+        vm_exit_during_initialization(err_msg("Error closing write pipe in child: %m"));
       execl(arg0, arg0, ARG1, NULL);
-      jio_snprintf(errbuf, sizeof(errbuf), "Error exec-ing %s " ARG1 ": %m", arg0);
       // FIXME: Double vm_exit*()?
-      vm_exit_during_initialization(errbuf);
+      vm_exit_during_initialization(err_msg("Error exec-ing %s " ARG1 ": %m", arg0));
   }
-  if (close(fds.writefd)) {
-    jio_snprintf(errbuf, sizeof(errbuf), "Error closing write pipe in parent: %m");
-    vm_exit_during_initialization(errbuf);
-  }
+  if (close(fds.writefd))
+    vm_exit_during_initialization(err_msg("Error closing write pipe in parent: %m"));
   FILE *f = fdopen(fds.readfd, "r");
-  if (f == NULL) {
-    jio_snprintf(errbuf, sizeof(errbuf), "Error converting pipe fd to FILE * in parent for %s " ARG1 ": %m", arg0);
-    vm_exit_during_initialization(errbuf);
-  }
+  if (f == NULL)
+    vm_exit_during_initialization(err_msg("Error converting pipe fd to FILE * in parent for %s " ARG1 ": %m", arg0));
   *pid_return = child;
   return f;
 }
 
 static void pclose_r(const char *arg0, FILE *f, pid_t pid) {
-  char errbuf[512];
-  if (fclose(f)) {
-    jio_snprintf(errbuf, sizeof(errbuf), "Error closing fdopen-ed %s " ARG1 ": %m", arg0);
-    vm_exit_during_initialization(errbuf);
-  }
+  if (fclose(f))
+    vm_exit_during_initialization(err_msg("Error closing fdopen-ed %s " ARG1 ": %m", arg0));
   int wstatus;
   pid_t waiterr = waitpid(pid, &wstatus, 0);
-  if (waiterr != pid) {
-    jio_snprintf(errbuf, sizeof(errbuf), "Error waiting on %s " ARG1 ": %m", arg0);
-    vm_exit_during_initialization(errbuf);
-  }
-  if (!WIFEXITED(wstatus)) {
-    jio_snprintf(errbuf, sizeof(errbuf), "Child command %s " ARG1 " did not properly exit (WIFEXITED): wstatus = %d", arg0, wstatus);
-    vm_exit_during_initialization(errbuf);
-  }
-  if (WEXITSTATUS(wstatus) != 0) {
-    jio_snprintf(errbuf, sizeof(errbuf), "Child command %s " ARG1 " did exit with an error: exit code = %d", arg0, WEXITSTATUS(wstatus));
-    vm_exit_during_initialization(errbuf);
-  }
+  if (waiterr != pid)
+    vm_exit_during_initialization(err_msg("Error waiting on %s " ARG1 ": %m", arg0));
+  if (!WIFEXITED(wstatus))
+    vm_exit_during_initialization(err_msg("Child command %s " ARG1 " did not properly exit (WIFEXITED): wstatus = %d", arg0, wstatus));
+  if (WEXITSTATUS(wstatus) != 0)
+    vm_exit_during_initialization(err_msg("Child command %s " ARG1 " did exit with an error: exit code = %d", arg0, WEXITSTATUS(wstatus)));
 }
 
 #endif // !INCLUDE_LD_SO_LIST_DIAGNOSTICS
@@ -815,22 +785,15 @@ bool VM_Version::glibc_env_set(char *disable_str) {
   if (ShowCPUFeatures) {
     tty->print_cr("Re-exec of java with new environment variable: " TUNABLES_NAME "=%s", env_val);
   }
-  char errbuf[512];
   int err = setenv(TUNABLES_NAME, env_val, 1);
-  if (err) {
-    jio_snprintf(errbuf, sizeof(errbuf), "setenv " TUNABLES_NAME " error: %m");
-    vm_exit_during_initialization(errbuf);
-  }
+  if (err)
+    vm_exit_during_initialization(err_msg("setenv " TUNABLES_NAME " error: %m"));
 
 #define REEXEC_NAME "HOTSPOT_GLIBC_TUNABLES_REEXEC"
-  if (getenv(REEXEC_NAME)) {
-    jio_snprintf(errbuf, sizeof(errbuf), "internal error: " TUNABLES_NAME "=%s failed and " REEXEC_NAME " is set", disable_str);
-    vm_exit_during_initialization(errbuf);
-  }
-  if (setenv(REEXEC_NAME, "1", 1)) {
-    jio_snprintf(errbuf, sizeof(errbuf), "setenv " REEXEC_NAME " error: %m");
-    vm_exit_during_initialization(errbuf);
-  }
+  if (getenv(REEXEC_NAME))
+    vm_exit_during_initialization(err_msg("internal error: " TUNABLES_NAME "=%s failed and " REEXEC_NAME " is set", disable_str));
+  if (setenv(REEXEC_NAME, "1", 1))
+    vm_exit_during_initialization(err_msg("setenv " REEXEC_NAME " error: %m"));
 #undef REEXEC_NAME
 #undef TUNABLES_NAME
   return false;
@@ -841,33 +804,24 @@ void VM_Version::glibc_reexec() {
   size_t buf_allocated = 0;
   size_t buf_used = 0;
 #define CMDLINE "/proc/self/cmdline"
-  char errbuf[512];
   int fd = open(CMDLINE, O_RDONLY);
-  if (fd == -1) {
-    jio_snprintf(errbuf, sizeof(errbuf), "Cannot open " CMDLINE ": %m");
-    vm_exit_during_initialization(errbuf);
-  }
+  if (fd == -1)
+    vm_exit_during_initialization(err_msg("Cannot open " CMDLINE ": %m"));
   ssize_t got;
   do {
     if (buf_used == buf_allocated) {
       buf_allocated = MAX2(size_t(4096), 2 * buf_allocated);
       buf = (char *)os::realloc(buf, buf_allocated, mtOther);
-      if (buf == NULL) {
-        jio_snprintf(errbuf, sizeof(errbuf), CMDLINE " reading failed allocating %zu bytes", buf_allocated);
-        vm_exit_during_initialization(errbuf);
-      }
+      if (buf == NULL)
+        vm_exit_during_initialization(err_msg(CMDLINE " reading failed allocating %zu bytes", buf_allocated));
     }
     got = read(fd, buf + buf_used, buf_allocated - buf_used);
-    if (got == -1) {
-      jio_snprintf(errbuf, sizeof(errbuf), "Cannot read " CMDLINE ": %m");
-      vm_exit_during_initialization(errbuf);
-    }
+    if (got == -1)
+      vm_exit_during_initialization(err_msg("Cannot read " CMDLINE ": %m"));
     buf_used += got;
   } while (got);
-  if (close(fd)) {
-    jio_snprintf(errbuf, sizeof(errbuf), "Cannot close " CMDLINE ": %m");
-    vm_exit_during_initialization(errbuf);
-  }
+  if (close(fd))
+    vm_exit_during_initialization(err_msg("Cannot close " CMDLINE ": %m"));
   char **argv = NULL;
   size_t argv_allocated = 0;
   size_t argv_used = 0;
@@ -876,10 +830,8 @@ void VM_Version::glibc_reexec() {
     if (argv_used == argv_allocated) {
       argv_allocated = MAX2(size_t(256), 2 * argv_allocated);
       argv = (char **)os::realloc(argv, argv_allocated * sizeof(*argv), mtOther);
-      if (argv == NULL) {
-        jio_snprintf(errbuf, sizeof(errbuf), CMDLINE " reading failed allocating %zu pointers", argv_allocated);
-        vm_exit_during_initialization(errbuf);
-      }
+      if (argv == NULL)
+        vm_exit_during_initialization(err_msg(CMDLINE " reading failed allocating %zu pointers", argv_allocated));
     }
     if (s == buf + buf_used) {
       break;
@@ -895,8 +847,7 @@ void VM_Version::glibc_reexec() {
 
 #define EXEC "/proc/self/exe"
   execv(EXEC, argv);
-  jio_snprintf(errbuf, sizeof(errbuf), "Cannot re-execute " EXEC ": %m");
-  vm_exit_during_initialization(errbuf);
+  vm_exit_during_initialization(err_msg("Cannot re-execute " EXEC ": %m"));
 #undef EXEC
 }
 
@@ -905,7 +856,6 @@ void VM_Version::glibc_not_using(uint64_t excessive_CPU, uint64_t excessive_GLIB
   if (!excessive_CPU && !excessive_GLIBC)
     return;
 #endif
-  char errbuf[512];
 #if INCLUDE_LD_SO_LIST_DIAGNOSTICS
   // sysdeps/x86/include/cpu-features.h CPUID_INDEX_14_ECX_0 == 8
   const int CPUID_INDEX_CEIL = 8;
@@ -928,10 +878,8 @@ void VM_Version::glibc_not_using(uint64_t excessive_CPU, uint64_t excessive_GLIB
   const char *arg0 = ld_so_name();
   pid_t f_child;
   FILE *f = popen_r(arg0, &f_child);
-  if (!f) {
-    jio_snprintf(errbuf, sizeof(errbuf), "Cannot popen %s " ARG1 ": %m", arg0);
-    vm_exit_during_initialization(errbuf);
-  }
+  if (!f)
+    vm_exit_during_initialization(err_msg("Cannot popen %s " ARG1 ": %m", arg0));
   for (;;) {
     char line[LINE_MAX];
     char *s = fgets(line, sizeof(line), f);
@@ -963,14 +911,10 @@ void VM_Version::glibc_not_using(uint64_t excessive_CPU, uint64_t excessive_GLIB
       continue;
     active[index][reg] = val;
   }
-  if (ferror(f)) {
-    jio_snprintf(errbuf, sizeof(errbuf), "Error reading popen-ed %s " ARG1 ": %m", arg0);
-    vm_exit_during_initialization(errbuf);
-  }
-  if (!feof(f)) {
-    jio_snprintf(errbuf, sizeof(errbuf), "EOF not reached on popen-ed %s " ARG1, arg0);
-    vm_exit_during_initialization(errbuf);
-  }
+  if (ferror(f))
+    vm_exit_during_initialization(err_msg("Error reading popen-ed %s " ARG1 ": %m", arg0));
+  if (!feof(f))
+    vm_exit_during_initialization(err_msg("EOF not reached on popen-ed %s " ARG1, arg0));
   pclose_r(arg0, f, f_child);
 #undef ARG1
 #endif // INCLUDE_LD_SO_LIST_DIAGNOSTICS
@@ -1172,13 +1116,10 @@ void VM_Version::glibc_not_using(uint64_t excessive_CPU, uint64_t excessive_GLIB
   *disable_end = 0;
 
 #ifdef ASSERT
-#define CHECK_KIND(kind) do {                                                                                   \
-    if (PASTE_TOKENS(disable_handled_, kind) != PASTE_TOKENS(excessive_handled_, kind)) {                       \
-      jio_snprintf(errbuf, sizeof(errbuf),                                                                      \
-                   "internal error: Unsupported disabling of " STR(kind) "_* 0x%" PRIx64 " != used 0x%" PRIx64, \
-                   PASTE_TOKENS(disable_handled_, kind), PASTE_TOKENS(excessive_handled_, kind));               \
-      vm_exit_during_initialization(errbuf);                                                                    \
-    }                                                                                                           \
+#define CHECK_KIND(kind) do {                                                                                                            \
+    if (PASTE_TOKENS(disable_handled_, kind) != PASTE_TOKENS(excessive_handled_, kind))                                                  \
+      vm_exit_during_initialization(err_msg("internal error: Unsupported disabling of " STR(kind) "_* 0x%" PRIx64 " != used 0x%" PRIx64, \
+                                            PASTE_TOKENS(disable_handled_, kind), PASTE_TOKENS(excessive_handled_, kind));               \
   } while (0)
   CHECK_KIND(CPU  );
   CHECK_KIND(GLIBC);
@@ -1216,12 +1157,10 @@ void VM_Version::glibc_not_using(uint64_t excessive_CPU, uint64_t excessive_GLIB
   GLIBC_UNSUPPORTED(GLIBC, LAHFSAHF         );
   GLIBC_UNSUPPORTED(GLIBC, F16C             );
 #undef GLIBC_UNSUPPORTED
-#define CHECK_KIND(kind) do {                                                                                                                                              \
-    if (PASTE_TOKENS(excessive_handled_, kind) != PASTE_TOKENS(kind, _MAX) - 1) {                                                                                          \
-      jio_snprintf(errbuf, sizeof(errbuf),                                                                                                                                 \
-                   "internal error: Unsupported disabling of some " STR(kind) "_* 0x%" PRIx64 " != full 0x%" PRIx64, PASTE_TOKENS(excessive_handled_, kind), CPU_MAX - 1); \
-      vm_exit_during_initialization(errbuf);                                                                                                                               \
-    }                                                                                                                                                                      \
+#define CHECK_KIND(kind) do {                                                                                                                 \
+    if (PASTE_TOKENS(excessive_handled_, kind) != PASTE_TOKENS(kind, _MAX) - 1)                                                               \
+      vm_exit_during_initialization(err_msg("internal error: Unsupported disabling of some " STR(kind) "_* 0x%" PRIx64 " != full 0x%" PRIx64, \
+                                            PASTE_TOKENS(excessive_handled_, kind), CPU_MAX - 1);                                             \
   } while (0)
   CHECK_KIND(CPU  );
   CHECK_KIND(GLIBC);
@@ -1301,11 +1240,8 @@ void VM_Version::get_processor_features_hardware() {
 #ifdef _LP64
   // OS should support SSE for x64 and hardware should support at least SSE2.
   if (!VM_Version::supports_sse2()) {
-    if (!FLAG_IS_DEFAULT(CPUFeatures)) {
-      char errbuf[512];
-      jio_snprintf(errbuf, sizeof(errbuf), "-XX:CPUFeatures option requires SSE2 flag to be set: 0x%" PRIx64, CPU_SSE2);
-      vm_exit_during_initialization(errbuf);
-    }
+    if (!FLAG_IS_DEFAULT(CPUFeatures))
+      vm_exit_during_initialization(err_msg("-XX:CPUFeatures option requires SSE2 flag to be set: 0x%" PRIx64, CPU_SSE2));
     vm_exit_during_initialization("Unknown x64 processor: SSE2 not supported");
   }
   // in 64 bit the use of SSE2 is the minimum

@@ -673,56 +673,6 @@ uint64_t VM_Version::CPUFeatures_parse(uint64_t &glibc_features) {
   return -1;
 }
 
-void VM_Version::CPUFeatures_init() {
-  uint64_t       features_expected =   CPU_MAX - 1;
-  uint64_t glibc_features_expected = GLIBC_MAX - 1;
-#if !INCLUDE_CPU_FEATURE_ACTIVE && !INCLUDE_LD_SO_LIST_DIAGNOSTICS
-        features_expected =       _features;
-  glibc_features_expected = _glibc_features;
-#endif
-  assert(!CPUFeatures == FLAG_IS_DEFAULT(CPUFeatures), "CPUFeatures parsing");
-  uint64_t GLIBCFeatures_x64;
-  uint64_t   CPUFeatures_x64 = CPUFeatures_parse(GLIBCFeatures_x64);
-  uint64_t       features_missing =   CPUFeatures_x64 & ~      _features;
-  uint64_t glibc_features_missing = GLIBCFeatures_x64 & ~_glibc_features;
-  if (features_missing || glibc_features_missing) {
-    char buf[512];
-    int res = jio_snprintf(
-		buf, sizeof(buf),
-		"Specified -XX:CPUFeatures=0x" UINT64_FORMAT_X ",0x" UINT64_FORMAT_X
-		"; this machine's CPU features are 0x" UINT64_FORMAT_X ",0x" UINT64_FORMAT_X
-		"; missing features of this CPU are 0x" UINT64_FORMAT_X ",0x" UINT64_FORMAT_X " ",
-		CPUFeatures_x64, GLIBCFeatures_x64,
-		_features, _glibc_features,
-		features_missing, glibc_features_missing);
-    assert(res > 0, "not enough temporary space allocated");
-    // insert_features_names() does crash for undefined too high-numbered features.
-    insert_features_names(buf + res , sizeof(buf) - res ,       features_missing & (  CPU_MAX - 1));
-    int res2 = res + strlen(buf + res);
-    insert_features_names(buf + res2, sizeof(buf) - res2, glibc_features_missing & (GLIBC_MAX - 1));
-    if (buf[res]) {
-      assert(buf[res] == ',', "unexpeced VM_Version::insert_features_names separator instead of ','");
-      buf[res] = '=';
-    }
-    vm_exit_during_initialization(buf);
-  }
-	_features =   CPUFeatures_x64;
-  _glibc_features = GLIBCFeatures_x64;
-
-  if (ShowCPUFeatures) {
-    if (ignore_glibc_not_using) {
-      tty->print_cr("CPU features are being kept intact as requested by -XX:CPUFeatures=ignore");
-    } else {
-      tty->print_cr("CPU features being used are: -XX:CPUFeatures=0x" UINT64_FORMAT_X ",0x" UINT64_FORMAT_X, _features, _glibc_features);
-    }
-  }
-
-  if (!ignore_glibc_not_using) {
-    glibc_not_using(      features_expected & ~      _features,
-                    glibc_features_expected & ~_glibc_features);
-  }
-}
-
 #if INCLUDE_LD_SO_LIST_DIAGNOSTICS
 
 static int ld_so_name_iterate_phdr(struct dl_phdr_info *info, size_t size, void *data_voidp) {
@@ -1175,21 +1125,19 @@ void VM_Version::glibc_not_using(uint64_t excessive_CPU, uint64_t excessive_GLIB
   char disable_str[64 * (10 + 3) + 1];
   strcpy(disable_str, glibc_prefix);
   char *disable_end = disable_str + glibc_prefix_len;
-#define GLIBC_DISABLE2(kind, hotspot, libc) do {                                                                                    \
-    assert(!(PASTE_TOKENS(disable_handled_, kind) & PASTE_TOKENS3(kind, _, hotspot)), "already used " STR(kind) "_" STR(hotspot) ); \
-    DEBUG_ONLY(PASTE_TOKENS(disable_handled_, kind) |= PASTE_TOKENS3(kind, _, hotspot));                                            \
-    if (PASTE_TOKENS(disable_, kind) & PASTE_TOKENS3(kind, _, hotspot)) {                                                           \
-      const char str[] = ",-" STR(libc);                                                                                            \
-      size_t remains = disable_str + sizeof(disable_str) - disable_end;                                                             \
-      strncpy(disable_end, str, remains);                                                                                           \
-      size_t len = strnlen(disable_end, remains);                                                                                   \
-      remains -= len;                                                                                                               \
-      assert(remains > 0, "internal error: disable_str overflow");                                                                  \
-      disable_end += len;                                                                                                           \
-    }                                                                                                                               \
+#define GLIBC_DISABLE(kind, hotspot_glibc) do {                                                                                                 \
+    assert(!(PASTE_TOKENS(disable_handled_, kind) & PASTE_TOKENS3(kind, _, hotspot_glibc)), "already used " STR(kind) "_" STR(hotspot_glibc) ); \
+    DEBUG_ONLY(PASTE_TOKENS(disable_handled_, kind) |= PASTE_TOKENS3(kind, _, hotspot_glibc));                                                  \
+    if (PASTE_TOKENS(disable_, kind) & PASTE_TOKENS3(kind, _, hotspot_glibc)) {                                                                 \
+      const char str[] = ",-" STR(hotspot_glibc);                                                                                               \
+      size_t remains = disable_str + sizeof(disable_str) - disable_end;                                                                         \
+      strncpy(disable_end, str, remains);                                                                                                       \
+      size_t len = strnlen(disable_end, remains);                                                                                               \
+      remains -= len;                                                                                                                           \
+      assert(remains > 0, "internal error: disable_str overflow");                                                                              \
+      disable_end += len;                                                                                                                       \
+    }                                                                                                                                           \
   } while (0);
-#define GLIBC_DISABLE(kind, name) GLIBC_DISABLE2(kind, name, name)
-  GLIBC_DISABLE2(CPU , HT, HTT)
   GLIBC_DISABLE(CPU  , AVX)
   GLIBC_DISABLE(CPU  , CX8)
   GLIBC_DISABLE(CPU  , FMA)
@@ -1218,6 +1166,7 @@ void VM_Version::glibc_not_using(uint64_t excessive_CPU, uint64_t excessive_GLIB
   GLIBC_DISABLE(GLIBC, SHSTK)
   GLIBC_DISABLE(GLIBC, XSAVE)
   GLIBC_DISABLE(GLIBC, OSXSAVE)
+  GLIBC_DISABLE(GLIBC, HTT)
 #undef GLIBC_DISABLE
 #undef GLIBC_DISABLE2
   *disable_end = 0;
@@ -1262,6 +1211,7 @@ void VM_Version::glibc_not_using(uint64_t excessive_CPU, uint64_t excessive_GLIB
   GLIBC_UNSUPPORTED(CPU  , FXSR             );
   GLIBC_UNSUPPORTED(CPU  , MMX              );
   GLIBC_UNSUPPORTED(CPU  , SSE              );
+  GLIBC_UNSUPPORTED(CPU  , HT               );
   GLIBC_UNSUPPORTED(GLIBC, CMPXCHG16        );
   GLIBC_UNSUPPORTED(GLIBC, LAHFSAHF         );
   GLIBC_UNSUPPORTED(GLIBC, F16C             );
@@ -1285,7 +1235,7 @@ void VM_Version::glibc_not_using(uint64_t excessive_CPU, uint64_t excessive_GLIB
   glibc_reexec();
 }
 
-static void nonlibc_tty_print_uint64(uint64_t num) {
+void VM_Version::nonlibc_tty_print_uint64(uint64_t num) {
   static const char prefix[] = "0x";
   tty->write(prefix, sizeof(prefix) - 1);
   bool first = true;
@@ -1299,8 +1249,22 @@ static void nonlibc_tty_print_uint64(uint64_t num) {
   }
 }
 
-void VM_Version::get_processor_features() {
+void VM_Version::nonlibc_tty_print_uint64_comma_uint64(uint64_t num1, uint64_t num2) {
+  nonlibc_tty_print_uint64(num1);
+  static const char comma = ',';
+  tty->print_raw(&comma, sizeof(comma));
+  nonlibc_tty_print_uint64(num2);
+}
 
+void VM_Version::nonlibc_tty_print_using_features_cr() {
+  if (ignore_glibc_not_using) {
+    tty->print_cr("CPU features are being kept intact as requested by -XX:CPUFeatures=ignore");
+  } else {
+    tty->print_cr("CPU features being used are: -XX:CPUFeatures=0x" UINT64_FORMAT_X ",0x" UINT64_FORMAT_X, _features, _glibc_features);
+  }
+}
+
+void VM_Version::get_processor_features_hardware() {
   _cpu = 4; // 486 by default
   _model = 0;
   _stepping = 0;
@@ -1326,18 +1290,6 @@ void VM_Version::get_processor_features() {
     _logical_processors_per_package = logical_processor_count();
     _L1_data_cache_line_size = L1_line_size();
   }
-
-  if (ShowCPUFeatures) {
-    static const char prefix[] = "This machine's CPU features are: -XX:CPUFeatures=";
-    tty->print_raw(prefix, sizeof(prefix) - 1);
-    nonlibc_tty_print_uint64(_features);
-    static const char comma = ',';
-    tty->print_raw(&comma, sizeof(comma));
-    nonlibc_tty_print_uint64(_glibc_features);
-    tty->cr();
-  }
-
-  CPUFeatures_init();
 
   _supports_cx8 = supports_cmpxchg8();
   // xchg and xadd instructions
@@ -1489,6 +1441,15 @@ void VM_Version::get_processor_features() {
     _has_intel_jcc_erratum = IntelJccErratumMitigation;
   }
 
+  if (ShowCPUFeatures) {
+    static const char prefix[] = "This machine's CPU features are: -XX:CPUFeatures=";
+    tty->print_raw(prefix, sizeof(prefix) - 1);
+    nonlibc_tty_print_uint64_comma_uint64(_features, _glibc_features);
+    tty->cr();
+  }
+}
+
+void VM_Version::get_processor_features_hotspot() {
   char buf[512];
   int res = jio_snprintf(
               buf, sizeof(buf),
@@ -2587,7 +2548,87 @@ void VM_Version::check_virtualizations() {
   }
 }
 
-void VM_Version::initialize_features() {
+// Print the feature names as " = feat1, ..., featN\n";
+void VM_Version::fatal_missing_features(uint64_t features_missing, uint64_t glibc_features_missing) {
+  static const char part1[] = "; missing features of this CPU are ";
+  tty->print_raw(part1, sizeof(part1) - 1);
+  nonlibc_tty_print_uint64_comma_uint64(features_missing, glibc_features_missing);
+  static const char part2[] = " =";
+  tty->print_raw(part2, sizeof(part2) - 1);
+  char buf[512] = "";
+  // insert_features_names() does crash for undefined too high-numbered features.
+  insert_features_names(buf, sizeof(buf)          ,       features_missing & (  CPU_MAX - 1));
+  char *s = buf;
+  while (*s)
+    ++s;
+  insert_features_names(s  , buf + sizeof(buf) - s, glibc_features_missing & (GLIBC_MAX - 1));
+  while (*s)
+    ++s;
+  /* +1 to skip the first ','. */
+  tty->print_raw(buf + 1, s - (buf + 1));
+  tty->cr();
+  vm_exit_during_initialization();
+}
+
+void VM_Version::crac_restore() {
+  assert(CRaCCheckpointTo != NULL, "");
+
+  if (ShowCPUFeatures) {
+    static const char prefix[] = "This snapshot's stored CPU features are: -XX:CPUFeatures=";
+    tty->print_raw(prefix, sizeof(prefix) - 1);
+    nonlibc_tty_print_uint64_comma_uint64(_features, _glibc_features);
+    tty->cr();
+  }
+
+  uint64_t       features_saved =       _features;
+  uint64_t glibc_features_saved = _glibc_features;
+#define SUPPORTS_SET \
+    SUPPORTS(supports_cx8) \
+    SUPPORTS(supports_atomic_getset4) \
+    SUPPORTS(supports_atomic_getset8) \
+    SUPPORTS(supports_atomic_getadd4) \
+    SUPPORTS(supports_atomic_getadd8) \
+    /**/
+#define SUPPORTS(x) bool x##_saved = Abstract_VM_Version::x();
+  SUPPORTS_SET
+#undef SUPPORTS
+
+  get_processor_features_hardware();
+
+  uint64_t       features_missing =       features_saved & ~      _features;
+  uint64_t glibc_features_missing = glibc_features_saved & ~_glibc_features;
+  if (features_missing || glibc_features_missing) {
+    static const char part1[] = "You have to specify -XX:CPUFeatures=";
+    tty->print_raw(part1, sizeof(part1) - 1);
+    nonlibc_tty_print_uint64_comma_uint64(_features & features_saved, _glibc_features & glibc_features_saved);
+    static const char part2[] = " together with -XX:CRaCCheckpointTo when making a checkpoint file; specified -XX:CRaCRestoreFrom file contains CPU features ";
+    tty->print_raw(part2, sizeof(part2) - 1);
+    nonlibc_tty_print_uint64_comma_uint64(features_saved, glibc_features_saved);
+    fatal_missing_features(features_missing, glibc_features_missing);
+  }
+
+  auto supports_exit = [&](const char *supports, bool file, bool this_cpu) {
+    char buf[512];
+    int res = jio_snprintf(
+                buf, sizeof(buf),
+                "Specified -XX:CRaCRestoreFrom file contains feature \"%s\" value %d while this CPU has value %d",
+                supports, file, this_cpu);
+    assert(res > 0, "not enough temporary space allocated");
+    vm_exit_during_initialization(buf);
+  };
+#define SUPPORTS(x)                                           \
+  if (x##_saved != Abstract_VM_Version::x()) {                \
+    supports_exit( #x , Abstract_VM_Version::x(), x##_saved); \
+  }
+  SUPPORTS_SET
+#undef SUPPORTS
+#undef SUPPORTS_SET
+
+  if (ShowCPUFeatures)
+    nonlibc_tty_print_using_features_cr();
+}
+
+void VM_Version::initialize() {
   ResourceMark rm;
   // Making this stub must be FIRST use of assembler
   stub_blob = BufferBlob::create("VM_Version stub", stub_size);
@@ -2602,11 +2643,46 @@ void VM_Version::initialize_features() {
   detect_virt_stub = CAST_TO_FN_PTR(detect_virt_stub_t,
                                      g.generate_detect_virt());
 
-  get_processor_features();
-}
+  assert(      _features == 0,       "_features should be zero at startup");
+  assert(_glibc_features == 0, "_glibc_features should be zero at startup");
+  get_processor_features_hardware();
 
-void VM_Version::initialize() {
-  initialize_features();
+  assert(!CPUFeatures == FLAG_IS_DEFAULT(CPUFeatures), "CPUFeatures parsing");
+  uint64_t GLIBCFeatures_x64;
+  uint64_t   CPUFeatures_x64 = CPUFeatures_parse(GLIBCFeatures_x64);
+  uint64_t       features_missing =   CPUFeatures_x64 & ~      _features;
+  uint64_t glibc_features_missing = GLIBCFeatures_x64 & ~_glibc_features;
+  if (features_missing || glibc_features_missing) {
+    static const char part1[] = "Specified -XX:CPUFeatures=";
+    tty->print_raw(part1, sizeof(part1) - 1);
+    nonlibc_tty_print_uint64_comma_uint64(CPUFeatures_x64, GLIBCFeatures_x64);
+    static const char part2[] = "; this machine's CPU features are ";
+    tty->print_raw(part2, sizeof(part2) - 1);
+    nonlibc_tty_print_uint64_comma_uint64(_features, _glibc_features);
+    fatal_missing_features(features_missing, glibc_features_missing);
+  }
+
+  uint64_t       features_saved =       _features;
+  uint64_t glibc_features_saved = _glibc_features;
+
+        _features =   CPUFeatures_x64;
+  _glibc_features = GLIBCFeatures_x64;
+
+  if (ShowCPUFeatures)
+    nonlibc_tty_print_using_features_cr();
+
+  if (!ignore_glibc_not_using) {
+    uint64_t       features_expected =   CPU_MAX - 1;
+    uint64_t glibc_features_expected = GLIBC_MAX - 1;
+#if !INCLUDE_CPU_FEATURE_ACTIVE && !INCLUDE_LD_SO_LIST_DIAGNOSTICS
+          features_expected =       features_saved;
+    glibc_features_expected = glibc_features_saved;
+#endif
+    glibc_not_using(      features_expected & ~      _features,
+                    glibc_features_expected & ~_glibc_features);
+  }
+
+  get_processor_features_hotspot();
 
   LP64_ONLY(Assembler::precompute_instructions();)
 

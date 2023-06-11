@@ -6045,55 +6045,8 @@ void VM_Crac::report_ok_to_jcmd_if_any() {
 }
 
 void VM_Crac::verify_cpu_compatibility() {
-  uint64_t features_saved = Abstract_VM_Version::features();
-#define SUPPORTS_SET \
-    SUPPORTS(supports_cx8) \
-    SUPPORTS(supports_atomic_getset4) \
-    SUPPORTS(supports_atomic_getset8) \
-    SUPPORTS(supports_atomic_getadd4) \
-    SUPPORTS(supports_atomic_getadd8) \
-    /**/
-#define SUPPORTS(x) bool x##_saved = Abstract_VM_Version::x();
-  SUPPORTS_SET
-#undef SUPPORTS
-
   // FIXME: x86 only
-  StubCodeDesc::thaw();
-  VM_Version::initialize_features();
-
-  // Abstract_VM_Version::features() may be less than current CPU's features as they have been already masked by the CPUFeatures argument (if it is present).
-  uint64_t features_missing = features_saved & ~Abstract_VM_Version::features();
-  if (features_missing) {
-    char buf[512];
-    int res = jio_snprintf(
-                buf, sizeof(buf),
-                "You have to specify -XX:CPUFeatures=0x" UINT64_FORMAT_X " during -XX:CRaCCheckpointTo making of the checkpoint"
-                "; specified -XX:CRaCRestoreFrom file contains CPU features 0x" UINT64_FORMAT_X
-                "; missing features of this CPU are 0x" UINT64_FORMAT_X " ",
-                Abstract_VM_Version::features() & features_saved,
-                features_saved, features_missing);
-    assert(res > 0, "not enough temporary space allocated");
-    VM_Version::insert_features_names(buf + res, sizeof(buf) - res, features_missing);
-    assert(buf[res] == ',', "unexpeced VM_Version::insert_features_names separator instead of ','");
-    buf[res] = '=';
-    vm_exit_during_initialization(buf);
-  }
-  auto supports_exit = [&](const char *supports, bool file, bool this_cpu) {
-    char buf[512];
-    int res = jio_snprintf(
-                buf, sizeof(buf),
-                "Specified -XX:CRaCRestoreFrom file contains feature \"%s\" value %d while this CPU has value %d",
-                supports, file, this_cpu);
-    assert(res > 0, "not enough temporary space allocated");
-    vm_exit_during_initialization(buf);
-  };
-#define SUPPORTS(x)                                           \
-  if (x##_saved != Abstract_VM_Version::x()) {                \
-    supports_exit( #x , Abstract_VM_Version::x(), x##_saved); \
-  }
-  SUPPORTS_SET
-#undef SUPPORTS
-#undef SUPPORTS_SET
+  VM_Version::crac_restore();
 }
 
 bool VM_Crac::is_claimed_fd(int fd) {

@@ -767,7 +767,8 @@ enum Extended_Family {
     return retVal;
   }
 
-  static void get_processor_features();
+  static void get_processor_features_hardware();
+  static void get_processor_features_hotspot();
 
   static uint64_t CPUFeatures_parse(uint64_t &glibc_features);
   static void CPUFeatures_init();
@@ -779,6 +780,10 @@ enum Extended_Family {
   static const size_t glibc_prefix_len;
   // C++17: Make ignore_glibc_not_using inline.
   static bool ignore_glibc_not_using;
+  static void nonlibc_tty_print_uint64(uint64_t num);
+  static void nonlibc_tty_print_uint64_comma_uint64(uint64_t num1, uint64_t num2);
+  static void nonlibc_tty_print_using_features_cr();
+  /*[[noreturn]]*/ static void fatal_missing_features(uint64_t features_missing, uint64_t glibc_features_missing);
 
 public:
   // Offsets for cpuid asm stub
@@ -821,7 +826,7 @@ public:
 
   // Initialization
   static void initialize();
-  static void initialize_features();
+  static void crac_restore();
 
   // Override Abstract_VM_Version implementation
   static void print_platform_virtualization_info(outputStream*);

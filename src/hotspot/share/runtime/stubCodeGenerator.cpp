@@ -57,11 +57,6 @@ void StubCodeDesc::freeze() {
   _frozen = true;
 }
 
-void StubCodeDesc::thaw() {
-  assert(_frozen, "repeated thaw operation");
-  _frozen = false;
-}
-
 void StubCodeDesc::print_on(outputStream* st) const {
   st->print("%s", group());
   st->print("::");

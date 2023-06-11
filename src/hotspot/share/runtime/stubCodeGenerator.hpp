@@ -80,7 +80,6 @@ class StubCodeDesc: public CHeapObj<mtCode> {
   };
 
   static void freeze();
-  static void thaw();
 
   const char* group() const                      { return _group; }
   const char* name() const                       { return _name; }

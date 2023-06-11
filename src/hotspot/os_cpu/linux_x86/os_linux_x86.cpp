@@ -214,7 +214,7 @@ bool PosixSignals::pd_hotspot_signal_handler(int sig, siginfo_t* info,
 
   address pc          = NULL;
 
-  // VM_Crac::verify_cpu_compatibility()->VM_Version::get_processor_features()
+  // VM_Version::crac_restore()->VM_Version::get_processor_features_hardware()
   // executes cpuinfo without a started Java thread.
   if (info != NULL && uc != NULL && thread == NULL && sig == SIGSEGV) {
     pc = (address) os::Posix::ucontext_get_pc(uc);

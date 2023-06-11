@@ -401,7 +401,6 @@ public:
   VMOp_Type type() const { return VMOp_VM_Crac; }
   void doit();
   bool read_shm(int shmid);
-  static void verify_cpu_compatibility();
 
 private:
   bool is_claimed_fd(int fd);
@@ -6044,11 +6043,6 @@ void VM_Crac::report_ok_to_jcmd_if_any() {
   _ostream = tty;
 }
 
-void VM_Crac::verify_cpu_compatibility() {
-  // FIXME: x86 only
-  VM_Version::crac_restore();
-}
-
 bool VM_Crac::is_claimed_fd(int fd) {
   typeArrayOop claimed_fds = typeArrayOop(JNIHandles::resolve_non_null(_fd_arr));
   for (int j = 0; j < claimed_fds->length(); ++j) {
@@ -6134,7 +6128,7 @@ void VM_Crac::doit() {
     }
   }
 
-  verify_cpu_compatibility();
+  VM_Version::crac_restore();
 
   if (shmid <= 0 || !VM_Crac::read_shm(shmid)) {
     _restore_start_time = os::javaTimeMillis();

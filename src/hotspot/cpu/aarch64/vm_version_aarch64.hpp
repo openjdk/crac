@@ -57,6 +57,7 @@ protected:
 public:
   // Initialization
   static void initialize();
+  static void crac_restore() {}
 
   // Asserts
   static void assert_is_initialized() {

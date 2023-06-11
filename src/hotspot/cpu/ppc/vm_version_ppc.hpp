@@ -89,6 +89,7 @@ public:
   // Initialization
   static void initialize();
   static void check_virtualizations();
+  static void crac_restore() {}
 
   // Override Abstract_VM_Version implementation
   static void print_platform_virtualization_info(outputStream*);

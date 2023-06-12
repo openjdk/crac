@@ -113,9 +113,9 @@ public abstract class SocketImpl implements SocketOptions {
     private class SocketResource extends JDKFdResource {
         @Override
         public void beforeCheckpoint(Context<? extends Resource> context) throws Exception {
-            ClaimedFDs ctx = Core.getClaimedFDs();
+            ClaimedFDs claimedFDs = Core.getClaimedFDs();
             SocketImpl socket = SocketImpl.this;
-            ctx.claimFd(
+            claimedFDs.claimFd(
                 fd,
                 socket,
                 () -> new CheckpointOpenSocketException(

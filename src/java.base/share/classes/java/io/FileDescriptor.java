@@ -64,10 +64,10 @@ public final class FileDescriptor {
         @Override
         public void beforeCheckpoint(Context<? extends jdk.crac.Resource> context) throws Exception {
             if (!closedByNIO && valid()) {
-                ClaimedFDs ctx = Core.getClaimedFDs();
+                ClaimedFDs claimedFDs = Core.getClaimedFDs();
                 FileDescriptor self = FileDescriptor.this;
 
-                ctx.claimFd(self, self, () ->  {
+                claimedFDs.claimFd(self, self, () ->  {
                     if (self == in || self == out || self == err) {
                         return null;
                     }

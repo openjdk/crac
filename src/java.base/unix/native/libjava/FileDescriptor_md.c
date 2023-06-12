@@ -94,7 +94,7 @@ static const char* stat2strtype(mode_t mode) {
 }
 
 JNIEXPORT jstring JNICALL
-Java_java_io_FileDescriptor_getPath(JNIEnv *env, jobject obj) {
+Java_java_io_FileDescriptorResource_getPath(JNIEnv *env, jclass clazz, jobject obj) {
     int fd = (*env)->GetIntField(env, obj, IO_fd_fdID);
     char fdpath[64];
     snprintf(fdpath, sizeof(fdpath), "/proc/self/fd/%d", fd);
@@ -108,7 +108,7 @@ Java_java_io_FileDescriptor_getPath(JNIEnv *env, jobject obj) {
 }
 
 JNIEXPORT jstring JNICALL
-Java_java_io_FileDescriptor_getType(JNIEnv *env, jobject obj) {
+Java_java_io_FileDescriptorResource_getType(JNIEnv *env, jclass clazz, jobject obj) {
     int fd = (*env)->GetIntField(env, obj, IO_fd_fdID);
     struct stat st;
     if (fstat(fd, &st) == 0) {
@@ -119,7 +119,7 @@ Java_java_io_FileDescriptor_getType(JNIEnv *env, jobject obj) {
 }
 
 JNIEXPORT jlong JNICALL
-Java_java_io_FileDescriptor_getOffset(JNIEnv *env, jobject obj) {
+Java_java_io_FileDescriptorResource_getOffset(JNIEnv *env, jclass clazz, jobject obj) {
     int fd = (*env)->GetIntField(env, obj, IO_fd_fdID);
     jlong offset = lseek(fd, 0, SEEK_CUR);
     if (offset < 0) {
@@ -134,13 +134,13 @@ Java_java_io_FileDescriptor_getOffset(JNIEnv *env, jobject obj) {
 }
 
 JNIEXPORT jint JNICALL
-Java_java_io_FileDescriptor_getFlags(JNIEnv *env, jobject obj) {
+Java_java_io_FileDescriptorResource_getFlags(JNIEnv *env, jclass clazz, jobject obj) {
     int fd = (*env)->GetIntField(env, obj, IO_fd_fdID);
     return fcntl(fd, F_GETFL);
 }
 
 JNIEXPORT jboolean JNICALL
-Java_java_io_FileDescriptor_reopen(JNIEnv *env, jobject obj, jint fd, jstring path, jint flags, jlong offset) {
+Java_java_io_FileDescriptorResource_reopen(JNIEnv *env, jclass clazz, jint fd, jstring path, jint flags, jlong offset) {
     if (fcntl(fd, F_GETFD) != -1) {
         JNU_ThrowByName(env, "jdk/crac/impl/CheckpointOpenFileException", "File descriptor is already open");
     }
@@ -174,7 +174,7 @@ Java_java_io_FileDescriptor_reopen(JNIEnv *env, jobject obj, jint fd, jstring pa
 }
 
 JNIEXPORT jboolean JNICALL
-Java_java_io_FileDescriptor_reopenNull(JNIEnv *env, jobject obj, jint fd) {
+Java_java_io_FileDescriptorResource_reopenNull(JNIEnv *env, jclass clazz, jint fd) {
     if (fcntl(fd, F_GETFD) != -1) {
         JNU_ThrowByName(env, "jdk/crac/impl/CheckpointOpenFileException", "File descriptor is already open");
     }

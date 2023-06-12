@@ -6063,8 +6063,7 @@ void VM_Crac::doit() {
 
   FdsInfo fds;
 
-  // dry-run fails checkpoint
-  bool ok = !_dry_run;
+  bool ok = true;
 
   for (int i = 0; i < fds.len(); ++i) {
     if (fds.get_state(i) == FdsInfo::CLOSED) {
@@ -6077,7 +6076,7 @@ void VM_Crac::doit() {
     const char* type = stat2strtype(st->st_mode);
     int linkret = readfdlink(fd, detailsbuf, sizeof(detailsbuf));
     const char* details = 0 < linkret ? detailsbuf : "";
-    print_resources("JVM: FD fd=%d type=%s path=\"%s\"", fd, type, details);
+    print_resources("JVM: FD fd=%d type=%s path=\"%s\" ", fd, type, details);
 
     if (is_claimed_fd(fd)) {
       print_resources("OK: claimed by java code\n");
@@ -6102,16 +6101,19 @@ void VM_Crac::doit() {
     const int maxinfo = 64;
     size_t buflen = strlen(details) + maxinfo;
     char* msg = NEW_C_HEAP_ARRAY(char, buflen, mtInternal);
-    int len = snprintf(msg, buflen, "FD fd=%d type=%s path=%s", i, type, detailsbuf);
+    int len = snprintf(msg, buflen, "FD fd=%d type=%s path=%s", fd, type, detailsbuf);
     msg[len < 0 ? 0 : ((size_t) len >= buflen ? buflen - 1 : len)] = '\0';
     _failures->append(CracFailDep(stat2stfail(st->st_mode & S_IFMT), msg));
   }
 
-  if (!ok && CRHeapDumpOnCheckpointException) {
+  if ((!ok || _dry_run) && CRHeapDumpOnCheckpointException) {
     HeapDumper::dump_heap();
   }
 
   if (!ok && CRDoThrowCheckpointException) {
+    return;
+  } else if (_dry_run) {
+    _ok = ok;
     return;
   }
 

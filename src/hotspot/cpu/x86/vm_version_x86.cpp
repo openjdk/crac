@@ -1119,7 +1119,7 @@ void VM_Version::glibc_not_using(uint64_t excessive_CPU, uint64_t excessive_GLIB
 #define CHECK_KIND(kind) do {                                                                                                            \
     if (PASTE_TOKENS(disable_handled_, kind) != PASTE_TOKENS(excessive_handled_, kind))                                                  \
       vm_exit_during_initialization(err_msg("internal error: Unsupported disabling of " STR(kind) "_* 0x%" PRIx64 " != used 0x%" PRIx64, \
-                                            PASTE_TOKENS(disable_handled_, kind), PASTE_TOKENS(excessive_handled_, kind));               \
+                                            PASTE_TOKENS(disable_handled_, kind), PASTE_TOKENS(excessive_handled_, kind)));              \
   } while (0)
   CHECK_KIND(CPU  );
   CHECK_KIND(GLIBC);
@@ -1160,7 +1160,7 @@ void VM_Version::glibc_not_using(uint64_t excessive_CPU, uint64_t excessive_GLIB
 #define CHECK_KIND(kind) do {                                                                                                                 \
     if (PASTE_TOKENS(excessive_handled_, kind) != PASTE_TOKENS(kind, _MAX) - 1)                                                               \
       vm_exit_during_initialization(err_msg("internal error: Unsupported disabling of some " STR(kind) "_* 0x%" PRIx64 " != full 0x%" PRIx64, \
-                                            PASTE_TOKENS(excessive_handled_, kind), CPU_MAX - 1);                                             \
+                                            PASTE_TOKENS(excessive_handled_, kind), CPU_MAX - 1));                                            \
   } while (0)
   CHECK_KIND(CPU  );
   CHECK_KIND(GLIBC);
@@ -1237,11 +1237,20 @@ void VM_Version::get_processor_features_hardware() {
   LP64_ONLY(_supports_atomic_getset8 = true);
   LP64_ONLY(_supports_atomic_getadd8 = true);
 
+  if (ShowCPUFeatures) {
+    static const char prefix[] = "This machine's CPU features are: -XX:CPUFeatures=";
+    tty->print_raw(prefix, sizeof(prefix) - 1);
+    nonlibc_tty_print_uint64_comma_uint64(_features, _glibc_features);
+    tty->cr();
+  }
+}
+
+void VM_Version::get_processor_features_hotspot() {
 #ifdef _LP64
   // OS should support SSE for x64 and hardware should support at least SSE2.
   if (!VM_Version::supports_sse2()) {
     if (!FLAG_IS_DEFAULT(CPUFeatures))
-      vm_exit_during_initialization(err_msg("-XX:CPUFeatures option requires SSE2 flag to be set: 0x%" PRIx64, CPU_SSE2));
+      vm_exit_during_initialization(err_msg("-XX:CPUFeatures option requires SSE2 flag to be set: 0x%" PRIx64 ",0x%" PRIx64, CPU_SSE2, (uint64_t)0));
     vm_exit_during_initialization("Unknown x64 processor: SSE2 not supported");
   }
   // in 64 bit the use of SSE2 is the minimum
@@ -1377,15 +1386,6 @@ void VM_Version::get_processor_features_hardware() {
     _has_intel_jcc_erratum = IntelJccErratumMitigation;
   }
 
-  if (ShowCPUFeatures) {
-    static const char prefix[] = "This machine's CPU features are: -XX:CPUFeatures=";
-    tty->print_raw(prefix, sizeof(prefix) - 1);
-    nonlibc_tty_print_uint64_comma_uint64(_features, _glibc_features);
-    tty->cr();
-  }
-}
-
-void VM_Version::get_processor_features_hotspot() {
   char buf[512];
   int res = jio_snprintf(
               buf, sizeof(buf),

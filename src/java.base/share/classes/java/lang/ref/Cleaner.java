@@ -25,7 +25,7 @@
 
 package java.lang.ref;
 
-import jdk.internal.crac.JDKResource;
+import jdk.internal.crac.Core;
 import jdk.internal.ref.CleanerImpl;
 
 import java.util.Objects;
@@ -218,7 +218,7 @@ public final class Cleaner {
     public Cleanable register(Object obj, Runnable action) {
         Objects.requireNonNull(obj, "obj");
         Objects.requireNonNull(action, "action");
-        return new CleanerImpl.PhantomCleanableRef(obj, this, action, JDKResource.Priority.CLEANERS);
+        return new CleanerImpl.PhantomCleanableRef(obj, this, action);
     }
 
     /**

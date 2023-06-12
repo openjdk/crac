@@ -438,7 +438,8 @@ public final class FileDescriptor {
                 return;
             }
             String path;
-            if (policy.type == OpenFDPolicies.AfterRestore.OPEN_OTHER) {
+            if (policy.type == OpenFDPolicies.AfterRestore.OPEN_OTHER ||
+                    policy.type == OpenFDPolicies.AfterRestore.OPEN_OTHER_AT_END) {
                 path = policy.param;
             } else {
                 if (resource.originalPath == null) {
@@ -450,10 +451,17 @@ public final class FileDescriptor {
                 }
                 path = resource.originalPath;
             }
-            // We will attempt to open at the original offset even if the path changed;
-            // this is used probably as the file moved on the filesystem but the contents
-            // are the same.
-            if (!reopen(resource.originalFd, path, resource.originalFlags, resource.originalOffset)) {
+            long offset;
+            if (policy.type == OpenFDPolicies.AfterRestore.REOPEN_AT_END ||
+                    policy.type == OpenFDPolicies.AfterRestore.OPEN_OTHER_AT_END) {
+                offset = -1;
+            } else {
+                // We will attempt to open at the original offset even if the path changed;
+                // this is used probably as the file moved on the filesystem but the contents
+                // are the same.
+                offset = resource.originalOffset;
+            }
+            if (!reopen(resource.originalFd, path, resource.originalFlags, offset)) {
                 if (policy.type == OpenFDPolicies.AfterRestore.REOPEN_OR_NULL) {
                     if (!reopenNull(resource.originalFd)) {
                         throw new RestoreFileDescriptorException("Cannot reopen file descriptor " +

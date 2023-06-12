@@ -15,8 +15,6 @@ import java.nio.file.PathMatcher;
 import java.util.*;
 import java.util.regex.Pattern;
 
-import static jdk.crac.impl.OpenFDPolicies.AfterRestore.OPEN_OTHER;
-
 public class OpenFDPolicies<P> {
     public static final String CHECKPOINT_PROPERTY = "jdk.crac.fd-policy.checkpoint";
     public static final String RESTORE_PROPERTY = "jdk.crac.fd-policy.restore";
@@ -78,30 +76,30 @@ public class OpenFDPolicies<P> {
         AfterRestore[] policies = AfterRestore.values();
         loadProperties("restore", RESTORE_PROPERTY).forEach((key, value) -> {
             String pstr = value.toString();
-            AfterRestorePolicy policy = null;
-            for (var p : policies) {
-                if (pstr.startsWith(p.name())) {
-                    if (p == OPEN_OTHER) {
-                        // we add + 2 because we need the equal sign and at least one character for the path
-                        if (pstr.length() < OPEN_OTHER.name().length() + 2 || pstr.charAt(OPEN_OTHER.name().length()) != '=') {
-                            LoggerContainer.error("Invalid specification for policy '{0}' for target {1}: " +
-                                    "Policy name should be followed by an equal sign '=' and then the path.", OPEN_OTHER, key);
-                            return;
-                        } else {
-                            policy = new AfterRestorePolicy(OPEN_OTHER,
-                                    unescape(pstr, OPEN_OTHER.name().length() + 1, pstr.length()));
-                        }
-                    } else if (pstr.length() == p.name().length()) {
-                        policy = new AfterRestorePolicy(p, null);
+            int eqIndex = pstr.indexOf('=');
+            String policyName = eqIndex < 0 ? pstr : pstr.substring(0, eqIndex);
+            AfterRestore type = Arrays.stream(policies).filter(p -> policyName.equals(p.name())).findAny().orElse(null);
+            if (type == null) {
+                throw new IllegalArgumentException("Invalid value of restore policy " + value +
+                        " for target " + key + "; valid values are: " + Arrays.toString(AfterRestore.values()));
+            }
+            AfterRestorePolicy policy;
+            switch (type) {
+                case OPEN_OTHER:
+                case OPEN_OTHER_AT_END:
+                    // we add + 2 because we need the equal sign and at least one character for the path
+                    if (pstr.length() < type.name().length() + 2) {
+                        throw new IllegalArgumentException("Invalid specification for policy " + type +
+                                " for target " + key +
+                                ": Policy name should be followed by an equal sign '=' and then the path.");
+                    } else {
+                        policy = new AfterRestorePolicy(type, unescape(pstr, type.name().length() + 1, pstr.length()));
                     }
-                }
+                    break;
+                default:
+                    policy = new AfterRestorePolicy(type, null);
             }
-            if (policy == null) {
-                LoggerContainer.error("Invalid value of restore policy '{0}' for target {1}; valid values are: {2}",
-                        value, key, Arrays.toString(AfterRestore.values()));
-            } else {
-                RESTORE.setPolicy(key, value, policy);
-            }
+            RESTORE.setPolicy(key, value, policy);
         });
         RESTORE.loaded = true;
     }
@@ -283,6 +281,13 @@ public class OpenFDPolicies<P> {
          */
         REOPEN_OR_NULL,
         /**
+         * The file descriptor is reopened, ignoring the last offset and using
+         * the end of file instead. This is particularly useful for append-only
+         * logs.
+         * If it cannot be reopened the behaviour is identical to {@link #REOPEN_OR_ERROR}.
+         */
+        REOPEN_AT_END,
+        /**
          * After restore another file specified as part of the policy
          * declaration (usually the policy name is followed by
          * an equal sign '=' character and then the path) is opened instead.
@@ -290,6 +295,11 @@ public class OpenFDPolicies<P> {
          * is terminated.
          */
         OPEN_OTHER,
+        /**
+         * Similar to {@link #OPEN_OTHER} but ignored the previous offset
+         * and opens the file at the end.
+         */
+        OPEN_OTHER_AT_END,
         /**
          * Do not do anything with the closed descriptor; this will probably result
          * in runtime errors if the resource is used.

@@ -162,10 +162,13 @@ Java_java_io_FileDescriptor_reopen(JNIEnv *env, jobject obj, jint fd, jstring pa
             perror("CRaC: failed to close opened file descriptor");
         }
     }
-    if (result && offset != 0 && lseek(fd, offset, SEEK_SET) < 0) {
-        perror("CRaC: Failed to lseek reopened file descriptor");
-        close(fd);
-        return JNI_FALSE;
+    if (result) {
+        if ((offset > 0 && lseek(fd, offset, SEEK_SET) < 0) ||
+            (offset < 0 && lseek(fd, 0, SEEK_END) < 0)) {
+            perror("CRaC: Failed to lseek reopened file descriptor");
+            close(fd);
+            return JNI_FALSE;
+        }
     }
     return result;
 }

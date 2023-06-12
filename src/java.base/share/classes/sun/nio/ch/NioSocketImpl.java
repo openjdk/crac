@@ -129,7 +129,7 @@ public final class NioSocketImpl extends SocketImpl implements PlatformSocketImp
     private boolean connectionReset;
 
     static {
-        // Force initialization before checkpoint starts
+        // trigger eager initialization
         new FileDispatcherImpl();
     }
 

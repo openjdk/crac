@@ -235,8 +235,8 @@ JVMFlag::Error WriteableFlags::set_flag(const char* name, const void* value, JVM
 
   JVMFlag* f = JVMFlag::find_flag(name);
   if (f) {
-    // only writeable flags are allowed to be set
-    if (f->is_writeable()) {
+    // only writeable or restore_settable flags are allowed to be set
+    if (f->is_writeable() || f->is_restore_settable() && origin == JVMFlagOrigin::CRAC_RESTORE) {
       return setter(f, value, origin, err_msg);
     } else {
       err_msg.print("only 'writeable' flags can be set");

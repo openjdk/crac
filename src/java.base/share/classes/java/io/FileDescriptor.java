@@ -29,9 +29,9 @@ import java.net.Socket;
 import java.util.*;
 
 import jdk.crac.Context;
-import jdk.crac.RestoreException;
-import jdk.crac.impl.OpenFDPolicies;
 import jdk.crac.impl.CheckpointOpenFileException;
+import jdk.crac.impl.OpenFDPolicies;
+import jdk.crac.impl.OpenFDPolicies.RestoreFileDescriptorException;
 import jdk.internal.access.JavaIOFileDescriptorAccess;
 import jdk.internal.access.SharedSecrets;
 import jdk.internal.crac.*;
@@ -69,8 +69,6 @@ public final class FileDescriptor {
         final Exception stackTraceHolder;
 
         Resource() {
-            JDKContext jdkContext = Core.getJDKContext();
-            jdkContext.register(this);
             if (JDKContext.Properties.COLLECT_FD_STACKTRACES) {
                 // About the timestamp: we cannot format it nicely since this
                 // exception is sometimes created too early in the VM lifecycle
@@ -80,6 +78,7 @@ public final class FileDescriptor {
             } else {
                 stackTraceHolder = null;
             }
+            Core.Priority.FILE_DESCRIPTORS.getContext().register(this);
         }
 
         @Override
@@ -92,11 +91,6 @@ public final class FileDescriptor {
         @Override
         public void afterRestore(Context<? extends jdk.crac.Resource> context) throws Exception {
             FileDescriptor.this.afterRestore();
-        }
-
-        @Override
-        public Priority getPriority() {
-            return Priority.FILE_DESCRIPTORS;
         }
 
         @Override
@@ -115,15 +109,21 @@ public final class FileDescriptor {
     static {
         initIDs();
 
-        Core.getJDKContext().register(checkpointListener = new JDKResourceStub(JDKResource.Priority.NORMAL) {
+        JDKResource resource = new JDKResource() {
             @Override
             public void beforeCheckpoint(Context<? extends jdk.crac.Resource> context) {
-                JDKContext ctx = (JDKContext) context;
+                JDKContext ctx = Core.getJDKContext();
                 ctx.claimFd(in, "System.in");
                 ctx.claimFd(out, "System.out");
                 ctx.claimFd(err, "System.err");
             }
-        });
+
+            @Override
+            public void afterRestore(Context<? extends jdk.crac.Resource> context) {
+            }
+        };
+        checkpointListener = resource;
+        Core.Priority.NORMAL.getContext().register(resource);
         OpenFDPolicies.ensureRegistered();
     }
 
@@ -426,7 +426,7 @@ public final class FileDescriptor {
 
     private native long getOffset();
 
-    private synchronized void afterRestore() throws RestoreException {
+    private synchronized void afterRestore() throws RestoreFileDescriptorException {
         if (!valid() && resource.originalFd >= 0) {
             OpenFDPolicies.AfterRestorePolicy policy =
                     OpenFDPolicies.RESTORE.get(resource.originalFd, resource.originalType, resource.originalPath);
@@ -442,10 +442,10 @@ public final class FileDescriptor {
                 path = policy.param;
             } else {
                 if (resource.originalPath == null) {
-                    throw new RestoreException("Cannot reopen file descriptor " +
+                    throw new RestoreFileDescriptorException("Cannot reopen file descriptor " +
                             resource.originalFd + ": invalid path: " + resource.originalPath);
                 } else if (resource.originalType.equals("socket")) {
-                    throw new RestoreException("Cannot reopen file descriptor " +
+                    throw new RestoreFileDescriptorException("Cannot reopen file descriptor " +
                             resource.originalFd + ": cannot restore socket");
                 }
                 path = resource.originalPath;
@@ -456,11 +456,11 @@ public final class FileDescriptor {
             if (!reopen(resource.originalFd, path, resource.originalFlags, resource.originalOffset)) {
                 if (policy.type == OpenFDPolicies.AfterRestore.REOPEN_OR_NULL) {
                     if (!reopenNull(resource.originalFd)) {
-                        throw new RestoreException("Cannot reopen file descriptor " +
+                        throw new RestoreFileDescriptorException("Cannot reopen file descriptor " +
                                 resource.originalFd + " to null device");
                     }
                 } else {
-                    throw new RestoreException("Cannot reopen file descriptor " +
+                    throw new RestoreFileDescriptorException("Cannot reopen file descriptor " +
                             resource.originalFd + " to " + path);
                 }
             } else {

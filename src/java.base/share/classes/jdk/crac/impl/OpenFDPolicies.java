@@ -4,7 +4,6 @@ import jdk.crac.Context;
 import jdk.crac.Resource;
 import jdk.internal.crac.Core;
 import jdk.internal.crac.JDKResource;
-import jdk.internal.crac.JDKResourceStub;
 import jdk.internal.crac.LoggerContainer;
 import sun.security.action.GetPropertyAction;
 
@@ -30,13 +29,17 @@ public class OpenFDPolicies<P> {
             new OpenFDPolicies<>(new AfterRestorePolicy(AfterRestore.REOPEN_OR_ERROR, null));
 
     private static Pattern NUMERIC;
-    private static final JDKResource resource = new JDKResourceStub(JDKResource.Priority.NORMAL) {
+    private static final JDKResource resource = new JDKResource() {
         @Override
         public void beforeCheckpoint(Context<? extends Resource> context) {
             CHECKPOINT.clear();
             // We need to s
             loadCheckpointPolicies();
             RESTORE.clear();
+        }
+
+        @Override
+        public void afterRestore(Context<? extends Resource> context) throws Exception {
         }
     };
 
@@ -49,7 +52,7 @@ public class OpenFDPolicies<P> {
 
     static {
         // This static ctor runs too early to invoke loadCheckpointPolicies directly
-        Core.getJDKContext().register(resource);
+        Core.Priority.NORMAL.getContext().register(resource);
     }
 
     private synchronized static void loadCheckpointPolicies() {
@@ -304,4 +307,11 @@ public class OpenFDPolicies<P> {
         }
     }
 
+    public static class RestoreFileDescriptorException extends Exception {
+        public static final long serialVersionUID = -8790346029973354266L;
+
+        public RestoreFileDescriptorException(String message) {
+            super(message);
+        }
+    }
 }

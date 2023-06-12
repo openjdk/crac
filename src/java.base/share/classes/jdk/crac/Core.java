@@ -128,19 +128,19 @@ public class Core {
         }
         jdk.internal.crac.Core.setClaimedFDs(null);
 
-        claimedFDs.getClaimedFds().forEach((integer, exceptionSupplier) -> {
+        List<ClaimedFDs.Descriptor> claimedList = claimedFDs.getClaimedFds();
+        int[] fdArr = new int[claimedList.size()];
+        LoggerContainer.debug("Claimed open file descriptors:");
+        for (int i = 0; i < claimedList.size(); ++i) {
+            ClaimedFDs.Descriptor desc = claimedList.get(i);
+            LoggerContainer.debug("\t{0} {1} {2}", desc.getFd(), desc.getClaimer(), desc.getExceptionSupplier());
+            fdArr[i] = desc.getFd();
+
+            Supplier<Exception> exceptionSupplier = desc.getExceptionSupplier();
             if (exceptionSupplier != null) {
-                Exception e = exceptionSupplier.second().get();
+                Exception e = exceptionSupplier.get();
                 checkpointException.handle(e);
             }
-        });
-
-        List<Map.Entry<Integer, ClaimedFDs.Tuple<Object, Supplier<Exception>>>> claimedPairs = claimedFDs.getClaimedFds().entrySet().stream().toList();
-        int[] fdArr = new int[claimedPairs.size()];
-        LoggerContainer.debug("Claimed open file descriptors:");
-        for (int i = 0; i < claimedPairs.size(); ++i) {
-            fdArr[i] = claimedPairs.get(i).getKey();
-            LoggerContainer.debug("\t{0} {1}", fdArr[i], claimedPairs.get(i).getValue().first());
         }
 
         final Object[] bundle = checkpointRestore0(fdArr, null, checkpointException.hasException(), jcmdStream);

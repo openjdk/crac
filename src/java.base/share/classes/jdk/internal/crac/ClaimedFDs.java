@@ -30,33 +30,61 @@ import jdk.internal.access.JavaIOFileDescriptorAccess;
 import jdk.internal.access.SharedSecrets;
 
 import java.io.FileDescriptor;
-import java.util.Map;
+import java.util.List;
 import java.util.Objects;
 import java.util.WeakHashMap;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
-public class ClaimedFDs {
-    private final WeakHashMap<FileDescriptor, Tuple<Object, Supplier<Exception>>> fds = new WeakHashMap<>();
 
-    public Map<Integer, Tuple<Object, Supplier<Exception>>> getClaimedFds() {
-        JavaIOFileDescriptorAccess fileDescriptorAccess = SharedSecrets.getJavaIOFileDescriptorAccess();
-        return fds.entrySet().stream()
-            .filter((var e) -> e.getKey().valid())
-            .collect(Collectors.toMap(entry -> fileDescriptorAccess.get(entry.getKey()), Map.Entry::getValue));
+public class ClaimedFDs {
+    private final static JavaIOFileDescriptorAccess fileDescriptorAccess = SharedSecrets.getJavaIOFileDescriptorAccess();
+
+    private WeakHashMap<FileDescriptor, Descriptor> fds = new WeakHashMap<>();
+
+    public static class Descriptor {
+        private int fd;
+        private final Object claimer;
+        private final Supplier<Exception> exceptionSupplier;
+
+        public Descriptor(Object claimer, Supplier<Exception> exceptionSupplier) {
+            this.fd = -1;
+            this.claimer = claimer;
+            this.exceptionSupplier = exceptionSupplier;
+        }
+
+        void setFd(int fd) {
+            assert this.fd == -1;
+            this.fd = fd;
+        }
+
+        public int getFd() {
+            assert this.fd != -1;
+            return fd;
+        }
+
+        public Object getClaimer() {
+            return claimer;
+        }
+
+        public Supplier<Exception> getExceptionSupplier() {
+            return exceptionSupplier;
+        }
     }
 
-    public static class Tuple<T1, T2> {
-        private final T1 o1;
-        private final T2 o2;
-
-        public Tuple(T1 o1, T2 o2) {
-            this.o1 = o1;
-            this.o2 = o2;
-        }
-        public T1 first() { return o1; }
-        public T2 second() { return o2; }
+    public List<Descriptor> getClaimedFds() {
+        List<Descriptor> list = fds.entrySet().stream()
+            .filter((var e) -> e.getKey().valid())
+            .map(entry -> {
+                    Descriptor d = entry.getValue();
+                    d.setFd(fileDescriptorAccess.get(entry.getKey()));
+                    return d;
+                })
+            .collect(Collectors.toList());
+        // destroy fds since we've modified Descriptors
+        fds = null;
+        return list;
     }
 
     public void claimFd(FileDescriptor fd, Object claimer, Supplier<Exception> supplier, Object... suppressedClaimers) {
@@ -66,12 +94,12 @@ public class ClaimedFDs {
             return;
         }
 
-        Tuple<Object, Supplier<Exception>> record = fds.get(fd);
+        Descriptor descriptor = fds.get(fd);
         LoggerContainer.debug("ClaimFD: fd {0} claimer {1} existing {2}",
-            fd, claimer, record != null ? record.first() : "NONE");
-        if (record == null ||
-                Stream.of(suppressedClaimers).anyMatch((supressed) -> supressed == record.first())) {
-            fds.put(fd, new Tuple<>(claimer, supplier));
+            fd, claimer, descriptor != null ? descriptor.claimer : "NONE");
+        if (descriptor == null ||
+                Stream.of(suppressedClaimers).anyMatch((supressed) -> supressed == descriptor.getClaimer())) {
+            fds.put(fd, new Descriptor(claimer, supplier));
         }
     }
 }

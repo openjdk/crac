@@ -27,7 +27,7 @@ public class ExceptionHolder<E extends Exception> {
         return exception != null;
     }
 
-    public void reSuppress(Exception e) {
+    public void resuppress(Exception e) {
         E exception = get();
         for (Throwable t : e.getSuppressed()) {
             exception.addSuppressed(t);
@@ -41,7 +41,7 @@ public class ExceptionHolder<E extends Exception> {
 
         E exception = get();
         if (exception.getClass() == e.getClass()) {
-            reSuppress(e);
+            resuppress(e);
         } else {
             if (e instanceof InterruptedException) {
                 // FIXME interrupt re-set should be up to the Context implementation, as

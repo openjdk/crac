@@ -436,6 +436,7 @@ static int clock_tics_per_sec = 100;
 
 // CRaC
 static const char* _crengine = NULL;
+static char* _crengine_arg_str = NULL;
 static const char* _crengine_args[32] = { NULL, NULL, NULL };
 static jlong _restore_start_time;
 static jlong _restore_start_counter;
@@ -5876,10 +5877,8 @@ static bool compute_crengine() {
   // release possible old copies
   os::free((char *) _crengine); // NULL is allowed
   _crengine = NULL;
-  for (size_t i = 2; i < ARRAY_SIZE(_crengine_args) && _crengine_args[i] != NULL; ++i) {
-    os::free((char *) _crengine_args[i]);
-    _crengine_args[i] = NULL;
-  }
+  os::free((char *) _crengine_arg_str);
+  _crengine_arg_str = NULL;
 
   if (!CREngine) {
     return true;
@@ -5888,6 +5887,7 @@ static bool compute_crengine() {
   char *comma = strchr(exec, ',');
   if (comma != NULL) {
     *comma = '\0';
+    _crengine_arg_str = os::strdup_check_oom(comma + 1);
   }
   if (exec[0] == '/') {
     _crengine = exec;
@@ -5903,45 +5903,38 @@ static bool compute_crengine() {
       return false;
     }
     _crengine = os::strdup_check_oom(path);
+    // we have read and duplicated args from exec, now we can release
+    os::free(exec);
   }
   _crengine_args[0] = _crengine;
 
   size_t next_arg = 2;
-  if (comma != NULL) {
-    char *arg = comma + 1;
-    bool done = false;
-    while (!done && next_arg < ARRAY_SIZE(_crengine_args) - 2) {
-      comma = strchrnul(arg, ',');
-      done = *comma == '\0';
-      *comma = '\0';
-      char *eq = strchrnul(arg, '=');
-      if (eq < comma) {
-        *eq = '\0';
+  if (_crengine_arg_str != NULL) {
+    char *arg = _crengine_arg_str;
+    char *target = _crengine_arg_str;
+    bool escaped = false;
+    for (char *c = arg; *c != '\0'; ++c) {
+      if (next_arg >= ARRAY_SIZE(_crengine_args) - 2) {
+        warning("Too many options to CREngine; cannot proceed with these: %s", arg);
+        return false;
       }
-      size_t alloc_size = strlen(arg) + 3;
-      char *opt = (char *) os::malloc(alloc_size, mtInternal);
-      if (opt == NULL) {
-        vm_exit_out_of_memory(alloc_size, OOM_MALLOC_ERROR, "compute_crengine");
-        return false; // should not reach here
+      if (!escaped) {
+        switch(*c) {
+        case '\\':
+          escaped = true;
+          continue; // for
+        case ',':
+          *target++ = '\0';
+          _crengine_args[next_arg++] = arg;
+          arg = target;
+          continue; // for
+        }
       }
-      strcpy(opt, "--");
-      strcpy(opt + 2, arg);
-      _crengine_args[next_arg++] = opt;
-      if (eq < comma) {
-        _crengine_args[next_arg++] = os::strdup_check_oom(eq + 1);
-      }
-      arg = comma + 1;
+      escaped = false;
+      *target++ = *c;
     }
-    assert(next_arg < ARRAY_SIZE(_crengine_args), "incremented by more than 2?");
+    _crengine_args[next_arg++] = arg;
     _crengine_args[next_arg] = NULL;
-    if (!done && next_arg > ARRAY_SIZE(_crengine_args) - 2) {
-      warning("Too many options to CREngine; cannot proceed with these: %s", arg);
-      return false;
-    }
-  }
-  if (exec != _crengine) {
-    // we have read and duplicated args from exec, now we can release
-    os::free(exec);
   }
   return true;
 }

@@ -232,6 +232,8 @@ static int restore(const char *basedir,
 
     memcpy(arg, tail, sizeof(tail));
 
+    fflush(stderr);
+
     execv(criu, (char**)args);
     perror("exec criu");
     return 1;
@@ -350,7 +352,7 @@ static char *parse_options(int argc, char *argv[]) {
         .flag = NULL,
         .val = 'v'
     }, {
-        .name = "log_file",
+        .name = "log-file",
         .has_arg = 1,
         .flag = NULL,
         .val = 'o',

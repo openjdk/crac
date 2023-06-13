@@ -85,12 +85,12 @@ static jobject create_isa(JNIEnv *env, jclass isa_class, jmethodID isa_ctor, SOC
 
 JNIEXPORT jobjectArray JNICALL
 Java_java_net_Socket_getAddresses(JNIEnv *env, jclass cl, jint fd) {
-    int family;
-    socklen_t famlen = sizeof(int);
-    if (getsockopt(fd, SOL_SOCKET, SO_DOMAIN, &family, &famlen) != 0) {
+    struct sockaddr sa;
+    socklen_t salen = sizeof(sa);
+    if (getsockname(fd, &sa, &salen) != 0) {
         JNU_ThrowByName(env, "java/net/SocketException", "Cannot find socket family");
         return NULL;
-    } else if (family != AF_INET && family != AF_INET6) {
+    } else if (sa.sa_family != AF_INET && sa.sa_family != AF_INET6) {
         return NULL;
     }
 
@@ -137,33 +137,35 @@ Java_java_net_Socket_getAddresses(JNIEnv *env, jclass cl, jint fd) {
 
 JNIEXPORT jstring JNICALL
 Java_java_net_Socket_getType(JNIEnv *env, jclass cl, jint fd) {
-    int socktype, family;
-    socklen_t typelen = sizeof(int), famlen = sizeof(int);
     const char *type;
-    if (getsockopt(fd, SOL_SOCKET, SO_DOMAIN, &family, &famlen) != 0) {
+    struct sockaddr sa;
+    socklen_t salen = sizeof(sa);
+    if (getsockname(fd, &sa, &salen) != 0) {
         JNU_ThrowByName(env, "java/net/SocketException", "Cannot find socket family");
         return NULL;
-    } else if (family == AF_UNIX) {
+    } else if (sa.sa_family == AF_UNIX) {
         type = "unix socket";
-    } else if (family != AF_INET && family != AF_INET6) {
+    } else if (sa.sa_family != AF_INET && sa.sa_family != AF_INET6) {
         type = "unknown socket family";
     } else {
+        int socktype;
+        socklen_t typelen = sizeof(int);
         if (getsockopt(fd, SOL_SOCKET, SO_TYPE, &socktype, &typelen) != 0) {
             JNU_ThrowByName(env, "java/net/SocketException", "Cannot find socket type");
             return NULL;
         }
         switch(socktype) {
             case SOCK_STREAM:
-                type = family == AF_INET ? "tcp" : "tcp6";
+                type = sa.sa_family == AF_INET ? "tcp" : "tcp6";
                 break;
             case SOCK_DGRAM:
-                type = family == AF_INET ? "udp" : "udp6";
+                type = sa.sa_family == AF_INET ? "udp" : "udp6";
                 break;
             case SOCK_RAW:
-                type = family == AF_INET ? "raw" : "raw6";
+                type = sa.sa_family == AF_INET ? "raw" : "raw6";
                 break;
             default:
-                type = family == AF_INET ? "unknown IPv4" : "unknown IPv6";
+                type = sa.sa_family == AF_INET ? "unknown IPv4" : "unknown IPv6";
         }
     }
     return (*env)->NewStringUTF(env, type);

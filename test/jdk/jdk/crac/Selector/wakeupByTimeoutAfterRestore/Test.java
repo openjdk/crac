@@ -28,6 +28,7 @@ import java.io.IOException;
  * @test Selector/wakeupByTimeoutAfterRestore
  * @summary check that the Selector selected before the checkpoint,
  *          will wake up by timeout after the restore
+ * @requires (os.family == "linux")
  * @library /test/lib
  * @build Test
  * @run driver jdk.test.lib.crac.CracTest

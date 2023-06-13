@@ -94,6 +94,7 @@ WinMain(HINSTANCE inst, HINSTANCE previnst, LPSTR cmdline, int cmdshow)
 
 #else /* JAVAW */
 
+#ifndef _WIN32
 #include <sys/wait.h>
 
 static int is_checkpoint = 0;
@@ -151,7 +152,7 @@ static void setup_sighandler() {
     sigact.sa_flags = SA_SIGINFO;
     sigact.sa_sigaction = sighandler;
 
-    for (int sig = 1; sig < __SIGRTMIN; ++sig) {
+    for (int sig = 1; sig <= 31; ++sig) {
         if (sig == SIGKILL || sig == SIGSTOP) {
             continue;
         }
@@ -166,6 +167,7 @@ static void setup_sighandler() {
         perror("sigprocmask");
     }
 }
+#endif // _WIN32
 
 JNIEXPORT int
 main(int argc, char **argv)

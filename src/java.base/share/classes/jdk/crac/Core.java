@@ -134,11 +134,11 @@ public class Core {
         }
 
         final Object[] bundle = checkpointRestore0(fdArr, objArr, checkpointException != null, jcmdStream);
-        final int retCode = (Integer)bundle[0];
-        final String newArguments = (String)bundle[1];
-        final String[] newProperties = (String[])bundle[2];
-        final int[] codes = (int[])bundle[3];
-        final String[] messages = (String[])bundle[4];
+        final int retCode = (null == bundle) ? JVM_CHECKPOINT_NONE : (Integer)bundle[0];
+        final String newArguments = (null == bundle) ? null : (String)bundle[1];
+        final String[] newProperties = (null == bundle) ? null : (String[])bundle[2];
+        final int[] codes = (null == bundle) ? null : (int[])bundle[3];
+        final String[] messages = (null == bundle) ? null : (String[])bundle[4];
 
         if (FlagsHolder.TRACE_STARTUP_TIME) {
             System.out.println("STARTUPTIME " + System.nanoTime() + " restore");

@@ -28,6 +28,7 @@ import java.io.IOException;
 /*
  * @test Selector/wakeupByClose
  * @summary check that the Selector's close() wakes it up after restore
+ * @requires (os.family == "linux")
  * @library /test/lib
  * @build Test
  * @run driver jdk.test.lib.crac.CracTest true  false

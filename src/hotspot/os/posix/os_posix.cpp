@@ -31,6 +31,7 @@
 #include "logging/log.hpp"
 #include "memory/allocation.inline.hpp"
 #include "os_posix.inline.hpp"
+#include "runtime/crac.hpp"
 #include "runtime/globals_extension.hpp"
 #include "runtime/osThread.hpp"
 #include "utilities/globalDefinitions.hpp"
@@ -653,6 +654,10 @@ const char* os::get_current_directory(char *buf, size_t buflen) {
   return getcwd(buf, buflen);
 }
 
+bool os::is_path_absolute(const char *path) {
+  return (path && '/' == path[0]);
+}
+
 FILE* os::open(int fd, const char* mode) {
   return ::fdopen(fd, mode);
 }
@@ -677,6 +682,14 @@ void os::flockfile(FILE* fp) {
 
 void os::funlockfile(FILE* fp) {
   ::funlockfile(fp);
+}
+
+int os::mkdir(const char *path) {
+  return ::mkdir(path, 0700);
+}
+
+int os::rmdir(const char *path) {
+  return ::rmdir(path);
 }
 
 DIR* os::opendir(const char* dirname) {
@@ -1932,6 +1945,32 @@ int os::fork_and_exec(const char* cmd, bool prefer_vfork) {
   }
 }
 
+int os::exec_child_process_and_wait(const char *path, const char *argv[]) {
+  char** env = os::get_environ();
+
+  pid_t pid = fork();
+  if (pid == -1) {
+    perror("cannot fork for crengine");
+    return -1;
+  }
+  if (pid == 0) {
+    execve(path, (char* const*)argv, env);
+    perror("execve");
+    exit(1);
+  }
+
+  int status;
+  int ret;
+  do {
+    ret = waitpid(pid, &status, 0);
+  } while (ret == -1 && errno == EINTR);
+
+  if (ret == -1 || !WIFEXITED(status)) {
+    return -1;
+  }
+  return WEXITSTATUS(status) == 0 ? 0 : -1;
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 // runtime exit support
 
@@ -1984,3 +2023,34 @@ void os::die() {
     ::abort();
   }
 }
+
+int CracSHM::open(int mode) {
+  int shmfd = shm_open(_path, mode, 0600);
+  if (-1 == shmfd) {
+    perror("shm_open");
+  }
+  return shmfd;
+}
+
+void CracSHM::unlink() {
+  shm_unlink(_path);
+}
+
+#ifndef LINUX
+void os::vm_create_start() {
+}
+
+void VM_Crac::report_ok_to_jcmd_if_any() {
+}
+
+bool VM_Crac::check_fds() {
+  return true;
+}
+
+bool VM_Crac::memory_checkpoint() {
+  return true;
+}
+
+void VM_Crac::memory_restore() {
+}
+#endif

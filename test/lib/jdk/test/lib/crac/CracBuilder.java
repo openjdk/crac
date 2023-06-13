@@ -7,6 +7,7 @@ import jdk.test.lib.util.FileUtils;
 
 import java.io.File;
 import java.io.IOException;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.*;
 
@@ -207,7 +208,9 @@ public class CracBuilder {
         if (!containerStarted) {
             ensureContainerKilled();
             DockerTestUtils.buildJdkDockerImage(dockerImageName, "Dockerfile-is-ignored", "jdk-docker");
-            FileUtils.deleteFileTreeWithRetry(Path.of(".", "jdk-docker"));
+            Path jdkDockerPath = Path.of(".", "jdk-docker");
+            if (Files.exists(jdkDockerPath))
+                FileUtils.deleteFileTreeWithRetry(jdkDockerPath);
             // Make sure we start with a clean image directory
             DockerTestUtils.execute(Container.ENGINE_COMMAND, "volume", "rm", "cr");
             List<String> cmd = prepareContainerCommand(dockerImageName, dockerOptions);

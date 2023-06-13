@@ -33,11 +33,13 @@
 #define RESTORE_SIGNAL   (SIGRTMIN + 2)
 
 static int kickjvm(pid_t jvm, int code) {
+#ifdef LINUX
     union sigval sv = { .sival_int = code };
     if (-1 == sigqueue(jvm, RESTORE_SIGNAL, sv)) {
         perror("sigqueue");
         return 1;
     }
+#endif //LINUX
     return 0;
 }
 

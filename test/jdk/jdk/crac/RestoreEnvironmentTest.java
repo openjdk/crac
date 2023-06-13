@@ -32,6 +32,7 @@ import java.io.IOException;
  * @library /test/lib
  * @build RestoreEnvironmentTest
  * @run driver/timeout=120 jdk.test.lib.crac.CracTest
+ * @requires (os.family == "linux")
  */
 public class RestoreEnvironmentTest implements CracTest {
     static final String TEST_VAR_NAME = "RESTORE_ENVIRONMENT_TEST_VAR";

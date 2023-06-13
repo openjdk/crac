@@ -33,6 +33,7 @@ import jdk.test.lib.crac.CracTest;
  * @library /test/lib
  * @build LeaveRunning
  * @run driver jdk.test.lib.crac.CracTest
+ * @requires (os.family == "linux")
  */
 public class LeaveRunning implements CracTest {
     @Override

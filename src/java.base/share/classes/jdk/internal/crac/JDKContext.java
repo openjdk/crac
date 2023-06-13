@@ -26,25 +26,93 @@
 
 package jdk.internal.crac;
 
-import jdk.crac.impl.AbstractContextImpl;
+import jdk.crac.CheckpointException;
+import jdk.crac.Context;
+import jdk.crac.Resource;
+import jdk.crac.RestoreException;
+import jdk.internal.access.JavaIOFileDescriptorAccess;
+import jdk.internal.access.SharedSecrets;
+import sun.security.action.GetBooleanAction;
 
-import java.util.Comparator;
+import java.io.File;
+import java.io.FileDescriptor;
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.HashMap;
 import java.util.Map;
+import java.util.WeakHashMap;
 
-public class JDKContext extends AbstractContextImpl<JDKResource, Void> {
-    static class ContextComparator implements Comparator<Map.Entry<JDKResource, Void>> {
-        @Override
-        public int compare(Map.Entry<JDKResource, Void> o1, Map.Entry<JDKResource, Void> o2) {
-            return o1.getKey().getPriority().compareTo(o2.getKey().getPriority());
-        }
+public class JDKContext implements JDKResource {
+    public static final String COLLECT_FD_STACKTRACES_PROPERTY = "jdk.crac.collect-fd-stacktraces";
+    public static final String COLLECT_FD_STACKTRACES_HINT = "Use -D" + COLLECT_FD_STACKTRACES_PROPERTY + "=true to find the source.";
+
+    // JDKContext by itself is initialized too early when system properties are not set yet
+    public static class Properties {
+        public static final boolean COLLECT_FD_STACKTRACES =
+                GetBooleanAction.privilegedGetProperty(JDKContext.COLLECT_FD_STACKTRACES_PROPERTY);
     }
 
-    JDKContext() {
-        super(new ContextComparator());
+    private WeakHashMap<FileDescriptor, Object> claimedFds;
+
+    public boolean matchClasspath(String path) {
+        Path p = Path.of(path);
+        String classpath = System.getProperty("java.class.path");
+        int index = 0;
+        do {
+            int end = classpath.indexOf(File.pathSeparatorChar, index);
+            if (end < 0) {
+                end = classpath.length();
+            }
+            try {
+                if (Files.isSameFile(p, Path.of(classpath.substring(index, end)))) {
+                    return true;
+                }
+            } catch (IOException e) {
+                // ignore exception
+                return false;
+            }
+            index = end + 1;
+        } while (index < classpath.length());
+        return false;
     }
 
     @Override
-    public void register(JDKResource resource) {
-        register(resource, null);
+    public void beforeCheckpoint(Context<? extends Resource> context) throws CheckpointException {
+        claimedFds = new WeakHashMap<>();
+    }
+
+    @Override
+    public void afterRestore(Context<? extends Resource> context) throws RestoreException {
+        claimedFds = null;
+    }
+
+    public Map<Integer, Object> getClaimedFds() {
+        JavaIOFileDescriptorAccess fileDescriptorAccess = SharedSecrets.getJavaIOFileDescriptorAccess();
+        // Using streams+lambdas here would create a new Cleaner, therefore registering a resource
+        Map<Integer, Object> map = new HashMap<>();
+        for (Map.Entry<FileDescriptor, Object> entry : claimedFds.entrySet()) {
+            if (map.put(fileDescriptorAccess.get(entry.getKey()), entry.getValue()) != null) {
+                throw new IllegalStateException("Duplicate key");
+            }
+        }
+        return map;
+    }
+
+    public void claimFd(FileDescriptor fd, Object obj) {
+        if (!fd.valid()) {
+            return;
+        }
+        Object e = claimedFds.put(fd, obj);
+        if (e != null) {
+            throw new AssertionError(fd + " was already claimed by " + e);
+        }
+    }
+
+    public boolean claimFdWeak(FileDescriptor fd, Object obj) {
+        if (!fd.valid()) {
+            return false;
+        }
+        return claimedFds.putIfAbsent(fd, obj) == null;
     }
 }

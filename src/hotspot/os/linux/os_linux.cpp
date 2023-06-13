@@ -54,6 +54,8 @@
 #include "runtime/init.hpp"
 #include "runtime/java.hpp"
 #include "runtime/javaCalls.hpp"
+#include "runtime/jniHandles.hpp"
+#include "runtime/jniHandles.inline.hpp"
 #include "runtime/mutexLocker.hpp"
 #include "runtime/objectMonitor.hpp"
 #include "runtime/osThread.hpp"
@@ -72,6 +74,7 @@
 #include "services/heapDumper.hpp"
 #include "services/memTracker.hpp"
 #include "services/runtimeService.hpp"
+#include "services/writeableFlags.hpp"
 #include "linuxAttachOperation.hpp"
 #include "utilities/align.hpp"
 #include "utilities/decoder.hpp"
@@ -175,14 +178,12 @@ public:
   };
 
   enum mark_t {
-    M_ZIP_CACHE    = 1 << 0,
-    M_CANT_RESTORE = 1 << 1,
-    M_CLASSPATH    = 1 << 2,
-    M_PERSISTENT   = 1 << 3,
+    M_CANT_RESTORE = 1 << 0,
   };
 
 private:
   struct fdinfo {
+    int fd;
     struct stat stat;
     state_t state;
     unsigned mark;
@@ -190,86 +191,59 @@ private:
     int flags;
   };
 
-  bool same_fd(int fd1, int fd2);
+  // params are indices into _fdinfos
+  bool same_fd(int i1, int i2);
 
-  fdinfo *_fdinfos;
-  int _len;
+  bool _inited;
+  GrowableArray<fdinfo> _fdinfos;
 
   void assert_mark(int i) {
-    assert(inited(), "");
-    assert(i < len(), "");
-    assert(_fdinfos[i].state != CLOSED, "");
+    assert(_inited, "");
+    assert(i < _fdinfos.length(), "");
+    assert(_fdinfos.at(i).state != CLOSED, "");
   }
 
 public:
   void initialize();
 
-  bool inited() { return _fdinfos != NULL; }
-  int len() { return _len; }
+  int len() { return _fdinfos.length(); }
 
-  state_t get_state(int i, state_t orstate = INVALID) {
-    assert(inited(), "");
-    if (i < len()) {
-      return _fdinfos[i].state;
+  state_t get_state(int i) {
+    assert(_inited, "");
+    assert(i < _fdinfos.length(), "");
+    return _fdinfos.at(i).state;
+  }
+
+  state_t find_state(int fd, state_t orstate) {
+    for (int i = 0; i < _fdinfos.length(); ++i) {
+      fdinfo *info = _fdinfos.adr_at(i);
+      if (info->fd == fd) {
+        return info->state;
+      }
     }
-    guarantee(orstate != INVALID, "can't use default orstate");
     return orstate;
   }
 
-  void set_state(int i, state_t newst) {
-    assert(inited(), "");
-    assert(i < len(), "");
-    _fdinfos[i].state = newst;
-  }
-
-  void mark(int i, mark_t m) {
-    assert_mark(i);
-    _fdinfos[i].mark |= (unsigned)m;
-  }
-  void clear(int i, mark_t m) {
-    assert_mark(i);
-    _fdinfos[i].mark &= ~(unsigned)m;
-  }
-  bool check(int i, mark_t m) {
-    assert_mark(i);
-    return 0 != (_fdinfos[i].mark & (unsigned)m);
+  int get_fd(int i) {
+    assert(_inited, "");
+    assert(i < _fdinfos.length(), "");
+    return _fdinfos.at(i).fd;
   }
 
   struct stat* get_stat(int i) {
-    assert(inited(), "");
-    assert(i < len(), "");
-    return &_fdinfos[i].stat;
+    assert(_inited, "");
+    assert(i < _fdinfos.length(), "");
+    return &_fdinfos.at(i).stat;
   }
 
   FdsInfo(bool do_init = true) :
-    _fdinfos(NULL),
-    _len(-1)
+    _inited(false),
+    _fdinfos(16, mtInternal)
   {
     if (do_init) {
       initialize();
     }
   }
-
-  ~FdsInfo() {
-    if (_fdinfos) {
-      FREE_C_HEAP_ARRAY(fdinfo, _fdinfos);
-    }
-  }
-};
-
-struct PersistentResourceDesc {
-  int _fd;
-  dev_t _st_dev;
-  ino_t _st_ino;
-  PersistentResourceDesc(int fd, int st_dev, int st_ino) :
-    _fd(fd),
-    _st_dev((dev_t)st_dev),
-    _st_ino((ino_t)st_ino)
-  {}
-
-  PersistentResourceDesc() :
-    _fd(INT_MAX)
-  {}
 };
 
 struct CracFailDep {
@@ -293,6 +267,7 @@ class CracRestoreParameters : public CHeapObj<mtInternal> {
   struct header {
     jlong _restore_time;
     jlong _restore_counter;
+    int _nflags;
     int _nprops;
     int _env_memory_size;
   };
@@ -345,6 +320,7 @@ class CracRestoreParameters : public CHeapObj<mtInternal> {
   }
 
   static bool write_to(int fd,
+      const char* const* flags, int num_flags,
       const SystemProperty* props,
       const char *args,
       jlong restore_time,
@@ -352,12 +328,19 @@ class CracRestoreParameters : public CHeapObj<mtInternal> {
     header hdr = {
       restore_time,
       restore_counter,
+      num_flags,
       system_props_length(props),
       env_vars_size(environ)
     };
 
     if (!write_check_error(fd, (void *)&hdr, sizeof(header))) {
       return false;
+    }
+
+    for (int i = 0; i < num_flags; ++i) {
+      if (!write_check_error(fd, flags[i], strlen(flags[i]) + 1)) {
+        return false;
+      }
     }
 
     const SystemProperty* p = props;
@@ -386,6 +369,7 @@ class CracRestoreParameters : public CHeapObj<mtInternal> {
 };
 
 class VM_Crac: public VM_Operation {
+  jarray _fd_arr;
   const bool _dry_run;
   bool _ok;
   GrowableArray<CracFailDep>* _failures;
@@ -394,7 +378,8 @@ class VM_Crac: public VM_Operation {
   LinuxAttachOperation* _attach_op;
 
 public:
-  VM_Crac(bool dry_run, bufferedStream* jcmd_stream) :
+  VM_Crac(jarray fd_arr, jobjectArray obj_arr, bool dry_run, bufferedStream* jcmd_stream) :
+    _fd_arr(fd_arr),
     _dry_run(dry_run),
     _ok(false),
     _failures(new (ResourceObj::C_HEAP, mtInternal) GrowableArray<CracFailDep>(0, mtInternal)),
@@ -417,6 +402,7 @@ public:
   bool read_shm(int shmid);
 
 private:
+  bool is_claimed_fd(int fd);
   bool is_socket_from_jcmd(int sock_fd);
   void report_ok_to_jcmd_if_any();
   void print_resources(const char* msg, ...);
@@ -454,7 +440,6 @@ static const char* _crengine_args[32] = { NULL, NULL, NULL };
 static jlong _restore_start_time;
 static jlong _restore_start_counter;
 static FdsInfo _vm_inited_fds(false);
-static GrowableArray<PersistentResourceDesc>* _persistent_resources = NULL;
 
 // If the VM might have been created on the primordial thread, we need to resolve the
 // primordial thread stack bounds and check if the current thread might be the
@@ -5792,147 +5777,88 @@ static bool same_stat(struct stat* st1, struct stat* st2) {
          st1->st_ino == st2->st_ino;
 }
 
-bool FdsInfo::same_fd(int fd1, int fd2) {
-  if (!same_stat(get_stat(fd1), get_stat(fd2))) {
+bool FdsInfo::same_fd(int i1, int i2) {
+  assert(i1 < _fdinfos.length(), "");
+  assert(i2 < _fdinfos.length(), "");
+  fdinfo *fi1 = _fdinfos.adr_at(i1);
+  fdinfo *fi2 = _fdinfos.adr_at(i2);
+  if (!same_stat(&fi1->stat, &fi2->stat)) {
     return false;
   }
 
-  int flags1 = fcntl(fd1, F_GETFL);
-  int flags2 = fcntl(fd2, F_GETFL);
+  int flags1 = fcntl(fi1->fd, F_GETFL);
+  int flags2 = fcntl(fi2->fd, F_GETFL);
   if (flags1 != flags2) {
     return false;
   }
 
   const int test_flag = O_NONBLOCK;
   const int new_flags1 = flags1 ^ test_flag;
-  fcntl(fd1, F_SETFL, new_flags1);
-  if (fcntl(fd1, F_GETFL) != new_flags1) {
+  fcntl(fi1->fd, F_SETFL, new_flags1);
+  if (fcntl(fi1->fd, F_GETFL) != new_flags1) {
     // flag write ignored or handled differently,
     // don't know what to do
     return false;
   }
 
-  const int new_flags2 = fcntl(fd2, F_GETFL);
+  const int new_flags2 = fcntl(fi2->fd, F_GETFL);
   const bool are_same = new_flags1 == new_flags2;
 
-  fcntl(fd1, flags1);
+  fcntl(fi2->fd, flags1);
 
   return are_same;
 }
 
 void FdsInfo::initialize() {
-  assert(!inited(), "should be called only once");
+  assert(!_inited, "should be called only once");
 
-  const int max_fd = sysconf(_SC_OPEN_MAX);
-  _fdinfos = NEW_C_HEAP_ARRAY(fdinfo, max_fd, mtInternal);
-  int last_fd = -1;
+  char path[PATH_MAX];
+  struct dirent *dp;
 
-  for (int i = 0; i < max_fd; ++i) {
-    fdinfo* info = _fdinfos + i;
-    int r = fstat(i, &info->stat);
-    if (r == -1) {
-      info->state = CLOSED;
+  DIR *dir = opendir("/proc/self/fd");
+  int dfd = dirfd(dir);
+  while (dp = readdir(dir)) {
+    if (dp->d_name[0] == '.') {
+      // skip "." and ".."
       continue;
     }
-    info->state = ROOT; // can be changed to DUP_OF_0 + N below
-    info->mark = 0;
-    last_fd = i;
+    fdinfo info;
+    info.fd = atoi(dp->d_name);
+    if (info.fd == dfd) {
+      continue;
+    }
+    int r = fstat(info.fd, &info.stat);
+    if (r == -1) {
+      info.state = CLOSED;
+      continue;
+    }
+    info.state = ROOT; // can be changed to DUP_OF_0 + N below
+    info.mark = 0;
+    _fdinfos.append(info);
   }
-  _len = last_fd + 1;
-  _fdinfos = REALLOC_C_HEAP_ARRAY(fdinfo, _fdinfos, _len, mtInternal);
+  closedir(dir);
+  _inited = true;
 
-  for (int i = 0; i < _len; ++i) {
+  for (int i = 0; i < _fdinfos.length(); ++i) {
+    fdinfo *info = _fdinfos.adr_at(i);
     for (int j = 0; j < i; ++j) {
       if (get_state(j) == ROOT && same_fd(i, j)) {
-        _fdinfos[i].state = (state_t)(DUP_OF_0 + j);
+        info->state = (state_t)(DUP_OF_0 + j);
         break;
       }
     }
 
-    if (get_state(i) == ROOT) {
+    if (info->state == ROOT) {
       char fdpath[PATH_MAX];
-      int r = readfdlink(i, fdpath, sizeof(fdpath));
+      int r = readfdlink(info->fd, fdpath, sizeof(fdpath));
       guarantee(-1 != r, "can't stat fd");
-      if (get_stat(i)->st_nlink == 0 ||
+      if (info->stat.st_nlink == 0 ||
           strstr(fdpath, "(deleted)") ||
           nfs_silly_rename(fdpath)) {
-        mark(i, FdsInfo::M_CANT_RESTORE);
+        info->mark |= FdsInfo::M_CANT_RESTORE;
       }
     }
   }
-}
-
-static void mark_classpath_entry(FdsInfo *fds, char* cp) {
-  struct stat st;
-  if (-1 == stat(cp, &st)) {
-    return;
-  }
-  for (int i = 0; i < fds->len(); ++i) {
-    if (same_stat(&st, fds->get_stat(i))) {
-      fds->mark(i, FdsInfo::M_CLASSPATH);
-    }
-  }
-}
-
-static void do_classpaths(void (*fn)(FdsInfo*, char*), FdsInfo *fds, char* classpath) {
-  assert(SafepointSynchronize::is_at_safepoint(),
-      "can't do nasty things with sysclasspath");
-  char *cp = classpath;
-  char *n;
-  while ((n = strchr(cp, ':'))) {
-    *n = '\0';
-    fn(fds, cp);
-    *n = ':';
-    cp = n + 1;
-  }
-  mark_classpath_entry(fds, cp);
-}
-
-
-static void mark_all_in(FdsInfo *fds, char* dirpath) {
-  DIR *dir = os::opendir(dirpath);
-  if (!dir) {
-    return;
-  }
-
-  struct dirent* dent;
-  while ((dent = os::readdir(dir))) {
-    for (int i = 0; i < fds->len(); ++i) {
-      if (fds->get_state(i) != FdsInfo::ROOT) {
-        continue;
-      }
-      struct stat* fstat = fds->get_stat(i);
-      if (dent->d_ino == fstat->st_ino) {
-        fds->mark(i, FdsInfo::M_CLASSPATH);
-      }
-    }
-  }
-
-  os::closedir(dir);
-}
-
-static void mark_persistent(FdsInfo *fds) {
-  if (!_persistent_resources) {
-    return;
-  }
-
-  for (int i = 0; i < _persistent_resources->length(); ++i) {
-    PersistentResourceDesc* pr = _persistent_resources->adr_at(i);
-    int fd = pr->_fd;
-    if (fds->len() <= fd) {
-      break;
-    }
-    if (fds->get_state(fd) != FdsInfo::ROOT) {
-      continue;
-    }
-    struct stat* st = fds->get_stat(fd);
-    if (st->st_dev == pr->_st_dev && st->st_ino == pr->_st_ino) {
-      fds->mark(fd, FdsInfo::M_PERSISTENT);
-    }
-  }
-
-  delete _persistent_resources;
-  _persistent_resources = NULL;
 }
 
 static int cr_util_path(char* path, int len) {
@@ -6154,72 +6080,6 @@ static int stat2stfail(mode_t mode) {
   return JVM_CR_FAIL;
 }
 
-static bool find_sock_details(int sockino, const char* base, bool v6, char* buf, size_t sz) {
-  char filename[16];
-  snprintf(filename, sizeof(filename), "/proc/net/%s", base);
-  FILE* f = fopen(filename, "r");
-  if (!f) {
-    return false;
-  }
-  int r = fscanf(f, "%*[^\n]");
-  if (r) {} // suppress warn unused gcc diagnostic
-
-  char la[33], ra[33];
-  int lp, rp;
-  int ino;
-  //   sl  local_address         remote_address        st   tx_queue rx_queue tr tm->when retrnsmt   uid  timeout inode
-  //    0: 0100007F:08AE         00000000:0000         0A   00000000:00000000 00:00000000 00000000  1000        0 2988639
-  //  %4d: %08X%08X%08X%08X:%04X %08X%08X%08X%08X:%04X %02X %08X:%08X         %02X:%08lX  %08X       %5u      %8d %d
-  bool eof;
-  do {
-    eof = EOF == fscanf(f, "%*d: %[^:]:%X %[^:]:%X %*X %*X:%*X %*X:%*X %*X %*d %*d %d%*[^\n]\n",
-        la, &lp, ra, &rp, &ino);
-  } while (ino != sockino && !eof);
-  fclose(f);
-
-  if (ino != sockino) {
-    return false;
-  }
-
-  struct in6_addr a6l, a6r;
-  struct in_addr a4l, a4r;
-  if (v6) {
-    for (int i = 0; i < 4; ++i) {
-      sscanf(la + i * 8, "%8" PRIX32, a6l.s6_addr32 + i);
-      sscanf(ra + i * 8, "%8" PRIX32, a6r.s6_addr32 + i);
-    }
-  } else {
-    sscanf(la, "%" PRIX32, &a4l.s_addr);
-    sscanf(ra, "%" PRIX32, &a4r.s_addr);
-  }
-
-  int const af = v6 ? AF_INET6 : AF_INET;
-  void* const laddr = v6 ? (void*)&a6l : (void*)&a4l;
-  void* const raddr = v6 ? (void*)&a6r : (void*)&a4r;
-  char lstrb[48], rstrb[48];
-  const char* const lstr = ::inet_ntop(af, laddr, lstrb, sizeof(lstrb)) ? lstrb : "NONE";
-  const char* const rstr = ::inet_ntop(af, raddr, rstrb, sizeof(rstrb)) ? rstrb : "NONE";
-  int msgsz = snprintf(buf, sz, "%s localAddr %s localPort %d remoteAddr %s remotePort %d",
-        base, lstr, lp, rstr, rp);
-  return msgsz < (int)sz;
-}
-
-static const char* sock_details(const char* details, char* buf, size_t sz) {
-  int sockino;
-  if (sscanf(details, "socket:[%d]", &sockino) <= 0) {
-    return details;
-  }
-
-  const char* bases[] = { "tcp", "udp", "tcp6", "udp6", NULL };
-  for (const char** b = bases; *b; ++b) {
-    if (find_sock_details(sockino, *b, 2 <= b - bases, buf, sz)) {
-      return buf;
-    }
-  }
-
-  return details;
-}
-
 bool VM_Crac::read_shm(int shmid) {
   CracSHM shm(shmid);
   int shmfd = shm.open(O_RDONLY);
@@ -6249,15 +6109,22 @@ void VM_Crac::report_ok_to_jcmd_if_any() {
   _ostream = tty;
 }
 
+bool VM_Crac::is_claimed_fd(int fd) {
+  typeArrayOop claimed_fds = typeArrayOop(JNIHandles::resolve_non_null(_fd_arr));
+  for (int j = 0; j < claimed_fds->length(); ++j) {
+    jint cfd = claimed_fds->int_at(j);
+    if (fd == cfd) {
+      return true;
+    }
+  }
+  return false;
+}
+
 void VM_Crac::doit() {
 
   AttachListener::abort();
 
   FdsInfo fds;
-  do_classpaths(mark_classpath_entry, &fds, Arguments::get_sysclasspath());
-  do_classpaths(mark_classpath_entry, &fds, Arguments::get_appclasspath());
-  do_classpaths(mark_all_in, &fds, Arguments::get_ext_dirs());
-  mark_persistent(&fds);
 
   // dry-run fails checkpoint
   bool ok = !_dry_run;
@@ -6266,52 +6133,40 @@ void VM_Crac::doit() {
     if (fds.get_state(i) == FdsInfo::CLOSED) {
       continue;
     }
+    int fd = fds.get_fd(i);
 
     char detailsbuf[PATH_MAX];
-    int linkret = readfdlink(i, detailsbuf, sizeof(detailsbuf));
+    struct stat* st = fds.get_stat(i);
+    const char* type = stat2strtype(st->st_mode);
+    int linkret = readfdlink(fd, detailsbuf, sizeof(detailsbuf));
     const char* details = 0 < linkret ? detailsbuf : "";
-    print_resources("JVM: FD fd=%d type=%s: details1=\"%s\" ",
-        i, stat2strtype(fds.get_stat(i)->st_mode), details);
+    print_resources("JVM: FD fd=%d type=%s path=\"%s\"", fd, type, details);
 
-    if (_vm_inited_fds.get_state(i, FdsInfo::CLOSED) != FdsInfo::CLOSED) {
+    if (is_claimed_fd(fd)) {
+      print_resources("OK: claimed by java code\n");
+      continue;
+    }
+
+    if (_vm_inited_fds.find_state(fd, FdsInfo::CLOSED) != FdsInfo::CLOSED) {
       print_resources("OK: inherited from process env\n");
       continue;
     }
 
-    struct stat* st = fds.get_stat(i);
-    if (S_ISCHR(st->st_mode)) {
-      const int mjr = major(st->st_rdev);
-      const int mnr = minor(st->st_rdev);
-      if (mjr == 1 && (mnr == 8 || mnr == 9)) {
-        print_resources("OK: always available, random or urandom\n");
-        continue;
-      }
-    }
-
-    if (fds.check(i, FdsInfo::M_CLASSPATH) && !fds.check(i, FdsInfo::M_CANT_RESTORE)) {
-      print_resources("OK: in classpath\n");
-      continue;
-    }
-
-    if (fds.check(i, FdsInfo::M_PERSISTENT)) {
-      print_resources("OK: assured persistent\n");
-      continue;
-    }
-
     if (S_ISSOCK(st->st_mode)) {
-      if (is_socket_from_jcmd(i)){
+      if (is_socket_from_jcmd(fd)){
         print_resources("OK: jcmd socket\n");
         continue;
       }
-      details = sock_details(details, detailsbuf, sizeof(detailsbuf));
-      print_resources(" details2=\"%s\" ", details);
     }
 
     print_resources("BAD: opened by application\n");
     ok = false;
 
-    char* msg = NEW_C_HEAP_ARRAY(char, strlen(details) + 1, mtInternal);
-    strcpy(msg, details);
+    const int maxinfo = 64;
+    size_t buflen = strlen(details) + maxinfo;
+    char* msg = NEW_C_HEAP_ARRAY(char, buflen, mtInternal);
+    int len = snprintf(msg, buflen, "FD fd=%d type=%s path=%s", i, type, detailsbuf);
+    msg[len < 0 ? 0 : ((size_t) len >= buflen ? buflen - 1 : len)] = '\0';
     _failures->append(CracFailDep(stat2stfail(st->st_mode & S_IFMT), msg));
   }
 
@@ -6347,53 +6202,6 @@ void VM_Crac::doit() {
   PerfMemoryLinux::restore();
 
   _ok = true;
-}
-
-void os::Linux::register_persistent_fd(int fd, int st_dev, int st_ino) {
-  if (!CRaCCheckpointTo) {
-    return;
-  }
-  if (!_persistent_resources) {
-    _persistent_resources = new (ResourceObj::C_HEAP, mtInternal)
-      GrowableArray<PersistentResourceDesc>(0, mtInternal);
-  }
-  int dup = -1;
-  int i = 0;
-  while (i < _persistent_resources->length()) {
-    int pfd = _persistent_resources->adr_at(i)->_fd;
-    if (pfd == fd) {
-      dup = i;
-      break;
-    } else if (fd < pfd) {
-      break;
-    }
-    ++i;
-  }
-
-  if (0 <= dup) {
-    _persistent_resources->at_put(dup, PersistentResourceDesc(fd, st_dev, st_ino));
-  } else {
-    _persistent_resources->insert_before(i, PersistentResourceDesc(fd, st_dev, st_ino));
-  }
-}
-
-void os::Linux::deregister_persistent_fd(int fd, int st_dev, int st_ino) {
-  if (!CRaCCheckpointTo) {
-    return;
-  }
-  if (!_persistent_resources) {
-    return;
-  }
-  int i = 0;
-  while (i < _persistent_resources->length()) {
-    PersistentResourceDesc* pr = _persistent_resources->adr_at(i);
-    if (pr->_fd == fd && pr->_st_dev == (dev_t)st_dev && pr->_st_ino == (ino_t)st_ino) {
-      break;
-    }
-  }
-  if (i < _persistent_resources->length()) {
-    _persistent_resources->remove_at(i);
-  }
 }
 
 bool os::Linux::prepare_checkpoint() {
@@ -6437,7 +6245,7 @@ static Handle ret_cr(int ret, Handle new_args, Handle new_props, Handle err_code
 
 /** Checkpoint main entry.
  */
-Handle os::Linux::checkpoint(bool dry_run, jlong jcmd_stream, TRAPS) {
+Handle os::Linux::checkpoint(jarray fd_arr, jobjectArray obj_arr, bool dry_run, jlong jcmd_stream, TRAPS) {
   if (!CRaCCheckpointTo) {
     return ret_cr(JVM_CHECKPOINT_NONE, Handle(), Handle(), Handle(), Handle(), THREAD);
   }
@@ -6451,7 +6259,7 @@ Handle os::Linux::checkpoint(bool dry_run, jlong jcmd_stream, TRAPS) {
   Universe::heap()->collect(GCCause::_full_gc_alot);
   Universe::heap()->set_cleanup_unused(false);
 
-  VM_Crac cr(dry_run, (bufferedStream*)jcmd_stream);
+  VM_Crac cr(fd_arr, obj_arr, dry_run, (bufferedStream*)jcmd_stream);
   {
     MutexLocker ml(Heap_lock);
     VMThread::execute(&cr);
@@ -6503,6 +6311,7 @@ void os::Linux::restore() {
   if (0 <= shmfd) {
     if (CracRestoreParameters::write_to(
           shmfd,
+          Arguments::jvm_flags_array(), Arguments::num_jvm_flags(),
           Arguments::system_properties(),
           Arguments::java_command() ? Arguments::java_command() : "",
           restore_time,
@@ -6609,6 +6418,31 @@ bool CracRestoreParameters::read_from(int fd) {
 
   ::_restore_start_time = hdr->_restore_time;
   ::_restore_start_counter = hdr->_restore_counter;
+
+  for (int i = 0; i < hdr->_nflags; i++) {
+    FormatBuffer<80> err_msg("%s", "");
+    JVMFlag::Error result;
+    const char *name = cursor;
+    if (*cursor == '+' || *cursor == '-') {
+      name = cursor + 1;
+      result = WriteableFlags::set_flag(name, *cursor == '+' ? "true" : "false",
+        JVMFlagOrigin::CRAC_RESTORE, err_msg);
+      cursor += strlen(cursor) + 1;
+    } else {
+      char* eq = strchrnul(cursor, '=');
+      if (*eq == '\0') {
+        result = JVMFlag::Error::MISSING_VALUE;
+        cursor = eq + 1;
+      } else {
+        *eq = '\0';
+        char* value = eq + 1;
+        result = WriteableFlags::set_flag(cursor, value, JVMFlagOrigin::CRAC_RESTORE, err_msg);
+        cursor = value + strlen(value) + 1;
+      }
+    }
+    guarantee(result == JVMFlag::Error::SUCCESS, "VM Option '%s' cannot be changed: %s",
+        name, JVMFlag::flag_error_str(result));
+  }
 
   for (int i = 0; i < hdr->_nprops; i++) {
     assert((cursor + strlen(cursor) <= contents + st.st_size), "property length exceeds shared memory size");

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022, Azul Systems, Inc. All rights reserved.
+ * Copyright (c) 2023, Azul Systems, Inc. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -21,58 +21,50 @@
  * questions.
  */
 
-import java.io.*;
-import java.lang.ref.Cleaner;
-import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.TimeUnit;
-
-import jdk.crac.*;
+import jdk.crac.Core;
 import jdk.test.lib.crac.CracBuilder;
-import jdk.test.lib.crac.CracEngine;
+import jdk.test.lib.crac.CracProcess;
 import jdk.test.lib.crac.CracTest;
 
-import static jdk.test.lib.Asserts.assertTrue;
+import java.io.IOException;
+import java.net.InetAddress;
+import java.net.ServerSocket;
+import java.net.Socket;
+import java.util.concurrent.CountDownLatch;
 
 /**
  * @test
  * @library /test/lib
- * @build RefQueueTest
- * @run driver jdk.test.lib.crac.CracTest
+ * @build OpenSocketDetectionTest
+ * @run driver/timeout=10 jdk.test.lib.crac.CracTest
  */
-public class RefQueueTest implements CracTest {
-    private static final Cleaner cleaner = Cleaner.create();
-
+public class OpenSocketDetectionTest implements CracTest {
     @Override
     public void test() throws Exception {
-        new CracBuilder().engine(CracEngine.SIMULATE)
-                .startCheckpoint().waitForSuccess();
+        CracProcess cp = new CracBuilder().captureOutput(true)
+                .startCheckpoint();
+        cp.outputAnalyzer()
+                .shouldHaveExitValue(1)
+                .shouldMatch("left open: tcp6? local [/0-9a-f:.]+:[0-9]+ remote [/0-9a-f:.]+:[0-9]+");
     }
 
     @Override
     public void exec() throws Exception {
-        File badFile = File.createTempFile("jtreg-RefQueueTest", null);
-        OutputStream badStream = new FileOutputStream(badFile);
-        badStream.write('j');
-        badFile.delete();
-
-        // the cleaner would be able to run right away
-        cleaner.register(new Object(), () -> {
+        ServerSocket serverSocket = new ServerSocket(0, 50, InetAddress.getLoopbackAddress());
+        CountDownLatch latch = new CountDownLatch(1);
+        Thread serverThread = new Thread(() -> {
             try {
-                badStream.close();
+                Socket socket = serverSocket.accept();
+                latch.countDown();
             } catch (IOException e) {
-                throw new RuntimeException(e);
+                e.printStackTrace();
             }
         });
-
-        // should close the file and only then go to the native checkpoint
+        serverThread.setDaemon(true);
+        serverThread.start();
+        Socket clientSocket = new Socket(InetAddress.getLoopbackAddress(), serverSocket.getLocalPort());
+        latch.await();
         Core.checkpointRestore();
-
-        // ensure that the cleaner starts working eventually
-        CountDownLatch latch = new CountDownLatch(1);
-        cleaner.register(new Object(), () -> {
-            latch.countDown();
-        });
-        System.gc();
-        assertTrue(latch.await(10, TimeUnit.SECONDS));
     }
+
 }

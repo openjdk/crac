@@ -33,23 +33,8 @@
 #include "io_util_md.h"
 
 #include "jdk_crac_Core.h"
-#include "jdk_internal_crac_Core.h"
 
 JNIEXPORT jobjectArray JNICALL
-Java_jdk_crac_Core_checkpointRestore0(JNIEnv *env, jclass ignore, jboolean dry_run, jlong jcmd_stream)
-{
-    return JVM_Checkpoint(env, dry_run, jcmd_stream);
-}
-
-JNIEXPORT void JNICALL Java_jdk_internal_crac_Core_registerPersistent0
-  (JNIEnv *env, jclass ignore, jobject fileDesc)
-{
-    jint fd = THIS_FD(fileDesc);
-
-    struct stat st;
-    if (-1 == fstat(fd, &st)) {
-        return;
-    }
-
-    JVM_RegisterPersistent(fd, st.st_dev, st.st_ino);
+Java_jdk_crac_Core_checkpointRestore0(JNIEnv *env, jclass ignore, jarray fdArr, jobjectArray objArr, jboolean dry_run, jlong jcmd_stream) {
+    return JVM_Checkpoint(env, fdArr, objArr, dry_run, jcmd_stream);
 }

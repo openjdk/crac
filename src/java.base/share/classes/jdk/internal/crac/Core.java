@@ -26,23 +26,45 @@
 
 package jdk.internal.crac;
 
-import java.io.FileDescriptor;
+import jdk.crac.Context;
+import jdk.crac.impl.BlockingOrderedContext;
 
 public class Core {
-    private static JDKContext JDKContext;
-
-    private static native void registerPersistent0(FileDescriptor fd);
-
-    static {
-        JDKContext = new JDKContext();
-        jdk.crac.Core.getGlobalContext().register(JDKContext);
-    }
+    private static JDKContext jdkContext = new JDKContext();
 
     public static JDKContext getJDKContext() {
-        return JDKContext;
+        return jdkContext;
     }
 
-    public static void registerPersistent(FileDescriptor fd) {
-        registerPersistent0(fd);
+
+    /**
+     * Priorities are defined in the order of registration to the global context.
+     * Checkpoint notification will be processed in the order from the bottom to the top of the list.
+     * Restore will be done in reverse order: from the top to the bottom.
+     *
+     * Resources of the same priority will be handled according the context supplied to the priority.
+     *
+     * Most resources should use priority NORMAL (the lowest priority).
+     */
+    public enum Priority {
+        FILE_DESCRIPTORS(new BlockingOrderedContext<>()),
+        PRE_FILE_DESRIPTORS(new BlockingOrderedContext<>()),
+        CLEANERS(new BlockingOrderedContext<>()),
+        REFERENCE_HANDLER(new BlockingOrderedContext<>()),
+        SEEDER_HOLDER(new BlockingOrderedContext<>()),
+        SECURE_RANDOM(new BlockingOrderedContext<>()),
+        NATIVE_PRNG(new BlockingOrderedContext<>()),
+        EPOLLSELECTOR(new BlockingOrderedContext<>()),
+        NORMAL(new BlockingOrderedContext<>());
+
+        private final Context<JDKResource> context;
+        Priority(Context<JDKResource> context) {
+            jdk.crac.Core.getGlobalContext().register(context);
+            this.context = context;
+        }
+
+        public Context<JDKResource> getContext() {
+            return context;
+        }
     }
 }

@@ -31,6 +31,6 @@ public class CheckpointOpenSocketException extends
     private static final long serialVersionUID = 4778540502218641776L;
 
     public CheckpointOpenSocketException(String details) {
-        super(details);
+        super(details, null);
     }
 }

@@ -33,6 +33,7 @@ import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 import jdk.crac.Context;
 import jdk.crac.Resource;
+import jdk.internal.crac.Core;
 import jdk.internal.crac.JDKResource;
 import sun.security.util.Debug;
 
@@ -397,6 +398,8 @@ public final class NativePRNG extends SecureRandomSpi {
             seedIn = FileInputStreamPool.getInputStream(seedFile);
             nextIn = FileInputStreamPool.getInputStream(nextFile);
             nextBuffer = new byte[bufferSize];
+
+            Core.Priority.NATIVE_PRNG.getContext().register(this);
         }
 
         // get the SHA1PRNG for mixing
@@ -593,6 +596,12 @@ public final class NativePRNG extends SecureRandomSpi {
 
         @Override
         public void beforeCheckpoint(Context<? extends Resource> context) throws Exception {
+            synchronized (LOCK_SET_SEED) {
+                if (seedOut != null) {
+                    Core.getJDKContext().claimFdWeak(((FileOutputStream)seedOut).getFD(), this);
+                }
+            }
+
             crLock.writeLock().lock();
             mixRandom = null;
             buffered = 0;
@@ -604,11 +613,5 @@ public final class NativePRNG extends SecureRandomSpi {
         public void afterRestore(Context<? extends Resource> context) throws Exception {
             crLock.writeLock().unlock();
         }
-
-        @Override
-        public Priority getPriority() {
-            return Priority.NATIVE_PRNG;
-        }
-
     }
 }

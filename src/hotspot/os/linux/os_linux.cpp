@@ -5933,6 +5933,7 @@ static bool compute_crengine() {
       escaped = false;
       *target++ = *c;
     }
+    *target = '\0';
     _crengine_args[next_arg++] = arg;
     _crengine_args[next_arg] = NULL;
   }

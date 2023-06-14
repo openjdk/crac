@@ -5708,11 +5708,12 @@ void VM_Crac::report_ok_to_jcmd_if_any() {
 
 bool VM_Crac::check_fds() {
 
-  bool ok = true;
-
   AttachListener::abort();
 
   FdsInfo fds;
+
+  bool ok = true;
+
   for (int i = 0; i < fds.len(); ++i) {
     if (fds.get_state(i) == FdsInfo::CLOSED) {
       continue;

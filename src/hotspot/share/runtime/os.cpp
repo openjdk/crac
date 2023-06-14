@@ -2187,17 +2187,20 @@ bool VM_Crac::is_claimed_fd(int fd) {
 
 void VM_Crac::doit() {
   // dry-run fails checkpoint
-  bool ok = !_dry_run;
+  bool ok = true;
 
   if (!check_fds()) {
     ok = false;
   }
 
-  if (!ok && CRHeapDumpOnCheckpointException) {
+  if ((!ok || _dry_run) && CRHeapDumpOnCheckpointException) {
     HeapDumper::dump_heap();
   }
 
   if (!ok && CRDoThrowCheckpointException) {
+    return;
+  } else if (_dry_run) {
+    _ok = ok;
     return;
   }
 

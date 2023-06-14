@@ -117,6 +117,10 @@ public class CracBuilder {
         return this;
     }
 
+    public void clearVmOptions() {
+        vmOptions.clear();
+    }
+
     public CracBuilder printResources(boolean print) {
         this.printResources = print;
         return this;

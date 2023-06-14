@@ -41,36 +41,42 @@ public class VMOptionsTest implements CracTest {
     @Override
     public void test() throws Exception {
         CracBuilder builder = new CracBuilder();
+        builder.vmOption("-XX:NativeMemoryTracking=off");
         builder.doCheckpoint();
+        builder.clearVmOptions();
         builder.vmOption("-XX:CRaCCheckpointTo=another"); // manageable
         builder.vmOption("-XX:CRaCIgnoredFileDescriptors=42,43"); // restore_settable
         builder.doRestore();
         // Setting non-manageable option
-        HotSpotDiagnosticMXBean bean = ManagementFactory.getPlatformMXBean(HotSpotDiagnosticMXBean.class);
-        final VMOption nmt = bean.getVMOption("NativeMemoryTracking");
-        builder.vmOption("-XX:NativeMemoryTracking=" + (nmt.getValue().equals("off") ? "summary" : "off"));
+        builder.vmOption("-XX:NativeMemoryTracking=summary");
         assertEquals(1, builder.startRestore().waitFor());
     }
 
     @Override
     public void exec() throws RestoreException, CheckpointException {
-        HotSpotDiagnosticMXBean bean = ManagementFactory.getPlatformMXBean(HotSpotDiagnosticMXBean.class);
-        VMOption checkpointTo1 = bean.getVMOption("CRaCCheckpointTo");
-        assertEquals("cr", checkpointTo1.getValue());
-        assertEquals(VMOption.Origin.VM_CREATION, checkpointTo1.getOrigin());
-        VMOption nmt1 = bean.getVMOption("NativeMemoryTracking");
-        assertEquals(VMOption.Origin.DEFAULT, nmt1.getOrigin());
+        {
+            HotSpotDiagnosticMXBean bean = ManagementFactory.getPlatformMXBean(HotSpotDiagnosticMXBean.class);
+            VMOption checkpointTo1 = bean.getVMOption("CRaCCheckpointTo");
+            assertEquals("cr", checkpointTo1.getValue());
+            assertEquals(VMOption.Origin.VM_CREATION, checkpointTo1.getOrigin());
+            VMOption nmt1 = bean.getVMOption("NativeMemoryTracking");
+            assertEquals("off", nmt1.getValue());
+            assertEquals(VMOption.Origin.VM_CREATION, nmt1.getOrigin());
+        }
 
         Core.checkpointRestore();
 
-        VMOption checkpointTo2 = bean.getVMOption("CRaCCheckpointTo");
-        assertEquals("another", checkpointTo2.getValue());
-        assertEquals(VMOption.Origin.OTHER, checkpointTo2.getOrigin());
-        VMOption ignoredFileDescriptors = bean.getVMOption("CRaCIgnoredFileDescriptors");
-        assertEquals("42,43", ignoredFileDescriptors.getValue());
-        assertEquals(VMOption.Origin.OTHER, ignoredFileDescriptors.getOrigin());
-        VMOption nmt = bean.getVMOption("NativeMemoryTracking");
-        assertEquals(nmt1.getValue(), nmt.getValue());
-        assertEquals(VMOption.Origin.DEFAULT, nmt.getOrigin());
+        {
+            HotSpotDiagnosticMXBean bean = ManagementFactory.getPlatformMXBean(HotSpotDiagnosticMXBean.class);
+            VMOption checkpointTo2 = bean.getVMOption("CRaCCheckpointTo");
+            assertEquals("another", checkpointTo2.getValue());
+            assertEquals(VMOption.Origin.OTHER, checkpointTo2.getOrigin());
+            VMOption ignoredFileDescriptors = bean.getVMOption("CRaCIgnoredFileDescriptors");
+            assertEquals("42,43", ignoredFileDescriptors.getValue());
+            assertEquals(VMOption.Origin.OTHER, ignoredFileDescriptors.getOrigin());
+            VMOption nmt = bean.getVMOption("NativeMemoryTracking");
+            assertEquals("off", nmt.getValue());
+            assertEquals(VMOption.Origin.VM_CREATION, nmt.getOrigin());
+        }
     }
 }

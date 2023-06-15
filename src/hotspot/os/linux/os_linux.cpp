@@ -437,7 +437,8 @@ static int clock_tics_per_sec = 100;
 // CRaC
 static const char* _crengine = NULL;
 static char* _crengine_arg_str = NULL;
-static const char* _crengine_args[32] = { NULL, NULL, NULL };
+static unsigned int _crengine_argc = 0;
+static const char* _crengine_args[32];
 static jlong _restore_start_time;
 static jlong _restore_start_counter;
 static FdsInfo _vm_inited_fds(false);
@@ -5907,14 +5908,14 @@ static bool compute_crengine() {
     os::free(exec);
   }
   _crengine_args[0] = _crengine;
+  _crengine_argc = 2;
 
-  size_t next_arg = 2;
   if (_crengine_arg_str != NULL) {
     char *arg = _crengine_arg_str;
     char *target = _crengine_arg_str;
     bool escaped = false;
     for (char *c = arg; *c != '\0'; ++c) {
-      if (next_arg >= ARRAY_SIZE(_crengine_args) - 2) {
+      if (_crengine_argc >= ARRAY_SIZE(_crengine_args) - 2) {
         warning("Too many options to CREngine; cannot proceed with these: %s", arg);
         return false;
       }
@@ -5925,7 +5926,7 @@ static bool compute_crengine() {
           continue; // for
         case ',':
           *target++ = '\0';
-          _crengine_args[next_arg++] = arg;
+          _crengine_args[_crengine_argc++] = arg;
           arg = target;
           continue; // for
         }
@@ -5934,21 +5935,19 @@ static bool compute_crengine() {
       *target++ = *c;
     }
     *target = '\0';
-    _crengine_args[next_arg++] = arg;
-    _crengine_args[next_arg] = NULL;
+    _crengine_args[_crengine_argc++] = arg;
+    _crengine_args[_crengine_argc] = NULL;
   }
   return true;
 }
 
 static void add_crengine_arg(const char *arg) {
-  for (size_t i = 2; i < ARRAY_SIZE(_crengine_args) - 1; ++i) {
-    if (_crengine_args[i] == NULL) {
-      _crengine_args[i] = arg;
-      _crengine_args[i + 1] = NULL;
+  if (_crengine_argc >= ARRAY_SIZE(_crengine_args) - 1) {
+      warning("Too many options to CREngine; cannot add %s", arg);
       return;
-    }
   }
-  ShouldNotReachHere();
+  _crengine_args[_crengine_argc++] = arg;
+  _crengine_args[_crengine_argc] = NULL;
 }
 
 static int call_crengine() {

@@ -25,6 +25,7 @@ import com.sun.management.HotSpotDiagnosticMXBean;
 import com.sun.management.VMOption;
 import jdk.crac.*;
 import jdk.test.lib.crac.CracBuilder;
+import jdk.test.lib.crac.CracEngine;
 import jdk.test.lib.crac.CracTest;
 
 import java.lang.management.ManagementFactory;
@@ -41,6 +42,8 @@ public class VMOptionsTest implements CracTest {
     @Override
     public void test() throws Exception {
         CracBuilder builder = new CracBuilder();
+        // this is here just to test passing CREngine params
+        builder.engine(CracEngine.CRIU, "--verbosity=4", "--log-file=/dev/null");
         builder.vmOption("-XX:NativeMemoryTracking=off");
         builder.doCheckpoint();
         builder.clearVmOptions();

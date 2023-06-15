@@ -10,6 +10,7 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.*;
+import java.util.stream.Collectors;
 
 import static jdk.test.lib.Asserts.*;
 
@@ -36,6 +37,7 @@ public class CracBuilder {
     final Map<String, String> javaOptions = new HashMap<>();
     String imageDir = DEFAULT_IMAGE_DIR;
     CracEngine engine;
+    String[] engineArgs;
     boolean printResources;
     Class<?> main;
     String[] args;
@@ -72,6 +74,7 @@ public class CracBuilder {
         other.javaOptions.putAll(javaOptions);
         other.imageDir = imageDir;
         other.engine = engine;
+        other.engineArgs = engineArgs == null ? null : Arrays.copyOf(engineArgs, engineArgs.length);
         other.printResources = printResources;
         other.main = main;
         other.args = args == null ? null : Arrays.copyOf(args, args.length);
@@ -96,9 +99,10 @@ public class CracBuilder {
         return this;
     }
 
-    public CracBuilder engine(CracEngine engine) {
-        assertNull(this.engine); // set once
+    public CracBuilder engine(CracEngine engine, String... args) {
+        assertTrue(this.engine == null || this.engine.equals(engine)); // allow overwriting args
         this.engine = engine;
+        this.engineArgs = args;
         return this;
     }
 
@@ -334,7 +338,9 @@ public class CracBuilder {
         }
         cmd.add("-ea");
         if (engine != null) {
-            cmd.add("-XX:CREngine=" + engine.engine);
+            String engArgs = engineArgs == null ? "" : "," + Arrays.stream(engineArgs)
+                    .map(str -> str.replace(",", "\\,")).collect(Collectors.joining(","));
+            cmd.add("-XX:CREngine=" + engine.engine + engArgs);
         }
         if (!isRestore) {
             cmd.add("-cp");

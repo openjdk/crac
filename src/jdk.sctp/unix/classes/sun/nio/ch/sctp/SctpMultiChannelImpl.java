@@ -24,10 +24,7 @@
  */
 package sun.nio.ch.sctp;
 
-import java.net.InetAddress;
-import java.net.SocketAddress;
-import java.net.SocketException;
-import java.net.InetSocketAddress;
+import java.net.*;
 import java.io.FileDescriptor;
 import java.io.IOException;
 import java.util.Collections;
@@ -53,6 +50,7 @@ import com.sun.nio.sctp.MessageInfo;
 import com.sun.nio.sctp.SctpChannel;
 import com.sun.nio.sctp.SctpMultiChannel;
 import com.sun.nio.sctp.SctpSocketOption;
+import jdk.internal.crac.JDKSocketResource;
 import sun.net.util.IPAddressUtil;
 import sun.nio.ch.DirectBuffer;
 import sun.nio.ch.NativeThread;
@@ -72,8 +70,8 @@ public class SctpMultiChannelImpl extends SctpMultiChannel
     implements SelChImpl
 {
     private final FileDescriptor fd;
-
     private final int fdVal;
+    private final JDKSocketResource resource;
 
     /* IDs of native threads doing send and receives, for signalling */
     private volatile long receiverThread = 0;
@@ -135,6 +133,7 @@ public class SctpMultiChannelImpl extends SctpMultiChannel
         super(provider);
         this.fd = SctpNet.socket(false /*one-to-many*/);
         this.fdVal = IOUtil.fdVal(fd);
+        this.resource = new JDKSocketResource(this, StandardProtocolFamily.INET, fd);
     }
 
     @Override

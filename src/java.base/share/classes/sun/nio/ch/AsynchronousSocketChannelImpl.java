@@ -25,12 +25,9 @@
 
 package sun.nio.ch;
 
+import java.net.*;
 import java.nio.ByteBuffer;
 import java.nio.channels.*;
-import java.net.SocketOption;
-import java.net.StandardSocketOptions;
-import java.net.SocketAddress;
-import java.net.InetSocketAddress;
 import java.io.IOException;
 import java.io.FileDescriptor;
 import java.util.Set;
@@ -38,6 +35,8 @@ import java.util.HashSet;
 import java.util.Collections;
 import java.util.concurrent.*;
 import java.util.concurrent.locks.*;
+
+import jdk.internal.crac.JDKSocketResource;
 import sun.net.NetHooks;
 import sun.net.ext.ExtendedSocketOptions;
 
@@ -50,6 +49,8 @@ abstract class AsynchronousSocketChannelImpl
     implements Cancellable, Groupable
 {
     protected final FileDescriptor fd;
+    @SuppressWarnings("unused")
+    private final JDKSocketResource resource;
 
     // protects state, localAddress, and remoteAddress
     protected final Object stateLock = new Object();
@@ -88,6 +89,7 @@ abstract class AsynchronousSocketChannelImpl
     {
         super(group.provider());
         this.fd = Net.socket(true);
+        this.resource = new JDKSocketResource(this, StandardProtocolFamily.INET, fd);
         this.state = ST_UNCONNECTED;
     }
 
@@ -99,6 +101,7 @@ abstract class AsynchronousSocketChannelImpl
     {
         super(group.provider());
         this.fd = fd;
+        this.resource = new JDKSocketResource(this, StandardProtocolFamily.INET, fd);
         this.state = ST_CONNECTED;
         this.localAddress = Net.localAddress(fd);
         this.remoteAddress = remote;

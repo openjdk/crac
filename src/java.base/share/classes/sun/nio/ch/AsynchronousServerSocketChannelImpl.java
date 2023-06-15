@@ -25,11 +25,8 @@
 
 package sun.nio.ch;
 
+import java.net.*;
 import java.nio.channels.*;
-import java.net.SocketAddress;
-import java.net.SocketOption;
-import java.net.StandardSocketOptions;
-import java.net.InetSocketAddress;
 import java.io.FileDescriptor;
 import java.io.IOException;
 import java.util.Set;
@@ -38,6 +35,8 @@ import java.util.Collections;
 import java.util.concurrent.Future;
 import java.util.concurrent.locks.ReadWriteLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
+
+import jdk.internal.crac.JDKSocketResource;
 import sun.net.NetHooks;
 import sun.net.ext.ExtendedSocketOptions;
 
@@ -50,6 +49,7 @@ abstract class AsynchronousServerSocketChannelImpl
     implements Cancellable, Groupable
 {
     protected final FileDescriptor fd;
+    private final JDKSocketResource resource;
 
     // the local address to which the channel's socket is bound
     protected volatile InetSocketAddress localAddress;
@@ -70,6 +70,7 @@ abstract class AsynchronousServerSocketChannelImpl
     AsynchronousServerSocketChannelImpl(AsynchronousChannelGroupImpl group) {
         super(group.provider());
         this.fd = Net.serverSocket(true);
+        this.resource = new JDKSocketResource(this, StandardProtocolFamily.INET, fd);
     }
 
     @Override

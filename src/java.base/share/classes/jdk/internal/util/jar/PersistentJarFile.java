@@ -26,10 +26,10 @@
 package jdk.internal.util.jar;
 
 import jdk.crac.Context;
-import jdk.internal.crac.Core;
-import jdk.internal.crac.LoggerContainer;
 import jdk.crac.Resource;
 import jdk.internal.access.SharedSecrets;
+import jdk.internal.crac.Core;
+import jdk.internal.crac.LoggerContainer;
 import jdk.internal.crac.JDKResource;
 
 import java.io.File;

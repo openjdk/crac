@@ -22,7 +22,7 @@
  */
 
 import jdk.crac.Core;
-import jdk.crac.impl.OpenFDPolicies;
+import jdk.crac.impl.OpenFilePolicies;
 import jdk.test.lib.crac.CracBuilder;
 import jdk.test.lib.crac.CracTest;
 import jdk.test.lib.crac.CracTestArg;
@@ -49,17 +49,17 @@ public class ReopenFileTest extends FDPolicyTestBase implements CracTest {
     @Override
     public void test() throws Exception {
         tempFile = Files.createTempFile(ReopenFileTest.class.getName(), ".txt").toString();
-        String configFile = Files.createTempFile(ReopenFifoTest.class.getName(), ".cfg").toString();
+        String configFile = Files.createTempFile(ReopenNamedFifoTest.class.getName(), ".cfg").toString();
         try (var writer = new FileWriter(configFile)) {
             writer.write("/some/other/file=ERROR\n");
-            writer.write(tempFile + '=' + OpenFDPolicies.BeforeCheckpoint.CLOSE + "\n");
+            writer.write(tempFile + '=' + OpenFilePolicies.BeforeCheckpoint.CLOSE + "\n");
             writer.write("**/*.globpattern.test=CLOSE");
         }
         Path tempPath = Path.of(tempFile);
         try {
             writeBigFile(tempPath, "Hello ", "world!");
             new CracBuilder()
-                    .javaOption(OpenFDPolicies.CHECKPOINT_PROPERTY + ".file", configFile)
+                    .javaOption(OpenFilePolicies.CHECKPOINT_PROPERTY + ".file", configFile)
                     .args(CracTest.args(tempFile)).doCheckpointAndRestore();
         } finally {
             Files.deleteIfExists(tempPath);

@@ -40,7 +40,7 @@ public class Test implements CracTest {
 
     @Override
     public void test() throws Exception {
-        new CracBuilder().doCheckpointAndRestore();
+        new CracBuilder().javaOption("jdk.crac.collect-fd-stacktraces", "true").doCheckpointAndRestore();
     }
 
     @Override

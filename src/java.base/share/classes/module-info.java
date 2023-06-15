@@ -159,6 +159,8 @@ module java.base {
         jdk.incubator.foreign;
     exports jdk.internal.access.foreign to
         jdk.incubator.foreign;
+    exports jdk.internal.crac to
+        jdk.sctp;
     exports jdk.internal.event to
         jdk.jfr;
     exports jdk.internal.jimage to

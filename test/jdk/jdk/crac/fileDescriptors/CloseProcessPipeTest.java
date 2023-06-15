@@ -22,55 +22,48 @@
  */
 
 import jdk.crac.Core;
-import jdk.crac.impl.OpenFDPolicies;
 import jdk.crac.impl.OpenFilePolicies;
 import jdk.test.lib.crac.CracBuilder;
 import jdk.test.lib.crac.CracTest;
-import jdk.test.lib.crac.CracTestArg;
-
-import java.io.FileWriter;
-import java.nio.file.Files;
-import java.nio.file.Path;
 
 import static jdk.test.lib.Asserts.assertEquals;
+import static jdk.test.lib.Asserts.assertGreaterThan;
 
 /**
  * @test
  * @library /test/lib
  * @modules java.base/jdk.crac.impl:+open
- * @build ReopenAppendingTest
+ * @requires (os.family == "linux")
+ * @build CloseProcessPipeTest
  * @run driver jdk.test.lib.crac.CracTest
  */
-public class ReopenAppendingTest implements CracTest {
-    @CracTestArg(optional = true)
-    String tempFile;
-
+public class CloseProcessPipeTest implements CracTest {
     @Override
     public void test() throws Exception {
-        tempFile = Files.createTempFile(ReopenAppendingTest.class.getName(), ".txt").toString();
-        Path tempPath = Path.of(tempFile);
-        try {
-            String checkpointPolicies = tempFile + '=' + OpenFilePolicies.BeforeCheckpoint.CLOSE;
-            CracBuilder builder = new CracBuilder();
-            builder
-                    .javaOption(OpenFilePolicies.CHECKPOINT_PROPERTY, checkpointPolicies)
-                    .args(CracTest.args(tempFile));
-            builder.doCheckpoint();
-            assertEquals("Hello ", Files.readString(tempPath));
-            builder.doRestore();
-            assertEquals("Hello world!", Files.readString(tempPath));
-        } finally {
-            Files.deleteIfExists(tempPath);
-        }
+        String checkpointPolicies = "FIFO=" + OpenFilePolicies.BeforeCheckpoint.CLOSE;
+        String restorePolicies = "FIFO=" + OpenFilePolicies.AfterRestore.OPEN_OTHER + "=/dev/null";
+        CracBuilder builder = new CracBuilder()
+                .javaOption(OpenFilePolicies.CHECKPOINT_PROPERTY, checkpointPolicies)
+                .javaOption(OpenFilePolicies.RESTORE_PROPERTY, restorePolicies);
+        builder.doCheckpointAndRestore();
     }
 
     @Override
     public void exec() throws Exception {
-        try (var writer = new FileWriter(tempFile)) {
-            writer.write("Hello ");
-            writer.flush();
-            Core.checkpointRestore();
-            writer.write("world!");
+        Process process = new ProcessBuilder().command("cat", "/dev/zero").start();
+        byte[] buffer = new byte[1024];
+        int read1 = process.getInputStream().read(buffer);
+        assertGreaterThan(read1, 0);
+        Core.checkpointRestore();
+        int read2, total = read1;
+        // Some data got buffered from /dev/zero, we will still read those.
+        // Had we used KEEP_CLOSED policy the read would return IOException: Stream Closed
+        // in native code when we try to read from FD -1.
+        while ((read2 = process.getInputStream().read(buffer)) >= 0) {
+            total += read2;
         }
+        System.err.printf("Read total %d bytes%n", total);
+        // The process will end with SIGPIPE
+        assertEquals(141, process.waitFor());
     }
 }

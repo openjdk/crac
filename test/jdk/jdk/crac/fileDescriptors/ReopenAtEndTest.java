@@ -23,6 +23,7 @@
 
 import jdk.crac.Core;
 import jdk.crac.impl.OpenFDPolicies;
+import jdk.crac.impl.OpenFilePolicies;
 import jdk.test.lib.crac.CracBuilder;
 import jdk.test.lib.crac.CracProcess;
 import jdk.test.lib.crac.CracTest;
@@ -62,12 +63,12 @@ public class ReopenAtEndTest extends FDPolicyTestBase implements CracTest {
         log3 = Files.createTempFile(ReopenAtEndTest.class.getName(), ".txt").toString();
         try {
             Files.writeString(Path.of(log3), "333");
-            String checkpointPolicies = "/**/*=" + OpenFDPolicies.BeforeCheckpoint.CLOSE;
-            String restorePolicies = log1 + '=' + OpenFDPolicies.AfterRestore.REOPEN_AT_END + File.pathSeparatorChar +
-                    log2 + '=' + OpenFDPolicies.AfterRestore.OPEN_OTHER_AT_END + '=' + log3;
+            String checkpointPolicies = "/**/*=" + OpenFilePolicies.BeforeCheckpoint.CLOSE;
+            String restorePolicies = log1 + '=' + OpenFilePolicies.AfterRestore.REOPEN_AT_END + ';' +
+                    log2 + '=' + OpenFilePolicies.AfterRestore.OPEN_OTHER_AT_END + '=' + log3;
             CracBuilder builder = new CracBuilder()
-                    .javaOption(OpenFDPolicies.CHECKPOINT_PROPERTY, checkpointPolicies)
-                    .javaOption(OpenFDPolicies.RESTORE_PROPERTY, restorePolicies)
+                    .javaOption(OpenFilePolicies.CHECKPOINT_PROPERTY, checkpointPolicies)
+                    .javaOption(OpenFilePolicies.RESTORE_PROPERTY, restorePolicies)
                     .args(CracTest.args(log1, log2, log3));
             builder.doCheckpoint();
             Files.writeString(Path.of(log1), "ZZZ", StandardOpenOption.APPEND);

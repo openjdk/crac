@@ -22,7 +22,7 @@
  */
 
 import jdk.crac.Core;
-import jdk.crac.impl.OpenFDPolicies;
+import jdk.crac.impl.OpenFilePolicies;
 import jdk.test.lib.crac.CracBuilder;
 import jdk.test.lib.crac.CracProcess;
 import jdk.test.lib.crac.CracTest;
@@ -42,24 +42,23 @@ import static jdk.test.lib.Asserts.assertEquals;
  * @library /test/lib
  * @modules java.base/jdk.crac.impl:+open
  * @requires (os.family == "linux")
- * @build ReopenFifoTest
+ * @build ReopenNamedFifoTest
  * @run driver jdk.test.lib.crac.CracTest
  */
-public class ReopenFifoTest implements CracTest {
+public class ReopenNamedFifoTest implements CracTest {
     @CracTestArg(optional = true)
     String fifo;
 
     @Override
     public void test() throws Exception {
-        Path tempDirectory = Files.createTempDirectory(ReopenFifoTest.class.getName());
+        Path tempDirectory = Files.createTempDirectory(ReopenNamedFifoTest.class.getName());
         Path pipePath = tempDirectory.resolve("pipe");
         fifo = pipePath.toString();
         assertEquals(0, new ProcessBuilder().inheritIO().command("mkfifo", fifo).start().waitFor());
 
-        // The socket part is here just to test parsing
-        String checkpointPolicies = "FIFO=" + OpenFDPolicies.BeforeCheckpoint.CLOSE + File.pathSeparator + "SOCKET=" + OpenFDPolicies.BeforeCheckpoint.ERROR;
+        String checkpointPolicies = "FIFO=" + OpenFilePolicies.BeforeCheckpoint.CLOSE;
         CracBuilder builder = new CracBuilder()
-                .javaOption(OpenFDPolicies.CHECKPOINT_PROPERTY, checkpointPolicies)
+                .javaOption(OpenFilePolicies.CHECKPOINT_PROPERTY, checkpointPolicies)
                 .args(CracTest.args(fifo));
         CracProcess cp = builder.startCheckpoint();
 

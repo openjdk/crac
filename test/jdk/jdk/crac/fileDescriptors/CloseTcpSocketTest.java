@@ -22,7 +22,7 @@
  */
 
 import jdk.crac.Core;
-import jdk.crac.impl.OpenFDPolicies;
+import jdk.crac.impl.OpenSocketPolicies;
 import jdk.test.lib.crac.CracBuilder;
 import jdk.test.lib.crac.CracTest;
 
@@ -39,16 +39,18 @@ import static jdk.test.lib.Asserts.assertEquals;
  * @library /test/lib
  * @modules java.base/jdk.crac.impl:+open
  * @build FDPolicyTestBase
- * @build CloseSocketTest
+ * @build CloseTcpSocketTest
  * @run driver jdk.test.lib.crac.CracTest
  */
-public class CloseSocketTest extends FDPolicyTestBase implements CracTest {
+public class CloseTcpSocketTest extends FDPolicyTestBase implements CracTest {
     @Override
     public void test() throws Exception {
-        String checkpointPolicies = "SOCKET=" + OpenFDPolicies.BeforeCheckpoint.CLOSE;
+        String loopback = InetAddress.getLoopbackAddress().getHostAddress();
+        String checkpointPolicies = "*=" + OpenSocketPolicies.BeforeCheckpoint.CLOSE;
+        String restorePolicies = loopback + ":*,*:*=" + OpenSocketPolicies.AfterRestore.KEEP_CLOSED;
         new CracBuilder()
-                .javaOption(OpenFDPolicies.CHECKPOINT_PROPERTY, checkpointPolicies)
-                .javaOption(OpenFDPolicies.RESTORE_PROPERTY, "SOCKET=" + OpenFDPolicies.AfterRestore.KEEP_CLOSED)
+                .javaOption(OpenSocketPolicies.CHECKPOINT_PROPERTY, checkpointPolicies)
+                .javaOption(OpenSocketPolicies.RESTORE_PROPERTY, restorePolicies)
                 .doCheckpointAndRestore();
     }
 
@@ -60,6 +62,7 @@ public class CloseSocketTest extends FDPolicyTestBase implements CracTest {
             try {
                 Socket socket = serverSocket.accept();
                 latch.countDown();
+                // the socket leaks in here but for some reason it does not leave the FD open
             } catch (IOException e) {
                 e.printStackTrace();
             }
@@ -69,7 +72,6 @@ public class CloseSocketTest extends FDPolicyTestBase implements CracTest {
         Socket clientSocket = new Socket(InetAddress.getLoopbackAddress(), serverSocket.getLocalPort());
         latch.await();
         Core.checkpointRestore();
-        System.out.println("Not much to do here");
     }
 
 }

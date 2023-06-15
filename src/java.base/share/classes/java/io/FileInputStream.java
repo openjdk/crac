@@ -27,6 +27,10 @@ package java.io;
 
 import java.nio.channels.FileChannel;
 import java.util.Arrays;
+import java.util.function.Supplier;
+
+import jdk.internal.crac.Core;
+import jdk.internal.crac.JDKFileResource;
 import jdk.internal.util.ArraysSupport;
 import sun.nio.ch.FileChannelImpl;
 
@@ -515,6 +519,23 @@ public class FileInputStream extends InputStream
         }
         return fc;
     }
+
+    @SuppressWarnings("unused")
+    private final JDKFileResource resource = new JDKFileResource(this) {
+        @Override
+        protected FileDescriptor getFD() {
+            return fd;
+        }
+
+        @Override
+        protected Supplier<Exception> claimException(int fdNum, String path) {
+            if (fd == FileDescriptor.in) {
+                return null;
+            } else {
+                return super.claimException(fdNum, path);
+            }
+        }
+    };
 
     private static native void initIDs();
 

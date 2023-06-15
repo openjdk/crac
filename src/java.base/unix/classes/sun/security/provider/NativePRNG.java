@@ -398,7 +398,6 @@ public final class NativePRNG extends SecureRandomSpi {
             seedIn = FileInputStreamPool.getInputStream(seedFile);
             nextIn = FileInputStreamPool.getInputStream(nextFile);
             nextBuffer = new byte[bufferSize];
-
             Core.Priority.NATIVE_PRNG.getContext().register(this);
         }
 
@@ -598,7 +597,8 @@ public final class NativePRNG extends SecureRandomSpi {
         public void beforeCheckpoint(Context<? extends Resource> context) throws Exception {
             synchronized (LOCK_SET_SEED) {
                 if (seedOut != null) {
-                    Core.getJDKContext().claimFdWeak(((FileOutputStream)seedOut).getFD(), this);
+                    FileDescriptor fd = ((FileOutputStream)seedOut).getFD();
+                    Core.getClaimedFDs().claimFd(fd, this, () -> null, fd);
                 }
             }
 

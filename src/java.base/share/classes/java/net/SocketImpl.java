@@ -34,6 +34,7 @@ import java.security.PrivilegedAction;
 import java.util.Objects;
 import java.util.Set;
 
+import jdk.internal.crac.JDKSocketResource;
 import sun.net.NetProperties;
 import sun.net.PlatformSocketImpl;
 import sun.nio.ch.NioSocketImpl;
@@ -103,6 +104,9 @@ public abstract class SocketImpl implements SocketOptions {
      * The local port number to which this socket is connected.
      */
     protected int localport;
+
+    @SuppressWarnings("unused")
+    private final JDKSocketResource resource = new JDKSocketResource(this, StandardProtocolFamily.INET, () -> fd);
 
     /**
      * Initialize a new instance of this class

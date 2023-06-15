@@ -25,6 +25,8 @@
 
 package java.net;
 
+import jdk.internal.crac.JDKSocketResource;
+
 import java.io.FileDescriptor;
 import java.io.IOException;
 import java.util.Objects;
@@ -71,6 +73,10 @@ public abstract class DatagramSocketImpl implements SocketOptions {
      * The file descriptor object.
      */
     protected FileDescriptor fd;
+
+    // We don't know the protocol family when this socket is created and FD allocated, but it's not UNIX
+    @SuppressWarnings("unused")
+    private final JDKSocketResource resource = new JDKSocketResource(this, StandardProtocolFamily.INET, () -> fd);
 
     int dataAvailable() {
         // default impl returns zero, which disables the calling

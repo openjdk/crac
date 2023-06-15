@@ -473,6 +473,27 @@ Java_sun_nio_ch_Net_remoteInetAddress(JNIEnv *env, jclass clazz, jobject fdo)
     return NET_SockaddrToInetAddress(env, &sa, &port);
 }
 
+JNIEXPORT jobject JNICALL
+Java_jdk_internal_crac_JDKSocketResource_inetRemoteAddress(JNIEnv *env, jclass clazz, jobject fdo)
+{
+    SOCKETADDRESS sa;
+    socklen_t sa_len = sizeof(sa);
+    int port;
+
+    if (getpeername(fdval(env, fdo), &sa.sa, &sa_len) < 0) {
+        if (errno == ENOTCONN) {
+            return NULL;
+        }
+        handleSocketError(env, errno);
+        return NULL;
+    }
+    jobject remote_ia = NET_SockaddrToInetAddress(env, &sa, &port);
+    jint remote_port = NET_GetPortFromSockaddr(&sa);
+    jobject isa = (*env)->NewObject(env, isa_class, isa_ctorID, remote_ia, remote_port);
+    CHECK_NULL_RETURN(isa, NULL);
+    return isa;
+}
+
 JNIEXPORT jint JNICALL
 Java_sun_nio_ch_Net_getIntOption0(JNIEnv *env, jclass clazz, jobject fdo,
                                   jboolean mayNeedConversion, jint level, jint opt)

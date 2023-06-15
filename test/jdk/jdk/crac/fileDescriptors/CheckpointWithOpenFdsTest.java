@@ -40,6 +40,7 @@ public class CheckpointWithOpenFdsTest implements CracTest {
     @Override
     public void test() throws Exception {
         CracBuilder builder = new CracBuilder();
+        builder.javaOption("jdk.crac.collect-fd-stacktraces", "true");
         builder.startCheckpoint(Arrays.asList(EXTRA_FD_WRAPPER, CracBuilder.JAVA)).waitForCheckpointed();
         builder.captureOutput(true).doRestore().outputAnalyzer().shouldContain(RESTORED_MESSAGE);
     }

@@ -55,6 +55,7 @@ import static java.net.StandardProtocolFamily.INET;
 import static java.net.StandardProtocolFamily.INET6;
 import static java.net.StandardProtocolFamily.UNIX;
 
+import jdk.internal.crac.JDKSocketResource;
 import sun.net.NetHooks;
 import sun.net.ext.ExtendedSocketOptions;
 
@@ -75,6 +76,7 @@ class ServerSocketChannelImpl
     // Our file descriptor
     private final FileDescriptor fd;
     private final int fdVal;
+    private JDKSocketResource resource;
 
     // Lock held by thread currently blocked on this channel
     private final ReentrantLock acceptLock = new ReentrantLock();
@@ -128,6 +130,7 @@ class ServerSocketChannelImpl
             this.fd = Net.serverSocket(family, true);
         }
         this.fdVal = IOUtil.fdVal(fd);
+        this.resource = new JDKSocketResource(this, family, fd);
     }
 
     ServerSocketChannelImpl(SelectorProvider sp,
@@ -402,7 +405,6 @@ class ServerSocketChannelImpl
         } finally {
             acceptLock.unlock();
         }
-
         if (n > 0) {
             return finishAccept(newfd, saa[0]);
         } else {

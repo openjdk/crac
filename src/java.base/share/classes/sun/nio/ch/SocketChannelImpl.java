@@ -59,6 +59,7 @@ import static java.net.StandardProtocolFamily.INET;
 import static java.net.StandardProtocolFamily.INET6;
 import static java.net.StandardProtocolFamily.UNIX;
 
+import jdk.internal.crac.JDKSocketResource;
 import sun.net.ConnectionResetException;
 import sun.net.NetHooks;
 import sun.net.ext.ExtendedSocketOptions;
@@ -81,6 +82,7 @@ class SocketChannelImpl
     // Our file descriptor object
     private final FileDescriptor fd;
     private final int fdVal;
+    private final JDKSocketResource resource;
 
     // Lock held by current reading or connecting thread
     private final ReentrantLock readLock = new ReentrantLock();
@@ -146,6 +148,7 @@ class SocketChannelImpl
             this.fd = Net.socket(family, true);
         }
         this.fdVal = IOUtil.fdVal(fd);
+        this.resource = new JDKSocketResource(this, family, fd);
     }
 
     // Constructor for sockets obtained from server sockets
@@ -160,6 +163,7 @@ class SocketChannelImpl
         this.family = family;
         this.fd = fd;
         this.fdVal = IOUtil.fdVal(fd);
+        this.resource = new JDKSocketResource(this, family, fd);
         synchronized (stateLock) {
             if (family == UNIX) {
                 this.localAddress = UnixDomainSockets.localAddress(fd);

@@ -69,6 +69,7 @@ import java.util.Set;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.Consumer;
 
+import jdk.internal.crac.JDKSocketResource;
 import jdk.internal.ref.CleanerFactory;
 import sun.net.ResourceManager;
 import sun.net.ext.ExtendedSocketOptions;
@@ -94,6 +95,7 @@ class DatagramChannelImpl
     // Our file descriptor
     private final FileDescriptor fd;
     private final int fdVal;
+    private final JDKSocketResource resource;
 
     // Native sockaddrs and cached InetSocketAddress for receive, protected by readLock
     private NativeSocketAddress sourceSockAddr;
@@ -193,6 +195,7 @@ class DatagramChannelImpl
             this.family = family;
             this.fd = fd = Net.socket(family, false);
             this.fdVal = IOUtil.fdVal(fd);
+            this.resource = new JDKSocketResource(this, family, fd);
 
             sockAddrs = NativeSocketAddress.allocate(3);
             readLock.lock();
@@ -233,6 +236,7 @@ class DatagramChannelImpl
                     : StandardProtocolFamily.INET;
             this.fd = fd;
             this.fdVal = IOUtil.fdVal(fd);
+            this.resource = new JDKSocketResource(this, family, fd);
 
             sockAddrs = NativeSocketAddress.allocate(3);
             readLock.lock();

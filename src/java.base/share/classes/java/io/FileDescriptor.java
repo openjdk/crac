@@ -28,10 +28,14 @@ package java.io;
 import java.util.*;
 
 import jdk.crac.Context;
-import jdk.crac.impl.OpenFDPolicies;
+import jdk.crac.impl.CheckpointOpenResourceException;
+import jdk.crac.impl.OpenFilePolicies;
+import jdk.crac.impl.OpenSocketPolicies;
 import jdk.internal.access.JavaIOFileDescriptorAccess;
 import jdk.internal.access.SharedSecrets;
-import jdk.internal.crac.*;
+import jdk.internal.crac.Core;
+import jdk.internal.crac.ClaimedFDs;
+import jdk.internal.crac.JDKFdResource;
 import jdk.internal.ref.PhantomCleanable;
 
 /**
@@ -56,7 +60,34 @@ public final class FileDescriptor {
     private List<Closeable> otherParents;
     private boolean closed;
 
-    FileDescriptorResource resource = new FileDescriptorResource(this);
+    class Resource extends JDKFdResource {
+        private boolean closedByNIO;
+
+        @Override
+        public void beforeCheckpoint(Context<? extends jdk.crac.Resource> context) throws Exception {
+            if (!closedByNIO && valid()) {
+                ClaimedFDs claimedFDs = Core.getClaimedFDs();
+                FileDescriptor self = FileDescriptor.this;
+
+                // Normally the claiming should be overridden by FileInputStream/FileOutputStream
+                // but in case these are collected we handle FDs 0..2 here as well.
+                if (self == in || self == out || self == err) {
+                    claimedFDs.claimFd(self, self, null);
+                }
+
+                claimedFDs.claimFd(self, self, () -> new CheckpointOpenResourceException(
+                    FileDescriptor.class.getSimpleName() + " " + fd + ": " + nativeDescription0(),
+                    getStackTraceHolder()));
+            }
+        }
+
+        @Override
+        public String toString() {
+            return getClass().getName() + "(FD " + fd + ")";
+        }
+    }
+
+    Resource resource = new Resource();
 
     /**
      * true, if file is opened for appending.
@@ -65,23 +96,7 @@ public final class FileDescriptor {
 
     static {
         initIDs();
-
-        JDKResource resource = new JDKResource() {
-            @Override
-            public void beforeCheckpoint(Context<? extends jdk.crac.Resource> context) {
-                JDKContext ctx = Core.getJDKContext();
-                ctx.claimFd(in, "System.in");
-                ctx.claimFd(out, "System.out");
-                ctx.claimFd(err, "System.err");
-            }
-
-            @Override
-            public void afterRestore(Context<? extends jdk.crac.Resource> context) {
-            }
-        };
-        checkpointListener = resource;
-        Core.Priority.NORMAL.getContext().register(resource);
-        OpenFDPolicies.ensureRegistered();
+        OpenFilePolicies.ensureRegistered();
     }
 
     // Set up JavaIOFileDescriptorAccess in SharedSecrets
@@ -110,7 +125,7 @@ public final class FileDescriptor {
 
                     @Override
                     public void markClosed(FileDescriptor fdo) {
-                        fdo.resource.markClosedByNio();
+                        fdo.resource.closedByNIO = true;
                     }
 
                     @Override
@@ -206,9 +221,6 @@ public final class FileDescriptor {
     public boolean valid() {
         return (handle != -1) || (fd != -1);
     }
-
-    private static final JDKResource checkpointListener;
-
 
     /**
      * Force all system buffers to synchronize with the underlying
@@ -329,6 +341,8 @@ public final class FileDescriptor {
         unregisterCleanup();
         close0();
     }
+
+    private native String nativeDescription0();
 
     /*
      * Close the raw file descriptor or handle, if it has not already been closed

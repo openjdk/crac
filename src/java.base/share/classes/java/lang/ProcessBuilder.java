@@ -35,6 +35,8 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.StringJoiner;
+
+import jdk.internal.crac.JDKFileResource;
 import jdk.internal.event.ProcessStartEvent;
 import sun.security.action.GetPropertyAction;
 
@@ -709,6 +711,13 @@ public final class ProcessBuilder
      */
     static class RedirectPipeImpl extends Redirect {
         final FileDescriptor fd;
+        @SuppressWarnings("unused")
+        final JDKFileResource resource = new JDKFileResource(this) {
+            @Override
+            protected FileDescriptor getFD() {
+                return fd;
+            }
+        };
 
         RedirectPipeImpl() {
             this.fd = new FileDescriptor();

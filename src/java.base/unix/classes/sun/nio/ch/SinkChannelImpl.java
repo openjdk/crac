@@ -25,6 +25,8 @@
 
 package sun.nio.ch;
 
+import jdk.internal.crac.JDKFileResource;
+
 import java.io.FileDescriptor;
 import java.io.IOException;
 import java.nio.ByteBuffer;
@@ -47,6 +49,12 @@ class SinkChannelImpl
     // The file descriptor associated with this channel
     private final FileDescriptor fd;
     private final int fdVal;
+    private final JDKFileResource resource = new JDKFileResource(this) {
+        @Override
+        protected FileDescriptor getFD() {
+            return fd;
+        }
+    };
 
     // Lock held by current writing thread
     private final ReentrantLock writeLock = new ReentrantLock();

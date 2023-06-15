@@ -46,6 +46,7 @@ import java.util.Objects;
 
 import jdk.internal.access.JavaIOFileDescriptorAccess;
 import jdk.internal.access.SharedSecrets;
+import jdk.internal.crac.JDKFileResource;
 import jdk.internal.misc.ExtendedMapMode;
 import jdk.internal.misc.Unsafe;
 import jdk.internal.misc.VM;
@@ -70,6 +71,12 @@ public class FileChannelImpl
 
     // File descriptor
     private final FileDescriptor fd;
+    private final JDKFileResource resource = new JDKFileResource(this) {
+        @Override
+        protected FileDescriptor getFD() {
+            return fd;
+        }
+    };
 
     // File access mode (immutable)
     private final boolean writable;

@@ -23,6 +23,7 @@
 
 import jdk.crac.Core;
 import jdk.crac.impl.OpenFDPolicies;
+import jdk.crac.impl.OpenFilePolicies;
 import jdk.test.lib.crac.CracBuilder;
 import jdk.test.lib.crac.CracProcess;
 import jdk.test.lib.crac.CracTest;
@@ -58,12 +59,12 @@ public class ReopenOtherTest extends FDPolicyTestBase implements CracTest {
         try {
             writeBigFile(hwPath, "Hello ", "world!");
             writeBigFile(nsPath, "Nazdar", "svete!");
-            String checkpointPolicies = helloWorld + '=' + OpenFDPolicies.BeforeCheckpoint.WARN_CLOSE;
-            String restorePolicies = helloWorld + '=' + OpenFDPolicies.AfterRestore.OPEN_OTHER + '=' + nazdarSvete;
+            String checkpointPolicies = helloWorld + '=' + OpenFilePolicies.BeforeCheckpoint.WARN_CLOSE;
+            String restorePolicies = helloWorld + '=' + OpenFilePolicies.AfterRestore.OPEN_OTHER + '=' + nazdarSvete;
             CracBuilder builder = new CracBuilder()
                     .captureOutput(true)
-                    .javaOption(OpenFDPolicies.CHECKPOINT_PROPERTY, checkpointPolicies)
-                    .javaOption(OpenFDPolicies.RESTORE_PROPERTY, restorePolicies)
+                    .javaOption(OpenFilePolicies.CHECKPOINT_PROPERTY, checkpointPolicies)
+                    .javaOption(OpenFilePolicies.RESTORE_PROPERTY, restorePolicies)
                     .args(CracTest.args(helloWorld));
             CracProcess cp = builder.startCheckpoint();
             cp.waitForCheckpointed();

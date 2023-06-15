@@ -25,6 +25,8 @@
 
 package sun.nio.ch;
 
+import jdk.internal.crac.JDKFileResource;
+
 import java.nio.ByteBuffer;
 import java.nio.channels.*;
 import java.util.concurrent.ExecutorService;
@@ -46,6 +48,12 @@ abstract class AsynchronousFileChannelImpl
 
     // file descriptor
     protected final FileDescriptor fdObj;
+    private final JDKFileResource resource = new JDKFileResource(this) {
+        @Override
+        protected FileDescriptor getFD() {
+            return fdObj;
+        }
+    };
 
     // indicates if open for reading/writing
     protected final boolean reading;

@@ -436,6 +436,9 @@ static int clock_tics_per_sec = 100;
 
 // CRaC
 static const char* _crengine = NULL;
+static char* _crengine_arg_str = NULL;
+static unsigned int _crengine_argc = 0;
+static const char* _crengine_args[32];
 static jlong _restore_start_time;
 static jlong _restore_start_counter;
 static FdsInfo _vm_inited_fds(false);
@@ -5872,28 +5875,79 @@ static int cr_util_path(char* path, int len) {
 }
 
 static bool compute_crengine() {
+  // release possible old copies
+  os::free((char *) _crengine); // NULL is allowed
+  _crengine = NULL;
+  os::free((char *) _crengine_arg_str);
+  _crengine_arg_str = NULL;
+
   if (!CREngine) {
     return true;
   }
-
-  if (CREngine[0] == '/') {
-    _crengine = CREngine;
-    return true;
+  char *exec = os::strdup_check_oom(CREngine);
+  char *comma = strchr(exec, ',');
+  if (comma != NULL) {
+    *comma = '\0';
+    _crengine_arg_str = os::strdup_check_oom(comma + 1);
   }
+  if (exec[0] == '/') {
+    _crengine = exec;
+  } else {
+    char path[JVM_MAXPATHLEN];
+    int pathlen = cr_util_path(path, sizeof(path));
+    strcat(path + pathlen, "/");
+    strcat(path + pathlen, exec);
 
-  char path[JVM_MAXPATHLEN];
-  int pathlen = cr_util_path(path, sizeof(path));
-  strcat(path + pathlen, "/");
-  strcat(path + pathlen, CREngine);
-
-  struct stat st;
-  if (0 != stat(path, &st)) {
-    warning("Could not find %s: %s", path, strerror(errno));
-    return false;
+    struct stat st;
+    if (0 != stat(path, &st)) {
+      warning("Could not find %s: %s", path, strerror(errno));
+      return false;
+    }
+    _crengine = os::strdup_check_oom(path);
+    // we have read and duplicated args from exec, now we can release
+    os::free(exec);
   }
+  _crengine_args[0] = _crengine;
+  _crengine_argc = 2;
 
-  _crengine = os::strdup(path);
+  if (_crengine_arg_str != NULL) {
+    char *arg = _crengine_arg_str;
+    char *target = _crengine_arg_str;
+    bool escaped = false;
+    for (char *c = arg; *c != '\0'; ++c) {
+      if (_crengine_argc >= ARRAY_SIZE(_crengine_args) - 2) {
+        warning("Too many options to CREngine; cannot proceed with these: %s", arg);
+        return false;
+      }
+      if (!escaped) {
+        switch(*c) {
+        case '\\':
+          escaped = true;
+          continue; // for
+        case ',':
+          *target++ = '\0';
+          _crengine_args[_crengine_argc++] = arg;
+          arg = target;
+          continue; // for
+        }
+      }
+      escaped = false;
+      *target++ = *c;
+    }
+    *target = '\0';
+    _crengine_args[_crengine_argc++] = arg;
+    _crengine_args[_crengine_argc] = NULL;
+  }
   return true;
+}
+
+static void add_crengine_arg(const char *arg) {
+  if (_crengine_argc >= ARRAY_SIZE(_crengine_args) - 1) {
+      warning("Too many options to CREngine; cannot add %s", arg);
+      return;
+  }
+  _crengine_args[_crengine_argc++] = arg;
+  _crengine_args[_crengine_argc] = NULL;
 }
 
 static int call_crengine() {
@@ -5907,8 +5961,10 @@ static int call_crengine() {
     return -1;
   }
   if (pid == 0) {
-    execl(_crengine, _crengine, "checkpoint", CRaCCheckpointTo, NULL);
-    perror("execl");
+    _crengine_args[1] = "checkpoint";
+    add_crengine_arg(CRaCCheckpointTo);
+    execv(_crengine, (char * const*)_crengine_args);
+    perror("execv CREngine checkpoint");
     exit(1);
   }
 
@@ -6264,7 +6320,9 @@ void os::Linux::restore() {
 
 
   if (_crengine) {
-    execl(_crengine, _crengine, "restore", CRaCRestoreFrom, NULL);
+    _crengine_args[1] = "restore";
+    add_crengine_arg(CRaCRestoreFrom);
+    execv(_crengine, (char * const*) _crengine_args);
     warning("cannot execute \"%s restore ...\" (%s)", _crengine, strerror(errno));
   }
 }

@@ -78,36 +78,6 @@ Java_java_io_FileDescriptor_getAppend(JNIEnv *env, jclass fdClass, jint fd) {
     return JNI_FALSE;
 }
 
-JNIEXPORT jstring JNICALL
-Java_java_io_FileDescriptor_getPath(JNIEnv *env, jobject obj) {
-    return NULL;
-}
-
-JNIEXPORT jstring JNICALL
-Java_java_io_FileDescriptor_getType(JNIEnv *env, jobject obj) {
-    return NULL;
-}
-
-JNIEXPORT jlong JNICALL
-Java_java_io_FileDescriptor_getOffset(JNIEnv *env, jobject obj) {
-    return -1;
-}
-
-JNIEXPORT jint JNICALL
-Java_java_io_FileDescriptor_getFlags(JNIEnv *env, jobject obj) {
-    return -1;
-}
-
-JNIEXPORT jboolean JNICALL
-Java_java_io_FileDescriptor_reopen(JNIEnv *env, jobject obj, jint fd, jstring path, jint flags, jlong offset) {
-    return JNI_FALSE;
-}
-
-JNIEXPORT jboolean JNICALL
-Java_java_io_FileDescriptor_reopenNull(JNIEnv *env, jobject obj, jint fd) {
-    return JNI_FALSE;
-}
-
 // instance method close0 for FileDescriptor
 JNIEXPORT void JNICALL
 Java_java_io_FileDescriptor_close0(JNIEnv *env, jobject this) {

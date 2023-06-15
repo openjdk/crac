@@ -65,7 +65,6 @@ public class JDKSocketResource extends JDKFdResource {
                 LoggerContainer.error(e,"Error reading local/remote address for FD " + originalFd);
             }
             OpenSocketPolicies.BeforeCheckpoint policy = OpenSocketPolicies.CHECKPOINT.get(originalFd, local, remote);
-            LoggerContainer.warn("DEBUG: FD {0} = {1} -> {2} {3} => {4}", originalFd, System.identityHashCode(fd), local, remote, policy);
             switch (policy) {
                 case ERROR:
                     error = true;

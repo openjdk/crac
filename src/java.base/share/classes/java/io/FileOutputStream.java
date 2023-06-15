@@ -30,7 +30,6 @@ import java.util.function.Supplier;
 
 import jdk.internal.access.SharedSecrets;
 import jdk.internal.access.JavaIOFileDescriptorAccess;
-import jdk.internal.crac.Core;
 import jdk.internal.crac.JDKFileResource;
 import sun.nio.ch.FileChannelImpl;
 

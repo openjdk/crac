@@ -56,16 +56,6 @@ public class SimpleConsoleLogger extends LoggerConfiguration
     static final PlatformLogger.Level DEFAULT_PLATFORM_LEVEL =
             PlatformLogger.toPlatformLevel(DEFAULT_LEVEL);
 
-    static {
-        // It is possible that CRaC would print first logging message after
-        // JDKContext completes. Registering a CallSite as resource at this
-        // point would hang the checkpoint, therefore we perform all the
-        // initialization eagerly.
-        new SimpleConsoleLogger(null, false).getCallerInfo();
-        String.format("%tc",ZonedDateTime.now());
-        MessageFormat.format("{0} {1}", 0, "1");
-    }
-
     static Level getDefaultLevel() {
         String levelName = GetPropertyAction
                 .privilegedGetProperty("jdk.system.logger.level", "INFO");

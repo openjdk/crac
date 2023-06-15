@@ -30,6 +30,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.io.UncheckedIOException;
+import java.lang.invoke.MethodHandles;
 import java.lang.ref.Cleaner.Cleanable;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
@@ -50,6 +51,12 @@ import java.util.Set;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.ReentrantLock;
 
+import jdk.crac.Context;
+import jdk.crac.Resource;
+import jdk.crac.impl.CheckpointOpenSocketException;
+import jdk.internal.crac.ClaimedFDs;
+import jdk.internal.crac.Core;
+import jdk.internal.crac.JDKFdResource;
 import jdk.internal.ref.CleanerFactory;
 import sun.net.ConnectionResetException;
 import sun.net.NetHooks;
@@ -1201,7 +1208,7 @@ public final class NioSocketImpl extends SocketImpl implements PlatformSocketImp
     /**
      * Returns an action to close the given file descriptor.
      */
-    private static Runnable closerFor(FileDescriptor fd, boolean stream) {
+    private static Runnable closerFor0(FileDescriptor fd, boolean stream) {
         if (stream) {
             return () -> {
                 try {
@@ -1222,6 +1229,20 @@ public final class NioSocketImpl extends SocketImpl implements PlatformSocketImp
                 }
             };
         }
+    }
+
+    private static Runnable closerFor(FileDescriptor fd, boolean stream) {
+
+        // FIXME ensure FileDispatcherImpl's Resource is registered before the closer is used,
+        // otherwise the closer during beforeCheckpoint may be the first one to access
+        // FileDescriptor, and then Dispatcher Resource will be blocked for registration.
+        try {
+            MethodHandles.lookup().ensureInitialized(FileDispatcherImpl.class);
+        } catch (IllegalAccessException e) {
+            throw new RuntimeException(e);
+        }
+
+        return closerFor0(fd, stream);
     }
 
     /**

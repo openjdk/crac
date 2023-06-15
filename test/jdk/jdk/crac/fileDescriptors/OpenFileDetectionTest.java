@@ -26,7 +26,8 @@ import jdk.test.lib.crac.CracBuilder;
 import jdk.test.lib.crac.CracProcess;
 import jdk.test.lib.crac.CracTest;
 
-import java.io.FileReader;
+import java.io.FileInputStream;
+import java.io.RandomAccessFile;
 
 /**
  * @test
@@ -42,13 +43,15 @@ public class OpenFileDetectionTest implements CracTest {
                 .startCheckpoint();
         cp.outputAnalyzer()
                 .shouldHaveExitValue(1)
-                .shouldContain("/etc/passwd")
+                .shouldMatch("CheckpointOpenFileException: /etc/passwd") // RandomAccessFile should have the expected format
+                .shouldMatch("/etc/group") // others are allowed to specify the path in some format
                 .shouldContain("This file descriptor was created by "); // <thread> at <time> here
     }
 
     @Override
     public void exec() throws Exception {
-        try (var reader = new FileReader("/etc/passwd")) {
+        try (var file1 = new RandomAccessFile("/etc/passwd", "r");
+             var file2 = new FileInputStream("/etc/group")) {
             Core.checkpointRestore();
         }
     }

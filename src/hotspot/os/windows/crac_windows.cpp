@@ -21,22 +21,30 @@
  * questions.
  */
 
-#ifndef SHARE_RUNTIME_CRAC_HPP
-#define SHARE_RUNTIME_CRAC_HPP
+// no precompiled headers
+#include "jvm.h"
+#include "runtime/crac_structs.hpp"
 
-#include "memory/allStatic.hpp"
-#include "runtime/handles.hpp"
-#include "utilities/macros.hpp"
+void crac::vm_create_start() {
+}
 
-class crac: AllStatic {
-public:
-  static void vm_create_start();
-  static bool prepare_checkpoint();
-  static Handle checkpoint(jarray fd_arr, jobjectArray obj_arr, bool dry_run, jlong jcmd_stream, TRAPS);
-  static void restore();
+void VM_Crac::report_ok_to_jcmd_if_any() {
+}
 
-  static jlong restore_start_time();
-  static jlong uptime_since_restore();
-};
+bool VM_Crac::check_fds() {
+  return true;
+}
 
-#endif //SHARE_RUNTIME_CRAC_HPP
+bool VM_Crac::memory_checkpoint() {
+  return true;
+}
+
+void VM_Crac::memory_restore() {
+}
+
+int CracSHM::open(int mode) {
+  return -1;
+}
+
+void CracSHM::unlink() {
+}

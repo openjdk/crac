@@ -2023,34 +2023,3 @@ void os::die() {
     ::abort();
   }
 }
-
-int CracSHM::open(int mode) {
-  int shmfd = shm_open(_path, mode, 0600);
-  if (-1 == shmfd) {
-    perror("shm_open");
-  }
-  return shmfd;
-}
-
-void CracSHM::unlink() {
-  shm_unlink(_path);
-}
-
-#ifndef LINUX
-void os::vm_create_start() {
-}
-
-void VM_Crac::report_ok_to_jcmd_if_any() {
-}
-
-bool VM_Crac::check_fds() {
-  return true;
-}
-
-bool VM_Crac::memory_checkpoint() {
-  return true;
-}
-
-void VM_Crac::memory_restore() {
-}
-#endif

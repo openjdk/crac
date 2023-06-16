@@ -954,11 +954,11 @@ static jlong get_long_attribute(jmmLongAttribute att) {
     return os::physical_memory();
 
   case JMM_JVM_RESTORE_START_TIME_MS:
-    return os::restore_start_time();
+    return crac::restore_start_time();
 
   case JMM_JVM_UPTIME_SINCE_RESTORE_MS:
     {
-      jlong ticks = os::uptime_since_restore();
+      jlong ticks = crac::uptime_since_restore();
       if (ticks == -1) {
         return -1;
       }

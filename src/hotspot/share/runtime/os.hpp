@@ -1032,15 +1032,6 @@ class os: AllStatic {
   };
 #endif // !WINDOWS
 
-  static void vm_create_start();
-
-  static Handle checkpoint(jarray fd_arr, jobjectArray obj_arr, bool dry_run, jlong jcmd_stream, TRAPS);
-  static bool prepare_checkpoint();
-  static void restore();
-
-  static jlong restore_start_time();
-  static jlong uptime_since_restore();
-
  protected:
   static volatile unsigned int _rand_seed;    // seed for random number generator
   static int _processor_count;                // number of processors

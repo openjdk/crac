@@ -6159,27 +6159,3 @@ void os::print_memory_mappings(char* addr, size_t bytes, outputStream* st) {
     }
   }
 }
-
-void os::vm_create_start() {
-}
-
-void VM_Crac::report_ok_to_jcmd_if_any() {
-}
-
-bool VM_Crac::check_fds() {
-  return true;
-}
-
-bool VM_Crac::memory_checkpoint() {
-  return true;
-}
-
-void VM_Crac::memory_restore() {
-}
-
-int CracSHM::open(int mode) {
-  return -1;
-}
-
-void CracSHM::unlink() {
-}

@@ -335,8 +335,10 @@ public class CracBuilder {
         }
         cmd.add("-ea");
         if (engine != null) {
-            String engArgs = engineArgs == null ? "" : "," + Arrays.stream(engineArgs)
-                    .map(str -> str.replace(",", "\\,")).collect(Collectors.joining(","));
+            String engArgs = engineArgs == null || engineArgs.length == 0 ? "" :
+                    "," + Arrays.stream(engineArgs)
+                            .map(str -> str.replace(",", "\\,"))
+                            .collect(Collectors.joining(","));
             cmd.add("-XX:CREngine=" + engine.engine + engArgs);
         }
         if (!isRestore) {

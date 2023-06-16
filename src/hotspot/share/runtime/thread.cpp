@@ -2709,7 +2709,7 @@ jint Threads::check_for_restore(JavaVMInitArgs* args) {
     if (!Arguments::parse_options_for_restore(args)) {
       return JNI_ERR;
     }
-    crac::Linux::restore();
+    crac::restore();
     if (!CRaCIgnoreRestoreIfUnavailable) {
       // FIXME switch to unified hotspot logging
       warning("cannot restore");
@@ -2785,7 +2785,7 @@ jint Threads::create_vm(JavaVMInitArgs* args, bool* canTryAgain) {
     os::pause();
   }
 
-  crac::Linux::vm_create_start();
+  crac::vm_create_start();
 
   HOTSPOT_VM_INIT_BEGIN();
 

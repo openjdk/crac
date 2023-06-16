@@ -3232,7 +3232,7 @@ jint Arguments::finalize_vm_init_args(bool patch_mod_javabase) {
   UNSUPPORTED_OPTION(ShowRegistersOnAssert);
 #endif // CAN_SHOW_REGISTERS_ON_ASSERT
 
-  if (CRaCCheckpointTo && !crac::Linux::prepare_checkpoint()) {
+  if (CRaCCheckpointTo && !crac::prepare_checkpoint()) {
     return JNI_ERR;
   }
 

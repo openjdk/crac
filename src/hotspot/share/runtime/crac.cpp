@@ -298,14 +298,14 @@ static jlong _restore_start_time;
 static jlong _restore_start_counter;
 static FdsInfo _vm_inited_fds(false);
 
-jlong crac::Linux::restore_start_time() {
+jlong crac::restore_start_time() {
   if (!_restore_start_time) {
     return -1;
   }
   return _restore_start_time;
 }
 
-jlong crac::Linux::uptime_since_restore() {
+jlong crac::uptime_since_restore() {
   if (!_restore_start_counter) {
     return -1;
   }
@@ -331,7 +331,7 @@ void VM_Crac::print_resources(const char* msg, ...) {
   }
 }
 
-void crac::Linux::vm_create_start() {
+void crac::vm_create_start() {
   if (!CRaCCheckpointTo) {
     return;
   }
@@ -795,7 +795,7 @@ void VM_Crac::doit() {
   _ok = true;
 }
 
-bool crac::Linux::prepare_checkpoint() {
+bool crac::prepare_checkpoint() {
   struct stat st;
 
   if (0 == stat(CRaCCheckpointTo, &st)) {
@@ -836,7 +836,7 @@ static Handle ret_cr(int ret, Handle new_args, Handle new_props, Handle err_code
 
 /** Checkpoint main entry.
  */
-Handle crac::Linux::checkpoint(jarray fd_arr, jobjectArray obj_arr, bool dry_run, jlong jcmd_stream, TRAPS) {
+Handle crac::checkpoint(jarray fd_arr, jobjectArray obj_arr, bool dry_run, jlong jcmd_stream, TRAPS) {
   if (!CRaCCheckpointTo) {
     return ret_cr(JVM_CHECKPOINT_NONE, Handle(), Handle(), Handle(), Handle(), THREAD);
   }
@@ -888,7 +888,7 @@ Handle crac::Linux::checkpoint(jarray fd_arr, jobjectArray obj_arr, bool dry_run
   return ret_cr(JVM_CHECKPOINT_ERROR, Handle(), Handle(), codes, msgs, THREAD);
 }
 
-void crac::Linux::restore() {
+void crac::restore() {
   struct stat st;
 
   jlong restore_time = os::javaTimeMillis();
@@ -962,7 +962,7 @@ static bool is_fd_ignored(int fd, const char *path) {
   return false;
 }
 
-void crac::Linux::close_extra_descriptors() {
+void crac::close_extra_descriptors() {
   // Path to the modules directory is opened early when JVM is booted up and won't be closed.
   // We can ignore this for purposes of CRaC.
   if (modules_path[0] == '\0') {

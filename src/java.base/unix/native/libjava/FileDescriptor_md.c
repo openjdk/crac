@@ -268,10 +268,13 @@ Java_jdk_internal_crac_JDKFileResource_reopen(JNIEnv *env, jclass clazz, jint fd
     if (fcntl(fd, F_GETFD) != -1) {
         JNU_ThrowByName(env, "jdk/crac/impl/CheckpointOpenFileException", "File descriptor is already open");
     }
-    // assert errno is EBADF?
+    if (flags & O_APPEND) {
+        // If the file was opened in append mode ignore offset and always open at the end
+        offset = 0;
+    }
     jboolean copy;
     const char *cpath = (*env)->GetStringUTFChars(env, path, &copy);
-    int firstFd = open(cpath, flags);
+    int firstFd = open(cpath, flags & ~(O_CREAT | O_EXCL));
     jboolean result = JNI_TRUE;
     if (firstFd < 0) {
         fprintf(stderr, "CRaC: Failed to reopen file descriptor %s: %s\n", cpath, strerror(errno));
@@ -287,8 +290,7 @@ Java_jdk_internal_crac_JDKFileResource_reopen(JNIEnv *env, jclass clazz, jint fd
     }
     (*env)->ReleaseStringUTFChars(env, path, cpath);
     if (result) {
-        if ((offset > 0 && lseek(fd, offset, SEEK_SET) < 0) ||
-            (offset < 0 && lseek(fd, 0, SEEK_END) < 0)) {
+        if ((offset > 0 && lseek(fd, offset, SEEK_SET) < 0)) {
             perror("CRaC: Failed to lseek reopened file descriptor");
             close(fd);
             return JNI_FALSE;
@@ -303,7 +305,7 @@ Java_jdk_internal_crac_JDKFileResource_reopenNull(JNIEnv *env, jclass clazz, jin
         JNU_ThrowByName(env, "jdk/crac/impl/CheckpointOpenFileException", "File descriptor is already open");
     }
     // assert errno is EBADF?
-    int firstFd = open("/dev/null", O_WRONLY);
+    int firstFd = open("/dev/null", O_RDWR);
     if (firstFd < 0) {
         perror("CRaC: Failed to reopen file descriptor using /dev/null");
         return JNI_FALSE;

@@ -61,7 +61,7 @@ public abstract class JDKFileResource extends JDKFdResource {
         OpenFilePolicies.BeforeCheckpoint policy = OpenFilePolicies.CHECKPOINT.get(fd, path, type);
         switch (policy) {
             case ERROR:
-                Supplier<Exception> exceptionSupplier = claimException(fd, path);
+                Supplier<Exception> exceptionSupplier = claimException(fileDescriptor, path);
                 Core.getClaimedFDs().claimFd(fileDescriptor, owner, exceptionSupplier, fileDescriptor);
                 break;
             case WARN_CLOSE:
@@ -91,13 +91,14 @@ public abstract class JDKFileResource extends JDKFdResource {
         }
     }
 
-    protected Supplier<Exception> claimException(int fd, String path) {
+    protected Supplier<Exception> claimException(FileDescriptor fd, String path) {
+        int fdVal = fdAccess.get(fd);
         Supplier<Exception> exceptionSupplier;
         if (matchClasspath(path)) {
             // Files on the classpath are considered persistent, exception is not thrown
             exceptionSupplier = null;
         } else {
-            exceptionSupplier = () -> new CheckpointOpenFileException(path + " (FD " + fd + ")", getStackTraceHolder());
+            exceptionSupplier = () -> new CheckpointOpenFileException(path + " (FD " + fdVal + ")", getStackTraceHolder());
         }
         return exceptionSupplier;
     }
@@ -124,8 +125,7 @@ public abstract class JDKFileResource extends JDKFdResource {
             return;
         }
         String path;
-        if (policy.type == OpenFilePolicies.AfterRestore.OPEN_OTHER ||
-                policy.type == OpenFilePolicies.AfterRestore.OPEN_OTHER_AT_END) {
+        if (policy.type == OpenFilePolicies.AfterRestore.OPEN_OTHER) {
             path = policy.param;
         } else {
             if (originalPath == null) {
@@ -134,16 +134,10 @@ public abstract class JDKFileResource extends JDKFdResource {
             }
             path = originalPath;
         }
-        long offset;
-        if (policy.type == OpenFilePolicies.AfterRestore.REOPEN_AT_END ||
-                policy.type == OpenFilePolicies.AfterRestore.OPEN_OTHER_AT_END) {
-            offset = -1;
-        } else {
-            // We will attempt to open at the original offset even if the path changed;
-            // this is used probably as the file moved on the filesystem but the contents
-            // are the same.
-            offset = originalOffset;
-        }
+        // We will attempt to open at the original offset even if the path changed;
+        // this is used probably as the file moved on the filesystem but the contents
+        // are the same.
+        long offset = originalOffset;
         if (!reopen(originalFd, path, originalFlags, offset)) {
             if (policy.type == OpenFilePolicies.AfterRestore.REOPEN_OR_NULL) {
                 if (!reopenNull(originalFd)) {

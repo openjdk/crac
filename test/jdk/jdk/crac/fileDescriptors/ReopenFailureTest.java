@@ -22,77 +22,68 @@
  */
 
 import jdk.crac.Core;
-import jdk.crac.impl.OpenFDPolicies;
+import jdk.crac.RestoreException;
 import jdk.crac.impl.OpenFilePolicies;
 import jdk.test.lib.crac.CracBuilder;
-import jdk.test.lib.crac.CracProcess;
 import jdk.test.lib.crac.CracTest;
 import jdk.test.lib.crac.CracTestArg;
 
-import java.io.File;
-import java.io.FileReader;
 import java.io.FileWriter;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.StandardOpenOption;
+import java.util.Collections;
 
 import static jdk.test.lib.Asserts.assertEquals;
+import static jdk.test.lib.Asserts.fail;
 
 /**
  * @test
  * @library /test/lib
  * @modules java.base/jdk.crac.impl:+open
  * @build FDPolicyTestBase
- * @build ReopenAtEndTest
+ * @build ReopenFailureTest
  * @run driver jdk.test.lib.crac.CracTest
  */
-public class ReopenAtEndTest extends FDPolicyTestBase implements CracTest {
+public class ReopenFailureTest extends FDPolicyTestBase implements CracTest {
     @CracTestArg(value = 0, optional = true)
     String log1;
 
     @CracTestArg(value = 1, optional = true)
     String log2;
 
-    @CracTestArg(value = 2, optional = true)
-    String log3;
-
     @Override
     public void test() throws Exception {
-        log1 = Files.createTempFile(ReopenAtEndTest.class.getName(), ".txt").toString();
-        log2 = Files.createTempFile(ReopenAtEndTest.class.getName(), ".txt").toString();
-        log3 = Files.createTempFile(ReopenAtEndTest.class.getName(), ".txt").toString();
+        log1 = Files.createTempFile(ReopenFailureTest.class.getName(), ".txt").toString();
+        log2 = Files.createTempFile(ReopenFailureTest.class.getName(), ".txt").toString();
         try {
-            Files.writeString(Path.of(log3), "333");
             String checkpointPolicies = "/**/*=" + OpenFilePolicies.BeforeCheckpoint.CLOSE;
-            String restorePolicies = log1 + '=' + OpenFilePolicies.AfterRestore.REOPEN_AT_END + ';' +
-                    log2 + '=' + OpenFilePolicies.AfterRestore.OPEN_OTHER_AT_END + '=' + log3;
             CracBuilder builder = new CracBuilder()
                     .javaOption(OpenFilePolicies.CHECKPOINT_PROPERTY, checkpointPolicies)
-                    .javaOption(OpenFilePolicies.RESTORE_PROPERTY, restorePolicies)
-                    .args(CracTest.args(log1, log2, log3));
+                    .args(CracTest.args(log1, log2));
             builder.doCheckpoint();
-            Files.writeString(Path.of(log1), "ZZZ", StandardOpenOption.APPEND);
+            Files.delete(Path.of(log1));
+            Files.setPosixFilePermissions(Path.of(log2), Collections.emptySet());
             builder.doRestore();
-            assertEquals("1ZZZX", Files.readString(Path.of(log1)));
-            assertEquals("22", Files.readString(Path.of(log2)));
-            assertEquals("333Y", Files.readString(Path.of(log3)));
         } finally {
             Files.deleteIfExists(Path.of(log1));
             Files.deleteIfExists(Path.of(log2));
-            Files.deleteIfExists(Path.of(log3));
         }
     }
 
     @Override
     public void exec() throws Exception {
-        try (var reader1 = new FileWriter(log1); var reader2 = new FileWriter(log2)) {
-            reader1.write("1");
-            reader1.flush();
-            reader2.write("22");
-            reader2.flush();
-            Core.checkpointRestore();
-            reader1.write("X");
-            reader2.write("Y");
+        try (var writer1 = new FileWriter(log1);
+             var writer2 = new FileWriter(log2, true)) {
+            writer1.write("Hello!");
+            writer1.flush();
+            writer2.write("Hello!");
+            writer2.flush();
+            try {
+                Core.checkpointRestore();
+                fail("Should throw");
+            } catch (RestoreException ex) {
+                assertEquals(2, ex.getSuppressed().length);
+            }
         }
     }
 }

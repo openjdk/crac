@@ -29,7 +29,6 @@ import java.nio.channels.FileChannel;
 import java.util.Arrays;
 import java.util.function.Supplier;
 
-import jdk.internal.crac.Core;
 import jdk.internal.crac.JDKFileResource;
 import jdk.internal.util.ArraysSupport;
 import sun.nio.ch.FileChannelImpl;
@@ -528,11 +527,11 @@ public class FileInputStream extends InputStream
         }
 
         @Override
-        protected Supplier<Exception> claimException(int fdNum, String path) {
+        protected Supplier<Exception> claimException(FileDescriptor fd, String path) {
             if (fd == FileDescriptor.in) {
                 return null;
             } else {
-                return super.claimException(fdNum, path);
+                return super.claimException(fd, path);
             }
         }
     };

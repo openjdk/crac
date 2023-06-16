@@ -75,7 +75,6 @@ public class OpenFilePolicies<P> {
             AfterRestorePolicy policy;
             switch (type) {
                 case OPEN_OTHER:
-                case OPEN_OTHER_AT_END:
                     // we add + 2 because we need the equal sign and at least one character for the path
                     if (pstr.length() < type.name().length() + 2) {
                         throw new IllegalArgumentException(String.format(
@@ -186,10 +185,13 @@ public class OpenFilePolicies<P> {
      */
     public enum AfterRestore {
         /**
-         * The file is reopened. If it cannot be opened (e.g. the file is not
-         * on the filesystem anymore or the process has insufficient
-         * permissions) an error is printed and the checkpoint throws
-         * an exception.
+         * The file is reopened; if the file was opened in append mode it is
+         * opened at the end, otherwise it is opened at the original position.
+         * If it cannot be opened (e.g. the file is not on the filesystem
+         * anymore or the process has insufficient permissions) an error is
+         * printed and the checkpoint throws an exception.
+         * When the file does not exist this is treated as an error even if
+         * it was previously opened with flags supporting creation.
          * This is the default behaviour.
          */
         REOPEN_OR_ERROR,
@@ -201,23 +203,15 @@ public class OpenFilePolicies<P> {
          */
         REOPEN_OR_NULL,
         /**
-         * The file is reopened, ignoring the last offset and using the end
-         * of file instead. This is particularly useful for append-only logs.
-         * If it cannot be reopened the behaviour is identical to {@link #REOPEN_OR_ERROR}.
-         */
-        REOPEN_AT_END,
-        /**
          * After restore another file specified as part of the policy
          * declaration is opened instead; the policy name should be followed
          * by an equal sign '=' and the new path.
+         * If the file was opened in append mode the new file is opened at the end;
+         * otherwise it is opened at the same position.
+         * The file must be present; a non-existent file is treated as an error.
          * If the other file cannot be open the checkpoint throws an exception.
          */
         OPEN_OTHER,
-        /**
-         * Similar to {@link #OPEN_OTHER} but ignored the previous offset
-         * and opens the file at the end.
-         */
-        OPEN_OTHER_AT_END,
         /**
          * Do not do anything with the closed file; this will probably result
          * in runtime errors if the resource is used.

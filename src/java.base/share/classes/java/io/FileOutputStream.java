@@ -467,11 +467,11 @@ public class FileOutputStream extends OutputStream
         }
 
         @Override
-        protected Supplier<Exception> claimException(int fdNum, String path) {
+        protected Supplier<Exception> claimException(FileDescriptor fd, String path) {
             if (fd == FileDescriptor.out || fd == FileDescriptor.err) {
                 return null;
             } else {
-                return super.claimException(fdNum, path);
+                return super.claimException(fd, path);
             }
         }
     };

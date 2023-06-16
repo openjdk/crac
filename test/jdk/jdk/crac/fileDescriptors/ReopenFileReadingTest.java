@@ -22,12 +22,12 @@
  */
 
 import jdk.crac.Core;
-import jdk.crac.impl.OpenFDPolicies;
 import jdk.crac.impl.OpenFilePolicies;
 import jdk.test.lib.crac.CracBuilder;
 import jdk.test.lib.crac.CracTest;
 import jdk.test.lib.crac.CracTestArg;
 
+import java.io.FileReader;
 import java.io.FileWriter;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -38,39 +38,45 @@ import static jdk.test.lib.Asserts.assertEquals;
  * @test
  * @library /test/lib
  * @modules java.base/jdk.crac.impl:+open
- * @build ReopenAppendingTest
+ * @build FDPolicyTestBase
+ * @build ReopenFileReadingTest
  * @run driver jdk.test.lib.crac.CracTest
  */
-public class ReopenAppendingTest implements CracTest {
+public class ReopenFileReadingTest extends FDPolicyTestBase implements CracTest {
     @CracTestArg(optional = true)
     String tempFile;
 
     @Override
     public void test() throws Exception {
-        tempFile = Files.createTempFile(ReopenAppendingTest.class.getName(), ".txt").toString();
+        tempFile = Files.createTempFile(ReopenFileReadingTest.class.getName(), ".txt").toString();
+        String configFile = Files.createTempFile(ReopenNamedFifoTest.class.getName(), ".cfg").toString();
+        try (var writer = new FileWriter(configFile)) {
+            writer.write("/some/other/file=ERROR\n");
+            writer.write(tempFile + '=' + OpenFilePolicies.BeforeCheckpoint.CLOSE + "\n");
+            writer.write("**/*.globpattern.test=CLOSE");
+        }
         Path tempPath = Path.of(tempFile);
         try {
-            String checkpointPolicies = tempFile + '=' + OpenFilePolicies.BeforeCheckpoint.CLOSE;
-            CracBuilder builder = new CracBuilder();
-            builder
-                    .javaOption(OpenFilePolicies.CHECKPOINT_PROPERTY, checkpointPolicies)
-                    .args(CracTest.args(tempFile));
-            builder.doCheckpoint();
-            assertEquals("Hello ", Files.readString(tempPath));
-            builder.doRestore();
-            assertEquals("Hello world!", Files.readString(tempPath));
+            writeBigFile(tempPath, "Hello ", "world!");
+            new CracBuilder()
+                    .javaOption(OpenFilePolicies.CHECKPOINT_PROPERTY + ".file", configFile)
+                    .args(CracTest.args(tempFile)).doCheckpointAndRestore();
         } finally {
             Files.deleteIfExists(tempPath);
+            Files.deleteIfExists(Path.of(configFile));
         }
     }
 
     @Override
     public void exec() throws Exception {
-        try (var writer = new FileWriter(tempFile)) {
-            writer.write("Hello ");
-            writer.flush();
+        try (var reader = new FileReader(tempFile)) {
+            char[] buf = new char[6];
+            assertEquals(buf.length, reader.read(buf));
+            assertEquals("Hello ", new String(buf));
             Core.checkpointRestore();
-            writer.write("world!");
+            readContents(reader);
+            assertEquals(buf.length, reader.read(buf));
+            assertEquals("world!", new String(buf));
         }
     }
 }

@@ -82,6 +82,14 @@ int               os::_processor_count    = 0;
 int               os::_initial_active_processor_count = 0;
 os::PageSizes     os::_page_sizes;
 
+// Timestamps recorded before checkpoint
+jlong os::checkpoint_millis;
+jlong os::checkpoint_nanos;
+char os::checkpoint_bootid[UUID_LENGTH];
+// Value based on wall clock time difference that will guarantee monotonic
+// System.nanoTime() close to actual wall-clock time difference.
+jlong os::javaTimeNanos_offset = 0;
+
 #ifndef PRODUCT
 julong os::num_mallocs = 0;         // # of calls to malloc/realloc
 julong os::alloc_bytes = 0;         // # of bytes allocated
@@ -2021,5 +2029,41 @@ void os::PageSizes::print_on(outputStream* st) const {
   }
   if (first) {
     st->print("empty");
+  }
+}
+
+void os::record_time_before_checkpoint() {
+  checkpoint_millis = javaTimeMillis();
+  checkpoint_nanos = javaTimeNanos();
+  memset(checkpoint_bootid, 0, UUID_LENGTH);
+  read_bootid(checkpoint_bootid);
+}
+
+void os::update_javaTimeNanos_offset() {
+  char buf[UUID_LENGTH];
+  // We will change the nanotime offset only if this is not the same boot
+  // to prevent reducing the accuracy of System.nanoTime() unnecessarily.
+  // It is possible that in a real-world case the boot_id does not change
+  // (containers keep the boot_id) - but the monotonic time changes. We will
+  // only guarantee that the nanotime does not go backwards in that case but
+  // won't offset the time based on wall-clock time as this change in monotonic
+  // time is likely intentional.
+  if (!read_bootid(buf) || memcmp(buf, checkpoint_bootid, UUID_LENGTH) != 0) {
+    assert(checkpoint_millis >= 0, "Restore without a checkpoint?");
+    long diff_millis = javaTimeMillis() - checkpoint_millis;
+    // If the wall clock has gone backwards we won't add it to the offset
+    if (diff_millis < 0) {
+      diff_millis = 0;
+    }
+    // javaTimeNanos() call on the second line below uses the *_offset, so we will zero
+    // it to make the call return true monotonic time rather than the adjusted value.
+    javaTimeNanos_offset = 0;
+    javaTimeNanos_offset = checkpoint_nanos - javaTimeNanos() + diff_millis * 1000000L;
+  } else {
+    // ensure monotonicity even if this looks like the same boot
+    jlong diff = javaTimeNanos() - checkpoint_nanos;
+    if (diff < 0) {
+      javaTimeNanos_offset -= diff;
+    }
   }
 }

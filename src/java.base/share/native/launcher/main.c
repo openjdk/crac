@@ -167,6 +167,49 @@ static void setup_sighandler() {
     }
 }
 
+static const char *last_pid_filename = "/proc/sys/kernel/ns_last_pid";
+
+static int get_last_pid() {
+    FILE *last_pid_file = fopen(last_pid_filename, "r");
+    if (!last_pid_file) {
+        perror("last_pid_file fopen");
+        return -1;
+    }
+    int last_pid;
+    if (0 >= fscanf(last_pid_file, "%d", &last_pid)) {
+        fclose(last_pid_file);
+        perror("last_pid_file fscanf");
+        last_pid = -1;
+    }
+    fclose(last_pid_file);
+    return last_pid;
+}
+
+static void set_last_pid(int pid) {
+    FILE *last_pid_file = fopen(last_pid_filename, "w");
+    if (!last_pid_file) {
+        perror("last_pid_file fopen");
+        return;
+    }
+    if (0 > fprintf(last_pid_file, "%d", pid)) {
+        perror("last_pid_file fprintf");
+    }
+    fclose(last_pid_file);
+}
+
+static void spin_last_pid(int pid) {
+    for (pid_t child = fork(); child < (pid_t)pid; child = fork()) {
+        if (0 == child) {
+            exit(0);
+        }
+        int status;
+        if (0 > waitpid(child, &status, 0)) {
+            perror("waitpid last pid");
+            break;
+        }
+    }
+}
+
 JNIEXPORT int
 main(int argc, char **argv)
 {
@@ -278,15 +321,32 @@ main(int argc, char **argv)
         margv = args->elements;
     }
 
-    // Avoid unexpected process completion when checkpointing under docker container run
-    // by creating the main process waiting for children before exit.
-    if (is_checkpoint && 1 == getpid()) {
-        g_child_pid = fork();
-        if (0 < g_child_pid) {
-            // The main process should forward signals to the child.
-            setup_sighandler();
-            const int status = wait_for_children();
-            exit(status);
+    if (is_checkpoint) {
+        const int crac_min_pid_default = 128;
+        const char *env_min_pid_str = getenv("CRAC_MIN_PID");
+        const int env_min_pid = env_min_pid_str ? atoi(env_min_pid_str) : 0;
+        // TODO: should it be checked for max pid overflow?
+        const int crac_min_pid = 0 < env_min_pid ? env_min_pid : crac_min_pid_default;
+
+        if (getpid() <= crac_min_pid) {
+            // Move PID value for new processes to a desired value
+            // to avoid PID conflicts on restore.
+            if (get_last_pid() < crac_min_pid) {
+                set_last_pid(crac_min_pid);
+                if (get_last_pid() < crac_min_pid) {
+                    spin_last_pid(crac_min_pid);
+                }
+            }
+
+            // Avoid unexpected process completion when checkpointing under docker container run
+            // by creating the main process waiting for children before exit.
+            g_child_pid = fork();
+            if (0 < g_child_pid) {
+                // The main process should forward signals to the child.
+                setup_sighandler();
+                const int status = wait_for_children();
+                exit(status);
+            }
         }
     }
 #endif /* WIN32 */

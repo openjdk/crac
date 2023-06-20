@@ -31,6 +31,7 @@ public class CracBuilder {
 
     boolean verbose = true;
     boolean debug = false;
+    boolean disablePrivileged = false;
     final List<String> classpathEntries = new ArrayList<>();
     final Map<String, String> env = new HashMap<>();
     final List<String> vmOptions = new ArrayList<>();
@@ -70,6 +71,7 @@ public class CracBuilder {
         CracBuilder other = new CracBuilder();
         other.verbose = verbose;
         other.debug = debug;
+        other.disablePrivileged = disablePrivileged;
         other.classpathEntries.addAll(classpathEntries);
         other.env.putAll(env);
         other.vmOptions.addAll(vmOptions);
@@ -93,6 +95,11 @@ public class CracBuilder {
 
     public CracBuilder debug(boolean debug) {
         this.debug = debug;
+        return this;
+    }
+
+    public CracBuilder disablePrivileged(boolean disablePrivileged) {
+        this.disablePrivileged = disablePrivileged;
         return this;
     }
 
@@ -268,7 +275,9 @@ public class CracBuilder {
         List<String> cmd = new ArrayList<>();
         cmd.add(Container.ENGINE_COMMAND);
         cmd.addAll(Arrays.asList("run", "--rm", "-d"));
-        cmd.add("--privileged"); // required to give CRIU sufficient permissions
+        if (!disablePrivileged) {
+            cmd.add("--privileged"); // required to give CRIU sufficient permissions
+        }
         cmd.add("--init"); // otherwise the checkpointed process would not be reaped (by sleep with PID 1)
         int entryCounter = 0;
         for (var entry : Utils.TEST_CLASS_PATH.split(File.pathSeparator)) {

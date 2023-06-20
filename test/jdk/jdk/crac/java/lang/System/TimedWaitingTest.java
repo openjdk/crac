@@ -28,6 +28,7 @@ import jdk.test.lib.crac.CracBuilder;
 import jdk.test.lib.crac.CracProcess;
 import jdk.test.lib.crac.CracTest;
 
+import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -95,6 +96,7 @@ public class TimedWaitingTest implements CracTest {
             new Thread(() -> {
                 try {
                     restore.waitForSuccess();
+                    System.err.print(restore.outputAnalyzer().getStderr());
                     future.complete(null);
                 } catch (Throwable t) {
                     future.completeExceptionally(t);
@@ -107,6 +109,29 @@ public class TimedWaitingTest implements CracTest {
         }
     }
 
+    private interface Task {
+        void run() throws InterruptedException;
+    }
+
+    private static void timedWait(Task task, List<Throwable> exceptions, boolean canReturnEarly) {
+        try {
+            long before = System.currentTimeMillis();
+            task.run();
+            long after = System.currentTimeMillis();
+            if (after - before < WAIT_TIME_MILLIS) {
+                if (canReturnEarly) {
+                    // Non-critical
+                    System.err.println(Thread.currentThread().getName() + " took: " + (after - before) + " ms");
+                } else {
+                    exceptions.add(new IllegalStateException(
+                            Thread.currentThread().getName() + " was too short: " + (after - before) + " ms"));
+                }
+            }
+        } catch (InterruptedException e) {
+            exceptions.add(unexpectedInterrupt(e));
+        }
+    }
+
     @Override
     public void exec() throws Exception {
         List<Throwable> exceptions = Collections.synchronizedList(new ArrayList<>());
@@ -114,11 +139,7 @@ public class TimedWaitingTest implements CracTest {
         CountDownLatch latch = new CountDownLatch(6);
 
         startThread("Thread.sleep", threads, latch, () -> {
-            try {
-                Thread.sleep(WAIT_TIME_MILLIS);
-            } catch (InterruptedException e) {
-                exceptions.add(unexpectedInterrupt(e));
-            }
+            timedWait(() -> Thread.sleep(WAIT_TIME_MILLIS), exceptions, false);
         });
 
         startThread("Thread.join", threads, latch, () -> {
@@ -131,51 +152,36 @@ public class TimedWaitingTest implements CracTest {
             }, "inifinite daemon");
             daemon.setDaemon(true);
             daemon.start();
-            try {
-                daemon.join(WAIT_TIME_MILLIS);
-            } catch (InterruptedException e) {
-                exceptions.add(unexpectedInterrupt(e));
-            }
+            timedWait(() -> daemon.join(WAIT_TIME_MILLIS), exceptions, false);
         });
 
         startThread("Object.wait", threads, latch, () -> {
             synchronized (this) {
-                try {
-                    this.wait(WAIT_TIME_MILLIS);
-                } catch (InterruptedException e) {
-                    exceptions.add(unexpectedInterrupt(e));
-                }
+                timedWait(() -> this.wait(WAIT_TIME_MILLIS), exceptions, true);
             }
         });
 
         ReentrantLock lock = new ReentrantLock();
         lock.lock();
         startThread("ReentrantLock.tryLock", threads, latch, () -> {
-            try {
+            timedWait(() -> {
                 if (lock.tryLock(WAIT_TIME_MILLIS, TimeUnit.MILLISECONDS)) {
                     exceptions.add(new AssertionError("Should not be able to lock"));
                 }
-            } catch (InterruptedException e) {
-                exceptions.add(unexpectedInterrupt(e));
-            }
+            }, exceptions, false);
         });
 
         startThread("Condition.await", threads, latch, () -> {
             ReentrantLock lock2 = new ReentrantLock();
             Condition condition = lock2.newCondition();
             lock2.lock();
-            try {
-                // We don't mind whether the call finishes after waiting
-                // those 1000 millis or spuriously before
-                //noinspection ResultOfMethodCallIgnored
-                condition.await(WAIT_TIME_MILLIS, TimeUnit.MILLISECONDS);
-            } catch (InterruptedException e) {
-                exceptions.add(unexpectedInterrupt(e));
-            }
+            //noinspection ResultOfMethodCallIgnored
+            timedWait(() -> condition.await(WAIT_TIME_MILLIS, TimeUnit.MILLISECONDS), exceptions, true);
         });
 
         startThread("LockSupport.parkUntil", threads, latch, () -> {
-            LockSupport.parkUntil(System.currentTimeMillis() + WAIT_TIME_MILLIS);
+            timedWait(() -> LockSupport.parkUntil(System.currentTimeMillis() + WAIT_TIME_MILLIS),
+                    exceptions, true);
         });
 
         assertEquals(latch.getCount(), (long) threads.size());

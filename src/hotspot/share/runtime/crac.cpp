@@ -147,7 +147,7 @@ class CracRestoreParameters : public CHeapObj<mtInternal> {
 
   struct header {
     jlong _restore_time;
-    jlong _restore_counter;
+    jlong _restore_nanos;
     int _nflags;
     int _nprops;
     int _env_memory_size;
@@ -205,10 +205,10 @@ class CracRestoreParameters : public CHeapObj<mtInternal> {
       const SystemProperty* props,
       const char *args,
       jlong restore_time,
-      jlong restore_counter) {
+      jlong restore_nanos) {
     header hdr = {
       restore_time,
-      restore_counter,
+      restore_nanos,
       num_flags,
       system_props_length(props),
       env_vars_size(environ)
@@ -295,8 +295,16 @@ static char* _crengine_arg_str = NULL;
 static unsigned int _crengine_argc = 0;
 static const char* _crengine_args[32];
 static jlong _restore_start_time;
-static jlong _restore_start_counter;
+static jlong _restore_start_nanos;
 static FdsInfo _vm_inited_fds(false);
+
+// Timestamps recorded before checkpoint
+jlong crac::checkpoint_millis;
+jlong crac::checkpoint_nanos;
+char crac::checkpoint_bootid[UUID_LENGTH];
+// Value based on wall clock time difference that will guarantee monotonic
+// System.nanoTime() close to actual wall-clock time difference.
+jlong crac::javaTimeNanos_offset = 0;
 
 jlong crac::restore_start_time() {
   if (!_restore_start_time) {
@@ -306,10 +314,10 @@ jlong crac::restore_start_time() {
 }
 
 jlong crac::uptime_since_restore() {
-  if (!_restore_start_counter) {
+  if (!_restore_start_nanos) {
     return -1;
   }
-  return os::javaTimeNanos() - _restore_start_counter;
+  return os::javaTimeNanos() - _restore_start_nanos;
 }
 
 void VM_Crac::trace_cr(const char* msg, ...) {
@@ -600,6 +608,7 @@ public:
 };
 
 static int checkpoint_restore(int *shmid) {
+  crac::record_time_before_checkpoint();
 
   int cres = call_crengine();
   if (cres < 0) {
@@ -616,6 +625,8 @@ static int checkpoint_restore(int *shmid) {
     sig = sigwaitinfo(&waitmask, &info);
   } while (sig == -1 && errno == EINTR);
   assert(sig == RESTORE_SIGNAL, "got what requested");
+
+  crac::update_javaTimeNanos_offset();
 
   if (CRTraceStartupTime) {
     tty->print_cr("STARTUPTIME " JLONG_FORMAT " restore-native", os::javaTimeNanos());
@@ -788,7 +799,9 @@ void VM_Crac::doit() {
 
   if (shmid <= 0 || !VM_Crac::read_shm(shmid)) {
     _restore_start_time = os::javaTimeMillis();
-    _restore_start_counter = os::javaTimeNanos();
+    _restore_start_nanos = os::javaTimeNanos();
+  } else {
+    _restore_start_nanos += crac::monotonic_time_offset();
   }
   PerfMemoryLinux::restore();
 
@@ -892,7 +905,7 @@ void crac::restore() {
   struct stat st;
 
   jlong restore_time = os::javaTimeMillis();
-  jlong restore_counter = os::javaTimeNanos();
+  jlong restore_nanos = os::javaTimeNanos();
 
   compute_crengine();
 
@@ -906,7 +919,7 @@ void crac::restore() {
           Arguments::system_properties(),
           Arguments::java_command() ? Arguments::java_command() : "",
           restore_time,
-          restore_counter)) {
+          restore_nanos)) {
       char strid[32];
       snprintf(strid, sizeof(strid), "%d", id);
       setenv("CRAC_NEW_ARGS_ID", strid, true);
@@ -1008,7 +1021,7 @@ bool CracRestoreParameters::read_from(int fd) {
   char* cursor = _raw_content + sizeof(header);
 
   ::_restore_start_time = hdr->_restore_time;
-  ::_restore_start_counter = hdr->_restore_counter;
+  ::_restore_start_nanos = hdr->_restore_nanos;
 
   for (int i = 0; i < hdr->_nflags; i++) {
     FormatBuffer<80> err_msg("%s", "");
@@ -1055,5 +1068,79 @@ bool CracRestoreParameters::read_from(int fd) {
   cursor += hdr->_env_memory_size;
 
   _args = cursor;
+  return true;
+}
+
+void crac::record_time_before_checkpoint() {
+  checkpoint_millis = os::javaTimeMillis();
+  checkpoint_nanos = os::javaTimeNanos();
+  memset(checkpoint_bootid, 0, UUID_LENGTH);
+  read_bootid(checkpoint_bootid);
+}
+
+void crac::update_javaTimeNanos_offset() {
+  char buf[UUID_LENGTH];
+  // We will change the nanotime offset only if this is not the same boot
+  // to prevent reducing the accuracy of System.nanoTime() unnecessarily.
+  // It is possible that in a real-world case the boot_id does not change
+  // (containers keep the boot_id) - but the monotonic time changes. We will
+  // only guarantee that the nanotime does not go backwards in that case but
+  // won't offset the time based on wall-clock time as this change in monotonic
+  // time is likely intentional.
+  if (!read_bootid(buf) || memcmp(buf, checkpoint_bootid, UUID_LENGTH) != 0) {
+    assert(checkpoint_millis >= 0, "Restore without a checkpoint?");
+    long diff_millis = os::javaTimeMillis() - checkpoint_millis;
+    // If the wall clock has gone backwards we won't add it to the offset
+    if (diff_millis < 0) {
+      diff_millis = 0;
+    }
+    // javaTimeNanos() call on the second line below uses the *_offset, so we will zero
+    // it to make the call return true monotonic time rather than the adjusted value.
+    javaTimeNanos_offset = 0;
+    javaTimeNanos_offset = checkpoint_nanos - os::javaTimeNanos() + diff_millis * 1000000L;
+  } else {
+    // ensure monotonicity even if this looks like the same boot
+    jlong diff = os::javaTimeNanos() - checkpoint_nanos;
+    if (diff < 0) {
+      javaTimeNanos_offset -= diff;
+    }
+  }
+}
+
+static bool read_all(int fd, char *dest, size_t n) {
+  size_t rd = 0;
+  do {
+    ssize_t r = ::read(fd, dest + rd, n - rd);
+    if (r == 0) {
+      return false;
+    } else if (r < 0) {
+      if (errno == EINTR) {
+        continue;
+      }
+      return false;
+    }
+    rd += r;
+  } while (rd < n);
+  return true;
+}
+
+bool crac::read_bootid(char *dest) {
+  int fd = ::open("/proc/sys/kernel/random/boot_id", O_RDONLY);
+  if (fd < 0 || !read_all(fd, dest, UUID_LENGTH)) {
+    perror("CRaC: Cannot read system boot ID");
+    return false;
+  }
+  char c;
+  if (!read_all(fd, &c, 1) || c != '\n') {
+    perror("CRaC: system boot ID does not end with newline");
+    return false;
+  }
+  if (::read(fd, &c, 1) != 0) {
+    perror("CRaC: Unexpected data/error reading system boot ID");
+    return false;
+  }
+  if (::close(fd) != 0) {
+    perror("CRaC: Cannot close system boot ID file");
+  }
   return true;
 }

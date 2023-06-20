@@ -28,6 +28,9 @@
 #include "runtime/handles.hpp"
 #include "utilities/macros.hpp"
 
+// xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
+#define UUID_LENGTH 36
+
 class crac: AllStatic {
 public:
   static void vm_create_start();
@@ -38,6 +41,21 @@ public:
 
   static jlong restore_start_time();
   static jlong uptime_since_restore();
+
+  static void record_time_before_checkpoint();
+  static void update_javaTimeNanos_offset();
+
+  static jlong monotonic_time_offset() {
+    return javaTimeNanos_offset;
+  }
+
+private:
+  static bool read_bootid(char *dest);
+
+  static jlong checkpoint_millis;
+  static jlong checkpoint_nanos;
+  static char checkpoint_bootid[UUID_LENGTH];
+  static jlong javaTimeNanos_offset;
 };
 
 #endif //SHARE_RUNTIME_CRAC_HPP

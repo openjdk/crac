@@ -31,7 +31,6 @@ public class CracBuilder {
 
     boolean verbose = true;
     boolean debug = false;
-    boolean disablePrivileged = false;
     final List<String> classpathEntries = new ArrayList<>();
     final Map<String, String> env = new HashMap<>();
     final List<String> vmOptions = new ArrayList<>();
@@ -47,6 +46,7 @@ public class CracBuilder {
     String dockerImageBaseVersion;
     String dockerImageName;
     private String[] dockerOptions;
+    boolean enablePrivilegesInContainer = true;
     // make sure to update copy() when adding another field here
 
     boolean containerStarted;
@@ -71,7 +71,6 @@ public class CracBuilder {
         CracBuilder other = new CracBuilder();
         other.verbose = verbose;
         other.debug = debug;
-        other.disablePrivileged = disablePrivileged;
         other.classpathEntries.addAll(classpathEntries);
         other.env.putAll(env);
         other.vmOptions.addAll(vmOptions);
@@ -85,6 +84,7 @@ public class CracBuilder {
         other.captureOutput = captureOutput;
         other.dockerImageName = dockerImageName;
         other.dockerOptions = dockerOptions == null ? null : Arrays.copyOf(dockerOptions, dockerOptions.length);
+        other.enablePrivilegesInContainer = enablePrivilegesInContainer;
         return other;
     }
 
@@ -98,8 +98,8 @@ public class CracBuilder {
         return this;
     }
 
-    public CracBuilder disablePrivileged(boolean disablePrivileged) {
-        this.disablePrivileged = disablePrivileged;
+    public CracBuilder enablePrivilegesInContainer(boolean enablePrivileges) {
+        this.enablePrivilegesInContainer = enablePrivileges;
         return this;
     }
 
@@ -275,7 +275,7 @@ public class CracBuilder {
         List<String> cmd = new ArrayList<>();
         cmd.add(Container.ENGINE_COMMAND);
         cmd.addAll(Arrays.asList("run", "--rm", "-d"));
-        if (!disablePrivileged) {
+        if (enablePrivilegesInContainer) {
             cmd.add("--privileged"); // required to give CRIU sufficient permissions
         }
         cmd.add("--init"); // otherwise the checkpointed process would not be reaped (by sleep with PID 1)

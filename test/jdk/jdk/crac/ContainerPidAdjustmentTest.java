@@ -34,11 +34,11 @@ import static jdk.test.lib.Asserts.assertLessThan;
  * @summary The test checks that process PID is adjusted with the specified value, when checkpointing in a container. Default min PID value is 128.
  * @library /test/lib
  * @build ContainerPidAdjustmentTest
- * @run driver/timeout=60 jdk.test.lib.crac.CracTest false 0      128  false
- * @run driver/timeout=60 jdk.test.lib.crac.CracTest true  0      128  false
- * @run driver/timeout=60 jdk.test.lib.crac.CracTest true  1      1    false
- * @run driver/timeout=60 jdk.test.lib.crac.CracTest true  1000   1000 true
- * @run driver/timeout=60 jdk.test.lib.crac.CracTest true  -10    128  false
+ * @run driver/timeout=60 jdk.test.lib.crac.CracTest false 0      128  true
+ * @run driver/timeout=60 jdk.test.lib.crac.CracTest true  0      128  true
+ * @run driver/timeout=60 jdk.test.lib.crac.CracTest true  1      1    true
+ * @run driver/timeout=60 jdk.test.lib.crac.CracTest true  1000   1000 false
+ * @run driver/timeout=60 jdk.test.lib.crac.CracTest true  -10    128  true
  */
 public class ContainerPidAdjustmentTest implements CracTest {
     @CracTestArg(0)
@@ -51,7 +51,7 @@ public class ContainerPidAdjustmentTest implements CracTest {
     long expectedLastPid;
 
     @CracTestArg(3)
-    boolean disablePrivileged;
+    boolean enablePrivileged;
 
     @Override
     public void test() throws Exception {
@@ -60,11 +60,11 @@ public class ContainerPidAdjustmentTest implements CracTest {
         }
         CracBuilder builder = new CracBuilder()
             .inDockerImage("pid-adjustment")
-            .disablePrivileged(disablePrivileged);
+            .enablePrivilegesInContainer(enablePrivileged);
         if (needSetLastPid) {
             builder.dockerOptions("-e", "CRAC_MIN_PID=" + lastPid);
         }
-        assertEquals(0, builder.startCheckpoint().waitFor(), "Process exited abnormally.");
+        builder.startCheckpoint().waitForSuccess();
     }
 
     @Override

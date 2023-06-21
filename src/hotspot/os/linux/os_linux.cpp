@@ -6118,16 +6118,17 @@ bool VM_Crac::is_claimed_fd(int fd) {
 
 class WakeupClosure: public ThreadClosure {
   void do_thread(Thread* thread) {
-    if (thread->is_Java_thread()) {
-      ThreadState state = thread->osthread()->get_state();
-      // ThreadState::SLEEPING is not used
-      if (state == ThreadState::CONDVAR_WAIT || state == ThreadState::OBJECT_WAIT) {
-        JavaThread *jt = (JavaThread *) thread;
-        // We want to cause a wakeup but not interrupted exception
-        jt->interrupt();
-        jt->osthread()->set_interrupted(false);
-      }
+    ThreadState state = thread->osthread()->get_state();
+    // Note: ThreadState::SLEEPING is not used
+    if (state != ThreadState::CONDVAR_WAIT && state != ThreadState::OBJECT_WAIT) {
+      return; // No need to unpark running threads
     }
+
+    assert(thread->is_Java_thread(), "must be called from java_threads_do");
+    JavaThread *jt = (JavaThread *) thread;
+    jt->wakeup_sleep();
+    jt->parker()->unpark();
+    jt->_ParkEvent->unpark();
   }
 };
 

@@ -1195,7 +1195,7 @@ void VM_Version::nonlibc_tty_print_uint64_comma_uint64(uint64_t num1, uint64_t n
   nonlibc_tty_print_uint64(num2);
 }
 
-void VM_Version::nonlibc_tty_print_using_features_cr() {
+void VM_Version::print_using_features_cr() {
   if (ignore_glibc_not_using) {
     tty->print_cr("CPU features are being kept intact as requested by -XX:CPUFeatures=ignore");
   } else {
@@ -2561,7 +2561,7 @@ void VM_Version::crac_restore() {
 #undef SUPPORTS_SET
 
   if (ShowCPUFeatures)
-    nonlibc_tty_print_using_features_cr();
+    print_using_features_cr();
 }
 
 void VM_Version::initialize() {
@@ -2605,7 +2605,7 @@ void VM_Version::initialize() {
   _glibc_features = GLIBCFeatures_x64;
 
   if (ShowCPUFeatures)
-    nonlibc_tty_print_using_features_cr();
+    print_using_features_cr();
 
   if (!ignore_glibc_not_using) {
     uint64_t       features_expected =   CPU_MAX - 1;

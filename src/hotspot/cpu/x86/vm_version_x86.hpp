@@ -783,7 +783,7 @@ enum Extended_Family {
   static bool ignore_glibc_not_using;
   static void nonlibc_tty_print_uint64(uint64_t num);
   static void nonlibc_tty_print_uint64_comma_uint64(uint64_t num1, uint64_t num2);
-  static void nonlibc_tty_print_using_features_cr();
+  static void print_using_features_cr();
   /*[[noreturn]]*/ static void fatal_missing_features(uint64_t features_missing, uint64_t glibc_features_missing);
 
 public:

@@ -32,6 +32,7 @@ import static jdk.test.lib.Asserts.assertLessThan;
 /*
  * @test ContainerPidAdjustmentTest
  * @summary The test checks that process PID is adjusted with the specified value, when checkpointing in a container. Default min PID value is 128.
+ * @requires (os.family == "linux")
  * @library /test/lib
  * @build ContainerPidAdjustmentTest
  * @run driver/timeout=60 jdk.test.lib.crac.CracTest false 0      128  true

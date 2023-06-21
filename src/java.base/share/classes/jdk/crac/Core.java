@@ -27,9 +27,12 @@
 package jdk.crac;
 
 import jdk.crac.impl.*;
+import jdk.internal.access.SharedSecrets;
 import jdk.internal.crac.ClaimedFDs;
+import jdk.internal.crac.JDKResource;
 import jdk.internal.crac.LoggerContainer;
 import sun.security.action.GetBooleanAction;
+import sun.security.action.GetPropertyAction;
 
 import java.io.PrintWriter;
 import java.io.StringWriter;
@@ -69,7 +72,26 @@ public class Core {
             GetBooleanAction.privilegedGetProperty("jdk.crac.trace-startup-time");
     }
 
-    private static final Context<Resource> globalContext = new BlockingOrderedContext<>();
+    private static final Context<Resource> globalContext = GlobalContext.createGlobalContextImpl();
+
+    private static class ReferenceHandlerResource implements JDKResource {
+        @Override
+        public void beforeCheckpoint(Context<? extends Resource> context) throws Exception {
+            System.gc();
+            // TODO ensure GC done processing all References
+            while (SharedSecrets.getJavaLangRefAccess().waitForReferenceProcessing());
+        }
+
+        @Override
+        public void afterRestore(Context<? extends Resource> context) throws Exception {
+        }
+
+        private static ReferenceHandlerResource resource = new ReferenceHandlerResource();
+
+        public static void register() {
+            jdk.internal.crac.Core.Priority.REFERENCE_HANDLER.getContext().register(resource);
+        }
+    }
 
     /** This class is not instantiable. */
     private Core() {
@@ -110,6 +132,11 @@ public class Core {
             CheckpointException,
             RestoreException {
         final ExceptionHolder<CheckpointException> checkpointException = new ExceptionHolder<>(CheckpointException::new);
+
+        // Register the resource here late, to avoid early registration
+        // during JDK initialization, e.g. if performed during j.l.r.Reference
+        // initialization.
+        ReferenceHandlerResource.register();
 
         // FIXME: log something to complete logger initialization:
         // - call sites in logger formatters.

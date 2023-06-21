@@ -38,7 +38,9 @@ public class Core {
     private Core() {
     }
 
-    private static final Context<Resource> globalContext = new ContextWrapper(new BlockingOrderedContext<>());
+    private static final Context<Resource> globalContext = new ContextWrapper(
+        jdk.crac.impl.GlobalContext.createGlobalContextImpl());
+
     static {
         jdk.crac.Core.getGlobalContext().register(new ResourceWrapper(null, globalContext));
     }

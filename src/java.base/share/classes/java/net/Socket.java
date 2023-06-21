@@ -128,10 +128,7 @@ public class Socket implements java.io.Closeable {
         } catch (Exception e) {
             throw new InternalError(e);
         }
-        initNative();
     }
-
-    private static native int initNative();
 
     /**
      * Creates an unconnected Socket.
@@ -1919,49 +1916,5 @@ public class Socket implements java.io.Closeable {
             options = Collections.emptySet();
         }
         return options;
-    }
-
-    /*
-     * Returns a pair of [ localAddr, remoteAddr ] used by socket with given descriptor.
-     * When the socket is not bound given element is <code>null</code>. When this does not
-     * represent an IPv4/IPv6 socket this method returns <code>null</code>.
-     */
-    private static native InetSocketAddress[] getAddresses(int fd);
-
-    /*
-     * Returns the type of the socket represented by this file descriptor. The most common
-     * values are <code>tcp</code>, <code>tcp6</code>, <code>udp</code> or <code>udp6</code>.
-     */
-    private static native String getType(int fd);
-
-    /**
-     * Returns a textual description of socket using this file descriptor.
-     *
-     * @param fileDescriptor Valid file descriptor instance.
-     * @return String describing the socket.
-     */
-    public static String getDescription(FileDescriptor fileDescriptor) {
-        int fd = SharedSecrets.getJavaIOFileDescriptorAccess().get(fileDescriptor);
-        if (fd < 0) {
-            throw new IllegalArgumentException();
-        }
-
-        InetSocketAddress[] addresses = Socket.getAddresses(fd);
-        StringBuilder sb = new StringBuilder(Socket.getType(fd));
-        if (addresses == null) {
-            sb.append("not IPv4/IPv6");
-        } else {
-            if (addresses[0] != null) {
-                sb.append(" local ").append(addresses[0]);
-            } else {
-                sb.append(" local not bound");
-            }
-            if (addresses[1] != null) {
-                sb.append(" remote ").append(addresses[1]);
-            } else {
-                sb.append(" remote not bound");
-            }
-        }
-        return sb.toString();
     }
 }

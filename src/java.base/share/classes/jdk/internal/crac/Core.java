@@ -30,12 +30,22 @@ import jdk.crac.Context;
 import jdk.crac.impl.BlockingOrderedContext;
 
 public class Core {
-    private static JDKContext jdkContext = new JDKContext();
+    private static ClaimedFDs claimedFDs;
 
-    public static JDKContext getJDKContext() {
-        return jdkContext;
+    /**
+     * Called by JDK FD resources
+     * @return
+     */
+    public static ClaimedFDs getClaimedFDs() {
+        return claimedFDs;
     }
 
+    /**
+     * Called by jdk.crac.Core to publish current ClaimedFDs
+     */
+    public static void setClaimedFDs(ClaimedFDs fds) {
+        claimedFDs = fds;
+    }
 
     /**
      * Priorities are defined in the order of registration to the global context.
@@ -48,7 +58,6 @@ public class Core {
      */
     public enum Priority {
         FILE_DESCRIPTORS(new BlockingOrderedContext<>()),
-        PRE_FILE_DESRIPTORS(new BlockingOrderedContext<>()),
         CLEANERS(new BlockingOrderedContext<>()),
         REFERENCE_HANDLER(new BlockingOrderedContext<>()),
         SEEDER_HOLDER(new BlockingOrderedContext<>()),

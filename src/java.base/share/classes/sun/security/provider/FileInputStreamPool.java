@@ -164,7 +164,8 @@ class FileInputStreamPool {
 
         @Override
         public void beforeCheckpoint(Context<? extends Resource> context) throws Exception {
-            Core.getJDKContext().claimFd(((FileInputStream)in).getFD(), this);
+            FileDescriptor fd = ((FileInputStream)in).getFD();
+            Core.getClaimedFDs().claimFd(fd, this, () -> null, fd);
         }
 
         @Override

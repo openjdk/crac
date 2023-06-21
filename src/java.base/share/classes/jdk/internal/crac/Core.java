@@ -26,15 +26,54 @@
 
 package jdk.internal.crac;
 
-public class Core {
-    private static JDKContext JDKContext;
+import jdk.crac.Context;
+import jdk.crac.impl.BlockingOrderedContext;
 
-    static {
-        JDKContext = new JDKContext();
-        jdk.crac.Core.getGlobalContext().register(JDKContext);
+public class Core {
+    private static ClaimedFDs claimedFDs;
+
+    /**
+     * Called by JDK FD resources
+     * @return
+     */
+    public static ClaimedFDs getClaimedFDs() {
+        return claimedFDs;
     }
 
-    public static JDKContext getJDKContext() {
-        return JDKContext;
+    /**
+     * Called by jdk.crac.Core to publish current ClaimedFDs
+     */
+    public static void setClaimedFDs(ClaimedFDs fds) {
+        claimedFDs = fds;
+    }
+
+    /**
+     * Priorities are defined in the order of registration to the global context.
+     * Checkpoint notification will be processed in the order from the bottom to the top of the list.
+     * Restore will be done in reverse order: from the top to the bottom.
+     *
+     * Resources of the same priority will be handled according the context supplied to the priority.
+     *
+     * Most resources should use priority NORMAL (the lowest priority).
+     */
+    public enum Priority {
+        FILE_DESCRIPTORS(new BlockingOrderedContext<>()),
+        CLEANERS(new BlockingOrderedContext<>()),
+        REFERENCE_HANDLER(new BlockingOrderedContext<>()),
+        SEEDER_HOLDER(new BlockingOrderedContext<>()),
+        SECURE_RANDOM(new BlockingOrderedContext<>()),
+        NATIVE_PRNG(new BlockingOrderedContext<>()),
+        EPOLLSELECTOR(new BlockingOrderedContext<>()),
+        NORMAL(new BlockingOrderedContext<>());
+
+        private final Context<JDKResource> context;
+        Priority(Context<JDKResource> context) {
+            jdk.crac.Core.getGlobalContext().register(context);
+            this.context = context;
+        }
+
+        public Context<JDKResource> getContext() {
+            return context;
+        }
     }
 }

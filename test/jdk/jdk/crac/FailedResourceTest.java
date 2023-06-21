@@ -21,58 +21,55 @@
  * questions.
  */
 
-import java.io.*;
-import java.lang.ref.Cleaner;
-import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.TimeUnit;
 
 import jdk.crac.*;
 import jdk.test.lib.crac.CracBuilder;
-import jdk.test.lib.crac.CracEngine;
 import jdk.test.lib.crac.CracTest;
 
-import static jdk.test.lib.Asserts.assertTrue;
+import java.util.Arrays;
+import java.util.concurrent.atomic.AtomicBoolean;
+
+import static jdk.test.lib.Asserts.*;
 
 /**
- * @test
+ * @test FailedResourceTest
  * @library /test/lib
- * @build RefQueueTest
+ * @build FailedResourceTest
  * @run driver jdk.test.lib.crac.CracTest
  */
-public class RefQueueTest implements CracTest {
-    private static final Cleaner cleaner = Cleaner.create();
+
+public class FailedResourceTest implements CracTest {
+    public static final String EXCEPTION_MESSAGE = "Resource failed";
 
     @Override
     public void test() throws Exception {
-        new CracBuilder().engine(CracEngine.SIMULATE)
-                .startCheckpoint().waitForSuccess();
+        new CracBuilder().startCheckpoint().waitForSuccess();
     }
 
     @Override
     public void exec() throws Exception {
-        File badFile = File.createTempFile("jtreg-RefQueueTest", null);
-        OutputStream badStream = new FileOutputStream(badFile);
-        badStream.write('j');
-        badFile.delete();
-
-        // the cleaner would be able to run right away
-        cleaner.register(new Object(), () -> {
-            try {
-                badStream.close();
-            } catch (IOException e) {
-                throw new RuntimeException(e);
+        AtomicBoolean ranAfter = new AtomicBoolean();
+        Resource resource = new Resource() {
+            @Override
+            public void beforeCheckpoint(Context<? extends Resource> context) throws Exception {
+                throw new Exception(EXCEPTION_MESSAGE);
             }
-        });
 
-        // should close the file and only then go to the native checkpoint
-        Core.checkpointRestore();
-
-        // ensure that the cleaner starts working eventually
-        CountDownLatch latch = new CountDownLatch(1);
-        cleaner.register(new Object(), () -> {
-            latch.countDown();
-        });
-        System.gc();
-        assertTrue(latch.await(10, TimeUnit.SECONDS));
+            @Override
+            public void afterRestore(Context<? extends Resource> context) throws Exception {
+                ranAfter.set(true);
+            }
+        };
+        Core.getGlobalContext().register(resource);
+        try {
+            Core.checkpointRestore();
+            fail("Was supposed to throw");
+        } catch (CheckpointException e) {
+            assertEquals(1, e.getSuppressed().length, Arrays.toString(e.getSuppressed()));
+            assertEquals(EXCEPTION_MESSAGE, e.getSuppressed()[0].getMessage());
+        } catch (RestoreException e) {
+            fail("Shouldn't error in restore", e);
+        }
+        assertTrue(ranAfter.get());
     }
 }

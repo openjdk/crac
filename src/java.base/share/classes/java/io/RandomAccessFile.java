@@ -27,14 +27,9 @@ package java.io;
 
 import java.nio.channels.FileChannel;
 
-import jdk.crac.Context;
-import jdk.crac.impl.CheckpointOpenFileException;
-import jdk.internal.access.JavaIOFileDescriptorAccess;
 import jdk.internal.access.JavaIORandomAccessFileAccess;
 import jdk.internal.access.SharedSecrets;
-import jdk.internal.crac.Core;
-import jdk.internal.crac.JDKContext;
-import jdk.internal.crac.JDKResource;
+import jdk.internal.crac.JDKFileResource;
 import sun.nio.ch.FileChannelImpl;
 
 
@@ -86,41 +81,17 @@ public class RandomAccessFile implements DataOutput, DataInput, Closeable {
     private static final int O_DSYNC =  8;
     private static final int O_TEMPORARY =  16;
 
-    private class Resource implements JDKResource {
-        private static final JavaIOFileDescriptorAccess fdAccess = SharedSecrets.getJavaIOFileDescriptorAccess();
-
-        Resource() {
-            Core.getJDKContext().register(this);
+    JDKFileResource resource = new JDKFileResource() {
+        @Override
+        protected FileDescriptor getFD() {
+            return fd;
         }
 
         @Override
-        public void beforeCheckpoint(Context<? extends jdk.crac.Resource> context) throws Exception {
-            if (Core.getJDKContext().claimFdWeak(fd, this)) {
-                if (Core.getJDKContext().matchClasspath(path)) {
-                    // Files on the classpath are considered persistent, exception is not thrown
-                    return;
-                }
-                int fdNum = fdAccess.get(fd);
-                String msg = "RandomAccessFile " + path + " left open (file descriptor " + fdNum + "). ";
-                if (!JDKContext.Properties.COLLECT_FD_STACKTRACES) {
-                    msg += JDKContext.COLLECT_FD_STACKTRACES_HINT;
-                }
-                throw new CheckpointOpenFileException(msg, fd.resource.stackTraceHolder);
-            }
+        protected String getPath() {
+            return path;
         }
-
-        @Override
-        public void afterRestore(Context<? extends jdk.crac.Resource> context) throws Exception {
-
-        }
-
-        @Override
-        public Priority getPriority() {
-            return Priority.PRE_FILE_DESRIPTORS;
-        }
-    }
-
-    Resource resource = new Resource();
+    };
 
     /**
      * Creates a random access file stream to read from, and optionally

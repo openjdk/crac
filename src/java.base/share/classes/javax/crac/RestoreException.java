@@ -27,16 +27,18 @@
 package javax.crac;
 
 /**
- * Suppresses exceptions thrown during restore notification.
+ * This exception works as an aggregate for all errors found during checkpoint;
+ * these are recorded as {@linkplain #getSuppressed() suppressed exceptions}.
+ * The exception does not have any own message, cause nor collects stack trace.
  */
-public class RestoreException extends Exception {
+public final class RestoreException extends Exception {
     private static final long serialVersionUID = -4091592505524280559L;
 
     /**
      * Creates a {@code RestoreException}.
      */
     public RestoreException() {
-        super();
+        super(null, null, true, false);
     }
 }
 

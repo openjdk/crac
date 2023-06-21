@@ -26,13 +26,9 @@
 
 package jdk.crac;
 
-import jdk.crac.impl.CheckpointOpenFileException;
-import jdk.crac.impl.CheckpointOpenResourceException;
-import jdk.crac.impl.CheckpointOpenSocketException;
-import jdk.crac.impl.OrderedContext;
-import jdk.internal.crac.JDKContext;
+import jdk.crac.impl.*;
+import jdk.internal.crac.ClaimedFDs;
 import jdk.internal.crac.LoggerContainer;
-
 import sun.security.action.GetBooleanAction;
 
 import java.io.PrintWriter;
@@ -45,7 +41,9 @@ import java.security.PrivilegedActionException;
 import java.security.PrivilegedExceptionAction;
 import java.util.Arrays;
 import java.util.List;
-import java.util.Map;
+import java.util.function.Consumer;
+import java.util.function.Function;
+import java.util.function.Supplier;
 
 /**
  * The coordination service.
@@ -71,38 +69,30 @@ public class Core {
             GetBooleanAction.privilegedGetProperty("jdk.crac.trace-startup-time");
     }
 
-    private static final Context<Resource> globalContext = new OrderedContext<>("GlobalContext");
-    static {
-        // force JDK context initialization
-        jdk.internal.crac.Core.getJDKContext();
-    }
+    private static final Context<Resource> globalContext = new BlockingOrderedContext<>();
 
     /** This class is not instantiable. */
     private Core() {
     }
 
     private static void translateJVMExceptions(int[] codes, String[] messages,
-                                               CheckpointException exception) {
+                                               ExceptionHolder<CheckpointException> exception) {
         assert codes.length == messages.length;
-        final int length = codes.length;
+        // When the CR engine fails (e.g. due to permissions, missing binaries...)
+        // there are no messages recorded, but the user would end up with an empty
+        // CheckpointException without stack trace nor message.
+        if (codes.length == 0) {
+            exception.handle(new RuntimeException("Native checkpoint failed."));
+        }
 
-        for (int i = 0; i < length; ++i) {
-            switch(codes[i]) {
-                case JVM_CR_FAIL_FILE:
-                    exception.addSuppressed(
-                            new CheckpointOpenFileException(messages[i], null));
-                    break;
-                case JVM_CR_FAIL_SOCK:
-                    exception.addSuppressed(
-                            new CheckpointOpenSocketException(messages[i]));
-                    break;
-                case JVM_CR_FAIL_PIPE:
-                    // FALLTHROUGH
-                default:
-                    exception.addSuppressed(
-                            new CheckpointOpenResourceException(messages[i], null));
-                    break;
-            }
+        for (int i = 0; i < codes.length; ++i) {
+            Exception ex = switch (codes[i]) {
+                case JVM_CR_FAIL_FILE -> new CheckpointOpenFileException(messages[i], null);
+                case JVM_CR_FAIL_SOCK -> new CheckpointOpenSocketException(messages[i], null);
+                case JVM_CR_FAIL_PIPE -> new CheckpointOpenResourceException(messages[i], null);
+                default -> new CheckpointOpenResourceException(messages[i], null);
+            };
+            exception.handle(ex);
         }
     }
 
@@ -119,31 +109,40 @@ public class Core {
     private static void checkpointRestore1(long jcmdStream) throws
             CheckpointException,
             RestoreException {
-        CheckpointException checkpointException = null;
-        // This log is here to initialize call sites in logger formatters.
-        LoggerContainer.debug("Starting checkpoint at epoch:{0}", System.currentTimeMillis());
+        final ExceptionHolder<CheckpointException> checkpointException = new ExceptionHolder<>(CheckpointException::new);
 
+        // FIXME: log something to complete logger initialization:
+        // - call sites in logger formatters.
+        // - FileDescriptors for resources (sun.util.calendar.ZoneInfoFile)
+        LoggerContainer.info("Starting checkpoint");
+        LoggerContainer.debug("at epoch:{0}", System.currentTimeMillis());
+
+        ClaimedFDs claimedFDs = new ClaimedFDs();
+
+        jdk.internal.crac.Core.setClaimedFDs(claimedFDs);
         try {
             globalContext.beforeCheckpoint(null);
         } catch (CheckpointException ce) {
-            checkpointException = new CheckpointException();
-            for (Throwable t : ce.getSuppressed()) {
-                checkpointException.addSuppressed(t);
+            checkpointException.handle(ce);
+        }
+        jdk.internal.crac.Core.setClaimedFDs(null);
+
+        List<ClaimedFDs.Descriptor> claimedList = claimedFDs.getClaimedFds();
+        int[] fdArr = new int[claimedList.size()];
+        LoggerContainer.debug("Claimed open file descriptors:");
+        for (int i = 0; i < claimedList.size(); ++i) {
+            ClaimedFDs.Descriptor desc = claimedList.get(i);
+            LoggerContainer.debug("\t{0} {1} {2}", desc.getFd(), desc.getClaimer(), desc.getExceptionSupplier());
+            fdArr[i] = desc.getFd();
+
+            Supplier<Exception> exceptionSupplier = desc.getExceptionSupplier();
+            if (exceptionSupplier != null) {
+                Exception e = exceptionSupplier.get();
+                checkpointException.handle(e);
             }
         }
 
-        JDKContext jdkContext = jdk.internal.crac.Core.getJDKContext();
-        List<Map.Entry<Integer, Object>> claimedPairs = jdkContext.getClaimedFds().entrySet().stream().toList();
-        int[] fdArr = new int[claimedPairs.size()];
-        Object[] objArr = new Object[claimedPairs.size()];
-        LoggerContainer.debug("Claimed open file descriptors:");
-        for (int i = 0; i < claimedPairs.size(); ++i) {
-            fdArr[i] = claimedPairs.get(i).getKey();
-            objArr[i] = claimedPairs.get(i).getValue();
-            LoggerContainer.debug( "\t{0} {1}", fdArr[i], objArr[i]);
-        }
-
-        final Object[] bundle = checkpointRestore0(fdArr, objArr, checkpointException != null, jcmdStream);
+        final Object[] bundle = checkpointRestore0(fdArr, null, checkpointException.hasException(), jcmdStream);
         final int retCode = (Integer)bundle[0];
         final String newArguments = (String)bundle[1];
         final String[] newProperties = (String[])bundle[2];
@@ -155,41 +154,43 @@ public class Core {
         }
 
         if (retCode != JVM_CHECKPOINT_OK) {
-            if (checkpointException == null) {
-                checkpointException = new CheckpointException();
-            }
             switch (retCode) {
-                case JVM_CHECKPOINT_ERROR:
-                    translateJVMExceptions(codes, messages, checkpointException);
-                    break;
-                case JVM_CHECKPOINT_NONE:
-                    checkpointException.addSuppressed(
-                            new RuntimeException("C/R is not configured"));
-                    break;
-                default:
-                    checkpointException.addSuppressed(
-                            new RuntimeException("Unknown C/R result: " + retCode));
+                case JVM_CHECKPOINT_ERROR -> translateJVMExceptions(codes, messages, checkpointException);
+                case JVM_CHECKPOINT_NONE -> checkpointException.handle(new RuntimeException("C/R is not configured"));
+                default ->                  checkpointException.handle(new RuntimeException("Unknown C/R result: " + retCode));
             }
         }
 
         if (newProperties != null && newProperties.length > 0) {
-            Arrays.stream(newProperties).map(propStr -> propStr.split("=", 2)).forEach(pair -> {
-                AccessController.doPrivileged(
-                    (PrivilegedAction<String>)() ->
-                        System.setProperty(pair[0], pair.length == 2 ? pair[1] : ""));
+            // Do not use lambda here since lambda will introduce registration
+            // during checkpoint, which may cause dead loop.
+            Arrays.stream(newProperties).map(new Function<String, String[]>() {
+                @Override
+                public String[] apply(String propStr) {
+                    return propStr.split("=", 2);
+                }
+            }).forEach(new Consumer<String[]>() {
+                @Override
+                public void accept(String[] pair) {
+                    AccessController.doPrivileged(
+                            new PrivilegedAction<String>() {
+                                @Override
+                                public String run() {
+                                    return System.setProperty(pair[0], pair.length == 2 ? pair[1] : "");
+                                }
+                            });
+                }
             });
         }
 
-        RestoreException restoreException = null;
+        ExceptionHolder<RestoreException> restoreException = new ExceptionHolder<>(RestoreException::new);
         try {
             globalContext.afterRestore(null);
         } catch (RestoreException re) {
-            if (checkpointException == null) {
-                restoreException = re;
+            if (checkpointException.hasException()) {
+                checkpointException.resuppress(re);
             } else {
-                for (Throwable t : re.getSuppressed()) {
-                    checkpointException.addSuppressed(t);
-                }
+                restoreException.handle(re);
             }
         }
 
@@ -213,22 +214,16 @@ public class Core {
                 } catch (PrivilegedActionException |
                          InvocationTargetException |
                          IllegalAccessException e) {
-                    assert checkpointException == null :
+                    assert !checkpointException.hasException() :
                         "should not have new arguments";
-                    if (restoreException == null) {
-                        restoreException = new RestoreException();
-                    }
-                    restoreException.addSuppressed(e);
+                    restoreException.handle(e);
                 }
             }
         }
 
-        assert checkpointException == null || restoreException == null;
-        if (checkpointException != null) {
-            throw checkpointException;
-        } else if (restoreException != null) {
-            throw restoreException;
-        }
+        assert !checkpointException.hasException() || !restoreException.hasException();
+        checkpointException.throwIfAny();
+        restoreException.throwIfAny();
     }
 
     /**
@@ -249,6 +244,7 @@ public class Core {
         checkpointRestore(JCMD_STREAM_NULL);
     }
 
+    @SuppressWarnings("try")
     private static void checkpointRestore(long jcmdStream) throws
             CheckpointException,
             RestoreException {
@@ -258,18 +254,20 @@ public class Core {
             // checkpointInProgress protects against recursive
             // checkpointRestore from resource's
             // beforeCheckpoint/afterRestore methods
-            if (!checkpointInProgress) {
+            if (checkpointInProgress) {
+                CheckpointException ex = new CheckpointException();
+                ex.addSuppressed(new IllegalStateException("Recursive checkpoint is not allowed"));
+                throw ex;
+            }
+
+            try (@SuppressWarnings("unused") var keepAlive = new KeepAlive()) {
                 checkpointInProgress = true;
-                try {
-                    checkpointRestore1(jcmdStream);
-                } finally {
-                    if (FlagsHolder.TRACE_STARTUP_TIME) {
-                        System.out.println("STARTUPTIME " + System.nanoTime() + " restore-finish");
-                    }
-                    checkpointInProgress = false;
+                checkpointRestore1(jcmdStream);
+            } finally {
+                if (FlagsHolder.TRACE_STARTUP_TIME) {
+                    System.out.println("STARTUPTIME " + System.nanoTime() + " restore-finish");
                 }
-            } else {
-                throw new CheckpointException("Recursive checkpoint is not allowed");
+                checkpointInProgress = false;
             }
         }
     }

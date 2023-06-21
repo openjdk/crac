@@ -27,12 +27,14 @@
 #include <assert.h>
 #include <string.h>
 #include <stdio.h>
+#include <stdbool.h>
 #include <libgen.h>
 #include <limits.h>
 #include <stdlib.h>
 #include <errno.h>
 #include <unistd.h>
 #include <fcntl.h>
+#include <getopt.h>
 #include <signal.h>
 #include <sys/wait.h>
 #include <sys/stat.h>
@@ -46,6 +48,9 @@
 static int create_cppath(const char *imagedir);
 
 static int g_pid;
+
+static char *verbosity = NULL; // default differs for checkpoint and restore
+static char *log_file = NULL;
 
 static int kickjvm(pid_t jvm, int code) {
     union sigval sv = { .sival_int = code };
@@ -102,9 +107,13 @@ static int checkpoint(pid_t jvm,
             "-t", jvmpidchar,
             "-D", imagedir,
             "--shell-job",
-            "-v4", "-o", "dump4.log", // -D without -W makes criu cd to image dir for logs
         };
-        const char** arg = args + 10;
+        const char** arg = args + 7;
+
+        *arg++ = verbosity != NULL ? verbosity : "-v4";
+        *arg++ = "-o";
+        // -D without -W makes criu cd to image dir for logs
+        *arg++ = log_file != NULL ? log_file : "dump4.log";
 
         if (leave_running) {
             *arg++ = "-R";
@@ -192,9 +201,15 @@ static int restore(const char *basedir,
         "--shell-job",
         "--action-script", self,
         "-D", imagedir,
-        "-v1"
     };
-    const char** arg = args + 10;
+    const char** arg = args + 9;
+
+    *arg++ = verbosity != NULL ? verbosity : "-v1";
+    if (log_file != NULL) {
+        *arg++ = "-o";
+        *arg++ = log_file;
+    }
+
     if (inherit_perfdata) {
         *arg++ = "--inherit-fd";
         *arg++ = inherit_perfdata;
@@ -216,6 +231,8 @@ static int restore(const char *basedir,
     }
 
     memcpy(arg, tail, sizeof(tail));
+
+    fflush(stderr);
 
     execv(criu, (char**)args);
     perror("exec criu");
@@ -326,10 +343,46 @@ static int restorewait(void) {
     return 1;
 }
 
+// return value is one argument after options
+static char *parse_options(int argc, char *argv[]) {
+    optind = 2; // starting after action
+    struct option opts[] = {{
+        .name = "verbosity",
+        .has_arg = 1,
+        .flag = NULL,
+        .val = 'v'
+    }, {
+        .name = "log-file",
+        .has_arg = 1,
+        .flag = NULL,
+        .val = 'o',
+    }, { NULL, 0, NULL, 0} };
+    bool processing = true;
+    do {
+        switch (getopt_long(argc, argv, "v:o:", opts, NULL)) {
+            case -1:
+            case '?':
+                processing = false;
+                break;
+            case 'v':
+                if (asprintf(&verbosity, "--verbosity=%s", optarg) < 0) {
+                    fprintf(stderr, "Cannot set verbosity level\n");
+                    verbosity = NULL;
+                }
+                break;
+            case 'o':
+                log_file = optarg;
+                break;
+        }
+    } while (processing);
+    return optind < argc ? argv[optind] : NULL;
+}
+
 int main(int argc, char *argv[]) {
     char* action;
-    if ((action = argv[1])) {
-        char* imagedir = argv[2];
+    if (argc >= 2 && (action = argv[1])) {
+
+        char* imagedir = parse_options(argc, argv);
 
         char *basedir = dirname(strdup(argv[0]));
 

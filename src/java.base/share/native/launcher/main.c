@@ -34,6 +34,10 @@
 #include "jli_util.h"
 #include "jni.h"
 
+#ifdef LINUX
+#include <syscall.h>
+#endif
+
 #ifdef _MSC_VER
 #if _MSC_VER > 1400 && _MSC_VER < 1600
 
@@ -197,8 +201,20 @@ static void set_last_pid(int pid) {
     fclose(last_pid_file);
 }
 
+static inline int clone_process() {
+#ifdef LINUX
+    return syscall(SYS_clone, SIGCHLD, NULL, NULL, 0);
+#else
+    return fork();
+#endif
+}
+
 static void spin_last_pid(int pid) {
-    for (pid_t child = fork(); child < (pid_t)pid; child = fork()) {
+    for (int child = clone_process(); child < pid; child = clone_process()) {
+        if (0 > child) {
+            perror("clone last pid");
+            break;
+        }
         if (0 == child) {
             exit(0);
         }

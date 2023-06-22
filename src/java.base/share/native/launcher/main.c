@@ -171,34 +171,27 @@ static void setup_sighandler() {
     }
 }
 
-static const char *last_pid_filename = "/proc/sys/kernel/ns_last_pid";
-
-static int get_last_pid() {
-    FILE *last_pid_file = fopen(last_pid_filename, "r");
-    if (!last_pid_file) {
-        perror("last_pid_file fopen");
-        return -1;
+static int set_last_pid(int pid) {
+#ifdef LINUX
+    char buf[11];
+    const int len = snprintf(buf, sizeof(buf), "%d", pid);
+    if (0 > len || sizeof(buf) < (size_t)len) {
+        return EINVAL;
     }
-    int last_pid;
-    if (0 >= fscanf(last_pid_file, "%d", &last_pid)) {
-        fclose(last_pid_file);
-        perror("last_pid_file fscanf");
-        last_pid = -1;
+    const char *last_pid_filename = "/proc/sys/kernel/ns_last_pid";
+    const int last_pid_file = open(last_pid_filename, O_WRONLY|O_CREAT|O_TRUNC, 0666);
+    if (0 > last_pid_file) {
+        return errno;
     }
-    fclose(last_pid_file);
-    return last_pid;
+    int res = 0;
+    if (0 > write(last_pid_file, buf, len)) {
+        res =   errno;
 }
-
-static void set_last_pid(int pid) {
-    FILE *last_pid_file = fopen(last_pid_filename, "w");
-    if (!last_pid_file) {
-        perror("last_pid_file fopen");
-        return;
-    }
-    if (0 > fprintf(last_pid_file, "%d", pid)) {
-        perror("last_pid_file fprintf");
-    }
-    fclose(last_pid_file);
+    close(last_pid_file);
+    return res;
+#else
+    return EPERM;
+#endif
 }
 
 static inline int clone_process() {
@@ -347,10 +340,14 @@ main(int argc, char **argv)
         if (getpid() <= crac_min_pid) {
             // Move PID value for new processes to a desired value
             // to avoid PID conflicts on restore.
-            if (get_last_pid() < crac_min_pid) {
-                set_last_pid(crac_min_pid);
-                if (get_last_pid() < crac_min_pid) {
+            {
+                const int res = set_last_pid(crac_min_pid);
+                if (EPERM == res || EACCES == res || EROFS == res) {
                     spin_last_pid(crac_min_pid);
+                } else if (EINVAL == res) {
+                    errno = EINVAL;
+                    perror("set last pid");
+                    exit(1);
                 }
             }
 

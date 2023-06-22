@@ -23,7 +23,6 @@
 
 import jdk.test.lib.containers.docker.DockerTestUtils;
 import jdk.test.lib.crac.CracBuilder;
-import jdk.test.lib.crac.CracProcess;
 import jdk.test.lib.crac.CracTest;
 import jdk.test.lib.crac.CracTestArg;
 import static jdk.test.lib.Asserts.assertEquals;
@@ -35,11 +34,14 @@ import static jdk.test.lib.Asserts.assertLessThan;
  * @requires (os.family == "linux")
  * @library /test/lib
  * @build ContainerPidAdjustmentTest
- * @run driver/timeout=60 jdk.test.lib.crac.CracTest false 0      128  true
- * @run driver/timeout=60 jdk.test.lib.crac.CracTest true  0      128  true
- * @run driver/timeout=60 jdk.test.lib.crac.CracTest true  1      1    true
- * @run driver/timeout=60 jdk.test.lib.crac.CracTest true  1000   1000 false
- * @run driver/timeout=60 jdk.test.lib.crac.CracTest true  -10    128  true
+ * @run driver/timeout=60 jdk.test.lib.crac.CracTest   false  0       true   128
+ * @run driver/timeout=60 jdk.test.lib.crac.CracTest   true   0       true   128
+ * @run driver/timeout=60 jdk.test.lib.crac.CracTest   true   1       true   1
+ * @run driver/timeout=60 jdk.test.lib.crac.CracTest   true   1000    false  1000
+ * @run driver/timeout=60 jdk.test.lib.crac.CracTest   true   -10     true   128
+ * @run driver/timeout=60 jdk.test.lib.crac.CracTest   true   40000   true   40000
+ * @run driver/timeout=60 jdk.test.lib.crac.CracTest   true   40000   false  -1
+ * @run driver/timeout=60 jdk.test.lib.crac.CracTest   true   5000000 true   -1
  */
 public class ContainerPidAdjustmentTest implements CracTest {
     @CracTestArg(0)
@@ -49,10 +51,10 @@ public class ContainerPidAdjustmentTest implements CracTest {
     long lastPid;
 
     @CracTestArg(2)
-    long expectedLastPid;
+    boolean enablePrivileged;
 
     @CracTestArg(3)
-    boolean enablePrivileged;
+    long expectedLastPid;
 
     @Override
     public void test() throws Exception {
@@ -65,12 +67,19 @@ public class ContainerPidAdjustmentTest implements CracTest {
         if (needSetLastPid) {
             builder.dockerOptions("-e", "CRAC_MIN_PID=" + lastPid);
         }
-        builder.startCheckpoint().waitForSuccess();
+        if (0 < expectedLastPid) {
+            builder.startCheckpoint().waitForSuccess();
+        } else {
+            int expectedExitValue = (int)java.lang.Math.abs(expectedLastPid);
+            int exitValue = builder.startCheckpoint().waitFor();
+            assertEquals(expectedExitValue, exitValue, "Process returned unexpected exit code: " + exitValue);
+        }
     }
 
     @Override
     public void exec() throws Exception {
         System.out.println("Current PID = " + ProcessHandle.current().pid());
+        assertLessThan((long)0, expectedLastPid, "Shouldn't happen");
         assertLessThan(expectedLastPid, ProcessHandle.current().pid());
     }
 }

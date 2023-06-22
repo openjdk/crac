@@ -34,6 +34,9 @@
 #include "jli_util.h"
 #include "jni.h"
 
+#ifndef WIN32
+#include <errno.h>
+#endif
 #ifdef LINUX
 #include <syscall.h>
 #endif
@@ -173,7 +176,7 @@ static void setup_sighandler() {
 
 static int set_last_pid(int pid) {
 #ifdef LINUX
-    char buf[11];
+    char buf[11]; // enough for int32
     const int len = snprintf(buf, sizeof(buf), "%d", pid);
     if (0 > len || sizeof(buf) < (size_t)len) {
         return EINVAL;
@@ -194,27 +197,29 @@ static int set_last_pid(int pid) {
 #endif
 }
 
-static inline int clone_process() {
-#ifdef LINUX
-    return syscall(SYS_clone, SIGCHLD, NULL, NULL, 0);
-#else
-    return fork();
-#endif
-}
-
 static void spin_last_pid(int pid) {
-    for (int child = clone_process(); child < pid; child = clone_process()) {
+    const int MaxSpinCount = 10000;
+    for (int child = fork(), prev = 0, cnt = MaxSpinCount; child < pid; child = fork(), --cnt) {
         if (0 > child) {
-            perror("clone last pid");
-            break;
+            perror("spin_last_pid clone");
+            exit(1);
         }
         if (0 == child) {
             exit(0);
         }
+        if (child < prev) {
+            fprintf(stderr, "%s: Invalid argument (%d)\n", __FUNCTION__, pid);
+            exit(1);
+        }
+        if (0 >= cnt) {
+            fprintf(stderr, "%s: Can't reach pid %d, out of try count. Current pid=%d\n", __FUNCTION__, pid, child);
+            exit(1);
+        }
+        prev = child;
         int status;
         if (0 > waitpid(child, &status, 0)) {
-            perror("waitpid last pid");
-            break;
+            perror("spin_last_pid waitpid");
+            exit(1);
         }
     }
 }
@@ -334,7 +339,6 @@ main(int argc, char **argv)
         const int crac_min_pid_default = 128;
         const char *env_min_pid_str = getenv("CRAC_MIN_PID");
         const int env_min_pid = env_min_pid_str ? atoi(env_min_pid_str) : 0;
-        // TODO: should it be checked for max pid overflow?
         const int crac_min_pid = 0 < env_min_pid ? env_min_pid : crac_min_pid_default;
 
         if (getpid() <= crac_min_pid) {
@@ -344,9 +348,9 @@ main(int argc, char **argv)
                 const int res = set_last_pid(crac_min_pid);
                 if (EPERM == res || EACCES == res || EROFS == res) {
                     spin_last_pid(crac_min_pid);
-                } else if (EINVAL == res) {
-                    errno = EINVAL;
-                    perror("set last pid");
+                } else if (0 != res) {
+                    errno = res;
+                    perror("set_last_pid");
                     exit(1);
                 }
             }

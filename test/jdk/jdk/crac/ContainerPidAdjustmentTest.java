@@ -23,10 +23,15 @@
 
 import jdk.test.lib.containers.docker.DockerTestUtils;
 import jdk.test.lib.crac.CracBuilder;
+import jdk.test.lib.crac.CracProcess;
 import jdk.test.lib.crac.CracTest;
 import jdk.test.lib.crac.CracTestArg;
 import static jdk.test.lib.Asserts.assertEquals;
 import static jdk.test.lib.Asserts.assertLessThan;
+
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.List;
 
 /*
  * @test ContainerPidAdjustmentTest
@@ -42,6 +47,7 @@ import static jdk.test.lib.Asserts.assertLessThan;
  * @run driver/timeout=60 jdk.test.lib.crac.CracTest   true   40000   true   40000
  * @run driver/timeout=60 jdk.test.lib.crac.CracTest   true   40000   false  -1
  * @run driver/timeout=60 jdk.test.lib.crac.CracTest   true   5000000 true   -1
+ * @run driver/timeout=60 jdk.test.lib.crac.CracTest   true   5000000 true   -1     4194200
  */
 public class ContainerPidAdjustmentTest implements CracTest {
     @CracTestArg(0)
@@ -51,10 +57,13 @@ public class ContainerPidAdjustmentTest implements CracTest {
     long lastPid;
 
     @CracTestArg(2)
-    boolean enablePrivileged;
+    boolean usePrivilegedContainer;
 
     @CracTestArg(3)
     long expectedLastPid;
+
+    @CracTestArg(value = 4, optional = true)
+    String lastPidSetup;
 
     @Override
     public void test() throws Exception {
@@ -63,16 +72,29 @@ public class ContainerPidAdjustmentTest implements CracTest {
         }
         CracBuilder builder = new CracBuilder()
             .inDockerImage("pid-adjustment")
-            .enablePrivilegesInContainer(enablePrivileged);
+            .containerUsePrivileged(usePrivilegedContainer);
         if (needSetLastPid) {
             builder.dockerOptions("-e", "CRAC_MIN_PID=" + lastPid);
         }
+        if (null != lastPidSetup) {
+            // Set up the initial last pid,
+            // and create a non-privileged user to force spinning the last pid, running checkpoint under the user.
+            builder
+                .containerSetup(Arrays.asList("bash", "-c", "useradd the_user && echo " + lastPidSetup + " >/proc/sys/kernel/ns_last_pid"))
+                .captureOutput(true)
+                .dockerCheckpointOptions(Arrays.asList("-u", "the_user"));
+        }
+
         if (0 < expectedLastPid) {
             builder.startCheckpoint().waitForSuccess();
         } else {
             int expectedExitValue = (int)java.lang.Math.abs(expectedLastPid);
-            int exitValue = builder.startCheckpoint().waitFor();
+            CracProcess process = builder.startCheckpoint();
+            final int exitValue = process.waitFor();
             assertEquals(expectedExitValue, exitValue, "Process returned unexpected exit code: " + exitValue);
+            if (null != lastPidSetup) {
+                process.outputAnalyzer().shouldContain("spin_last_pid: Invalid argument (" + lastPid + ")");
+            }
         }
     }
 

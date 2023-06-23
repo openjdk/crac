@@ -46,7 +46,9 @@ public class CracBuilder {
     String dockerImageBaseVersion;
     String dockerImageName;
     private String[] dockerOptions;
-    boolean enablePrivilegesInContainer = true;
+    private List<String> dockerCheckpointOptions;
+    boolean containerUsePrivileged = true;
+    private List<String> containerSetupCommand;
     // make sure to update copy() when adding another field here
 
     boolean containerStarted;
@@ -84,7 +86,9 @@ public class CracBuilder {
         other.captureOutput = captureOutput;
         other.dockerImageName = dockerImageName;
         other.dockerOptions = dockerOptions == null ? null : Arrays.copyOf(dockerOptions, dockerOptions.length);
-        other.enablePrivilegesInContainer = enablePrivilegesInContainer;
+        other.dockerCheckpointOptions = dockerCheckpointOptions;
+        other.containerUsePrivileged = containerUsePrivileged;
+        other.containerSetupCommand = containerSetupCommand;
         return other;
     }
 
@@ -98,8 +102,18 @@ public class CracBuilder {
         return this;
     }
 
-    public CracBuilder enablePrivilegesInContainer(boolean enablePrivileges) {
-        this.enablePrivilegesInContainer = enablePrivileges;
+    public CracBuilder dockerCheckpointOptions(List<String> options) {
+        this.dockerCheckpointOptions = options;
+        return this;
+    }
+
+    public CracBuilder containerSetup(List<String> cmd) {
+        this.containerSetupCommand = cmd;
+        return this;
+    }
+
+    public CracBuilder containerUsePrivileged(boolean usePrivileged) {
+        this.containerUsePrivileged = usePrivileged;
         return this;
     }
 
@@ -240,7 +254,18 @@ public class CracBuilder {
             List<String> cmd = prepareContainerCommand(dockerImageName, dockerOptions);
             log("Starting docker container:\n" + String.join(" ", cmd));
             assertEquals(0, new ProcessBuilder().inheritIO().command(cmd).start().waitFor());
+            containerSetup();
             containerStarted = true;
+        }
+    }
+
+    private void containerSetup() throws Exception {
+        if (null != containerSetupCommand && 0 < containerSetupCommand.size()) {
+            List<String> cmd = new ArrayList<>();
+            cmd.addAll(Arrays.asList(Container.ENGINE_COMMAND, "exec", CONTAINER_NAME));
+            cmd.addAll(containerSetupCommand);
+            log("Container set up:\n" + String.join(" ", cmd));
+            DockerTestUtils.execute(cmd).shouldHaveExitValue(0);
         }
     }
 
@@ -275,7 +300,7 @@ public class CracBuilder {
         List<String> cmd = new ArrayList<>();
         cmd.add(Container.ENGINE_COMMAND);
         cmd.addAll(Arrays.asList("run", "--rm", "-d"));
-        if (enablePrivilegesInContainer) {
+        if (containerUsePrivileged) {
             cmd.add("--privileged"); // required to give CRIU sufficient permissions
         }
         cmd.add("--init"); // otherwise the checkpointed process would not be reaped (by sleep with PID 1)
@@ -378,7 +403,12 @@ public class CracBuilder {
         if (javaPrefix != null) {
             cmd.addAll(javaPrefix);
         } else if (dockerImageName != null) {
-            cmd.addAll(Arrays.asList(Container.ENGINE_COMMAND, "exec", CONTAINER_NAME));
+            cmd.add(Container.ENGINE_COMMAND);
+            cmd.add("exec");
+            if (null != dockerCheckpointOptions) {
+                cmd.addAll(dockerCheckpointOptions);
+            }
+            cmd.add(CONTAINER_NAME);
             cmd.add(DOCKER_JAVA);
         } else {
             cmd.add(JAVA);

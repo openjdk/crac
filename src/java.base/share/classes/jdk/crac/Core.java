@@ -88,8 +88,15 @@ public class Core {
 
         private static ReferenceHandlerResource resource = new ReferenceHandlerResource();
 
-        public static void register() {
+        static {
             jdk.internal.crac.Core.Priority.REFERENCE_HANDLER.getContext().register(resource);
+        }
+
+        /**
+         * Performs one-time registration of the Reference handling resource
+         */
+        public static void register() {
+            // nothing to do: the resource registered in the static initializer
         }
     }
 

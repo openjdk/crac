@@ -104,6 +104,7 @@ WinMain(HINSTANCE inst, HINSTANCE previnst, LPSTR cmdline, int cmdshow)
 #include <sys/wait.h>
 
 static int is_checkpoint = 0;
+static int crac_min_pid = 0;
 
 static void parse_checkpoint(const char *arg) {
     if (!is_checkpoint) {
@@ -111,6 +112,13 @@ static void parse_checkpoint(const char *arg) {
         const int len = strlen(checkpoint_arg);
         if (0 == strncmp(arg, checkpoint_arg, len)) {
             is_checkpoint = 1;
+        }
+    }
+    {
+        const char *checkpoint_arg = "-XX:CRaCMinPid=";
+        const int len = strlen(checkpoint_arg);
+        if (0 == strncmp(arg, checkpoint_arg, len)) {
+            crac_min_pid = atoi(arg + len);
         }
     }
 }
@@ -337,17 +345,15 @@ main(int argc, char **argv)
 
     if (is_checkpoint) {
         const int crac_min_pid_default = 128;
-        const char *env_min_pid_str = getenv("CRAC_MIN_PID");
-        const int env_min_pid = env_min_pid_str ? atoi(env_min_pid_str) : 0;
-        const int crac_min_pid = 0 < env_min_pid ? env_min_pid : crac_min_pid_default;
+        const int min_pid = 0 < crac_min_pid ? crac_min_pid : crac_min_pid_default;
 
-        if (getpid() <= crac_min_pid) {
+        if (getpid() <= min_pid) {
             // Move PID value for new processes to a desired value
             // to avoid PID conflicts on restore.
             {
-                const int res = set_last_pid(crac_min_pid);
+                const int res = set_last_pid(min_pid);
                 if (EPERM == res || EACCES == res || EROFS == res) {
-                    spin_last_pid(crac_min_pid);
+                    spin_last_pid(min_pid);
                 } else if (0 != res) {
                     errno = res;
                     perror("set_last_pid");

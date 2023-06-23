@@ -74,11 +74,12 @@ public class ContainerPidAdjustmentTest implements CracTest {
             .inDockerImage("pid-adjustment")
             .containerUsePrivileged(usePrivilegedContainer);
         if (needSetLastPid) {
-            builder.dockerOptions("-e", "CRAC_MIN_PID=" + lastPid);
+            builder.vmOption("-XX:CRaCMinPid=" + lastPid);
         }
         if (null != lastPidSetup) {
             // Set up the initial last pid,
-            // and create a non-privileged user to force spinning the last pid, running checkpoint under the user.
+            // create a non-privileged user,
+            // and force spinning the last pid running checkpoint under the user.
             builder
                 .containerSetup(Arrays.asList("bash", "-c", "useradd the_user && echo " + lastPidSetup + " >/proc/sys/kernel/ns_last_pid"))
                 .captureOutput(true)

@@ -330,18 +330,10 @@ public class CracBuilder {
 
     public void recreateContainer(String imageName, String... options) throws Exception {
         assertTrue(containerStarted);
-        String minPid = DockerTestUtils.execute(Container.ENGINE_COMMAND, "exec", CONTAINER_NAME,
-                "cat", "/proc/sys/kernel/ns_last_pid").getStdout().trim();
         DockerTestUtils.execute(Container.ENGINE_COMMAND, "kill", CONTAINER_NAME).getExitValue();
         List<String> cmd = prepareContainerCommand(imageName, options);
         log("Recreating docker container:\n" + String.join(" ", cmd));
         assertEquals(0, new ProcessBuilder().inheritIO().command(cmd).start().waitFor());
-        // We need to cycle PIDs; had we tried to restore right away the exec would get the
-        // same PIDs and restore would fail.
-        log("Cycling PIDs until %s%n", minPid);
-        DockerTestUtils.execute(Container.ENGINE_COMMAND, "exec",
-                CONTAINER_NAME, "bash", "-c",
-                "while [ $(cat /proc/sys/kernel/ns_last_pid) -le " + minPid + " ]; do cat /dev/null; done");
     }
 
     public CracProcess doRestore(String... javaPrefix) throws Exception {

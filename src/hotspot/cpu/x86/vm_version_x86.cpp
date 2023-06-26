@@ -35,8 +35,16 @@
 #include "runtime/os.hpp"
 #include "runtime/stubCodeGenerator.hpp"
 #include "runtime/vm_version.hpp"
+#include "utilities/formatBuffer.hpp"
 #include "utilities/powerOfTwo.hpp"
 #include "utilities/virtualizationSupport.hpp"
+#if INCLUDE_CPU_FEATURE_ACTIVE
+# include <sys/platform/x86.h>
+#endif
+#if INCLUDE_LD_SO_LIST_DIAGNOSTICS
+# include <link.h>
+# include <sys/wait.h>
+#endif
 
 #include OS_HEADER_INLINE(os)
 
@@ -45,9 +53,11 @@ int VM_Version::_model;
 int VM_Version::_stepping;
 bool VM_Version::_has_intel_jcc_erratum;
 VM_Version::CpuidInfo VM_Version::_cpuid_info = { 0, };
+uint64_t VM_Version::_glibc_features;
 
 #define DECLARE_CPU_FEATURE_NAME(id, name, bit) name,
-const char* VM_Version::_features_names[] = { CPU_FEATURE_FLAGS(DECLARE_CPU_FEATURE_NAME)};
+const char* VM_Version::      _features_names[] = {   CPU_FEATURE_FLAGS(DECLARE_CPU_FEATURE_NAME)};
+const char* VM_Version::_glibc_features_names[] = { GLIBC_FEATURE_FLAGS(DECLARE_CPU_FEATURE_NAME)};
 #undef DECLARE_CPU_FEATURE_FLAG
 
 // Address of instruction which causes SEGV
@@ -615,8 +625,585 @@ class VM_Version_StubGenerator: public StubCodeGenerator {
   };
 };
 
-void VM_Version::get_processor_features() {
+uint64_t VM_Version::CPUFeatures_parse(uint64_t &glibc_features) {
+  glibc_features = _glibc_features;
+  if (CPUFeatures == NULL || strcmp(CPUFeatures, "native") == 0) {
+    return _features;
+  }
+  if (strcmp(CPUFeatures, "ignore") == 0) {
+    ignore_glibc_not_using = true;
+    return _features;
+  }
+  glibc_features = 0;
+  if (strcmp(CPUFeatures, "generic") == 0) {
+    // 32-bit x86 cannot rely on anything.
+    return 0
+#ifdef AMD64
+      // The following options are all in /proc/cpuinfo of one of the first 64-bit CPUs - Atom D2700 (and Opteron 1352): https://superuser.com/q/1572306/1015048
+      | CPU_SSE // enabled in 'gcc -Q --help=target', used by OpenJDK
+      | CPU_SSE2 // enabled in 'gcc -Q --help=target', required by OpenJDK
+      | CPU_FXSR // enabled in 'gcc -Q --help=target', not used by OpenJDK
+      | CPU_MMX // enabled in 'gcc -Q --help=target', used only by 32-bit x86 OpenJDK
+      | CPU_TSC // not used by gcc, used by OpenJDK
+      | CPU_CX8 // gcc detects it to set cpu "pentium" (=32-bit only), used by OpenJDK
+      | CPU_CMOV // gcc detects it to set cpu "pentiumpro" (=32-bit only), used by OpenJDK
+      | CPU_FLUSH // ="clflush" in cpuinfo, not used by gcc, required by OpenJDK
+      // GLIBC_MOVBE is disabled in 'gcc -Q --help=target' and some CPUs do not support it: https://stackoverflow.com/a/5246553/2995591
+      // GLIBC_LAHFSAHF is disabled in 'gcc -Q --help=target' and "Early Intel Pentium 4 CPUs with Intel 64 support ... lacked the LAHF and SAHF instructions"
+#endif
+    ;
+  }
+  char *endptr;
+  errno = 0;
+  uint64_t retval;
+  unsigned long long ull = strtoull(CPUFeatures, &endptr, 0);
+  retval = ull;
+  if (!errno && *endptr == ',' && retval == ull) {
+    ull = strtoull(endptr + 1, &endptr, 0);
+    glibc_features = ull;
+    if (!errno && !*endptr && glibc_features == ull) {
+      return retval;
+    }
+  }
+  vm_exit_during_initialization(err_msg("VM option 'CPUFeatures=%s' must be of the form: 0xnum,0xnum", CPUFeatures));
+  return -1;
+}
 
+#if INCLUDE_LD_SO_LIST_DIAGNOSTICS
+
+static int ld_so_name_iterate_phdr(struct dl_phdr_info *info, size_t size, void *data_voidp) {
+  const char **retval_return = (const char **)data_voidp;
+  assert(size >= offsetof(struct dl_phdr_info, dlpi_adds), "missing PHDRs for the java executable");
+  if (strcmp(info->dlpi_name, "") != 0)
+    vm_exit_during_initialization(err_msg("Unexpected name of first dl_phdr_info: %s", info->dlpi_name));
+  for (size_t phdr_ix = 0; phdr_ix < info->dlpi_phnum; ++phdr_ix) {
+    const Elf64_Phdr *phdr = info->dlpi_phdr + phdr_ix;
+    if (phdr->p_type == PT_INTERP) {
+      *retval_return = (const char *)(phdr->p_vaddr + info->dlpi_addr);
+      return 42;
+    }
+  }
+  vm_exit_during_initialization("PT_INTERP not found for the java executable");
+  return -1;
+}
+
+static const char *ld_so_name() {
+  const char *retval;
+  int err = dl_iterate_phdr(ld_so_name_iterate_phdr, &retval);
+  assert(err == 42, "internal error 42");
+  return retval;
+}
+
+#define ARG1 "--list-diagnostics"
+
+static FILE *popen_r(const char *arg0, pid_t *pid_return) {
+  union {
+    int fds[2];
+    struct {
+      int readfd, writefd;
+    };
+  } fds;
+  if (pipe(fds.fds))
+    vm_exit_during_initialization(err_msg("Error creating pipe: %m"));
+  pid_t child = fork();
+  switch (child) {
+    case -1:
+      vm_exit_during_initialization(err_msg("Error fork-ing: %m"));
+    case 0:
+      if (close(fds.readfd))
+        vm_exit_during_initialization(err_msgt("Error closing read pipe in child: %m"));
+      }
+      if (dup2(fds.writefd, STDOUT_FILENO) != STDOUT_FILENO)
+        vm_exit_during_initialization(err_msg("Error closing preparing write pipe in child: %m"));
+      if (close(fds.writefd))
+        vm_exit_during_initialization(err_msg("Error closing write pipe in child: %m"));
+      execl(arg0, arg0, ARG1, NULL);
+      // FIXME: Double vm_exit*()?
+      vm_exit_during_initialization(err_msg("Error exec-ing %s " ARG1 ": %m", arg0));
+  }
+  if (close(fds.writefd))
+    vm_exit_during_initialization(err_msg("Error closing write pipe in parent: %m"));
+  FILE *f = fdopen(fds.readfd, "r");
+  if (f == NULL)
+    vm_exit_during_initialization(err_msg("Error converting pipe fd to FILE * in parent for %s " ARG1 ": %m", arg0));
+  *pid_return = child;
+  return f;
+}
+
+static void pclose_r(const char *arg0, FILE *f, pid_t pid) {
+  if (fclose(f))
+    vm_exit_during_initialization(err_msg("Error closing fdopen-ed %s " ARG1 ": %m", arg0));
+  int wstatus;
+  pid_t waiterr = waitpid(pid, &wstatus, 0);
+  if (waiterr != pid)
+    vm_exit_during_initialization(err_msg("Error waiting on %s " ARG1 ": %m", arg0));
+  if (!WIFEXITED(wstatus))
+    vm_exit_during_initialization(err_msg("Child command %s " ARG1 " did not properly exit (WIFEXITED): wstatus = %d", arg0, wstatus));
+  if (WEXITSTATUS(wstatus) != 0)
+    vm_exit_during_initialization(err_msg("Child command %s " ARG1 " did exit with an error: exit code = %d", arg0, WEXITSTATUS(wstatus)));
+}
+
+#endif // !INCLUDE_LD_SO_LIST_DIAGNOSTICS
+
+const char VM_Version::glibc_prefix[] = ":glibc.cpu.hwcaps=";
+const size_t VM_Version::glibc_prefix_len = strlen(glibc_prefix);
+bool VM_Version::ignore_glibc_not_using = false;
+
+bool VM_Version::glibc_env_set(char *disable_str) {
+#define TUNABLES_NAME "GLIBC_TUNABLES"
+  char *env_val = disable_str;
+  const char *env = getenv(TUNABLES_NAME);
+  if (env && strcmp(env, env_val) == 0) {
+#if !INCLUDE_CPU_FEATURE_ACTIVE && !INCLUDE_LD_SO_LIST_DIAGNOSTICS
+    if (ShowCPUFeatures) {
+      tty->print_cr("Environment variable already set, both glibc CPU_FEATURE_ACTIVE and ld.so --list-diagnostics are unavailable - re-exec suppressed: " TUNABLES_NAME "=%s", env);
+    }
+    return true;
+#endif
+  }
+  char env_buf[strlen(disable_str) + (!env ? 0 : strlen(env) + 100)];
+  if (env) {
+    if (ShowCPUFeatures) {
+      tty->print_cr("Original environment variable: " TUNABLES_NAME "=%s", env);
+    }
+    const char *hwcaps = strstr(env, glibc_prefix + 1 /* skip ':' */);
+    if (!hwcaps) {
+      strcpy(env_buf, env);
+      strcat(env_buf, disable_str);
+    } else {
+      const char *colon = strchr(hwcaps, ':');
+      if (!colon) {
+        strcpy(env_buf, env);
+        strcat(env_buf, disable_str + glibc_prefix_len);
+      } else {
+        int err = jio_snprintf(env_buf, sizeof(env_buf), "%.*s%s%s", (int)(colon - env), env, disable_str + glibc_prefix_len, colon);
+        assert(err >= 0 && (unsigned)err < sizeof(env_buf), "internal error: " TUNABLES_NAME " buffer overflow");
+      }
+    }
+    env_val = env_buf;
+  }
+  if (ShowCPUFeatures) {
+    tty->print_cr("Re-exec of java with new environment variable: " TUNABLES_NAME "=%s", env_val);
+  }
+  int err = setenv(TUNABLES_NAME, env_val, 1);
+  if (err)
+    vm_exit_during_initialization(err_msg("setenv " TUNABLES_NAME " error: %m"));
+
+#define REEXEC_NAME "HOTSPOT_GLIBC_TUNABLES_REEXEC"
+  if (getenv(REEXEC_NAME))
+    vm_exit_during_initialization(err_msg("internal error: " TUNABLES_NAME "=%s failed and " REEXEC_NAME " is set", disable_str));
+  if (setenv(REEXEC_NAME, "1", 1))
+    vm_exit_during_initialization(err_msg("setenv " REEXEC_NAME " error: %m"));
+#undef REEXEC_NAME
+#undef TUNABLES_NAME
+  return false;
+}
+
+void VM_Version::glibc_reexec() {
+  char *buf = NULL;
+  size_t buf_allocated = 0;
+  size_t buf_used = 0;
+#define CMDLINE "/proc/self/cmdline"
+  int fd = open(CMDLINE, O_RDONLY);
+  if (fd == -1)
+    vm_exit_during_initialization(err_msg("Cannot open " CMDLINE ": %m"));
+  ssize_t got;
+  do {
+    if (buf_used == buf_allocated) {
+      buf_allocated = MAX2(size_t(4096), 2 * buf_allocated);
+      buf = (char *)os::realloc(buf, buf_allocated, mtOther);
+      if (buf == NULL)
+        vm_exit_during_initialization(err_msg(CMDLINE " reading failed allocating %zu bytes", buf_allocated));
+    }
+    got = read(fd, buf + buf_used, buf_allocated - buf_used);
+    if (got == -1)
+      vm_exit_during_initialization(err_msg("Cannot read " CMDLINE ": %m"));
+    buf_used += got;
+  } while (got);
+  if (close(fd))
+    vm_exit_during_initialization(err_msg("Cannot close " CMDLINE ": %m"));
+  char **argv = NULL;
+  size_t argv_allocated = 0;
+  size_t argv_used = 0;
+  char *s = buf;
+  while (s <= buf + buf_used) {
+    if (argv_used == argv_allocated) {
+      argv_allocated = MAX2(size_t(256), 2 * argv_allocated);
+      argv = (char **)os::realloc(argv, argv_allocated * sizeof(*argv), mtOther);
+      if (argv == NULL)
+        vm_exit_during_initialization(err_msg(CMDLINE " reading failed allocating %zu pointers", argv_allocated));
+    }
+    if (s == buf + buf_used) {
+      break;
+    }
+    argv[argv_used++] = s;
+    s += strnlen(s, buf + buf_used - s);
+    if (s == buf + buf_used)
+      vm_exit_during_initialization("Missing end of string zero while parsing " CMDLINE);
+    ++s;
+  }
+  argv[argv_used] = NULL;
+#undef CMDLINE
+
+#define EXEC "/proc/self/exe"
+  execv(EXEC, argv);
+  vm_exit_during_initialization(err_msg("Cannot re-execute " EXEC ": %m"));
+#undef EXEC
+}
+
+void VM_Version::glibc_not_using(uint64_t excessive_CPU, uint64_t excessive_GLIBC) {
+#ifndef ASSERT
+  if (!excessive_CPU && !excessive_GLIBC)
+    return;
+#endif
+#if INCLUDE_LD_SO_LIST_DIAGNOSTICS
+  // sysdeps/x86/include/cpu-features.h CPUID_INDEX_14_ECX_0 == 8
+  const int CPUID_INDEX_CEIL = 8;
+  // /usr/include/bits/platform/x86.h
+  enum
+  {
+    CPUID_INDEX_1 = 0,
+    CPUID_INDEX_7,
+    CPUID_INDEX_80000001,
+    CPUID_INDEX_D_ECX_1,
+    CPUID_INDEX_80000007,
+    CPUID_INDEX_80000008,
+    CPUID_INDEX_7_ECX_1,
+    CPUID_INDEX_19,
+    CPUID_INDEX_14_ECX_0
+  };
+  const int index_max = CPUID_INDEX_CEIL + 1;
+  enum { eax = 0, ebx, ecx, edx, reg_max };
+  unsigned active[index_max][reg_max] = { 0 };
+  const char *arg0 = ld_so_name();
+  pid_t f_child;
+  FILE *f = popen_r(arg0, &f_child);
+  if (!f)
+    vm_exit_during_initialization(err_msg("Cannot popen %s " ARG1 ": %m", arg0));
+  for (;;) {
+    char line[LINE_MAX];
+    char *s = fgets(line, sizeof(line), f);
+    if (!s)
+      break;
+    s = line;
+    // x86.cpu_features.features[0x0].active[0x2]=0x7ed83203
+    const char prefix[] = "x86.cpu_features.features[";
+    if (strncmp(s, prefix, sizeof(prefix) - 1) != 0)
+      continue;
+    s += sizeof(prefix) - 1;
+    unsigned long index = strtoul(s, &s, 0);
+    if (index >= index_max)
+      continue;
+    const char mid[] = "].active[";
+    if (strncmp(s, mid, sizeof(mid) - 1) != 0)
+      continue;
+    s += sizeof(mid) - 1;
+    unsigned long reg = strtoul(s, &s, 0);
+    if (reg >= reg_max)
+      continue;
+    if (s[0] != ']' || s[1] != '=')
+      continue;
+    s += 2;
+    unsigned long val = strtoul(s, &s, 0);
+    if (val > UINT_MAX)
+      continue;
+    if (s[0] != '\n' || s[1] != 0)
+      continue;
+    active[index][reg] = val;
+  }
+  if (ferror(f))
+    vm_exit_during_initialization(err_msg("Error reading popen-ed %s " ARG1 ": %m", arg0));
+  if (!feof(f))
+    vm_exit_during_initialization(err_msg("EOF not reached on popen-ed %s " ARG1, arg0));
+  pclose_r(arg0, f, f_child);
+#undef ARG1
+#endif // INCLUDE_LD_SO_LIST_DIAGNOSTICS
+
+  // glibc: sysdeps/x86/get-isa-level.h:
+  // glibc: if (CPU_FEATURE_USABLE_P (cpu_features, CMOV)
+  // glibc:     && CPU_FEATURE_USABLE_P (cpu_features, CX8)
+  // glibc:     && CPU_FEATURE_CPU_P (cpu_features, FPU)
+  // glibc:     && CPU_FEATURE_USABLE_P (cpu_features, FXSR)
+  // glibc:     && CPU_FEATURE_USABLE_P (cpu_features, MMX)
+  // glibc:     && CPU_FEATURE_USABLE_P (cpu_features, SSE)
+  // glibc:     && CPU_FEATURE_USABLE_P (cpu_features, SSE2))
+  // glibc:     isa_level = GNU_PROPERTY_X86_ISA_1_BASELINE;
+  if ((_features & CPU_CMOV) &&
+      (_features & CPU_CX8) &&
+      // FPU is always present on i686+: (_features & CPU_FPU) &&
+      (_features & CPU_SSE2))
+    // These cannot be disabled by GLIBC_TUNABLES.
+    if (excessive_CPU & (CPU_FXSR | CPU_MMX | CPU_SSE)) {
+      assert(!(excessive_CPU & CPU_SSE2), "CPU_SSE2 in both _features and excessive_CPU cannot happen");
+      // FIXME: The choice should be based on glibc impact, not the feature age.
+      // CX8 is i586+, CMOV is i686+ 1995+, SSE2 is 2000+
+      excessive_CPU |= CPU_SSE2;
+    }
+    if ((_features & CPU_FXSR) &&
+        (_features & CPU_MMX) &&
+        (_features & CPU_SSE)) {
+      // glibc: if (CPU_FEATURE_USABLE_P (cpu_features, CMPXCHG16B)
+      // glibc:     && CPU_FEATURE_USABLE_P (cpu_features, LAHF64_SAHF64)
+      // glibc:     && CPU_FEATURE_USABLE_P (cpu_features, POPCNT)
+      // glibc:     && CPU_FEATURE_USABLE_P (cpu_features, SSE3)
+      // glibc:     && CPU_FEATURE_USABLE_P (cpu_features, SSSE3)
+      // glibc:     && CPU_FEATURE_USABLE_P (cpu_features, SSE4_1)
+      // glibc:     && CPU_FEATURE_USABLE_P (cpu_features, SSE4_2))
+      // glibc:     isa_level |= GNU_PROPERTY_X86_ISA_1_V2;
+      if ((_features & CPU_POPCNT) &&
+          (_features & CPU_SSSE3) &&
+          (_features & CPU_SSE4_1) &&
+          (_features & CPU_SSE4_2)) {
+        if ((excessive_CPU & CPU_SSE3) ||
+            (excessive_GLIBC & (GLIBC_CMPXCHG16 | GLIBC_LAHFSAHF))) {
+          assert(!(excessive_CPU & CPU_SSE4_2), "CPU_SSE4_2 in both _features and excessive_CPU cannot happen");
+          // POPCNT is 2007+, SSSE3 is 2006+, SSE4_1 is 2007+, SSE4_2 is 2008+.
+          excessive_CPU |= CPU_SSE4_2;
+        }
+        if ((_features & CPU_SSE3) &&
+            (_glibc_features & GLIBC_CMPXCHG16) &&
+            (_glibc_features & GLIBC_LAHFSAHF)) {
+          // glibc: if (CPU_FEATURE_USABLE_P (cpu_features, AVX)
+          // glibc:     && CPU_FEATURE_USABLE_P (cpu_features, AVX2)
+          // glibc:     && CPU_FEATURE_USABLE_P (cpu_features, BMI1)
+          // glibc:     && CPU_FEATURE_USABLE_P (cpu_features, BMI2)
+          // glibc:     && CPU_FEATURE_USABLE_P (cpu_features, F16C)
+          // glibc:     && CPU_FEATURE_USABLE_P (cpu_features, FMA)
+          // glibc:     && CPU_FEATURE_USABLE_P (cpu_features, LZCNT)
+          // glibc:     && CPU_FEATURE_USABLE_P (cpu_features, MOVBE))
+          // glibc:     isa_level |= GNU_PROPERTY_X86_ISA_1_V3;
+          if ((_features & CPU_AVX) &&
+              (_features & CPU_AVX2) &&
+              (_features & CPU_BMI1) &&
+              (_features & CPU_BMI2) &&
+              (_features & CPU_FMA) &&
+              (_features & CPU_LZCNT) &&
+              (_glibc_features & GLIBC_MOVBE)) {
+          if (excessive_GLIBC & GLIBC_F16C) {
+            assert(!(excessive_GLIBC & GLIBC_MOVBE), "GLIBC_MOVBE in both _glibc_features and excessive_GLIBC cannot happen");
+            // FMA is 2012+, AVX2+BMI1+BMI2+LZCNT are 2013+, MOVBE is 2015+
+            excessive_GLIBC |= GLIBC_MOVBE;
+          }
+          if (_glibc_features & GLIBC_F16C) {
+            // glibc: if (CPU_FEATURE_USABLE_P (cpu_features, AVX512F)
+            // glibc:     && CPU_FEATURE_USABLE_P (cpu_features, AVX512BW)
+            // glibc:     && CPU_FEATURE_USABLE_P (cpu_features, AVX512CD)
+            // glibc:     && CPU_FEATURE_USABLE_P (cpu_features, AVX512DQ)
+            // glibc:     && CPU_FEATURE_USABLE_P (cpu_features, AVX512VL))
+            // glibc:   isa_level |= GNU_PROPERTY_X86_ISA_1_V4;
+            // All these flags are supported by GLIBC_DISABLE below.
+          }
+        }
+      }
+    }
+  }
+  uint64_t disable_CPU   = 0;
+  uint64_t disable_GLIBC = 0;
+#define PASTE_TOKENS3(x, y, z) PASTE_TOKENS(x, PASTE_TOKENS(y, z))
+#ifdef ASSERT
+  uint64_t excessive_handled_CPU   = 0;
+  uint64_t excessive_handled_GLIBC = 0;
+  uint64_t disable_handled_CPU   = 0;
+  uint64_t disable_handled_GLIBC = 0;
+#endif
+#define EXCESSIVE_HANDLED(kind, hotspot) do {                                                                                         \
+    assert(!(PASTE_TOKENS(excessive_handled_, kind) & PASTE_TOKENS3(kind, _, hotspot)), "already used " STR(kind) "_" STR(hotspot) ); \
+    DEBUG_ONLY(PASTE_TOKENS(excessive_handled_, kind) |= PASTE_TOKENS3(kind, _, hotspot));                                            \
+  } while (0)
+#if INCLUDE_CPU_FEATURE_ACTIVE
+# define FEATURE_ACTIVE(glibc, hotspot_field, hotspot_union, glibc_index, glibc_reg) CPU_FEATURE_ACTIVE(glibc)
+#elif INCLUDE_LD_SO_LIST_DIAGNOSTICS
+# define FEATURE_ACTIVE(glibc, hotspot_field, hotspot_union, glibc_index, glibc_reg) ({ \
+    hotspot_union u;                                                                    \
+    u.value = active[glibc_index][glibc_reg];                                           \
+    u.bits.hotspot_field != 0;                                                          \
+  })
+#else
+# define FEATURE_ACTIVE(glibc, hotspot_field, hotspot_union, glibc_index, glibc_reg) true
+#endif
+#define EXCESSIVE6(kind, hotspotglibc, hotspot_field, hotspot_union, glibc_index, glibc_reg) do {                                                                      \
+    EXCESSIVE_HANDLED(kind, hotspotglibc);                                                                                                                             \
+    if (PASTE_TOKENS(excessive_, kind) & PASTE_TOKENS3(kind, _, hotspotglibc) && FEATURE_ACTIVE(hotspotglibc, hotspot_field, hotspot_union, glibc_index, glibc_reg)) { \
+      PASTE_TOKENS(disable_, kind) |= PASTE_TOKENS3(kind, _, hotspotglibc);                                                                                            \
+    }                                                                                                                                                                  \
+  } while (0)
+#define EXCESSIVE(kind, hotspotglibc, hotspot_union, def...) EXCESSIVE6(kind, hotspotglibc, hotspot_field, def)
+#define DEF_ExtCpuid1Ecx ExtCpuid1Ecx, CPUID_INDEX_80000001, ecx
+#define DEF_SefCpuid7Ebx SefCpuid7Ebx, CPUID_INDEX_7       , ebx
+#define DEF_SefCpuid7Ecx SefCpuid7Ecx, CPUID_INDEX_7       , ecx
+#define DEF_SefCpuid7Edx SefCpuid7Edx, CPUID_INDEX_7       , edx
+#define DEF_StdCpuid1Ecx StdCpuid1Ecx, CPUID_INDEX_1       , ecx
+#define DEF_StdCpuid1Edx StdCpuid1Edx, CPUID_INDEX_1       , edx
+  EXCESSIVE(CPU  , AVX     , avx     , DEF_StdCpuid1Ecx);
+  EXCESSIVE(CPU  , CX8     , cmpxchg8, DEF_StdCpuid1Edx);
+  EXCESSIVE(CPU  , FMA     , fma     , DEF_StdCpuid1Ecx);
+  EXCESSIVE(CPU  , RTM     , rtm     , DEF_SefCpuid7Ebx);
+  EXCESSIVE(CPU  , AVX2    , avx2    , DEF_SefCpuid7Ebx);
+  EXCESSIVE(CPU  , BMI1    , bmi1    , DEF_SefCpuid7Ebx);
+  EXCESSIVE(CPU  , BMI2    , bmi2    , DEF_SefCpuid7Ebx);
+  EXCESSIVE(CPU  , CMOV    , cmov    , DEF_StdCpuid1Edx);
+  EXCESSIVE(CPU  , ERMS    , erms    , DEF_SefCpuid7Ebx);
+  EXCESSIVE(CPU  , SSE2    , sse2    , DEF_StdCpuid1Edx);
+  EXCESSIVE(CPU  , LZCNT   , fma4    , DEF_ExtCpuid1Ecx);
+  EXCESSIVE(CPU  , SSSE3   , ssse3   , DEF_StdCpuid1Ecx);
+  EXCESSIVE(CPU  , POPCNT  , popcnt  , DEF_StdCpuid1Ecx);
+  EXCESSIVE(CPU  , SSE4_1  , sse4_1  , DEF_StdCpuid1Ecx);
+  EXCESSIVE(CPU  , SSE4_2  , sse4_2  , DEF_StdCpuid1Ecx);
+  EXCESSIVE(CPU  , AVX512F , avx512f , DEF_SefCpuid7Ebx);
+  EXCESSIVE(CPU  , AVX512CD, avx512cd, DEF_SefCpuid7Ebx);
+  EXCESSIVE(CPU  , AVX512BW, avx512bw, DEF_SefCpuid7Ebx);
+  EXCESSIVE(CPU  , AVX512DQ, avx512dq, DEF_SefCpuid7Ebx);
+  EXCESSIVE(CPU  , AVX512ER, avx512er, DEF_SefCpuid7Ebx);
+  EXCESSIVE(CPU  , AVX512PF, avx512pf, DEF_SefCpuid7Ebx);
+  EXCESSIVE(CPU  , AVX512VL, avx512vl, DEF_SefCpuid7Ebx);
+  EXCESSIVE(GLIBC, IBT     , ibt     , DEF_SefCpuid7Edx);
+  EXCESSIVE(GLIBC, FMA4    , fma4    , DEF_ExtCpuid1Ecx);
+  EXCESSIVE(GLIBC, MOVBE   , movbe   , DEF_StdCpuid1Ecx);
+  EXCESSIVE(GLIBC, SHSTK   , shstk   , DEF_SefCpuid7Ecx);
+  EXCESSIVE(GLIBC, XSAVE   , xsave   , DEF_StdCpuid1Ecx);
+  EXCESSIVE(GLIBC, OSXSAVE , osxsave , DEF_StdCpuid1Ecx);
+  EXCESSIVE(GLIBC, HTT     , ht      , DEF_StdCpuid1Edx);
+#undef EXCESSIVE
+#undef EXCESSIVE5
+
+  char disable_str[64 * (10 + 3) + 1];
+  strcpy(disable_str, glibc_prefix);
+  char *disable_end = disable_str + glibc_prefix_len;
+#define GLIBC_DISABLE(kind, hotspot_glibc) do {                                                                                                 \
+    assert(!(PASTE_TOKENS(disable_handled_, kind) & PASTE_TOKENS3(kind, _, hotspot_glibc)), "already used " STR(kind) "_" STR(hotspot_glibc) ); \
+    DEBUG_ONLY(PASTE_TOKENS(disable_handled_, kind) |= PASTE_TOKENS3(kind, _, hotspot_glibc));                                                  \
+    if (PASTE_TOKENS(disable_, kind) & PASTE_TOKENS3(kind, _, hotspot_glibc)) {                                                                 \
+      const char str[] = ",-" STR(hotspot_glibc);                                                                                               \
+      size_t remains = disable_str + sizeof(disable_str) - disable_end;                                                                         \
+      strncpy(disable_end, str, remains);                                                                                                       \
+      size_t len = strnlen(disable_end, remains);                                                                                               \
+      remains -= len;                                                                                                                           \
+      assert(remains > 0, "internal error: disable_str overflow");                                                                              \
+      disable_end += len;                                                                                                                       \
+    }                                                                                                                                           \
+  } while (0);
+  GLIBC_DISABLE(CPU  , AVX)
+  GLIBC_DISABLE(CPU  , CX8)
+  GLIBC_DISABLE(CPU  , FMA)
+  GLIBC_DISABLE(CPU  , RTM)
+  GLIBC_DISABLE(CPU  , AVX2)
+  GLIBC_DISABLE(CPU  , BMI1)
+  GLIBC_DISABLE(CPU  , BMI2)
+  GLIBC_DISABLE(CPU  , CMOV)
+  GLIBC_DISABLE(CPU  , ERMS)
+  GLIBC_DISABLE(CPU  , SSE2)
+  GLIBC_DISABLE(CPU  , LZCNT)
+  GLIBC_DISABLE(CPU  , SSSE3)
+  GLIBC_DISABLE(CPU  , POPCNT)
+  GLIBC_DISABLE(CPU  , SSE4_1)
+  GLIBC_DISABLE(CPU  , SSE4_2)
+  GLIBC_DISABLE(CPU  , AVX512F)
+  GLIBC_DISABLE(CPU  , AVX512CD)
+  GLIBC_DISABLE(CPU  , AVX512BW)
+  GLIBC_DISABLE(CPU  , AVX512DQ)
+  GLIBC_DISABLE(CPU  , AVX512ER)
+  GLIBC_DISABLE(CPU  , AVX512PF)
+  GLIBC_DISABLE(CPU  , AVX512VL)
+  GLIBC_DISABLE(GLIBC, IBT)
+  GLIBC_DISABLE(GLIBC, FMA4)
+  GLIBC_DISABLE(GLIBC, MOVBE)
+  GLIBC_DISABLE(GLIBC, SHSTK)
+  GLIBC_DISABLE(GLIBC, XSAVE)
+  GLIBC_DISABLE(GLIBC, OSXSAVE)
+  GLIBC_DISABLE(GLIBC, HTT)
+#undef GLIBC_DISABLE
+#undef GLIBC_DISABLE2
+  *disable_end = 0;
+
+#ifdef ASSERT
+#define CHECK_KIND(kind) do {                                                                                                            \
+    if (PASTE_TOKENS(disable_handled_, kind) != PASTE_TOKENS(excessive_handled_, kind))                                                  \
+      vm_exit_during_initialization(err_msg("internal error: Unsupported disabling of " STR(kind) "_* 0x%" PRIx64 " != used 0x%" PRIx64, \
+                                            PASTE_TOKENS(disable_handled_, kind), PASTE_TOKENS(excessive_handled_, kind)));              \
+  } while (0)
+  CHECK_KIND(CPU  );
+  CHECK_KIND(GLIBC);
+#undef CHECK_KIND
+
+  // These cannot be disabled by GLIBC_TUNABLES interface.
+#define GLIBC_UNSUPPORTED(kind, hotspot) EXCESSIVE_HANDLED(kind, hotspot)
+  GLIBC_UNSUPPORTED(CPU  , 3DNOW_PREFETCH   );
+  GLIBC_UNSUPPORTED(CPU  , SSE4A            );
+  GLIBC_UNSUPPORTED(CPU  , TSC              );
+  GLIBC_UNSUPPORTED(CPU  , TSCINV_BIT       );
+  GLIBC_UNSUPPORTED(CPU  , TSCINV           );
+  GLIBC_UNSUPPORTED(CPU  , AES              );
+  GLIBC_UNSUPPORTED(CPU  , CLMUL            );
+  GLIBC_UNSUPPORTED(CPU  , ADX              );
+  GLIBC_UNSUPPORTED(CPU  , SHA              );
+  GLIBC_UNSUPPORTED(CPU  , VZEROUPPER       );
+  GLIBC_UNSUPPORTED(CPU  , AVX512_VPOPCNTDQ );
+  GLIBC_UNSUPPORTED(CPU  , AVX512_VPCLMULQDQ);
+  GLIBC_UNSUPPORTED(CPU  , AVX512_VAES      );
+  GLIBC_UNSUPPORTED(CPU  , AVX512_VNNI      );
+  GLIBC_UNSUPPORTED(CPU  , FLUSH            );
+  GLIBC_UNSUPPORTED(CPU  , FLUSHOPT         );
+  GLIBC_UNSUPPORTED(CPU  , CLWB             );
+  GLIBC_UNSUPPORTED(CPU  , AVX512_VBMI2     );
+  GLIBC_UNSUPPORTED(CPU  , AVX512_VBMI      );
+  GLIBC_UNSUPPORTED(CPU  , HV               );
+  GLIBC_UNSUPPORTED(CPU  , SSE3             );
+  // These are handled as an exception above.
+  GLIBC_UNSUPPORTED(CPU  , FXSR             );
+  GLIBC_UNSUPPORTED(CPU  , MMX              );
+  GLIBC_UNSUPPORTED(CPU  , SSE              );
+  GLIBC_UNSUPPORTED(CPU  , HT               );
+  GLIBC_UNSUPPORTED(GLIBC, CMPXCHG16        );
+  GLIBC_UNSUPPORTED(GLIBC, LAHFSAHF         );
+  GLIBC_UNSUPPORTED(GLIBC, F16C             );
+#undef GLIBC_UNSUPPORTED
+#define CHECK_KIND(kind) do {                                                                                                                 \
+    if (PASTE_TOKENS(excessive_handled_, kind) != PASTE_TOKENS(kind, _MAX) - 1)                                                               \
+      vm_exit_during_initialization(err_msg("internal error: Unsupported disabling of some " STR(kind) "_* 0x%" PRIx64 " != full 0x%" PRIx64, \
+                                            PASTE_TOKENS(excessive_handled_, kind), CPU_MAX - 1));                                            \
+  } while (0)
+  CHECK_KIND(CPU  );
+  CHECK_KIND(GLIBC);
+#undef CHECK_KIND
+#endif // ASSERT
+
+  if (disable_end == disable_str + glibc_prefix_len)
+    return;
+  if (glibc_env_set(disable_str))
+    return;
+  glibc_reexec();
+}
+
+void VM_Version::nonlibc_tty_print_uint64(uint64_t num) {
+  static const char prefix[] = "0x";
+  tty->write(prefix, sizeof(prefix) - 1);
+  bool first = true;
+  for (int pos = 64 - 4; pos >= 0; pos -= 4) {
+    unsigned nibble = (num >> pos) & 0xf;
+    if (first && nibble == 0 && pos)
+      continue;
+    first = false;
+    char c = nibble >= 0xa ? 'a' + nibble - 0xa : '0' + nibble;
+    tty->write(&c, sizeof(c));
+  }
+}
+
+void VM_Version::nonlibc_tty_print_uint64_comma_uint64(uint64_t num1, uint64_t num2) {
+  nonlibc_tty_print_uint64(num1);
+  static const char comma = ',';
+  tty->print_raw(&comma, sizeof(comma));
+  nonlibc_tty_print_uint64(num2);
+}
+
+void VM_Version::print_using_features_cr() {
+  if (ignore_glibc_not_using) {
+    tty->print_cr("CPU features are being kept intact as requested by -XX:CPUFeatures=ignore");
+  } else {
+    tty->print_cr("CPU features being used are: -XX:CPUFeatures=0x" UINT64_FORMAT_X ",0x" UINT64_FORMAT_X, _features, _glibc_features);
+  }
+}
+
+void VM_Version::get_processor_features_hardware() {
   _cpu = 4; // 486 by default
   _model = 0;
   _stepping = 0;
@@ -636,6 +1223,7 @@ void VM_Version::get_processor_features() {
 
   if (cpu_family() > 4) { // it supports CPUID
     _features = feature_flags();
+    _glibc_features = glibc_flags();
     // Logical processors are only available on P4s and above,
     // and only if hyperthreading is available.
     _logical_processors_per_package = logical_processor_count();
@@ -649,9 +1237,20 @@ void VM_Version::get_processor_features() {
   LP64_ONLY(_supports_atomic_getset8 = true);
   LP64_ONLY(_supports_atomic_getadd8 = true);
 
+  if (ShowCPUFeatures) {
+    static const char prefix[] = "This machine's CPU features are: -XX:CPUFeatures=";
+    tty->print_raw(prefix, sizeof(prefix) - 1);
+    nonlibc_tty_print_uint64_comma_uint64(_features, _glibc_features);
+    tty->cr();
+  }
+}
+
+void VM_Version::get_processor_features_hotspot() {
 #ifdef _LP64
   // OS should support SSE for x64 and hardware should support at least SSE2.
   if (!VM_Version::supports_sse2()) {
+    if (!FLAG_IS_DEFAULT(CPUFeatures))
+      vm_exit_during_initialization(err_msg("-XX:CPUFeatures option requires SSE2 flag to be set: 0x%" PRIx64 ",0x%" PRIx64, CPU_SSE2, (uint64_t)0));
     vm_exit_during_initialization("Unknown x64 processor: SSE2 not supported");
   }
   // in 64 bit the use of SSE2 is the minimum
@@ -794,7 +1393,7 @@ void VM_Version::get_processor_features() {
               cores_per_cpu(), threads_per_core(),
               cpu_family(), _model, _stepping, os::cpu_microcode_revision());
   assert(res > 0, "not enough temporary space allocated");
-  insert_features_names(buf + res, sizeof(buf) - res, _features_names);
+  insert_features_names(buf + res, sizeof(buf) - res);
 
   _features_string = os::strdup(buf);
 
@@ -1885,6 +2484,86 @@ void VM_Version::check_virtualizations() {
   }
 }
 
+// Print the feature names as " = feat1, ..., featN\n";
+void VM_Version::fatal_missing_features(uint64_t features_missing, uint64_t glibc_features_missing) {
+  static const char part1[] = "; missing features of this CPU are ";
+  tty->print_raw(part1, sizeof(part1) - 1);
+  nonlibc_tty_print_uint64_comma_uint64(features_missing, glibc_features_missing);
+  static const char part2[] = " =";
+  tty->print_raw(part2, sizeof(part2) - 1);
+  char buf[512] = "";
+  // insert_features_names() does crash for undefined too high-numbered features.
+  insert_features_names(buf, sizeof(buf)          ,       features_missing & (  CPU_MAX - 1));
+  char *s = buf;
+  while (*s)
+    ++s;
+  insert_features_names(s  , buf + sizeof(buf) - s, glibc_features_missing & (GLIBC_MAX - 1));
+  while (*s)
+    ++s;
+  /* +1 to skip the first ','. */
+  tty->print_raw(buf + 1, s - (buf + 1));
+  tty->cr();
+  vm_exit_during_initialization();
+}
+
+void VM_Version::crac_restore() {
+  assert(CRaCCheckpointTo != NULL, "");
+
+  if (ShowCPUFeatures) {
+    static const char prefix[] = "This snapshot's stored CPU features are: -XX:CPUFeatures=";
+    tty->print_raw(prefix, sizeof(prefix) - 1);
+    nonlibc_tty_print_uint64_comma_uint64(_features, _glibc_features);
+    tty->cr();
+  }
+
+  uint64_t       features_saved =       _features;
+  uint64_t glibc_features_saved = _glibc_features;
+#define SUPPORTS_SET \
+    SUPPORTS(supports_cx8) \
+    SUPPORTS(supports_atomic_getset4) \
+    SUPPORTS(supports_atomic_getset8) \
+    SUPPORTS(supports_atomic_getadd4) \
+    SUPPORTS(supports_atomic_getadd8) \
+    /**/
+#define SUPPORTS(x) bool x##_saved = Abstract_VM_Version::x();
+  SUPPORTS_SET
+#undef SUPPORTS
+
+  get_processor_features_hardware();
+
+  uint64_t       features_missing =       features_saved & ~      _features;
+  uint64_t glibc_features_missing = glibc_features_saved & ~_glibc_features;
+  if (features_missing || glibc_features_missing) {
+    static const char part1[] = "You have to specify -XX:CPUFeatures=";
+    tty->print_raw(part1, sizeof(part1) - 1);
+    nonlibc_tty_print_uint64_comma_uint64(_features & features_saved, _glibc_features & glibc_features_saved);
+    static const char part2[] = " together with -XX:CRaCCheckpointTo when making a checkpoint file; specified -XX:CRaCRestoreFrom file contains CPU features ";
+    tty->print_raw(part2, sizeof(part2) - 1);
+    nonlibc_tty_print_uint64_comma_uint64(features_saved, glibc_features_saved);
+    fatal_missing_features(features_missing, glibc_features_missing);
+  }
+
+  auto supports_exit = [&](const char *supports, bool file, bool this_cpu) {
+    char buf[512];
+    int res = jio_snprintf(
+                buf, sizeof(buf),
+                "Specified -XX:CRaCRestoreFrom file contains feature \"%s\" value %d while this CPU has value %d",
+                supports, file, this_cpu);
+    assert(res > 0, "not enough temporary space allocated");
+    vm_exit_during_initialization(buf);
+  };
+#define SUPPORTS(x)                                           \
+  if (x##_saved != Abstract_VM_Version::x()) {                \
+    supports_exit( #x , Abstract_VM_Version::x(), x##_saved); \
+  }
+  SUPPORTS_SET
+#undef SUPPORTS
+#undef SUPPORTS_SET
+
+  if (ShowCPUFeatures)
+    print_using_features_cr();
+}
+
 void VM_Version::initialize() {
   ResourceMark rm;
   // Making this stub must be FIRST use of assembler
@@ -1900,7 +2579,46 @@ void VM_Version::initialize() {
   detect_virt_stub = CAST_TO_FN_PTR(detect_virt_stub_t,
                                      g.generate_detect_virt());
 
-  get_processor_features();
+  assert(      _features == 0,       "_features should be zero at startup");
+  assert(_glibc_features == 0, "_glibc_features should be zero at startup");
+  get_processor_features_hardware();
+
+  assert(!CPUFeatures == FLAG_IS_DEFAULT(CPUFeatures), "CPUFeatures parsing");
+  uint64_t GLIBCFeatures_x64;
+  uint64_t   CPUFeatures_x64 = CPUFeatures_parse(GLIBCFeatures_x64);
+  uint64_t       features_missing =   CPUFeatures_x64 & ~      _features;
+  uint64_t glibc_features_missing = GLIBCFeatures_x64 & ~_glibc_features;
+  if (features_missing || glibc_features_missing) {
+    static const char part1[] = "Specified -XX:CPUFeatures=";
+    tty->print_raw(part1, sizeof(part1) - 1);
+    nonlibc_tty_print_uint64_comma_uint64(CPUFeatures_x64, GLIBCFeatures_x64);
+    static const char part2[] = "; this machine's CPU features are ";
+    tty->print_raw(part2, sizeof(part2) - 1);
+    nonlibc_tty_print_uint64_comma_uint64(_features, _glibc_features);
+    fatal_missing_features(features_missing, glibc_features_missing);
+  }
+
+  uint64_t       features_saved =       _features;
+  uint64_t glibc_features_saved = _glibc_features;
+
+        _features =   CPUFeatures_x64;
+  _glibc_features = GLIBCFeatures_x64;
+
+  if (ShowCPUFeatures)
+    print_using_features_cr();
+
+  if (!ignore_glibc_not_using) {
+    uint64_t       features_expected =   CPU_MAX - 1;
+    uint64_t glibc_features_expected = GLIBC_MAX - 1;
+#if !INCLUDE_CPU_FEATURE_ACTIVE && !INCLUDE_LD_SO_LIST_DIAGNOSTICS
+          features_expected =       features_saved;
+    glibc_features_expected = glibc_features_saved;
+#endif
+    glibc_not_using(      features_expected & ~      _features,
+                    glibc_features_expected & ~_glibc_features);
+  }
+
+  get_processor_features_hotspot();
 
   LP64_ONLY(Assembler::precompute_instructions();)
 

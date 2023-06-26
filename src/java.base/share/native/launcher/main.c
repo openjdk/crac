@@ -105,6 +105,7 @@ WinMain(HINSTANCE inst, HINSTANCE previnst, LPSTR cmdline, int cmdshow)
 
 static int is_checkpoint = 0;
 static int crac_min_pid = 0;
+static int is_min_pid_set = 0;
 
 static void parse_checkpoint(const char *arg) {
     if (!is_checkpoint) {
@@ -114,11 +115,12 @@ static void parse_checkpoint(const char *arg) {
             is_checkpoint = 1;
         }
     }
-    {
+    if (!is_min_pid_set) {
         const char *checkpoint_arg = "-XX:CRaCMinPid=";
         const int len = strlen(checkpoint_arg);
         if (0 == strncmp(arg, checkpoint_arg, len)) {
             crac_min_pid = atoi(arg + len);
+            is_min_pid_set = 1;
         }
     }
 }
@@ -196,7 +198,7 @@ static int set_last_pid(int pid) {
     }
     int res = 0;
     if (0 > write(last_pid_file, buf, len)) {
-        res =   errno;
+        res = errno;
 }
     close(last_pid_file);
     return res;
@@ -206,7 +208,7 @@ static int set_last_pid(int pid) {
 }
 
 static void spin_last_pid(int pid) {
-    const int MaxSpinCount = 10000;
+    const int MaxSpinCount = pid < 1000 ? 1000 : pid;
     for (int child = fork(), prev = 0, cnt = MaxSpinCount; child < pid; child = fork(), --cnt) {
         if (0 > child) {
             perror("spin_last_pid clone");
@@ -347,6 +349,9 @@ main(int argc, char **argv)
         const int crac_min_pid_default = 128;
         const int min_pid = 0 < crac_min_pid ? crac_min_pid : crac_min_pid_default;
 
+        if (is_min_pid_set && min_pid != crac_min_pid) {
+            fprintf(stderr, "Warning: wrong CRaCMinPid specified %d, using default value.\n", crac_min_pid);
+        }
         if (getpid() <= min_pid) {
             // Move PID value for new processes to a desired value
             // to avoid PID conflicts on restore.
@@ -355,8 +360,7 @@ main(int argc, char **argv)
                 if (EPERM == res || EACCES == res || EROFS == res) {
                     spin_last_pid(min_pid);
                 } else if (0 != res) {
-                    errno = res;
-                    perror("set_last_pid");
+                    fprintf(stderr, "set_last_pid: %s\n", strerror(res));
                     exit(1);
                 }
             }
@@ -364,6 +368,17 @@ main(int argc, char **argv)
             // Avoid unexpected process completion when checkpointing under docker container run
             // by creating the main process waiting for children before exit.
             g_child_pid = fork();
+            if (0 == g_child_pid && getpid() < min_pid) {
+                if (is_min_pid_set) {
+                    fprintf(stderr, "Error: Can't adjust PID to min PID %d, current PID %d\n", min_pid, (int)getpid());
+                    exit(1);
+                } else {
+                    fprintf(stderr,
+                            "Warning: Can't adjust PID to min PID %d, current PID %d.\n"
+                            "This message can be suppressed by '-XX:CRaCMinPid=1' option\n",
+                            min_pid, (int)getpid());
+                }
+            }
             if (0 < g_child_pid) {
                 // The main process should forward signals to the child.
                 setup_sighandler();

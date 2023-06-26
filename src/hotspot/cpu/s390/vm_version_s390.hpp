@@ -382,6 +382,7 @@ class VM_Version: public Abstract_VM_Version {
   static void initialize();
   static void print_features();
   static bool is_determine_features_test_running() { return _is_determine_features_test_running; }
+  static void crac_restore() {}
 
   // Override Abstract_VM_Version implementation
   static void print_platform_virtualization_info(outputStream*);
@@ -533,6 +534,9 @@ class VM_Version: public Abstract_VM_Version {
   // Sometimes helpful for debugging.
   static unsigned long z_SIGILL();
   static unsigned long z_SIGSEGV();
+
+  // No _features_names[] available on this CPU.
+  static void insert_features_names(char* buf, size_t buflen, uint64_t features = _features) {}
 };
 
 #endif // CPU_S390_VM_VERSION_S390_HPP

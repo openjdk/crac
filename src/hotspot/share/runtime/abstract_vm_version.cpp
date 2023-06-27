@@ -298,16 +298,21 @@ unsigned int Abstract_VM_Version::jvm_version() {
          (Abstract_VM_Version::vm_build_number() & 0xFF);
 }
 
-void Abstract_VM_Version::insert_features_names(char* buf, size_t buflen, const char* features_names[]) {
-  uint64_t features = _features;
+void Abstract_VM_Version::insert_features_names(char* buf, size_t buflen, const char* features_names[], uint64_t features) {
   uint features_names_index = 0;
 
   while (features != 0) {
     if (features & 1) {
-      int res = jio_snprintf(buf, buflen, ", %s", features_names[features_names_index]);
-      assert(res > 0, "not enough temporary space allocated");
-      buf += res;
-      buflen -= res;
+      // Do not use any libc string functions. Our caller VM_Version::fatal_missing_features may have GNU_IFUNC-misconfigured glibc.
+      if (buflen-- > 0)
+        *buf++ = ',';
+      if (buflen-- > 0)
+        *buf++ = ' ';
+      for (const char *src = features_names[features_names_index]; *src; ++src)
+      if (buflen-- > 0)
+        *buf++ = *src;
+      assert(buflen > 0, "not enough temporary space allocated");
+      *buf = 0;
     }
     features >>= 1;
     ++features_names_index;

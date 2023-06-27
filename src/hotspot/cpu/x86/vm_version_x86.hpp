@@ -27,7 +27,11 @@
 
 #include "memory/universe.hpp"
 #include "runtime/abstract_vm_version.hpp"
+#include "utilities/formatBuffer.hpp"
 #include "utilities/macros.hpp"
+#include "runtime/java.hpp"
+#include "runtime/globals_extension.hpp"
+#include "jvm_io.h"
 
 class VM_Version : public Abstract_VM_Version {
   friend class VMStructs;
@@ -82,14 +86,16 @@ class VM_Version : public Abstract_VM_Version {
                dca      : 1,
                sse4_1   : 1,
                sse4_2   : 1,
-                        : 2,
+                        : 1,
+               movbe    : 1,
                popcnt   : 1,
                         : 1,
                aes      : 1,
-                        : 1,
+               xsave    : 1,
                osxsave  : 1,
                avx      : 1,
-                        : 2,
+               f16c     : 1,
+                        : 1,
                hv       : 1;
     } bits;
   };
@@ -153,7 +159,9 @@ class VM_Version : public Abstract_VM_Version {
                sse4a        : 1,
                misalignsse  : 1,
                prefetchw    : 1,
-                            : 22;
+                            : 7,
+               fma4         : 1,
+                            : 14;
     } bits;
   };
 
@@ -243,7 +251,7 @@ class VM_Version : public Abstract_VM_Version {
                      ospke : 1,
                            : 1,
               avx512_vbmi2 : 1,
-                           : 1,
+                     shstk : 1,
                       gfni : 1,
                       vaes : 1,
          avx512_vpclmulqdq : 1,
@@ -261,7 +269,9 @@ class VM_Version : public Abstract_VM_Version {
       uint32_t             : 2,
              avx512_4vnniw : 1,
              avx512_4fmaps : 1,
-                           : 28;
+                           : 16,
+             ibt           : 1,
+                           : 11;
     } bits;
   };
 
@@ -359,14 +369,40 @@ protected:
                                                      \
     decl(AVX512_VBMI2,      "avx512_vbmi2",      44) /* VBMI2 shift left double instructions */ \
     decl(AVX512_VBMI,       "avx512_vbmi",       45) /* Vector BMI instructions */ \
-    decl(HV,                "hv",                46) /* Hypervisor instructions */
+    decl(HV,                "hv",                46) /* Hypervisor instructions */ \
+                                                     \
+    decl(MAX,               "max",               47) /* Maximum - this feature must never be used */
 
 #define DECLARE_CPU_FEATURE_FLAG(id, name, bit) CPU_##id = (1ULL << bit),
     CPU_FEATURE_FLAGS(DECLARE_CPU_FEATURE_FLAG)
 #undef DECLARE_CPU_FEATURE_FLAG
   };
 
+  /* Tracking of a CPU feature for glibc */ \
+  enum Glibc_Feature_Flag : uint64_t {
+#define GLIBC_FEATURE_FLAGS(decl) \
+    decl(FMA4,              "fma4",               0) \
+    decl(MOVBE,             "movbe",              1) \
+    decl(OSXSAVE,           "osxsave",            2) \
+    decl(IBT,               "ibt",                3) \
+    decl(SHSTK,             "shstk",              4) /* Also known as cet_ss */ \
+    decl(XSAVE,             "xsave",              5) \
+    decl(CMPXCHG16,         "cmpxchg16",          6) /* Also known in cpuinfo as cx16 and in glibc as cmpxchg16b */ \
+    decl(LAHFSAHF,          "lahfsahf",           7) /* Also known in cpuinfo as lahf_lm and in glibc as lahf64_sahf64 */ \
+    decl(F16C,              "f16c",               8) \
+    decl(HTT,               "htt",                9) /* hotspot calls it 'ht' but it is affected by threads_per_core() */ \
+                                                     \
+    decl(MAX,               "max",               10) /* Maximum - this feature must never be used */
+#define DECLARE_GLIBC_FEATURE_FLAG(id, name, bit) GLIBC_##id = (1ULL << bit),
+    GLIBC_FEATURE_FLAGS(DECLARE_GLIBC_FEATURE_FLAG)
+#undef DECLARE_GLIBC_FEATURE_FLAG
+  };
+
+  // glibc feature flags.
+  static uint64_t _glibc_features;
+
   static const char* _features_names[];
+  static const char* _glibc_features_names[];
 
 enum Extended_Family {
     // AMD
@@ -668,6 +704,31 @@ enum Extended_Family {
     return result;
   }
 
+  static uint64_t glibc_flags() {
+    uint64_t result = 0;
+    if (_cpuid_info.std_cpuid1_ecx.bits.movbe != 0)
+      result |= GLIBC_MOVBE;
+    if (_cpuid_info.std_cpuid1_ecx.bits.osxsave != 0)
+      result |= GLIBC_OSXSAVE;
+    if (_cpuid_info.std_cpuid1_ecx.bits.xsave != 0)
+      result |= GLIBC_XSAVE;
+    if (_cpuid_info.std_cpuid1_ecx.bits.cmpxchg16 != 0)
+      result |= GLIBC_CMPXCHG16;
+    if (_cpuid_info.std_cpuid1_ecx.bits.f16c != 0)
+      result |= GLIBC_F16C;
+    if (_cpuid_info.sef_cpuid7_ecx.bits.shstk != 0)
+      result |= GLIBC_SHSTK;
+    if (_cpuid_info.sef_cpuid7_edx.bits.ibt != 0)
+      result |= GLIBC_IBT;
+    if (_cpuid_info.ext_cpuid1_ecx.bits.fma4 != 0)
+      result |= GLIBC_FMA4;
+    if (_cpuid_info.ext_cpuid1_ecx.bits.LahfSahf != 0)
+      result |= GLIBC_LAHFSAHF;
+    if (_cpuid_info.std_cpuid1_edx.bits.ht != 0)
+      result |= GLIBC_HTT;
+    return result;
+  }
+
   static bool os_supports_avx_vectors() {
     bool retVal = false;
     int nreg = 2 LP64_ONLY(+2);
@@ -707,7 +768,23 @@ enum Extended_Family {
     return retVal;
   }
 
-  static void get_processor_features();
+  static void get_processor_features_hardware();
+  static void get_processor_features_hotspot();
+
+  static uint64_t CPUFeatures_parse(uint64_t &glibc_features);
+  static void CPUFeatures_init();
+  static void glibc_not_using(uint64_t excessive_CPU, uint64_t excessive_GLIBC);
+  static bool glibc_env_set(char *disable_str);
+  /*[[noreturn]]*/ static void glibc_reexec();
+  // C++17: Make glibc_prefix and glibc_prefix_len constexpr.
+  static const char glibc_prefix[];
+  static const size_t glibc_prefix_len;
+  // C++17: Make ignore_glibc_not_using inline.
+  static bool ignore_glibc_not_using;
+  static void nonlibc_tty_print_uint64(uint64_t num);
+  static void nonlibc_tty_print_uint64_comma_uint64(uint64_t num1, uint64_t num2);
+  static void print_using_features_cr();
+  /*[[noreturn]]*/ static void fatal_missing_features(uint64_t features_missing, uint64_t glibc_features_missing);
 
 public:
   // Offsets for cpuid asm stub
@@ -740,9 +817,17 @@ public:
   static void set_avx_cpuFeatures() { _features = (CPU_SSE | CPU_SSE2 | CPU_AVX | CPU_VZEROUPPER ); }
   static void set_evex_cpuFeatures() { _features = (CPU_AVX512F | CPU_SSE | CPU_SSE2 | CPU_VZEROUPPER ); }
 
+  static void insert_features_names(char* buf, size_t buflen, uint64_t features = _features) {
+    Abstract_VM_Version::insert_features_names(buf, buflen, _features_names, features);
+  }
+  static void insert_glibc_features_names(char* buf, size_t buflen, uint64_t glibc_features) {
+    Abstract_VM_Version::insert_features_names(buf, buflen, _glibc_features_names, glibc_features);
+  }
+
 
   // Initialization
   static void initialize();
+  static void crac_restore();
 
   // Override Abstract_VM_Version implementation
   static void print_platform_virtualization_info(outputStream*);
@@ -1040,8 +1125,17 @@ public:
     // up. Assembler::flush calls this routine to check that clflush
     // is allowed. So, we give the caller a free pass if Universe init
     // is still in progress.
-    assert ((!Universe::is_fully_initialized() || (_features & CPU_FLUSH) != 0), "clflush should be available");
-    return true;
+    if (!Universe::is_fully_initialized()) {
+      return true;
+    }
+    if ((_features & CPU_FLUSH) != 0) {
+      return true;
+    }
+    if (FLAG_IS_DEFAULT(CPUFeatures)) {
+      vm_exit_during_initialization("clflush should be available");
+    }
+    vm_exit_during_initialization(err_msg("-XX:CPUFeatures option requires FLUSH flag to be set: 0x%" PRIx64, CPU_FLUSH));
+    return false;
   }
 #else
   static bool supports_clflush() { return  ((_features & CPU_FLUSH) != 0); }

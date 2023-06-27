@@ -47,6 +47,7 @@ m4_define(jvm_features_valid, m4_normalize( \
     cds compiler1 compiler2 dtrace epsilongc g1gc jfr jni-check \
     jvmci jvmti link-time-opt management minimal nmt opt-size parallelgc \
     serialgc services shenandoahgc static-build vm-structs zero zgc \
+    cpu_feature_active ld_so_list_diagnostics \
 ))
 
 # Deprecated JVM features (these are ignored, but with a warning)
@@ -381,6 +382,142 @@ AC_DEFUN_ONCE([JVM_FEATURES_CHECK_ZGC],
 ])
 
 ###############################################################################
+# Check if glibc CPU_FEATURE_ACTIVE is available on this platform.
+#
+AC_DEFUN_ONCE([JVM_FEATURES_CHECK_CPU_FEATURE_ACTIVE],
+[
+  JVM_FEATURES_CHECK_AVAILABILITY(cpu_feature_active, [
+    AC_MSG_CHECKING([if glibc CPU_FEATURE_ACTIVE is supported])
+    AC_COMPILE_IFELSE(
+      [AC_LANG_PROGRAM([[#include <sys/platform/x86.h>]],
+        [[int x = CPU_FEATURE_ACTIVE(SSE2);]])
+      ],
+      [
+        AC_MSG_RESULT([yes])
+      ],
+      [
+        AC_MSG_RESULT([no])
+        AVAILABLE=false
+      ]
+    )
+  ])
+])
+
+###############################################################################
+# Check if glibc ld.so --list-diagnostics is available on this platform.
+#
+AC_DEFUN_ONCE([JVM_FEATURES_CHECK_LD_SO_LIST_DIAGNOSTICS],
+[
+  JVM_FEATURES_CHECK_AVAILABILITY(ld_so_list_diagnostics, [
+    AC_MSG_CHECKING([if glibc ld.so --list-diagnostics is supported])
+    AC_RUN_IFELSE(
+      [AC_LANG_SOURCE([[
+#define _GNU_SOURCE 1
+#include <link.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <stddef.h>
+#include <string.h>
+#include <limits.h>
+static int ld_so_name_iterate_phdr(struct dl_phdr_info *info, size_t size, void *data_voidp) {
+  const char **retval_return = (const char **)data_voidp;
+  if (size < offsetof(struct dl_phdr_info, dlpi_adds)) {
+    fputs("missing PHDRs\n", stderr);
+    exit(1);
+  }
+  if (strcmp(info->dlpi_name, "") != 0) {
+    fprintf(stderr, "Unexpected name of first dl_phdr_info: %s\n", info->dlpi_name);
+    exit(1);
+  }
+  for (size_t phdr_ix = 0; phdr_ix < info->dlpi_phnum; ++phdr_ix) {
+    const Elf64_Phdr *phdr = info->dlpi_phdr + phdr_ix;
+    if (phdr->p_type == PT_INTERP) {
+      *retval_return = (const char *)(phdr->p_vaddr + info->dlpi_addr);
+      return 42;
+    }
+  }
+  exit(1);
+}
+static const char *ld_so_name() {
+  const char *retval;
+  int err = dl_iterate_phdr(ld_so_name_iterate_phdr, &retval);
+  if (err != 42)
+    exit(1);
+  return retval;
+}
+int main(void) {
+  char cmd[PATH_MAX + 100];
+  int got = snprintf(cmd, sizeof(cmd), "%s --list-diagnostics", ld_so_name());
+  if (got < 0) {
+    fprintf(stderr, "snprintf error: %m\n");
+  }
+  if ((unsigned) got == sizeof(cmd)) {
+    fputs("internal error - buffer overflow\n", stderr);
+    exit(1);
+  }
+  FILE *f = popen(cmd, "r");
+  if (!f) {
+    fprintf(stderr, "popen('%s'): %m\n", cmd);
+    exit(1);
+  }
+  char line[LINE_MAX];
+  int found = 0;
+  const char prefix[] = "x86.cpu_features.features";
+  for (;;) {
+    char *s = fgets(line, sizeof(line), f);
+    if (!s) break;
+    if (s != line) {
+      fprintf(stderr, "fgets(popen('%s')) did not return buffer address\n", cmd);
+      exit(1);
+    }
+    if (strstr(line, prefix))
+      found = 1;
+  }
+  if (ferror(f)) {
+    fprintf(stderr, "ferror(popen('%s'))\n", cmd);
+    exit(1);
+  }
+  if (!feof(f)) {
+    fprintf(stderr, "!feof(popen('%s'))\n", cmd);
+    exit(1);
+  }
+  int wstatus = pclose(f);
+  if (wstatus == -1) {
+    fprintf(stderr, "pclose('%s'): %m\n", cmd);
+    exit(1);
+  }
+  if (!WIFEXITED(wstatus)) {
+    fprintf(stderr, "Child command '%s' did not properly exit (WIFEXITED): wstatus = %d\n", cmd, wstatus);
+    exit(1);
+  }
+  if (WEXITSTATUS(wstatus) != 0) {
+    fprintf(stderr, "Child command '%s' did exit with an error: exit code = %d\n", cmd, WEXITSTATUS(wstatus));
+    exit(1);
+  }
+  if (!found) {
+    fprintf(stderr, "Not found in '%s' output: %s\n", cmd, prefix);
+    exit(1);
+  }
+  return 0;
+}
+	]])
+      ],
+      [
+        AC_MSG_RESULT([yes])
+      ],
+      [
+        AC_MSG_RESULT([no])
+        AVAILABLE=false
+      ],
+      [
+        AC_MSG_RESULT([assumed no - cross compiling])
+        AVAILABLE=false
+      ]
+    )
+  ])
+])
+
+###############################################################################
 # Setup JVM_FEATURES_PLATFORM_UNAVAILABLE and JVM_FEATURES_PLATFORM_FILTER
 # to contain those features that are unavailable, or should be off by default,
 # for this platform, regardless of JVM variant.
@@ -397,6 +534,8 @@ AC_DEFUN_ONCE([JVM_FEATURES_PREPARE_PLATFORM],
   JVM_FEATURES_CHECK_SHENANDOAHGC
   JVM_FEATURES_CHECK_STATIC_BUILD
   JVM_FEATURES_CHECK_ZGC
+  JVM_FEATURES_CHECK_CPU_FEATURE_ACTIVE
+  JVM_FEATURES_CHECK_LD_SO_LIST_DIAGNOSTICS
 
   # Filter out features by default for all variants on certain platforms.
   # Make sure to just add to JVM_FEATURES_PLATFORM_FILTER, since it could

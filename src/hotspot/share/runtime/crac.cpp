@@ -34,6 +34,7 @@
 #include "runtime/interfaceSupport.inline.hpp"
 #include "runtime/jniHandles.hpp"
 #include "runtime/jniHandles.inline.hpp"
+#include "runtime/vm_version.hpp"
 #include "runtime/vmOperation.hpp"
 #include "runtime/vmThread.hpp"
 #include "services/attachListener.hpp"
@@ -626,6 +627,10 @@ static int checkpoint_restore(int *shmid) {
   } while (sig == -1 && errno == EINTR);
   assert(sig == RESTORE_SIGNAL, "got what requested");
 
+  if (CRaCCPUCountInit) {
+    os::Linux::initialize_cpu_count();
+  }
+
   crac::update_javaTimeNanos_offset();
 
   if (CRTraceStartupTime) {
@@ -796,6 +801,8 @@ void VM_Crac::doit() {
       return;
     }
   }
+
+  VM_Version::crac_restore();
 
   if (shmid <= 0 || !VM_Crac::read_shm(shmid)) {
     _restore_start_time = os::javaTimeMillis();

@@ -345,33 +345,46 @@ main(int argc, char **argv)
         margv = args->elements;
     }
 
-    if (is_checkpoint && (1 == getpid() || is_min_pid_set)) {
+    if (is_checkpoint) {
+        const int crac_min_pid_default = 128;
+        const int min_pid = 0 < crac_min_pid ? crac_min_pid : crac_min_pid_default;
 
-        if (is_min_pid_set && 0 < crac_min_pid && getpid() < crac_min_pid) {
+        if (is_min_pid_set && min_pid != crac_min_pid) {
+            fprintf(stderr, "Warning: wrong CRaCMinPid specified %d, using default value.\n", crac_min_pid);
+        }
+        if (getpid() <= min_pid) {
             // Move PID value for new processes to a desired value
             // to avoid PID conflicts on restore.
-            const int res = set_last_pid(crac_min_pid);
-            if (EPERM == res || EACCES == res || EROFS == res) {
-                spin_last_pid(crac_min_pid);
-            } else if (0 != res) {
-                fprintf(stderr, "set_last_pid: %s\n", strerror(res));
-                exit(1);
+            {
+                const int res = set_last_pid(min_pid);
+                if (EPERM == res || EACCES == res || EROFS == res) {
+                    spin_last_pid(min_pid);
+                } else if (0 != res) {
+                    fprintf(stderr, "set_last_pid: %s\n", strerror(res));
+                    exit(1);
+                }
             }
-        }
 
-        // Avoid unexpected process completion when checkpointing under docker container run
-        // or when adjusting PID for checkpointed process
-        // by creating the main process waiting for children before exit.
-        g_child_pid = fork();
-        if (0 == g_child_pid && is_min_pid_set && getpid() < crac_min_pid) {
-            fprintf(stderr, "Error: Can't adjust PID to min PID %d, current PID %d\n", crac_min_pid, (int)getpid());
-            exit(1);
-        }
-        if (0 < g_child_pid) {
-            // The main process should forward signals to the child.
-            setup_sighandler();
-            const int status = wait_for_children();
-            exit(status);
+            // Avoid unexpected process completion when checkpointing under docker container run
+            // by creating the main process waiting for children before exit.
+            g_child_pid = fork();
+            if (0 == g_child_pid && getpid() < min_pid) {
+                if (is_min_pid_set) {
+                    fprintf(stderr, "Error: Can't adjust PID to min PID %d, current PID %d\n", min_pid, (int)getpid());
+                    exit(1);
+                } else {
+                    fprintf(stderr,
+                            "Warning: Can't adjust PID to min PID %d, current PID %d.\n"
+                            "This message can be suppressed by '-XX:CRaCMinPid=1' option\n",
+                            min_pid, (int)getpid());
+                }
+            }
+            if (0 < g_child_pid) {
+                // The main process should forward signals to the child.
+                setup_sighandler();
+                const int status = wait_for_children();
+                exit(status);
+            }
         }
     }
 #endif /* WIN32 */

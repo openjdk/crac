@@ -104,6 +104,7 @@ WinMain(HINSTANCE inst, HINSTANCE previnst, LPSTR cmdline, int cmdshow)
 #include <sys/wait.h>
 
 static int is_checkpoint = 0;
+static const int crac_min_pid_default = 128;
 static int crac_min_pid = 0;
 static int is_min_pid_set = 0;
 
@@ -192,14 +193,14 @@ static int set_last_pid(int pid) {
         return EINVAL;
     }
     const char *last_pid_filename = "/proc/sys/kernel/ns_last_pid";
-    const int last_pid_file = open(last_pid_filename, O_WRONLY|O_CREAT|O_TRUNC, 0666);
+    const int last_pid_file = open(last_pid_filename, O_WRONLY|O_TRUNC, 0666);
     if (0 > last_pid_file) {
         return errno;
     }
     int res = 0;
-    if (0 > write(last_pid_file, buf, len)) {
+    if (len > write(last_pid_file, buf, len)) {
         res = errno;
-}
+    }
     close(last_pid_file);
     return res;
 #else
@@ -345,44 +346,43 @@ main(int argc, char **argv)
         margv = args->elements;
     }
 
-    const int is_min_pid_valid = !is_min_pid_set || 0 < crac_min_pid;
-    if (is_checkpoint && is_min_pid_valid) {
-        const int crac_min_pid_default = 128;
-        const int min_pid = is_min_pid_set ? crac_min_pid : crac_min_pid_default;
+    const int is_init = 1 == getpid();
+    if (is_init && !is_min_pid_set) {
+        crac_min_pid = crac_min_pid_default;
+    }
+    const int needs_pid_adjust = getpid() < crac_min_pid;
+    if (is_checkpoint && (is_init || needs_pid_adjust)) {
+        // Move PID value for new processes to a desired value
+        // to avoid PID conflicts on restore.
+        if (needs_pid_adjust) {
+            const int res = set_last_pid(crac_min_pid);
+            if (EPERM == res || EACCES == res || EROFS == res) {
+                spin_last_pid(crac_min_pid);
+            } else if (0 != res) {
+                fprintf(stderr, "set_last_pid: %s\n", strerror(res));
+                exit(1);
+            }
+        }
 
-        if (1 == getpid() || (is_min_pid_set && getpid() < min_pid)) {
-            // Move PID value for new processes to a desired value
-            // to avoid PID conflicts on restore.
-            {
-                const int res = set_last_pid(min_pid);
-                if (EPERM == res || EACCES == res || EROFS == res) {
-                    spin_last_pid(min_pid);
-                } else if (0 != res) {
-                    fprintf(stderr, "set_last_pid: %s\n", strerror(res));
-                    exit(1);
-                }
+        // Avoid unexpected process completion when checkpointing under docker container run
+        // by creating the main process waiting for children before exit.
+        g_child_pid = fork();
+        if (0 == g_child_pid && needs_pid_adjust && getpid() < crac_min_pid) {
+            if (is_min_pid_set) {
+                fprintf(stderr, "Error: Can't adjust PID to min PID %d, current PID %d\n", crac_min_pid, (int)getpid());
+                exit(1);
+            } else {
+                fprintf(stderr,
+                        "Warning: Can't adjust PID to min PID %d, current PID %d.\n"
+                        "This message can be suppressed by '-XX:CRaCMinPid=1' option\n",
+                        crac_min_pid, (int)getpid());
             }
-
-            // Avoid unexpected process completion when checkpointing under docker container run
-            // by creating the main process waiting for children before exit.
-            g_child_pid = fork();
-            if (0 == g_child_pid && getpid() < min_pid) {
-                if (is_min_pid_set) {
-                    fprintf(stderr, "Error: Can't adjust PID to min PID %d, current PID %d\n", min_pid, (int)getpid());
-                    exit(1);
-                } else {
-                    fprintf(stderr,
-                            "Warning: Can't adjust PID to min PID %d, current PID %d.\n"
-                            "This message can be suppressed by '-XX:CRaCMinPid=1' option\n",
-                            min_pid, (int)getpid());
-                }
-            }
-            if (0 < g_child_pid) {
-                // The main process should forward signals to the child.
-                setup_sighandler();
-                const int status = wait_for_children();
-                exit(status);
-            }
+        }
+        if (0 < g_child_pid) {
+            // The main process should forward signals to the child.
+            setup_sighandler();
+            const int status = wait_for_children();
+            exit(status);
         }
     }
 #endif /* WIN32 */

@@ -39,30 +39,27 @@ import java.util.Arrays;
  * @requires (os.family == "linux")
  * @library /test/lib
  * @build ContainerPidAdjustmentTest
- * @run driver/timeout=60 jdk.test.lib.crac.CracTest   false  0       true   128
- * @run driver/timeout=60 jdk.test.lib.crac.CracTest   true   0       true   128
- * @run driver/timeout=60 jdk.test.lib.crac.CracTest   true   1       true   1
- * @run driver/timeout=60 jdk.test.lib.crac.CracTest   true   1000    false  1000
- * @run driver/timeout=60 jdk.test.lib.crac.CracTest   true   -10     true   -1
- * @run driver/timeout=60 jdk.test.lib.crac.CracTest   true   blabla  true   -1
- * @run driver/timeout=60 jdk.test.lib.crac.CracTest   true   5000000 true   -1
- * @run driver/timeout=60 jdk.test.lib.crac.CracTest   true   5000000 true   -1     4194200
- * @run driver/timeout=60 jdk.test.lib.crac.CracTest   true   4194303 true   -1
+ * @run driver/timeout=60 jdk.test.lib.crac.CracTest   1       true   1
+ * @run driver/timeout=60 jdk.test.lib.crac.CracTest   128     true   128
+ * @run driver/timeout=60 jdk.test.lib.crac.CracTest   1000    false  1000
+ * @run driver/timeout=60 jdk.test.lib.crac.CracTest   0       true   -1
+ * @run driver/timeout=60 jdk.test.lib.crac.CracTest   -10     true   -1
+ * @run driver/timeout=60 jdk.test.lib.crac.CracTest   blabla  true   -1
+ * @run driver/timeout=60 jdk.test.lib.crac.CracTest   5000000 true   -1
+ * @run driver/timeout=60 jdk.test.lib.crac.CracTest   5000000 true   -1     4194200
+ * @run driver/timeout=60 jdk.test.lib.crac.CracTest   4194303 true   -1
  */
 public class ContainerPidAdjustmentTest implements CracTest {
     @CracTestArg(0)
-    boolean needSetLastPid;
-
-    @CracTestArg(1)
     String lastPid;
 
-    @CracTestArg(2)
+    @CracTestArg(1)
     boolean usePrivilegedContainer;
 
-    @CracTestArg(3)
+    @CracTestArg(2)
     long expectedLastPid;
 
-    @CracTestArg(value = 4, optional = true)
+    @CracTestArg(value = 3, optional = true)
     String lastPidSetup;
 
     final private String CURRENT_PID_MESSAGE = "Current PID = ";
@@ -74,10 +71,8 @@ public class ContainerPidAdjustmentTest implements CracTest {
         }
         CracBuilder builder = new CracBuilder()
             .inDockerImage("pid-adjustment")
-            .containerUsePrivileged(usePrivilegedContainer);
-        if (needSetLastPid) {
-            builder.vmOption("-XX:CRaCMinPid=" + lastPid);
-        }
+            .containerUsePrivileged(usePrivilegedContainer)
+            .vmOption("-XX:CRaCMinPid=" + lastPid);
         if (0 > expectedLastPid) {
             builder.captureOutput(true);
         }

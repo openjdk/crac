@@ -345,14 +345,12 @@ main(int argc, char **argv)
         margv = args->elements;
     }
 
-    if (is_checkpoint) {
+    const int is_min_pid_valid = !is_min_pid_set || 0 < crac_min_pid;
+    if (is_checkpoint && is_min_pid_valid) {
         const int crac_min_pid_default = 128;
-        const int min_pid = 0 < crac_min_pid ? crac_min_pid : crac_min_pid_default;
+        const int min_pid = is_min_pid_set ? crac_min_pid : crac_min_pid_default;
 
-        if (is_min_pid_set && min_pid != crac_min_pid) {
-            fprintf(stderr, "Warning: wrong CRaCMinPid specified %d, using default value.\n", crac_min_pid);
-        }
-        if (getpid() <= min_pid) {
+        if (1 == getpid() || (is_min_pid_set && getpid() < min_pid)) {
             // Move PID value for new processes to a desired value
             // to avoid PID conflicts on restore.
             {

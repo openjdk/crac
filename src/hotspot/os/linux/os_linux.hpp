@@ -176,8 +176,6 @@ class Linux {
   // Return the namespace pid if so, otherwise -1.
   static int get_namespace_pid(int vmid);
 
-  static int checkpoint_restore(int *shmid);
-
   // Stack repair handling
 
   // none present

@@ -58,6 +58,7 @@ public class Core {
      */
     public enum Priority {
         FILE_DESCRIPTORS(new BlockingOrderedContext<>()),
+        PRE_FILE_DESCRIPTORS(new BlockingOrderedContext<>()),
         CLEANERS(new BlockingOrderedContext<>()),
         REFERENCE_HANDLER(new BlockingOrderedContext<>()),
         SEEDER_HOLDER(new BlockingOrderedContext<>()),

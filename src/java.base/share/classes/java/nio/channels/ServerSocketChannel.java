@@ -25,8 +25,6 @@
 
 package java.nio.channels;
 
-import jdk.crac.impl.OpenSocketPolicies;
-
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.net.NetPermission;
@@ -394,8 +392,4 @@ public abstract class ServerSocketChannel
      */
     @Override
     public abstract SocketAddress getLocalAddress() throws IOException;
-
-    static {
-        OpenSocketPolicies.ensureRegistered();
-    }
 }

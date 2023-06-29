@@ -49,4 +49,10 @@ public abstract class FDPolicyTestBase {
             count += r;
         }
     }
+
+    protected Path writeConfig(String content) throws IOException {
+        Path config = Files.createTempFile(getClass().getName(), ".yaml");
+        Files.writeString(config, content);
+        return config;
+    }
 }

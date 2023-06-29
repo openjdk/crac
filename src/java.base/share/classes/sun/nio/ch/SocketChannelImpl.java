@@ -82,7 +82,7 @@ class SocketChannelImpl
     // Our file descriptor object
     private final FileDescriptor fd;
     private final int fdVal;
-    private final JDKSocketResource resource;
+    private final Resource resource = new Resource();
 
     // Lock held by current reading or connecting thread
     private final ReentrantLock readLock = new ReentrantLock();
@@ -148,7 +148,6 @@ class SocketChannelImpl
             this.fd = Net.socket(family, true);
         }
         this.fdVal = IOUtil.fdVal(fd);
-        this.resource = new JDKSocketResource(this, family, fd);
     }
 
     // Constructor for sockets obtained from server sockets
@@ -163,7 +162,6 @@ class SocketChannelImpl
         this.family = family;
         this.fd = fd;
         this.fdVal = IOUtil.fdVal(fd);
-        this.resource = new JDKSocketResource(this, family, fd);
         synchronized (stateLock) {
             if (family == UNIX) {
                 this.localAddress = UnixDomainSockets.localAddress(fd);
@@ -1489,5 +1487,31 @@ class SocketChannelImpl
         }
         sb.append(']');
         return sb.toString();
+    }
+
+    private class Resource extends JDKSocketResource {
+        public Resource() {
+            super(SocketChannelImpl.this);
+        }
+
+        @Override
+        protected FileDescriptor getFD() {
+            return fd;
+        }
+
+        @Override
+        protected SocketAddress localAddress() {
+            return localAddress;
+        }
+
+        @Override
+        protected SocketAddress remoteAddress() {
+            return remoteAddress;
+        }
+
+        @Override
+        protected void closeBeforeCheckpoint() throws IOException {
+            close();
+        }
     }
 }

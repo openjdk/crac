@@ -27,9 +27,7 @@ package sun.nio.ch.sctp;
 import java.net.*;
 import java.io.FileDescriptor;
 import java.io.IOException;
-import java.util.Collections;
-import java.util.Set;
-import java.util.HashSet;
+import java.util.*;
 import java.nio.ByteBuffer;
 import java.nio.channels.SelectionKey;
 import java.nio.channels.ClosedChannelException;
@@ -39,6 +37,7 @@ import java.nio.channels.AlreadyConnectedException;
 import java.nio.channels.NotYetBoundException;
 import java.nio.channels.NotYetConnectedException;
 import java.nio.channels.spi.SelectorProvider;
+
 import com.sun.nio.sctp.AbstractNotificationHandler;
 import com.sun.nio.sctp.Association;
 import com.sun.nio.sctp.AssociationChangeNotification;
@@ -50,7 +49,6 @@ import com.sun.nio.sctp.MessageInfo;
 import com.sun.nio.sctp.NotificationHandler;
 import com.sun.nio.sctp.SctpChannel;
 import com.sun.nio.sctp.SctpSocketOption;
-import jdk.internal.crac.JDKSocketResource;
 import sun.net.util.IPAddressUtil;
 import sun.nio.ch.DirectBuffer;
 import sun.nio.ch.IOStatus;
@@ -60,6 +58,7 @@ import sun.nio.ch.Net;
 import sun.nio.ch.SelChImpl;
 import sun.nio.ch.SelectionKeyImpl;
 import sun.nio.ch.Util;
+
 import static com.sun.nio.sctp.SctpStandardSocketOptions.*;
 import static sun.nio.ch.sctp.ResultContainer.SEND_FAILED;
 import static sun.nio.ch.sctp.ResultContainer.ASSOCIATION_CHANGED;
@@ -75,7 +74,31 @@ public class SctpChannelImpl extends SctpChannel
 {
     private final FileDescriptor fd;
     private final int fdVal;
-    private final JDKSocketResource resource;
+    private final SctpResource resource = new SctpResource(this) {
+        @Override
+        protected FileDescriptor getFD() {
+            return fd;
+        }
+
+        @Override
+        protected void closeBeforeCheckpoint() throws IOException {
+            close();
+        }
+
+        @Override
+        protected Set<SocketAddress> getRemoteAddresses() {
+            synchronized (stateLock) {
+                return new HashSet<>(remoteAddresses);
+            }
+        }
+
+        @Override
+        protected HashSet<InetSocketAddress> getLocalAddresses() {
+            synchronized (stateLock) {
+                return new HashSet<>(localAddresses);
+            }
+        }
+    };
 
     /* IDs of native threads doing send and receivess, for signalling */
     private volatile long receiverThread = 0;
@@ -136,7 +159,6 @@ public class SctpChannelImpl extends SctpChannel
         super(provider);
         this.fd = SctpNet.socket(true);
         this.fdVal = IOUtil.fdVal(fd);
-        this.resource = new JDKSocketResource(this, StandardProtocolFamily.INET, fd);
         this.state = ChannelState.UNCONNECTED;
     }
 
@@ -158,7 +180,6 @@ public class SctpChannelImpl extends SctpChannel
         super(provider);
         this.fd = fd;
         this.fdVal = IOUtil.fdVal(fd);
-        this.resource = new JDKSocketResource(this, StandardProtocolFamily.INET, fd);
         this.state = ChannelState.CONNECTED;
         port = (Net.localAddress(fd)).getPort();
 
@@ -1099,4 +1120,6 @@ public class SctpChannelImpl extends SctpChannel
             });
         initIDs();
     }
+
 }
+

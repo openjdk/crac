@@ -27,8 +27,12 @@ package java.io;
 
 import java.nio.channels.FileChannel;
 import java.util.Arrays;
-import java.util.function.Supplier;
 
+import jdk.crac.Context;
+import jdk.crac.Resource;
+import jdk.internal.crac.LoggerContainer;
+import jdk.internal.crac.OpenResourcePolicies;
+import jdk.internal.crac.Core;
 import jdk.internal.crac.JDKFileResource;
 import jdk.internal.util.ArraysSupport;
 import sun.nio.ch.FileChannelImpl;
@@ -520,18 +524,51 @@ public class FileInputStream extends InputStream
     }
 
     @SuppressWarnings("unused")
-    private final JDKFileResource resource = new JDKFileResource(this) {
+    private final JDKFileResource resource = new JDKFileResource() {
+        private long offset;
+
         @Override
         protected FileDescriptor getFD() {
             return fd;
         }
 
         @Override
-        protected Supplier<Exception> claimException(FileDescriptor fd, String path) {
+        protected String getPath() {
+            return path;
+        }
+
+        @Override
+        public void beforeCheckpoint(Context<? extends Resource> context) throws Exception {
             if (fd == FileDescriptor.in) {
-                return null;
+                Core.getClaimedFDs().claimFd(fd, FileInputStream.this, NO_EXCEPTION, fd);
             } else {
-                return super.claimException(fd, path);
+                // When the stream is opened with file descriptor we don't have any extra
+                // information we could use for policy (this is most often a pipe, but could
+                // be a socket as well). Such cases need to be handled on a higher level.
+                super.beforeCheckpoint(context);
+            }
+        }
+
+        @Override
+        protected void closeBeforeCheckpoint(OpenResourcePolicies.Policy policy) throws IOException {
+            try {
+                offset = position();
+            } catch (IOException e) {
+                // We might get IOException from native code when lseeking a named pipe.
+                offset = 0;
+            }
+            close();
+        }
+
+        @Override
+        protected void reopenAfterRestore(OpenResourcePolicies.Policy policy) throws IOException {
+            synchronized (closeLock) {
+                open(path);
+                if (offset > 0) {
+                    skip(offset);
+                }
+                FileInputStream.this.closed = false;
+                FileCleanable.register(fd);
             }
         }
     };

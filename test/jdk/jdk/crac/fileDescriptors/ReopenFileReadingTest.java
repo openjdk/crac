@@ -22,7 +22,7 @@
  */
 
 import jdk.crac.Core;
-import jdk.crac.impl.OpenFilePolicies;
+import jdk.internal.crac.OpenResourcePolicies;
 import jdk.test.lib.crac.CracBuilder;
 import jdk.test.lib.crac.CracTest;
 import jdk.test.lib.crac.CracTestArg;
@@ -37,7 +37,7 @@ import static jdk.test.lib.Asserts.assertEquals;
 /**
  * @test
  * @library /test/lib
- * @modules java.base/jdk.crac.impl:+open
+ * @modules java.base/jdk.internal.crac:+open
  * @build FDPolicyTestBase
  * @build ReopenFileReadingTest
  * @run driver jdk.test.lib.crac.CracTest
@@ -48,22 +48,32 @@ public class ReopenFileReadingTest extends FDPolicyTestBase implements CracTest 
 
     @Override
     public void test() throws Exception {
-        tempFile = Files.createTempFile(ReopenFileReadingTest.class.getName(), ".txt").toString();
-        String configFile = Files.createTempFile(ReopenNamedFifoTest.class.getName(), ".cfg").toString();
-        try (var writer = new FileWriter(configFile)) {
-            writer.write("/some/other/file=ERROR\n");
-            writer.write(tempFile + '=' + OpenFilePolicies.BeforeCheckpoint.CLOSE + "\n");
-            writer.write("**/*.globpattern.test=CLOSE");
-        }
+        tempFile = Files.createTempFile(getClass().getName(), ".txt").toString();
+        Path configFile = writeConfig("""
+                # These first two rules are just to test parsing
+                type: FILE
+                path: /some/other/file                
+                action: error
+                ---
+                type: FILE
+                path: **/*.globpattern.test                
+                action: CLOSE
+                ---
+                type: FILE
+                path: $tempFile
+                # action is case-insensitive
+                action: ReOpeN
+                ---
+                """.replace("$tempFile", tempFile));
         Path tempPath = Path.of(tempFile);
         try {
             writeBigFile(tempPath, "Hello ", "world!");
             new CracBuilder()
-                    .javaOption(OpenFilePolicies.CHECKPOINT_PROPERTY + ".file", configFile)
+                    .javaOption(OpenResourcePolicies.PROPERTY, configFile.toString())
                     .args(CracTest.args(tempFile)).doCheckpointAndRestore();
         } finally {
             Files.deleteIfExists(tempPath);
-            Files.deleteIfExists(Path.of(configFile));
+            Files.deleteIfExists(configFile);
         }
     }
 

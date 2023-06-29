@@ -76,7 +76,7 @@ class ServerSocketChannelImpl
     // Our file descriptor
     private final FileDescriptor fd;
     private final int fdVal;
-    private JDKSocketResource resource;
+    private final Resource resource = new Resource();
 
     // Lock held by thread currently blocked on this channel
     private final ReentrantLock acceptLock = new ReentrantLock();
@@ -130,7 +130,6 @@ class ServerSocketChannelImpl
             this.fd = Net.serverSocket(family, true);
         }
         this.fdVal = IOUtil.fdVal(fd);
-        this.resource = new JDKSocketResource(this, family, fd);
     }
 
     ServerSocketChannelImpl(SelectorProvider sp,
@@ -728,5 +727,31 @@ class ServerSocketChannelImpl
         }
         sb.append(']');
         return sb.toString();
+    }
+
+    private class Resource extends JDKSocketResource {
+        public Resource() {
+            super(ServerSocketChannelImpl.this);
+        }
+
+        @Override
+        protected FileDescriptor getFD() {
+            return fd;
+        }
+
+        @Override
+        protected SocketAddress localAddress() {
+            return localAddress;
+        }
+
+        @Override
+        protected SocketAddress remoteAddress() {
+            return null;
+        }
+
+        @Override
+        protected void closeBeforeCheckpoint() throws IOException {
+            close();
+        }
     }
 }

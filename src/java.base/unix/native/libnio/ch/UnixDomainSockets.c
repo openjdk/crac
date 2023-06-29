@@ -191,26 +191,3 @@ Java_sun_nio_ch_UnixDomainSockets_localAddress0(JNIEnv *env, jclass clazz, jobje
     }
     return sockaddrToUnixAddressBytes(env, &sa, sa_len);
 }
-
-
-JNIEXPORT jbyteArray JNICALL
-Java_jdk_internal_crac_JDKSocketResource_unixDomainLocalAddress0(JNIEnv *env, jclass clazz, jobject fdo)
-{
-    return Java_sun_nio_ch_UnixDomainSockets_localAddress0(env, NULL, fdo);
-}
-
-JNIEXPORT jbyteArray JNICALL
-Java_jdk_internal_crac_JDKSocketResource_unixDomainRemoteAddress0(JNIEnv *env, jclass clazz, jobject fdo)
-{
-    struct sockaddr_un sa;
-    socklen_t sa_len = sizeof(struct sockaddr_un);
-    int port;
-    if (getpeername(fdval(env, fdo), (struct sockaddr *)&sa, &sa_len) < 0) {
-        if (errno == ENOTCONN) {
-            return NULL;
-        }
-        handleSocketError(env, errno);
-        return NULL;
-    }
-    return sockaddrToUnixAddressBytes(env, &sa, sa_len);
-}

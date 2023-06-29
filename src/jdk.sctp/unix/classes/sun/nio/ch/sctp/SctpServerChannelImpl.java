@@ -58,7 +58,29 @@ public class SctpServerChannelImpl extends SctpServerChannel
 {
     private final FileDescriptor fd;
     private final int fdVal;
-    private final JDKSocketResource resource;
+    private final SctpResource resource = new SctpResource(this) {
+        @Override
+        protected Set<SocketAddress> getRemoteAddresses() {
+            return Collections.emptySet();
+        }
+
+        @Override
+        protected HashSet<InetSocketAddress> getLocalAddresses() {
+            synchronized (stateLock) {
+                return new HashSet<>(localAddresses);
+            }
+        }
+
+        @Override
+        protected FileDescriptor getFD() {
+            return fd;
+        }
+
+        @Override
+        protected void closeBeforeCheckpoint() throws IOException {
+            close();
+        }
+    };
 
     /* IDs of native thread doing accept, for signalling */
     private volatile long thread = 0;
@@ -96,7 +118,6 @@ public class SctpServerChannelImpl extends SctpServerChannel
         super(provider);
         this.fd = SctpNet.socket(true);
         this.fdVal = IOUtil.fdVal(fd);
-        this.resource = new JDKSocketResource(this, StandardProtocolFamily.INET, fd);
         this.state = ChannelState.INUSE;
     }
 

@@ -22,7 +22,7 @@
  */
 
 import jdk.crac.Core;
-import jdk.crac.impl.OpenSocketPolicies;
+import jdk.internal.crac.OpenResourcePolicies;
 import jdk.test.lib.crac.CracBuilder;
 import jdk.test.lib.crac.CracTest;
 
@@ -30,6 +30,8 @@ import java.io.IOException;
 import java.net.InetAddress;
 import java.net.ServerSocket;
 import java.net.Socket;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.concurrent.CountDownLatch;
 
 import static jdk.test.lib.Asserts.assertEquals;
@@ -37,7 +39,7 @@ import static jdk.test.lib.Asserts.assertEquals;
 /**
  * @test
  * @library /test/lib
- * @modules java.base/jdk.crac.impl:+open
+ * @modules java.base/jdk.internal.crac:+open
  * @build FDPolicyTestBase
  * @build CloseTcpSocketTest
  * @run driver jdk.test.lib.crac.CracTest
@@ -46,12 +48,19 @@ public class CloseTcpSocketTest extends FDPolicyTestBase implements CracTest {
     @Override
     public void test() throws Exception {
         String loopback = InetAddress.getLoopbackAddress().getHostAddress();
-        String checkpointPolicies = "*=" + OpenSocketPolicies.BeforeCheckpoint.CLOSE;
-        String restorePolicies = loopback + ":*,*:*=" + OpenSocketPolicies.AfterRestore.KEEP_CLOSED;
-        new CracBuilder()
-                .javaOption(OpenSocketPolicies.CHECKPOINT_PROPERTY, checkpointPolicies)
-                .javaOption(OpenSocketPolicies.RESTORE_PROPERTY, restorePolicies)
-                .doCheckpointAndRestore();
+        Path config = writeConfig("""
+                type: SOCKET
+                family: ip
+                localAddress: $loopback
+                action: close
+                """.replace("$loopback", loopback));
+        try {
+            new CracBuilder()
+                    .javaOption(OpenResourcePolicies.PROPERTY, config.toString())
+                    .doCheckpointAndRestore();
+        } finally {
+            Files.deleteIfExists(config);
+        }
     }
 
     @Override

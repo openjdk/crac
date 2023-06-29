@@ -58,7 +58,10 @@ class FileDispatcherImpl extends FileDispatcher {
     static {
         IOUtil.load();
         init();
-        Core.Priority.NORMAL.getContext().register(resourceProxy);
+        // We cannot register using normal priority because other JDK resources
+        // might read configuration files with this or later priority.
+        // It's difficult to trigger static initialization outside the package.
+        Core.Priority.PRE_FILE_DESCRIPTORS.getContext().register(resourceProxy);
     }
 
     private static final JavaIOFileDescriptorAccess fdAccess =

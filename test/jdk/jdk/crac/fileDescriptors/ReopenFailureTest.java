@@ -23,7 +23,7 @@
 
 import jdk.crac.Core;
 import jdk.crac.RestoreException;
-import jdk.crac.impl.OpenFilePolicies;
+import jdk.internal.crac.OpenResourcePolicies;
 import jdk.test.lib.crac.CracBuilder;
 import jdk.test.lib.crac.CracTest;
 import jdk.test.lib.crac.CracTestArg;
@@ -39,7 +39,7 @@ import static jdk.test.lib.Asserts.fail;
 /**
  * @test
  * @library /test/lib
- * @modules java.base/jdk.crac.impl:+open
+ * @modules java.base/jdk.internal.crac:+open
  * @build FDPolicyTestBase
  * @build ReopenFailureTest
  * @run driver jdk.test.lib.crac.CracTest
@@ -53,20 +53,26 @@ public class ReopenFailureTest extends FDPolicyTestBase implements CracTest {
 
     @Override
     public void test() throws Exception {
-        log1 = Files.createTempFile(ReopenFailureTest.class.getName(), ".txt").toString();
-        log2 = Files.createTempFile(ReopenFailureTest.class.getName(), ".txt").toString();
+        Path config = writeConfig("""
+                type: file
+                action: reopen
+                """);
+        Path path1 = Files.createTempFile(getClass().getName(), ".txt");
+        Path path2 = Files.createTempFile(getClass().getName(), ".txt");
+        log1 = path1.toString();
+        log2 = path2.toString();
         try {
-            String checkpointPolicies = "/**/*=" + OpenFilePolicies.BeforeCheckpoint.CLOSE;
             CracBuilder builder = new CracBuilder()
-                    .javaOption(OpenFilePolicies.CHECKPOINT_PROPERTY, checkpointPolicies)
+                    .javaOption(OpenResourcePolicies.PROPERTY, config.toString())
                     .args(CracTest.args(log1, log2));
             builder.doCheckpoint();
-            Files.delete(Path.of(log1));
-            Files.setPosixFilePermissions(Path.of(log2), Collections.emptySet());
+            Files.delete(path1);
+            Files.setPosixFilePermissions(path2, Collections.emptySet());
             builder.doRestore();
         } finally {
-            Files.deleteIfExists(Path.of(log1));
-            Files.deleteIfExists(Path.of(log2));
+            Files.deleteIfExists(path1);
+            Files.deleteIfExists(path2);
+            Files.deleteIfExists(config);
         }
     }
 

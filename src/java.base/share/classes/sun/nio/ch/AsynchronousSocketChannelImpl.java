@@ -50,7 +50,7 @@ abstract class AsynchronousSocketChannelImpl
 {
     protected final FileDescriptor fd;
     @SuppressWarnings("unused")
-    private final JDKSocketResource resource;
+    private final JDKSocketResource resource = new Resource();
 
     // protects state, localAddress, and remoteAddress
     protected final Object stateLock = new Object();
@@ -89,7 +89,6 @@ abstract class AsynchronousSocketChannelImpl
     {
         super(group.provider());
         this.fd = Net.socket(true);
-        this.resource = new JDKSocketResource(this, StandardProtocolFamily.INET, fd);
         this.state = ST_UNCONNECTED;
     }
 
@@ -101,7 +100,6 @@ abstract class AsynchronousSocketChannelImpl
     {
         super(group.provider());
         this.fd = fd;
-        this.resource = new JDKSocketResource(this, StandardProtocolFamily.INET, fd);
         this.state = ST_CONNECTED;
         this.localAddress = Net.localAddress(fd);
         this.remoteAddress = remote;
@@ -606,5 +604,31 @@ abstract class AsynchronousSocketChannelImpl
         }
         sb.append(']');
         return sb.toString();
+    }
+
+    private class Resource extends JDKSocketResource {
+        public Resource() {
+            super(AsynchronousSocketChannelImpl.this);
+        }
+
+        @Override
+        protected FileDescriptor getFD() {
+            return fd;
+        }
+
+        @Override
+        protected SocketAddress localAddress() {
+            return localAddress;
+        }
+
+        @Override
+        protected SocketAddress remoteAddress() {
+            return remoteAddress;
+        }
+
+        @Override
+        protected void closeBeforeCheckpoint() throws IOException {
+            close();
+        }
     }
 }

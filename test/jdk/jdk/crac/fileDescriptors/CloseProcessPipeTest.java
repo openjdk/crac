@@ -22,30 +22,41 @@
  */
 
 import jdk.crac.Core;
-import jdk.crac.impl.OpenFilePolicies;
+import jdk.internal.crac.JDKFdResource;
+import jdk.internal.crac.OpenResourcePolicies;
 import jdk.test.lib.crac.CracBuilder;
 import jdk.test.lib.crac.CracTest;
 
-import static jdk.test.lib.Asserts.assertEquals;
-import static jdk.test.lib.Asserts.assertGreaterThan;
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+
+import static jdk.test.lib.Asserts.*;
 
 /**
  * @test
  * @library /test/lib
- * @modules java.base/jdk.crac.impl:+open
+ * @modules java.base/jdk.internal.crac:+open
  * @requires (os.family == "linux")
+ * @build FDPolicyTestBase
  * @build CloseProcessPipeTest
  * @run driver jdk.test.lib.crac.CracTest
  */
-public class CloseProcessPipeTest implements CracTest {
+public class CloseProcessPipeTest extends FDPolicyTestBase implements CracTest {
     @Override
     public void test() throws Exception {
-        String checkpointPolicies = "FIFO=" + OpenFilePolicies.BeforeCheckpoint.CLOSE;
-        String restorePolicies = "FIFO=" + OpenFilePolicies.AfterRestore.OPEN_OTHER + "=/dev/null";
-        CracBuilder builder = new CracBuilder()
-                .javaOption(OpenFilePolicies.CHECKPOINT_PROPERTY, checkpointPolicies)
-                .javaOption(OpenFilePolicies.RESTORE_PROPERTY, restorePolicies);
-        builder.doCheckpointAndRestore();
+        Path config = writeConfig("""
+                type: pipe
+                action: close
+                """);
+        try {
+            CracBuilder builder = new CracBuilder()
+                    .javaOption(JDKFdResource.COLLECT_FD_STACKTRACES_PROPERTY, "true")
+                    .javaOption(OpenResourcePolicies.PROPERTY, config.toString());
+            builder.doCheckpointAndRestore();
+        } finally {
+            Files.deleteIfExists(config);
+        }
     }
 
     @Override
@@ -56,11 +67,14 @@ public class CloseProcessPipeTest implements CracTest {
         assertGreaterThan(read1, 0);
         Core.checkpointRestore();
         int read2, total = read1;
-        // Some data got buffered from /dev/zero, we will still read those.
-        // Had we used KEEP_CLOSED policy the read would return IOException: Stream Closed
-        // in native code when we try to read from FD -1.
-        while ((read2 = process.getInputStream().read(buffer)) >= 0) {
-            total += read2;
+        // Some data might got buffered from /dev/zero, we will still read those.
+        try {
+            while ((read2 = process.getInputStream().read(buffer)) >= 0) {
+                total += read2;
+            }
+            fail("Should have failed");
+        } catch (IOException e) {
+            // the exception comes from native method
         }
         System.err.printf("Read total %d bytes%n", total);
         // The process will end with SIGPIPE

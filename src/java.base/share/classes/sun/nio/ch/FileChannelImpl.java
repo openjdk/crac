@@ -44,6 +44,9 @@ import java.nio.channels.SelectableChannel;
 import java.nio.channels.WritableByteChannel;
 import java.util.Objects;
 
+import jdk.crac.Context;
+import jdk.crac.Resource;
+import jdk.internal.crac.OpenResourcePolicies;
 import jdk.internal.access.JavaIOFileDescriptorAccess;
 import jdk.internal.access.SharedSecrets;
 import jdk.internal.crac.JDKFileResource;
@@ -71,10 +74,34 @@ public class FileChannelImpl
 
     // File descriptor
     private final FileDescriptor fd;
-    private final JDKFileResource resource = new JDKFileResource(this) {
+    private final JDKFileResource resource = new JDKFileResource() {
         @Override
         protected FileDescriptor getFD() {
             return fd;
+        }
+
+        @Override
+        protected String getPath() {
+            return path;
+        }
+
+        @Override
+        public void beforeCheckpoint(Context<? extends Resource> context) throws Exception {
+            if (!isOpen() || path == null) {
+                return;
+            }
+            super.beforeCheckpoint(context);
+        }
+
+        @Override
+        protected void closeBeforeCheckpoint(OpenResourcePolicies.Policy policy) throws IOException {
+            close();
+        }
+
+        @Override
+        protected void reopenAfterRestore(OpenResourcePolicies.Policy policy) throws IOException {
+            // implementation is possible but non-trivial
+            throw new UnsupportedOperationException();
         }
     };
 

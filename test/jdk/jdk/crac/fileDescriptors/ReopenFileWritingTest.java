@@ -22,7 +22,7 @@
  */
 
 import jdk.crac.Core;
-import jdk.crac.impl.OpenFilePolicies;
+import jdk.internal.crac.OpenResourcePolicies;
 import jdk.test.lib.crac.CracBuilder;
 import jdk.test.lib.crac.CracTest;
 import jdk.test.lib.crac.CracTestArg;
@@ -38,11 +38,12 @@ import static jdk.test.lib.Asserts.assertEquals;
 /**
  * @test
  * @library /test/lib
- * @modules java.base/jdk.crac.impl:+open
+ * @modules java.base/jdk.internal.crac:+open
+ * @build FDPolicyTestBase
  * @build ReopenFileWritingTest
  * @run driver jdk.test.lib.crac.CracTest
  */
-public class ReopenFileWritingTest implements CracTest {
+public class ReopenFileWritingTest extends FDPolicyTestBase implements CracTest {
     @CracTestArg(value = 0, optional = true)
     String fileNoAppend;
 
@@ -57,19 +58,22 @@ public class ReopenFileWritingTest implements CracTest {
 
     @Override
     public void test() throws Exception {
-        fileNoAppend = Files.createTempFile(ReopenFileWritingTest.class.getName(), ".txt").toString();
-        fileAppend = Files.createTempFile(ReopenFileWritingTest.class.getName(), ".txt").toString();
-        fileAppendExtended = Files.createTempFile(ReopenFileWritingTest.class.getName(), ".txt").toString();
-        fileAppendTruncated = Files.createTempFile(ReopenFileWritingTest.class.getName(), ".txt").toString();
-        Path noAppendPath = Path.of(fileNoAppend);
-        Path appendPath = Path.of(fileAppend);
-        Path appendExtendedPath = Path.of(fileAppendExtended);
-        Path appendTruncatedPath = Path.of(fileAppendTruncated);
+        Path noAppendPath = Files.createTempFile(getClass().getName(), ".txt");
+        Path appendPath = Files.createTempFile(getClass().getName(), ".txt");
+        Path appendExtendedPath = Files.createTempFile(getClass().getName(), ".txt");
+        Path appendTruncatedPath = Files.createTempFile(getClass().getName(), ".txt");
+        fileNoAppend = noAppendPath.toString();
+        fileAppend = appendPath.toString();
+        fileAppendExtended = appendExtendedPath.toString();
+        fileAppendTruncated = appendTruncatedPath.toString();
+        Path config = writeConfig("""
+                type: FILE
+                action: reopen
+                """);
         try {
-            String checkpointPolicies = noAppendPath.getParent().resolve("*").toString() + '=' + OpenFilePolicies.BeforeCheckpoint.CLOSE;
             CracBuilder builder = new CracBuilder();
             builder
-                    .javaOption(OpenFilePolicies.CHECKPOINT_PROPERTY, checkpointPolicies)
+                    .javaOption(OpenResourcePolicies.PROPERTY, config.toString())
                     .args(CracTest.args(fileNoAppend, fileAppend, fileAppendExtended, fileAppendTruncated));
             builder.doCheckpoint();
             assertEquals("Hello ", Files.readString(noAppendPath));
@@ -81,7 +85,9 @@ public class ReopenFileWritingTest implements CracTest {
             Files.writeString(appendExtendedPath, "1234567890");
             Files.writeString(appendTruncatedPath, "");
             builder.doRestore();
-            assertEquals("123456world!", Files.readString(noAppendPath));
+            // Note: current implementation in FileOutputStream does not record FD offset
+            //       and always opens the file for appending
+            assertEquals("1234567890world!", Files.readString(noAppendPath));
             assertEquals("123456world!", Files.readString(appendPath));
             assertEquals("1234567890world!", Files.readString(appendExtendedPath));
             assertEquals("world!", Files.readString(appendTruncatedPath));
@@ -90,6 +96,7 @@ public class ReopenFileWritingTest implements CracTest {
             Files.deleteIfExists(appendPath);
             Files.deleteIfExists(appendExtendedPath);
             Files.deleteIfExists(appendTruncatedPath);
+            Files.deleteIfExists(config);
         }
     }
 

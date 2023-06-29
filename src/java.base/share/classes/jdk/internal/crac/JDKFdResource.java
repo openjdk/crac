@@ -4,13 +4,23 @@ import jdk.crac.Context;
 import jdk.crac.Resource;
 import sun.security.action.GetBooleanAction;
 
+import java.util.function.Supplier;
+
 public abstract class JDKFdResource implements JDKResource {
-    private static final String COLLECT_FD_STACKTRACES_PROPERTY = "jdk.crac.collect-fd-stacktraces";
+    public static final String COLLECT_FD_STACKTRACES_PROPERTY = "jdk.crac.collect-fd-stacktraces";
     private static final String COLLECT_FD_STACKTRACES_HINT =
         "Use -D" + COLLECT_FD_STACKTRACES_PROPERTY + "=true to find the source.";
 
     private static final boolean COLLECT_FD_STACKTRACES =
         GetBooleanAction.privilegedGetProperty(COLLECT_FD_STACKTRACES_PROPERTY);
+
+    // No lambdas during clinit...
+    protected static Supplier<Exception> NO_EXCEPTION = new Supplier<Exception>() {
+        @Override
+        public Exception get() {
+            return null;
+        }
+    };
 
     final Exception stackTraceHolder;
 
@@ -26,6 +36,7 @@ public abstract class JDKFdResource implements JDKResource {
             null;
 
         Core.Priority.FILE_DESCRIPTORS.getContext().register(this);
+        OpenResourcePolicies.ensureRegistered();
     }
 
     protected Exception getStackTraceHolder() {

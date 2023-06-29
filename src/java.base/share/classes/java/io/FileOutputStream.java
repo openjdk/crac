@@ -26,8 +26,10 @@
 package java.io;
 
 import java.nio.channels.FileChannel;
-import java.util.function.Supplier;
+import java.nio.file.Files;
+import java.nio.file.Path;
 
+import jdk.internal.crac.OpenResourcePolicies;
 import jdk.internal.access.SharedSecrets;
 import jdk.internal.access.JavaIOFileDescriptorAccess;
 import jdk.internal.crac.JDKFileResource;
@@ -460,18 +462,33 @@ public class FileOutputStream extends OutputStream
     }
 
     @SuppressWarnings("unused")
-    private final JDKFileResource resource = new JDKFileResource(this) {
+    private final JDKFileResource resource = new JDKFileResource() {
         @Override
         protected FileDescriptor getFD() {
             return fd;
         }
 
         @Override
-        protected Supplier<Exception> claimException(FileDescriptor fd, String path) {
-            if (fd == FileDescriptor.out || fd == FileDescriptor.err) {
-                return null;
-            } else {
-                return super.claimException(fd, path);
+        protected String getPath() {
+            return path;
+        }
+
+        @Override
+        protected void closeBeforeCheckpoint(OpenResourcePolicies.Policy policy) throws IOException {
+            close();
+        }
+
+        @Override
+        protected void reopenAfterRestore(OpenResourcePolicies.Policy policy) throws IOException {
+            synchronized (closeLock) {
+                // We have been writing to a file, but it disappeared during checkpoint
+                if (!Files.exists(Path.of(path))) {
+                    throw new IOException("File " + path + " is not present during restore");
+                }
+                // FileOutputStream writes only forward, so it makes sense to reopen it appending
+                open(path, true);
+                FileOutputStream.this.closed = false;
+                FileCleanable.register(fd);
             }
         }
     };

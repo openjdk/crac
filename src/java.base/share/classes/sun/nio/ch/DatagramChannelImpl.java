@@ -95,7 +95,7 @@ class DatagramChannelImpl
     // Our file descriptor
     private final FileDescriptor fd;
     private final int fdVal;
-    private final JDKSocketResource resource;
+    private final JDKSocketResource resource = new Resource();
 
     // Native sockaddrs and cached InetSocketAddress for receive, protected by readLock
     private NativeSocketAddress sourceSockAddr;
@@ -195,7 +195,6 @@ class DatagramChannelImpl
             this.family = family;
             this.fd = fd = Net.socket(family, false);
             this.fdVal = IOUtil.fdVal(fd);
-            this.resource = new JDKSocketResource(this, family, fd);
 
             sockAddrs = NativeSocketAddress.allocate(3);
             readLock.lock();
@@ -236,7 +235,6 @@ class DatagramChannelImpl
                     : StandardProtocolFamily.INET;
             this.fd = fd;
             this.fdVal = IOUtil.fdVal(fd);
-            this.resource = new JDKSocketResource(this, family, fd);
 
             sockAddrs = NativeSocketAddress.allocate(3);
             readLock.lock();
@@ -1891,5 +1889,31 @@ class DatagramChannelImpl
 
     static {
         IOUtil.load();
+    }
+
+    private class Resource extends JDKSocketResource {
+        public Resource() {
+            super(DatagramChannelImpl.this);
+        }
+
+        @Override
+        protected FileDescriptor getFD() {
+            return fd;
+        }
+
+        @Override
+        protected SocketAddress localAddress() {
+            return localAddress;
+        }
+
+        @Override
+        protected SocketAddress remoteAddress() {
+            return remoteAddress;
+        }
+
+        @Override
+        protected void closeBeforeCheckpoint() throws IOException {
+            close();
+        }
     }
 }

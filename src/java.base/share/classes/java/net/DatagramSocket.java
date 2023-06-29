@@ -33,7 +33,6 @@ import java.security.AccessController;
 import java.security.PrivilegedAction;
 import java.util.Set;
 
-import jdk.crac.impl.OpenSocketPolicies;
 import sun.net.NetProperties;
 import sun.nio.ch.DefaultSelectorProvider;
 
@@ -1447,9 +1446,5 @@ public class DatagramSocket implements java.io.Closeable {
         @SuppressWarnings("unchecked")
         T result = (T) delegate;
         return result;
-    }
-
-    static {
-        OpenSocketPolicies.ensureRegistered();
     }
 }

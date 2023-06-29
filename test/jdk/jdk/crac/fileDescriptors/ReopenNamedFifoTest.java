@@ -22,7 +22,7 @@
  */
 
 import jdk.crac.Core;
-import jdk.crac.impl.OpenFilePolicies;
+import jdk.internal.crac.OpenResourcePolicies;
 import jdk.test.lib.crac.CracBuilder;
 import jdk.test.lib.crac.CracProcess;
 import jdk.test.lib.crac.CracTest;
@@ -40,25 +40,29 @@ import static jdk.test.lib.Asserts.assertEquals;
 /**
  * @test
  * @library /test/lib
- * @modules java.base/jdk.crac.impl:+open
+ * @modules java.base/jdk.internal.crac:+open
  * @requires (os.family == "linux")
+ * @build FDPolicyTestBase
  * @build ReopenNamedFifoTest
  * @run driver jdk.test.lib.crac.CracTest
  */
-public class ReopenNamedFifoTest implements CracTest {
+public class ReopenNamedFifoTest extends FDPolicyTestBase implements CracTest {
     @CracTestArg(optional = true)
     String fifo;
 
     @Override
     public void test() throws Exception {
-        Path tempDirectory = Files.createTempDirectory(ReopenNamedFifoTest.class.getName());
+        Path tempDirectory = Files.createTempDirectory(getClass().getName());
         Path pipePath = tempDirectory.resolve("pipe");
         fifo = pipePath.toString();
         assertEquals(0, new ProcessBuilder().inheritIO().command("mkfifo", fifo).start().waitFor());
-
-        String checkpointPolicies = "FIFO=" + OpenFilePolicies.BeforeCheckpoint.CLOSE;
+        // From Java POV this has a path, therefore is treated as a file and not as a named pipe
+        Path config = writeConfig("""
+                type: file
+                action: reopen
+                """);
         CracBuilder builder = new CracBuilder()
-                .javaOption(OpenFilePolicies.CHECKPOINT_PROPERTY, checkpointPolicies)
+                .javaOption(OpenResourcePolicies.PROPERTY, config.toString())
                 .args(CracTest.args(fifo));
         CracProcess cp = builder.startCheckpoint();
 
@@ -72,7 +76,10 @@ public class ReopenNamedFifoTest implements CracTest {
                 if (output.contains("RESTORED")) {
                     latch.countDown();
                 }
-            }, error -> {});
+            }, error -> {
+                System.err.println(error);
+                latch.countDown();
+            });
             latch.await();
             writer.write("world!");
             writer.flush();
@@ -80,6 +87,7 @@ public class ReopenNamedFifoTest implements CracTest {
         } finally {
             Files.deleteIfExists(pipePath);
             Files.deleteIfExists(tempDirectory);
+            Files.deleteIfExists(config);
         }
     }
 

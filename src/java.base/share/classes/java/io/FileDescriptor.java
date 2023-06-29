@@ -29,8 +29,6 @@ import java.util.*;
 
 import jdk.crac.Context;
 import jdk.crac.impl.CheckpointOpenResourceException;
-import jdk.crac.impl.OpenFilePolicies;
-import jdk.crac.impl.OpenSocketPolicies;
 import jdk.internal.access.JavaIOFileDescriptorAccess;
 import jdk.internal.access.SharedSecrets;
 import jdk.internal.crac.Core;
@@ -96,7 +94,6 @@ public final class FileDescriptor {
 
     static {
         initIDs();
-        OpenFilePolicies.ensureRegistered();
     }
 
     // Set up JavaIOFileDescriptorAccess in SharedSecrets

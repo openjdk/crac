@@ -37,6 +37,7 @@ import java.util.Set;
 import jdk.internal.crac.JDKSocketResource;
 import sun.net.NetProperties;
 import sun.net.PlatformSocketImpl;
+import sun.nio.ch.Net;
 import sun.nio.ch.NioSocketImpl;
 
 /**
@@ -106,7 +107,27 @@ public abstract class SocketImpl implements SocketOptions {
     protected int localport;
 
     @SuppressWarnings("unused")
-    private final JDKSocketResource resource = new JDKSocketResource(this, StandardProtocolFamily.INET, () -> fd);
+    private final JDKSocketResource resource = new JDKSocketResource(this) {
+        @Override
+        protected FileDescriptor getFD() {
+            return fd;
+        }
+
+        @Override
+        protected SocketAddress localAddress() throws IOException {
+            return Net.localAddress(fd);
+        }
+
+        @Override
+        protected SocketAddress remoteAddress() {
+            return new InetSocketAddress(address, port);
+        }
+
+        @Override
+        protected void closeBeforeCheckpoint() throws IOException {
+            close();
+        }
+    };
 
     /**
      * Initialize a new instance of this class

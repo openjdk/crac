@@ -70,7 +70,27 @@ abstract class AsynchronousServerSocketChannelImpl
     AsynchronousServerSocketChannelImpl(AsynchronousChannelGroupImpl group) {
         super(group.provider());
         this.fd = Net.serverSocket(true);
-        this.resource = new JDKSocketResource(this, StandardProtocolFamily.INET, fd);
+        this.resource = new JDKSocketResource(this) {
+            @Override
+            protected FileDescriptor getFD() {
+                return fd;
+            }
+
+            @Override
+            protected SocketAddress localAddress() {
+                return localAddress;
+            }
+
+            @Override
+            protected SocketAddress remoteAddress() {
+                return null;
+            }
+
+            @Override
+            protected void closeBeforeCheckpoint() throws IOException {
+                close();
+            }
+        };
     }
 
     @Override

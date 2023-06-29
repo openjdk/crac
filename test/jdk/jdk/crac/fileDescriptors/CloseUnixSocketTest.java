@@ -22,7 +22,8 @@
  */
 
 import jdk.crac.Core;
-import jdk.crac.impl.OpenSocketPolicies;
+import jdk.internal.crac.JDKFdResource;
+import jdk.internal.crac.OpenResourcePolicies;
 import jdk.test.lib.crac.CracBuilder;
 import jdk.test.lib.crac.CracTest;
 
@@ -39,7 +40,7 @@ import static jdk.test.lib.Asserts.assertTrue;
 /**
  * @test
  * @library /test/lib
- * @modules java.base/jdk.crac.impl:+open
+ * @modules java.base/jdk.internal.crac:+open
  * @build FDPolicyTestBase
  * @build CloseUnixSocketTest
  * @run driver jdk.test.lib.crac.CracTest
@@ -47,12 +48,19 @@ import static jdk.test.lib.Asserts.assertTrue;
 public class CloseUnixSocketTest extends FDPolicyTestBase implements CracTest {
     @Override
     public void test() throws Exception {
-        String checkpointPolicies = "*=" + OpenSocketPolicies.BeforeCheckpoint.CLOSE;
-        String restorePolicies = "*,*=" + OpenSocketPolicies.AfterRestore.KEEP_CLOSED;
-        new CracBuilder()
-                .javaOption(OpenSocketPolicies.CHECKPOINT_PROPERTY, checkpointPolicies)
-                .javaOption(OpenSocketPolicies.RESTORE_PROPERTY, restorePolicies)
-                .doCheckpointAndRestore();
+        Path config = writeConfig("""
+                type: SoCkEt
+                action: close
+                family: unix
+                """);
+        try {
+            new CracBuilder()
+                    .javaOption(JDKFdResource.COLLECT_FD_STACKTRACES_PROPERTY, "true")
+                    .javaOption(OpenResourcePolicies.PROPERTY, config.toString())
+                    .doCheckpointAndRestore();
+        } finally {
+            Files.deleteIfExists(config);
+        }
     }
 
     @Override

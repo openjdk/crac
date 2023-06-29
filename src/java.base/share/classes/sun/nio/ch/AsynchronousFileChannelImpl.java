@@ -25,6 +25,9 @@
 
 package sun.nio.ch;
 
+import jdk.crac.Context;
+import jdk.crac.Resource;
+import jdk.internal.crac.OpenResourcePolicies;
 import jdk.internal.crac.JDKFileResource;
 
 import java.nio.ByteBuffer;
@@ -48,10 +51,33 @@ abstract class AsynchronousFileChannelImpl
 
     // file descriptor
     protected final FileDescriptor fdObj;
-    private final JDKFileResource resource = new JDKFileResource(this) {
+    private final JDKFileResource resource = new JDKFileResource() {
         @Override
         protected FileDescriptor getFD() {
             return fdObj;
+        }
+
+        @Override
+        protected String getPath() {
+            // TODO: we don't have information about the path without introspecting FD
+            throw new UnsupportedOperationException();
+        }
+
+        @Override
+        public void beforeCheckpoint(Context<? extends Resource> context) throws Exception {
+            if (isOpen()) {
+                super.beforeCheckpoint(context);
+            }
+        }
+
+        @Override
+        protected void closeBeforeCheckpoint(OpenResourcePolicies.Policy policy) throws IOException {
+            throw new UnsupportedOperationException();
+        }
+
+        @Override
+        protected void reopenAfterRestore(OpenResourcePolicies.Policy policy) throws IOException {
+            throw new UnsupportedOperationException();
         }
     };
 

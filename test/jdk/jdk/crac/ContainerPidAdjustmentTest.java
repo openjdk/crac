@@ -40,6 +40,7 @@ import java.util.Arrays;
  * @library /test/lib
  * @build ContainerPidAdjustmentTest
  * @run driver/timeout=60 jdk.test.lib.crac.CracTest  true   false  INF     true   128
+ * @run driver/timeout=60 jdk.test.lib.crac.CracTest  true   true   1       false  1
  * @run driver/timeout=60 jdk.test.lib.crac.CracTest  true   true   100     true   100
  * @run driver/timeout=60 jdk.test.lib.crac.CracTest  false  false  INF     false  1
  * @run driver/timeout=60 jdk.test.lib.crac.CracTest  false  true   1       false  1

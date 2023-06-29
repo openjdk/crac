@@ -1410,7 +1410,7 @@ jlong os::javaTimeNanos() {
   struct timespec tp;
   int status = clock_gettime(CLOCK_MONOTONIC, &tp);
   assert(status == 0, "clock_gettime error: %s", os::strerror(errno));
-  jlong result = jlong(tp.tv_sec) * NANOSECS_PER_SEC + jlong(tp.tv_nsec);
+  jlong result = jlong(tp.tv_sec) * NANOSECS_PER_SEC + jlong(tp.tv_nsec) + javaTimeNanos_offset;
   return result;
 }
 

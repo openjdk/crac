@@ -89,6 +89,7 @@ public:
   // Initialization
   static void initialize();
   static void check_virtualizations();
+  static void crac_restore() {}
 
   // Override Abstract_VM_Version implementation
   static void print_platform_virtualization_info(outputStream*);
@@ -128,6 +129,9 @@ public:
   // Assembler testing
   static void allow_all();
   static void revert();
+
+  // No _features_names[] available on this CPU.
+  static void insert_features_names(char* buf, size_t buflen, uint64_t features = _features) {}
 
   // POWER 8: DSCR current value.
   static uint64_t _dscr_val;

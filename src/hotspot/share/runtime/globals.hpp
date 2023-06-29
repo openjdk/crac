@@ -2097,11 +2097,12 @@ const intx ObjectAlignmentInBytes = 8;
   product(ccstr, CRaCRestoreFrom, NULL, RESTORE_SETTABLE,                   \
       "Path to image for restore, replaces the initializing VM on success") \
                                                                             \
-  /* It is usually not possible to use a different engine for checkpoint */ \
-  /* and restore but when we use a non-default engine this must be set   */ \
-  /* on restore, too. */                                                    \
   product(ccstr, CREngine, "criuengine", RESTORE_SETTABLE,                  \
-      "Path or name of a program implementing checkpoint/restore")          \
+      "Path or name of a program implementing checkpoint/restore and "      \
+      "optional extra parameters as a comma-separated list: "               \
+      "-XX:CREngine=program,--key,value,--anotherkey results in calling "   \
+      "'program --key value --anotherkey'. Commas used as part of args "    \
+      "should be escaped with a backslash character ('\\').")               \
                                                                             \
   product(bool, CRaCIgnoreRestoreIfUnavailable, false, RESTORE_SETTABLE,    \
       "Ignore -XX:CRaCRestoreFrom and continue initialization if restore "  \

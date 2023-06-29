@@ -266,7 +266,7 @@ class CracRestoreParameters : public CHeapObj<mtInternal> {
 
   struct header {
     jlong _restore_time;
-    jlong _restore_counter;
+    jlong _restore_nanos;
     int _nflags;
     int _nprops;
     int _env_memory_size;
@@ -324,10 +324,10 @@ class CracRestoreParameters : public CHeapObj<mtInternal> {
       const SystemProperty* props,
       const char *args,
       jlong restore_time,
-      jlong restore_counter) {
+      jlong restore_nanos) {
     header hdr = {
       restore_time,
-      restore_counter,
+      restore_nanos,
       num_flags,
       system_props_length(props),
       env_vars_size(environ)
@@ -436,8 +436,11 @@ static int clock_tics_per_sec = 100;
 
 // CRaC
 static const char* _crengine = NULL;
+static char* _crengine_arg_str = NULL;
+static unsigned int _crengine_argc = 0;
+static const char* _crengine_args[32];
 static jlong _restore_start_time;
-static jlong _restore_start_counter;
+static jlong _restore_start_nanos;
 static FdsInfo _vm_inited_fds(false);
 
 // If the VM might have been created on the primordial thread, we need to resolve the
@@ -626,8 +629,13 @@ static const char *unstable_chroot_error = "/proc file system not found.\n"
                      "Java may be unstable running multithreaded in a chroot "
                      "environment on Linux when /proc filesystem is not mounted.";
 
-void os::Linux::initialize_system_info() {
+void os::Linux::initialize_processor_count() {
   set_processor_count(sysconf(_SC_NPROCESSORS_CONF));
+  assert(processor_count() > 0, "linux error");
+}
+
+void os::Linux::initialize_system_info() {
+  initialize_processor_count();
   if (processor_count() == 1) {
     pid_t pid = os::Linux::gettid();
     char fname[32];
@@ -640,7 +648,6 @@ void os::Linux::initialize_system_info() {
     }
   }
   _physical_memory = (julong)sysconf(_SC_PHYS_PAGES) * (julong)sysconf(_SC_PAGESIZE);
-  assert(processor_count() > 0, "linux error");
 }
 
 void os::init_system_properties_values() {
@@ -5707,10 +5714,10 @@ jlong os::Linux::restore_start_time() {
 }
 
 jlong os::Linux::uptime_since_restore() {
-  if (!_restore_start_counter) {
+  if (!_restore_start_nanos) {
     return -1;
   }
-  return javaTimeNanos() - _restore_start_counter;
+  return javaTimeNanos() - _restore_start_nanos;
 }
 
 void VM_Crac::trace_cr(const char* msg, ...) {
@@ -5872,28 +5879,79 @@ static int cr_util_path(char* path, int len) {
 }
 
 static bool compute_crengine() {
+  // release possible old copies
+  os::free((char *) _crengine); // NULL is allowed
+  _crengine = NULL;
+  os::free((char *) _crengine_arg_str);
+  _crengine_arg_str = NULL;
+
   if (!CREngine) {
     return true;
   }
-
-  if (CREngine[0] == '/') {
-    _crengine = CREngine;
-    return true;
+  char *exec = os::strdup_check_oom(CREngine);
+  char *comma = strchr(exec, ',');
+  if (comma != NULL) {
+    *comma = '\0';
+    _crengine_arg_str = os::strdup_check_oom(comma + 1);
   }
+  if (exec[0] == '/') {
+    _crengine = exec;
+  } else {
+    char path[JVM_MAXPATHLEN];
+    int pathlen = cr_util_path(path, sizeof(path));
+    strcat(path + pathlen, "/");
+    strcat(path + pathlen, exec);
 
-  char path[JVM_MAXPATHLEN];
-  int pathlen = cr_util_path(path, sizeof(path));
-  strcat(path + pathlen, "/");
-  strcat(path + pathlen, CREngine);
-
-  struct stat st;
-  if (0 != stat(path, &st)) {
-    warning("Could not find %s: %s", path, strerror(errno));
-    return false;
+    struct stat st;
+    if (0 != stat(path, &st)) {
+      warning("Could not find %s: %s", path, strerror(errno));
+      return false;
+    }
+    _crengine = os::strdup_check_oom(path);
+    // we have read and duplicated args from exec, now we can release
+    os::free(exec);
   }
+  _crengine_args[0] = _crengine;
+  _crengine_argc = 2;
 
-  _crengine = os::strdup(path);
+  if (_crengine_arg_str != NULL) {
+    char *arg = _crengine_arg_str;
+    char *target = _crengine_arg_str;
+    bool escaped = false;
+    for (char *c = arg; *c != '\0'; ++c) {
+      if (_crengine_argc >= ARRAY_SIZE(_crengine_args) - 2) {
+        warning("Too many options to CREngine; cannot proceed with these: %s", arg);
+        return false;
+      }
+      if (!escaped) {
+        switch(*c) {
+        case '\\':
+          escaped = true;
+          continue; // for
+        case ',':
+          *target++ = '\0';
+          _crengine_args[_crengine_argc++] = arg;
+          arg = target;
+          continue; // for
+        }
+      }
+      escaped = false;
+      *target++ = *c;
+    }
+    *target = '\0';
+    _crengine_args[_crengine_argc++] = arg;
+    _crengine_args[_crengine_argc] = NULL;
+  }
   return true;
+}
+
+static void add_crengine_arg(const char *arg) {
+  if (_crengine_argc >= ARRAY_SIZE(_crengine_args) - 1) {
+      warning("Too many options to CREngine; cannot add %s", arg);
+      return;
+  }
+  _crengine_args[_crengine_argc++] = arg;
+  _crengine_args[_crengine_argc] = NULL;
 }
 
 static int call_crengine() {
@@ -5907,8 +5965,10 @@ static int call_crengine() {
     return -1;
   }
   if (pid == 0) {
-    execl(_crengine, _crengine, "checkpoint", CRaCCheckpointTo, NULL);
-    perror("execl");
+    _crengine_args[1] = "checkpoint";
+    add_crengine_arg(CRaCCheckpointTo);
+    execv(_crengine, (char * const*)_crengine_args);
+    perror("execv CREngine checkpoint");
     exit(1);
   }
 
@@ -5947,7 +6007,8 @@ public:
   }
 };
 
-static int checkpoint_restore(int *shmid) {
+int os::Linux::checkpoint_restore(int *shmid) {
+  os::record_time_before_checkpoint();
 
   int cres = call_crengine();
   if (cres < 0) {
@@ -5964,6 +6025,14 @@ static int checkpoint_restore(int *shmid) {
     sig = sigwaitinfo(&waitmask, &info);
   } while (sig == -1 && errno == EINTR);
   assert(sig == RESTORE_SIGNAL, "got what requested");
+
+  if (CRaCCPUCountInit) {
+    initialize_processor_count();
+    if (_cpu_to_node != NULL)
+      rebuild_cpu_to_node_map();
+  }
+
+  os::update_javaTimeNanos_offset();
 
   if (CRTraceStartupTime) {
     tty->print_cr("STARTUPTIME " JLONG_FORMAT " restore-native", os::javaTimeNanos());
@@ -6131,16 +6200,20 @@ void VM_Crac::doit() {
   } else {
     trace_cr("Checkpoint ...");
     report_ok_to_jcmd_if_any();
-    int ret = checkpoint_restore(&shmid);
+    int ret = os::Linux::checkpoint_restore(&shmid);
     if (ret == JVM_CHECKPOINT_ERROR) {
       PerfMemoryLinux::restore();
       return;
     }
   }
 
+  VM_Version::crac_restore();
+
   if (shmid <= 0 || !VM_Crac::read_shm(shmid)) {
     _restore_start_time = os::javaTimeMillis();
-    _restore_start_counter = os::javaTimeNanos();
+    _restore_start_nanos = os::javaTimeNanos();
+  } else {
+    _restore_start_nanos += os::monotonic_time_offset();
   }
   PerfMemoryLinux::restore();
 
@@ -6244,7 +6317,7 @@ void os::Linux::restore() {
   struct stat st;
 
   jlong restore_time = javaTimeMillis();
-  jlong restore_counter = javaTimeNanos();
+  jlong restore_nanos = javaTimeNanos();
 
   compute_crengine();
 
@@ -6258,7 +6331,7 @@ void os::Linux::restore() {
           Arguments::system_properties(),
           Arguments::java_command() ? Arguments::java_command() : "",
           restore_time,
-          restore_counter)) {
+          restore_nanos)) {
       char strid[32];
       snprintf(strid, sizeof(strid), "%d", id);
       setenv("CRAC_NEW_ARGS_ID", strid, true);
@@ -6268,7 +6341,9 @@ void os::Linux::restore() {
 
 
   if (_crengine) {
-    execl(_crengine, _crengine, "restore", CRaCRestoreFrom, NULL);
+    _crengine_args[1] = "restore";
+    add_crengine_arg(CRaCRestoreFrom);
+    execv(_crengine, (char * const*) _crengine_args);
     warning("cannot execute \"%s restore ...\" (%s)", _crengine, strerror(errno));
   }
 }
@@ -6358,7 +6433,7 @@ bool CracRestoreParameters::read_from(int fd) {
   char* cursor = _raw_content + sizeof(header);
 
   ::_restore_start_time = hdr->_restore_time;
-  ::_restore_start_counter = hdr->_restore_counter;
+  ::_restore_start_nanos = hdr->_restore_nanos;
 
   for (int i = 0; i < hdr->_nflags; i++) {
     FormatBuffer<80> err_msg("%s", "");
@@ -6436,4 +6511,42 @@ void os::print_memory_mappings(char* addr, size_t bytes, outputStream* st) {
     }
     st->cr();
   }
+}
+
+static bool read_all(int fd, char *dest, size_t n) {
+  size_t rd = 0;
+  do {
+    ssize_t r = ::read(fd, dest + rd, n - rd);
+    if (r == 0) {
+      return false;
+    } else if (r < 0) {
+      if (errno == EINTR) {
+        continue;
+      }
+      return false;
+    }
+    rd += r;
+  } while (rd < n);
+  return true;
+}
+
+bool os::read_bootid(char *dest) {
+  int fd = ::open("/proc/sys/kernel/random/boot_id", O_RDONLY);
+  if (fd < 0 || !read_all(fd, dest, UUID_LENGTH)) {
+    perror("CRaC: Cannot read system boot ID");
+    return false;
+  }
+  char c;
+  if (!read_all(fd, &c, 1) || c != '\n') {
+    perror("CRaC: system boot ID does not end with newline");
+    return false;
+  }
+  if (::read(fd, &c, 1) != 0) {
+    perror("CRaC: Unexpected data/error reading system boot ID");
+    return false;
+  }
+  if (::close(fd) != 0) {
+    perror("CRaC: Cannot close system boot ID file");
+  }
+  return true;
 }

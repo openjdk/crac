@@ -49,6 +49,7 @@ public class CracBuilder {
     private List<String> dockerCheckpointOptions;
     boolean containerUsePrivileged = true;
     private List<String> containerSetupCommand;
+    boolean runContainerDirectly = false;
     // make sure to update copy() when adding another field here
 
     boolean containerStarted;
@@ -89,6 +90,7 @@ public class CracBuilder {
         other.dockerCheckpointOptions = dockerCheckpointOptions;
         other.containerUsePrivileged = containerUsePrivileged;
         other.containerSetupCommand = containerSetupCommand;
+        other.runContainerDirectly = runContainerDirectly;
         return other;
     }
 
@@ -114,6 +116,11 @@ public class CracBuilder {
 
     public CracBuilder containerUsePrivileged(boolean usePrivileged) {
         this.containerUsePrivileged = usePrivileged;
+        return this;
+    }
+
+    public CracBuilder runContainerDirectly(boolean runDirectly) {
+        this.runContainerDirectly = runDirectly;
         return this;
     }
 
@@ -218,7 +225,11 @@ public class CracBuilder {
     }
 
     public CracProcess startCheckpoint(List<String> javaPrefix) throws Exception {
-        ensureContainerStarted();
+        if (runContainerDirectly) {
+            prepareContainer();
+        } else {
+            ensureContainerStarted();
+        }
         List<String> cmd = prepareCommand(javaPrefix, false);
         cmd.add("-XX:CRaCCheckpointTo=" + imageDir);
         cmd.add(main().getName());
@@ -246,17 +257,24 @@ public class CracBuilder {
             fail("CRAC_CRIU_PATH is not set and cannot find criu executable in any of: " + CRIU_CANDIDATES);
         }
         if (!containerStarted) {
-            ensureContainerKilled();
-            buildDockerImage();
-            FileUtils.deleteFileTreeWithRetry(Path.of(".", "jdk-docker"));
-            // Make sure we start with a clean image directory
-            DockerTestUtils.execute(Container.ENGINE_COMMAND, "volume", "rm", "cr");
+            prepareContainer();
             List<String> cmd = prepareContainerCommand(dockerImageName, dockerOptions);
             log("Starting docker container:\n" + String.join(" ", cmd));
             assertEquals(0, new ProcessBuilder().inheritIO().command(cmd).start().waitFor());
             containerSetup();
             containerStarted = true;
         }
+    }
+
+    private void prepareContainer() throws Exception {
+        if (runContainerDirectly && null != containerSetupCommand) {
+            fail("runContainerDirectly and containerSetupCommand cannot be used together.");
+        }
+        ensureContainerKilled();
+        buildDockerImage();
+        FileUtils.deleteFileTreeWithRetry(Path.of(".", "jdk-docker"));
+        // Make sure we start with a clean image directory
+        DockerTestUtils.execute(Container.ENGINE_COMMAND, "volume", "rm", "cr");
     }
 
     private void containerSetup() throws Exception {
@@ -296,14 +314,17 @@ public class CracBuilder {
         }
     }
 
-    private List<String> prepareContainerCommand(String imageName, String[] options) {
+    private List<String> prepareContainerCommandBase(String imageName, String[] options) {
         List<String> cmd = new ArrayList<>();
         cmd.add(Container.ENGINE_COMMAND);
-        cmd.addAll(Arrays.asList("run", "--rm", "-d"));
+        cmd.addAll(Arrays.asList("run", "--rm"));
+        if (!runContainerDirectly) {
+            cmd.add("-d");
+            cmd.add("--init"); // otherwise the checkpointed process would not be reaped (by sleep with PID 1)
+        }
         if (containerUsePrivileged) {
             cmd.add("--privileged"); // required to give CRIU sufficient permissions
         }
-        cmd.add("--init"); // otherwise the checkpointed process would not be reaped (by sleep with PID 1)
         int entryCounter = 0;
         for (var entry : Utils.TEST_CLASS_PATH.split(File.pathSeparator)) {
             cmd.addAll(Arrays.asList("--volume", entry + ":/cp/" + (entryCounter++)));
@@ -319,6 +340,11 @@ public class CracBuilder {
             cmd.addAll(Arrays.asList(options));
         }
         cmd.add(imageName);
+        return cmd;
+    }
+
+    private List<String> prepareContainerCommand(String imageName, String[] options) {
+        List<String> cmd = prepareContainerCommandBase(imageName, options);
         cmd.addAll(Arrays.asList("sleep", "3600"));
         return cmd;
     }
@@ -395,12 +421,16 @@ public class CracBuilder {
         if (javaPrefix != null) {
             cmd.addAll(javaPrefix);
         } else if (dockerImageName != null) {
-            cmd.add(Container.ENGINE_COMMAND);
-            cmd.add("exec");
-            if (null != dockerCheckpointOptions) {
-                cmd.addAll(dockerCheckpointOptions);
+            if (runContainerDirectly) {
+                cmd = prepareContainerCommandBase(dockerImageName, dockerOptions);
+            } else {
+                cmd.add(Container.ENGINE_COMMAND);
+                cmd.add("exec");
+                if (null != dockerCheckpointOptions) {
+                    cmd.addAll(dockerCheckpointOptions);
+                }
+                cmd.add(CONTAINER_NAME);
             }
-            cmd.add(CONTAINER_NAME);
             cmd.add(DOCKER_JAVA);
         } else {
             cmd.add(JAVA);

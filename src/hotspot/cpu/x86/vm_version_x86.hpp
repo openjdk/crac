@@ -370,12 +370,11 @@ protected:
     decl(AVX512_VBMI2,      "avx512_vbmi2",      44) /* VBMI2 shift left double instructions */ \
     decl(AVX512_VBMI,       "avx512_vbmi",       45) /* Vector BMI instructions */ \
     decl(HV,                "hv",                46) /* Hypervisor instructions */ \
-                                                     \
-    decl(MAX,               "max",               47) /* Maximum - this feature must never be used */
 
 #define DECLARE_CPU_FEATURE_FLAG(id, name, bit) CPU_##id = (1ULL << bit),
     CPU_FEATURE_FLAGS(DECLARE_CPU_FEATURE_FLAG)
 #undef DECLARE_CPU_FEATURE_FLAG
+    MAX_CPU = CPU_HV << 1
   };
 
   /* Tracking of a CPU feature for glibc */ \
@@ -391,11 +390,11 @@ protected:
     decl(LAHFSAHF,          "lahfsahf",           7) /* Also known in cpuinfo as lahf_lm and in glibc as lahf64_sahf64 */ \
     decl(F16C,              "f16c",               8) \
     decl(HTT,               "htt",                9) /* hotspot calls it 'ht' but it is affected by threads_per_core() */ \
-                                                     \
-    decl(MAX,               "max",               10) /* Maximum - this feature must never be used */
+
 #define DECLARE_GLIBC_FEATURE_FLAG(id, name, bit) GLIBC_##id = (1ULL << bit),
     GLIBC_FEATURE_FLAGS(DECLARE_GLIBC_FEATURE_FLAG)
 #undef DECLARE_GLIBC_FEATURE_FLAG
+    MAX_GLIBC = GLIBC_HTT << 1
   };
 
   // glibc feature flags.

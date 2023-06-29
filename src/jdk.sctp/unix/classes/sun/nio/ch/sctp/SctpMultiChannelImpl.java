@@ -24,7 +24,10 @@
  */
 package sun.nio.ch.sctp;
 
-import java.net.*;
+import java.net.InetAddress;
+import java.net.SocketAddress;
+import java.net.SocketException;
+import java.net.InetSocketAddress;
 import java.io.FileDescriptor;
 import java.io.IOException;
 import java.util.Collections;
@@ -71,6 +74,7 @@ public class SctpMultiChannelImpl extends SctpMultiChannel
     implements SelChImpl
 {
     private final FileDescriptor fd;
+
     private final int fdVal;
     private final SctpResource resource = new SctpResource(this) {
         @Override

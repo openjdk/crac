@@ -32,7 +32,6 @@ import java.nio.channels.MulticastChannel;
 import java.security.AccessController;
 import java.security.PrivilegedAction;
 import java.util.Set;
-
 import sun.net.NetProperties;
 import sun.nio.ch.DefaultSelectorProvider;
 
@@ -1447,4 +1446,5 @@ public class DatagramSocket implements java.io.Closeable {
         T result = (T) delegate;
         return result;
     }
+
 }

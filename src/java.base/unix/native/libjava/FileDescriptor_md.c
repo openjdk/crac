@@ -24,9 +24,7 @@
  */
 #include <fcntl.h>
 #include <inttypes.h>
-#include <limits.h>
 #include <stdbool.h>
-#include <string.h>
 #include <unistd.h>
 
 #include "jni.h"

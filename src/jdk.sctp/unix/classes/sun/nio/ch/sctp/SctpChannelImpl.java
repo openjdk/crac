@@ -24,10 +24,15 @@
  */
 package sun.nio.ch.sctp;
 
-import java.net.*;
+import java.net.InetAddress;
+import java.net.SocketAddress;
+import java.net.SocketException;
+import java.net.InetSocketAddress;
 import java.io.FileDescriptor;
 import java.io.IOException;
-import java.util.*;
+import java.util.Collections;
+import java.util.Set;
+import java.util.HashSet;
 import java.nio.ByteBuffer;
 import java.nio.channels.SelectionKey;
 import java.nio.channels.ClosedChannelException;
@@ -37,7 +42,6 @@ import java.nio.channels.AlreadyConnectedException;
 import java.nio.channels.NotYetBoundException;
 import java.nio.channels.NotYetConnectedException;
 import java.nio.channels.spi.SelectorProvider;
-
 import com.sun.nio.sctp.AbstractNotificationHandler;
 import com.sun.nio.sctp.Association;
 import com.sun.nio.sctp.AssociationChangeNotification;
@@ -58,7 +62,6 @@ import sun.nio.ch.Net;
 import sun.nio.ch.SelChImpl;
 import sun.nio.ch.SelectionKeyImpl;
 import sun.nio.ch.Util;
-
 import static com.sun.nio.sctp.SctpStandardSocketOptions.*;
 import static sun.nio.ch.sctp.ResultContainer.SEND_FAILED;
 import static sun.nio.ch.sctp.ResultContainer.ASSOCIATION_CHANGED;
@@ -73,6 +76,7 @@ public class SctpChannelImpl extends SctpChannel
     implements SelChImpl
 {
     private final FileDescriptor fd;
+
     private final int fdVal;
     private final SctpResource resource = new SctpResource(this) {
         @Override
@@ -1120,6 +1124,4 @@ public class SctpChannelImpl extends SctpChannel
             });
         initIDs();
     }
-
 }
-

@@ -31,7 +31,6 @@ import java.io.StringWriter;
 import java.lang.StackWalker.StackFrame;
 import java.security.AccessController;
 import java.security.PrivilegedAction;
-import java.text.MessageFormat;
 import java.time.ZonedDateTime;
 import java.util.Optional;
 import java.util.MissingResourceException;

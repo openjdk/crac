@@ -25,9 +25,12 @@
 
 package sun.nio.ch;
 
-import java.net.*;
 import java.nio.ByteBuffer;
 import java.nio.channels.*;
+import java.net.SocketOption;
+import java.net.StandardSocketOptions;
+import java.net.SocketAddress;
+import java.net.InetSocketAddress;
 import java.io.IOException;
 import java.io.FileDescriptor;
 import java.util.Set;

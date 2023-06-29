@@ -39,28 +39,39 @@ import java.util.Arrays;
  * @requires (os.family == "linux")
  * @library /test/lib
  * @build ContainerPidAdjustmentTest
- * @run driver/timeout=60 jdk.test.lib.crac.CracTest   1       true   1
- * @run driver/timeout=60 jdk.test.lib.crac.CracTest   100     true   100
- * @run driver/timeout=60 jdk.test.lib.crac.CracTest   1000    false  1000
- * @run driver/timeout=60 jdk.test.lib.crac.CracTest   2000    true   2000   1000
- * @run driver/timeout=60 jdk.test.lib.crac.CracTest   0       true   -1
- * @run driver/timeout=60 jdk.test.lib.crac.CracTest   -10     true   -1
- * @run driver/timeout=60 jdk.test.lib.crac.CracTest   blabla  true   -1
- * @run driver/timeout=60 jdk.test.lib.crac.CracTest   5000000 true   -1
- * @run driver/timeout=60 jdk.test.lib.crac.CracTest   5000000 true   -1     4194200
- * @run driver/timeout=60 jdk.test.lib.crac.CracTest   4194303 true   -1
+ * @run driver/timeout=60 jdk.test.lib.crac.CracTest  true   false  INF     true   128
+ * @run driver/timeout=60 jdk.test.lib.crac.CracTest  true   true   100     true   100
+ * @run driver/timeout=60 jdk.test.lib.crac.CracTest  false  false  INF     false  1
+ * @run driver/timeout=60 jdk.test.lib.crac.CracTest  false  true   1       false  1
+ * @run driver/timeout=60 jdk.test.lib.crac.CracTest  false  true   1       true   1
+ * @run driver/timeout=60 jdk.test.lib.crac.CracTest  false  true   200     true   200
+ * @run driver/timeout=60 jdk.test.lib.crac.CracTest  false  true   1000    false  1000
+ * @run driver/timeout=60 jdk.test.lib.crac.CracTest  false  true   2000    true   2000   1000
+ * @run driver/timeout=60 jdk.test.lib.crac.CracTest  false  true   0       true   -1
+ * @run driver/timeout=60 jdk.test.lib.crac.CracTest  false  true   -10     true   -1
+ * @run driver/timeout=60 jdk.test.lib.crac.CracTest  false  true   blabla  true   -1
+ * @run driver/timeout=60 jdk.test.lib.crac.CracTest  false  true   5000000 true   -1
+ * @run driver/timeout=60 jdk.test.lib.crac.CracTest  false  true   5000000 true   -1     4194200
+ * @run driver/timeout=60 jdk.test.lib.crac.CracTest  false  true   4194303 true   -1
+
  */
 public class ContainerPidAdjustmentTest implements CracTest {
     @CracTestArg(0)
-    String lastPid;
+    boolean runDirectly;
 
     @CracTestArg(1)
-    boolean usePrivilegedContainer;
+    boolean needSetMinPid;
 
     @CracTestArg(2)
+    String lastPid;
+
+    @CracTestArg(3)
+    boolean usePrivilegedContainer;
+
+    @CracTestArg(4)
     long expectedLastPid;
 
-    @CracTestArg(value = 3, optional = true)
+    @CracTestArg(value = 5, optional = true)
     String lastPidSetup;
 
     final private String CURRENT_PID_MESSAGE = "Current PID = ";
@@ -72,8 +83,11 @@ public class ContainerPidAdjustmentTest implements CracTest {
         }
         CracBuilder builder = new CracBuilder()
             .inDockerImage("pid-adjustment")
-            .vmOption("-XX:CRaCMinPid=" + lastPid)
+            .runContainerDirectly(runDirectly)
             .containerUsePrivileged(usePrivilegedContainer);
+        if (needSetMinPid) {
+            builder.vmOption("-XX:CRaCMinPid=" + lastPid);
+        }
         if (0 > expectedLastPid) {
             builder.captureOutput(true);
         }

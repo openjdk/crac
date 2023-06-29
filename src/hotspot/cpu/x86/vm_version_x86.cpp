@@ -1158,9 +1158,9 @@ void VM_Version::glibc_not_using(uint64_t excessive_CPU, uint64_t excessive_GLIB
   GLIBC_UNSUPPORTED(GLIBC, F16C             );
 #undef GLIBC_UNSUPPORTED
 #define CHECK_KIND(kind) do {                                                                                                                 \
-    if (PASTE_TOKENS(excessive_handled_, kind) != PASTE_TOKENS(kind, _MAX) - 1)                                                               \
+    if (PASTE_TOKENS(excessive_handled_, kind) != PASTE_TOKENS(MAX_, kind) - 1)                                                               \
       vm_exit_during_initialization(err_msg("internal error: Unsupported disabling of some " STR(kind) "_* 0x%" PRIx64 " != full 0x%" PRIx64, \
-                                            PASTE_TOKENS(excessive_handled_, kind), CPU_MAX - 1));                                            \
+                                            PASTE_TOKENS(excessive_handled_, kind), PASTE_TOKENS(MAX_, kind) - 1));                           \
   } while (0)
   CHECK_KIND(CPU  );
   CHECK_KIND(GLIBC);
@@ -2493,11 +2493,11 @@ void VM_Version::fatal_missing_features(uint64_t features_missing, uint64_t glib
   tty->print_raw(part2, sizeof(part2) - 1);
   char buf[512] = "";
   // insert_features_names() does crash for undefined too high-numbered features.
-  insert_features_names(buf, sizeof(buf)          ,       features_missing & (  CPU_MAX - 1));
+  insert_features_names(buf, sizeof(buf)          ,       features_missing & (  MAX_CPU - 1));
   char *s = buf;
   while (*s)
     ++s;
-  insert_features_names(s  , buf + sizeof(buf) - s, glibc_features_missing & (GLIBC_MAX - 1));
+  insert_features_names(s  , buf + sizeof(buf) - s, glibc_features_missing & (MAX_GLIBC - 1));
   while (*s)
     ++s;
   /* +1 to skip the first ','. */
@@ -2608,8 +2608,8 @@ void VM_Version::initialize() {
     print_using_features_cr();
 
   if (!ignore_glibc_not_using) {
-    uint64_t       features_expected =   CPU_MAX - 1;
-    uint64_t glibc_features_expected = GLIBC_MAX - 1;
+    uint64_t       features_expected =   MAX_CPU - 1;
+    uint64_t glibc_features_expected = MAX_GLIBC - 1;
 #if !INCLUDE_CPU_FEATURE_ACTIVE && !INCLUDE_LD_SO_LIST_DIAGNOSTICS
           features_expected =       features_saved;
     glibc_features_expected = glibc_features_saved;

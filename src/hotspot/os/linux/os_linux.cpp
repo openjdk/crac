@@ -6126,6 +6126,23 @@ bool VM_Crac::is_claimed_fd(int fd) {
   return false;
 }
 
+class WakeupClosure: public ThreadClosure {
+  void do_thread(Thread* thread) {
+    JavaThread *jt = thread->as_Java_thread();
+    jt->wakeup_sleep();
+    jt->parker()->unpark();
+    jt->_ParkEvent->unpark();
+  }
+};
+
+static void wakeup_threads_in_timedwait() {
+  WakeupClosure wc;
+  Threads::java_threads_do(&wc);
+
+  MonitorLocker ml(PeriodicTask_lock, Mutex::_no_safepoint_check_flag);
+  WatcherThread::watcher_thread()->unpark();
+}
+
 void VM_Crac::doit() {
 
   AttachListener::abort();
@@ -6212,6 +6229,8 @@ void VM_Crac::doit() {
     _restore_start_nanos += os::monotonic_time_offset();
   }
   PerfMemoryLinux::restore();
+
+  wakeup_threads_in_timedwait();
 
   _ok = true;
 }

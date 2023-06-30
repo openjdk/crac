@@ -210,7 +210,11 @@ static int set_last_pid(int pid) {
 
 static void spin_last_pid(int pid) {
     const int MaxSpinCount = pid < 1000 ? 1000 : pid;
-    for (int child = fork(), prev = 0, cnt = MaxSpinCount; child < pid; child = fork(), --cnt) {
+    int cnt = MaxSpinCount;
+    int child = 0;
+    int prev = 0;
+    do {
+        child = fork();
         if (0 > child) {
             perror("spin_last_pid clone");
             exit(1);
@@ -232,7 +236,8 @@ static void spin_last_pid(int pid) {
             perror("spin_last_pid waitpid");
             exit(1);
         }
-    }
+        --cnt;
+    } while (child < pid);
 }
 
 JNIEXPORT int

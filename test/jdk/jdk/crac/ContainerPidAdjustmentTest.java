@@ -78,7 +78,6 @@ public class ContainerPidAdjustmentTest implements CracTest {
     final private String CURRENT_PID_MESSAGE = "Current PID = ";
 
     @Override
-    // FIXME: need to add a test for default values, for Java's PID==1.
     public void test() throws Exception {
         if (!DockerTestUtils.canTestDocker()) {
             return;

@@ -37,7 +37,7 @@ import java.io.IOException;
 import java.util.jar.JarFile;
 
 /**
- * @crac It is assumed that JAR files opened through this class thatn are open
+ * @crac It is assumed that JAR files opened through this class that are open
  * during checkpoint will be present on same path in the filesystem after
  * restore. Therefore, application does <strong>not</strong> have to close
  * these files before a checkpoint.

@@ -323,9 +323,9 @@ public class Timer {
      * with respect to one another.
      *
      * @crac Since the execution is suspended after a checkpoint the timer
-     * could execute many times after a restore. This is likely an undesired
-     * behaviour, therefore it is recommended to cancel the task before
-     * checkpoint and schedule it again after restore.
+     * could execute many times after a restore, catching up for all the
+     * delayed executions. If this is not desirable the application can cancel
+     * the task before checkpoint and schedule it again after restore.
      *
      * @param task   task to be scheduled.
      * @param delay  delay in milliseconds before task is to be executed.
@@ -372,9 +372,9 @@ public class Timer {
      * with respect to one another.
      *
      * @crac Since the execution is suspended after a checkpoint the timer
-     * could execute many times after a restore. This is likely an undesired
-     * behaviour, therefore it is recommended to cancel the task before
-     * checkpoint and schedule it again after restore.
+     * could execute many times after a restore, catching up for all the
+     * delayed executions. If this is not desirable the application can cancel
+     * the task before checkpoint and schedule it again after restore.
      *
      * @param task   task to be scheduled.
      * @param firstTime First time at which task is to be executed.

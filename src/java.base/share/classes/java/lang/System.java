@@ -543,11 +543,10 @@ public final class System {
      * if (System.nanoTime() >= startTime + timeoutNanos) ...}</pre>
      * because of the possibility of numerical overflow.
      *
-     * @crac The value returned by this method can be non-consistent after
-     * restore from a checkpoint. Applications are recommended to discard
-     * the measurement if the difference from previous invocation is outside
-     * of expected bounds, or {@link javax.crac.Context#register(javax.crac.Resource) register}
-     * a resource that will help with adapting after the restore.
+     * @crac When the process is restored on another machine or if the machine
+     * rebooted the value is updated based on wall-clock time difference,
+     * resulting in a loss of accuracy when comparing timestamps obtained
+     * before and after checkpoint.
      *
      * @return the current value of the running Java Virtual Machine's
      *         high-resolution time source, in nanoseconds
@@ -787,9 +786,10 @@ public final class System {
      *
      * @crac While the API note above discourages from changing system properties during
      * runtime it is actually quite common after restore from a checkpoint. The application
-     * should {@link javax.crac.Context#register(javax.crac.Resource) register}
-     * a resource and in the {@link javax.crac.Resource#afterRestore(javax.crac.Context) afterRestore method}
-     * reload system properties, propagating any change.
+     * can {@link javax.crac.Context#register(javax.crac.Resource) register}
+     * a resource and reload system properties in the
+     * {@link javax.crac.Resource#afterRestore(javax.crac.Context) afterRestore method},
+     * updating the application.
      *
      * @implNote
      * In addition to the standard system properties, the system
@@ -1105,9 +1105,10 @@ public final class System {
      *
      * @crac While environment variables are typically constant through
      * the lifetime of a process these can change after restore from
-     * a checkpoint. The application should {@link javax.crac.Context#register(javax.crac.Resource) register}
-     * a resource and in the {@link javax.crac.Resource#afterRestore(javax.crac.Context) afterRestore method}
-     * reload environment variables, propagating any change.
+     * a checkpoint. The application can {@link javax.crac.Context#register(javax.crac.Resource) register}
+     * a resource and reload environment variables in the
+     * {@link javax.crac.Resource#afterRestore(javax.crac.Context) afterRestore method},
+     * updating the application.
      *
      * @param  name the name of the environment variable
      * @return the string value of the variable, or {@code null}
@@ -1164,9 +1165,10 @@ public final class System {
      *
      * @crac While environment variables are typically constant through
      * the lifetime of a process these can change after restore from
-     * a checkpoint. The application should {@link javax.crac.Context#register(javax.crac.Resource) register}
-     * a resource and in the {@link javax.crac.Resource#afterRestore(javax.crac.Context) afterRestore method}
-     * reload the environment variable, propagating any change.
+     * a checkpoint. The application can {@link javax.crac.Context#register(javax.crac.Resource) register}
+     * a resource and reload the environment variables in the
+     * {@link javax.crac.Resource#afterRestore(javax.crac.Context) afterRestore method},
+     * updating the application.
      *
      * @return the environment as a map of variable names to values
      * @throws SecurityException

@@ -363,7 +363,7 @@ public class SecureRandom extends java.util.Random {
      * <p> Note that the list of registered providers may be retrieved via
      * the {@link Security#getProviders() Security.getProviders()} method.
      *
-     * @crac See provider documentation for details of behaviour after restore from a checkpoint.
+     * @crac The checkpoint/restore behaviour depends on security provider implementation.
      *
      * @implNote
      * The JDK Reference Implementation additionally uses the
@@ -412,7 +412,7 @@ public class SecureRandom extends java.util.Random {
      * <p> Note that the list of registered providers may be retrieved via
      * the {@link Security#getProviders() Security.getProviders()} method.
      *
-     * @crac See provider documentation for details of behaviour after restore from a checkpoint.
+     * @crac The checkpoint/restore behaviour depends on security provider implementation.
      *
      * @param algorithm the name of the RNG algorithm.
      * See the {@code SecureRandom} section in the <a href=
@@ -458,7 +458,7 @@ public class SecureRandom extends java.util.Random {
      * object is returned.  Note that the specified {@code Provider} object
      * does not have to be registered in the provider list.
      *
-     * @crac See provider documentation for details of behaviour after restore from a checkpoint.
+     * @crac The checkpoint/restore behaviour depends on security provider implementation.
      *
      * @param algorithm the name of the RNG algorithm.
      * See the {@code SecureRandom} section in the <a href=
@@ -507,7 +507,7 @@ public class SecureRandom extends java.util.Random {
      * <p> Note that the list of registered providers may be retrieved via
      * the {@link Security#getProviders() Security.getProviders()} method.
      *
-     * @crac See provider documentation for details of behaviour after restore from a checkpoint.
+     * @crac The checkpoint/restore behaviour depends on security provider implementation.
      *
      * @implNote
      * The JDK Reference Implementation additionally uses the
@@ -566,7 +566,7 @@ public class SecureRandom extends java.util.Random {
      * <p> Note that the list of registered providers may be retrieved via
      * the {@link Security#getProviders() Security.getProviders()} method.
      *
-     * @crac See provider documentation for details of behaviour after restore from a checkpoint.
+     * @crac The checkpoint/restore behaviour depends on security provider implementation.
      *
      * @param algorithm the name of the RNG algorithm.
      * See the {@code SecureRandom} section in the <a href=
@@ -621,7 +621,7 @@ public class SecureRandom extends java.util.Random {
      * {@code Provider} object does not have to be registered in the
      * provider list.
      *
-     * @crac See provider documentation for details of behaviour after restore from a checkpoint.
+     * @crac The checkpoint/restore behaviour depends on security provider implementation.
      *
      * @param algorithm the name of the RNG algorithm.
      * See the {@code SecureRandom} section in the <a href=

@@ -41,6 +41,7 @@
 #include "services/memTracker.hpp"
 #include "runtime/arguments.hpp"
 #include "runtime/atomic.hpp"
+#include "runtime/crac.hpp"
 #include "runtime/java.hpp"
 #include "runtime/orderAccess.hpp"
 #include "runtime/perfMemory.hpp"
@@ -1410,7 +1411,7 @@ jlong os::javaTimeNanos() {
   struct timespec tp;
   int status = clock_gettime(CLOCK_MONOTONIC, &tp);
   assert(status == 0, "clock_gettime error: %s", os::strerror(errno));
-  jlong result = jlong(tp.tv_sec) * NANOSECS_PER_SEC + jlong(tp.tv_nsec) + javaTimeNanos_offset;
+  jlong result = jlong(tp.tv_sec) * NANOSECS_PER_SEC + jlong(tp.tv_nsec) + crac::monotonic_time_offset();
   return result;
 }
 

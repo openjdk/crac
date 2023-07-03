@@ -23,18 +23,33 @@
 
 import java.io.*;
 import java.lang.ref.Cleaner;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 
 import jdk.crac.*;
+import jdk.test.lib.crac.CracBuilder;
+import jdk.test.lib.crac.CracEngine;
+import jdk.test.lib.crac.CracTest;
+
+import static jdk.test.lib.Asserts.assertTrue;
 
 /**
  * @test
- * @run main/othervm -XX:CREngine=simengine -XX:CRaCCheckpointTo=./cr RefQueueTest
+ * @library /test/lib
+ * @build RefQueueTest
+ * @run driver jdk.test.lib.crac.CracTest
  */
-public class RefQueueTest {
+public class RefQueueTest implements CracTest {
     private static final Cleaner cleaner = Cleaner.create();
 
-    static public void main(String[] args) throws Exception {
+    @Override
+    public void test() throws Exception {
+        new CracBuilder().engine(CracEngine.SIMULATE)
+                .startCheckpoint().waitForSuccess();
+    }
 
+    @Override
+    public void exec() throws Exception {
         File badFile = File.createTempFile("jtreg-RefQueueTest", null);
         OutputStream badStream = new FileOutputStream(badFile);
         badStream.write('j');
@@ -51,5 +66,13 @@ public class RefQueueTest {
 
         // should close the file and only then go to the native checkpoint
         Core.checkpointRestore();
+
+        // ensure that the cleaner starts working eventually
+        CountDownLatch latch = new CountDownLatch(1);
+        cleaner.register(new Object(), () -> {
+            latch.countDown();
+        });
+        System.gc();
+        assertTrue(latch.await(10, TimeUnit.SECONDS));
     }
 }

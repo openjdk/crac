@@ -25,6 +25,7 @@
 
 package java.lang.ref;
 
+import jdk.internal.crac.Core;
 import jdk.internal.ref.CleanerImpl;
 
 import java.util.Objects;

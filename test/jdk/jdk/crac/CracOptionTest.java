@@ -21,35 +21,36 @@
  * questions.
  */
 
+
 import jdk.crac.*;
-import jdk.test.lib.process.ProcessTools;
-import jdk.test.lib.process.OutputAnalyzer;
+import jdk.test.lib.Asserts;
+import jdk.test.lib.crac.CracBuilder;
+import jdk.test.lib.crac.CracTest;
+
+import java.io.File;
+import java.io.IOException;
+import java.nio.channels.Pipe;
+import java.nio.file.*;
+import java.util.Objects;
+import java.util.concurrent.TimeUnit;
 
 /**
- * @test
+ * @test CracOptionTest
  * @library /test/lib
- * @run main LazyProps
+ * @build CracOptionTest
+ * @run driver jdk.test.lib.crac.CracTest
  */
-public class LazyProps {
-    static public void main(String[] args) throws Exception {
-        if (args.length == 0) {
-            OutputAnalyzer output = ProcessTools.executeTestJvm(
-                    "-XX:CREngine=simengine", "-XX:CRaCCheckpointTo=./cr",
-                    "LazyProps",
-                    "-runTest");
-            output.shouldHaveExitValue(0);
-            output.shouldContain("jdk.crac beforeCheckpoint");
-        } else {
-            Resource resource = new Resource() {
-                @Override
-                public void beforeCheckpoint(Context<? extends Resource> context) throws Exception { }
-                @Override
-                public void afterRestore(Context<? extends Resource> context) throws Exception { }
-            };
-            Core.getGlobalContext().register(resource);
 
-            System.setProperty("jdk.crac.debug", "true");
-            Core.checkpointRestore();
-        }
+public class CracOptionTest implements CracTest {
+    @Override
+    public void test() throws Exception {
+        CracBuilder builder = new CracBuilder();
+        builder.javaOption("k","v");
+        builder.doCheckpointAndRestore();
+    }
+
+    @Override
+    public void exec() throws Exception {
+        Core.checkpointRestore();
     }
 }

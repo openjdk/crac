@@ -48,9 +48,9 @@ import java.util.Arrays;
 
 import jdk.crac.Context;
 import jdk.crac.Resource;
-import jdk.internal.crac.Core;
 import jdk.internal.access.JavaNetInetAddressAccess;
 import jdk.internal.access.SharedSecrets;
+import jdk.internal.crac.Core;
 import jdk.internal.crac.JDKResource;
 import sun.security.action.*;
 import sun.net.InetAddressCachePolicy;
@@ -356,11 +356,6 @@ public class InetAddress implements java.io.Serializable {
         // or in a different environment should query DNS again.
         checkpointListener = new JDKResource() {
             @Override
-            public Priority getPriority() {
-                return Priority.NORMAL;
-            }
-
-            @Override
             public void beforeCheckpoint(Context<? extends Resource> context) throws Exception {
                 cache.clear();
                 expirySet.clear();
@@ -370,7 +365,7 @@ public class InetAddress implements java.io.Serializable {
             public void afterRestore(Context<? extends Resource> context) throws Exception {
             }
         };
-        Core.getJDKContext().register(checkpointListener);
+        Core.Priority.NORMAL.getContext().register(checkpointListener);
     }
 
     /**

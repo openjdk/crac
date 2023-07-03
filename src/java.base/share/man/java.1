@@ -1308,6 +1308,23 @@ Strings introduces the regression
 In both of these scenarios, disabling Compact Strings makes sense.
 .RE
 .TP
+.B \f[CB]\-XX:CRaCCheckpointTo=\f[R]\f[I]directory\f[R]
+The CRaC (Coordinated Restore at Checkpoint) Project provides checkpointing of
+a running Java program into an image directory. Restoring from the image should
+solve some of the problematic start-up and warm-up times.
+.PP
+This option defines a path to the snapshot which is currently a directory. The
+directory will be created if it does not exist, but no parent directories are
+created.
+.RS
+.RE
+.TP
+.B \f[CB]\-XX:CRaCRestoreFrom=\f[R]\f[I]directory\f[R]
+Restores a snapshot created by
+\f[CB]\-XX:CRaCCheckpointTo=\f[R]\f[I]directory\f[R].
+.RS
+.RE
+.TP
 .B \f[CB]\-XX:ErrorFile=\f[R]\f[I]filename\f[R]
 Specifies the path and file name to which error data is written when an
 irrecoverable error occurs.
@@ -2326,6 +2343,15 @@ compilation.
 .RS
 .RE
 .TP
+.B \f[CB]\-XX:CPUFeatures=\f[R]\f[I]0xnumber\f[R]
+CPU feature set, use -XX:CPUFeatures=0xnumber with -XX:CRaCCheckpointTo when
+you get an error during -XX:CRaCRestoreFrom on a different machine.
+\f[CB]\-XX:CPUFeatures=native\f[R] is the default.
+\f[CB]\-XX:CPUFeatures=generic\f[R] is compatible with any CPU but not as slow
+as \f[CB]\-XX:CPUFeatures=0\f[R].
+.RS
+.RE
+.TP
 .B \f[CB]\-XX:+DoEscapeAnalysis\f[R]
 Enables the use of escape analysis.
 This option is enabled by default.
@@ -2604,6 +2630,12 @@ Lookaside Buffer (ITLB).
 ICache is an instruction cache in theCPU.
 The implementation of the code cache can be found in the file:
 \f[CB]/share/vm/code/codeCache.cpp\f[R].
+.RS
+.RE
+.TP
+.B \f[CB]\-XX:+ShowCPUFeatures\f[R]
+Show features of this CPU to be possibly used for the
+\f[CB]\-XX:CPUFeatures=0xnumber\f[R] option.
 .RS
 .RE
 .TP

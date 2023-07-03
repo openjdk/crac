@@ -26,28 +26,45 @@
 
 package jdk.crac.impl;
 
-import jdk.crac.Resource;
-import jdk.crac.impl.AbstractContextImpl;
+import jdk.crac.*;
 
-import java.util.Comparator;
-import java.util.Map;
+import java.util.*;
 
-public class OrderedContext extends AbstractContextImpl<Resource, Long> {
-    private long order;
+/**
+ * Context performing Checkpoint notification in reverse order of registration.
+ * Concurrent registration along notification is silently ignored.
+ * @param <R>
+ */
+public class OrderedContext<R extends Resource> extends AbstractContext<R> {
+    private final WeakHashMap<R, Long> resources = new WeakHashMap<>();
+    private long order = 0;
+    private List<R> restoreSnapshot = null;
 
-    static class ContextComparator implements Comparator<Map.Entry<Resource, Long>> {
-        @Override
-        public int compare(Map.Entry<Resource, Long> o1, Map.Entry<Resource, Long> o2) {
-            return (int)(o2.getValue() - o1.getValue());
+    protected List<R> checkpointSnapshot() {
+        List<R> snapshot;
+        synchronized (this) {
+            snapshot = this.resources.entrySet().stream()
+                .sorted(Collections.reverseOrder(Map.Entry.comparingByValue()))
+                .map(Map.Entry::getKey)
+                .toList();
         }
+        restoreSnapshot = new ArrayList<>(snapshot);
+        Collections.reverse(restoreSnapshot);
+        return snapshot;
     }
 
-    public OrderedContext() {
-        super(new ContextComparator());
+    // We won't synchronize access to restoreSnapshot because methods
+    // beforeCheckpoint and afterRestore should be invoked only
+    // by the single thread performing the C/R and other threads should
+    // not touch that.
+    protected List<R> restoreSnapshot() {
+        List<R> snapshot = restoreSnapshot;
+        restoreSnapshot = null;
+        return snapshot;
     }
 
     @Override
-    public synchronized void register(Resource r) {
-        register(r, order++);
+    public synchronized void register(R resource) {
+        resources.put(resource, order++);
     }
 }

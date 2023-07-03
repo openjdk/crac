@@ -56,7 +56,6 @@ public class ReferenceQueue<T> {
     private final Lock lock = new Lock();
     private volatile Reference<? extends T> head;
     private long queueLength = 0;
-    private int nWaiters = 0;
 
     boolean enqueue(Reference<? extends T> r) { /* Called only by Reference class */
         synchronized (lock) {
@@ -122,6 +121,22 @@ public class ReferenceQueue<T> {
         }
     }
 
+    Reference<? extends T> poll(long timeout) throws InterruptedException {
+        synchronized (lock) {
+            Reference<? extends T> r = reallyPoll();
+            if (r != null) return r;
+            // any wake (including spurious) ends the wait
+            lock.wait(timeout);
+            return reallyPoll();
+        }
+    }
+
+    void wakeup() {
+        synchronized (lock) {
+            lock.notifyAll();
+        }
+    }
+
     /**
      * Removes the next reference object in this queue, blocking until either
      * one becomes available or the given timeout period expires.
@@ -153,10 +168,7 @@ public class ReferenceQueue<T> {
             if (r != null) return r;
             long start = (timeout == 0) ? 0 : System.nanoTime();
             for (;;) {
-                ++nWaiters;
-                lock.notifyAll();
                 lock.wait(timeout);
-                --nWaiters;
                 r = reallyPoll();
                 if (r != null) return r;
                 if (timeout != 0) {
@@ -205,19 +217,6 @@ public class ReferenceQueue<T> {
             } else {
                 // next in chain
                 r = rn;
-            }
-        }
-    }
-
-    /**
-     * Blocks calling thread until the specified number of threads are blocked with no reference available.
-     * @param nWaiters number of threads to wait
-     * @throws InterruptedException If the wait is interrupted
-     */
-    public void waitForWaiters(int nWaiters) throws InterruptedException {
-        synchronized (lock) {
-            while (head != null || this.nWaiters < nWaiters) {
-                lock.wait();
             }
         }
     }

@@ -29,6 +29,7 @@ import java.nio.channels.FileChannel;
 
 import jdk.internal.access.JavaIORandomAccessFileAccess;
 import jdk.internal.access.SharedSecrets;
+import jdk.internal.crac.JDKFileResource;
 import sun.nio.ch.FileChannelImpl;
 
 
@@ -79,6 +80,18 @@ public class RandomAccessFile implements DataOutput, DataInput, Closeable {
     private static final int O_SYNC =   4;
     private static final int O_DSYNC =  8;
     private static final int O_TEMPORARY =  16;
+
+    JDKFileResource resource = new JDKFileResource() {
+        @Override
+        protected FileDescriptor getFD() {
+            return fd;
+        }
+
+        @Override
+        protected String getPath() {
+            return path;
+        }
+    };
 
     /**
      * Creates a random access file stream to read from, and optionally

@@ -25,12 +25,15 @@
 
 package java.io;
 
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Objects;
+import java.util.*;
 
+import jdk.crac.Context;
+import jdk.crac.impl.CheckpointOpenResourceException;
 import jdk.internal.access.JavaIOFileDescriptorAccess;
 import jdk.internal.access.SharedSecrets;
+import jdk.internal.crac.Core;
+import jdk.internal.crac.ClaimedFDs;
+import jdk.internal.crac.JDKFdResource;
 import jdk.internal.ref.PhantomCleanable;
 
 /**
@@ -54,6 +57,34 @@ public final class FileDescriptor {
     private Closeable parent;
     private List<Closeable> otherParents;
     private boolean closed;
+
+    class Resource extends JDKFdResource {
+        private boolean closedByNIO;
+
+        @Override
+        public void beforeCheckpoint(Context<? extends jdk.crac.Resource> context) throws Exception {
+            if (!closedByNIO && valid()) {
+                ClaimedFDs claimedFDs = Core.getClaimedFDs();
+                FileDescriptor self = FileDescriptor.this;
+
+                claimedFDs.claimFd(self, self, () ->  {
+                    if (self == in || self == out || self == err) {
+                        return null;
+                    }
+                    return new CheckpointOpenResourceException(
+                        FileDescriptor.class.getSimpleName() + " " + fd + ": " + nativeDescription0(),
+                        getStackTraceHolder());
+                });
+            }
+        }
+
+        @Override
+        public String toString() {
+            return getClass().getName() + "(FD " + fd + ")";
+        }
+    }
+
+    Resource resource = new Resource();
 
     /**
      * true, if file is opened for appending.
@@ -86,6 +117,11 @@ public final class FileDescriptor {
 
                     public void close(FileDescriptor fdo) throws IOException {
                         fdo.close();
+                    }
+
+                    @Override
+                    public void markClosed(FileDescriptor fdo) {
+                        fdo.resource.closedByNIO = true;
                     }
 
                     /* Register for a normal FileCleanable fd/handle cleanup. */
@@ -296,6 +332,8 @@ public final class FileDescriptor {
         unregisterCleanup();
         close0();
     }
+
+    private native String nativeDescription0();
 
     /*
      * Close the raw file descriptor or handle, if it has not already been closed

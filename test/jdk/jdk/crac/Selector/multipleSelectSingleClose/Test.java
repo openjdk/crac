@@ -18,6 +18,9 @@
 // CA 94089 USA or visit www.azul.com if you need additional information or
 // have any questions.
 
+import jdk.test.lib.crac.CracBuilder;
+import jdk.test.lib.crac.CracTest;
+import jdk.test.lib.crac.CracTestArg;
 
 import java.nio.channels.Selector;
 import java.nio.channels.ClosedSelectorException;
@@ -26,13 +29,36 @@ import java.util.Random;
 
 import java.util.concurrent.atomic.AtomicInteger;
 
-
-public class Test {
-
+/*
+ * @test Selector/multipleSelectSingleClose
+ * @summary check a coexistence of multiple select() + C/R in case when the selector is finally closed
+ * @library /test/lib
+ * @build Test
+ * @run driver jdk.test.lib.crac.CracTest false false
+ * @run driver jdk.test.lib.crac.CracTest false true
+ * @run driver jdk.test.lib.crac.CracTest true  true
+ */
+public class Test implements CracTest {
     private final static Random RND = new Random();
 
-    private static void test(boolean skipCR, boolean closeBeforeCheckpoint) throws Exception {
+    @CracTestArg(0)
+    boolean skipCR;
 
+    @CracTestArg(1)
+    boolean closeBeforeCheckpoint;
+
+    @Override
+    public void test() throws Exception {
+        CracBuilder builder = new CracBuilder();
+        if (skipCR) {
+            builder.doPlain();
+        } else {
+            builder.doCheckpointAndRestore();
+        }
+    }
+
+    @Override
+    public void exec() throws Exception {
         int nThreads = 20;
 
         AtomicInteger nSelected = new AtomicInteger(0);
@@ -97,26 +123,5 @@ public class Test {
 
         // just in case...
         for (Thread t: selectThreads) { t.join(); }
-    }
-
-
-
-    public static void main(String args[]) throws Exception {
-
-        if (args.length < 1) { throw new RuntimeException("test number is missing"); }
-
-        switch (args[0]) {
-            case "1":
-                test(false, false);
-                break;
-            case "2":
-                test(false, true);
-                break;
-            case "3":
-                test(true, true);
-                break;
-            default:
-                throw new RuntimeException("invalid test number");
-        }
     }
 }

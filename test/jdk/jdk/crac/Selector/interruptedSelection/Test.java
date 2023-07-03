@@ -18,15 +18,48 @@
 // CA 94089 USA or visit www.azul.com if you need additional information or
 // have any questions.
 
+import jdk.test.lib.crac.CracBuilder;
+import jdk.test.lib.crac.CracTest;
+import jdk.test.lib.crac.CracTestArg;
 
 import java.nio.channels.Selector;
 import java.io.IOException;
 
-public class Test {
+/*
+ * @test Selector/interruptedSelection
+ * @summary check that the thread blocked by Selector.select() could be properly woken up by an interruption
+ * @library /test/lib
+ * @build Test
+ * @run driver/timeout=30 jdk.test.lib.crac.CracTest true  true  false
+ * @run driver/timeout=30 jdk.test.lib.crac.CracTest true  false false
+ * @run driver/timeout=30 jdk.test.lib.crac.CracTest false true  false
+ * @run driver/timeout=30 jdk.test.lib.crac.CracTest false false false
+ * @run driver/timeout=30 jdk.test.lib.crac.CracTest true  true  true
+ * @run driver/timeout=30 jdk.test.lib.crac.CracTest false true  true
+ */
+public class Test implements CracTest {
+    @CracTestArg(0)
+    boolean setTimeout;
+
+    @CracTestArg(1)
+    boolean interruptBeforeCheckpoint;
+
+    @CracTestArg(2)
+    boolean skipCR;
+
+    @Override
+    public void test() throws Exception {
+        CracBuilder builder = new CracBuilder();
+        if (skipCR) {
+            builder.doPlain();
+        } else {
+            builder.doCheckpointAndRestore();
+        }
+    }
 
     // select(): interrupt before the checkpoint
-    private static void test(boolean setTimeout, boolean interruptBeforeCheckpoint, boolean skipCR) throws Exception {
-
+    @Override
+    public void exec() throws Exception {
         Selector selector = Selector.open();
         Runnable r = new Runnable() {
             @Override
@@ -69,34 +102,5 @@ public class Test {
         selector.select(200);
         selector.close();
     }
-
-
-    public static void main(String args[]) throws Exception {
-
-        if (args.length < 1) { throw new RuntimeException("test number is missing"); }
-
-        switch (args[0]) {
-            case "1":
-                test(true, true, false);
-                break;
-            case "2":
-                test(true, false, false);
-                break;
-            case "3":
-                test(false, true, false);
-                break;
-            case "4":
-                test(false, false, false);
-                break;
-            // 5, 6: skip C/R
-            case "5":
-                test(true, true, true);
-                break;
-            case "6":
-                test(false, true, true);
-                break;
-            default:
-                throw new RuntimeException("invalid test number");
-        }
-    }
 }
+

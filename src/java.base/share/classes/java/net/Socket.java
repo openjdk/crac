@@ -25,8 +25,10 @@
 
 package java.net;
 
+import jdk.internal.access.SharedSecrets;
 import sun.security.util.SecurityConstants;
 
+import java.io.FileDescriptor;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.io.IOException;

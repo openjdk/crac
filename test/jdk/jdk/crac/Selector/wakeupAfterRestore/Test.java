@@ -18,18 +18,37 @@
 // CA 94089 USA or visit www.azul.com if you need additional information or
 // have any questions.
 
+import jdk.test.lib.crac.CracBuilder;
+import jdk.test.lib.crac.CracTest;
+import jdk.test.lib.crac.CracTestArg;
 
 import java.nio.channels.Selector;
 import java.io.IOException;
 
-public class Test {
+/*
+ * @test Selector/wakeupAfterRestore
+ * @summary check that the thread blocked by Selector.select() on checkpoint could be properly woken up after restore
+ * @library /test/lib
+ * @build Test
+ * @run driver jdk.test.lib.crac.CracTest true
+ * @run driver jdk.test.lib.crac.CracTest false
+ */
+public class Test implements CracTest {
 
     private final static long TIMEOUT = 3600_000; // looong timeout
 
     static boolean awakened;
 
-    private static void test(boolean setTimeout) throws Exception {
+    @CracTestArg
+    boolean setTimeout;
 
+    @Override
+    public void test() throws Exception {
+        new CracBuilder().doCheckpointAndRestore();
+    }
+
+    @Override
+    public void exec() throws Exception {
         Selector selector = Selector.open();
         Runnable r = new Runnable() {
             @Override
@@ -66,24 +85,5 @@ public class Test {
         selector.selectNow();
         selector.select(200);
         selector.close();
-    }
-
-
-
-
-    public static void main(String args[]) throws Exception {
-
-        if (args.length < 1) { throw new RuntimeException("test number is missing"); }
-
-        switch (args[0]) {
-            case "1":
-                test(true);
-                break;
-            case "2":
-                test(false);
-                break;
-            default:
-                throw new RuntimeException("invalid test number");
-        }
     }
 }

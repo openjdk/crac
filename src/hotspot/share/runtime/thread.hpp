@@ -1580,6 +1580,7 @@ private:
   ParkEvent * _SleepEvent;
 public:
   bool sleep(jlong millis);
+  void wakeup_sleep() { _SleepEvent->unpark(); }
 
   // java.lang.Thread interruption support
   void interrupt();

@@ -34,7 +34,6 @@ import jdk.internal.access.JavaIOFileDescriptorAccess;
 import jdk.internal.access.SharedSecrets;
 import jdk.internal.crac.Core;
 import jdk.internal.crac.JDKResource;
-import jdk.internal.crac.JDKResource.Priority;
 
 class FileDispatcherImpl extends FileDispatcher {
     static class ResourceProxy implements JDKResource {
@@ -48,11 +47,6 @@ class FileDispatcherImpl extends FileDispatcher {
                 throws IOException {
             FileDispatcherImpl.afterRestore();
         }
-
-        @Override
-        public Priority getPriority() {
-            return Priority.NORMAL;
-        }
     }
 
     static Object closeLock = new Object();
@@ -64,7 +58,7 @@ class FileDispatcherImpl extends FileDispatcher {
     static {
         IOUtil.load();
         init();
-        Core.getJDKContext().register(resourceProxy);
+        Core.Priority.NORMAL.getContext().register(resourceProxy);
     }
 
     private static final JavaIOFileDescriptorAccess fdAccess =
@@ -206,6 +200,13 @@ class FileDispatcherImpl extends FileDispatcher {
         }
     }
 
+    // Shared with SocketDispatcher and DatagramDispatcher but
+    // NOT used by FileDispatcherImpl
+    static void closeAndMark(FileDescriptor fd) throws IOException {
+        fdAccess.markClosed(fd);
+        close0(fd);
+    }
+
     // -- Native methods --
 
     static native int read0(FileDescriptor fd, long address, int len)
@@ -243,9 +244,7 @@ class FileDispatcherImpl extends FileDispatcher {
     static native void release0(FileDescriptor fd, long pos, long size)
         throws IOException;
 
-    // Shared with SocketDispatcher and DatagramDispatcher but
-    // NOT used by FileDispatcherImpl
-    static native void close0(FileDescriptor fd) throws IOException;
+    private static native void close0(FileDescriptor fd) throws IOException;
 
     static native void preClose0(FileDescriptor fd) throws IOException;
 

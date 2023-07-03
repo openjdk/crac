@@ -3849,15 +3849,7 @@ JVM_ENTRY_NO_ENV(jint, JVM_FindSignal(const char *name))
   return os::get_signal_number(name);
 JVM_END
 
-JVM_ENTRY(jobjectArray, JVM_Checkpoint(JNIEnv *env, jboolean dry_run, jlong jcmd_stream))
-  Handle ret = os::Linux::checkpoint(dry_run, jcmd_stream, CHECK_NULL);
+JVM_ENTRY(jobjectArray, JVM_Checkpoint(JNIEnv *env, jarray fd_arr, jobjectArray obj_arr, jboolean dry_run, jlong jcmd_stream))
+  Handle ret = os::Linux::checkpoint(fd_arr, obj_arr, dry_run, jcmd_stream, CHECK_NULL);
   return (jobjectArray) JNIHandles::make_local(THREAD, ret());
-JVM_END
-
-JVM_LEAF(void, JVM_RegisterPersistent(int fd, int st_dev, int st_ino))
-  os::Linux::register_persistent_fd(fd, st_dev, st_ino);
-JVM_END
-
-JVM_LEAF(void, JVM_DeregisterPersistent(int fd, int st_dev, int st_ino))
-  os::Linux::deregister_persistent_fd(fd, st_dev, st_ino);
 JVM_END

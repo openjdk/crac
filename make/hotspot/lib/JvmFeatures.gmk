@@ -154,6 +154,13 @@ ifneq ($(call check-jvm-feature, zgc), true)
   JVM_EXCLUDE_PATTERNS += gc/z
 endif
 
+ifneq ($(call check-jvm-feature, cpu_feature_active), true)
+  JVM_CFLAGS_FEATURES += -DINCLUDE_CPU_FEATURE_ACTIVE=0
+endif
+ifneq ($(call check-jvm-feature, ld_so_list_diagnostics), true)
+  JVM_CFLAGS_FEATURES += -DINCLUDE_LD_SO_LIST_DIAGNOSTICS=0
+endif
+
 ifneq ($(call check-jvm-feature, shenandoahgc), true)
   JVM_CFLAGS_FEATURES += -DINCLUDE_SHENANDOAHGC=0
   JVM_EXCLUDE_PATTERNS += gc/shenandoah

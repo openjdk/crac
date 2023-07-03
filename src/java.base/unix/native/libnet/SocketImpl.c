@@ -27,6 +27,7 @@
 #include <string.h>
 
 #include "net_util.h"
+#include "net_util_md.h"
 #include "java_net_SocketCleanable.h"
 
 JNIEXPORT jboolean JNICALL
@@ -57,4 +58,3 @@ Java_java_net_SocketCleanable_cleanupClose0(JNIEnv *env, jclass c1, jint fd)
 {
     NET_SocketClose(fd);
 }
-

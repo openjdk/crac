@@ -64,6 +64,7 @@ class Linux {
   static void set_physical_memory(julong phys_mem) { _physical_memory = phys_mem; }
   static int active_processor_count();
 
+  static void initialize_processor_count();
   static void initialize_system_info();
 
   static int commit_memory_impl(char* addr, size_t bytes, bool exec);
@@ -173,10 +174,9 @@ class Linux {
 
   static void vm_create_start();
   static bool prepare_checkpoint();
-  static Handle checkpoint(bool dry_run, jlong jcmd_stream, TRAPS);
+  static Handle checkpoint(jarray fd_arr, jobjectArray obj_arr, bool dry_run, jlong jcmd_stream, TRAPS);
   static void restore();
-  static void register_persistent_fd(int fd, int st_dev, int st_ino);
-  static void deregister_persistent_fd(int fd, int st_dev, int st_ino);
+  static void close_extra_descriptors();
 
   static jlong restore_start_time();
   static jlong uptime_since_restore();
@@ -184,6 +184,8 @@ class Linux {
   // Determine if the vmid is the parent pid for a child in a PID namespace.
   // Return the namespace pid if so, otherwise -1.
   static int get_namespace_pid(int vmid);
+
+  static int checkpoint_restore(int *shmid);
 
   // Stack repair handling
 

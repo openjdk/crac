@@ -34,7 +34,6 @@ import java.io.FileDescriptor;
 import java.io.RandomAccessFile;
 import java.io.UncheckedIOException;
 import java.lang.ref.Cleaner.Cleanable;
-import java.nio.charset.CharacterCodingException;
 import java.nio.charset.Charset;
 import java.nio.file.InvalidPathException;
 import java.nio.file.attribute.BasicFileAttributes;
@@ -1801,7 +1800,7 @@ public class ZipFile implements ZipConstants, Closeable {
                 } catch (IOException e) {
                 }
                 if (fd != null) {
-                    Core.registerPersistent(fd);
+                    Core.getClaimedFDs().claimFd(fd, this, () -> null, fd);
                 }
             }
         }

@@ -18,17 +18,46 @@
 // CA 94089 USA or visit www.azul.com if you need additional information or
 // have any questions.
 
-
 import jdk.crac.*;
+import jdk.test.lib.crac.CracBuilder;
+import jdk.test.lib.crac.CracTest;
+import jdk.test.lib.crac.CracTestArg;
+
 import java.security.SecureRandom;
 
-public class Test1 {
+import static jdk.test.lib.Asserts.assertEquals;
+import static jdk.test.lib.Asserts.assertNotEquals;
 
-    private static SecureRandom sr;
+/*
+ * @test
+ * @summary Verify that SHA1PRNG secure random is reseeded after restore if initialized with default seed.
+ * @library /test/lib
+ * @build ReseedTest
+ * @run driver/timeout=60 jdk.test.lib.crac.CracTest true
+ * @run driver/timeout=60 jdk.test.lib.crac.CracTest false
+ */
+public class ReseedTest implements CracTest {
+    @CracTestArg
+    boolean reseed;
 
-    public static void main(String args[]) throws Exception {
+    @Override
+    public void test() throws Exception {
+        CracBuilder builder = new CracBuilder();
+        builder.doCheckpoint();
+        builder.captureOutput(true);
+        String e1 = builder.doRestore().outputAnalyzer().getStdout();
+        String e2 = builder.doRestore().outputAnalyzer().getStdout();
+        if (reseed) {
+            assertEquals(e1, e2);
+        } else {
+            assertNotEquals(e1, e2);
+        }
+    }
+
+    @Override
+    public void exec() throws Exception {
         SecureRandom sr = SecureRandom.getInstance("SHA1PRNG");
-        if ("1".equalsIgnoreCase(args[0])) {
+        if (reseed) {
             sr.setSeed(sr.generateSeed(10));
         }
         sr.nextInt();
@@ -42,7 +71,6 @@ public class Test1 {
             throw new RuntimeException("Restore ERROR " + e);
         }
 
-        int r = sr.nextInt(255);
-        System.exit(r);
+        System.out.println(sr.nextInt());
     }
 }

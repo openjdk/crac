@@ -30,7 +30,6 @@ import jdk.crac.Context;
 import jdk.crac.Resource;
 import jdk.internal.crac.Core;
 import jdk.internal.crac.JDKResource;
-import jdk.internal.crac.JDKResource.Priority;
 
 /*
  * On Unix systems we simply delegate to native methods.
@@ -53,11 +52,6 @@ class PlainSocketImpl extends AbstractPlainSocketImpl
         public void afterRestore(Context<? extends Resource> context) throws Exception {
             PlainSocketImpl.afterRestore();
         }
-
-        @Override
-        public Priority getPriority() {
-            return Priority.NORMAL;
-        }
     }
 
     static Object closeLock = new Object();
@@ -68,7 +62,7 @@ class PlainSocketImpl extends AbstractPlainSocketImpl
 
     static {
         initProto();
-        Core.getJDKContext().register(resourceProxy);
+        Core.Priority.NORMAL.getContext().register(resourceProxy);
     }
 
     /**

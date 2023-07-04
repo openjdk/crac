@@ -33,14 +33,7 @@
 
 typedef int pid_t;
 
-#define RESTORE_SIGNAL   (SIGRTMIN + 2)
-
 static int kickjvm(pid_t jvm, int code) {
-    // union sigval sv = { .sival_int = code };
-    // if (-1 == sigqueue(jvm, RESTORE_SIGNAL, sv)) {
-    //     perror("sigqueue");
-    //     return 1;
-    // }
     return 0;
 }
 

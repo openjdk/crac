@@ -28,15 +28,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-// #define RESTORE_SIGNAL   (SIGRTMIN + 2)
-
 static int kickjvm(int jvm, int code) {
-//     union sigval sv = { .sival_int = code };
-//     if (-1 == sigqueue(jvm, RESTORE_SIGNAL, sv)) {
-//         perror("sigqueue");
-//         return 1;
-//     }
-
     return 0;
 }
 

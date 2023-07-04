@@ -26,14 +26,14 @@
 package java.io;
 
 import java.util.*;
+import java.util.function.Supplier;
+import java.util.regex.Pattern;
 
 import jdk.crac.Context;
 import jdk.crac.impl.CheckpointOpenResourceException;
 import jdk.internal.access.JavaIOFileDescriptorAccess;
 import jdk.internal.access.SharedSecrets;
-import jdk.internal.crac.Core;
-import jdk.internal.crac.ClaimedFDs;
-import jdk.internal.crac.JDKFdResource;
+import jdk.internal.crac.*;
 import jdk.internal.ref.PhantomCleanable;
 
 /**
@@ -61,22 +61,63 @@ public final class FileDescriptor {
     class Resource extends JDKFdResource {
         private boolean closedByNIO;
 
+        @SuppressWarnings("fallthrough")
         @Override
         public void beforeCheckpoint(Context<? extends jdk.crac.Resource> context) throws Exception {
             if (!closedByNIO && valid()) {
                 ClaimedFDs claimedFDs = Core.getClaimedFDs();
                 FileDescriptor self = FileDescriptor.this;
+                String nativeDescription = nativeDescription0();
 
+                OpenResourcePolicies.Policy policy = findPolicy(nativeDescription);
+                String action = "error";
+                String warn = "false";
+                Supplier<Exception> supplier = null;
                 // Normally the claiming should be overridden by FileInputStream/FileOutputStream
                 // but in case these are collected we handle FDs 0..2 here as well.
-                if (self == in || self == out || self == err) {
-                    claimedFDs.claimFd(self, self, null);
+                if (policy != null) {
+                    action = policy.action;
+                    warn = policy.params.getOrDefault("warn", "false");
+                } else if (self == in || self == out || self == err) {
+                    action = "ignore";
                 }
-
-                claimedFDs.claimFd(self, self, () -> new CheckpointOpenResourceException(
-                    FileDescriptor.class.getSimpleName() + " " + fd + ": " + nativeDescription0(),
-                    getStackTraceHolder()));
+                supplier = switch (action.toLowerCase()) {
+                    case "error":
+                        yield () -> new CheckpointOpenResourceException(
+                            FileDescriptor.class.getSimpleName() + " " + fd + ": " + nativeDescription,
+                            getStackTraceHolder());
+                    case "close":
+                        close();
+                    case "ignore":
+                        if (Boolean.parseBoolean(warn)) {
+                            LoggerContainer.warn("File descriptor {0} was not closed by the application!", fd);
+                        }
+                        yield NO_EXCEPTION;
+                    default: throw new IllegalArgumentException("Unknown policy action for file descriptor " + fd + ": " + action);
+                };
+                claimedFDs.claimFd(self, self, supplier);
             }
+        }
+
+        private OpenResourcePolicies.Policy findPolicy(String nativeDescription) {
+            return OpenResourcePolicies.find(false, "filedescriptor", params -> {
+                String value = params.get("value");
+                if (value != null) {
+                    try {
+                        int expected = Integer.parseInt(value);
+                        if (expected != fd) {
+                            return false;
+                        }
+                    } catch (NumberFormatException e) {
+                        throw new IllegalArgumentException("Cannot parse file descriptor value '" + value + "'");
+                    }
+                }
+                String regex = params.get("regex");
+                if (regex != null) {
+                    return Pattern.compile(regex).matcher(nativeDescription).matches();
+                }
+                return true;
+            });
         }
 
         @Override

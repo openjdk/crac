@@ -37,6 +37,7 @@ import static jdk.test.lib.Asserts.assertEquals;
  * @library /test/lib
  * @build VMOptionsTest
  * @run driver jdk.test.lib.crac.CracTest
+ * @requires (os.family == "linux")
  */
 public class VMOptionsTest implements CracTest {
     @Override

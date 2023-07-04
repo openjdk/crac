@@ -44,6 +44,7 @@
 #include "oops/oop.inline.hpp"
 #include "prims/jvmtiExport.hpp"
 #include "runtime/arguments.hpp"
+#include "runtime/crac.hpp"
 #include "runtime/flags/jvmFlag.hpp"
 #include "runtime/flags/jvmFlagAccess.hpp"
 #include "runtime/flags/jvmFlagLimit.hpp"
@@ -3232,7 +3233,7 @@ jint Arguments::finalize_vm_init_args(bool patch_mod_javabase) {
   UNSUPPORTED_OPTION(ShowRegistersOnAssert);
 #endif // CAN_SHOW_REGISTERS_ON_ASSERT
 
-  if (CRaCCheckpointTo && !os::Linux::prepare_checkpoint()) {
+  if (CRaCCheckpointTo && !crac::prepare_checkpoint()) {
     return JNI_ERR;
   }
 

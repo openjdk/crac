@@ -2533,6 +2533,10 @@ void VM_Version::crac_restore() {
 
   uint64_t       features_missing =       features_saved & ~      _features;
   uint64_t glibc_features_missing = glibc_features_saved & ~_glibc_features;
+
+  // Workaround JDK-8311164: CPU_HT is set randomly on hybrid CPUs like Alder Lake.
+  features_missing &= ~CPU_HT;
+
   if (features_missing || glibc_features_missing) {
     static const char part1[] = "You have to specify -XX:CPUFeatures=";
     tty->print_raw(part1, sizeof(part1) - 1);
@@ -2588,6 +2592,10 @@ void VM_Version::initialize() {
   uint64_t   CPUFeatures_x64 = CPUFeatures_parse(GLIBCFeatures_x64);
   uint64_t       features_missing =   CPUFeatures_x64 & ~      _features;
   uint64_t glibc_features_missing = GLIBCFeatures_x64 & ~_glibc_features;
+
+  // Workaround JDK-8311164: CPU_HT is set randomly on hybrid CPUs like Alder Lake.
+  features_missing &= ~CPU_HT;
+
   if (features_missing || glibc_features_missing) {
     static const char part1[] = "Specified -XX:CPUFeatures=";
     tty->print_raw(part1, sizeof(part1) - 1);

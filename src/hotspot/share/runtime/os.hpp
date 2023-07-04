@@ -82,9 +82,6 @@ enum WXMode {
   WXExec
 };
 
-// xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
-#define UUID_LENGTH 36
-
 // Executable parameter flag for os::commit_memory() and
 // os::commit_memory_or_exit().
 const bool ExecMem = true;
@@ -133,11 +130,6 @@ class os: AllStatic {
   static address            _polling_page;
   static PageSizes          _page_sizes;
 
-  static jlong checkpoint_millis;
-  static jlong checkpoint_nanos;
-  static char checkpoint_bootid[UUID_LENGTH];
-  static jlong javaTimeNanos_offset;
-
   static char*  pd_reserve_memory(size_t bytes, bool executable);
 
   static char*  pd_attempt_reserve_memory_at(char* addr, size_t bytes, bool executable);
@@ -182,8 +174,6 @@ class os: AllStatic {
 
   LINUX_ONLY(static void pd_init_container_support();)
 
-  static bool read_bootid(char *dest);
-
  public:
   static void init(void);                      // Called before command line parsing
 
@@ -208,12 +198,6 @@ class os: AllStatic {
   static void   javaTimeNanos_info(jvmtiTimerInfo *info_ptr);
   static void   javaTimeSystemUTC(jlong &seconds, jlong &nanos);
   static void   run_periodic_checks();
-
-  static void record_time_before_checkpoint();
-  static void update_javaTimeNanos_offset();
-  static jlong monotonic_time_offset() {
-    return javaTimeNanos_offset;
-  }
 
   // Returns the elapsed time in seconds since the vm started.
   static double elapsedTime();

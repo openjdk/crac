@@ -2097,6 +2097,10 @@ const intx ObjectAlignmentInBytes = 8;
   product(ccstr, CRaCRestoreFrom, NULL, RESTORE_SETTABLE,                   \
       "Path to image for restore, replaces the initializing VM on success") \
                                                                             \
+  product(uint, CRaCMinPid, 128,                                            \
+      "Mininal PID value for checkpoint'ed process")                        \
+      range(1, UINT_MAX)                                                    \
+                                                                            \
   product(ccstr, CREngine, "criuengine", RESTORE_SETTABLE,                  \
       "Path or name of a program implementing checkpoint/restore and "      \
       "optional extra parameters as a comma-separated list: "               \

@@ -21,7 +21,8 @@
  * questions.
  */
 
-// no precompiled headers
+#include "precompiled.hpp"
+
 #include "jvm.h"
 #include "runtime/crac_structs.hpp"
 
@@ -47,4 +48,8 @@ int CracSHM::open(int mode) {
 }
 
 void CracSHM::unlink() {
+}
+
+bool crac::read_bootid(char *dest) {
+  return true;
 }

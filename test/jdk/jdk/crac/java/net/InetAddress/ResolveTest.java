@@ -66,6 +66,7 @@ public class ResolveTest implements CracTest {
 
         try {
             CompletableFuture<?> firstOutputFuture = new CompletableFuture<Void>();
+            builder.vmOption("-XX:CRaCMinPid=100");
             CracProcess checkpointed = builder.startCheckpoint().watch(line -> {
                 System.out.println("OUTPUT: " + line);
                 if (line.equals("192.168.12.34")) {
@@ -79,6 +80,7 @@ public class ResolveTest implements CracTest {
             builder.checkpointViaJcmd();
             checkpointed.waitForCheckpointed();
 
+            builder.clearVmOptions();
             builder.recreateContainer(imageName,
                     "--add-host", TEST_HOSTNAME + ":192.168.56.78",
                     "--volume", Utils.TEST_CLASSES + ":/second-run"); // any file/dir suffices

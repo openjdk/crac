@@ -413,3 +413,41 @@ void crac::vm_create_start() {
   close_extra_descriptors();
   _vm_inited_fds.initialize();
 }
+
+static bool read_all(int fd, char *dest, size_t n) {
+  size_t rd = 0;
+  do {
+    ssize_t r = ::read(fd, dest + rd, n - rd);
+    if (r == 0) {
+      return false;
+    } else if (r < 0) {
+      if (errno == EINTR) {
+        continue;
+      }
+      return false;
+    }
+    rd += r;
+  } while (rd < n);
+  return true;
+}
+
+bool crac::read_bootid(char *dest) {
+  int fd = ::open("/proc/sys/kernel/random/boot_id", O_RDONLY);
+  if (fd < 0 || !read_all(fd, dest, UUID_LENGTH)) {
+    perror("CRaC: Cannot read system boot ID");
+    return false;
+  }
+  char c;
+  if (!read_all(fd, &c, 1) || c != '\n') {
+    perror("CRaC: system boot ID does not end with newline");
+    return false;
+  }
+  if (::read(fd, &c, 1) != 0) {
+    perror("CRaC: Unexpected data/error reading system boot ID");
+    return false;
+  }
+  if (::close(fd) != 0) {
+    perror("CRaC: Cannot close system boot ID file");
+  }
+  return true;
+}

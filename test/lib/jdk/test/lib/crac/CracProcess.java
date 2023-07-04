@@ -94,6 +94,15 @@ public class CracProcess {
 
     public CracProcess waitForSuccess() throws InterruptedException {
         int exitValue = process.waitFor();
+        if (exitValue != 0 && builder.captureOutput) {
+            try {
+                OutputAnalyzer oa = outputAnalyzer();
+                System.err.print(oa.getStderr());
+                System.out.print(oa.getStdout());
+            } catch (IOException e) {
+                throw new RuntimeException(e);
+            }
+        }
         assertEquals(0, exitValue, "Process returned unexpected exit code: " + exitValue);
         builder.log("Process %d completed with exit value %d%n", process.pid(), exitValue);
         return this;

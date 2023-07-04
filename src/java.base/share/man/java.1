@@ -1325,6 +1325,11 @@ Restores a snapshot created by
 .RS
 .RE
 .TP
+.B \f[CB]\-XX:CRaCMinPid=\f[R]value\f[R]
+A desired minimal PID value for checkpoint'ed process. Ignored on restore.
+.RS
+.RE
+.TP
 .B \f[CB]\-XX:ErrorFile=\f[R]\f[I]filename\f[R]
 Specifies the path and file name to which error data is written when an
 irrecoverable error occurs.
@@ -2343,6 +2348,15 @@ compilation.
 .RS
 .RE
 .TP
+.B \f[CB]\-XX:CPUFeatures=\f[R]\f[I]0xnumber\f[R]
+CPU feature set, use -XX:CPUFeatures=0xnumber with -XX:CRaCCheckpointTo when
+you get an error during -XX:CRaCRestoreFrom on a different machine.
+\f[CB]\-XX:CPUFeatures=native\f[R] is the default.
+\f[CB]\-XX:CPUFeatures=generic\f[R] is compatible with any CPU but not as slow
+as \f[CB]\-XX:CPUFeatures=0\f[R].
+.RS
+.RE
+.TP
 .B \f[CB]\-XX:+DoEscapeAnalysis\f[R]
 Enables the use of escape analysis.
 This option is enabled by default.
@@ -2621,6 +2635,12 @@ Lookaside Buffer (ITLB).
 ICache is an instruction cache in theCPU.
 The implementation of the code cache can be found in the file:
 \f[CB]/share/vm/code/codeCache.cpp\f[R].
+.RS
+.RE
+.TP
+.B \f[CB]\-XX:+ShowCPUFeatures\f[R]
+Show features of this CPU to be possibly used for the
+\f[CB]\-XX:CPUFeatures=0xnumber\f[R] option.
 .RS
 .RE
 .TP

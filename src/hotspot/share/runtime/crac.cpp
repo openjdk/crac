@@ -21,28 +21,40 @@
  * questions.
  */
 
-// no precompiled headers
+#include "precompiled.hpp"
+
 #include "classfile/classLoader.hpp"
 #include "jvm.h"
 #include "memory/oopFactory.hpp"
 #include "oops/typeArrayOop.inline.hpp"
-#include "perfMemory_linux.hpp"
 #include "runtime/crac_structs.hpp"
 #include "runtime/crac.hpp"
 #include "runtime/interfaceSupport.inline.hpp"
 #include "runtime/jniHandles.hpp"
 #include "runtime/jniHandles.inline.hpp"
+#include "runtime/vm_version.hpp"
 #include "runtime/vmThread.hpp"
 #include "services/heapDumper.hpp"
 #include "services/writeableFlags.hpp"
 
+#ifdef _WINDOWS
+#include <process.h>
+#endif
 
 static const char* _crengine = NULL;
 static char* _crengine_arg_str = NULL;
 static unsigned int _crengine_argc = 0;
 static const char* _crengine_args[32];
 static jlong _restore_start_time;
-static jlong _restore_start_counter;
+static jlong _restore_start_nanos;
+
+// Timestamps recorded before checkpoint
+jlong crac::checkpoint_millis;
+jlong crac::checkpoint_nanos;
+char crac::checkpoint_bootid[UUID_LENGTH];
+// Value based on wall clock time difference that will guarantee monotonic
+// System.nanoTime() close to actual wall-clock time difference.
+jlong crac::javaTimeNanos_offset = 0;
 
 jlong crac::restore_start_time() {
   if (!_restore_start_time) {
@@ -52,10 +64,10 @@ jlong crac::restore_start_time() {
 }
 
 jlong crac::uptime_since_restore() {
-  if (!_restore_start_counter) {
+  if (!_restore_start_nanos) {
     return -1;
   }
-  return os::javaTimeNanos() - _restore_start_counter;
+  return os::javaTimeNanos() - _restore_start_nanos;
 }
 
 void VM_Crac::trace_cr(const char* msg, ...) {
@@ -209,6 +221,7 @@ static int call_crengine() {
 }
 
 static int checkpoint_restore(int *shmid) {
+  crac::record_time_before_checkpoint();
 
   int cres = call_crengine();
   if (cres < 0) {
@@ -226,9 +239,15 @@ static int checkpoint_restore(int *shmid) {
     sig = sigwaitinfo(&waitmask, &info);
   } while (sig == -1 && errno == EINTR);
   assert(sig == RESTORE_SIGNAL, "got what requested");
+
+  if (CRaCCPUCountInit) {
+    os::Linux::initialize_cpu_count();
+  }
 #else
   // TODO add sync processing
 #endif //LINUX
+
+  crac::update_javaTimeNanos_offset();
 
   if (CRTraceStartupTime) {
     tty->print_cr("STARTUPTIME " JLONG_FORMAT " restore-native", os::javaTimeNanos());
@@ -276,6 +295,23 @@ bool VM_Crac::is_claimed_fd(int fd) {
   return false;
 }
 
+class WakeupClosure: public ThreadClosure {
+  void do_thread(Thread* thread) {
+    JavaThread *jt = thread->as_Java_thread();
+    jt->wakeup_sleep();
+    jt->parker()->unpark();
+    jt->_ParkEvent->unpark();
+  }
+};
+
+static void wakeup_threads_in_timedwait() {
+  WakeupClosure wc;
+  Threads::java_threads_do(&wc);
+
+  MonitorLocker ml(PeriodicTask_lock, Mutex::_no_safepoint_check_flag);
+  WatcherThread::watcher_thread()->unpark();
+}
+
 void VM_Crac::doit() {
   // dry-run fails checkpoint
   bool ok = true;
@@ -312,11 +348,17 @@ void VM_Crac::doit() {
     }
   }
 
+  VM_Version::crac_restore();
+
   if (shmid <= 0 || !VM_Crac::read_shm(shmid)) {
     _restore_start_time = os::javaTimeMillis();
-    _restore_start_counter = os::javaTimeNanos();
+    _restore_start_nanos = os::javaTimeNanos();
+  } else {
+    _restore_start_nanos += crac::monotonic_time_offset();
   }
   memory_restore();
+
+  wakeup_threads_in_timedwait();
 
   _ok = true;
 }
@@ -417,7 +459,7 @@ Handle crac::checkpoint(jarray fd_arr, jobjectArray obj_arr, bool dry_run, jlong
 
 void crac::restore() {
   jlong restore_time = os::javaTimeMillis();
-  jlong restore_counter = os::javaTimeNanos();
+  jlong restore_nanos = os::javaTimeNanos();
 
   compute_crengine();
 
@@ -432,7 +474,7 @@ void crac::restore() {
           Arguments::system_properties(),
           Arguments::java_command() ? Arguments::java_command() : "",
           restore_time,
-          restore_counter)) {
+          restore_nanos)) {
       char strid[32];
       snprintf(strid, sizeof(strid), "%d", id);
       LINUX_ONLY(setenv("CRAC_NEW_ARGS_ID", strid, true));
@@ -474,7 +516,7 @@ bool CracRestoreParameters::read_from(int fd) {
   char* cursor = _raw_content + sizeof(header);
 
   ::_restore_start_time = hdr->_restore_time;
-  ::_restore_start_counter = hdr->_restore_counter;
+  ::_restore_start_nanos = hdr->_restore_nanos;
 
   for (int i = 0; i < hdr->_nflags; i++) {
     FormatBuffer<80> err_msg("%s", "");
@@ -522,4 +564,40 @@ bool CracRestoreParameters::read_from(int fd) {
 
   _args = cursor;
   return true;
+}
+
+void crac::record_time_before_checkpoint() {
+  checkpoint_millis = os::javaTimeMillis();
+  checkpoint_nanos = os::javaTimeNanos();
+  memset(checkpoint_bootid, 0, UUID_LENGTH);
+  read_bootid(checkpoint_bootid);
+}
+
+void crac::update_javaTimeNanos_offset() {
+  char buf[UUID_LENGTH];
+  // We will change the nanotime offset only if this is not the same boot
+  // to prevent reducing the accuracy of System.nanoTime() unnecessarily.
+  // It is possible that in a real-world case the boot_id does not change
+  // (containers keep the boot_id) - but the monotonic time changes. We will
+  // only guarantee that the nanotime does not go backwards in that case but
+  // won't offset the time based on wall-clock time as this change in monotonic
+  // time is likely intentional.
+  if (!read_bootid(buf) || memcmp(buf, checkpoint_bootid, UUID_LENGTH) != 0) {
+    assert(checkpoint_millis >= 0, "Restore without a checkpoint?");
+    long diff_millis = os::javaTimeMillis() - checkpoint_millis;
+    // If the wall clock has gone backwards we won't add it to the offset
+    if (diff_millis < 0) {
+      diff_millis = 0;
+    }
+    // javaTimeNanos() call on the second line below uses the *_offset, so we will zero
+    // it to make the call return true monotonic time rather than the adjusted value.
+    javaTimeNanos_offset = 0;
+    javaTimeNanos_offset = checkpoint_nanos - os::javaTimeNanos() + diff_millis * 1000000L;
+  } else {
+    // ensure monotonicity even if this looks like the same boot
+    jlong diff = os::javaTimeNanos() - checkpoint_nanos;
+    if (diff < 0) {
+      javaTimeNanos_offset -= diff;
+    }
+  }
 }

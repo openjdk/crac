@@ -56,7 +56,7 @@ class CracRestoreParameters : public CHeapObj<mtInternal> {
 
   struct header {
     jlong _restore_time;
-    jlong _restore_counter;
+    jlong _restore_nanos;
     int _nflags;
     int _nprops;
     int _env_memory_size;
@@ -114,10 +114,10 @@ class CracRestoreParameters : public CHeapObj<mtInternal> {
       const SystemProperty* props,
       const char *args,
       jlong restore_time,
-      jlong restore_counter) {
+      jlong restore_nanos) {
     header hdr = {
       restore_time,
-      restore_counter,
+      restore_nanos,
       num_flags,
       system_props_length(props),
       env_vars_size(os::get_environ())

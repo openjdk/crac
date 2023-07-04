@@ -56,4 +56,8 @@ bool VM_Crac::memory_checkpoint() {
 
 void VM_Crac::memory_restore() {
 }
+
+bool crac::read_bootid(char *dest) {
+  return true;
+}
 #endif

@@ -365,8 +365,13 @@ static const char *unstable_chroot_error = "/proc file system not found.\n"
                      "Java may be unstable running multithreaded in a chroot "
                      "environment on Linux when /proc filesystem is not mounted.";
 
-void os::Linux::initialize_system_info() {
+void os::Linux::initialize_processor_count() {
   set_processor_count(sysconf(_SC_NPROCESSORS_CONF));
+  assert(processor_count() > 0, "linux error");
+}
+
+void os::Linux::initialize_system_info() {
+  initialize_processor_count();
   if (processor_count() == 1) {
     pid_t pid = os::Linux::gettid();
     char fname[32];
@@ -379,7 +384,6 @@ void os::Linux::initialize_system_info() {
     }
   }
   _physical_memory = (julong)sysconf(_SC_PHYS_PAGES) * (julong)sysconf(_SC_PAGESIZE);
-  assert(processor_count() > 0, "linux error");
 }
 
 void os::init_system_properties_values() {

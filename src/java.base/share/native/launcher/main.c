@@ -186,7 +186,6 @@ static void setup_sighandler() {
         perror("sigprocmask");
     }
 }
-#endif // _WIN32
 
 static int set_last_pid(int pid) {
 #ifdef LINUX
@@ -242,6 +241,7 @@ static void spin_last_pid(int pid) {
         --cnt;
     } while (child < pid);
 }
+#endif // _WIN32
 
 JNIEXPORT int
 main(int argc, char **argv)

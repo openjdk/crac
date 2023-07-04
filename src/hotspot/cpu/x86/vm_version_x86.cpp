@@ -750,6 +750,7 @@ const size_t VM_Version::glibc_prefix_len = strlen(glibc_prefix);
 bool VM_Version::ignore_glibc_not_using = false;
 
 bool VM_Version::glibc_env_set(char *disable_str) {
+#ifdef LINUX
 #define TUNABLES_NAME "GLIBC_TUNABLES"
   char *env_val = disable_str;
   const char *env = getenv(TUNABLES_NAME);
@@ -796,10 +797,12 @@ bool VM_Version::glibc_env_set(char *disable_str) {
     vm_exit_during_initialization(err_msg("setenv " REEXEC_NAME " error: %m"));
 #undef REEXEC_NAME
 #undef TUNABLES_NAME
+#endif //LINUX
   return false;
 }
 
 void VM_Version::glibc_reexec() {
+#ifdef LINUX
   char *buf = NULL;
   size_t buf_allocated = 0;
   size_t buf_used = 0;
@@ -849,9 +852,11 @@ void VM_Version::glibc_reexec() {
   execv(EXEC, argv);
   vm_exit_during_initialization(err_msg("Cannot re-execute " EXEC ": %m"));
 #undef EXEC
+#endif //LINUX
 }
 
 void VM_Version::glibc_not_using(uint64_t excessive_CPU, uint64_t excessive_GLIBC) {
+#ifdef LINUX
 #ifndef ASSERT
   if (!excessive_CPU && !excessive_GLIBC)
     return;
@@ -1172,6 +1177,7 @@ void VM_Version::glibc_not_using(uint64_t excessive_CPU, uint64_t excessive_GLIB
   if (glibc_env_set(disable_str))
     return;
   glibc_reexec();
+#endif //LINUX
 }
 
 void VM_Version::nonlibc_tty_print_uint64(uint64_t num) {

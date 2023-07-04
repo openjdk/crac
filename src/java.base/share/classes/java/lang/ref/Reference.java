@@ -249,8 +249,6 @@ public abstract class Reference<T> {
     private static final Object processPendingLock = new Object();
     private static boolean processPendingActive = false;
 
-    private static JDKResource referenceHandlerResource;
-
     private static void processPendingReferences() {
         // Only the singleton reference processing thread calls
         // waitForReferencePendingList() and getAndClearReferencePendingList().
@@ -343,20 +341,6 @@ public abstract class Reference<T> {
                 queue.wakeup();
             }
         });
-
-        referenceHandlerResource = new JDKResource() {
-            @Override
-            public void beforeCheckpoint(Context<? extends Resource> context) throws Exception {
-                System.gc();
-                // TODO ensure GC done processing all References
-                while (waitForReferenceProcessing());
-            }
-
-            @Override
-            public void afterRestore(Context<? extends Resource> context) throws Exception {
-            }
-        };
-        Core.Priority.REFERENCE_HANDLER.getContext().register(referenceHandlerResource);
     }
 
     /* -- Referent accessor and setters -- */

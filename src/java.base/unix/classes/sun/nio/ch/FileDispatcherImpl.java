@@ -209,7 +209,7 @@ class FileDispatcherImpl extends FileDispatcher {
         // Originally this used fdAccess.markClosed() and close0() but leaving
         // the FD value set breaks JDKSocketResource (we don't want the extra
         // test if the FD resource has been marked).
-        fdAccess.closeNoCleanup(fd);
+        fdAccess.close(fd);
     }
 
     // -- Native methods --

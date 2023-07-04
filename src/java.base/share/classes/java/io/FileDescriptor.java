@@ -125,11 +125,6 @@ public final class FileDescriptor {
                         fdo.resource.closedByNIO = true;
                     }
 
-                    @Override
-                    public void closeNoCleanup(FileDescriptor fdo) throws IOException {
-                        fdo.close0();
-                    }
-
                     /* Register for a normal FileCleanable fd/handle cleanup. */
                     public void registerCleanup(FileDescriptor fdo) {
                         FileCleanable.register(fdo);

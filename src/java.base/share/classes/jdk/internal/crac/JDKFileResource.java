@@ -9,6 +9,8 @@ import sun.security.action.GetPropertyAction;
 import java.io.File;
 import java.io.FileDescriptor;
 import java.io.IOException;
+import java.nio.file.FileSystems;
+import java.nio.file.Path;
 import java.util.function.Supplier;
 
 public abstract class JDKFileResource extends JDKFdResource {
@@ -18,6 +20,19 @@ public abstract class JDKFileResource extends JDKFdResource {
 
     boolean closed;
     boolean error;
+
+    public static OpenResourcePolicies.Policy findPolicy(boolean isRestore, String pathStr) {
+        Path path = Path.of(pathStr);
+        return OpenResourcePolicies.find(isRestore,
+                OpenResourcePolicies.FILE, props -> {
+                    String policyPath = props.get("path");
+                    if (policyPath == null) {
+                        return true; // missing path matches all files
+                    } else {
+                        return FileSystems.getDefault().getPathMatcher("glob:" + policyPath).matches(path);
+                    }
+                });
+    }
 
     protected abstract FileDescriptor getFD();
     protected abstract String getPath();
@@ -42,14 +57,20 @@ public abstract class JDKFileResource extends JDKFdResource {
             return;
         }
 
-        OpenResourcePolicies.Policy policy = OpenResourcePolicies.findForPath(false, path);
-        String action = policy != null ? policy.action.toLowerCase() : "error";
+        OpenResourcePolicies.Policy policy = findPolicy(false, path);
+        String action = "error";
+        String warn = "false";
+        if (policy != null) {
+            action = policy.action.toLowerCase();
+            warn = policy.params.getOrDefault("warn", "false");
+        } else if (matchClasspath(path)) {
+            // Files on the classpath are considered persistent, exception is not thrown
+            action = "ignore";
+        }
         Supplier<Exception> exceptionSupplier = switch (action) {
             case "error":
                 error = true;
-                // Files on the classpath are considered persistent, exception is not thrown
-                yield matchClasspath(path) ? NO_EXCEPTION :
-                        () -> new CheckpointOpenFileException(path, getStackTraceHolder());
+                yield () -> new CheckpointOpenFileException(path, getStackTraceHolder());
             case "close", "reopen":
                 // Here we assume that the stream is idle; any concurrent access
                 // will end with exceptions as the file-descriptors is invalidated
@@ -60,8 +81,8 @@ public abstract class JDKFileResource extends JDKFdResource {
                 }
                 closed = true;
             case "ignore":
-                if (Boolean.parseBoolean(policy.params.getOrDefault("warn", "false"))) {
-                    LoggerContainer.warn("CRaC: File {0} was not closed by the application!", path);
+                if (Boolean.parseBoolean(warn)) {
+                    LoggerContainer.warn("File {0} was not closed by the application!", path);
                 }
                 yield NO_EXCEPTION;
             default:
@@ -76,7 +97,7 @@ public abstract class JDKFileResource extends JDKFdResource {
         if (!closed || error) {
             return;
         }
-        OpenResourcePolicies.Policy policy = OpenResourcePolicies.findForPath(true, getPath());
+        OpenResourcePolicies.Policy policy = findPolicy(true, getPath());
         if (policy != null && "reopen".equalsIgnoreCase(policy.action)) {
             reopenAfterRestore(policy);
             closed = false;

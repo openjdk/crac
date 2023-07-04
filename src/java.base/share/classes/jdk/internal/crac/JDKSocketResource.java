@@ -33,9 +33,8 @@ public abstract class JDKSocketResource extends JDKSocketResourceBase {
         }
         var localMatcher = getMatcher(local, "localAddress", "localPort", "localPath");
         var remoteMatcher = getMatcher(remote, "remoteAddress", "remotePort", "remotePath");
-        OpenResourcePolicies.Policy policy = OpenResourcePolicies.find(isRestore, OpenResourcePolicies.SOCKET,
+        return OpenResourcePolicies.find(isRestore, OpenResourcePolicies.SOCKET,
                 params -> localMatcher.test(params) && remoteMatcher.test(params));
-        return policy;
     }
 
     @Override

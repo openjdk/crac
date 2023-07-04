@@ -6,9 +6,7 @@ import sun.security.action.GetPropertyAction;
 
 import java.io.File;
 import java.io.IOException;
-import java.nio.file.FileSystems;
 import java.nio.file.Files;
-import java.nio.file.Path;
 import java.util.*;
 import java.util.function.Predicate;
 
@@ -149,19 +147,6 @@ public class OpenResourcePolicies {
             return list.get(0);
         }
         return list.stream().filter(p -> filter.test(p.params)).findFirst().orElse(null);
-    }
-
-    public static Policy findForPath(boolean isRestore, String pathStr) {
-        Path path = Path.of(pathStr);
-        return find(isRestore,
-                FILE, props -> {
-                    String policyPath = props.get("path");
-                    if (policyPath == null) {
-                        return true; // missing path matches all files
-                    } else {
-                        return FileSystems.getDefault().getPathMatcher("glob:" + policyPath).matches(path);
-                    }
-                });
     }
 
     public static class Policy {

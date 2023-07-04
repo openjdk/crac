@@ -67,7 +67,7 @@ class PipeImpl
                     // intentional fallthrough
                 case "ignore":
                     if (Boolean.parseBoolean(policy.params.getOrDefault("warn", "false"))) {
-                        LoggerContainer.warn("CRaC: {0} was not closed by the application!", this);
+                        LoggerContainer.warn("{0} was not closed by the application!", this);
                     }
                     Core.getClaimedFDs().claimFd(source.getFD(), this, NO_EXCEPTION, source.getFD());
                     Core.getClaimedFDs().claimFd(sink.getFD(), this, NO_EXCEPTION, sink.getFD());

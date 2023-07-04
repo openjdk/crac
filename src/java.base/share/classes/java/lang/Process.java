@@ -873,7 +873,7 @@ public abstract class Process {
                     // intentional fallthrough
                 case "ignore":
                     if (Boolean.parseBoolean(policy.params.getOrDefault("warn", "false"))) {
-                        LoggerContainer.warn("CRaC: {0} was not closed by the application!", this);
+                        LoggerContainer.warn("{0} was not closed by the application!", this);
                     }
                     yield NO_EXCEPTION;
                 default:

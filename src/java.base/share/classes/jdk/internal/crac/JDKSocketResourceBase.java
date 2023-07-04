@@ -3,8 +3,6 @@ package jdk.internal.crac;
 import jdk.crac.Context;
 import jdk.crac.Resource;
 import jdk.crac.impl.CheckpointOpenSocketException;
-import jdk.internal.access.JavaIOFileDescriptorAccess;
-import jdk.internal.access.SharedSecrets;
 
 import java.io.FileDescriptor;
 import java.io.IOException;
@@ -15,11 +13,8 @@ import java.util.function.Predicate;
 import java.util.function.Supplier;
 
 public abstract class JDKSocketResourceBase extends JDKFdResource {
-    private static final JavaIOFileDescriptorAccess fdAccess =
-            SharedSecrets.getJavaIOFileDescriptorAccess();
-
     protected final Object owner;
-    private int originalFd = -1;
+    private boolean valid;
     private boolean error;
 
     public JDKSocketResourceBase(Object owner) {
@@ -38,16 +33,15 @@ public abstract class JDKSocketResourceBase extends JDKFdResource {
             return;
         }
         synchronized (fd) {
-            if (!fd.valid()) {
+            if (!(valid = fd.valid())) {
                 return;
             }
-            originalFd = fdAccess.get(fd);
             OpenResourcePolicies.Policy policy = findPolicy(false);
             String action = policy == null ? "error" : policy.action.toLowerCase();
             Supplier<Exception> exceptionSupplier = switch (action) {
                 case "error":
                     error = true;
-                    yield () -> new CheckpointOpenSocketException(owner + "(FD " + originalFd + ")", getStackTraceHolder());
+                    yield () -> new CheckpointOpenSocketException(owner.toString(), getStackTraceHolder());
                 case "close", "reopen":
                     try {
                         closeBeforeCheckpoint();
@@ -57,7 +51,7 @@ public abstract class JDKSocketResourceBase extends JDKFdResource {
                     // intentional fallthrough
                 case "ignore":
                     if (Boolean.parseBoolean(policy.params.getOrDefault("warn", "false"))) {
-                        LoggerContainer.warn("CRaC: Socket {0} (FD {1}) was not closed by the application!", owner, originalFd);
+                        LoggerContainer.warn("Socket {0} was not closed by the application!", owner);
                     }
                     yield NO_EXCEPTION;
                 default:
@@ -135,7 +129,7 @@ public abstract class JDKSocketResourceBase extends JDKFdResource {
     @Override
     public void afterRestore(Context<? extends Resource> context) throws Exception {
         // Don't do anything when we've already failed
-        if (originalFd < 0 || error) {
+        if (!valid || error) {
             return;
         }
         FileDescriptor fd = getFD();
@@ -148,7 +142,7 @@ public abstract class JDKSocketResourceBase extends JDKFdResource {
             try {
                 // FIXME: implement
                 if (action.equals("reopen")) {
-                    throw new UnsupportedOperationException("Policy " + policy.type + " not implemented (FD " + originalFd + ")");
+                    throw new UnsupportedOperationException("Policy " + policy.type + " not implemented");
                 }
             } finally {
                 reset();

@@ -37,10 +37,6 @@
 #include "services/heapDumper.hpp"
 #include "services/writeableFlags.hpp"
 
-#ifdef _WINDOWS
-#include <process.h>
-#endif
-
 static const char* _crengine = NULL;
 static char* _crengine_arg_str = NULL;
 static unsigned int _crengine_argc = 0;
@@ -145,19 +141,6 @@ static bool compute_crengine() {
     size_t pathlen = cr_util_path(path, sizeof(path));
     strcat(path + pathlen, os::file_separator());
     strcat(path + pathlen, exec);
-#ifdef _WINDOWS
-    {
-      // Add ".exe" if needed
-      const char * const exe_suffix = ".exe";
-      const size_t exe_suffix_len = strlen(exe_suffix);
-      pathlen = strlen(path);
-      if (exe_suffix_len < pathlen) {
-        if (0 != strncmp(path + pathlen - exe_suffix_len, exe_suffix, exe_suffix_len)) {
-          strcat(path + pathlen, exe_suffix);
-        }
-      }
-    }
-#endif
 
     struct stat st;
     if (0 != os::stat(path, &st)) {

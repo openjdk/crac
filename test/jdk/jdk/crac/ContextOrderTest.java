@@ -39,6 +39,7 @@ import static jdk.test.lib.Asserts.*;
 
 /**
  * @test ContextOrderTest
+ * @requires os.family != "windows"
  * @library /test/lib
  * @modules java.base/jdk.internal.crac:+open
  * @modules java.base/jdk.crac.impl:+open
@@ -47,6 +48,18 @@ import static jdk.test.lib.Asserts.*;
  * @run main/othervm -ea -XX:CREngine=simengine -XX:CRaCCheckpointTo=ignored ContextOrderTest testThrowing
  * @run main/othervm -ea -XX:CREngine=simengine -XX:CRaCCheckpointTo=ignored ContextOrderTest testRegisterToCompleted
  * @run main/othervm -ea -XX:CREngine=simengine -XX:CRaCCheckpointTo=ignored ContextOrderTest testRegisterFromOtherThread
+ */
+/**
+ * @test ContextOrderTest
+ * @requires os.family == "windows"
+ * @library /test/lib
+ * @modules java.base/jdk.internal.crac:+open
+ * @modules java.base/jdk.crac.impl:+open
+ * @run main/othervm -ea -XX:CREngine=simengine.exe -XX:CRaCCheckpointTo=ignored ContextOrderTest testOrder
+ * @run main/othervm -ea -XX:CREngine=simengine.exe -XX:CRaCCheckpointTo=ignored ContextOrderTest testRegisterBlocks
+ * @run main/othervm -ea -XX:CREngine=simengine.exe -XX:CRaCCheckpointTo=ignored ContextOrderTest testThrowing
+ * @run main/othervm -ea -XX:CREngine=simengine.exe -XX:CRaCCheckpointTo=ignored ContextOrderTest testRegisterToCompleted
+ * @run main/othervm -ea -XX:CREngine=simengine.exe -XX:CRaCCheckpointTo=ignored ContextOrderTest testRegisterFromOtherThread
  */
 public class ContextOrderTest {
     // prevents GC releasing the resources

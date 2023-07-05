@@ -1972,6 +1972,10 @@ int os::exec_child_process_and_wait(const char *path, const char *argv[]) {
   return WEXITSTATUS(status) == 0 ? 0 : -1;
 }
 
+int os::execv(const char *path, const char *argv[]) {
+  return ::execv(path, (char * const *)argv);
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 // runtime exit support
 

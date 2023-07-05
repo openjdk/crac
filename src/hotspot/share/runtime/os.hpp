@@ -531,6 +531,8 @@ class os: AllStatic {
 
   static int exec_child_process_and_wait(const char *path, const char *argv[]);
 
+  static int execv(const char *path, const char *argv[]);
+
   // Call ::exit() on all platforms but Windows
   static void exit(int num);
 

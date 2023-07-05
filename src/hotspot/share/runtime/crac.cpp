@@ -482,15 +482,10 @@ void crac::restore() {
     close(shmfd);
   }
 
-
   if (_crengine) {
     _crengine_args[1] = "restore";
     add_crengine_arg(CRaCRestoreFrom);
-#ifdef _WINDOWS
-    _execv(_crengine, _crengine_args);
-#else
-    execv(_crengine, (char * const*) _crengine_args);
-#endif //_WINDOWS
+    os::execv(_crengine, _crengine_args);
     warning("cannot execute \"%s restore ...\" (%s)", _crengine, strerror(errno));
   }
 }

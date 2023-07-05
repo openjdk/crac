@@ -5656,6 +5656,10 @@ int os::exec_child_process_and_wait(const char *path, const char *argv[]) {
   return 0 == status ? 0 : -1;
 }
 
+int os::execv(const char *path, const char *argv[]) {
+  return _execv(path, argv);
+}
+
 bool os::find(address addr, outputStream* st) {
   int offset = -1;
   bool result = false;

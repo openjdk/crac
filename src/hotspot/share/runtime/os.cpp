@@ -23,7 +23,6 @@
  */
 
 #include "precompiled.hpp"
-#include "crac.hpp"
 #include "jvm.h"
 #include "classfile/javaClasses.hpp"
 #include "classfile/moduleEntry.hpp"
@@ -40,7 +39,6 @@
 #include "logging/logStream.hpp"
 #include "memory/allocation.inline.hpp"
 #include "memory/guardedMemory.hpp"
-#include "memory/oopFactory.hpp"
 #include "memory/resourceArea.hpp"
 #include "memory/universe.hpp"
 #include "oops/compressedOops.inline.hpp"
@@ -54,7 +52,6 @@
 #include "runtime/java.hpp"
 #include "runtime/javaCalls.hpp"
 #include "runtime/jniHandles.hpp"
-#include "runtime/jniHandles.inline.hpp"
 #include "runtime/mutexLocker.hpp"
 #include "runtime/os.inline.hpp"
 #include "runtime/osThread.hpp"
@@ -65,12 +62,10 @@
 #include "runtime/vmOperations.hpp"
 #include "runtime/vm_version.hpp"
 #include "services/attachListener.hpp"
-#include "services/heapDumper.hpp"
 #include "services/mallocTracker.hpp"
 #include "services/memTracker.hpp"
 #include "services/nmtCommon.hpp"
 #include "services/threadService.hpp"
-#include "services/writeableFlags.hpp"
 #include "utilities/align.hpp"
 #include "utilities/count_trailing_zeros.hpp"
 #include "utilities/defaultStream.hpp"
@@ -79,10 +74,6 @@
 
 # include <signal.h>
 # include <errno.h>
-
-#ifdef _WINDOWS
-#include <process.h>
-#endif //LINUX
 
 OSThread*         os::_starting_thread    = NULL;
 address           os::_polling_page       = NULL;
@@ -99,11 +90,6 @@ julong os::free_bytes = 0;          // # of bytes freed
 #endif
 
 static size_t cur_malloc_words = 0;  // current size for MallocMaxTestWords
-
-// CRaC
-static const char* _crengine = NULL;
-static jlong _restore_start_time;
-static jlong _restore_start_counter;
 
 DEBUG_ONLY(bool os::_mutex_init_done = false;)
 

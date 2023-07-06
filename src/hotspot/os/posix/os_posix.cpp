@@ -31,7 +31,6 @@
 #include "logging/log.hpp"
 #include "memory/allocation.inline.hpp"
 #include "os_posix.inline.hpp"
-#include "runtime/crac.hpp"
 #include "runtime/globals_extension.hpp"
 #include "runtime/osThread.hpp"
 #include "utilities/globalDefinitions.hpp"

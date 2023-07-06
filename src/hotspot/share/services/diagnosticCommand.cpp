@@ -1055,7 +1055,12 @@ void CheckpointDCmd::execute(DCmdSource source, TRAPS) {
     char* out = java_lang_String::as_utf8_string(str);
     if (out[0] != '\0') {
       outputStream* stream = output();
-      LINUX_ONLY(if (LinuxAttachListener::get_current_op() && LinuxAttachListener::get_current_op()->is_effectively_completed()) { stream = tty; })
+#ifdef LINUX
+      assert(LinuxAttachListener::get_current_op(), "should exist");
+      if (LinuxAttachListener::get_current_op()->is_effectively_completed()) {
+        stream = tty;
+      }
+#endif //LINUX
       stream->print_cr("An exception during a checkpoint operation:");
       stream->print("%s", out);
     }

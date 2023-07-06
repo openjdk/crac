@@ -103,54 +103,33 @@ ifeq ($(OPENJDK_TARGET_OS), linux)
 
 endif
 
-ifeq ($(call isTargetOs, macosx linux), true)
+ifeq ($(call isTargetOs, macosx linux windows), true)
   $(eval $(call SetupJdkExecutable, BUILD_PAUSEENGINE, \
       NAME := pauseengine, \
-      SRC := $(TOPDIR)/src/$(MODULE)/unix/native/pauseengine, \
+      SRC := $(TOPDIR)/src/$(MODULE)/share/native/pauseengine, \
       INCLUDE_FILES := pauseengine.c, \
       OPTIMIZATION := LOW, \
       CFLAGS := $(CFLAGS_JDKEXE), \
       LDFLAGS := $(LDFLAGS_JDKEXE), \
-      OUTPUT_DIR := $(SUPPORT_OUTPUTDIR)/modules_libs/$(MODULE), \
+      $(if $(call isTargetOs, windows), \
+        OUTPUT_DIR := $(SUPPORT_OUTPUTDIR)/modules_cmds/$(MODULE), \
+        OUTPUT_DIR := $(SUPPORT_OUTPUTDIR)/modules_libs/$(MODULE), \
+      ) \
   ))
   TARGETS += $(BUILD_PAUSEENGINE)
 
   $(eval $(call SetupJdkExecutable, BUILD_SIMENGINE, \
       NAME := simengine, \
-      SRC := $(TOPDIR)/src/$(MODULE)/unix/native/simengine, \
+      SRC := $(TOPDIR)/src/$(MODULE)/share/native/simengine, \
       INCLUDE_FILES := simengine.c, \
       OPTIMIZATION := LOW, \
       CFLAGS := $(CFLAGS_JDKEXE), \
       LDFLAGS := $(LDFLAGS_JDKEXE), \
-      OUTPUT_DIR := $(SUPPORT_OUTPUTDIR)/modules_libs/$(MODULE), \
+      $(if $(call isTargetOs, windows), \
+        OUTPUT_DIR := $(SUPPORT_OUTPUTDIR)/modules_cmds/$(MODULE), \
+        OUTPUT_DIR := $(SUPPORT_OUTPUTDIR)/modules_libs/$(MODULE), \
+      ) \
   ))
-  TARGETS += $(BUILD_SIMENGINE)
-
-endif
-
-ifeq ($(OPENJDK_TARGET_OS), windows)
-  $(eval $(call SetupJdkExecutable, BUILD_PAUSEENGINE, \
-      NAME := pauseengine, \
-      SRC := $(TOPDIR)/src/$(MODULE)/windows/native/pauseengine, \
-      INCLUDE_FILES := pauseengine.c, \
-      OPTIMIZATION := LOW, \
-      CFLAGS := $(CFLAGS_JDKEXE), \
-      LDFLAGS := $(LDFLAGS_JDKEXE), \
-      OUTPUT_DIR := $(SUPPORT_OUTPUTDIR)/modules_cmds/$(MODULE), \
-  ))
-  TARGETS += $(BUILD_PAUSEENGINE)
-
-  $(eval $(call SetupJdkExecutable, BUILD_SIMENGINE, \
-      NAME := simengine, \
-      SRC := $(TOPDIR)/src/$(MODULE)/windows/native/simengine, \
-      INCLUDE_FILES := simengine.c, \
-      OPTIMIZATION := LOW, \
-      CFLAGS := $(CFLAGS_JDKEXE), \
-      LDFLAGS := $(LDFLAGS_JDKEXE), \
-      LIBS := advapi32.lib version.lib user32.lib, \
-      OUTPUT_DIR := $(SUPPORT_OUTPUTDIR)/modules_cmds/$(MODULE), \
-  ))
-
   TARGETS += $(BUILD_SIMENGINE)
 
 endif

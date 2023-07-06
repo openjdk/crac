@@ -27,10 +27,14 @@
 #include <string.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <unistd.h>
 #include <signal.h>
 
+#ifdef LINUX
+#include <unistd.h>
 #define RESTORE_SIGNAL   (SIGRTMIN + 2)
+#else
+typedef int pid_t;
+#endif //LINUX
 
 static int kickjvm(pid_t jvm, int code) {
 #ifdef LINUX
@@ -49,7 +53,11 @@ int main(int argc, char *argv[]) {
     if (!strcmp(action, "checkpoint")) {
         const char* argsidstr = getenv("SIM_CRAC_NEW_ARGS_ID");
         int argsid = argsidstr ? atoi(argsidstr) : 0;
+#ifdef LINUX
         pid_t jvm = getppid();
+#else
+        pid_t jvm = -1;
+#endif //LINUX
         kickjvm(jvm, argsid);
     } else if (!strcmp(action, "restore")) {
         char *strid = getenv("CRAC_NEW_ARGS_ID");

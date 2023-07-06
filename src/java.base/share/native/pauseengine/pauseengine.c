@@ -27,10 +27,14 @@
 #include <string.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <unistd.h>
 #include <signal.h>
 
+#ifdef LINUX
+#include <unistd.h>
 #define RESTORE_SIGNAL   (SIGRTMIN + 2)
+#else
+typedef int pid_t;
+#endif //LINUX
 
 static int kickjvm(pid_t jvm, int code) {
 #ifdef LINUX
@@ -47,13 +51,17 @@ int main(int argc, char *argv[]) {
     char* action = argv[1];
     char* imagedir = argv[2];
 
-    char *pidpath;
-    if (-1 == asprintf(&pidpath, "%s/pid", imagedir)) {
+    char pidpath[1024];
+    if (0 > snprintf(pidpath, sizeof(pidpath), "%s/pid", imagedir)) {
         return 1;
     }
 
     if (!strcmp(action, "checkpoint")) {
+#ifdef LINUX
         pid_t jvm = getppid();
+#else
+        pid_t jvm = -1;
+#endif //LINUX
 
         FILE *pidfile = fopen(pidpath, "w");
         if (!pidfile) {

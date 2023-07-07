@@ -627,6 +627,10 @@ class VM_Version_StubGenerator: public StubCodeGenerator {
 
 uint64_t VM_Version::CPUFeatures_parse(uint64_t &glibc_features) {
   glibc_features = _glibc_features;
+#ifndef LINUX
+  ignore_glibc_not_using = true;
+  return _features;
+#endif
   if (CPUFeatures == NULL || strcmp(CPUFeatures, "native") == 0) {
     return _features;
   }
@@ -745,12 +749,12 @@ static void pclose_r(const char *arg0, FILE *f, pid_t pid) {
 
 #endif // !INCLUDE_LD_SO_LIST_DIAGNOSTICS
 
+bool VM_Version::ignore_glibc_not_using = false;
+#ifdef LINUX
 const char VM_Version::glibc_prefix[] = ":glibc.cpu.hwcaps=";
 const size_t VM_Version::glibc_prefix_len = strlen(glibc_prefix);
-bool VM_Version::ignore_glibc_not_using = false;
 
 bool VM_Version::glibc_env_set(char *disable_str) {
-#ifdef LINUX
 #define TUNABLES_NAME "GLIBC_TUNABLES"
   char *env_val = disable_str;
   const char *env = getenv(TUNABLES_NAME);
@@ -797,12 +801,10 @@ bool VM_Version::glibc_env_set(char *disable_str) {
     vm_exit_during_initialization(err_msg("setenv " REEXEC_NAME " error: %m"));
 #undef REEXEC_NAME
 #undef TUNABLES_NAME
-#endif //LINUX
   return false;
 }
 
 void VM_Version::glibc_reexec() {
-#ifdef LINUX
   char *buf = NULL;
   size_t buf_allocated = 0;
   size_t buf_used = 0;
@@ -852,11 +854,9 @@ void VM_Version::glibc_reexec() {
   execv(EXEC, argv);
   vm_exit_during_initialization(err_msg("Cannot re-execute " EXEC ": %m"));
 #undef EXEC
-#endif //LINUX
 }
 
 void VM_Version::glibc_not_using(uint64_t excessive_CPU, uint64_t excessive_GLIBC) {
-#ifdef LINUX
 #ifndef ASSERT
   if (!excessive_CPU && !excessive_GLIBC)
     return;
@@ -1177,8 +1177,8 @@ void VM_Version::glibc_not_using(uint64_t excessive_CPU, uint64_t excessive_GLIB
   if (glibc_env_set(disable_str))
     return;
   glibc_reexec();
-#endif //LINUX
 }
+#endif //LINUX
 
 void VM_Version::nonlibc_tty_print_uint64(uint64_t num) {
   static const char prefix[] = "0x";
@@ -2621,6 +2621,7 @@ void VM_Version::initialize() {
   if (ShowCPUFeatures)
     print_using_features_cr();
 
+#ifdef LINUX
   if (!ignore_glibc_not_using) {
     uint64_t       features_expected =   MAX_CPU - 1;
     uint64_t glibc_features_expected = MAX_GLIBC - 1;
@@ -2631,6 +2632,7 @@ void VM_Version::initialize() {
     glibc_not_using(      features_expected & ~      _features,
                     glibc_features_expected & ~_glibc_features);
   }
+#endif
 
   get_processor_features_hotspot();
 

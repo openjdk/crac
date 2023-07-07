@@ -703,9 +703,9 @@ enum Extended_Family {
     return result;
   }
 
+#ifdef LINUX
   static uint64_t glibc_flags() {
     uint64_t result = 0;
-#ifdef LINUX
     if (_cpuid_info.std_cpuid1_ecx.bits.movbe != 0)
       result |= GLIBC_MOVBE;
     if (_cpuid_info.std_cpuid1_ecx.bits.osxsave != 0)
@@ -726,9 +726,9 @@ enum Extended_Family {
       result |= GLIBC_LAHFSAHF;
     if (_cpuid_info.std_cpuid1_edx.bits.ht != 0)
       result |= GLIBC_HTT;
-#endif //LINUX
     return result;
   }
+#endif //LINUX
 
   static bool os_supports_avx_vectors() {
     bool retVal = false;

@@ -1229,7 +1229,7 @@ void VM_Version::get_processor_features_hardware() {
 
   if (cpu_family() > 4) { // it supports CPUID
     _features = feature_flags();
-    _glibc_features = glibc_flags();
+    LINUX_ONLY(_glibc_features = glibc_flags();)
     // Logical processors are only available on P4s and above,
     // and only if hyperthreading is available.
     _logical_processors_per_package = logical_processor_count();

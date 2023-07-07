@@ -103,6 +103,12 @@ ifeq ($(OPENJDK_TARGET_OS), linux)
 
 endif
 
+ifeq ($(OPENJDK_TARGET_OS), windows)
+  CRAC_ENGINE_DIR = modules_cmds
+else
+  CRAC_ENGINE_DIR = modules_libs
+endif
+
 ifeq ($(call isTargetOs, macosx linux windows), true)
   $(eval $(call SetupJdkExecutable, BUILD_PAUSEENGINE, \
       NAME := pauseengine, \
@@ -111,10 +117,7 @@ ifeq ($(call isTargetOs, macosx linux windows), true)
       OPTIMIZATION := LOW, \
       CFLAGS := $(CFLAGS_JDKEXE), \
       LDFLAGS := $(LDFLAGS_JDKEXE), \
-      $(if $(call isTargetOs, windows), \
-        OUTPUT_DIR := $(SUPPORT_OUTPUTDIR)/modules_cmds/$(MODULE), \
-        OUTPUT_DIR := $(SUPPORT_OUTPUTDIR)/modules_libs/$(MODULE), \
-      ) \
+      OUTPUT_DIR := $(SUPPORT_OUTPUTDIR)/$(CRAC_ENGINE_DIR)/$(MODULE), \
   ))
   TARGETS += $(BUILD_PAUSEENGINE)
 
@@ -125,10 +128,7 @@ ifeq ($(call isTargetOs, macosx linux windows), true)
       OPTIMIZATION := LOW, \
       CFLAGS := $(CFLAGS_JDKEXE), \
       LDFLAGS := $(LDFLAGS_JDKEXE), \
-      $(if $(call isTargetOs, windows), \
-        OUTPUT_DIR := $(SUPPORT_OUTPUTDIR)/modules_cmds/$(MODULE), \
-        OUTPUT_DIR := $(SUPPORT_OUTPUTDIR)/modules_libs/$(MODULE), \
-      ) \
+      OUTPUT_DIR := $(SUPPORT_OUTPUTDIR)/$(CRAC_ENGINE_DIR)/$(MODULE), \
   ))
   TARGETS += $(BUILD_SIMENGINE)
 

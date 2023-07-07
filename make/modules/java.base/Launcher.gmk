@@ -103,13 +103,13 @@ ifeq ($(OPENJDK_TARGET_OS), linux)
 
 endif
 
-ifeq ($(OPENJDK_TARGET_OS), windows)
-  CRAC_ENGINE_DIR = modules_cmds
-else
-  CRAC_ENGINE_DIR = modules_libs
-endif
-
 ifeq ($(call isTargetOs, macosx linux windows), true)
+  ifeq ($(OPENJDK_TARGET_OS), windows)
+    CRAC_ENGINE_DIR = modules_cmds
+  else
+    CRAC_ENGINE_DIR = modules_libs
+  endif
+
   $(eval $(call SetupJdkExecutable, BUILD_PAUSEENGINE, \
       NAME := pauseengine, \
       SRC := $(TOPDIR)/src/$(MODULE)/share/native/pauseengine, \

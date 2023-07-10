@@ -30,6 +30,7 @@ import java.nio.channels.Selector;
  * @summary check that the Selector's wakeup() makes the subsequent select() call to return immediately
  *          (see also jdk/test/java/nio/channels/Selector/WakeupSpeed.java);
  *          covers ZE-983
+ * @requires (os.family == "linux")
  * @library /test/lib
  * @build Test
  * @run driver jdk.test.lib.crac.CracTest true  false false

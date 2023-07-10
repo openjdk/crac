@@ -38,6 +38,7 @@ import java.util.concurrent.*;
 /*
  * @test
  * @summary Test if InetAddress cache is flushed after checkpoint/restore
+ * @requires (os.family == "linux")
  * @requires docker.support
  * @library /test/lib
  * @build ResolveTest

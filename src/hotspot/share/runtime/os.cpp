@@ -41,8 +41,6 @@
 #include "memory/guardedMemory.hpp"
 #include "memory/resourceArea.hpp"
 #include "memory/universe.hpp"
-#include "oops/compressedOops.inline.hpp"
-#include "oops/oop.inline.hpp"
 #include "prims/jvm_misc.hpp"
 #include "runtime/arguments.hpp"
 #include "runtime/atomic.hpp"
@@ -71,9 +69,6 @@
 #include "utilities/defaultStream.hpp"
 #include "utilities/events.hpp"
 #include "utilities/powerOfTwo.hpp"
-
-# include <signal.h>
-# include <errno.h>
 
 OSThread*         os::_starting_thread    = NULL;
 address           os::_polling_page       = NULL;

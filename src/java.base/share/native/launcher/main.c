@@ -101,6 +101,7 @@ WinMain(HINSTANCE inst, HINSTANCE previnst, LPSTR cmdline, int cmdshow)
 
 #else /* JAVAW */
 
+#ifndef _WIN32
 #include <sys/wait.h>
 
 static int is_checkpoint = 0;
@@ -169,7 +170,8 @@ static void setup_sighandler() {
     sigact.sa_flags = SA_SIGINFO;
     sigact.sa_sigaction = sighandler;
 
-    for (int sig = 1; sig < __SIGRTMIN; ++sig) {
+    const int MaxSignalValue = 31;
+    for (int sig = 1; sig <= MaxSignalValue; ++sig) {
         if (sig == SIGKILL || sig == SIGSTOP) {
             continue;
         }
@@ -239,6 +241,7 @@ static void spin_last_pid(int pid) {
         --cnt;
     } while (child < pid);
 }
+#endif // _WIN32
 
 JNIEXPORT int
 main(int argc, char **argv)

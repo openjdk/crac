@@ -27,6 +27,7 @@ import java.nio.channels.Selector;
 /*
  * @test Selector/selectAndWakeupAfterRestore
  * @summary a trivial check that Selector.wakeup() after restore behaves as expected
+ * @requires (os.family == "linux")
  * @library /test/lib
  * @build Test
  * @run driver jdk.test.lib.crac.CracTest

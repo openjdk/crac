@@ -703,6 +703,7 @@ enum Extended_Family {
     return result;
   }
 
+#ifdef LINUX
   static uint64_t glibc_flags() {
     uint64_t result = 0;
     if (_cpuid_info.std_cpuid1_ecx.bits.movbe != 0)
@@ -727,6 +728,7 @@ enum Extended_Family {
       result |= GLIBC_HTT;
     return result;
   }
+#endif //LINUX
 
   static bool os_supports_avx_vectors() {
     bool retVal = false;
@@ -771,13 +773,14 @@ enum Extended_Family {
   static void get_processor_features_hotspot();
 
   static uint64_t CPUFeatures_parse(uint64_t &glibc_features);
-  static void CPUFeatures_init();
+#ifdef LINUX
   static void glibc_not_using(uint64_t excessive_CPU, uint64_t excessive_GLIBC);
   static bool glibc_env_set(char *disable_str);
   /*[[noreturn]]*/ static void glibc_reexec();
   // C++17: Make glibc_prefix and glibc_prefix_len constexpr.
   static const char glibc_prefix[];
   static const size_t glibc_prefix_len;
+#endif //LINUX
   // C++17: Make ignore_glibc_not_using inline.
   static bool ignore_glibc_not_using;
   static void nonlibc_tty_print_uint64(uint64_t num);

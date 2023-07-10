@@ -28,6 +28,7 @@ import jdk.test.lib.crac.CracTestArg;
 /*
  * @test Selector/keyAfterRestore
  * @summary a trivial test for SelectionKey's state after restore
+ * @requires (os.family == "linux")
  * @library /test/lib
  * @build ChannelResource
  * @build Test

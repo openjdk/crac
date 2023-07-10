@@ -32,6 +32,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 /*
  * @test Selector/multipleSelectSingleClose
  * @summary check a coexistence of multiple select() + C/R in case when the selector is finally closed
+ * @requires (os.family == "linux")
  * @library /test/lib
  * @build Test
  * @run driver jdk.test.lib.crac.CracTest false false

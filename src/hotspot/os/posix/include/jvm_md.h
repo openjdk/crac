@@ -91,8 +91,10 @@
 #define SHUTDOWN2_SIGNAL SIGINT
 #define SHUTDOWN3_SIGNAL SIGTERM
 
-#ifdef LINUX
+#if defined(LINUX)
 #define RESTORE_SIGNAL   (SIGRTMIN + 2)
+#elif defined(__APPLE__)
+#define RESTORE_SIGNAL   SIGUSR2
 #endif
 
 #endif /* !_JAVASOFT_JVM_MD_H_ */

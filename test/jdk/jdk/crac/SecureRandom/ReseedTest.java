@@ -35,6 +35,7 @@ import static jdk.test.lib.Asserts.assertNotEquals;
  * @build ReseedTest
  * @run driver/timeout=60 jdk.test.lib.crac.CracTest true
  * @run driver/timeout=60 jdk.test.lib.crac.CracTest false
+ * @requires (os.family == "linux")
  */
 public class ReseedTest implements CracTest {
     @CracTestArg

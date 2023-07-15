@@ -3129,6 +3129,7 @@ jint Arguments::finalize_vm_init_args(bool patch_mod_javabase) {
   }
 
   if (CRaCCheckpointTo && UseZGC) {
+    # jdk.crac.impl.CheckpointOpenFileException: FD fd=3 type=regular path=/memfd:java_heap (deleted)
     jio_fprintf(defaultStream::output_stream(),
       "-XX:+UseZGC is currently unsupported for -XX:CRaCCheckpointTo, contact Azul for ZULU-13196.\n");
     return JNI_ERR;

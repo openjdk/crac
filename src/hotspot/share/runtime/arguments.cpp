@@ -3128,6 +3128,12 @@ jint Arguments::finalize_vm_init_args(bool patch_mod_javabase) {
     return JNI_ERR;
   }
 
+  if (CRaCCheckpointTo && UseZGC) {
+    jio_fprintf(defaultStream::output_stream(),
+      "-XX:+UseZGC is currently unsupported for -XX:CRaCCheckpointTo, contact Azul for ZULU-13196.\n");
+    return JNI_ERR;
+  }
+
   // This must be done after all arguments have been processed
   // and the container support has been initialized since AggressiveHeap
   // relies on the amount of total memory available.

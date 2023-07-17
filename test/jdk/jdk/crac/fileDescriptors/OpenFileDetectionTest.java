@@ -23,9 +23,11 @@
 
 import jdk.crac.Core;
 import jdk.test.lib.crac.CracBuilder;
+import jdk.test.lib.crac.CracEngine;
 import jdk.test.lib.crac.CracProcess;
 import jdk.test.lib.crac.CracTest;
 
+import java.io.File;
 import java.io.FileInputStream;
 import java.io.RandomAccessFile;
 
@@ -34,25 +36,28 @@ import java.io.RandomAccessFile;
  * @library /test/lib
  * @build OpenFileDetectionTest
  * @run driver jdk.test.lib.crac.CracTest
- * @requires (os.family == "linux")
  */
 public class OpenFileDetectionTest implements CracTest {
     @Override
     public void test() throws Exception {
-        CracProcess cp = new CracBuilder().captureOutput(true)
+        CracProcess cp = new CracBuilder().engine(CracEngine.SIMULATE).captureOutput(true)
                 .javaOption("jdk.crac.collect-fd-stacktraces", "true")
                 .startCheckpoint();
         cp.outputAnalyzer()
                 .shouldHaveExitValue(1)
-                .shouldMatch("CheckpointOpenFileException: /etc/passwd") // RandomAccessFile should have the expected format
-                .shouldMatch("/etc/group") // others are allowed to specify the path in some format
+                .shouldMatch("CheckpointOpenFileException: filename1.txt") // RandomAccessFile should have the expected format
+                .shouldMatch("filename2.txt") // others are allowed to specify the path in some format
                 .shouldContain("This file descriptor was created by "); // <thread> at <time> here
     }
 
     @Override
     public void exec() throws Exception {
-        try (var file1 = new RandomAccessFile("/etc/passwd", "r");
-             var file2 = new FileInputStream("/etc/group")) {
+        {
+            new File("filename1.txt").createNewFile();
+            new File("filename2.txt").createNewFile();
+        }
+        try (var file1 = new RandomAccessFile("filename1.txt", "r");
+             var file2 = new FileInputStream("filename2.txt")) {
             Core.checkpointRestore();
         }
     }

@@ -92,3 +92,29 @@ Java_java_io_FileCleanable_cleanupClose0(JNIEnv *env, jclass fdClass, jint unuse
         }
     }
 }
+
+JNIEXPORT jstring JNICALL
+Java_java_io_FileDescriptor_nativeDescription0(JNIEnv* env, jobject this) {
+    HANDLE hFile = (HANDLE)(*env)->GetLongField(env, this, IO_handle_fdID);
+    #define BufferSize 1024
+    char lpszFilePath[BufferSize] = {'\0'};
+
+    HMODULE hModule = LoadLibrary(TEXT("kernel32.dll"));
+    if (!hModule) {
+        JNU_ThrowIOExceptionWithLastError(env, "LoadLibrary failed");
+    } else {
+        typedef BOOL (WINAPI* GetFinalPathNameByHandleFunc) (HANDLE, LPSTR, DWORD, DWORD);
+        GetFinalPathNameByHandleFunc getFinalPathNameByHandle = (GetFinalPathNameByHandleFunc)GetProcAddress(hModule, "GetFinalPathNameByHandleA");
+        if (!getFinalPathNameByHandle) {
+            JNU_ThrowIOExceptionWithLastError(env, "GetProcAddress failed");
+        } else {
+            const DWORD res = getFinalPathNameByHandle(hFile, lpszFilePath, BufferSize, FILE_NAME_OPENED);
+            if (!res) {
+                JNU_ThrowIOExceptionWithLastError(env, "GetFinalPathNameByHandle failed");
+            }
+        }
+        CloseHandle(hModule);
+    }
+
+    return (*env)->NewStringUTF(env, lpszFilePath);
+}

@@ -627,6 +627,10 @@ class VM_Version_StubGenerator: public StubCodeGenerator {
 
 uint64_t VM_Version::CPUFeatures_parse(uint64_t &glibc_features) {
   glibc_features = _glibc_features;
+#ifndef LINUX
+  ignore_glibc_not_using = true;
+  return _features;
+#endif
   if (CPUFeatures == NULL || strcmp(CPUFeatures, "native") == 0) {
     return _features;
   }
@@ -745,9 +749,10 @@ static void pclose_r(const char *arg0, FILE *f, pid_t pid) {
 
 #endif // !INCLUDE_LD_SO_LIST_DIAGNOSTICS
 
+bool VM_Version::ignore_glibc_not_using = false;
+#ifdef LINUX
 const char VM_Version::glibc_prefix[] = ":glibc.cpu.hwcaps=";
 const size_t VM_Version::glibc_prefix_len = strlen(glibc_prefix);
-bool VM_Version::ignore_glibc_not_using = false;
 
 bool VM_Version::glibc_env_set(char *disable_str) {
 #define TUNABLES_NAME "GLIBC_TUNABLES"
@@ -1173,6 +1178,7 @@ void VM_Version::glibc_not_using(uint64_t excessive_CPU, uint64_t excessive_GLIB
     return;
   glibc_reexec();
 }
+#endif //LINUX
 
 void VM_Version::nonlibc_tty_print_uint64(uint64_t num) {
   static const char prefix[] = "0x";
@@ -1223,7 +1229,7 @@ void VM_Version::get_processor_features_hardware() {
 
   if (cpu_family() > 4) { // it supports CPUID
     _features = feature_flags();
-    _glibc_features = glibc_flags();
+    LINUX_ONLY(_glibc_features = glibc_flags();)
     // Logical processors are only available on P4s and above,
     // and only if hyperthreading is available.
     _logical_processors_per_package = logical_processor_count();
@@ -2615,6 +2621,7 @@ void VM_Version::initialize() {
   if (ShowCPUFeatures)
     print_using_features_cr();
 
+#ifdef LINUX
   if (!ignore_glibc_not_using) {
     uint64_t       features_expected =   MAX_CPU - 1;
     uint64_t glibc_features_expected = MAX_GLIBC - 1;
@@ -2625,6 +2632,7 @@ void VM_Version::initialize() {
     glibc_not_using(      features_expected & ~      _features,
                     glibc_features_expected & ~_glibc_features);
   }
+#endif
 
   get_processor_features_hotspot();
 

@@ -21,40 +21,43 @@
  * questions.
  */
 
-#ifndef SHARE_RUNTIME_CRAC_HPP
-#define SHARE_RUNTIME_CRAC_HPP
+// no precompiled headers
+#include "jvm.h"
+#include "runtime/crac_structs.hpp"
 
-#include "memory/allStatic.hpp"
-#include "runtime/handles.hpp"
-#include "utilities/macros.hpp"
+#include <sys/mman.h>
 
-// xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
-#define UUID_LENGTH 36
-
-class crac: AllStatic {
-public:
-  static void vm_create_start();
-  static bool prepare_checkpoint();
-  static Handle checkpoint(jarray fd_arr, jobjectArray obj_arr, bool dry_run, jlong jcmd_stream, TRAPS);
-  static void restore();
-
-  static jlong restore_start_time();
-  static jlong uptime_since_restore();
-
-  static void record_time_before_checkpoint();
-  static void update_javaTimeNanos_offset();
-
-  static jlong monotonic_time_offset() {
-    return javaTimeNanos_offset;
+int CracSHM::open(int mode) {
+  int shmfd = shm_open(_path, mode, 0600);
+  if (-1 == shmfd) {
+    perror("shm_open");
   }
+  return shmfd;
+}
 
-private:
-  static bool read_bootid(char *dest);
+void CracSHM::unlink() {
+  shm_unlink(_path);
+}
 
-  static jlong checkpoint_millis;
-  static jlong checkpoint_nanos;
-  static char checkpoint_bootid[UUID_LENGTH];
-  static jlong javaTimeNanos_offset;
-};
+#ifndef LINUX
+void crac::vm_create_start() {
+}
 
-#endif //SHARE_RUNTIME_CRAC_HPP
+void VM_Crac::report_ok_to_jcmd_if_any() {
+}
+
+bool VM_Crac::check_fds() {
+  return true;
+}
+
+bool VM_Crac::memory_checkpoint() {
+  return true;
+}
+
+void VM_Crac::memory_restore() {
+}
+
+bool crac::read_bootid(char *dest) {
+  return true;
+}
+#endif

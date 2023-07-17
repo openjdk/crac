@@ -34,6 +34,7 @@ import java.io.RandomAccessFile;
  * @library /test/lib
  * @build OpenFileDetectionTest
  * @run driver jdk.test.lib.crac.CracTest
+ * @requires (os.family == "linux")
  */
 public class OpenFileDetectionTest implements CracTest {
     @Override

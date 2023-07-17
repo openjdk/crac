@@ -6,6 +6,7 @@ import jdk.test.lib.process.StreamPumper;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.file.*;
+import java.util.concurrent.TimeUnit;
 import java.util.List;
 import java.util.function.Consumer;
 import java.util.function.Predicate;
@@ -43,6 +44,10 @@ public class CracProcess {
 
     public void waitForPausePid() throws IOException, InterruptedException {
         assertEquals(CracEngine.PAUSE, builder.engine, "Pause PID file created only with pauseengine");
+
+        // (at least on Windows) we need to wait to avoid os::prepare_checkpoint() interference with mkdir/rmdir calls
+        Thread.sleep(500);
+
         try (WatchService watcher = FileSystems.getDefault().newWatchService()) {
             Path imageDir = builder.imageDir().toAbsolutePath();
             waitForFileCreated(watcher, imageDir.getParent(), path -> "cr".equals(path.toFile().getName()));
@@ -60,8 +65,18 @@ public class CracProcess {
                     return;
                 }
             }
+            int timeoutCounter = 10;
             for (; ; ) {
-                WatchKey key2 = watcher.take();
+                WatchKey key2 = watcher.poll(1, TimeUnit.SECONDS);
+                if (null == key2) {
+                    if (!process.isAlive() && 0 < --timeoutCounter) {
+                        // At least on macOS, it seems like WatchService's event may be delayed up to 10 secs,
+                        // so we need to keep waiting some time for the event, even the process is completed.
+                        continue;
+                    }
+                    assertTrue(process.isAlive(), "Process should exist");
+                    continue;
+                }
                 for (WatchEvent<?> event : key2.pollEvents()) {
                     if (event.kind() != StandardWatchEventKinds.ENTRY_CREATE) {
                         continue;

@@ -37,6 +37,7 @@ import java.util.concurrent.CountDownLatch;
  * @library /test/lib
  * @build OpenSocketDetectionTest
  * @run driver/timeout=10 jdk.test.lib.crac.CracTest
+ * @requires (os.family == "linux")
  */
 public class OpenSocketDetectionTest implements CracTest {
     @Override

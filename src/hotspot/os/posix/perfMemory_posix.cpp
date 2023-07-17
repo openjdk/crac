@@ -32,13 +32,16 @@
 #include "memory/resourceArea.hpp"
 #include "oops/oop.inline.hpp"
 //#include "os_linux.inline.hpp"
-#include "perfMemory_linux.hpp"
 #include "os_posix.inline.hpp"
 #include "runtime/handles.inline.hpp"
 #include "runtime/os.hpp"
 #include "runtime/perfMemory.hpp"
 #include "services/memTracker.hpp"
 #include "utilities/exceptions.hpp"
+
+#ifdef LINUX
+#include "perfMemory_linux.hpp"
+#endif //LINUX
 
 // put OS-includes here
 # include <sys/types.h>
@@ -1328,6 +1331,7 @@ void PerfMemory::detach(char* addr, size_t bytes) {
   unmap_shared(addr, bytes);
 }
 
+#ifdef LINUX
 bool PerfMemoryLinux::checkpoint(const char* checkpoint_path) {
   assert(checkpoint_path, "should be set");
 
@@ -1425,3 +1429,4 @@ bool PerfMemoryLinux::restore() {
   checkpoint_fd = -1;
   return true;
 }
+#endif //LINUX

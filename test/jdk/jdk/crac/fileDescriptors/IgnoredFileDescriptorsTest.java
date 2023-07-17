@@ -40,6 +40,7 @@ import java.util.stream.Collectors;
  * @library /test/lib
  * @build IgnoredFileDescriptorsTest
  * @run driver jdk.test.lib.crac.CracTest
+ * @requires (os.family == "linux")
  */
 public class IgnoredFileDescriptorsTest implements CracTest {
     private static final String EXTRA_FD_WRAPPER = Path.of(Utils.TEST_SRC, "extra_fd_wrapper.sh").toString();

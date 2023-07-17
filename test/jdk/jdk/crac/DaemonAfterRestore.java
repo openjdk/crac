@@ -38,6 +38,7 @@ import static jdk.test.lib.Asserts.assertFalse;
  * @library /test/lib
  * @build DaemonAfterRestore
  * @run driver jdk.test.lib.crac.CracTest
+ * @requires (os.family == "linux")
  */
 public class DaemonAfterRestore implements CracTest {
     static final String MAIN_THREAD_FINISH = "main thread finish";

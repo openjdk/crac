@@ -30,6 +30,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 /*
  * @test Selector/multipleSelectNow
  * @summary check work of multiple selectNow() + C/R peaceful coexistence
+ * @requires (os.family == "linux")
  * @library /test/lib
  * @build Test
  * @run driver jdk.test.lib.crac.CracTest false

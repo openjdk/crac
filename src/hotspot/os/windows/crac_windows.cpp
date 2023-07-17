@@ -21,40 +21,35 @@
  * questions.
  */
 
-#ifndef SHARE_RUNTIME_CRAC_HPP
-#define SHARE_RUNTIME_CRAC_HPP
+#include "precompiled.hpp"
 
-#include "memory/allStatic.hpp"
-#include "runtime/handles.hpp"
-#include "utilities/macros.hpp"
+#include "jvm.h"
+#include "runtime/crac_structs.hpp"
 
-// xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
-#define UUID_LENGTH 36
+void crac::vm_create_start() {
+}
 
-class crac: AllStatic {
-public:
-  static void vm_create_start();
-  static bool prepare_checkpoint();
-  static Handle checkpoint(jarray fd_arr, jobjectArray obj_arr, bool dry_run, jlong jcmd_stream, TRAPS);
-  static void restore();
+void VM_Crac::report_ok_to_jcmd_if_any() {
+}
 
-  static jlong restore_start_time();
-  static jlong uptime_since_restore();
+bool VM_Crac::check_fds() {
+  return true;
+}
 
-  static void record_time_before_checkpoint();
-  static void update_javaTimeNanos_offset();
+bool VM_Crac::memory_checkpoint() {
+  return true;
+}
 
-  static jlong monotonic_time_offset() {
-    return javaTimeNanos_offset;
-  }
+void VM_Crac::memory_restore() {
+}
 
-private:
-  static bool read_bootid(char *dest);
+int CracSHM::open(int mode) {
+  return -1;
+}
 
-  static jlong checkpoint_millis;
-  static jlong checkpoint_nanos;
-  static char checkpoint_bootid[UUID_LENGTH];
-  static jlong javaTimeNanos_offset;
-};
+void CracSHM::unlink() {
+}
 
-#endif //SHARE_RUNTIME_CRAC_HPP
+bool crac::read_bootid(char *dest) {
+  return true;
+}

@@ -39,6 +39,7 @@ import java.util.concurrent.TimeUnit;
  * @library /test/lib
  * @build CracOptionTest
  * @run driver jdk.test.lib.crac.CracTest
+ * @requires (os.family == "linux")
  */
 
 public class CracOptionTest implements CracTest {

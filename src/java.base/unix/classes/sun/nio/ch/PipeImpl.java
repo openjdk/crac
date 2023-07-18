@@ -66,8 +66,8 @@ class PipeImpl
                     sink.close();
                     // intentional fallthrough
                 case "ignore":
-                    if (Boolean.parseBoolean(policy.params.getOrDefault("warn", "false"))) {
-                        LoggerContainer.warn("{0} was not closed by the application!", this);
+                    if (Boolean.parseBoolean(policy.params.getOrDefault("warn", "true"))) {
+                        LoggerContainer.warn("{0} was not closed by the application. Use 'warn: false' in the policy to suppress this message.", this);
                     }
                     Core.getClaimedFDs().claimFd(source.getFD(), this, NO_EXCEPTION, source.getFD());
                     Core.getClaimedFDs().claimFd(sink.getFD(), this, NO_EXCEPTION, sink.getFD());

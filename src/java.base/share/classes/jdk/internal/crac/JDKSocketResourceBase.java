@@ -50,8 +50,8 @@ public abstract class JDKSocketResourceBase extends JDKFdResource {
                     }
                     // intentional fallthrough
                 case "ignore":
-                    if (Boolean.parseBoolean(policy.params.getOrDefault("warn", "false"))) {
-                        LoggerContainer.warn("Socket {0} was not closed by the application!", owner);
+                    if (Boolean.parseBoolean(policy.params.getOrDefault("warn", "true"))) {
+                        LoggerContainer.warn("Socket {0} was not closed by the application. Use 'warn: false' in the policy to suppress this message.", owner);
                     }
                     yield NO_EXCEPTION;
                 default:

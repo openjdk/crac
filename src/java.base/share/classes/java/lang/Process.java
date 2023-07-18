@@ -872,8 +872,8 @@ public abstract class Process {
                     owner.close();
                     // intentional fallthrough
                 case "ignore":
-                    if (Boolean.parseBoolean(policy.params.getOrDefault("warn", "false"))) {
-                        LoggerContainer.warn("{0} was not closed by the application!", this);
+                    if (Boolean.parseBoolean(policy.params.getOrDefault("warn", "true"))) {
+                        LoggerContainer.warn("{0} was not closed by the application. Use 'warn: false' in the policy to suppress this message.", this);
                     }
                     yield NO_EXCEPTION;
                 default:

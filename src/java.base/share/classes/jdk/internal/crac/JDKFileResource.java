@@ -62,7 +62,7 @@ public abstract class JDKFileResource extends JDKFdResource {
         String warn = "false";
         if (policy != null) {
             action = policy.action.toLowerCase();
-            warn = policy.params.getOrDefault("warn", "false");
+            warn = policy.params.getOrDefault("warn", "true");
         } else if (matchClasspath(path)) {
             // Files on the classpath are considered persistent, exception is not thrown
             action = "ignore";
@@ -82,7 +82,7 @@ public abstract class JDKFileResource extends JDKFdResource {
                 closed = true;
             case "ignore":
                 if (Boolean.parseBoolean(warn)) {
-                    LoggerContainer.warn("File {0} was not closed by the application!", path);
+                    LoggerContainer.warn("File {0} was not closed by the application. Use 'warn: false' in the policy to suppress this message.", path);
                 }
                 yield NO_EXCEPTION;
             default:

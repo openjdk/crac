@@ -27,8 +27,12 @@ import jdk.test.lib.crac.CracBuilder;
 import jdk.test.lib.crac.CracTest;
 import jdk.test.lib.crac.CracTestArg;
 
+import java.io.FileOutputStream;
 import java.io.FileWriter;
 import java.io.IOException;
+import java.nio.ByteBuffer;
+import java.nio.channels.FileChannel;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.stream.Stream;
@@ -56,16 +60,22 @@ public class ReopenFileWritingTest extends FDPolicyTestBase implements CracTest 
     @CracTestArg(value = 3, optional = true)
     String fileAppendTruncated;
 
+    @CracTestArg(value = 4, optional = true)
+    String fileUseChannel;
+
+
     @Override
     public void test() throws Exception {
         Path noAppendPath = Files.createTempFile(getClass().getName(), ".txt");
         Path appendPath = Files.createTempFile(getClass().getName(), ".txt");
         Path appendExtendedPath = Files.createTempFile(getClass().getName(), ".txt");
         Path appendTruncatedPath = Files.createTempFile(getClass().getName(), ".txt");
+        Path useChannelPath = Files.createTempFile(getClass().getName(), ".txt");
         fileNoAppend = noAppendPath.toString();
         fileAppend = appendPath.toString();
         fileAppendExtended = appendExtendedPath.toString();
         fileAppendTruncated = appendTruncatedPath.toString();
+        fileUseChannel = useChannelPath.toString();
         Path config = writeConfig("""
                 type: FILE
                 action: reopen
@@ -74,28 +84,30 @@ public class ReopenFileWritingTest extends FDPolicyTestBase implements CracTest 
             CracBuilder builder = new CracBuilder();
             builder
                     .javaOption(OpenResourcePolicies.PROPERTY, config.toString())
-                    .args(CracTest.args(fileNoAppend, fileAppend, fileAppendExtended, fileAppendTruncated));
+                    .args(CracTest.args(fileNoAppend, fileAppend, fileAppendExtended, fileAppendTruncated, fileUseChannel));
             builder.doCheckpoint();
             assertEquals("Hello ", Files.readString(noAppendPath));
             assertEquals("Hello ", Files.readString(appendPath));
             assertEquals("Hello ", Files.readString(appendExtendedPath));
             assertEquals("Hello ", Files.readString(appendTruncatedPath));
+            assertEquals("Hello ", Files.readString(useChannelPath));
             Files.writeString(noAppendPath, "1234567890");
             Files.writeString(appendPath, "123456");
             Files.writeString(appendExtendedPath, "1234567890");
             Files.writeString(appendTruncatedPath, "");
+            Files.writeString(useChannelPath, "123456");
             builder.doRestore();
-            // Note: current implementation in FileOutputStream does not record FD offset
-            //       and always opens the file for appending
-            assertEquals("1234567890world!", Files.readString(noAppendPath));
+            assertEquals("123456world!", Files.readString(noAppendPath));
             assertEquals("123456world!", Files.readString(appendPath));
             assertEquals("1234567890world!", Files.readString(appendExtendedPath));
             assertEquals("world!", Files.readString(appendTruncatedPath));
+            assertEquals("123world!", Files.readString(useChannelPath));
         } finally {
             Files.deleteIfExists(noAppendPath);
             Files.deleteIfExists(appendPath);
             Files.deleteIfExists(appendExtendedPath);
             Files.deleteIfExists(appendTruncatedPath);
+            Files.deleteIfExists(useChannelPath);
             Files.deleteIfExists(config);
         }
     }
@@ -105,7 +117,8 @@ public class ReopenFileWritingTest extends FDPolicyTestBase implements CracTest 
         try (var w1 = new FileWriter(fileNoAppend);
              var w2 = new FileWriter(fileAppend, true);
              var w3 = new FileWriter(fileAppendExtended, true);
-             var w4 = new FileWriter(fileAppendTruncated, true)) {
+             var w4 = new FileWriter(fileAppendTruncated, true);
+             var fos5 = new FileOutputStream(fileUseChannel)) {
             Stream.of(w1, w2, w3, w4).forEach(w -> {
                 try {
                     w.write("Hello ");
@@ -114,6 +127,8 @@ public class ReopenFileWritingTest extends FDPolicyTestBase implements CracTest 
                     throw new RuntimeException(e);
                 }
             });
+            FileChannel ch5 = fos5.getChannel();
+            ch5.write(ByteBuffer.wrap("Hello ".getBytes(StandardCharsets.UTF_8)));
             Core.checkpointRestore();
             Stream.of(w1, w2, w3, w4).forEach(w -> {
                 try {
@@ -122,6 +137,8 @@ public class ReopenFileWritingTest extends FDPolicyTestBase implements CracTest 
                     throw new RuntimeException(e);
                 }
             });
+            ch5.position(3);
+            ch5.write(ByteBuffer.wrap("world!".getBytes(StandardCharsets.UTF_8)));
         }
     }
 }

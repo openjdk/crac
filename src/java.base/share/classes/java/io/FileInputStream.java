@@ -557,7 +557,22 @@ public class FileInputStream extends InputStream
                 // We might get IOException from native code when lseeking a named pipe.
                 offset = 0;
             }
-            close();
+            // Calling close method means that the channel would be closed as well,
+            // but we cannot reopen it and this is exposed (so we cannot recycle it).
+            // Therefore, if the application uses it before this is reopened it might
+            // face exceptions due to invalid FD; since closing must be explicitly
+            // requested via policy this is acceptable.
+            synchronized (closeLock) {
+                if (closed) {
+                    return;
+                }
+                closed = true;
+            }
+            fd.closeAll(new Closeable() {
+                public void close() throws IOException {
+                    fd.close();
+                }
+            });
         }
 
         @Override

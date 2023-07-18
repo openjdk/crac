@@ -77,7 +77,7 @@ public final class FileDescriptor {
                 // but in case these are collected we handle FDs 0..2 here as well.
                 if (policy != null) {
                     action = policy.action;
-                    warn = policy.params.getOrDefault("warn", "false");
+                    warn = policy.params.getOrDefault("warn", "true");
                 } else if (self == in || self == out || self == err) {
                     action = "ignore";
                 }
@@ -90,7 +90,7 @@ public final class FileDescriptor {
                         close();
                     case "ignore":
                         if (Boolean.parseBoolean(warn)) {
-                            LoggerContainer.warn("File descriptor {0} was not closed by the application!", fd);
+                            LoggerContainer.warn("File descriptor {0} was not closed by the application. Use 'warn: false' in the policy to suppress this message.", fd);
                         }
                         yield NO_EXCEPTION;
                     default: throw new IllegalArgumentException("Unknown policy action for file descriptor " + fd + ": " + action);

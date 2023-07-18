@@ -27,8 +27,12 @@ import jdk.test.lib.crac.CracBuilder;
 import jdk.test.lib.crac.CracTest;
 import jdk.test.lib.crac.CracTestArg;
 
+import java.io.FileInputStream;
 import java.io.FileReader;
-import java.io.FileWriter;
+import java.io.IOException;
+import java.nio.ByteBuffer;
+import java.nio.channels.FileChannel;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 
@@ -52,11 +56,11 @@ public class ReopenFileReadingTest extends FDPolicyTestBase implements CracTest 
         Path configFile = writeConfig("""
                 # These first two rules are just to test parsing
                 type: FILE
-                path: /some/other/file                
+                path: /some/other/file
                 action: error
                 ---
                 type: FILE
-                path: **/*.globpattern.test                
+                path: **/*.globpattern.test
                 action: CLOSE
                 ---
                 type: FILE
@@ -79,14 +83,36 @@ public class ReopenFileReadingTest extends FDPolicyTestBase implements CracTest 
 
     @Override
     public void exec() throws Exception {
-        try (var reader = new FileReader(tempFile)) {
+        try (var reader = new FileReader(tempFile);
+             var fis = new FileInputStream(tempFile)) {
             char[] buf = new char[6];
             assertEquals(buf.length, reader.read(buf));
             assertEquals("Hello ", new String(buf));
+
+            FileChannel channel = fis.getChannel();
+            byte[] buf2 = new byte[3];
+            ByteBuffer byteBuffer = ByteBuffer.wrap(buf2);
+            readFully(channel, byteBuffer);
+            assertEquals("Hel", new String(buf2, StandardCharsets.UTF_8));
+
             Core.checkpointRestore();
             readContents(reader);
             assertEquals(buf.length, reader.read(buf));
             assertEquals("world!", new String(buf));
+
+            readFully(channel, byteBuffer);
+            assertEquals("lo ", new String(buf2, StandardCharsets.UTF_8));
+
+            channel.position(8 * 1024 * 1024 + 6);
+            readFully(channel, byteBuffer);
+            assertEquals("wor", new String(buf2, StandardCharsets.UTF_8));
+        }
+    }
+
+    private static void readFully(FileChannel channel, ByteBuffer byteBuffer) throws IOException {
+        byteBuffer.clear();
+        while (byteBuffer.position() < byteBuffer.capacity()) {
+            channel.read(byteBuffer);
         }
     }
 }

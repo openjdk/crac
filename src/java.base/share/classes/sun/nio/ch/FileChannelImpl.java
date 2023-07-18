@@ -89,6 +89,10 @@ public class FileChannelImpl
         public void beforeCheckpoint(Context<? extends Resource> context) throws Exception {
             if (!isOpen() || path == null) {
                 return;
+            } else if (parent != null) {
+                // This FileChannel is managed by a higher level object that
+                // will handle the provided file descriptor on its own.
+                return;
             }
             super.beforeCheckpoint(context);
         }

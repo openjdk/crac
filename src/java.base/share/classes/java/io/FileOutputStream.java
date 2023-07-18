@@ -29,6 +29,10 @@ import java.nio.channels.FileChannel;
 import java.nio.file.Files;
 import java.nio.file.Path;
 
+import jdk.crac.Context;
+import jdk.crac.Resource;
+import jdk.internal.crac.Core;
+import jdk.internal.crac.JDKResource;
 import jdk.internal.crac.OpenResourcePolicies;
 import jdk.internal.access.SharedSecrets;
 import jdk.internal.access.JavaIOFileDescriptorAccess;
@@ -98,6 +102,16 @@ public class FileOutputStream extends OutputStream
     private final Object closeLock = new Object();
 
     private volatile boolean closed;
+
+    /**
+     * When the file is opened in non-append mode we need to check position
+     * through the {@link #channel} when handling the file descriptor policy;
+     * this needs to be independent of the regular resource as we need to
+     * ensure initialization of the channel before FD priority class.
+     * This field being <code>null</code> means that the file is opened in
+     * append-only mode and does not need to track the position.
+     */
+    private final EnsureChannelResource channelResource;
 
     /**
      * Creates a file output stream to write to the file with the
@@ -236,6 +250,11 @@ public class FileOutputStream extends OutputStream
         this.fd = new FileDescriptor();
         fd.attach(this);
         this.path = name;
+        if (append) {
+            channelResource = null;
+        } else {
+            channelResource = new EnsureChannelResource();
+        }
 
         open(name, append);
         FileCleanable.register(fd);   // open sets the fd, register the cleanup
@@ -275,6 +294,8 @@ public class FileOutputStream extends OutputStream
         }
         this.fd = fdObj;
         this.path = null;
+        // We don't have path information and won't reopen the file
+        this.channelResource = null;
 
         fd.attach(this);
     }
@@ -284,7 +305,7 @@ public class FileOutputStream extends OutputStream
      * @param name name of file to be opened
      * @param append whether the file is to be opened in append mode
      */
-    private native void open0(String name, boolean append)
+    private native void open0(String name, boolean append, boolean truncate)
         throws FileNotFoundException;
 
     // wrap native call to allow instrumentation
@@ -295,7 +316,7 @@ public class FileOutputStream extends OutputStream
      */
     private void open(String name, boolean append)
         throws FileNotFoundException {
-        open0(name, append);
+        open0(name, append, !append);
     }
 
     /**
@@ -475,21 +496,64 @@ public class FileOutputStream extends OutputStream
 
         @Override
         protected void closeBeforeCheckpoint(OpenResourcePolicies.Policy policy) throws IOException {
-            close();
+            if (channelResource != null) {
+                FileChannel channel = getChannel();
+                channelResource.position = channel.isOpen() ? channel.position() : -1;
+            }
+            // Calling close method means that the channel would be closed as well,
+            // but we cannot reopen it and this is exposed (so we cannot recycle it).
+            // Therefore, if the application uses it before this is reopened it might
+            // face exceptions due to invalid FD; since closing must be explicitly
+            // requested via policy this is acceptable.
+            synchronized (closeLock) {
+                if (closed) {
+                    return;
+                }
+                closed = true;
+            }
+            fd.closeAll(new Closeable() {
+                public void close() throws IOException {
+                    fd.close();
+                }
+            });
         }
 
         @Override
         protected void reopenAfterRestore(OpenResourcePolicies.Policy policy) throws IOException {
+            assert path != null; // won't be reopened if it was not closed, and won't be closed without path
             synchronized (closeLock) {
                 // We have been writing to a file, but it disappeared during checkpoint
                 if (!Files.exists(Path.of(path))) {
                     throw new IOException("File " + path + " is not present during restore");
                 }
-                // FileOutputStream writes only forward, so it makes sense to reopen it appending
-                open(path, true);
+                if (channelResource == null) {
+                    open(path, true);
+                } else {
+                    open0(path, false, false);
+                    //noinspection resource
+                    getChannel().position(channelResource.position);
+                }
                 FileOutputStream.this.closed = false;
                 FileCleanable.register(fd);
             }
         }
     };
+
+    private class EnsureChannelResource implements JDKResource {
+        public long position;
+
+        EnsureChannelResource() {
+            Core.Priority.PRE_FILE_DESCRIPTORS.getContext().register(this);
+        }
+
+        @Override
+        public void beforeCheckpoint(Context<? extends Resource> context) throws Exception {
+            // the channel is not used but we ensure its existence
+            getChannel();
+        }
+
+        @Override
+        public void afterRestore(Context<? extends Resource> context) throws Exception {
+        }
+    }
 }

@@ -543,7 +543,9 @@ public class FileOutputStream extends OutputStream
         public long position;
 
         EnsureChannelResource() {
-            Core.Priority.PRE_FILE_DESCRIPTORS.getContext().register(this);
+            // This must be before PRE_FILE_DESCRIPTORS as getChannel()
+            // could clinit FileDispatcherImpl
+            Core.Priority.NORMAL.getContext().register(this);
         }
 
         @Override

@@ -31,6 +31,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 /*
  * @test Selector/multipleSelect
  * @summary check work of multiple select() + wakeup() + C/R
+ * @requires (os.family == "linux")
  * @library /test/lib
  * @build Test
  * @run driver/timeout=30 jdk.test.lib.crac.CracTest ONLY_TIMEOUTS false

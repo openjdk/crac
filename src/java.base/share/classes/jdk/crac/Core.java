@@ -27,9 +27,12 @@
 package jdk.crac;
 
 import jdk.crac.impl.*;
+import jdk.internal.access.SharedSecrets;
 import jdk.internal.crac.ClaimedFDs;
+import jdk.internal.crac.JDKResource;
 import jdk.internal.crac.LoggerContainer;
 import sun.security.action.GetBooleanAction;
+import sun.security.action.GetPropertyAction;
 
 import java.io.PrintWriter;
 import java.io.StringWriter;
@@ -69,7 +72,33 @@ public class Core {
             GetBooleanAction.privilegedGetProperty("jdk.crac.trace-startup-time");
     }
 
-    private static final Context<Resource> globalContext = new BlockingOrderedContext<>();
+    private static final Context<Resource> globalContext = GlobalContext.createGlobalContextImpl();
+
+    private static class ReferenceHandlerResource implements JDKResource {
+        @Override
+        public void beforeCheckpoint(Context<? extends Resource> context) throws Exception {
+            System.gc();
+            // TODO ensure GC done processing all References
+            while (SharedSecrets.getJavaLangRefAccess().waitForReferenceProcessing());
+        }
+
+        @Override
+        public void afterRestore(Context<? extends Resource> context) throws Exception {
+        }
+
+        private static ReferenceHandlerResource resource = new ReferenceHandlerResource();
+
+        static {
+            jdk.internal.crac.Core.Priority.REFERENCE_HANDLER.getContext().register(resource);
+        }
+
+        /**
+         * Performs one-time registration of the Reference handling resource
+         */
+        public static void register() {
+            // nothing to do: the resource registered in the static initializer
+        }
+    }
 
     /** This class is not instantiable. */
     private Core() {
@@ -111,6 +140,11 @@ public class Core {
             RestoreException {
         final ExceptionHolder<CheckpointException> checkpointException = new ExceptionHolder<>(CheckpointException::new);
 
+        // Register the resource here late, to avoid early registration
+        // during JDK initialization, e.g. if performed during j.l.r.Reference
+        // initialization.
+        ReferenceHandlerResource.register();
+
         // FIXME: log something to complete logger initialization:
         // - call sites in logger formatters.
         // - FileDescriptors for resources (sun.util.calendar.ZoneInfoFile)
@@ -143,11 +177,11 @@ public class Core {
         }
 
         final Object[] bundle = checkpointRestore0(fdArr, null, checkpointException.hasException(), jcmdStream);
-        final int retCode = (Integer)bundle[0];
-        final String newArguments = (String)bundle[1];
-        final String[] newProperties = (String[])bundle[2];
-        final int[] codes = (int[])bundle[3];
-        final String[] messages = (String[])bundle[4];
+        final int retCode = (null == bundle) ? JVM_CHECKPOINT_NONE : (Integer)bundle[0];
+        final String newArguments = (null == bundle) ? null : (String)bundle[1];
+        final String[] newProperties = (null == bundle) ? null : (String[])bundle[2];
+        final int[] codes = (null == bundle) ? null : (int[])bundle[3];
+        final String[] messages = (null == bundle) ? null : (String[])bundle[4];
 
         if (FlagsHolder.TRACE_STARTUP_TIME) {
             System.out.println("STARTUPTIME " + System.nanoTime() + " restore");

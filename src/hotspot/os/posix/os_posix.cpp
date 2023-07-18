@@ -41,6 +41,7 @@
 #include "services/memTracker.hpp"
 #include "runtime/arguments.hpp"
 #include "runtime/atomic.hpp"
+#include "runtime/crac.hpp"
 #include "runtime/java.hpp"
 #include "runtime/orderAccess.hpp"
 #include "runtime/perfMemory.hpp"
@@ -653,6 +654,10 @@ const char* os::get_current_directory(char *buf, size_t buflen) {
   return getcwd(buf, buflen);
 }
 
+bool os::is_path_absolute(const char *path) {
+  return (path && '/' == path[0]);
+}
+
 FILE* os::open(int fd, const char* mode) {
   return ::fdopen(fd, mode);
 }
@@ -677,6 +682,14 @@ void os::flockfile(FILE* fp) {
 
 void os::funlockfile(FILE* fp) {
   ::funlockfile(fp);
+}
+
+int os::mkdir(const char *path) {
+  return ::mkdir(path, 0700);
+}
+
+int os::rmdir(const char *path) {
+  return ::rmdir(path);
 }
 
 DIR* os::opendir(const char* dirname) {
@@ -1410,7 +1423,7 @@ jlong os::javaTimeNanos() {
   struct timespec tp;
   int status = clock_gettime(CLOCK_MONOTONIC, &tp);
   assert(status == 0, "clock_gettime error: %s", os::strerror(errno));
-  jlong result = jlong(tp.tv_sec) * NANOSECS_PER_SEC + jlong(tp.tv_nsec) + javaTimeNanos_offset;
+  jlong result = jlong(tp.tv_sec) * NANOSECS_PER_SEC + jlong(tp.tv_nsec) + crac::monotonic_time_offset();
   return result;
 }
 
@@ -1930,6 +1943,36 @@ int os::fork_and_exec(const char* cmd, bool prefer_vfork) {
       return status;
     }
   }
+}
+
+int os::exec_child_process_and_wait(const char *path, const char *argv[]) {
+  char** env = os::get_environ();
+
+  pid_t pid = fork();
+  if (pid == -1) {
+    perror("cannot fork for crengine");
+    return -1;
+  }
+  if (pid == 0) {
+    execve(path, (char* const*)argv, env);
+    perror("execve");
+    exit(1);
+  }
+
+  int status;
+  int ret;
+  do {
+    ret = waitpid(pid, &status, 0);
+  } while (ret == -1 && errno == EINTR);
+
+  if (ret == -1 || !WIFEXITED(status)) {
+    return -1;
+  }
+  return WEXITSTATUS(status) == 0 ? 0 : -1;
+}
+
+int os::execv(const char *path, const char *argv[]) {
+  return ::execv(path, (char * const *)argv);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

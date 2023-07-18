@@ -39,6 +39,7 @@ import static jdk.test.lib.Asserts.*;
 
 /**
  * @test ContextOrderTest
+ * @requires os.family == "linux"
  * @library /test/lib
  * @modules java.base/jdk.internal.crac:+open
  * @modules java.base/jdk.crac.impl:+open

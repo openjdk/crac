@@ -27,62 +27,41 @@
 #include <string.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <unistd.h>
 #include <signal.h>
 
+#ifdef LINUX
+#include <unistd.h>
 #define RESTORE_SIGNAL   (SIGRTMIN + 2)
+#else
+typedef int pid_t;
+#endif //LINUX
 
 static int kickjvm(pid_t jvm, int code) {
+#ifdef LINUX
     union sigval sv = { .sival_int = code };
     if (-1 == sigqueue(jvm, RESTORE_SIGNAL, sv)) {
         perror("sigqueue");
         return 1;
     }
+#endif //LINUX
     return 0;
 }
 
 int main(int argc, char *argv[]) {
     char* action = argv[1];
-    char* imagedir = argv[2];
-
-    char *pidpath;
-    if (-1 == asprintf(&pidpath, "%s/pid", imagedir)) {
-        return 1;
-    }
 
     if (!strcmp(action, "checkpoint")) {
+        const char* argsidstr = getenv("SIM_CRAC_NEW_ARGS_ID");
+        int argsid = argsidstr ? atoi(argsidstr) : 0;
+#ifdef LINUX
         pid_t jvm = getppid();
-
-        FILE *pidfile = fopen(pidpath, "w");
-        if (!pidfile) {
-            perror("fopen pidfile");
-            kickjvm(jvm, -1);
-            return 1;
-        }
-
-        fprintf(pidfile, "%d\n", jvm);
-        fclose(pidfile);
-
+#else
+        pid_t jvm = -1;
+#endif //LINUX
+        kickjvm(jvm, argsid);
     } else if (!strcmp(action, "restore")) {
-        FILE *pidfile = fopen(pidpath, "r");
-        if (!pidfile) {
-            perror("fopen pidfile");
-            return 1;
-        }
-
-        pid_t jvm;
-        if (1 != fscanf(pidfile, "%d", &jvm)) {
-            fclose(pidfile);
-            fprintf(stderr, "cannot read pid\n");
-            return 1;
-        }
-        fclose(pidfile);
-
         char *strid = getenv("CRAC_NEW_ARGS_ID");
-        if (kickjvm(jvm, strid ? atoi(strid) : 0)) {
-            return 1;
-        }
-
+        printf("SIM_CRAC_NEW_ARGS_ID=%s\n", strid ? strid : "0");
     } else {
         fprintf(stderr, "unknown action: %s\n", action);
         return 1;

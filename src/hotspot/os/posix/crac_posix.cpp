@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022, Azul Systems, Inc. All rights reserved.
+ * Copyright (c) 2023, Azul Systems, Inc. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -21,37 +21,43 @@
  * questions.
  */
 
+// no precompiled headers
+#include "jvm.h"
+#include "runtime/crac_structs.hpp"
 
-import jdk.crac.*;
-import jdk.test.lib.Asserts;
-import jdk.test.lib.crac.CracBuilder;
-import jdk.test.lib.crac.CracTest;
+#include <sys/mman.h>
 
-import java.io.File;
-import java.io.IOException;
-import java.nio.channels.Pipe;
-import java.nio.file.*;
-import java.util.Objects;
-import java.util.concurrent.TimeUnit;
-
-/**
- * @test CracOptionTest
- * @library /test/lib
- * @build CracOptionTest
- * @run driver jdk.test.lib.crac.CracTest
- * @requires (os.family == "linux")
- */
-
-public class CracOptionTest implements CracTest {
-    @Override
-    public void test() throws Exception {
-        CracBuilder builder = new CracBuilder();
-        builder.javaOption("k","v");
-        builder.doCheckpointAndRestore();
-    }
-
-    @Override
-    public void exec() throws Exception {
-        Core.checkpointRestore();
-    }
+int CracSHM::open(int mode) {
+  int shmfd = shm_open(_path, mode, 0600);
+  if (-1 == shmfd) {
+    perror("shm_open");
+  }
+  return shmfd;
 }
+
+void CracSHM::unlink() {
+  shm_unlink(_path);
+}
+
+#ifndef LINUX
+void crac::vm_create_start() {
+}
+
+void VM_Crac::report_ok_to_jcmd_if_any() {
+}
+
+bool VM_Crac::check_fds() {
+  return true;
+}
+
+bool VM_Crac::memory_checkpoint() {
+  return true;
+}
+
+void VM_Crac::memory_restore() {
+}
+
+bool crac::read_bootid(char *dest) {
+  return true;
+}
+#endif

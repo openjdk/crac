@@ -82,9 +82,6 @@ enum WXMode {
   WXExec
 };
 
-// xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
-#define UUID_LENGTH 36
-
 // Executable parameter flag for os::commit_memory() and
 // os::commit_memory_or_exit().
 const bool ExecMem = true;
@@ -133,11 +130,6 @@ class os: AllStatic {
   static address            _polling_page;
   static PageSizes          _page_sizes;
 
-  static jlong checkpoint_millis;
-  static jlong checkpoint_nanos;
-  static char checkpoint_bootid[UUID_LENGTH];
-  static jlong javaTimeNanos_offset;
-
   static char*  pd_reserve_memory(size_t bytes, bool executable);
 
   static char*  pd_attempt_reserve_memory_at(char* addr, size_t bytes, bool executable);
@@ -182,8 +174,6 @@ class os: AllStatic {
 
   LINUX_ONLY(static void pd_init_container_support();)
 
-  static bool read_bootid(char *dest);
-
  public:
   static void init(void);                      // Called before command line parsing
 
@@ -208,12 +198,6 @@ class os: AllStatic {
   static void   javaTimeNanos_info(jvmtiTimerInfo *info_ptr);
   static void   javaTimeSystemUTC(jlong &seconds, jlong &nanos);
   static void   run_periodic_checks();
-
-  static void record_time_before_checkpoint();
-  static void update_javaTimeNanos_offset();
-  static jlong monotonic_time_offset() {
-    return javaTimeNanos_offset;
-  }
 
   // Returns the elapsed time in seconds since the vm started.
   static double elapsedTime();
@@ -545,6 +529,10 @@ class os: AllStatic {
   // child process (ignored on AIX, which always uses vfork).
   static int fork_and_exec(const char *cmd, bool prefer_vfork = false);
 
+  static int exec_child_process_and_wait(const char *path, const char *argv[]);
+
+  static int execv(const char *path, const char *argv[]);
+
   // Call ::exit() on all platforms but Windows
   static void exit(int num);
 
@@ -595,11 +583,16 @@ class os: AllStatic {
   static struct dirent* readdir(DIR* dirp);
   static int            closedir(DIR* dirp);
 
+  static int mkdir(const char *pathname);
+  static int rmdir(const char *pathname);
+
   // Dynamic library extension
   static const char*    dll_file_extension();
 
   static const char*    get_temp_directory();
   static const char*    get_current_directory(char *buf, size_t buflen);
+
+  static bool is_path_absolute(const char *path);
 
   // Builds the platform-specific name of a library.
   // Returns false if the buffer is too small.

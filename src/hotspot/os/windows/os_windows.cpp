@@ -46,6 +46,7 @@
 #include "prims/jvm_misc.hpp"
 #include "runtime/arguments.hpp"
 #include "runtime/atomic.hpp"
+#include "runtime/crac.hpp"
 #include "runtime/globals.hpp"
 #include "runtime/globals_extension.hpp"
 #include "runtime/interfaceSupport.inline.hpp"
@@ -1324,6 +1325,33 @@ const char* os::get_current_directory(char *buf, size_t buflen) {
   int n = static_cast<int>(buflen);
   if (buflen > INT_MAX)  n = INT_MAX;
   return _getcwd(buf, n);
+}
+
+// NOTE: is_path_absolute() function implementation is mostly a copy from FileSystemSupport_md.c
+// WinAPI has PathIsRelative() function for this purpose, however it causes linkage to Shlwapi.dll.
+static int prefixLength(const char* path) {
+    assert(1 == strlen(os::file_separator()), "the file separator must be a single-char, not a string");
+    char c0, c1;
+
+    int n = (int)strlen(path);
+    if (n == 0) return 0;
+    c0 = path[0];
+    c1 = (n > 1) ? path[1] : 0;
+    if (c0 == *os::file_separator()) {
+        if (c1 == *os::file_separator()) return 2;      /* Absolute UNC pathname "\\\\foo" */
+        return 1;                       /* Drive-relative "\\foo" */
+    }
+    if (::isalpha(c0) && (c1 == ':')) {
+        if ((n > 2) && (path[2] == *os::file_separator()))
+            return 3;           /* Absolute local pathname "z:\\foo" */
+        return 2;                       /* Directory-relative "z:foo" */
+    }
+    return 0;                   /* Completely relative */
+}
+
+bool os::is_path_absolute(const char *path) {
+  int pl = prefixLength(path);
+  return (((pl == 2) && (path[0] == *os::file_separator())) || (pl == 3));
 }
 
 //-----------------------------------------------------------
@@ -4456,6 +4484,31 @@ static wchar_t* wide_abs_unc_path(char const* path, errno_t & err, int additiona
   return static_cast<wchar_t*>(result); // LPWSTR and wchat_t* are the same type on Windows.
 }
 
+int os::mkdir(const char *path) {
+  errno_t err;
+  wchar_t* wide_path = wide_abs_unc_path(path, err);
+  if (wide_path == NULL) {
+    errno = err;
+    return -1;
+  }
+  int res = _wmkdir(wide_path);
+  os::free(wide_path);
+  return res;
+}
+
+int os::rmdir(const char *path) {
+  errno_t err;
+  wchar_t* wide_path = wide_abs_unc_path(path, err);
+  if (wide_path == NULL) {
+    errno = err;
+    return -1;
+  }
+  int res = _wrmdir(wide_path);
+  os::free(wide_path);
+  return res;
+}
+
+
 int os::stat(const char *path, struct stat *sbuf) {
   errno_t err;
   wchar_t* wide_path = wide_abs_unc_path(path, err);
@@ -5596,6 +5649,15 @@ int os::fork_and_exec(const char* cmd, bool dummy /* ignored */) {
 
   FREE_C_HEAP_ARRAY(char, cmd_string);
   return (int)exit_code;
+}
+
+int os::exec_child_process_and_wait(const char *path, const char *argv[]) {
+  const int status = _spawnv(_P_WAIT, path, argv); // env is inherited by a child process
+  return 0 == status ? 0 : -1;
+}
+
+int os::execv(const char *path, const char *argv[]) {
+  return _execv(path, argv);
 }
 
 bool os::find(address addr, outputStream* st) {

@@ -50,6 +50,7 @@
 #include "oops/oop.hpp"
 #include "oops/oopsHierarchy.hpp"
 #include "runtime/atomic.hpp"
+#include "runtime/crac.hpp"
 #include "runtime/globals.hpp"
 #include "runtime/handles.hpp"
 #include "runtime/mutex.hpp"

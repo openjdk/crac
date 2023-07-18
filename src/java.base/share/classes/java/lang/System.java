@@ -784,9 +784,8 @@ public final class System {
      * {@link #setProperties(Properties)}, {@link #setProperty(String, String)}, or
      * {@link #clearProperty(String)} may not have the desired effect.
      *
-     * @crac While the API note above discourages from changing system properties during
-     * runtime it is actually quite common after restore from a checkpoint. The application
-     * can {@link javax.crac.Context#register(javax.crac.Resource) register}
+     * @crac System properties can be updated during restore from a checkpoint.
+     * The application can {@link javax.crac.Context#register(javax.crac.Resource) register}
      * a resource and reload system properties in the
      * {@link javax.crac.Resource#afterRestore(javax.crac.Context) afterRestore method},
      * updating the application.
@@ -905,8 +904,7 @@ public final class System {
      * unless otherwise specified</strong>.
      * See {@linkplain #getProperties getProperties} for details.
      *
-     * @crac While the API note above discourages from changing system properties during
-     * runtime it is actually quite common after restore from a checkpoint.
+     * @crac System properties can be updated during restore from a checkpoint.
      * See {@linkplain #getProperties getProperties} for details.
      *
      * @param      key   the name of the system property.
@@ -945,8 +943,7 @@ public final class System {
      * properties is first created and initialized in the same manner as
      * for the {@code getProperties} method.
      *
-     * @crac While traditionally it is discouraged to change system properties during
-     * runtime it is actually quite common after restore from a checkpoint.
+     * @crac System properties can be updated during restore from a checkpoint.
      * See {@linkplain #getProperties getProperties} for details.
      *
      * @param      key   the name of the system property.
@@ -1103,9 +1100,8 @@ public final class System {
      * {@code System.getenv("FOO").equals(System.getenv("foo"))}
      * is likely to be true on Microsoft Windows.
      *
-     * @crac While environment variables are typically constant through
-     * the lifetime of a process these can change after restore from
-     * a checkpoint. The application can {@link javax.crac.Context#register(javax.crac.Resource) register}
+     * @crac Environment variables can be updated during restore from a checkpoint.
+     * The application can {@link javax.crac.Context#register(javax.crac.Resource) register}
      * a resource and reload environment variables in the
      * {@link javax.crac.Resource#afterRestore(javax.crac.Context) afterRestore method},
      * updating the application.
@@ -1163,9 +1159,8 @@ public final class System {
      * <a href=#EnvironmentVSSystemProperties>system properties</a>
      * are generally preferred over environment variables.
      *
-     * @crac While environment variables are typically constant through
-     * the lifetime of a process these can change after restore from
-     * a checkpoint. The application can {@link javax.crac.Context#register(javax.crac.Resource) register}
+     * @crac Environment variables can be updated during restore from a checkpoint.
+     * The application can {@link javax.crac.Context#register(javax.crac.Resource) register}
      * a resource and reload the environment variables in the
      * {@link javax.crac.Resource#afterRestore(javax.crac.Context) afterRestore method},
      * updating the application.

@@ -25,6 +25,13 @@
 
 package java.lang;
 
+import jdk.crac.Context;
+import jdk.crac.Resource;
+import jdk.crac.impl.CheckpointOpenResourceException;
+import jdk.internal.crac.Core;
+import jdk.internal.crac.JDKFdResource;
+import jdk.internal.crac.LoggerContainer;
+import jdk.internal.crac.OpenResourcePolicies;
 import jdk.internal.util.StaticProperty;
 
 import java.io.*;
@@ -35,6 +42,7 @@ import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ForkJoinPool;
 import java.util.concurrent.TimeUnit;
+import java.util.function.Supplier;
 import java.util.stream.Stream;
 
 /**
@@ -813,9 +821,11 @@ public abstract class Process {
      * instead of seeking, the underlying pipe does not support seek.
      */
     static class PipeInputStream extends FileInputStream {
+        private final JDKFdResource resource;
 
         PipeInputStream(FileDescriptor fd) {
             super(fd);
+            resource = new PipeResource(this, fd);
         }
 
         @Override
@@ -838,6 +848,37 @@ public abstract class Process {
             }
 
             return n - remaining;
+        }
+    }
+
+    static class PipeResource extends JDKFdResource {
+        private final Closeable owner;
+        private final FileDescriptor fd;
+
+        PipeResource(Closeable owner, FileDescriptor fd) {
+            this.owner = owner;
+            this.fd = fd;
+        }
+
+        @SuppressWarnings("fallthrough")
+        @Override
+        public void beforeCheckpoint(Context<? extends Resource> context) throws Exception {
+            OpenResourcePolicies.Policy policy = OpenResourcePolicies.find(false, OpenResourcePolicies.PIPE, null);
+            String action = policy != null ? policy.action.toLowerCase() : "error";
+            Supplier<Exception> exceptionSupplier = switch (action) {
+                case "error":
+                    yield  () -> new CheckpointOpenResourceException(owner.toString(), getStackTraceHolder());
+                case "close":
+                    owner.close();
+                    // intentional fallthrough
+                case "ignore":
+                    warnOpenResource(policy, owner.toString());
+                    yield NO_EXCEPTION;
+                default:
+                    throw new IllegalStateException("Unknown policy action " + action + " for " + owner, null);
+            };
+            // FileInputStream does not claim when path is null
+            Core.getClaimedFDs().claimFd(fd, this, exceptionSupplier, fd);
         }
     }
 

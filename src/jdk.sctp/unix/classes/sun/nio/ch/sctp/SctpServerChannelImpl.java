@@ -29,6 +29,7 @@ import java.net.InetSocketAddress;
 import java.net.InetAddress;
 import java.io.FileDescriptor;
 import java.io.IOException;
+import java.net.StandardProtocolFamily;
 import java.util.Collections;
 import java.util.Set;
 import java.util.HashSet;
@@ -41,14 +42,13 @@ import com.sun.nio.sctp.SctpChannel;
 import com.sun.nio.sctp.SctpServerChannel;
 import com.sun.nio.sctp.SctpSocketOption;
 import com.sun.nio.sctp.SctpStandardSocketOptions;
-import sun.nio.ch.DirectBuffer;
+import jdk.internal.crac.JDKSocketResource;
 import sun.nio.ch.NativeThread;
 import sun.nio.ch.IOStatus;
 import sun.nio.ch.IOUtil;
 import sun.nio.ch.Net;
 import sun.nio.ch.SelChImpl;
 import sun.nio.ch.SelectionKeyImpl;
-import sun.nio.ch.Util;
 
 /**
  * An implementation of SctpServerChannel
@@ -57,8 +57,30 @@ public class SctpServerChannelImpl extends SctpServerChannel
     implements SelChImpl
 {
     private final FileDescriptor fd;
-
     private final int fdVal;
+    private final SctpResource resource = new SctpResource(this) {
+        @Override
+        protected Set<SocketAddress> getRemoteAddresses() {
+            return Collections.emptySet();
+        }
+
+        @Override
+        protected HashSet<InetSocketAddress> getLocalAddresses() {
+            synchronized (stateLock) {
+                return new HashSet<>(localAddresses);
+            }
+        }
+
+        @Override
+        protected FileDescriptor getFD() {
+            return fd;
+        }
+
+        @Override
+        protected void closeBeforeCheckpoint() throws IOException {
+            close();
+        }
+    };
 
     /* IDs of native thread doing accept, for signalling */
     private volatile long thread = 0;

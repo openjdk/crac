@@ -27,6 +27,13 @@ package java.io;
 
 import java.nio.channels.FileChannel;
 import java.util.Arrays;
+
+import jdk.crac.Context;
+import jdk.crac.Resource;
+import jdk.internal.crac.LoggerContainer;
+import jdk.internal.crac.OpenResourcePolicies;
+import jdk.internal.crac.Core;
+import jdk.internal.crac.JDKFileResource;
 import jdk.internal.util.ArraysSupport;
 import sun.nio.ch.FileChannelImpl;
 
@@ -515,6 +522,71 @@ public class FileInputStream extends InputStream
         }
         return fc;
     }
+
+    @SuppressWarnings("unused")
+    private final JDKFileResource resource = new JDKFileResource() {
+        private long offset;
+
+        @Override
+        protected FileDescriptor getFD() {
+            return fd;
+        }
+
+        @Override
+        protected String getPath() {
+            return path;
+        }
+
+        @Override
+        public void beforeCheckpoint(Context<? extends Resource> context) throws Exception {
+            if (fd == FileDescriptor.in) {
+                Core.getClaimedFDs().claimFd(fd, FileInputStream.this, NO_EXCEPTION, fd);
+            } else {
+                // When the stream is opened with file descriptor we don't have any extra
+                // information we could use for policy (this is most often a pipe, but could
+                // be a socket as well). Such cases need to be handled on a higher level.
+                super.beforeCheckpoint(context);
+            }
+        }
+
+        @Override
+        protected void closeBeforeCheckpoint(OpenResourcePolicies.Policy policy) throws IOException {
+            try {
+                offset = position();
+            } catch (IOException e) {
+                // We might get IOException from native code when lseeking a named pipe.
+                offset = 0;
+            }
+            // Calling close method means that the channel would be closed as well,
+            // but we cannot reopen it and this is exposed (so we cannot recycle it).
+            // Therefore, if the application uses it before this is reopened it might
+            // face exceptions due to invalid FD; since closing must be explicitly
+            // requested via policy this is acceptable.
+            synchronized (closeLock) {
+                if (closed) {
+                    return;
+                }
+                closed = true;
+            }
+            fd.closeAll(new Closeable() {
+                public void close() throws IOException {
+                    fd.close();
+                }
+            });
+        }
+
+        @Override
+        protected void reopenAfterRestore(OpenResourcePolicies.Policy policy) throws IOException {
+            synchronized (closeLock) {
+                open(path);
+                if (offset > 0) {
+                    skip(offset);
+                }
+                FileInputStream.this.closed = false;
+                FileCleanable.register(fd);
+            }
+        }
+    };
 
     private static native void initIDs();
 

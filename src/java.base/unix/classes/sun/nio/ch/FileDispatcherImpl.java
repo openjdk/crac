@@ -58,7 +58,10 @@ class FileDispatcherImpl extends FileDispatcher {
     static {
         IOUtil.load();
         init();
-        Core.Priority.NORMAL.getContext().register(resourceProxy);
+        // We cannot register using normal priority because other JDK resources
+        // might read configuration files with this or later priority.
+        // It's difficult to trigger static initialization outside the package.
+        Core.Priority.PRE_FILE_DESCRIPTORS.getContext().register(resourceProxy);
     }
 
     private static final JavaIOFileDescriptorAccess fdAccess =
@@ -203,8 +206,10 @@ class FileDispatcherImpl extends FileDispatcher {
     // Shared with SocketDispatcher and DatagramDispatcher but
     // NOT used by FileDispatcherImpl
     static void closeAndMark(FileDescriptor fd) throws IOException {
-        fdAccess.markClosed(fd);
-        close0(fd);
+        // Originally this used fdAccess.markClosed() and close0() but leaving
+        // the FD value set breaks JDKSocketResource (we don't want the extra
+        // test if the FD resource has been marked).
+        fdAccess.close(fd);
     }
 
     // -- Native methods --

@@ -41,6 +41,8 @@ import java.nio.channels.SelectionKey;
 import java.nio.channels.ClosedChannelException;
 import java.nio.channels.NotYetBoundException;
 import java.nio.channels.spi.SelectorProvider;
+import java.util.stream.Collectors;
+
 import com.sun.nio.sctp.AbstractNotificationHandler;
 import com.sun.nio.sctp.Association;
 import com.sun.nio.sctp.AssociationChangeNotification;
@@ -74,6 +76,40 @@ public class SctpMultiChannelImpl extends SctpMultiChannel
     private final FileDescriptor fd;
 
     private final int fdVal;
+    private final SctpResource resource = new SctpResource(this) {
+        @Override
+        protected Set<SocketAddress> getRemoteAddresses() {
+            synchronized (stateLock) {
+                if (!isOpen() || !isBound()) {
+                    return Collections.emptySet();
+                }
+                return associationMap.keySet().stream().flatMap(a -> {
+                    try {
+                        return SctpMultiChannelImpl.this.getRemoteAddresses(a).stream();
+                    } catch (IOException e) {
+                        throw new RuntimeException(e);
+                    }
+                }).collect(Collectors.toSet());
+            }
+        }
+
+        @Override
+        protected HashSet<InetSocketAddress> getLocalAddresses() {
+            synchronized (stateLock) {
+                return new HashSet<>(localAddresses);
+            }
+        }
+
+        @Override
+        protected FileDescriptor getFD() {
+            return fd;
+        }
+
+        @Override
+        protected void closeBeforeCheckpoint() throws IOException {
+            close();
+        }
+    };
 
     /* IDs of native threads doing send and receives, for signalling */
     private volatile long receiverThread = 0;

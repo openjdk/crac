@@ -25,18 +25,60 @@
 
 package sun.nio.ch;
 
+import jdk.crac.Context;
+import jdk.crac.Resource;
+import jdk.crac.impl.CheckpointOpenResourceException;
+import jdk.internal.crac.OpenResourcePolicies;
+import jdk.internal.crac.Core;
+import jdk.internal.crac.JDKFdResource;
+import jdk.internal.crac.LoggerContainer;
+
 import java.io.*;
 import java.nio.channels.*;
 import java.nio.channels.spi.*;
-
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.function.Supplier;
 
 class PipeImpl
     extends Pipe
 {
 
     // Source and sink channels
-    private final SourceChannel source;
-    private final SinkChannel sink;
+    private final SourceChannelImpl source;
+    private final SinkChannelImpl sink;
+    private final JDKFdResource resource = new JDKFdResource() {
+        @SuppressWarnings("fallthrough")
+        @Override
+        public void beforeCheckpoint(Context<? extends Resource> context) throws Exception {
+            OpenResourcePolicies.Policy policy = OpenResourcePolicies.find(false, OpenResourcePolicies.PIPE, null);
+            String action = policy != null ? policy.action.toLowerCase() : "error";
+            switch (action) {
+                case "error":
+                    // We will report the error only once
+                    AtomicBoolean reported = new AtomicBoolean();
+                    Supplier<Exception> supplier = () -> reported.getAndSet(true) ? null :
+                            new CheckpointOpenResourceException(toString(), getStackTraceHolder());
+                    Core.getClaimedFDs().claimFd(source.getFD(), this, supplier, source.getFD());
+                    Core.getClaimedFDs().claimFd(sink.getFD(), this, supplier, sink.getFD());
+                    break;
+                case "close":
+                    source.close();
+                    sink.close();
+                    // intentional fallthrough
+                case "ignore":
+                    warnOpenResource(policy, PipeImpl.this.toString());
+                    Core.getClaimedFDs().claimFd(source.getFD(), this, NO_EXCEPTION, source.getFD());
+                    Core.getClaimedFDs().claimFd(sink.getFD(), this, NO_EXCEPTION, sink.getFD());
+                default:
+                    throw new IllegalStateException("Unknown policy action " + action + " for " + PipeImpl.this, null);
+            }
+        }
+    };
+
+    @Override
+    public String toString() {
+        return "Pipe " + source.getFDVal() + " -> " + sink.getFDVal();
+    }
 
     PipeImpl(SelectorProvider sp) throws IOException {
         long pipeFds = IOUtil.makePipe(true);
@@ -57,5 +99,4 @@ class PipeImpl
     public SinkChannel sink() {
         return sink;
     }
-
 }

@@ -543,6 +543,11 @@ public final class System {
      * if (System.nanoTime() >= startTime + timeoutNanos) ...}</pre>
      * because of the possibility of numerical overflow.
      *
+     * @crac When the process is restored on another machine or if the machine
+     * rebooted the value is updated based on wall-clock time difference,
+     * resulting in a loss of accuracy when comparing timestamps obtained
+     * before and after checkpoint.
+     *
      * @return the current value of the running Java Virtual Machine's
      *         high-resolution time source, in nanoseconds
      * @since 1.5
@@ -779,6 +784,12 @@ public final class System {
      * {@link #setProperties(Properties)}, {@link #setProperty(String, String)}, or
      * {@link #clearProperty(String)} may not have the desired effect.
      *
+     * @crac System properties can be updated on restore from a checkpoint.
+     * The application can {@link javax.crac.Context#register(javax.crac.Resource) register}
+     * a resource and reload system properties in the
+     * {@link javax.crac.Resource#afterRestore(javax.crac.Context) afterRestore method},
+     * updating the application.
+     *
      * @implNote
      * In addition to the standard system properties, the system
      * properties may include the following keys:
@@ -893,6 +904,9 @@ public final class System {
      * unless otherwise specified</strong>.
      * See {@linkplain #getProperties getProperties} for details.
      *
+     * @crac System properties can be updated on restore from a checkpoint.
+     * See {@linkplain #getProperties getProperties} for details.
+     *
      * @param      key   the name of the system property.
      * @return     the string value of the system property,
      *             or {@code null} if there is no property with that key.
@@ -928,6 +942,9 @@ public final class System {
      * If there is no current set of system properties, a set of system
      * properties is first created and initialized in the same manner as
      * for the {@code getProperties} method.
+     *
+     * @crac System properties can be updated on restore from a checkpoint.
+     * See {@linkplain #getProperties getProperties} for details.
      *
      * @param      key   the name of the system property.
      * @param      def   a default value.
@@ -1083,6 +1100,12 @@ public final class System {
      * {@code System.getenv("FOO").equals(System.getenv("foo"))}
      * is likely to be true on Microsoft Windows.
      *
+     * @crac Environment variables can be updated on restore from a checkpoint.
+     * The application can {@link javax.crac.Context#register(javax.crac.Resource) register}
+     * a resource and reload environment variables in the
+     * {@link javax.crac.Resource#afterRestore(javax.crac.Context) afterRestore method},
+     * updating the application.
+     *
      * @param  name the name of the environment variable
      * @return the string value of the variable, or {@code null}
      *         if the variable is not defined in the system environment
@@ -1135,6 +1158,12 @@ public final class System {
      * <p>When passing information to a Java subprocess,
      * <a href=#EnvironmentVSSystemProperties>system properties</a>
      * are generally preferred over environment variables.
+     *
+     * @crac Environment variables can be updated on restore from a checkpoint.
+     * The application can {@link javax.crac.Context#register(javax.crac.Resource) register}
+     * a resource and reload the environment variables in the
+     * {@link javax.crac.Resource#afterRestore(javax.crac.Context) afterRestore method},
+     * updating the application.
      *
      * @return the environment as a map of variable names to values
      * @throws SecurityException

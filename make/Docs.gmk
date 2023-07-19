@@ -74,6 +74,7 @@ JAVADOC_TAGS := \
     -tag Note:X \
     -tag ToDo:X \
     -tag 'apiNote:a:API Note:' \
+    -tag crac:cmopt:'CRaC:' \
     -tag 'implSpec:a:Implementation Requirements:' \
     -tag 'implNote:a:Implementation Note:' \
     -tag param \

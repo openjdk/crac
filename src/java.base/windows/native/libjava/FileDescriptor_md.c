@@ -92,3 +92,8 @@ Java_java_io_FileCleanable_cleanupClose0(JNIEnv *env, jclass fdClass, jint unuse
         }
     }
 }
+
+JNIEXPORT jstring JNICALL
+Java_java_io_FileDescriptor_nativeDescription0(JNIEnv *env, jobject this) {
+    return (*env)->NewStringUTF(env, "(not implemented)");
+}

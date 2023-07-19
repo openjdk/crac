@@ -40,6 +40,7 @@ import static jdk.test.lib.Asserts.fail;
  * @test
  * @library /test/lib
  * @modules java.base/jdk.internal.crac:+open
+ * @requires (os.family == "linux")
  * @build FDPolicyTestBase
  * @build ReopenFailureTest
  * @run driver jdk.test.lib.crac.CracTest

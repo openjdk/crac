@@ -41,6 +41,7 @@ import static jdk.test.lib.Asserts.assertTrue;
  * @test
  * @library /test/lib
  * @modules java.base/jdk.internal.crac:+open
+ * @requires (os.family == "linux")
  * @build FDPolicyTestBase
  * @build CloseUnixSocketTest
  * @run driver jdk.test.lib.crac.CracTest

@@ -42,6 +42,7 @@ import static jdk.test.lib.Asserts.assertEquals;
  * @test
  * @library /test/lib
  * @modules java.base/jdk.internal.crac:+open
+ * @requires (os.family == "linux")
  * @build FDPolicyTestBase
  * @build ReopenFileReadingTest
  * @run driver jdk.test.lib.crac.CracTest

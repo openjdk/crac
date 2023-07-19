@@ -24,7 +24,8 @@ public abstract class JDKFdResource implements JDKResource {
 
     final Exception stackTraceHolder;
 
-    static volatile boolean hintPrinted = false;
+    static volatile boolean stacktraceHintPrinted = false;
+    static volatile boolean warningSuppressionHintPrinted = false;
 
     public JDKFdResource() {
         stackTraceHolder = COLLECT_FD_STACKTRACES ?
@@ -40,8 +41,8 @@ public abstract class JDKFdResource implements JDKResource {
     }
 
     protected Exception getStackTraceHolder() {
-        if (!hintPrinted && stackTraceHolder == null) {
-            hintPrinted = true;
+        if (!stacktraceHintPrinted && stackTraceHolder == null) {
+            stacktraceHintPrinted = true;
             LoggerContainer.info(COLLECT_FD_STACKTRACES_HINT);
         }
         return stackTraceHolder;
@@ -60,7 +61,11 @@ public abstract class JDKFdResource implements JDKResource {
             warn = policy.params.getOrDefault("warn", "true");
         }
         if (Boolean.parseBoolean(warn)) {
-            LoggerContainer.warn("{0} was not closed by the application. Use 'warn: false' in the policy to suppress this message.", self);
+            LoggerContainer.warn("{0} was not closed by the application.", self);
+            if (!warningSuppressionHintPrinted) {
+                LoggerContainer.info("To suppress the warning above use 'warn: false' in the resource policy.");
+                warningSuppressionHintPrinted = true;
+            }
         }
     }
 }

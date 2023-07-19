@@ -51,4 +51,16 @@ public abstract class JDKFdResource implements JDKResource {
     public void afterRestore(Context<? extends Resource> context) throws Exception {
 
     }
+
+    protected void warnOpenResource(OpenResourcePolicies.Policy policy, String self) {
+        // The warning is not printed for implicitly closed resource (without policy)
+        // e.g. standard input/output streams
+        String warn = "false";
+        if (policy != null) {
+            warn = policy.params.getOrDefault("warn", "true");
+        }
+        if (Boolean.parseBoolean(warn)) {
+            LoggerContainer.warn("{0} was not closed by the application. Use 'warn: false' in the policy to suppress this message.", self);
+        }
+    }
 }

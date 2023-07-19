@@ -59,10 +59,8 @@ public abstract class JDKFileResource extends JDKFdResource {
 
         OpenResourcePolicies.Policy policy = findPolicy(false, path);
         String action = "error";
-        String warn = "false";
         if (policy != null) {
             action = policy.action.toLowerCase();
-            warn = policy.params.getOrDefault("warn", "true");
         } else if (matchClasspath(path)) {
             // Files on the classpath are considered persistent, exception is not thrown
             action = "ignore";
@@ -81,9 +79,7 @@ public abstract class JDKFileResource extends JDKFdResource {
                 }
                 closed = true;
             case "ignore":
-                if (Boolean.parseBoolean(warn)) {
-                    LoggerContainer.warn("File {0} was not closed by the application. Use 'warn: false' in the policy to suppress this message.", path);
-                }
+                warnOpenResource(policy, "File " + path);
                 yield NO_EXCEPTION;
             default:
                 throw new IllegalStateException("Unknown policy action for path " + path + ": " + policy.action);

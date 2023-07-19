@@ -71,13 +71,11 @@ public final class FileDescriptor {
 
                 OpenResourcePolicies.Policy policy = findPolicy(nativeDescription);
                 String action = "error";
-                String warn = "false";
                 Supplier<Exception> supplier = null;
                 // Normally the claiming should be overridden by FileInputStream/FileOutputStream
                 // but in case these are collected we handle FDs 0..2 here as well.
                 if (policy != null) {
                     action = policy.action;
-                    warn = policy.params.getOrDefault("warn", "true");
                 } else if (self == in || self == out || self == err) {
                     action = "ignore";
                 }
@@ -89,9 +87,7 @@ public final class FileDescriptor {
                     case "close":
                         close();
                     case "ignore":
-                        if (Boolean.parseBoolean(warn)) {
-                            LoggerContainer.warn("File descriptor {0} was not closed by the application. Use 'warn: false' in the policy to suppress this message.", fd);
-                        }
+                        warnOpenResource(policy, "File descriptor " + fd);
                         yield NO_EXCEPTION;
                     default: throw new IllegalArgumentException("Unknown policy action for file descriptor " + fd + ": " + action);
                 };
@@ -114,7 +110,7 @@ public final class FileDescriptor {
                 }
                 String regex = params.get("regex");
                 if (regex != null) {
-                    return Pattern.compile(regex).matcher(nativeDescription).matches();
+                    return Pattern.compile(regex).matcher(nativeDescription).find();
                 }
                 return true;
             });

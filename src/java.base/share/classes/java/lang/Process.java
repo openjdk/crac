@@ -872,9 +872,7 @@ public abstract class Process {
                     owner.close();
                     // intentional fallthrough
                 case "ignore":
-                    if (Boolean.parseBoolean(policy.params.getOrDefault("warn", "true"))) {
-                        LoggerContainer.warn("{0} was not closed by the application. Use 'warn: false' in the policy to suppress this message.", this);
-                    }
+                    warnOpenResource(policy, owner.toString());
                     yield NO_EXCEPTION;
                 default:
                     throw new IllegalStateException("Unknown policy action " + action + " for " + owner, null);

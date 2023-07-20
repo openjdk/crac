@@ -75,6 +75,11 @@ import sun.security.util.Debug;
  * to avoid having to open and close /dev/[u]random constantly. However,
  * there may be many NativePRNG instances created by the JCA framework.
  *
+ * @crac Before checkpoint the underlying random number generator is discarded
+ * and after restore a new {@link sun.security.provider.SecureRandom} is
+ * created, therefore this produces different sequences when restored multiple
+ * times.
+ *
  * @since   1.5
  * @author  Andreas Sterbenz
  */

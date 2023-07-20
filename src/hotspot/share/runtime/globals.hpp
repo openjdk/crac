@@ -2135,6 +2135,10 @@ const intx ObjectAlignmentInBytes = 8;
       "Throw CheckpointException if uncheckpointable resource handle found")\
                                                                             \
   product(bool, CRTrace, true, RESTORE_SETTABLE, "Minimal C/R tracing")     \
+                                                                            \
+  product(bool, CRPauseOnCheckpointError, false, DIAGNOSTIC,                \
+      "Pauses the checkpoint when a problem is found on VM level.")
+
 
 // end of RUNTIME_FLAGS
 

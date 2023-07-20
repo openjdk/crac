@@ -307,6 +307,10 @@ void VM_Crac::doit() {
     HeapDumper::dump_heap();
   }
 
+  if (!ok && CRPauseOnCheckpointError) {
+    os::message_box("Checkpoint failed", "Errors were found during checkpoint.");
+  }
+
   if (!ok && CRDoThrowCheckpointException) {
     return;
   } else if (_dry_run) {

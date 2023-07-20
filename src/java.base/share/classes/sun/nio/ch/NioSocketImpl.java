@@ -51,12 +51,6 @@ import java.util.Set;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.ReentrantLock;
 
-import jdk.crac.Context;
-import jdk.crac.Resource;
-import jdk.crac.impl.CheckpointOpenSocketException;
-import jdk.internal.crac.ClaimedFDs;
-import jdk.internal.crac.Core;
-import jdk.internal.crac.JDKFdResource;
 import jdk.internal.ref.CleanerFactory;
 import sun.net.ConnectionResetException;
 import sun.net.NetHooks;

@@ -54,9 +54,9 @@ Java_java_io_FileOutputStream_initIDs(JNIEnv *env, jclass fdClass) {
 
 JNIEXPORT void JNICALL
 Java_java_io_FileOutputStream_open0(JNIEnv *env, jobject this,
-                                    jstring path, jboolean append) {
+                                    jstring path, jboolean append, jboolean truncate) {
     fileOpen(env, this, path, fos_fd,
-             O_WRONLY | O_CREAT | (append ? O_APPEND : O_TRUNC));
+             O_WRONLY | O_CREAT | (append ? O_APPEND : 0) | (truncate ? O_TRUNC : 0));
 }
 
 JNIEXPORT void JNICALL

@@ -78,6 +78,31 @@ public class SctpChannelImpl extends SctpChannel
     private final FileDescriptor fd;
 
     private final int fdVal;
+    private final SctpResource resource = new SctpResource(this) {
+        @Override
+        protected FileDescriptor getFD() {
+            return fd;
+        }
+
+        @Override
+        protected void closeBeforeCheckpoint() throws IOException {
+            close();
+        }
+
+        @Override
+        protected Set<SocketAddress> getRemoteAddresses() {
+            synchronized (stateLock) {
+                return new HashSet<>(remoteAddresses);
+            }
+        }
+
+        @Override
+        protected HashSet<InetSocketAddress> getLocalAddresses() {
+            synchronized (stateLock) {
+                return new HashSet<>(localAddresses);
+            }
+        }
+    };
 
     /* IDs of native threads doing send and receivess, for signalling */
     private volatile long receiverThread = 0;

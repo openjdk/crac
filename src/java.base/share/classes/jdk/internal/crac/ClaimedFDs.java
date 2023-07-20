@@ -71,6 +71,11 @@ public class ClaimedFDs {
         public Supplier<Exception> getExceptionSupplier() {
             return exceptionSupplier;
         }
+
+        @Override
+        public String toString() {
+            return "{fd=" + fd + ", claimer=" + claimer + '}';
+        }
     }
 
     public List<Descriptor> getClaimedFds() {
@@ -88,8 +93,6 @@ public class ClaimedFDs {
     }
 
     public void claimFd(FileDescriptor fd, Object claimer, Supplier<Exception> supplier, Object... suppressedClaimers) {
-        Objects.requireNonNull(supplier);
-
         if (fd == null) {
             return;
         }

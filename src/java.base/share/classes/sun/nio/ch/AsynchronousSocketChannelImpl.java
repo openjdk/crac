@@ -38,6 +38,8 @@ import java.util.HashSet;
 import java.util.Collections;
 import java.util.concurrent.*;
 import java.util.concurrent.locks.*;
+
+import jdk.internal.crac.JDKSocketResource;
 import sun.net.NetHooks;
 import sun.net.ext.ExtendedSocketOptions;
 
@@ -50,6 +52,8 @@ abstract class AsynchronousSocketChannelImpl
     implements Cancellable, Groupable
 {
     protected final FileDescriptor fd;
+    @SuppressWarnings("unused")
+    private final JDKSocketResource resource = new Resource();
 
     // protects state, localAddress, and remoteAddress
     protected final Object stateLock = new Object();
@@ -603,5 +607,31 @@ abstract class AsynchronousSocketChannelImpl
         }
         sb.append(']');
         return sb.toString();
+    }
+
+    private class Resource extends JDKSocketResource {
+        public Resource() {
+            super(AsynchronousSocketChannelImpl.this);
+        }
+
+        @Override
+        protected FileDescriptor getFD() {
+            return fd;
+        }
+
+        @Override
+        protected SocketAddress localAddress() {
+            return localAddress;
+        }
+
+        @Override
+        protected SocketAddress remoteAddress() {
+            return remoteAddress;
+        }
+
+        @Override
+        protected void closeBeforeCheckpoint() throws IOException {
+            close();
+        }
     }
 }

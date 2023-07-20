@@ -34,14 +34,10 @@ import java.security.PrivilegedAction;
 import java.util.Objects;
 import java.util.Set;
 
-import jdk.crac.Context;
-import jdk.crac.Resource;
-import jdk.crac.impl.CheckpointOpenSocketException;
-import jdk.internal.crac.Core;
-import jdk.internal.crac.ClaimedFDs;
-import jdk.internal.crac.JDKFdResource;
+import jdk.internal.crac.JDKSocketResource;
 import sun.net.NetProperties;
 import sun.net.PlatformSocketImpl;
+import sun.nio.ch.Net;
 import sun.nio.ch.NioSocketImpl;
 
 /**
@@ -110,22 +106,28 @@ public abstract class SocketImpl implements SocketOptions {
      */
     protected int localport;
 
-    private class SocketResource extends JDKFdResource {
+    @SuppressWarnings("unused")
+    private final JDKSocketResource resource = new JDKSocketResource(this) {
         @Override
-        public void beforeCheckpoint(Context<? extends Resource> context) throws Exception {
-            ClaimedFDs claimedFDs = Core.getClaimedFDs();
-            SocketImpl socket = SocketImpl.this;
-            claimedFDs.claimFd(
-                fd,
-                socket,
-                () -> new CheckpointOpenSocketException(
-                    socket.toString(),
-                    getStackTraceHolder()),
-                fd);
+        protected FileDescriptor getFD() {
+            return fd;
+        }
+
+        @Override
+        protected SocketAddress localAddress() throws IOException {
+            return Net.localAddress(fd);
+        }
+
+        @Override
+        protected SocketAddress remoteAddress() {
+            return new InetSocketAddress(address, port);
+        }
+
+        @Override
+        protected void closeBeforeCheckpoint() throws IOException {
+            close();
         }
     };
-
-    private final SocketResource socketResource = new SocketResource();
 
     /**
      * Initialize a new instance of this class

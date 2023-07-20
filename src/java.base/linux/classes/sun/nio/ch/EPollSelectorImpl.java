@@ -55,8 +55,10 @@ import static sun.nio.ch.EPoll.EPOLL_CTL_MOD;
 
 /**
  * Linux epoll based Selector implementation
+ *
+ * @crac The file descriptor(s) used internally by this class are automatically
+ * closed before checkpointing the process and opened after the restore.
  */
-
 class EPollSelectorImpl extends SelectorImpl implements JDKResource {
 
     // maximum number of events to poll in one call to epoll_wait

@@ -38,6 +38,8 @@ import java.util.Collections;
 import java.util.concurrent.Future;
 import java.util.concurrent.locks.ReadWriteLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
+
+import jdk.internal.crac.JDKSocketResource;
 import sun.net.NetHooks;
 import sun.net.ext.ExtendedSocketOptions;
 
@@ -50,6 +52,7 @@ abstract class AsynchronousServerSocketChannelImpl
     implements Cancellable, Groupable
 {
     protected final FileDescriptor fd;
+    private final JDKSocketResource resource;
 
     // the local address to which the channel's socket is bound
     protected volatile InetSocketAddress localAddress;
@@ -70,6 +73,27 @@ abstract class AsynchronousServerSocketChannelImpl
     AsynchronousServerSocketChannelImpl(AsynchronousChannelGroupImpl group) {
         super(group.provider());
         this.fd = Net.serverSocket(true);
+        this.resource = new JDKSocketResource(this) {
+            @Override
+            protected FileDescriptor getFD() {
+                return fd;
+            }
+
+            @Override
+            protected SocketAddress localAddress() {
+                return localAddress;
+            }
+
+            @Override
+            protected SocketAddress remoteAddress() {
+                return null;
+            }
+
+            @Override
+            protected void closeBeforeCheckpoint() throws IOException {
+                close();
+            }
+        };
     }
 
     @Override

@@ -322,6 +322,11 @@ public class Timer {
      * scheduling multiple repeating timer tasks that must remain synchronized
      * with respect to one another.
      *
+     * @crac Since the execution is suspended after a checkpoint the timer
+     * could execute many times after a restore, catching up for all the
+     * delayed executions. If this is not desirable the application can cancel
+     * the task before checkpoint and schedule it again after restore.
+     *
      * @param task   task to be scheduled.
      * @param delay  delay in milliseconds before task is to be executed.
      * @param period time in milliseconds between successive task executions.
@@ -365,6 +370,11 @@ public class Timer {
      * ten seconds.  Finally, fixed-rate execution is appropriate for
      * scheduling multiple repeating timer tasks that must remain synchronized
      * with respect to one another.
+     *
+     * @crac Since the execution is suspended after a checkpoint the timer
+     * could execute many times after a restore, catching up for all the
+     * delayed executions. If this is not desirable the application can cancel
+     * the task before checkpoint and schedule it again after restore.
      *
      * @param task   task to be scheduled.
      * @param firstTime First time at which task is to be executed.

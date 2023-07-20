@@ -53,6 +53,16 @@ import java.util.concurrent.locks.ReentrantLock;
  * object should be seeded, using
  * <a href="#engineSetSeed(byte[])">engineSetSeed</a>.
  *
+ * @crac If this class is created using the {@link #SecureRandom() no-arg constructor}
+ * and never {@link #engineSetSeed(byte[]) reseeded} it is automatically reseeded
+ * after restore from a checkpoint. Therefore, after restore the sequences produced
+ * during different runs should differ (and the application will consume system entropy).
+ * If a seed was provided externally the application might depend on the sequence
+ * produced by this generator, therefore it is not reseeded.
+ * If this behaviour is not desired the application should {@link javax.crac.Context#register(javax.crac.Resource) register}
+ * a resource and in the {@link javax.crac.Resource#afterRestore(javax.crac.Context) afterRestore method}
+ * reseed it using the {@link #engineSetSeed(byte[])}.
+ *
  * @author Benjamin Renaud
  * @author Josh Bloch
  * @author Gadi Guy
@@ -88,6 +98,10 @@ implements java.io.Serializable, jdk.internal.crac.JDKResource {
      * depending on the underlying hardware.  Successive calls run
      * quickly because they rely on the same (internal) pseudo-random
      * number generator for their seed bits.
+     *
+     * @crac Instances created using this constructor are automatically
+     * reseeded upon restore from a checkpoint.
+     * See {@link SecureRandom} for details.
      */
     public SecureRandom() {
         init(null);
@@ -96,6 +110,10 @@ implements java.io.Serializable, jdk.internal.crac.JDKResource {
     /**
      * This constructor is used to instantiate the private seeder object
      * with a given seed from the SeedGenerator.
+     *
+     * @crac Instances created using this constructor are <strong>not</strong>
+     * reseeded upon restore from a checkpoint.
+     * See {@link SecureRandom} for details.
      *
      * @param seed the seed.
      */
@@ -159,6 +177,10 @@ implements java.io.Serializable, jdk.internal.crac.JDKResource {
      * Reseeds this random object. The given seed supplements, rather than
      * replaces, the existing seed. Thus, repeated calls are guaranteed
      * never to reduce randomness.
+     *
+     * @crac After this method is called the instance is <strong>not</strong>
+     * reseeded upon restore from a checkpoint.
+     * See {@link SecureRandom} for details.
      *
      * @param seed the seed.
      */

@@ -25,6 +25,9 @@
 
 package java.net;
 
+import jdk.internal.crac.JDKSocketResource;
+import sun.nio.ch.Net;
+
 import java.io.FileDescriptor;
 import java.io.IOException;
 import java.util.Objects;
@@ -71,6 +74,29 @@ public abstract class DatagramSocketImpl implements SocketOptions {
      * The file descriptor object.
      */
     protected FileDescriptor fd;
+
+    @SuppressWarnings("unused")
+    private final JDKSocketResource resource = new JDKSocketResource(this) {
+        @Override
+        protected FileDescriptor getFD() {
+            return fd;
+        }
+
+        @Override
+        protected SocketAddress localAddress() throws IOException {
+            return Net.localAddress(fd);
+        }
+
+        @Override
+        protected SocketAddress remoteAddress() {
+            return null;
+        }
+
+        @Override
+        protected void closeBeforeCheckpoint() {
+            disconnect();
+        }
+    };
 
     int dataAvailable() {
         // default impl returns zero, which disables the calling

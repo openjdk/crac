@@ -30,11 +30,14 @@ import java.io.FileDescriptor;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
-import java.util.Arrays;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Map;
-import java.util.StringJoiner;
+import java.util.*;
+
+import jdk.crac.Context;
+import jdk.crac.Resource;
+import jdk.internal.access.JavaIOFileDescriptorAccess;
+import jdk.internal.access.SharedSecrets;
+import jdk.internal.crac.Core;
+import jdk.internal.crac.JDKResource;
 import jdk.internal.event.ProcessStartEvent;
 import sun.security.action.GetPropertyAction;
 
@@ -711,6 +714,8 @@ public final class ProcessBuilder
         final FileDescriptor fd;
 
         RedirectPipeImpl() {
+            // This creates a file descriptor but does not need own resource,
+            // see PipelineResource.
             this.fd = new FileDescriptor();
         }
         @Override
@@ -1272,45 +1277,85 @@ public final class ProcessBuilder
         // Accumulate and check the builders
         final int numBuilders = builders.size();
         List<Process> processes = new ArrayList<>(numBuilders);
-        try {
-            Redirect prevOutput = null;
-            for (int index = 0; index < builders.size(); index++) {
-                ProcessBuilder builder = builders.get(index);
-                Redirect[] redirects = builder.redirects();
-                if (index > 0) {
-                    // check the current Builder to see if it can take input from the previous
-                    if (builder.redirectInput() != Redirect.PIPE) {
-                        throw new IllegalArgumentException("builder redirectInput()" +
-                                " must be PIPE except for the first builder: "
-                                + builder.redirectInput());
+        // This resource helps us block the checkpoint until all subprocesses
+        // are created; after that we won't need the FileDescriptors and can safely
+        // close these.
+        PipelineResource pipelineResource = new PipelineResource();
+        synchronized (pipelineResource) {
+            try (pipelineResource) {
+                Redirect prevOutput = null;
+                for (int index = 0; index < builders.size(); index++) {
+                    ProcessBuilder builder = builders.get(index);
+                    Redirect[] redirects = builder.redirects();
+                    if (index > 0) {
+                        // check the current Builder to see if it can take input from the previous
+                        if (builder.redirectInput() != Redirect.PIPE) {
+                            throw new IllegalArgumentException("builder redirectInput()" +
+                                    " must be PIPE except for the first builder: "
+                                    + builder.redirectInput());
+                        }
+                        redirects[0] = prevOutput;
                     }
-                    redirects[0] = prevOutput;
-                }
-                if (index < numBuilders - 1) {
-                    // check all but the last stage has output = PIPE
-                    if (builder.redirectOutput() != Redirect.PIPE) {
-                        throw new IllegalArgumentException("builder redirectOutput()" +
-                                " must be PIPE except for the last builder: "
-                                + builder.redirectOutput());
+                    if (index < numBuilders - 1) {
+                        // check all but the last stage has output = PIPE
+                        if (builder.redirectOutput() != Redirect.PIPE) {
+                            throw new IllegalArgumentException("builder redirectOutput()" +
+                                    " must be PIPE except for the last builder: "
+                                    + builder.redirectOutput());
+                        }
+                        RedirectPipeImpl redirectPipe = new RedirectPipeImpl();
+                        redirects[1] = redirectPipe;  // placeholder for new output
+                        pipelineResource.addRedirect(redirectPipe);
                     }
-                    redirects[1] = new RedirectPipeImpl();  // placeholder for new output
+                    processes.add(builder.start(redirects));
+                    prevOutput = redirects[1];
                 }
-                processes.add(builder.start(redirects));
-                prevOutput = redirects[1];
+            } catch (Exception ex) {
+                // Cleanup processes already started
+                processes.forEach(Process::destroyForcibly);
+                processes.forEach(p -> {
+                    try {
+                        p.waitFor();        // Wait for it to exit
+                    } catch (InterruptedException ie) {
+                        // If interrupted; continue with next Process
+                        Thread.currentThread().interrupt();
+                    }
+                });
+                throw ex;
             }
-        } catch (Exception ex) {
-            // Cleanup processes already started
-            processes.forEach(Process::destroyForcibly);
-            processes.forEach(p -> {
-                try {
-                    p.waitFor();        // Wait for it to exit
-                } catch (InterruptedException ie) {
-                    // If interrupted; continue with next Process
-                    Thread.currentThread().interrupt();
-                }
-            });
-            throw ex;
         }
         return processes;
+    }
+
+    private static class PipelineResource implements JDKResource, AutoCloseable {
+        private static final JavaIOFileDescriptorAccess fdAccess = SharedSecrets.getJavaIOFileDescriptorAccess();
+        private final List<RedirectPipeImpl> redirects = new ArrayList<>();
+
+        public PipelineResource() {
+            Core.Priority.FILE_DESCRIPTORS.getContext().register(this);
+        }
+
+        @Override
+        public synchronized void beforeCheckpoint(Context<? extends Resource> context) {
+            // Noop, but this method is synchronized
+            assert redirects.isEmpty();
+        }
+
+        @Override
+        public void afterRestore(Context<? extends Resource> context) {
+        }
+
+        public void addRedirect(RedirectPipeImpl redirect) {
+            this.redirects.add(redirect);
+        }
+
+        @Override
+        public void close() throws IOException {
+            // The file descriptors won't be used by this process
+            for (RedirectPipeImpl r : redirects) {
+                fdAccess.close(r.getFd());
+            }
+            redirects.clear();
+        }
     }
 }

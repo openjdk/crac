@@ -37,7 +37,6 @@ import java.nio.file.Path;
  * @library /test/lib
  * @build JarFileFactoryCacheTest
  * @run driver jdk.test.lib.crac.CracTest
- * @requires (os.family == "linux")
  */
 public class JarFileFactoryCacheTest implements CracTest {
     @Override

@@ -102,26 +102,16 @@ Java_java_io_FileDescriptor_nativeDescription0(JNIEnv* env, jobject this) {
     #define BufferSize 1024
     char lpszFilePath[BufferSize] = {'\0'};
 
-    HMODULE hKernelDll = LoadLibrary(TEXT("kernel32.dll"));
-    if (!hKernelDll) {
-        JNU_ThrowIOExceptionWithLastError(env, "LoadLibrary kernel32.dll failed");
-        return NULL;
-    }
-
     HMODULE hNtdllDll = GetModuleHandle(TEXT("ntdll.dll"));
     if (!hNtdllDll) {
         JNU_ThrowIOExceptionWithLastError(env, "LoadLibrary ntdll.dll failed");
-        CloseHandle(hKernelDll);
         return NULL;
     }
 
     typedef NTSTATUS(WINAPI* NtQueryObjectFunc)(HANDLE, OBJECT_INFORMATION_CLASS, PVOID, ULONG, PULONG);
-    typedef BOOL(WINAPI* GetFinalPathNameByHandleFunc)(HANDLE, LPSTR, DWORD, DWORD);
-
     NtQueryObjectFunc ntQueryObject = (NtQueryObjectFunc)GetProcAddress(hNtdllDll, "NtQueryObject");
-    GetFinalPathNameByHandleFunc getFinalPathNameByHandle = (GetFinalPathNameByHandleFunc)GetProcAddress(hKernelDll, "GetFinalPathNameByHandleA");
 
-    if (!ntQueryObject || !getFinalPathNameByHandle) {
+    if (!ntQueryObject) {
         JNU_ThrowIOExceptionWithLastError(env, "GetProcAddress failed");
     } else {
         char tmp[BufferSize];
@@ -133,7 +123,7 @@ Java_java_io_FileDescriptor_nativeDescription0(JNIEnv* env, jobject this) {
         } else {
             PCWSTR typeName = objTypeInfo->TypeName.Buffer;
             const BOOL hasFilepath = (0 == wcscmp(L"File", typeName) || 0 == wcscmp(L"Directory", typeName));
-            if (!hasFilepath || !getFinalPathNameByHandle(handle, lpszFilePath, BufferSize, FILE_NAME_OPENED)) {
+            if (!hasFilepath || !GetFinalPathNameByHandleA(handle, lpszFilePath, BufferSize, FILE_NAME_OPENED)) {
                 int len = snprintf(lpszFilePath, sizeof(lpszFilePath) - 1, "Handle %p, ", handle);
                 if (0 > len) {
                     len = 0;
@@ -144,7 +134,6 @@ Java_java_io_FileDescriptor_nativeDescription0(JNIEnv* env, jobject this) {
     }
 
     CloseHandle(hNtdllDll);
-    CloseHandle(hKernelDll);
 
     return (*env)->NewStringUTF(env, lpszFilePath);
 }

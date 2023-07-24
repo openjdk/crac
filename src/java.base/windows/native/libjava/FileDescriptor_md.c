@@ -30,6 +30,9 @@
 #include "jlong.h"
 #include "io_util_md.h"
 
+#include <windows.h>
+#include <winternl.h>
+
 #include "java_io_FileDescriptor.h"
 
 /*******************************************************************/
@@ -95,26 +98,52 @@ Java_java_io_FileCleanable_cleanupClose0(JNIEnv *env, jclass fdClass, jint unuse
 
 JNIEXPORT jstring JNICALL
 Java_java_io_FileDescriptor_nativeDescription0(JNIEnv* env, jobject this) {
-    HANDLE hFile = (HANDLE)(*env)->GetLongField(env, this, IO_handle_fdID);
+    HANDLE handle = (HANDLE)(*env)->GetLongField(env, this, IO_handle_fdID);
     #define BufferSize 1024
     char lpszFilePath[BufferSize] = {'\0'};
 
-    HMODULE hModule = LoadLibrary(TEXT("kernel32.dll"));
-    if (!hModule) {
-        JNU_ThrowIOExceptionWithLastError(env, "LoadLibrary failed");
+    HMODULE hKernelDll = LoadLibrary(TEXT("kernel32.dll"));
+    if (!hKernelDll) {
+        JNU_ThrowIOExceptionWithLastError(env, "LoadLibrary kernel32.dll failed");
+        return NULL;
+    }
+
+    HMODULE hNtdllDll = GetModuleHandle(TEXT("ntdll.dll"));
+    if (!hNtdllDll) {
+        JNU_ThrowIOExceptionWithLastError(env, "LoadLibrary ntdll.dll failed");
+        CloseHandle(hKernelDll);
+        return NULL;
+    }
+
+    typedef NTSTATUS(WINAPI* NtQueryObjectFunc)(HANDLE, OBJECT_INFORMATION_CLASS, PVOID, ULONG, PULONG);
+    typedef BOOL(WINAPI* GetFinalPathNameByHandleFunc)(HANDLE, LPSTR, DWORD, DWORD);
+
+    NtQueryObjectFunc ntQueryObject = (NtQueryObjectFunc)GetProcAddress(hNtdllDll, "NtQueryObject");
+    GetFinalPathNameByHandleFunc getFinalPathNameByHandle = (GetFinalPathNameByHandleFunc)GetProcAddress(hKernelDll, "GetFinalPathNameByHandleA");
+
+    if (!ntQueryObject || !getFinalPathNameByHandle) {
+        JNU_ThrowIOExceptionWithLastError(env, "GetProcAddress failed");
     } else {
-        typedef BOOL (WINAPI* GetFinalPathNameByHandleFunc) (HANDLE, LPSTR, DWORD, DWORD);
-        GetFinalPathNameByHandleFunc getFinalPathNameByHandle = (GetFinalPathNameByHandleFunc)GetProcAddress(hModule, "GetFinalPathNameByHandleA");
-        if (!getFinalPathNameByHandle) {
-            JNU_ThrowIOExceptionWithLastError(env, "GetProcAddress failed");
+        char tmp[BufferSize];
+        PUBLIC_OBJECT_TYPE_INFORMATION *objTypeInfo = (PUBLIC_OBJECT_TYPE_INFORMATION *)tmp;
+        ULONG retLen;
+        NTSTATUS status = ntQueryObject(handle, ObjectTypeInformation, objTypeInfo, sizeof(tmp), &retLen);
+        if (0 != status) {
+            JNU_ThrowIOExceptionWithLastError(env, "NtQueryObject failed");
         } else {
-            const DWORD res = getFinalPathNameByHandle(hFile, lpszFilePath, BufferSize, FILE_NAME_OPENED);
-            if (!res) {
-                JNU_ThrowIOExceptionWithLastError(env, "GetFinalPathNameByHandle failed");
+            if (0 == wcscmp(L"File", objTypeInfo->TypeName.Buffer) && 0 == wcscmp(L"Directory", objTypeInfo->TypeName.Buffer)) {
+                if (!getFinalPathNameByHandle(handle, lpszFilePath, BufferSize, FILE_NAME_OPENED)) {
+                    JNU_ThrowIOExceptionWithLastError(env, "GetFinalPathNameByHandle failed");
+                }
+            } else {
+                // TODO: implement object handle details
+                WideCharToMultiByte(CP_ACP, 0, objTypeInfo->TypeName.Buffer, -1, lpszFilePath, sizeof(lpszFilePath), NULL, NULL);
             }
         }
-        CloseHandle(hModule);
     }
+
+    CloseHandle(hNtdllDll);
+    CloseHandle(hKernelDll);
 
     return (*env)->NewStringUTF(env, lpszFilePath);
 }

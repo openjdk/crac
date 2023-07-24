@@ -131,13 +131,14 @@ Java_java_io_FileDescriptor_nativeDescription0(JNIEnv* env, jobject this) {
         if (0 != status) {
             JNU_ThrowIOExceptionWithLastError(env, "NtQueryObject failed");
         } else {
-            if (0 == wcscmp(L"File", objTypeInfo->TypeName.Buffer) && 0 == wcscmp(L"Directory", objTypeInfo->TypeName.Buffer)) {
-                if (!getFinalPathNameByHandle(handle, lpszFilePath, BufferSize, FILE_NAME_OPENED)) {
-                    JNU_ThrowIOExceptionWithLastError(env, "GetFinalPathNameByHandle failed");
+            PCWSTR typeName = objTypeInfo->TypeName.Buffer;
+            const BOOL hasFilepath = (0 == wcscmp(L"File", typeName) || 0 == wcscmp(L"Directory", typeName));
+            if (!hasFilepath || !getFinalPathNameByHandle(handle, lpszFilePath, BufferSize, FILE_NAME_OPENED)) {
+                int len = snprintf(lpszFilePath, sizeof(lpszFilePath) - 1, "Handle %p, ", handle);
+                if (0 > len) {
+                    len = 0;
                 }
-            } else {
-                // TODO: implement object handle details
-                WideCharToMultiByte(CP_ACP, 0, objTypeInfo->TypeName.Buffer, -1, lpszFilePath, sizeof(lpszFilePath), NULL, NULL);
+                WideCharToMultiByte(CP_ACP, 0, typeName, -1, lpszFilePath + len, sizeof(lpszFilePath) - len, NULL, NULL);
             }
         }
     }

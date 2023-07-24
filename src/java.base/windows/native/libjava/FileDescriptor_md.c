@@ -102,38 +102,10 @@ Java_java_io_FileDescriptor_nativeDescription0(JNIEnv* env, jobject this) {
     #define BufferSize 1024
     char lpszFilePath[BufferSize] = {'\0'};
 
-    HMODULE hNtdllDll = GetModuleHandle(TEXT("ntdll.dll"));
-    if (!hNtdllDll) {
-        JNU_ThrowIOExceptionWithLastError(env, "GetModuleHandle ntdll.dll failed");
-        return NULL;
+    const DWORD dwFileType = GetFileType(handle);
+    if (FILE_TYPE_DISK != dwFileType || !GetFinalPathNameByHandleA(handle, lpszFilePath, BufferSize, FILE_NAME_OPENED)) {
+        snprintf(lpszFilePath, sizeof(lpszFilePath) - 1, "Handle 0x%p, type %lu", handle, dwFileType);
     }
-
-    typedef NTSTATUS(WINAPI* NtQueryObjectFunc)(HANDLE, OBJECT_INFORMATION_CLASS, PVOID, ULONG, PULONG);
-    NtQueryObjectFunc ntQueryObject = (NtQueryObjectFunc)GetProcAddress(hNtdllDll, "NtQueryObject");
-
-    if (!ntQueryObject) {
-        JNU_ThrowIOExceptionWithLastError(env, "GetProcAddress failed");
-    } else {
-        char tmp[BufferSize];
-        PUBLIC_OBJECT_TYPE_INFORMATION *objTypeInfo = (PUBLIC_OBJECT_TYPE_INFORMATION *)tmp;
-        ULONG retLen;
-        NTSTATUS status = ntQueryObject(handle, ObjectTypeInformation, objTypeInfo, sizeof(tmp), &retLen);
-        if (0 != status) {
-            JNU_ThrowIOExceptionWithLastError(env, "NtQueryObject failed");
-        } else {
-            PCWSTR typeName = objTypeInfo->TypeName.Buffer;
-            const BOOL hasFilepath = (0 == wcscmp(L"File", typeName) || 0 == wcscmp(L"Directory", typeName));
-            if (!hasFilepath || !GetFinalPathNameByHandleA(handle, lpszFilePath, BufferSize, FILE_NAME_OPENED)) {
-                int len = snprintf(lpszFilePath, sizeof(lpszFilePath) - 1, "Handle %p, ", handle);
-                if (0 > len) {
-                    len = 0;
-                }
-                WideCharToMultiByte(CP_ACP, 0, typeName, -1, lpszFilePath + len, sizeof(lpszFilePath) - len, NULL, NULL);
-            }
-        }
-    }
-
-    CloseHandle(hNtdllDll);
 
     return (*env)->NewStringUTF(env, lpszFilePath);
 }

@@ -104,7 +104,7 @@ Java_java_io_FileDescriptor_nativeDescription0(JNIEnv* env, jobject this) {
 
     HMODULE hNtdllDll = GetModuleHandle(TEXT("ntdll.dll"));
     if (!hNtdllDll) {
-        JNU_ThrowIOExceptionWithLastError(env, "LoadLibrary ntdll.dll failed");
+        JNU_ThrowIOExceptionWithLastError(env, "GetModuleHandle ntdll.dll failed");
         return NULL;
     }
 

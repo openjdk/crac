@@ -144,9 +144,7 @@ static char* fmtaddr(char *buf, const char *end, unsigned char* addr, int len) {
     return buf;
 }
 
-#ifdef __APPLE__
 __attribute__((__format__ (__printf__, 3, 0)))
-#endif
 static jstring format_string(JNIEnv *env, struct stat *st, const char *fmt, ...) {
     char details[PATH_MAX];
     va_list va;

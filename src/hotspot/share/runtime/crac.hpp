@@ -48,6 +48,54 @@ public:
     return javaTimeNanos_offset;
   }
 
+  class MemoryPersisterBase {
+  protected:
+    struct record {
+      u_int64_t addr;
+      u_int64_t length;
+      u_int64_t offset;
+    };
+
+    int _fd;
+    size_t _slots, _index_curr, _offset_curr;
+    size_t _index_begin, _index_end;
+    struct record *_index;
+
+    MemoryPersisterBase(size_t slots);
+    ~MemoryPersisterBase();
+
+    bool open(bool loading, const char *filename);
+  };
+
+  class MemoryPersister: protected MemoryPersisterBase {
+  public:
+    MemoryPersister(size_t slots): MemoryPersisterBase(slots) {}
+    ~MemoryPersister();
+
+    // not using constructor to allow error
+    bool open(const char *filename, const char type[16]);
+
+
+    bool store(void *addr, size_t length, size_t mapped_length);
+    bool store_gap(void *addr, size_t length);
+
+  private:
+    bool unmap(void *addr, size_t length);
+  };
+
+  class MemoryLoader: protected MemoryPersisterBase {
+  public:
+    MemoryLoader(size_t slots): MemoryPersisterBase(slots) {}
+
+    bool open(const char *filename, const char type[16]);
+
+    bool load(void *addr, size_t expected_length, size_t mapped_length);
+    bool load_gap(void *addr, size_t length);
+  private:
+    bool map(void *addr, size_t length, int fd, size_t offset);
+  };
+
+
 private:
   static bool read_bootid(char *dest);
 

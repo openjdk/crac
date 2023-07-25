@@ -537,6 +537,12 @@ class CollectedHeap : public CHeapObj<mtGC> {
   void reset_promotion_should_fail(volatile size_t* count);
   void reset_promotion_should_fail();
 #endif  // #ifndef PRODUCT
+
+  // CRaC related
+  virtual bool persist_for_checkpoint() {
+    return true; // by default ignore the request
+  }
+  virtual void load_on_restore() {}
 };
 
 // Class to set and reset the GC cause for a CollectedHeap.

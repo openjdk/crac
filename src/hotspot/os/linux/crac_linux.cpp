@@ -22,7 +22,9 @@
  */
 
 // no precompiled headers
+#include "gc/shared/collectedHeap.hpp"
 #include "jvm.h"
+#include "memory/universe.hpp"
 #include "perfMemory_linux.hpp"
 #include "runtime/crac_structs.hpp"
 #include "runtime/crac.hpp"
@@ -30,6 +32,8 @@
 #include "utilities/growableArray.hpp"
 #include "logging/log.hpp"
 #include "classfile/classLoader.hpp"
+
+#include <sys/mman.h>
 
 class FdsInfo {
 public:
@@ -341,10 +345,29 @@ bool VM_Crac::check_fds() {
 }
 
 bool VM_Crac::memory_checkpoint() {
+  if (CRPersistMemory) {
+    // FILE *fp = fopen("/proc/self/maps", "r");
+    // if (fp) {
+    //   address low, high;
+    //   char buf[256];
+    //   while (!feof(fp)) {
+    //     if (fgets(buf, 256, fp)) {
+    //       fputs(buf, stderr);
+    //     }
+    //   }
+    //   fclose(fp);
+    // }
+    if (!Universe::heap()->persist_for_checkpoint()) {
+      return false;
+    }
+  }
   return PerfMemoryLinux::checkpoint(CRaCCheckpointTo);
 }
 
 void VM_Crac::memory_restore() {
+  if (CRPersistMemory) {
+    Universe::heap()->load_on_restore();
+  }
   PerfMemoryLinux::restore();
 }
 
@@ -454,6 +477,38 @@ bool crac::read_bootid(char *dest) {
   }
   if (::close(fd) != 0) {
     perror("CRaC: Cannot close system boot ID file");
+  }
+  return true;
+}
+
+bool crac::MemoryPersister::unmap(void *addr, size_t length) {
+  if (::munmap(addr, length) != 0) {
+    perror("::munmap");
+    return false;
+  }
+  return true;
+}
+
+bool crac::MemoryLoader::map(void *addr, size_t length, int fd, size_t offset) {
+  if (::mmap(addr, length, PROT_READ | PROT_WRITE,
+      MAP_PRIVATE | MAP_FIXED | (fd < 0 ? MAP_ANONYMOUS : 0), fd, offset) != addr) {
+    perror("::mmap RW");
+    return false;
+  }
+  return true;
+}
+
+bool crac::MemoryLoader::load_gap(void *addr, size_t length) {
+  if (length == 0) {
+    return true;
+  }
+
+  assert(((u_int64_t) addr & (os::vm_page_size() - 1)) == 0, "Unaligned address %p", addr);
+  assert((length & (os::vm_page_size() - 1)) == 0, "Unaligned length %lx", length);
+  // Not storing anything, not even to index
+  if (::mmap(addr, length, PROT_NONE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0) != addr) {
+    perror("::mmap NONE");
+    return false;
   }
   return true;
 }

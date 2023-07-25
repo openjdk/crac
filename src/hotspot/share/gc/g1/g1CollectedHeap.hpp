@@ -1312,6 +1312,15 @@ public:
 
   // Used to print information about locations in the hs_err file.
   bool print_location(outputStream* st, void* addr) const override;
+
+  bool persist_for_checkpoint() {
+    return _hrm.persist_for_checkpoint();
+  }
+  void load_on_restore() {
+    if (!_hrm.load_on_restore()) {
+      fatal("Cannot read heap");
+    }
+  }
 };
 
 // Scoped object that performs common pre- and post-gc heap printing operations.

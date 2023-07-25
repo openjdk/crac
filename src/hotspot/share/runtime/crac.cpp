@@ -601,3 +601,202 @@ void crac::update_javaTimeNanos_offset() {
     }
   }
 }
+
+struct persisted_mem_header {
+  const int32_t version;
+  const size_t slots;
+  char type[16];
+};
+
+static bool write_fully(int fd, const char* buf, size_t len) {
+  do {
+    int n = os::write(fd, buf, len);
+    if (n < 0) {
+      if (errno != EINTR) {
+        fprintf(stderr, "Addr %p, length %lx\n", buf, len);
+        perror("Cannot write");
+        return false;
+      }
+    } else {
+      buf += n;
+      len -= n;
+    }
+  }
+  while (len > 0);
+  return true;
+}
+
+static bool read_fully(int fd, char *dest, size_t n) {
+  size_t rd = 0;
+  do {
+    ssize_t r = os::read(fd, dest + rd, n - rd);
+    if (r == 0) {
+      return false;
+    } else if (r < 0) {
+      if (errno == EINTR) {
+        continue;
+      }
+      return false;
+    }
+    rd += r;
+  } while (rd < n);
+  return true;
+}
+
+
+crac::MemoryPersisterBase::MemoryPersisterBase(size_t slots): _fd(-1), _slots(slots), _index_curr(0) {
+  _index_begin = sizeof(persisted_mem_header);
+  size_t page_size = os::vm_page_size();
+  // end of index/begin of data must be aligned to page size
+  _index_end = (((_index_begin + slots * sizeof(struct record) - 1) & ~(page_size - 1)) + 1) * page_size;
+  _offset_curr = _index_end;
+  _index = NEW_C_HEAP_ARRAY(struct record, slots, mtInternal);
+}
+
+crac::MemoryPersisterBase::~MemoryPersisterBase() {
+  FREE_C_HEAP_ARRAY(struct record, _index);
+  if (_fd < 0) {
+    return;
+  }
+  os::close(_fd);
+}
+
+crac::MemoryPersister::~MemoryPersister() {
+  if (_fd < 0) {
+    return;
+  }
+  os::seek_to_file_offset(_fd, _index_begin);
+  write_fully(_fd, (char *) _index, _index_curr * sizeof(struct record));
+}
+
+bool crac::MemoryPersisterBase::open(bool loading, const char *filename) {
+  char path[PATH_MAX];
+  snprintf(path, PATH_MAX, "%s%s%s", CRaCCheckpointTo, os::file_separator(), filename);
+  _fd = os::open(path, loading ? O_RDONLY : (O_WRONLY | O_CREAT | O_TRUNC), S_IRUSR | S_IWUSR);
+  if (_fd < 0) {
+    perror("Cannot open persisted memory file");
+    return false;
+  }
+  return true;
+}
+
+bool crac::MemoryPersister::open(const char *filename, const char type[16]) {
+  if (!MemoryPersisterBase::open(false, filename)) {
+    return false;
+  }
+  struct persisted_mem_header header = {
+    .version = 1,
+    .slots = _slots
+  };
+  memcpy(header.type, type, 16);
+  if (!write_fully(_fd, (char *) &header, sizeof(header))) {
+    tty->print_cr("Cannot write persisted memory file header");
+    return false;
+  }
+  os::seek_to_file_offset(_fd, _index_end);
+  return true;
+}
+
+bool crac::MemoryPersister::store(void *addr, size_t length, size_t mapped_length) {
+  if (mapped_length == 0) {
+    return true;
+  }
+
+  size_t page_size = os::vm_page_size();
+  guarantee(_index_curr < _slots, "No more index space reserved");
+  assert(((u_int64_t) addr & (page_size - 1)) == 0, "Unaligned address %p", addr);
+  assert(length <= mapped_length, "Useful length %lx shorter than mapped %lx", length, mapped_length);
+  assert((mapped_length & (page_size - 1)) == 0, "Unaligned length %lx", length);
+
+  if (length > 0 && !write_fully(_fd, (char *) addr, length)) {
+    tty->print_cr("Cannot store persisted memory");
+    return false;
+  }
+  size_t aligned_length = align_up(length, page_size);
+  _index[_index_curr++] = {
+    .addr = (u_int64_t) addr,
+    .length = (u_int64_t) length,
+    .offset = (u_int64_t) _offset_curr
+  };
+  _offset_curr += aligned_length;
+  if (length != aligned_length) {
+    os::seek_to_file_offset(_fd, _offset_curr);
+  }
+  return unmap(addr, mapped_length);
+}
+
+bool crac::MemoryPersister::store_gap(void *addr, size_t length) {
+  assert(((u_int64_t) addr & (os::vm_page_size() - 1)) == 0, "Unaligned address");
+  assert((length & (os::vm_page_size() - 1)) == 0, "Unaligned length");
+  // Not storing anything, not even to index
+  return unmap(addr, length);
+}
+
+bool crac::MemoryLoader::open(const char *filename, const char type[16]) {
+  if (!MemoryPersisterBase::open(true, filename)) {
+    return false;
+  }
+  struct persisted_mem_header header = {};
+  if (!read_fully(_fd, (char *) &header, sizeof(header))) {
+    tty->print_cr("Cannot read persisted memory file header");
+    return false;
+  } else if (header.version != 1) {
+    tty->print_cr("Invalid persisted memory file version");
+    return false;
+  } else if (header.slots != _slots) {
+    tty->print_cr("Number of persisted memory file slots does not match");
+    return false;
+  } else if (memcmp(header.type, type, 16)) {
+    tty->print_cr("Mismatch for type of persisted memory file");
+    return false;
+  }
+
+  if (!read_fully(_fd, (char *) _index, _slots * sizeof(struct record))) {
+    tty->print_cr("Cannot read persisted memory file index");
+    return false;
+  }
+
+  return true;
+}
+
+bool crac::MemoryLoader::load(void *addr, size_t expected_length, size_t mapped_length) {
+  if (mapped_length == 0) {
+    return true;
+  }
+
+  size_t at = UINT_MAX;
+  // we're not going from 0 to optimize reading in the same order as writing
+  for (size_t i = _index_curr; i < _slots; ++i) {
+    if (_index[i].addr == (u_int64_t) addr) {
+      at = i;
+      break;
+    }
+  }
+  if (at != UINT_MAX) {
+    for (size_t i = 0; i < _index_curr; ++i) {
+      if (_index[i].addr == (u_int64_t) addr) {
+        at = i;
+        break;
+      }
+    }
+  }
+  if (at == UINT_MAX) {
+    tty->print_cr("Cannot find region with address %p", addr);
+    return false;
+  }
+  if (_index[at].length != (u_int64_t) expected_length) {
+    tty->print_cr("Persisted memory region length does not match at %p: %lu vs. %lu",
+    addr, expected_length, _index[at].length);
+    return false;
+  }
+  size_t offset = _index[at].offset;
+  size_t aligned_length = align_up(expected_length, os::vm_page_size());
+  if (expected_length > 0 && !map(addr, expected_length, _fd, offset)) {
+    return false;
+  }
+  if (aligned_length < mapped_length && !map((char *) addr + aligned_length, mapped_length - aligned_length, -1, 0)) {
+    return false;
+  }
+  _index_curr = at + 1;
+  return true;
+}

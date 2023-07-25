@@ -292,6 +292,9 @@ public:
 
   // Do some sanity checking.
   void verify_optional() PRODUCT_RETURN;
+
+  bool persist_for_checkpoint();
+  bool load_on_restore();
 };
 
 // The HeapRegionClaimer is used during parallel iteration over heap regions,

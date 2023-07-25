@@ -35,6 +35,7 @@
 #include "logging/logStream.hpp"
 #include "memory/allocation.hpp"
 #include "runtime/atomic.hpp"
+#include "runtime/crac.hpp"
 #include "runtime/mutexLocker.hpp"
 #include "runtime/orderAccess.hpp"
 #include "utilities/bitMap.inline.hpp"
@@ -827,4 +828,67 @@ void HeapRegionManager::rebuild_free_list(WorkerThreads* workers) {
     _free_list.append_ordered(task.worker_freelist(worker));
   }
   G1CollectedHeap::heap()->phase_times()->record_serial_rebuild_freelist_time_ms((Ticks::now() - serial_time).seconds() * 1000.0);
+}
+
+
+bool HeapRegionManager::persist_for_checkpoint() {
+  size_t non_null = 0;
+  for (size_t i = 0; i < _regions.length(); ++i) {
+    if (_regions.get_by_index(i) != nullptr) ++non_null;
+  }
+
+  crac::MemoryPersister persister(non_null);
+  if (!persister.open("heap_regions.img", "GCGC")) {
+    return false;
+  }
+
+  size_t page_size = os::vm_page_size();
+  for (size_t i = 0; i < _regions.length(); ++i) {
+    HeapRegion *region = _regions.get_by_index(i);
+    if (region == nullptr) {
+      continue;
+    }
+    u_int64_t top_aligned = align_up((u_int64_t) region->top(), page_size);
+    // both active and inactive are mapped RW
+    if (_committed_map.active(i) || _committed_map.inactive(i)) {
+      if (!persister.store(region->bottom(), region->used(), region->capacity())) {
+        return false;
+      }
+    } else {
+      if (!persister.store_gap(region->bottom(), region->capacity())) {
+        return false;
+      }
+    }
+  }
+  return true;
+}
+
+bool HeapRegionManager::load_on_restore() {
+  size_t non_null = 0;
+  for (size_t i = 0; i < _regions.length(); ++i) {
+    if (_regions.get_by_index(i) != nullptr) ++non_null;
+  }
+
+  crac::MemoryLoader loader(non_null);
+  if (!loader.open("heap_regions.img", "GCGC")) {
+    return false;
+  }
+
+  size_t page_size = os::vm_page_size();
+  for (size_t i = 0; i < _regions.length(); ++i) {
+    HeapRegion *region = _regions.get_by_index(i);
+    if (region == nullptr) {
+      continue;
+    }
+    if (_committed_map.active(i) || _committed_map.inactive(i)) {
+      if (!loader.load(region->bottom(), region->used(), region->capacity())) {
+       return false;
+      }
+    } else {
+      if (!loader.load_gap(region->bottom(), region->capacity())) {
+       return false;
+      }
+    }
+  }
+  return true;
 }

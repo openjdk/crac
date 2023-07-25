@@ -52,10 +52,9 @@ public class OpenFileDetectionTest implements CracTest {
 
     @Override
     public void exec() throws Exception {
-        {
-            new File("filename1.txt").createNewFile();
-            new File("filename2.txt").createNewFile();
-        }
+        new File("filename1.txt").createNewFile();
+        new File("filename2.txt").createNewFile();
+
         try (var file1 = new RandomAccessFile("filename1.txt", "r");
              var file2 = new FileInputStream("filename2.txt")) {
             Core.checkpointRestore();

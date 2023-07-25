@@ -47,6 +47,7 @@ class G1UncommitRegionTask : public G1ServiceTask {
   // service thread multiple times. If the task is active, a new requst to
   // enqueue it will be ignored.
   bool _active;
+  Semaphore _active_sem;
 
   // Members to keep a summary of the current concurrent uncommit
   // work. Used for printing when no more work is available.
@@ -61,9 +62,12 @@ class G1UncommitRegionTask : public G1ServiceTask {
   void report_summary();
   void clear_summary();
 
+  void _wait_if_active();
+
 public:
   static void enqueue();
   virtual void execute();
+  static void wait_if_active();
 };
 
 #endif

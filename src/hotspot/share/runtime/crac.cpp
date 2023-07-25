@@ -24,6 +24,7 @@
 #include "precompiled.hpp"
 
 #include "classfile/classLoader.hpp"
+#include "gc/g1/g1UncommitRegionTask.hpp"
 #include "jvm.h"
 #include "memory/oopFactory.hpp"
 #include "oops/typeArrayOop.inline.hpp"
@@ -405,6 +406,7 @@ Handle crac::checkpoint(jarray fd_arr, jobjectArray obj_arr, bool dry_run, jlong
   Universe::heap()->set_cleanup_unused(true);
   Universe::heap()->collect(GCCause::_full_gc_alot);
   Universe::heap()->set_cleanup_unused(false);
+  G1UncommitRegionTask::wait_if_active();
 
   VM_Crac cr(fd_arr, obj_arr, dry_run, (bufferedStream*)jcmd_stream);
   {

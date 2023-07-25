@@ -129,7 +129,21 @@ void G1UncommitRegionTask::execute() {
   } else {
     // Nothing more to do, change state and report a summary.
     set_active(false);
+    _active_sem.signal();
     report_summary();
     clear_summary();
+  }
+}
+
+void G1UncommitRegionTask::_wait_if_active() {
+  while (_active) {
+    _active_sem.wait();
+  }
+}
+
+void G1UncommitRegionTask::wait_if_active() {
+  // Otherwise G1 GC is not in use.
+  if (_instance) {
+    _instance->_wait_if_active();
   }
 }

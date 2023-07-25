@@ -96,10 +96,11 @@ Java_java_io_FileCleanable_cleanupClose0(JNIEnv *env, jclass fdClass, jint unuse
     }
 }
 
+#define BufferSize 1024
+
 JNIEXPORT jstring JNICALL
 Java_java_io_FileDescriptor_nativeDescription0(JNIEnv* env, jobject this) {
     HANDLE handle = (HANDLE)(*env)->GetLongField(env, this, IO_handle_fdID);
-    #define BufferSize 1024
     char lpszFilePath[BufferSize] = {'\0'};
 
     const DWORD dwFileType = GetFileType(handle);

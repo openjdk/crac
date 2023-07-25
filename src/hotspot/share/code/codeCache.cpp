@@ -52,6 +52,7 @@
 #include "oops/verifyOopClosure.hpp"
 #include "runtime/arguments.hpp"
 #include "runtime/atomic.hpp"
+#include "runtime/crac.hpp"
 #include "runtime/deoptimization.hpp"
 #include "runtime/globals_extension.hpp"
 #include "runtime/handles.inline.hpp"
@@ -1877,3 +1878,44 @@ void CodeCache::print_names(outputStream *out) {
   }
 }
 //---<  END  >--- CodeHeap State Analytics.
+
+#define CODECACHE_IMG  "codecache.img"
+#define CODECACHE_TYPE "CodeCache"
+
+bool CodeCache::persist_for_checkpoint() {
+  crac::MemoryPersister persister(3 * _heaps->length());
+  if (!persister.open(CODECACHE_IMG, CODECACHE_TYPE)) {
+    return false;
+  }
+
+  FOR_ALL_HEAPS(it) {
+    CodeHeap *heap = *it;
+    if (heap == NULL) {
+      continue;
+    }
+    size_t used = heap->high() - heap->low();
+    if (!persister.store_gap(heap->low_boundary(), heap->low_boundary() - heap->low()) ||
+        !persister.store(heap->low(), used, used) ||
+        !persister.store_gap(heap->high(), heap->high_boundary() - heap->high())) {
+      return false;
+    }
+  }
+  return true;
+}
+
+void CodeCache::load_on_restore() {
+  crac::MemoryLoader loader(3 * _heaps->length());
+  if (!loader.open(CODECACHE_IMG, CODECACHE_TYPE)) {
+    fatal("Could not open " CODECACHE_IMG);
+  }
+
+  FOR_ALL_HEAPS(it) {
+    CodeHeap *heap = *it;
+    size_t used = heap->high() - heap->low();
+    if (!loader.load_gap(heap->low_boundary(), heap->low_boundary() - heap->low()) ||
+        !loader.load(heap->low(), used, used, true) ||
+        !loader.load_gap(heap->high(), heap->high_boundary() - heap->high())) {
+      fatal("Could not load code cache heap");
+    }
+  }
+}

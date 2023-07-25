@@ -89,10 +89,10 @@ public:
 
     bool open(const char *filename, const char type[16]);
 
-    bool load(void *addr, size_t expected_length, size_t mapped_length);
+    bool load(void *addr, size_t expected_length, size_t mapped_length, bool executable);
     bool load_gap(void *addr, size_t length);
   private:
-    bool map(void *addr, size_t length, int fd, size_t offset);
+    bool map(void *addr, size_t length, int fd, size_t offset, bool executable);
   };
 
 

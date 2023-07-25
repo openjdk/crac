@@ -340,6 +340,9 @@ class CodeCache : AllStatic {
   static void print_space(outputStream *out);
   static void print_age(outputStream *out);
   static void print_names(outputStream *out);
+
+  static bool persist_for_checkpoint();
+  static void load_on_restore();
 };
 
 

@@ -881,7 +881,7 @@ bool HeapRegionManager::load_on_restore() {
       continue;
     }
     if (_committed_map.active(i) || _committed_map.inactive(i)) {
-      if (!loader.load(region->bottom(), region->used(), region->capacity())) {
+      if (!loader.load(region->bottom(), region->used(), region->capacity(), false)) {
        return false;
       }
     } else {

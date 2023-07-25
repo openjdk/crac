@@ -489,8 +489,8 @@ bool crac::MemoryPersister::unmap(void *addr, size_t length) {
   return true;
 }
 
-bool crac::MemoryLoader::map(void *addr, size_t length, int fd, size_t offset) {
-  if (::mmap(addr, length, PROT_READ | PROT_WRITE,
+bool crac::MemoryLoader::map(void *addr, size_t length, int fd, size_t offset, bool executable) {
+  if (::mmap(addr, length, PROT_READ | PROT_WRITE | (executable ? PROT_EXEC : 0),
       MAP_PRIVATE | MAP_FIXED | (fd < 0 ? MAP_ANONYMOUS : 0), fd, offset) != addr) {
     perror("::mmap RW");
     return false;

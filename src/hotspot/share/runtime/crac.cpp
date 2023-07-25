@@ -23,6 +23,7 @@
 
 #include "precompiled.hpp"
 
+#include "code/codeCache.hpp"
 #include "classfile/classLoader.hpp"
 #include "jvm.h"
 #include "memory/oopFactory.hpp"
@@ -332,6 +333,13 @@ void VM_Crac::doit() {
     return;
   }
 
+  // We don't invoke this inside memory_checkpoint() for symmetry;
+  // CodeCache must be restored earlier (see below)
+  if (CRPersistMemory && !CodeCache::persist_for_checkpoint()) {
+    memory_restore();
+    return;
+  }
+
   int shmid = 0;
   if (CRAllowToSkipCheckpoint) {
     trace_cr("Skip Checkpoint");
@@ -343,6 +351,12 @@ void VM_Crac::doit() {
       memory_restore();
       return;
     }
+  }
+
+  if (CRPersistMemory) {
+    // CodeCache must be restored before VM_Version::crac_restore as this
+    // generates some code in the code cache on the fly
+    CodeCache::load_on_restore();
   }
 
   // It needs to check CPU features before any other code (such as VM_Crac::read_shm) depends on them.
@@ -728,6 +742,9 @@ bool crac::MemoryPersister::store(void *addr, size_t length, size_t mapped_lengt
 bool crac::MemoryPersister::store_gap(void *addr, size_t length) {
   assert(((u_int64_t) addr & (os::vm_page_size() - 1)) == 0, "Unaligned address");
   assert((length & (os::vm_page_size() - 1)) == 0, "Unaligned length");
+  if (length == 0) {
+    return true;
+  }
   // Not storing anything, not even to index
   return unmap(addr, length);
 }
@@ -759,7 +776,7 @@ bool crac::MemoryLoader::open(const char *filename, const char type[16]) {
   return true;
 }
 
-bool crac::MemoryLoader::load(void *addr, size_t expected_length, size_t mapped_length) {
+bool crac::MemoryLoader::load(void *addr, size_t expected_length, size_t mapped_length, bool executable) {
   if (mapped_length == 0) {
     return true;
   }
@@ -791,10 +808,10 @@ bool crac::MemoryLoader::load(void *addr, size_t expected_length, size_t mapped_
   }
   size_t offset = _index[at].offset;
   size_t aligned_length = align_up(expected_length, os::vm_page_size());
-  if (expected_length > 0 && !map(addr, expected_length, _fd, offset)) {
+  if (expected_length > 0 && !map(addr, expected_length, _fd, offset, executable)) {
     return false;
   }
-  if (aligned_length < mapped_length && !map((char *) addr + aligned_length, mapped_length - aligned_length, -1, 0)) {
+  if (aligned_length < mapped_length && !map((char *) addr + aligned_length, mapped_length - aligned_length, -1, 0, executable)) {
     return false;
   }
   _index_curr = at + 1;

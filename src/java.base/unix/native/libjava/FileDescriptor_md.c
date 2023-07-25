@@ -144,6 +144,7 @@ static char* fmtaddr(char *buf, const char *end, unsigned char* addr, int len) {
     return buf;
 }
 
+__attribute__((__format__ (__printf__, 3, 0)))
 static jstring format_string(JNIEnv *env, struct stat *st, const char *fmt, ...) {
     char details[PATH_MAX];
     va_list va;
@@ -179,12 +180,13 @@ Java_java_io_FileDescriptor_nativeDescription0(JNIEnv *env, jobject this) {
         return format_string(env, &st, "%s: %s", stat2strtype(st.st_mode), link);
     }
 
-    int family;
-    socklen_t famlen = sizeof(int);
-    if (getsockopt(fd, SOL_SOCKET, SO_DOMAIN, &family, &famlen) != 0) {
+    struct sockaddr sa;
+    socklen_t slen = sizeof(sa);
+    if (getsockname(fd, &sa, &slen) != 0) {
         return format_string(env, &st, "socket: %s", link);
     }
 
+    const int family = sa.sa_family;
     int socktype;
     socklen_t typelen = sizeof(int);
     if (getsockopt(fd, SOL_SOCKET, SO_TYPE, &socktype, &typelen) != 0) {

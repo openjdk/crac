@@ -208,6 +208,9 @@ private:
 
   void set_empty();
 
+  bool persist_for_checkpoint();
+  void load_on_restore();
+
   // Apply Fn to every oop on the mark stack. The mark stack must not
   // be modified while iterating.
   template<typename Fn> void iterate(Fn fn) const PRODUCT_RETURN;
@@ -616,6 +619,14 @@ public:
   ConcurrentGCTimer* gc_timer_cm() const { return _gc_timer_cm; }
 
   G1OldTracer* gc_tracer_cm() const { return _gc_tracer_cm; }
+
+  bool persist_for_checkpoint() {
+    return _global_mark_stack.persist_for_checkpoint();
+  }
+
+  void load_on_restore() {
+    return _global_mark_stack.load_on_restore();
+  }
 
 private:
   // Rebuilds the remembered sets for chosen regions in parallel and concurrently

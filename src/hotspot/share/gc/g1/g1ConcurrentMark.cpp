@@ -67,6 +67,7 @@
 #include "oops/access.inline.hpp"
 #include "oops/oop.inline.hpp"
 #include "runtime/atomic.hpp"
+#include "runtime/crac.hpp"
 #include "runtime/globals_extension.hpp"
 #include "runtime/handles.inline.hpp"
 #include "runtime/java.hpp"
@@ -3052,4 +3053,32 @@ G1PrintRegionLivenessInfoClosure::~G1PrintRegionLivenessInfoClosure() {
                          percent_of(_total_live_bytes, _total_capacity_bytes),
                          bytes_to_mb(_total_remset_bytes),
                          bytes_to_mb(_total_code_roots_bytes));
+}
+
+#define MARKSTACK_FILE "g1cmmarkstack.img"
+#define MARKSTACK_TYPE "G1CMMarkStack"
+
+bool G1CMMarkStack::persist_for_checkpoint() {
+  crac::MemoryPersister persister(1);
+  if (!persister.open(MARKSTACK_FILE, MARKSTACK_TYPE)) {
+    return false;
+  }
+  size_t used = MIN2(_hwm, _chunk_capacity) * sizeof(TaskQueueEntryChunk);
+  size_t committed = _chunk_capacity * sizeof(TaskQueueEntryChunk);
+  if (!persister.store((void *) _base, used, committed)) {
+    return false;
+  }
+  return true;
+}
+
+void G1CMMarkStack::load_on_restore() {
+  crac::MemoryLoader loader;
+  if (!loader.open(MARKSTACK_FILE, MARKSTACK_TYPE)) {
+    fatal("Cannot open G1 concurrent mark stack file");
+  }
+  size_t used = MIN2(_hwm, _chunk_capacity) * sizeof(TaskQueueEntryChunk);
+  size_t committed = _chunk_capacity * sizeof(TaskQueueEntryChunk);
+  if (!loader.load((void *) _base, used, committed, false)) {
+    fatal("Cannot load G1 concurrent mark stack");
+  }
 }

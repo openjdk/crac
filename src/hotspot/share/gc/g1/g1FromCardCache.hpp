@@ -95,6 +95,9 @@ public:
   static size_t static_mem_size() {
     return _static_mem_size;
   }
+
+  static bool persist_for_checkpoint();
+  static void load_on_restore();
 };
 
 #endif // SHARE_GC_G1_G1FROMCARDCACHE_HPP

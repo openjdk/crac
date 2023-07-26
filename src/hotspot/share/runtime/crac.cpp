@@ -720,7 +720,23 @@ bool crac::MemoryPersister::store(void *addr, size_t length, size_t mapped_lengt
   guarantee(_index_curr < _slots, "No more index space reserved");
   assert(((u_int64_t) addr & (page_size - 1)) == 0, "Unaligned address %p", addr);
   assert(length <= mapped_length, "Useful length %lx shorter than mapped %lx", length, mapped_length);
-  assert((mapped_length & (page_size - 1)) == 0, "Unaligned length %lx", length);
+  assert((mapped_length & (page_size - 1)) == 0, "Unaligned length %lx at %p", length, addr);
+
+// TODO: optimize saving zero pages. This would require dynamic index sizing
+#if 0
+  size_t pages = 0;
+  for (size_t offset = 0; offset < length; offset += page_size) {
+    unsigned long long *ptr = (unsigned long long *)((char *) addr + offset);
+    unsigned long long *end = (unsigned long long *)((char *) addr + offset + page_size);
+    while (ptr < end && *ptr == 0) ++ptr;
+    if (ptr == end) {
+      pages++;
+    }
+  }
+  if (pages > 0) {
+    fprintf(stderr, "%p: %lu/%lu pages zero\n", addr, pages, align_up(length, page_size)/page_size);
+  }
+#endif
 
   if (length > 0 && !write_fully(_fd, (char *) addr, length)) {
     tty->print_cr("Cannot store persisted memory");

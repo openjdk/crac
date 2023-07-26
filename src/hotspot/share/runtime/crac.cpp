@@ -657,10 +657,10 @@ static bool read_fully(int fd, char *dest, size_t n) {
   return true;
 }
 
-
-crac::MemoryPersisterBase::MemoryPersisterBase(size_t slots): _fd(-1), _slots(slots), _index_curr(0) {
-  _index_begin = sizeof(persisted_mem_header);
+void crac::MemoryPersisterBase::allocate_index(size_t slots) {
+  _slots = slots;
   size_t page_size = os::vm_page_size();
+  _index_begin = sizeof(persisted_mem_header);
   // end of index/begin of data must be aligned to page size
   _index_end = (((_index_begin + slots * sizeof(struct record) - 1) & ~(page_size - 1)) + 1) * page_size;
   _offset_curr = _index_end;
@@ -760,13 +760,11 @@ bool crac::MemoryLoader::open(const char *filename, const char type[16]) {
   } else if (header.version != 1) {
     tty->print_cr("Invalid persisted memory file version");
     return false;
-  } else if (header.slots != _slots) {
-    tty->print_cr("Number of persisted memory file slots does not match");
-    return false;
   } else if (memcmp(header.type, type, 16)) {
     tty->print_cr("Mismatch for type of persisted memory file");
     return false;
   }
+  allocate_index(header.slots);
 
   if (!read_fully(_fd, (char *) _index, _slots * sizeof(struct record))) {
     tty->print_cr("Cannot read persisted memory file index");

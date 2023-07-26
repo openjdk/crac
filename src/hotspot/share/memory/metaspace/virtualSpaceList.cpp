@@ -35,6 +35,7 @@
 #include "memory/metaspace/virtualSpaceList.hpp"
 #include "memory/metaspace/virtualSpaceNode.hpp"
 #include "runtime/atomic.hpp"
+#include "runtime/crac.hpp"
 #include "runtime/mutexLocker.hpp"
 
 namespace metaspace {
@@ -208,6 +209,42 @@ VirtualSpaceList* VirtualSpaceList::vslist_class() {
 
 VirtualSpaceList* VirtualSpaceList::vslist_nonclass() {
   return MetaspaceContext::context_nonclass() == nullptr ? nullptr : MetaspaceContext::context_nonclass()->vslist();
+}
+
+bool VirtualSpaceList::persist_for_checkpoint(const char *filename) {
+  size_t granule_size = Settings::commit_granule_bytes();
+
+  VirtualSpaceNode* vsn = _first_node;
+  size_t ranges = 0;
+  while (vsn != NULL) {
+    ranges += vsn->count_commit_ranges();
+    vsn = vsn->next();
+  }
+
+  crac::MemoryPersister persister(ranges);
+  if (!persister.open(filename, "VirtualSpaceList")) {
+    return false;
+  }
+  vsn = _first_node;
+  while (vsn != NULL) {
+    ranges += vsn->persist_for_checkpoint(persister);
+    vsn = vsn->next();
+  }
+  return true;
+}
+
+void VirtualSpaceList::load_on_restore(const char *filename) {
+  size_t granule_size = Settings::commit_granule_bytes();
+
+  crac::MemoryLoader loader;
+  if (!loader.open(filename, "VirtualSpaceList")) {
+    fatal("Cannot open persisted virtual space list %s", filename);
+  }
+  VirtualSpaceNode* vsn = _first_node;
+  while (vsn != NULL) {
+    vsn->load_on_restore(loader);
+    vsn = vsn->next();
+  }
 }
 
 } // namespace metaspace

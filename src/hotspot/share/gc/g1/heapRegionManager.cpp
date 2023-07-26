@@ -864,12 +864,7 @@ bool HeapRegionManager::persist_for_checkpoint() {
 }
 
 bool HeapRegionManager::load_on_restore() {
-  size_t non_null = 0;
-  for (size_t i = 0; i < _regions.length(); ++i) {
-    if (_regions.get_by_index(i) != nullptr) ++non_null;
-  }
-
-  crac::MemoryLoader loader(non_null);
+  crac::MemoryLoader loader;
   if (!loader.open("heap_regions.img", "GCGC")) {
     return false;
   }

@@ -33,6 +33,7 @@
 #include "memory/metaspace/metaspaceSettings.hpp"
 #include "memory/metaspace/rootChunkArea.hpp"
 #include "memory/virtualspace.hpp"
+#include "runtime/crac.hpp"
 #include "utilities/bitMap.hpp"
 #include "utilities/debug.hpp"
 #include "utilities/globalDefinitions.hpp"
@@ -254,6 +255,13 @@ public:
   //// List stuff ////
   VirtualSpaceNode* next() const        { return _next; }
   void set_next(VirtualSpaceNode* vsn)  { _next = vsn; }
+
+  // Calculates number of continuous ranges of ones/zeroes in commit mask,
+  // e.g. for 0000001110001 it would return 4
+  size_t count_commit_ranges();
+
+  bool persist_for_checkpoint(crac::MemoryPersister &persister);
+  void load_on_restore(crac::MemoryLoader &loader);
 
   /// Debug stuff ////
 

@@ -61,15 +61,19 @@ public:
     size_t _index_begin, _index_end;
     struct record *_index;
 
-    MemoryPersisterBase(size_t slots);
+    MemoryPersisterBase(): _fd(-1), _slots(0), _index_curr(0),
+      _index_begin(0), _index_end(0), _index(NULL) {}
     ~MemoryPersisterBase();
 
     bool open(bool loading, const char *filename);
+    void allocate_index(size_t slots);
   };
 
   class MemoryPersister: protected MemoryPersisterBase {
   public:
-    MemoryPersister(size_t slots): MemoryPersisterBase(slots) {}
+    MemoryPersister(size_t slots) {
+      allocate_index(slots);
+    }
     ~MemoryPersister();
 
     // not using constructor to allow error
@@ -85,8 +89,6 @@ public:
 
   class MemoryLoader: protected MemoryPersisterBase {
   public:
-    MemoryLoader(size_t slots): MemoryPersisterBase(slots) {}
-
     bool open(const char *filename, const char type[16]);
 
     bool load(void *addr, size_t expected_length, size_t mapped_length, bool executable);

@@ -1904,7 +1904,7 @@ bool CodeCache::persist_for_checkpoint() {
 }
 
 void CodeCache::load_on_restore() {
-  crac::MemoryLoader loader(3 * _heaps->length());
+  crac::MemoryLoader loader;
   if (!loader.open(CODECACHE_IMG, CODECACHE_TYPE)) {
     fatal("Could not open " CODECACHE_IMG);
   }

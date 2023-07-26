@@ -25,6 +25,7 @@
 #include "gc/shared/collectedHeap.hpp"
 #include "jvm.h"
 #include "memory/universe.hpp"
+#include "memory/metaspace/virtualSpaceList.hpp"
 #include "perfMemory_linux.hpp"
 #include "runtime/crac_structs.hpp"
 #include "runtime/crac.hpp"
@@ -360,6 +361,16 @@ bool VM_Crac::memory_checkpoint() {
     if (!Universe::heap()->persist_for_checkpoint()) {
       return false;
     }
+    // FIXME: revert on failure. The problem is that if the persist happens partially
+    // we would need to map any persisted chunks again.
+    metaspace::VirtualSpaceList *vsc = metaspace::VirtualSpaceList::vslist_class();
+    if (vsc != NULL && !vsc->persist_for_checkpoint("vslist_class.img")) {
+      fatal("Cannot persist class virtual space list");
+    }
+    metaspace::VirtualSpaceList *vsn = metaspace::VirtualSpaceList::vslist_nonclass();
+    if (vsn != NULL && !vsn->persist_for_checkpoint("vslist_nonclass.img")) {
+      fatal("Cannot persist non-class virtual space list");
+    }
   }
   return PerfMemoryLinux::checkpoint(CRaCCheckpointTo);
 }
@@ -367,6 +378,15 @@ bool VM_Crac::memory_checkpoint() {
 void VM_Crac::memory_restore() {
   if (CRPersistMemory) {
     Universe::heap()->load_on_restore();
+    metaspace::VirtualSpaceList *vsc = metaspace::VirtualSpaceList::vslist_class();
+    if (vsc != NULL) {
+      vsc->load_on_restore("vslist_class.img");
+    }
+    metaspace::VirtualSpaceList *vsn = metaspace::VirtualSpaceList::vslist_nonclass();
+    if (vsn != NULL) {
+      vsn->load_on_restore("vslist_nonclass.img");
+    }
+
   }
   PerfMemoryLinux::restore();
 }

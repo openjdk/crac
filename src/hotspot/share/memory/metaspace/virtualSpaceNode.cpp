@@ -46,6 +46,7 @@
 #include "sanitizers/leak.hpp"
 #include "services/memTracker.hpp"
 #include "utilities/align.hpp"
+#include "utilities/bitMap.inline.hpp"
 #include "utilities/debug.hpp"
 #include "utilities/globalDefinitions.hpp"
 #include "utilities/ostream.hpp"
@@ -447,5 +448,68 @@ void VirtualSpaceNode::verify_locked() const {
 }
 
 #endif
+
+size_t VirtualSpaceNode::count_commit_ranges() {
+  size_t count = 0;
+  bool flip = _commit_mask.at(0);
+  size_t index = 0;
+  while (index < _commit_mask.size()) {
+    ++count;
+    if (flip) {
+      index = _commit_mask.get_next_zero_offset(index);
+    } else {
+      index = _commit_mask.get_next_one_offset(index);
+    }
+    flip = !flip;
+  }
+  return count;
+}
+
+bool VirtualSpaceNode::persist_for_checkpoint(crac::MemoryPersister &persister) {
+  size_t granule_size = Settings::commit_granule_bytes();
+  bool flip = _commit_mask.at(0);
+  size_t index = 0;
+  while (index < _commit_mask.size()) {
+    size_t next;
+    if (flip) {
+      next = _commit_mask.get_next_zero_offset(index);
+      size_t length = (next - index) * granule_size;
+      if (!persister.store((char *) _base + index * granule_size, length, length)) {
+        return false;
+      }
+    } else {
+      next = _commit_mask.get_next_one_offset(index);
+      if (!persister.store_gap((char *) _base + index * granule_size, (next - index) * granule_size)) {
+        return false;
+      }
+    }
+    flip = !flip;
+    index = next;
+  }
+  return true;
+}
+
+void VirtualSpaceNode::load_on_restore(crac::MemoryLoader &loader) {
+  size_t granule_size = Settings::commit_granule_bytes();
+  bool flip = _commit_mask.at(0);
+  size_t index = 0;
+  while (index < _commit_mask.size()) {
+    size_t next;
+    if (flip) {
+      next = _commit_mask.get_next_zero_offset(index);
+      size_t length = (next - index) * granule_size;
+      if (!loader.load((char *) _base + index * granule_size, length, length, false)) {
+        fatal("Cannot load committed virtual space node");
+      }
+    } else {
+      next = _commit_mask.get_next_one_offset(index);
+      if (!loader.load_gap((char *) _base + index * granule_size, (next - index) * granule_size)) {
+        fatal("Cannot map uncommitted virtual space node");
+      }
+    }
+    flip = !flip;
+    index = next;
+  }
+}
 
 } // namespace metaspace

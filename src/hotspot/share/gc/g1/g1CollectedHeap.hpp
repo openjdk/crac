@@ -45,6 +45,7 @@
 #include "gc/g1/g1NUMA.hpp"
 #include "gc/g1/g1RedirtyCardsQueue.hpp"
 #include "gc/g1/g1SurvivorRegions.hpp"
+#include "gc/g1/g1UncommitRegionTask.hpp"
 #include "gc/g1/heapRegionManager.hpp"
 #include "gc/g1/heapRegionSet.hpp"
 #include "gc/shared/barrierSet.hpp"
@@ -1144,6 +1145,10 @@ public:
   // Perform a collection of the heap with the given cause.
   // Returns whether this collection actually executed.
   bool try_collect(GCCause::Cause cause);
+
+  virtual void wait_for_collection_finish() {
+    G1UncommitRegionTask::wait_if_active();
+  }
 
   // True iff an evacuation has failed in the most-recent collection.
   inline bool evacuation_failed() const;

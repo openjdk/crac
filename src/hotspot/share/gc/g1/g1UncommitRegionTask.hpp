@@ -26,6 +26,7 @@
 #define SHARE_GC_G1_G1UNCOMMITREGIONTASK_HPP
 
 #include "gc/g1/g1ServiceThread.hpp"
+#include "runtime/semaphore.hpp"
 #include "utilities/globalDefinitions.hpp"
 #include "utilities/ticks.hpp"
 
@@ -35,7 +36,7 @@ class G1UncommitRegionTask : public G1ServiceTask {
   // is short, while still making reasonable progress.
   static const uint UncommitSizeLimit = 128 * M;
   // Initial delay in milliseconds after GC before the regions are uncommitted.
-  static const uint UncommitInitialDelayMs = 100;
+  static const uint UncommitInitialDelayMs = 10*1000; // FIXME: for reproducibility: 10*1000
   // The delay between two uncommit task executions.
   static const uint UncommitTaskDelayMs = 10;
 

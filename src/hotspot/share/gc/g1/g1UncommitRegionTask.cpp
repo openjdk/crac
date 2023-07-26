@@ -27,6 +27,7 @@
 #include "gc/g1/g1UncommitRegionTask.hpp"
 #include "gc/shared/suspendibleThreadSet.hpp"
 #include "runtime/globals.hpp"
+#include "runtime/thread.inline.hpp"
 #include "utilities/ticks.hpp"
 
 G1UncommitRegionTask* G1UncommitRegionTask::_instance = NULL;
@@ -136,6 +137,13 @@ void G1UncommitRegionTask::execute() {
 }
 
 void G1UncommitRegionTask::_wait_if_active() {
+  // Not valid: assert_at_safepoint();
+  assert(Thread::current_or_null() != NULL, "no current thread");
+  // Not valid: assert(Thread::current()->is_VM_thread(), "");
+  assert(Thread::current()->is_active_Java_thread(), "unexpected thread type");
+  assert(strcmp(Thread::current()->name(), "main") == 0, "unexpected thread");
+  assert(Thread::current()->as_Java_thread()->thread_state() == _thread_in_vm, "unexpected thread state");
+
   while (_active) {
     _active_sem.wait();
   }

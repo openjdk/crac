@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2021, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2021, 2023, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -36,7 +36,15 @@ final class XmlSelection extends XmlInput {
         for (XmlOption option : getOptions()) {
             sj.add(option.getName());
         }
-        return getName() + "=" + sj.toString();
+        StringBuilder sb = new StringBuilder();
+        sb.append(getName());
+        sb.append("=");
+        sb.append(sj.toString());
+        XmlOption selected = getSelected();
+        if (selected != null) {
+            sb.append("  (").append(selected.getName()).append(")");
+        }
+        return sb.toString();
     }
 
     @Override
@@ -113,6 +121,6 @@ final class XmlSelection extends XmlInput {
                 return optionElement;
             }
         }
-        return options.isEmpty() ? null : options.get(0);
+        return options.isEmpty() ? null : options.getFirst();
     }
 }

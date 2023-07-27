@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1999, 2019, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 1999, 2023, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -28,7 +28,7 @@
 #include "c1/c1_FrameMap.hpp"
 #include "code/stubs.hpp"
 #include "interpreter/interpreter.hpp"
-#include "memory/allocation.hpp"
+#include "memory/allStatic.hpp"
 #include "runtime/deoptimization.hpp"
 
 class StubAssembler;
@@ -190,6 +190,8 @@ class Runtime1: public AllStatic {
   static int  is_instance_of(oopDesc* mirror, oopDesc* obj);
 
   static void predicate_failed_trap(JavaThread* current);
+
+  static void check_abort_on_vm_exception(oopDesc* ex);
 
   static void print_statistics()                 PRODUCT_RETURN;
 };

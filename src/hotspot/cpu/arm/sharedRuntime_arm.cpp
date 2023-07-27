@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2008, 2021, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2008, 2023, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -28,6 +28,7 @@
 #include "code/icBuffer.hpp"
 #include "code/vtableStubs.hpp"
 #include "compiler/oopMap.hpp"
+#include "gc/shared/barrierSetAssembler.hpp"
 #include "interpreter/interpreter.hpp"
 #include "logging/log.hpp"
 #include "memory/resourceArea.hpp"
@@ -102,11 +103,11 @@ public:
   };
 
   // all regs but Rthread (R10), FP (R7 or R11), SP and PC
-  // (altFP_7_11 is the one amoung R7 and R11 which is not FP)
+  // (altFP_7_11 is the one among R7 and R11 which is not FP)
 #define SAVED_BASE_REGS (RegisterSet(R0, R6) | RegisterSet(R8, R9) | RegisterSet(R12) | R14 | altFP_7_11)
 
 
-  //  When LR may be live in the nmethod from which we are comming
+  //  When LR may be live in the nmethod from which we are coming
   //  then lr_saved is true, the return address is saved before the
   //  call to save_live_register by the caller and LR contains the
   //  live value.
@@ -255,7 +256,7 @@ int SharedRuntime::c_calling_convention(const BasicType *sig_bt,
                                         VMRegPair *regs,
                                         VMRegPair *regs2,
                                         int total_args_passed) {
-  assert(regs2 == NULL, "not needed on arm");
+  assert(regs2 == nullptr, "not needed on arm");
 
   int slot = 0;
   int ireg = 0;
@@ -366,7 +367,7 @@ int SharedRuntime::java_calling_convention(const BasicType *sig_bt,
                                            int total_args_passed) {
 #ifdef __SOFTFP__
   // soft float is the same as the C calling convention.
-  return c_calling_convention(sig_bt, regs, NULL, total_args_passed);
+  return c_calling_convention(sig_bt, regs, nullptr, total_args_passed);
 #endif // __SOFTFP__
   int slot = 0;
   int ireg = 0;
@@ -644,7 +645,6 @@ AdapterHandlerEntry* SharedRuntime::generate_i2c2i_adapters(MacroAssembler *masm
   address c2i_entry = __ pc();
   gen_c2i_adapter(masm, total_args_passed, comp_args_on_stack, sig_bt, regs, skip_fixup);
 
-  __ flush();
   return AdapterHandlerLibrary::new_entry(fingerprint, i2c_entry, c2i_entry, c2i_unverified_entry);
 }
 
@@ -750,8 +750,7 @@ nmethod* SharedRuntime::generate_native_wrapper(MacroAssembler* masm,
                                                 int compile_id,
                                                 BasicType* in_sig_bt,
                                                 VMRegPair* in_regs,
-                                                BasicType ret_type,
-                                                address critical_entry) {
+                                                BasicType ret_type) {
   if (method->is_method_handle_intrinsic()) {
     vmIntrinsics::ID iid = method->intrinsic_id();
     intptr_t start = (intptr_t)__ pc();
@@ -771,26 +770,23 @@ nmethod* SharedRuntime::generate_native_wrapper(MacroAssembler* masm,
                                        stack_slots / VMRegImpl::slots_per_word,
                                        in_ByteSize(-1),
                                        in_ByteSize(-1),
-                                       (OopMapSet*)NULL);
+                                       (OopMapSet*)nullptr);
   }
   // Arguments for JNI method include JNIEnv and Class if static
 
   // Usage of Rtemp should be OK since scratched by native call
 
-  bool is_static = method->is_static();
+  bool method_is_static = method->is_static();
 
   const int total_in_args = method->size_of_parameters();
-  int total_c_args = total_in_args + 1;
-  if (is_static) {
-    total_c_args++;
-  }
+  int total_c_args = total_in_args + (method_is_static ? 2 : 1);
 
   BasicType* out_sig_bt = NEW_RESOURCE_ARRAY(BasicType, total_c_args);
   VMRegPair* out_regs   = NEW_RESOURCE_ARRAY(VMRegPair, total_c_args);
 
   int argc = 0;
   out_sig_bt[argc++] = T_ADDRESS;
-  if (is_static) {
+  if (method_is_static) {
     out_sig_bt[argc++] = T_OBJECT;
   }
 
@@ -799,7 +795,7 @@ nmethod* SharedRuntime::generate_native_wrapper(MacroAssembler* masm,
     out_sig_bt[argc++] = in_sig_bt[i];
   }
 
-  int out_arg_slots = c_calling_convention(out_sig_bt, out_regs, NULL, total_c_args);
+  int out_arg_slots = c_calling_convention(out_sig_bt, out_regs, nullptr, total_c_args);
   int stack_slots = SharedRuntime::out_preserve_stack_slots() + out_arg_slots;
   // Since object arguments need to be wrapped, we must preserve space
   // for those object arguments which come in registers (GPR_PARAMS maximum)
@@ -862,11 +858,6 @@ nmethod* SharedRuntime::generate_native_wrapper(MacroAssembler* masm,
     assert(markWord::unlocked_value == 1, "adjust this code");
     __ tbz(Rtemp, exact_log2(markWord::unlocked_value), slow_case);
 
-    if (UseBiasedLocking) {
-      assert(is_power_of_2(markWord::biased_lock_bit_in_place), "adjust this code");
-      __ tbnz(Rtemp, exact_log2(markWord::biased_lock_bit_in_place), slow_case);
-    }
-
     __ bics(Rtemp, Rtemp, ~markWord::hash_mask_in_place);
     __ mov(R0, AsmOperand(Rtemp, lsr, markWord::hash_shift), ne);
     __ bx(LR, ne);
@@ -882,11 +873,15 @@ nmethod* SharedRuntime::generate_native_wrapper(MacroAssembler* masm,
   __ mov(FP, SP);
   __ sub_slow(SP, SP, stack_size - 2*wordSize);
 
+  BarrierSetAssembler* bs = BarrierSet::barrier_set()->barrier_set_assembler();
+  assert(bs != nullptr, "Sanity");
+  bs->nmethod_entry_barrier(masm);
+
   int frame_complete = __ pc() - start;
 
   OopMapSet* oop_maps = new OopMapSet();
   OopMap* map = new OopMap(stack_slots * 2, 0 /* arg_slots*/);
-  const int extra_args = is_static ? 2 : 1;
+  const int extra_args = method_is_static ? 2 : 1;
   int receiver_offset = -1;
   int fp_regs_in_arguments = 0;
 
@@ -909,7 +904,7 @@ nmethod* SharedRuntime::generate_native_wrapper(MacroAssembler* masm,
         int offset = oop_handle_offset * VMRegImpl::stack_slot_size;
         __ str(src->as_Register(), Address(SP, offset));
         map->set_oop(VMRegImpl::stack2reg(oop_handle_offset));
-        if ((i == 0) && (!is_static)) {
+        if ((i == 0) && (!method_is_static)) {
           receiver_offset = offset;
         }
         oop_handle_offset += VMRegImpl::slots_per_word;
@@ -1121,7 +1116,7 @@ nmethod* SharedRuntime::generate_native_wrapper(MacroAssembler* masm,
 
   // Get Klass mirror
   int klass_offset = -1;
-  if (is_static) {
+  if (method_is_static) {
     klass_offset = oop_handle_offset * VMRegImpl::stack_slot_size;
     __ mov_oop(Rtemp, JNIHandles::make_local(method->method_holder()->java_mirror()));
     __ add(c_rarg1, SP, klass_offset);
@@ -1151,46 +1146,48 @@ nmethod* SharedRuntime::generate_native_wrapper(MacroAssembler* masm,
   const Register disp_hdr    = altFP_7_11;
   const Register tmp         = R8;
 
-  Label slow_lock, slow_lock_biased, lock_done, fast_lock;
+  Label slow_lock, lock_done, fast_lock;
   if (method->is_synchronized()) {
     // The first argument is a handle to sync object (a class or an instance)
     __ ldr(sync_obj, Address(R1));
     // Remember the handle for the unlocking code
     __ mov(sync_handle, R1);
 
-    if(UseBiasedLocking) {
-      __ biased_locking_enter(sync_obj, tmp, disp_hdr/*scratched*/, false, Rtemp, lock_done, slow_lock_biased);
+    if (LockingMode == LM_LIGHTWEIGHT) {
+      log_trace(fastlock)("SharedRuntime lock fast");
+      __ fast_lock_2(sync_obj /* object */, disp_hdr /* t1 */, tmp /* t2 */, Rtemp /* t3 */,
+                     0x7 /* savemask */, slow_lock);
+      // Fall through to lock_done
+    } else if (LockingMode == LM_LEGACY) {
+      const Register mark = tmp;
+      // On MP platforms the next load could return a 'stale' value if the memory location has been modified by another thread.
+      // That would be acceptable as either CAS or slow case path is taken in that case
+
+      __ ldr(mark, Address(sync_obj, oopDesc::mark_offset_in_bytes()));
+      __ sub(disp_hdr, FP, lock_slot_fp_offset);
+      __ tst(mark, markWord::unlocked_value);
+      __ b(fast_lock, ne);
+
+      // Check for recursive lock
+      // See comments in InterpreterMacroAssembler::lock_object for
+      // explanations on the fast recursive locking check.
+      // Check independently the low bits and the distance to SP
+      // -1- test low 2 bits
+      __ movs(Rtemp, AsmOperand(mark, lsl, 30));
+      // -2- test (hdr - SP) if the low two bits are 0
+      __ sub(Rtemp, mark, SP, eq);
+      __ movs(Rtemp, AsmOperand(Rtemp, lsr, exact_log2(os::vm_page_size())), eq);
+      // If still 'eq' then recursive locking OK
+      // set to zero if recursive lock, set to non zero otherwise (see discussion in JDK-8267042)
+      __ str(Rtemp, Address(disp_hdr, BasicLock::displaced_header_offset_in_bytes()));
+      __ b(lock_done, eq);
+      __ b(slow_lock);
+
+      __ bind(fast_lock);
+      __ str(mark, Address(disp_hdr, BasicLock::displaced_header_offset_in_bytes()));
+
+      __ cas_for_lock_acquire(mark, disp_hdr, sync_obj, Rtemp, slow_lock);
     }
-
-    const Register mark = tmp;
-    // On MP platforms the next load could return a 'stale' value if the memory location has been modified by another thread.
-    // That would be acceptable as either CAS or slow case path is taken in that case
-
-    __ ldr(mark, Address(sync_obj, oopDesc::mark_offset_in_bytes()));
-    __ sub(disp_hdr, FP, lock_slot_fp_offset);
-    __ tst(mark, markWord::unlocked_value);
-    __ b(fast_lock, ne);
-
-    // Check for recursive lock
-    // See comments in InterpreterMacroAssembler::lock_object for
-    // explanations on the fast recursive locking check.
-    // Check independently the low bits and the distance to SP
-    // -1- test low 2 bits
-    __ movs(Rtemp, AsmOperand(mark, lsl, 30));
-    // -2- test (hdr - SP) if the low two bits are 0
-    __ sub(Rtemp, mark, SP, eq);
-    __ movs(Rtemp, AsmOperand(Rtemp, lsr, exact_log2(os::vm_page_size())), eq);
-    // If still 'eq' then recursive locking OK
-    // set to zero if recursive lock, set to non zero otherwise (see discussion in JDK-8267042)
-    __ str(Rtemp, Address(disp_hdr, BasicLock::displaced_header_offset_in_bytes()));
-    __ b(lock_done, eq);
-    __ b(slow_lock);
-
-    __ bind(fast_lock);
-    __ str(mark, Address(disp_hdr, BasicLock::displaced_header_offset_in_bytes()));
-
-    __ cas_for_lock_acquire(mark, disp_hdr, sync_obj, Rtemp, slow_lock);
-
     __ bind(lock_done);
   }
 
@@ -1220,7 +1217,9 @@ nmethod* SharedRuntime::generate_native_wrapper(MacroAssembler* masm,
   __ str_32(Rtemp, Address(Rthread, JavaThread::thread_state_offset()));
 
   // make sure the store is observed before reading the SafepointSynchronize state and further mem refs
-  __ membar(MacroAssembler::Membar_mask_bits(MacroAssembler::StoreLoad | MacroAssembler::StoreStore), Rtemp);
+  if (!UseSystemMemoryBarrier) {
+    __ membar(MacroAssembler::Membar_mask_bits(MacroAssembler::StoreLoad | MacroAssembler::StoreStore), Rtemp);
+  }
 
   __ safepoint_poll(R2, call_safepoint_runtime);
   __ ldr_u32(R3, Address(Rthread, JavaThread::suspend_flags_offset()));
@@ -1241,20 +1240,21 @@ nmethod* SharedRuntime::generate_native_wrapper(MacroAssembler* masm,
 
   Label slow_unlock, unlock_done;
   if (method->is_synchronized()) {
-    __ ldr(sync_obj, Address(sync_handle));
+    if (LockingMode == LM_LIGHTWEIGHT) {
+      log_trace(fastlock)("SharedRuntime unlock fast");
+      __ fast_unlock_2(sync_obj, R2 /* t1 */, tmp /* t2 */, Rtemp /* t3 */,
+                       7 /* savemask */, slow_unlock);
+      // Fall through
+    } else if (LockingMode == LM_LEGACY) {
+      // See C1_MacroAssembler::unlock_object() for more comments
+      __ ldr(sync_obj, Address(sync_handle));
 
-    if(UseBiasedLocking) {
-      __ biased_locking_exit(sync_obj, Rtemp, unlock_done);
-      // disp_hdr may not have been saved on entry with biased locking
-      __ sub(disp_hdr, FP, lock_slot_fp_offset);
+      // See C1_MacroAssembler::unlock_object() for more comments
+      __ ldr(R2, Address(disp_hdr, BasicLock::displaced_header_offset_in_bytes()));
+      __ cbz(R2, unlock_done);
+
+      __ cas_for_lock_release(disp_hdr, R2, sync_obj, Rtemp, slow_unlock);
     }
-
-    // See C1_MacroAssembler::unlock_object() for more comments
-    __ ldr(R2, Address(disp_hdr, BasicLock::displaced_header_offset_in_bytes()));
-    __ cbz(R2, unlock_done);
-
-    __ cas_for_lock_release(disp_hdr, R2, sync_obj, Rtemp, slow_unlock);
-
     __ bind(unlock_done);
   }
 
@@ -1262,7 +1262,7 @@ nmethod* SharedRuntime::generate_native_wrapper(MacroAssembler* masm,
   __ ldr(LR, Address(Rthread, JavaThread::active_handles_offset()));
   __ reset_last_Java_frame(Rtemp); // sets Rtemp to 0 on 32-bit ARM
 
-  __ str_32(Rtemp, Address(LR, JNIHandleBlock::top_offset_in_bytes()));
+  __ str_32(Rtemp, Address(LR, JNIHandleBlock::top_offset()));
   if (CheckJNICalls) {
     __ str(__ zero_register(Rtemp), Address(Rthread, JavaThread::pending_jni_exception_check_fn_offset()));
   }
@@ -1304,11 +1304,6 @@ nmethod* SharedRuntime::generate_native_wrapper(MacroAssembler* masm,
 
   if (method->is_synchronized()) {
     // Locking slow case
-    if(UseBiasedLocking) {
-      __ bind(slow_lock_biased);
-      __ sub(disp_hdr, FP, lock_slot_fp_offset);
-    }
-
     __ bind(slow_lock);
 
     push_param_registers(masm, fp_regs_in_arguments);
@@ -1352,7 +1347,7 @@ nmethod* SharedRuntime::generate_native_wrapper(MacroAssembler* masm,
                                      vep_offset,
                                      frame_complete,
                                      stack_slots / VMRegImpl::slots_per_word,
-                                     in_ByteSize(is_static ? klass_offset : receiver_offset),
+                                     in_ByteSize(method_is_static ? klass_offset : receiver_offset),
                                      in_ByteSize(lock_slot_offset * VMRegImpl::stack_slot_size),
                                      oop_maps);
 }
@@ -1416,7 +1411,7 @@ void SharedRuntime::generate_deopt_blob() {
   // exception_in_tls_offset entry point.
   __ str(Rexception_obj, Address(Rthread, JavaThread::exception_oop_offset()));
   __ str(Rexception_pc, Address(Rthread, JavaThread::exception_pc_offset()));
-  // Force return value to NULL to avoid confusing the escape analysis
+  // Force return value to null to avoid confusing the escape analysis
   // logic. Everything is dead here anyway.
   __ mov(R0, 0);
 
@@ -1455,7 +1450,7 @@ void SharedRuntime::generate_deopt_blob() {
   __ mov(Rublock, R0);
 
   // Reload Rkind from the UnrollBlock (might have changed)
-  __ ldr_s32(Rkind, Address(Rublock, Deoptimization::UnrollBlock::unpack_kind_offset_in_bytes()));
+  __ ldr_s32(Rkind, Address(Rublock, Deoptimization::UnrollBlock::unpack_kind_offset()));
   Label noException;
   __ cmp_32(Rkind, Deoptimization::Unpack_exception);   // Was exception pending?
   __ b(noException, ne);
@@ -1489,9 +1484,9 @@ void SharedRuntime::generate_deopt_blob() {
   __ add(SP, SP, RegisterSaver::reg_save_size * wordSize);
 
   // Set initial stack state before pushing interpreter frames
-  __ ldr_s32(Rtemp, Address(Rublock, Deoptimization::UnrollBlock::size_of_deoptimized_frame_offset_in_bytes()));
-  __ ldr(R2, Address(Rublock, Deoptimization::UnrollBlock::frame_pcs_offset_in_bytes()));
-  __ ldr(R3, Address(Rublock, Deoptimization::UnrollBlock::frame_sizes_offset_in_bytes()));
+  __ ldr_s32(Rtemp, Address(Rublock, Deoptimization::UnrollBlock::size_of_deoptimized_frame_offset()));
+  __ ldr(R2, Address(Rublock, Deoptimization::UnrollBlock::frame_pcs_offset()));
+  __ ldr(R3, Address(Rublock, Deoptimization::UnrollBlock::frame_sizes_offset()));
 
   __ add(SP, SP, Rtemp);
 
@@ -1507,11 +1502,11 @@ void SharedRuntime::generate_deopt_blob() {
   // propagated to the caller of the deoptimized method. Need to get the pc
   // from the caller in LR and restore FP.
   __ ldr(LR, Address(R2, 0));
-  __ ldr(FP, Address(Rublock, Deoptimization::UnrollBlock::initial_info_offset_in_bytes()));
-  __ ldr_s32(R8, Address(Rublock, Deoptimization::UnrollBlock::total_frame_sizes_offset_in_bytes()));
+  __ ldr(FP, Address(Rublock, Deoptimization::UnrollBlock::initial_info_offset()));
+  __ ldr_s32(R8, Address(Rublock, Deoptimization::UnrollBlock::total_frame_sizes_offset()));
   __ arm_stack_overflow_check(R8, Rtemp);
 #endif
-  __ ldr_s32(R8, Address(Rublock, Deoptimization::UnrollBlock::number_of_frames_offset_in_bytes()));
+  __ ldr_s32(R8, Address(Rublock, Deoptimization::UnrollBlock::number_of_frames_offset()));
 
   // Pick up the initial fp we should save
   // XXX Note: was ldr(FP, Address(FP));
@@ -1523,9 +1518,9 @@ void SharedRuntime::generate_deopt_blob() {
   // Hence, ldr(FP, Address(FP)) is probably not correct. For x86,
   // Deoptimization::fetch_unroll_info computes the right FP value and
   // stores it in Rublock.initial_info. This has been activated for ARM.
-  __ ldr(FP, Address(Rublock, Deoptimization::UnrollBlock::initial_info_offset_in_bytes()));
+  __ ldr(FP, Address(Rublock, Deoptimization::UnrollBlock::initial_info_offset()));
 
-  __ ldr_s32(Rtemp, Address(Rublock, Deoptimization::UnrollBlock::caller_adjustment_offset_in_bytes()));
+  __ ldr_s32(Rtemp, Address(Rublock, Deoptimization::UnrollBlock::caller_adjustment_offset()));
   __ mov(Rsender, SP);
   __ sub(SP, SP, Rtemp);
 
@@ -1566,7 +1561,7 @@ void SharedRuntime::generate_deopt_blob() {
 #ifdef ASSERT
   // Reload Rkind from the UnrollBlock and check that it was not overwritten (Rkind is not callee-saved)
   { Label L;
-    __ ldr_s32(Rtemp, Address(Rublock, Deoptimization::UnrollBlock::unpack_kind_offset_in_bytes()));
+    __ ldr_s32(Rtemp, Address(Rublock, Deoptimization::UnrollBlock::unpack_kind_offset()));
     __ cmp_32(Rkind, Rtemp);
     __ b(L, eq);
     __ stop("Rkind was overwritten");
@@ -1625,13 +1620,11 @@ void SharedRuntime::generate_uncommon_trap_blob() {
   ResourceMark rm;
 
   // setup code generation tools
-  int pad = VerifyThread ? 512 : 0;
 #ifdef _LP64
-  CodeBuffer buffer("uncommon_trap_blob", 2700+pad, 512);
+  CodeBuffer buffer("uncommon_trap_blob", 2700, 512);
 #else
-  // Measured 8/7/03 at 660 in 32bit debug build (no VerifyThread)
-  // Measured 8/7/03 at 1028 in 32bit debug build (VerifyThread)
-  CodeBuffer buffer("uncommon_trap_blob", 2000+pad, 512);
+  // Measured 8/7/03 at 660 in 32bit debug build
+  CodeBuffer buffer("uncommon_trap_blob", 2000, 512);
 #endif
   // bypassed when code generation useless
   MacroAssembler* masm               = new MacroAssembler(&buffer);
@@ -1678,7 +1671,7 @@ void SharedRuntime::generate_uncommon_trap_blob() {
 
 #ifdef ASSERT
   { Label L;
-    __ ldr_s32(Rtemp, Address(Rublock, Deoptimization::UnrollBlock::unpack_kind_offset_in_bytes()));
+    __ ldr_s32(Rtemp, Address(Rublock, Deoptimization::UnrollBlock::unpack_kind_offset()));
     __ cmp_32(Rtemp, Deoptimization::Unpack_uncommon_trap);
     __ b(L, eq);
     __ stop("SharedRuntime::generate_uncommon_trap_blob: expected Unpack_uncommon_trap");
@@ -1688,9 +1681,9 @@ void SharedRuntime::generate_uncommon_trap_blob() {
 
 
   // Set initial stack state before pushing interpreter frames
-  __ ldr_s32(Rtemp, Address(Rublock, Deoptimization::UnrollBlock::size_of_deoptimized_frame_offset_in_bytes()));
-  __ ldr(R2, Address(Rublock, Deoptimization::UnrollBlock::frame_pcs_offset_in_bytes()));
-  __ ldr(R3, Address(Rublock, Deoptimization::UnrollBlock::frame_sizes_offset_in_bytes()));
+  __ ldr_s32(Rtemp, Address(Rublock, Deoptimization::UnrollBlock::size_of_deoptimized_frame_offset()));
+  __ ldr(R2, Address(Rublock, Deoptimization::UnrollBlock::frame_pcs_offset()));
+  __ ldr(R3, Address(Rublock, Deoptimization::UnrollBlock::frame_sizes_offset()));
 
   __ add(SP, SP, Rtemp);
 
@@ -1706,16 +1699,16 @@ void SharedRuntime::generate_uncommon_trap_blob() {
   // propagated to the caller of the deoptimized method. Need to get the pc
   // from the caller in LR and restore FP.
   __ ldr(LR, Address(R2, 0));
-  __ ldr(FP, Address(Rublock, Deoptimization::UnrollBlock::initial_info_offset_in_bytes()));
-  __ ldr_s32(R8, Address(Rublock, Deoptimization::UnrollBlock::total_frame_sizes_offset_in_bytes()));
+  __ ldr(FP, Address(Rublock, Deoptimization::UnrollBlock::initial_info_offset()));
+  __ ldr_s32(R8, Address(Rublock, Deoptimization::UnrollBlock::total_frame_sizes_offset()));
   __ arm_stack_overflow_check(R8, Rtemp);
 #endif
-  __ ldr_s32(R8, Address(Rublock, Deoptimization::UnrollBlock::number_of_frames_offset_in_bytes()));
-  __ ldr_s32(Rtemp, Address(Rublock, Deoptimization::UnrollBlock::caller_adjustment_offset_in_bytes()));
+  __ ldr_s32(R8, Address(Rublock, Deoptimization::UnrollBlock::number_of_frames_offset()));
+  __ ldr_s32(Rtemp, Address(Rublock, Deoptimization::UnrollBlock::caller_adjustment_offset()));
   __ mov(Rsender, SP);
   __ sub(SP, SP, Rtemp);
   //  __ ldr(FP, Address(FP));
-  __ ldr(FP, Address(Rublock, Deoptimization::UnrollBlock::initial_info_offset_in_bytes()));
+  __ ldr(FP, Address(Rublock, Deoptimization::UnrollBlock::initial_info_offset()));
 
   // Push interpreter frames in a loop
   Label loop;
@@ -1753,7 +1746,7 @@ void SharedRuntime::generate_uncommon_trap_blob() {
   __ pop(RegisterSet(FP) | RegisterSet(PC));
 
   masm->flush();
-  _uncommon_trap_blob = UncommonTrapBlob::create(&buffer, NULL, 2 /* LR+FP */);
+  _uncommon_trap_blob = UncommonTrapBlob::create(&buffer, nullptr, 2 /* LR+FP */);
 }
 
 #endif // COMPILER2
@@ -1765,7 +1758,7 @@ void SharedRuntime::generate_uncommon_trap_blob() {
 // a safepoint.
 //
 SafepointBlob* SharedRuntime::generate_handler_blob(address call_ptr, int poll_type) {
-  assert(StubRoutines::forward_exception_entry() != NULL, "must be generated before");
+  assert(StubRoutines::forward_exception_entry() != nullptr, "must be generated before");
 
   ResourceMark rm;
   CodeBuffer buffer("handler_blob", 256, 256);
@@ -1835,7 +1828,7 @@ SafepointBlob* SharedRuntime::generate_handler_blob(address call_ptr, int poll_t
 }
 
 RuntimeStub* SharedRuntime::generate_resolve_blob(address destination, const char* name) {
-  assert(StubRoutines::forward_exception_entry() != NULL, "must be generated before");
+  assert(StubRoutines::forward_exception_entry() != nullptr, "must be generated before");
 
   ResourceMark rm;
   CodeBuffer buffer(name, 1000, 512);
@@ -1891,13 +1884,3 @@ RuntimeStub* SharedRuntime::generate_resolve_blob(address destination, const cha
 
   return RuntimeStub::new_runtime_stub(name, &buffer, frame_complete, frame_size_words, oop_maps, true);
 }
-
-#ifdef COMPILER2
-RuntimeStub* SharedRuntime::make_native_invoker(address call_target,
-                                                int shadow_space_bytes,
-                                                const GrowableArray<VMReg>& input_registers,
-                                                const GrowableArray<VMReg>& output_registers) {
-  Unimplemented();
-  return nullptr;
-}
-#endif

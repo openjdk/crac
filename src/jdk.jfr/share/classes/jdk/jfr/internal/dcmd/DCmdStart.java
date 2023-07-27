@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012, 2021, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2012, 2023, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -24,7 +24,6 @@
  */
 package jdk.jfr.internal.dcmd;
 
-import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.InvalidPathException;
@@ -32,7 +31,6 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.text.ParseException;
 import java.time.Duration;
-import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -42,13 +40,18 @@ import java.util.Set;
 import jdk.jfr.FlightRecorder;
 import jdk.jfr.Recording;
 import jdk.jfr.internal.JVM;
+import jdk.jfr.internal.LogLevel;
+import jdk.jfr.internal.LogTag;
+import jdk.jfr.internal.Logger;
 import jdk.jfr.internal.OldObjectSample;
 import jdk.jfr.internal.PlatformRecording;
 import jdk.jfr.internal.PrivateAccess;
 import jdk.jfr.internal.SecuritySupport.SafePath;
+import jdk.jfr.internal.SecuritySupport;
 import jdk.jfr.internal.Type;
 import jdk.jfr.internal.jfc.JFC;
 import jdk.jfr.internal.jfc.model.JFCModel;
+import jdk.jfr.internal.jfc.model.JFCModelException;
 import jdk.jfr.internal.jfc.model.XmlInput;
 
 /**
@@ -57,8 +60,6 @@ import jdk.jfr.internal.jfc.model.XmlInput;
  */
 //Instantiated by native
 final class DCmdStart extends AbstractDCmd {
-
-    private Object source;
 
     @Override
     public void execute(ArgumentParser parser) throws DCmdException {
@@ -76,7 +77,7 @@ final class DCmdStart extends AbstractDCmd {
         Long delay = parser.getOption("delay");
         Long duration = parser.getOption("duration");
         Boolean disk = parser.getOption("disk");
-        String path = parser.getOption("filename");
+        String path = expandFilename(parser.getOption("filename"));
         Long maxAge = parser.getOption("maxage");
         Long maxSize = parser.getOption("maxsize");
         Long flush = parser.getOption("flush-interval");
@@ -138,11 +139,24 @@ final class DCmdStart extends AbstractDCmd {
         }
 
         if (disk != null) {
+            if (!disk) {
+                if (maxAge != null) {
+                    logWarning("Option maxage has no effect with disk=false.");
+                }
+                if (maxSize != null) {
+                    logWarning("Option maxsize has no effect with disk=false.");
+                }
+            }
             recording.setToDisk(disk.booleanValue());
         }
 
         recording.setSettings(s);
         SafePath safePath = null;
+
+        // Generate dump filename if user has specified a time-bound recording
+        if (duration != null && path == null) {
+            path = resolvePath(recording, null).toString();
+        }
 
         if (path != null) {
             try {
@@ -223,26 +237,27 @@ final class DCmdStart extends AbstractDCmd {
     }
 
     private LinkedHashMap<String, String> configureStandard(String[] settings) throws DCmdException {
-        LinkedHashMap<String, String> s = new LinkedHashMap<>();
+        LinkedHashMap<String, String> s = LinkedHashMap.newLinkedHashMap(settings.length);
         for (String configName : settings) {
             try {
                 s.putAll(JFC.createKnown(configName).getSettings());
-            } catch(FileNotFoundException e) {
-                throw new DCmdException("Could not find settings file'" + configName + "'", e);
-            } catch (IOException | ParseException e) {
-                throw new DCmdException("Could not parse settings file '" + settings[0] + "'", e);
+            } catch (InvalidPathException | IOException | ParseException e) {
+                throw new DCmdException(JFC.formatException("Could not", e, configName), e);
             }
         }
         return s;
     }
 
     private LinkedHashMap<String, String> configureExtended(String[] settings, ArgumentParser parser) throws DCmdException {
-        List<SafePath> paths = new ArrayList<>();
+        JFCModel model = new JFCModel(l -> logWarning(l));
         for (String setting : settings) {
-            paths.add(JFC.createSafePath(setting));
+            try {
+                model.parse(JFC.createSafePath(setting));
+            } catch (InvalidPathException | IOException | JFCModelException | ParseException e) {
+                throw new DCmdException(JFC.formatException("Could not", e, setting), e);
+            }
         }
         try {
-            JFCModel model = new JFCModel(paths);
             Set<String> jfcOptions = new HashSet<>();
             for (XmlInput input : model.getInputs()) {
                 jfcOptions.add(input.getName());
@@ -264,13 +279,9 @@ final class DCmdStart extends AbstractDCmd {
                 }
             }
             return model.getSettings();
-         } catch (IllegalArgumentException iae) {
+        } catch (IllegalArgumentException iae) {
              throw new DCmdException(iae.getMessage()); // spelling error, invalid value
-         } catch (FileNotFoundException ioe) {
-             throw new DCmdException("Could not find settings file'" + settings[0] + "'", ioe);
-         } catch (IOException | ParseException e) {
-             throw new DCmdException("Could not parse settings file '" + settings[0] + "'", e);
-         }
+        }
     }
 
     // Instruments JDK-events on class load to reduce startup time
@@ -278,12 +289,11 @@ final class DCmdStart extends AbstractDCmd {
         if (!hasJDKEvents(settings)) {
             return;
         }
-        JVM jvm = JVM.getJVM();
         try {
-            jvm.setForceInstrumentation(true);
+            JVM.setForceInstrumentation(true);
             FlightRecorder.getFlightRecorder();
         } finally {
-            jvm.setForceInstrumentation(false);
+            JVM.setForceInstrumentation(false);
         }
     }
 
@@ -339,6 +349,10 @@ final class DCmdStart extends AbstractDCmd {
                                  generated from the PID and the current date in the specified
                                  directory. (STRING, no default value)
 
+                                 Note: If a filename is given, '%%p' in the filename will be
+                                 replaced by the PID, and '%%t' will be replaced by the time in
+                                 'yyyy_MM_dd_HH_mm_ss' format.
+
                  maxage          (Optional) Maximum time to keep the recorded data on disk. This
                                  parameter is valid only when the disk parameter is set to true.
                                  Note 0s means forever. (INTEGER followed by 's' for seconds 'm'
@@ -362,7 +376,7 @@ final class DCmdStart extends AbstractDCmd {
                                  Turn on this flag only when you have an application that you
                                  suspect has a memory leak. If the settings parameter is set to
                                  'profile', then the information collected includes the stack
-                                 trace from where the potential leaking object wasallocated.
+                                 trace from where the potential leaking object was allocated.
                                  (BOOLEAN, false)
 
                  settings        (Optional) Name of the settings file that identifies which events
@@ -392,7 +406,7 @@ final class DCmdStart extends AbstractDCmd {
                take  precedence. The whitespace character can be omitted for timespan values,
                i.e. 20s. For more information about the settings syntax, see Javadoc of the
                jdk.jfr package.
-
+               %s
                Options must be specified using the <key> or <key>=<value> syntax.
 
                Example usage:
@@ -412,7 +426,28 @@ final class DCmdStart extends AbstractDCmd {
 
                Note, if the default event settings are modified, overhead may exceed 1%%.
 
-               """.formatted(exampleDirectory()).lines().toArray(String[]::new);
+               """.formatted(jfcOptions(), exampleDirectory()).lines().toArray(String[]::new);
+    }
+
+    private static String jfcOptions() {
+        try {
+            StringBuilder sb = new StringBuilder();
+            for (SafePath s : SecuritySupport.getPredefinedJFCFiles()) {
+                String name = JFC.nameFromPath(s.toPath());
+                JFCModel model = JFCModel.create(s, l -> {});
+                sb.append('\n');
+                sb.append("Options for ").append(name).append(":\n");
+                sb.append('\n');
+                for (XmlInput input : model.getInputs()) {
+                    sb.append("  ").append(input.getOptionSyntax()).append('\n');
+                    sb.append('\n');
+                }
+            }
+            return sb.toString();
+        } catch (IOException | JFCModelException | ParseException  e) {
+            Logger.log(LogTag.JFR_DCMD, LogLevel.DEBUG, "Could not list .jfc options for JFR.start. " + e.getMessage());
+            return "";
+        }
     }
 
     @Override
@@ -420,37 +455,37 @@ final class DCmdStart extends AbstractDCmd {
         return new Argument[] {
             new Argument("name",
                 "Name that can be used to identify recording, e.g. \\\"My Recording\\\"",
-                "STRING", false, null, false),
+                "STRING", false, true, null, false),
             new Argument("settings",
                 "Settings file(s), e.g. profile or default. See JAVA_HOME/lib/jfr",
-                "STRING SET", false, "deafult.jfc", true),
+                "STRING SET", false, true, "default.jfc", true),
             new Argument("delay",
                 "Delay recording start with (s)econds, (m)inutes), (h)ours), or (d)ays, e.g. 5h.",
-                "NANOTIME", false, "0s", false),
+                "NANOTIME", false, true, "0s", false),
             new Argument("duration",
                 "Duration of recording in (s)econds, (m)inutes, (h)ours, or (d)ays, e.g. 300s.",
-                "NANOTIME", false, null, false),
+                "NANOTIME", false, true, null, false),
             new Argument("disk",
                 "Recording should be persisted to disk",
-                "BOOLEAN", false, "true", false),
+                "BOOLEAN", false, true, "true", false),
             new Argument("filename",
                 "Resulting recording filename, e.g. \\\"" + exampleFilename() +  "\\\"",
-                "STRING", false, "hotspot-pid-xxxxx-id-y-YYYY_MM_dd_HH_mm_ss.jfr", false),
+                "STRING", false, true, "hotspot-pid-xxxxx-id-y-YYYY_MM_dd_HH_mm_ss.jfr", false),
             new Argument("maxage",
                 "Maximum time to keep recorded data (on disk) in (s)econds, (m)inutes, (h)ours, or (d)ays, e.g. 60m, or 0 for no limit",
-                "NANOTIME", false, "0", false),
+                "NANOTIME", false, true, "0", false),
             new Argument("maxsize",
                 "Maximum amount of bytes to keep (on disk) in (k)B, (M)B or (G)B, e.g. 500M, or 0 for no limit",
-                "MEMORY SIZE", false, "250M", false),
+                "MEMORY SIZE", false, true, "250M", false),
             new Argument("flush-interval",
-                "Dump running recording when JVM shuts down",
-                "NANOTIME", false, "1s", false),
-            new Argument("dumponexit",
                 "Minimum time before flushing buffers, measured in (s)econds, e.g. 4 s, or 0 for flushing when a recording ends",
-                "BOOLEAN", false, "false", false),
+                "NANOTIME", false, true, "1s", false),
+            new Argument("dumponexit",
+                "Dump running recording when JVM shuts down",
+                "BOOLEAN", false, true, "false", false),
             new Argument("path-to-gc-roots",
                 "Collect path to GC roots",
-                "BOOLEAN", false, "false", false)
+                "BOOLEAN", false, true, "false", false)
         };
     }
 }

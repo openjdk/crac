@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998, 2020, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 1998, 2022, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -36,9 +36,10 @@ import java.security.NoSuchAlgorithmException;
 import java.security.NoSuchProviderException;
 import java.util.Arrays;
 import java.util.concurrent.locks.ReentrantLock;
+import java.util.Arrays;
 
 /**
- * <p>This class provides a crytpographically strong pseudo-random number
+ * <p>This class provides a cryptographically strong pseudo-random number
  * generator based on the SHA-1 hash algorithm.
  *
  * <p>Note that if a seed is not provided, we attempt to provide sufficient
@@ -201,9 +202,7 @@ implements java.io.Serializable, jdk.internal.crac.JDKResource {
     private void setSeedImpl(byte[] seed) {
         if (state != null) {
             digest.update(state);
-            for (int i = 0; i < state.length; i++) {
-                state[i] = 0;
-            }
+            Arrays.fill(state, (byte) 0);
         }
         state = digest.digest(seed);
         remCount = 0;
@@ -322,12 +321,12 @@ implements java.io.Serializable, jdk.internal.crac.JDKResource {
                 SeederHolder.getSeeder().engineNextBytes(seed);
                 state = digest.digest(seed);
             }
+
             // Use remainder from last time
             int r = remCount;
             if (r > 0) {
                 // How many bytes?
-                todo = (result.length - index) < (DIGEST_SIZE - r) ?
-                        (result.length - index) : (DIGEST_SIZE - r);
+                todo = Math.min(result.length - index, DIGEST_SIZE - r);
                 // Copy the bytes, zero the buffer
                 for (int i = 0; i < todo; i++) {
                     result[i] = output[r];
@@ -343,9 +342,9 @@ implements java.io.Serializable, jdk.internal.crac.JDKResource {
                 digest.update(state);
                 output = digest.digest();
                 updateState(state, output);
+
                 // How many bytes?
-                todo = (result.length - index) > DIGEST_SIZE ?
-                        DIGEST_SIZE : result.length - index;
+                todo = Math.min((result.length - index), DIGEST_SIZE);
                 // Copy the bytes, zero the buffer
                 for (int i = 0; i < todo; i++) {
                     result[index++] = output[i];

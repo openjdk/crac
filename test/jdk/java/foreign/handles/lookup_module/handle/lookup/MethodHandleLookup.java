@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2021, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2021, 2023, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -23,23 +23,19 @@
 
 package handle.lookup;
 
-import jdk.incubator.foreign.Addressable;
-import jdk.incubator.foreign.CLinker;
+import java.lang.foreign.Arena;
+import java.lang.foreign.Linker;
 
 import java.lang.invoke.MethodHandle;
 import java.lang.invoke.MethodHandles;
 import java.lang.invoke.MethodType;
-import java.nio.charset.Charset;
-import java.nio.file.Path;
-import java.util.Optional;
 
-import jdk.incubator.foreign.FunctionDescriptor;
-import jdk.incubator.foreign.SymbolLookup;
-import jdk.incubator.foreign.MemoryAddress;
-import jdk.incubator.foreign.MemoryLayout;
-import jdk.incubator.foreign.MemorySegment;
-import jdk.incubator.foreign.ResourceScope;
-import jdk.incubator.foreign.SegmentAllocator;
+import java.lang.foreign.FunctionDescriptor;
+import java.lang.foreign.MemorySegment;
+import java.lang.foreign.SymbolLookup;
+
+import java.nio.file.Path;
+import java.util.function.Consumer;
 
 import org.testng.annotations.*;
 
@@ -54,38 +50,27 @@ public class MethodHandleLookup {
     static Object[][] restrictedMethods() {
         try {
             return new Object[][]{
-                    { MethodHandles.lookup().findStatic(CLinker.class, "getInstance",
-                            MethodType.methodType(CLinker.class)), "CLinker::getInstance" },
-                    { MethodHandles.lookup().findStatic(CLinker.class, "toJavaString",
-                            MethodType.methodType(String.class, MemoryAddress.class)),
-                            "CLinker::toJavaString" },
-                    { MethodHandles.lookup().findStatic(CLinker.class, "allocateMemory",
-                            MethodType.methodType(MemoryAddress.class, long.class)),
-                            "CLinker::allocateMemory" },
-                    { MethodHandles.lookup().findStatic(CLinker.class, "freeMemory",
-                            MethodType.methodType(void.class, MemoryAddress.class)),
-                            "CLinker::freeMemory" },
-                    { MethodHandles.lookup().findStatic(CLinker.VaList.class, "ofAddress",
-                            MethodType.methodType(CLinker.VaList.class, MemoryAddress.class)),
-                            "VaList::ofAddress/1" },
-                    { MethodHandles.lookup().findStatic(CLinker.VaList.class, "ofAddress",
-                            MethodType.methodType(CLinker.VaList.class, MemoryAddress.class, ResourceScope.class)),
-                            "VaList::ofAddress/2" },
-                    { MethodHandles.lookup().findStatic(CLinker.class, "systemLookup",
-                            MethodType.methodType(SymbolLookup.class)),
-                            "CLinker::systemLookup" },
-                    { MethodHandles.lookup().findStatic(SymbolLookup.class, "loaderLookup",
-                            MethodType.methodType(SymbolLookup.class)),
-                            "SymbolLookup::loaderLookup" },
-                    { MethodHandles.lookup().findVirtual(MemoryAddress.class, "asSegment",
-                            MethodType.methodType(MemorySegment.class, long.class, ResourceScope.class)),
-                            "MemoryAddress::asSegment/1" },
-                    { MethodHandles.lookup().findVirtual(MemoryAddress.class, "asSegment",
-                            MethodType.methodType(MemorySegment.class, long.class, Runnable.class, ResourceScope.class)),
-                            "MemoryAddress::asSegment/2" },
-                    { MethodHandles.lookup().findStatic(MemorySegment.class, "globalNativeSegment",
-                            MethodType.methodType(MemorySegment.class)),
-                            "MemoryAddress::globalNativeSegment" }
+                    { MethodHandles.lookup().findVirtual(Linker.class, "downcallHandle",
+                            MethodType.methodType(MethodHandle.class, FunctionDescriptor.class, Linker.Option[].class)), "Linker::downcallHandle/1" },
+                    { MethodHandles.lookup().findVirtual(Linker.class, "downcallHandle",
+                            MethodType.methodType(MethodHandle.class, MemorySegment.class, FunctionDescriptor.class, Linker.Option[].class)), "Linker::downcallHandle/2" },
+                    { MethodHandles.lookup().findVirtual(Linker.class, "upcallStub",
+                            MethodType.methodType(MemorySegment.class, MethodHandle.class, FunctionDescriptor.class, Arena.class, Linker.Option[].class)), "Linker::upcallStub" },
+                    { MethodHandles.lookup().findVirtual(MemorySegment.class, "reinterpret",
+                            MethodType.methodType(MemorySegment.class, long.class)),
+                            "MemorySegment::reinterpret/1" },
+                    { MethodHandles.lookup().findVirtual(MemorySegment.class, "reinterpret",
+                            MethodType.methodType(MemorySegment.class, Arena.class, Consumer.class)),
+                            "MemorySegment::reinterpret/2" },
+                    { MethodHandles.lookup().findVirtual(MemorySegment.class, "reinterpret",
+                            MethodType.methodType(MemorySegment.class, long.class, Arena.class, Consumer.class)),
+                            "MemorySegment::reinterpret/3" },
+                    { MethodHandles.lookup().findStatic(SymbolLookup.class, "libraryLookup",
+                            MethodType.methodType(SymbolLookup.class, String.class, Arena.class)),
+                            "SymbolLookup::libraryLookup(String)" },
+                    { MethodHandles.lookup().findStatic(SymbolLookup.class, "libraryLookup",
+                            MethodType.methodType(SymbolLookup.class, Path.class, Arena.class)),
+                            "SymbolLookup::libraryLookup(Path)" },
             };
         } catch (Throwable ex) {
             throw new ExceptionInInitializerError((ex));

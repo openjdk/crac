@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012, 2015, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2012, 2022, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -170,7 +170,7 @@ final class Nodes {
     }
 
     /**
-     * Produces a variable size @{link Node.Builder}.
+     * Produces a variable size {@link Node.Builder}.
      *
      * @param <T> the type of elements of the node builder
      * @return a {@code Node.Builder}
@@ -208,7 +208,7 @@ final class Nodes {
     }
 
     /**
-     * Produces a variable size @{link Node.Builder.OfInt}.
+     * Produces a variable size {@link Node.Builder.OfInt}.
      *
      * @return a {@code Node.Builder.OfInt}
      */
@@ -245,7 +245,7 @@ final class Nodes {
     }
 
     /**
-     * Produces a variable size @{link Node.Builder.OfLong}.
+     * Produces a variable size {@link Node.Builder.OfLong}.
      *
      * @return a {@code Node.Builder.OfLong}
      */
@@ -282,7 +282,7 @@ final class Nodes {
     }
 
     /**
-     * Produces a variable size @{link Node.Builder.OfDouble}.
+     * Produces a variable size {@link Node.Builder.OfDouble}.
      *
      * @return a {@code Node.Builder.OfDouble}
      */
@@ -582,6 +582,7 @@ final class Nodes {
             }
         }
 
+        @SuppressWarnings("overloads")
         private static final class OfInt
                 extends EmptyNode<Integer, int[], IntConsumer>
                 implements Node.OfInt {
@@ -599,6 +600,7 @@ final class Nodes {
             }
         }
 
+        @SuppressWarnings("overloads")
         private static final class OfLong
                 extends EmptyNode<Long, long[], LongConsumer>
                 implements Node.OfLong {
@@ -616,6 +618,7 @@ final class Nodes {
             }
         }
 
+        @SuppressWarnings("overloads")
         private static final class OfDouble
                 extends EmptyNode<Double, double[], DoubleConsumer>
                 implements Node.OfDouble {
@@ -880,6 +883,7 @@ final class Nodes {
             }
         }
 
+        @SuppressWarnings("overloads")
         static final class OfInt
                 extends ConcNode.OfPrimitive<Integer, IntConsumer, int[], Spliterator.OfInt, Node.OfInt>
                 implements Node.OfInt {
@@ -894,6 +898,7 @@ final class Nodes {
             }
         }
 
+        @SuppressWarnings("overloads")
         static final class OfLong
                 extends ConcNode.OfPrimitive<Long, LongConsumer, long[], Spliterator.OfLong, Node.OfLong>
                 implements Node.OfLong {
@@ -908,6 +913,7 @@ final class Nodes {
             }
         }
 
+        @SuppressWarnings("overloads")
         static final class OfDouble
                 extends ConcNode.OfPrimitive<Double, DoubleConsumer, double[], Spliterator.OfDouble, Node.OfDouble>
                 implements Node.OfDouble {
@@ -1160,6 +1166,7 @@ final class Nodes {
             }
         }
 
+        @SuppressWarnings("overloads")
         private static final class OfInt
                 extends OfPrimitive<Integer, IntConsumer, int[], Spliterator.OfInt, Node.OfInt>
                 implements Spliterator.OfInt {
@@ -1169,6 +1176,7 @@ final class Nodes {
             }
         }
 
+        @SuppressWarnings("overloads")
         private static final class OfLong
                 extends OfPrimitive<Long, LongConsumer, long[], Spliterator.OfLong, Node.OfLong>
                 implements Spliterator.OfLong {
@@ -1178,6 +1186,7 @@ final class Nodes {
             }
         }
 
+        @SuppressWarnings("overloads")
         private static final class OfDouble
                 extends OfPrimitive<Double, DoubleConsumer, double[], Spliterator.OfDouble, Node.OfDouble>
                 implements Spliterator.OfDouble {
@@ -2055,14 +2064,14 @@ final class Nodes {
                 else {
                     task.setPendingCount(task.node.getChildCount() - 1);
 
-                    int size = 0;
+                    long size = 0;
                     int i = 0;
                     for (;i < task.node.getChildCount() - 1; i++) {
-                        K leftTask = task.makeChild(i, task.offset + size);
+                        K leftTask = task.makeChild(i, (int) (task.offset + size));
                         size += leftTask.node.count();
                         leftTask.fork();
                     }
-                    task = task.makeChild(i, task.offset + size);
+                    task = task.makeChild(i, (int) (task.offset + size));
                 }
             }
         }

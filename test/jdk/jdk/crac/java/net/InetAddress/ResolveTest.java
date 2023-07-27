@@ -45,7 +45,6 @@ import java.util.concurrent.*;
  * @run driver jdk.test.lib.crac.CracTest
  */
 public class ResolveTest implements CracTest {
-    private static final String imageName = Common.imageName("inet-address");
     public static final String TEST_HOSTNAME = "some.test.hostname.example.com";
 
     @CracTestArg(value = 0, optional = true)
@@ -59,6 +58,9 @@ public class ResolveTest implements CracTest {
         if (!DockerTestUtils.canTestDocker()) {
             return;
         }
+
+        String imageName = Common.imageName("inet-address");
+
         CracBuilder builder = new CracBuilder()
                 .inDockerImage(imageName).dockerOptions("--add-host", TEST_HOSTNAME + ":192.168.12.34")
                 .captureOutput(true)

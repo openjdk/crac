@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1996, 2020, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 1996, 2022, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -254,7 +254,7 @@ public:
     INLINE void SetModuleHandle(HMODULE h) { m_dllHandle = h; }
 
     INLINE static DWORD MainThread() { return GetInstance().m_mainThreadId; }
-    INLINE void VerifyActive() throw (awt_toolkit_shutdown) {
+    INLINE void VerifyActive() {
         if (!m_isActive && m_mainThreadId != ::GetCurrentThreadId()) {
             throw awt_toolkit_shutdown();
         }
@@ -441,7 +441,8 @@ public:
 
     HANDLE m_waitEvent;
     volatile DWORD eventNumber;
-    volatile BOOL isInDoDragDropLoop;
+    volatile BOOL isDnDSourceActive;
+    volatile BOOL isDnDTargetActive;
 private:
     HWND CreateToolkitWnd(LPCTSTR name);
 

@@ -137,20 +137,13 @@ void G1UncommitRegionTask::execute() {
 }
 
 void G1UncommitRegionTask::_wait_if_active() {
-  // Not valid: assert_at_safepoint();
-  assert(Thread::current_or_null() != NULL, "no current thread");
-  // Not valid: assert(Thread::current()->is_VM_thread(), "");
-  assert(Thread::current()->is_active_Java_thread(), "unexpected thread type");
-  assert(strcmp(Thread::current()->name(), "main") == 0, "unexpected thread");
-  assert(Thread::current()->as_Java_thread()->thread_state() == _thread_in_vm, "unexpected thread state");
-
   while (_active) {
     _active_sem.wait();
   }
 }
 
 void G1UncommitRegionTask::wait_if_active() {
-  // Otherwise G1 GC is not in use.
+  // If _instance is NULL G1 GC is either not in use or its collection has not yet been executed.
   if (_instance) {
     _instance->_wait_if_active();
   }

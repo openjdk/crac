@@ -65,6 +65,7 @@
 #include <pwd.h>
 #include <pthread.h>
 #include <signal.h>
+#include <spawn.h>
 #include <sys/mman.h>
 #include <sys/resource.h>
 #include <sys/socket.h>
@@ -1965,15 +1966,13 @@ int os::fork_and_exec(const char* cmd) {
 int os::exec_child_process_and_wait(const char *path, const char *argv[]) {
   char** env = os::get_environ();
 
-  pid_t pid = fork();
-  if (pid == -1) {
-    perror("cannot fork for crengine");
+  // We do not use fork & exec since glibc goes over all threads on fork(),
+  // and when some threads have stack unmapped (in-JVM memory persistence)
+  // this would crash the process.
+  pid_t pid;
+  if (posix_spawn(&pid, path, NULL, NULL, (char * const *) argv, env) != 0) {
+    perror("Cannot spawn crengine");
     return -1;
-  }
-  if (pid == 0) {
-    execve(path, (char* const*)argv, env);
-    perror("execve");
-    exit(1);
   }
 
   int status;

@@ -284,6 +284,86 @@ bool VM_Crac::is_claimed_fd(int fd) {
   return false;
 }
 
+class CountThreadsClosure: public ThreadClosure {
+private:
+  size_t _count;
+public:
+  CountThreadsClosure(): _count(0) {}
+
+  void do_thread(Thread* t) {
+    ++_count;
+  }
+
+  size_t count() {
+    return _count;
+  }
+};
+
+class PersistThreadStackClosure: public ThreadClosure {
+private:
+  crac::MemoryPersister &_persister;
+public:
+  PersistThreadStackClosure(crac::MemoryPersister &persister): _persister(persister) {}
+
+  void do_thread(Thread* t) {
+    JavaThread *thread = t->as_Java_thread();
+    size_t reserved = thread->stack_overflow_state()->stack_reserved_zone_base() - thread->stack_end();
+    if (!_persister.store_gap(thread->stack_end(), reserved)) {
+      fatal("Cannot record reserved zone for stack");
+    }
+    size_t length = thread->stack_size() - reserved;
+    if (!_persister.store(thread->stack_end() + reserved, length, length)) {
+      fatal("Cannot persist thread stack");
+    }
+  }
+};
+
+class LoadThreadStackClosure: public ThreadClosure {
+private:
+  crac::MemoryLoader &_loader;
+public:
+  LoadThreadStackClosure(crac::MemoryLoader &loader): _loader(loader) {}
+    void do_thread(Thread* t) {
+    JavaThread *thread = t->as_Java_thread();
+    size_t reserved = thread->stack_overflow_state()->stack_reserved_zone_base() - thread->stack_end();
+    if (!_loader.load_gap(thread->stack_end(), reserved)) {
+      fatal("Cannot restore reserved zone for stack");
+    }
+    size_t length = thread->stack_size() - reserved;
+    if (!_loader.load(thread->stack_end() + reserved, length, length, false)) {
+      fatal("Cannot load thread stack");
+    }
+  }
+};
+
+static void persist_thread_stacks() {
+// Not platform-specific, but skip this on non-Linux
+// Note: if glibc has rseq enabled, the checkpoint will crash in CRIU parasite
+// Use GLIBC_TUNABLES=glibc.pthread.rseq=0
+#ifdef LINUX
+  crac::before_threads_persisted();
+  CountThreadsClosure counter;
+  Threads::java_threads_do(&counter);
+  crac::MemoryPersister persister(counter.count());
+  if (!persister.open("thread_stacks.img", "Threads"));
+  PersistThreadStackClosure closure(persister);
+  Threads::java_threads_do(&closure);
+#endif
+}
+
+static void restore_thread_stacks() {
+// Not platform-specific, but skip this on non-Linux
+#ifdef LINUX
+  crac::MemoryLoader loader;
+  if (!loader.open("thread_stacks.img", "Threads")) {
+    fatal("Cannot load thread stacks");
+  }
+  LoadThreadStackClosure closure(loader);
+  Threads::java_threads_do(&closure);
+  crac::after_threads_restored();
+#endif
+}
+
 class WakeupClosure: public ThreadClosure {
   void do_thread(Thread* thread) {
     JavaThread *jt = JavaThread::cast(thread);
@@ -346,7 +426,15 @@ void VM_Crac::doit() {
   } else {
     trace_cr("Checkpoint ...");
     report_ok_to_jcmd_if_any();
+    if (CRPersistMemory) {
+      // Since VM_Crac instance is allocated on stack of other thread
+      // we must not use it from now on
+      persist_thread_stacks();
+    }
     int ret = checkpoint_restore(&shmid);
+    if (CRPersistMemory) {
+      restore_thread_stacks();
+    }
     if (ret == JVM_CHECKPOINT_ERROR) {
       memory_restore();
       return;

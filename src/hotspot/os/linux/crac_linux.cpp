@@ -30,11 +30,17 @@
 #include "runtime/crac_structs.hpp"
 #include "runtime/crac.hpp"
 #include "runtime/os.hpp"
+#include "runtime/osThread.hpp"
 #include "utilities/growableArray.hpp"
 #include "logging/log.hpp"
 #include "classfile/classLoader.hpp"
 
+#include <linux/futex.h>
+#include <pthread.h>
+#include <stdint.h>
+#include <string.h>
 #include <sys/mman.h>
+#include <sys/syscall.h>
 
 class FdsInfo {
 public:
@@ -386,7 +392,6 @@ void VM_Crac::memory_restore() {
     if (vsn != NULL) {
       vsn->load_on_restore("vslist_nonclass.img");
     }
-
   }
   PerfMemoryLinux::restore();
 }
@@ -531,4 +536,92 @@ bool crac::MemoryLoader::load_gap(void *addr, size_t length) {
     return false;
   }
   return true;
+}
+
+static volatile int persist_waiters = 0;
+static volatile int persist_futex = 0;
+
+static void block_in_other_futex(int signal) {
+  Atomic::add(&persist_waiters, 1);
+  // From now on the code must not use stack variables!
+  while (persist_futex) {
+    syscall(SYS_futex, &persist_futex, FUTEX_WAIT_PRIVATE, 1, NULL, NULL, 0);
+  }
+}
+
+class SignalClosure: public ThreadClosure {
+public:
+  size_t _count;
+
+  SignalClosure(): _count(0) {}
+
+  void do_thread(Thread* thread) {
+    sigval_t val;
+    pthread_sigqueue(thread->osthread()->pthread_id(), SIGUSR1, val);
+    ++_count;
+
+    JavaThread *jt = thread->as_Java_thread();
+    jt->wakeup_sleep();
+    jt->parker()->unpark();
+    jt->_ParkEvent->unpark();
+  }
+};
+
+// copied from minicriu
+static pid_t *gettid_ptr(pthread_t thr) {
+	const size_t header_size =
+#if defined(__x86_64__)
+		0x2c0;
+#else
+#error "Unimplemented arch"
+#endif
+		return (pid_t *)((char *)thr + header_size + 2 * sizeof(void *));
+}
+
+// JavaThreads that are going to be unmapped are parked as we're on safepoint
+// but the parking syscall likely uses memory that is going to be unmapped.
+// This is fine for the duration of the syscall, but if CREngine restarts
+// these syscalls these would fail with EFAULT and crash in GLIBC.
+// Therefore we register a signal handler that will park on global futex,
+// send signal to each individual thread and wake up the threads to move
+// to this signal handler.
+void crac::before_threads_persisted() {
+  persist_futex = 1;
+
+  struct sigaction action, old;
+  action.sa_handler = block_in_other_futex;
+  action.sa_flags = 0;
+  action.sa_restorer = NULL;
+  if (sigaction(SIGUSR1, &action, &old)) {
+    fatal("Cannot install SIGUSR1 handler: %s", strerror(errno));
+  }
+
+  SignalClosure closure;
+  Threads::java_threads_do(&closure);
+  // We need to signal the primordial thread waiting to join Java main thread...
+  pid_t primordial_pid = getpid();
+  if (tgkill(primordial_pid, primordial_pid, SIGUSR1)) {
+    fatal("Cannot signal primordial thread: %s", strerror(errno));
+  }
+  // ... and wake it up from waiting on pthread_join
+  int *main_thread_futex = (int *) gettid_ptr(os::Linux::main_thread());
+  if (syscall(SYS_futex, main_thread_futex, FUTEX_WAKE_PRIVATE, 1, NULL, NULL, 0) < 0) {
+    fatal("Cannot wake up primordial thread: %s", strerror(errno));
+  }
+
+  while ((size_t) persist_waiters < closure._count + 1) {
+    sched_yield();
+  }
+
+  if (sigaction(SIGUSR1, &old, NULL)) {
+    fatal("Cannot restore SIGUSR1 handler: %s", strerror(errno));
+  }
+}
+
+void crac::after_threads_restored() {
+  persist_futex = 0;
+  persist_waiters = 0;
+  if (syscall(SYS_futex, &persist_futex, FUTEX_WAKE_PRIVATE, INT_MAX, NULL, NULL, 0) < 0) {
+    fatal("Cannot wake up threads after restore: %s", strerror(errno));
+  }
 }

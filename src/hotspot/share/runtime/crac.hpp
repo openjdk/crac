@@ -48,6 +48,7 @@ public:
     return javaTimeNanos_offset;
   }
 
+
   class MemoryPersisterBase {
   protected:
     struct record {
@@ -97,6 +98,8 @@ public:
     bool map(void *addr, size_t length, int fd, size_t offset, bool executable);
   };
 
+  static void before_threads_persisted();
+  static void after_threads_restored();
 
 private:
   static bool read_bootid(char *dest);

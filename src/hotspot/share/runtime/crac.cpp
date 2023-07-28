@@ -344,8 +344,7 @@ static void persist_thread_stacks() {
   crac::before_threads_persisted();
   CountThreadsClosure counter;
   Threads::java_threads_do(&counter);
-  crac::MemoryPersister persister(counter.count());
-  if (!persister.open("thread_stacks.img", "Threads"));
+  crac::MemoryPersister persister(counter.count(), "thread_stacks.img", "Threads");
   PersistThreadStackClosure closure(persister);
   Threads::java_threads_do(&closure);
 #endif
@@ -354,10 +353,7 @@ static void persist_thread_stacks() {
 static void restore_thread_stacks() {
 // Not platform-specific, but skip this on non-Linux
 #ifdef LINUX
-  crac::MemoryLoader loader;
-  if (!loader.open("thread_stacks.img", "Threads")) {
-    fatal("Cannot load thread stacks");
-  }
+  crac::MemoryLoader loader("thread_stacks.img", "Threads");
   LoadThreadStackClosure closure(loader);
   Threads::java_threads_do(&closure);
   crac::after_threads_restored();
@@ -415,9 +411,8 @@ void VM_Crac::doit() {
 
   // We don't invoke this inside memory_checkpoint() for symmetry;
   // CodeCache must be restored earlier (see below)
-  if (CRPersistMemory && !CodeCache::persist_for_checkpoint()) {
-    memory_restore();
-    return;
+  if (CRPersistMemory) {
+    CodeCache::persist_for_checkpoint();
   }
 
   int shmid = 0;
@@ -771,32 +766,28 @@ crac::MemoryPersister::~MemoryPersister() {
   write_fully(_fd, (char *) _index, _index_curr * sizeof(struct record));
 }
 
-bool crac::MemoryPersisterBase::open(bool loading, const char *filename) {
+void crac::MemoryPersisterBase::open(bool loading, const char *filename) {
   char path[PATH_MAX];
   snprintf(path, PATH_MAX, "%s%s%s", CRaCCheckpointTo, os::file_separator(), filename);
   _fd = os::open(path, loading ? O_RDONLY : (O_WRONLY | O_CREAT | O_TRUNC), S_IRUSR | S_IWUSR);
   if (_fd < 0) {
-    perror("Cannot open persisted memory file");
-    return false;
+    fatal("Cannot open persisted memory file: %s", strerror(errno));
   }
-  return true;
 }
 
-bool crac::MemoryPersister::open(const char *filename, const char type[16]) {
-  if (!MemoryPersisterBase::open(false, filename)) {
-    return false;
-  }
+crac::MemoryPersister::MemoryPersister(size_t slots, const char *filename, const char type[16]) {
+  allocate_index(slots);
+  MemoryPersisterBase::open(false, filename);
   struct persisted_mem_header header = {
     .version = 1,
     .slots = _slots
   };
   memcpy(header.type, type, 16);
-  if (!write_fully(_fd, (char *) &header, sizeof(header))) {
-    tty->print_cr("Cannot write persisted memory file header");
-    return false;
+  if (write_fully(_fd, (char *) &header, sizeof(header))) {
+    os::seek_to_file_offset(_fd, _index_end);
+  } else {
+    fatal("Cannot write persisted memory file header");
   }
-  os::seek_to_file_offset(_fd, _index_end);
-  return true;
 }
 
 bool crac::MemoryPersister::store(void *addr, size_t length, size_t mapped_length) {
@@ -811,6 +802,7 @@ bool crac::MemoryPersister::store(void *addr, size_t length, size_t mapped_lengt
   assert((mapped_length & (page_size - 1)) == 0, "Unaligned length %lx at %p", length, addr);
 
 // TODO: optimize saving zero pages. This would require dynamic index sizing
+// For simplicity we could keep the index in-memory (in a static variable)
 #if 0
   size_t pages = 0;
   for (size_t offset = 0; offset < length; offset += page_size) {
@@ -853,29 +845,21 @@ bool crac::MemoryPersister::store_gap(void *addr, size_t length) {
   return unmap(addr, length);
 }
 
-bool crac::MemoryLoader::open(const char *filename, const char type[16]) {
-  if (!MemoryPersisterBase::open(true, filename)) {
-    return false;
-  }
+crac::MemoryLoader::MemoryLoader(const char *filename, const char type[16]) {
+  MemoryPersisterBase::open(true, filename);
   struct persisted_mem_header header = {};
   if (!read_fully(_fd, (char *) &header, sizeof(header))) {
-    tty->print_cr("Cannot read persisted memory file header");
-    return false;
+    fatal("Cannot read persisted memory file header");
   } else if (header.version != 1) {
-    tty->print_cr("Invalid persisted memory file version");
-    return false;
+    fatal("Invalid persisted memory file version");
   } else if (memcmp(header.type, type, 16)) {
-    tty->print_cr("Mismatch for type of persisted memory file");
-    return false;
+    fatal("Mismatch for type of persisted memory file");
   }
   allocate_index(header.slots);
 
   if (!read_fully(_fd, (char *) _index, _slots * sizeof(struct record))) {
-    tty->print_cr("Cannot read persisted memory file index");
-    return false;
+    fatal("Cannot read persisted memory file index");
   }
-
-  return true;
 }
 
 bool crac::MemoryLoader::load(void *addr, size_t expected_length, size_t mapped_length, bool executable) {

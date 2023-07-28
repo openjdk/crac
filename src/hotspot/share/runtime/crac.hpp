@@ -48,7 +48,6 @@ public:
     return javaTimeNanos_offset;
   }
 
-
   class MemoryPersisterBase {
   protected:
     struct record {
@@ -66,19 +65,16 @@ public:
       _index_begin(0), _index_end(0), _index(NULL) {}
     ~MemoryPersisterBase();
 
-    bool open(bool loading, const char *filename);
+    void open(bool loading, const char *filename);
     void allocate_index(size_t slots);
   };
 
   class MemoryPersister: protected MemoryPersisterBase {
   public:
-    MemoryPersister(size_t slots) {
-      allocate_index(slots);
-    }
+    MemoryPersister(size_t slots, const char *filename, const char type[16]);
     ~MemoryPersister();
 
-    // not using constructor to allow error
-    bool open(const char *filename, const char type[16]);
+    void open();
 
 
     bool store(void *addr, size_t length, size_t mapped_length);
@@ -90,7 +86,7 @@ public:
 
   class MemoryLoader: protected MemoryPersisterBase {
   public:
-    bool open(const char *filename, const char type[16]);
+    MemoryLoader(const char *filename, const char type[16]);
 
     bool load(void *addr, size_t expected_length, size_t mapped_length, bool executable);
     bool load_gap(void *addr, size_t length);

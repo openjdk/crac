@@ -208,7 +208,7 @@ private:
 
   void set_empty();
 
-  bool persist_for_checkpoint();
+  void persist_for_checkpoint();
   void load_on_restore();
 
   // Apply Fn to every oop on the mark stack. The mark stack must not
@@ -620,12 +620,12 @@ public:
 
   G1OldTracer* gc_tracer_cm() const { return _gc_tracer_cm; }
 
-  bool persist_for_checkpoint() {
-    return _global_mark_stack.persist_for_checkpoint();
+  void persist_for_checkpoint() {
+    _global_mark_stack.persist_for_checkpoint();
   }
 
   void load_on_restore() {
-    return _global_mark_stack.load_on_restore();
+    _global_mark_stack.load_on_restore();
   }
 
 private:

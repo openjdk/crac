@@ -96,7 +96,7 @@ public:
     return _static_mem_size;
   }
 
-  static bool persist_for_checkpoint();
+  static void persist_for_checkpoint();
   static void load_on_restore();
 };
 

@@ -831,16 +831,13 @@ void HeapRegionManager::rebuild_free_list(WorkerThreads* workers) {
 }
 
 
-bool HeapRegionManager::persist_for_checkpoint() {
+void HeapRegionManager::persist_for_checkpoint() {
   size_t non_null = 0;
   for (size_t i = 0; i < _regions.length(); ++i) {
     if (_regions.get_by_index(i) != nullptr) ++non_null;
   }
 
-  crac::MemoryPersister persister(non_null);
-  if (!persister.open("heap_regions.img", "GCGC")) {
-    return false;
-  }
+  crac::MemoryPersister persister(non_null, "heap_regions.img", "GCGC");
 
   size_t page_size = os::vm_page_size();
   for (size_t i = 0; i < _regions.length(); ++i) {
@@ -852,22 +849,18 @@ bool HeapRegionManager::persist_for_checkpoint() {
     // both active and inactive are mapped RW
     if (_committed_map.active(i) || _committed_map.inactive(i)) {
       if (!persister.store(region->bottom(), region->used(), region->capacity())) {
-        return false;
+        fatal("Cannot persist heap region %p - %p", region->bottom(), region->end());
       }
     } else {
       if (!persister.store_gap(region->bottom(), region->capacity())) {
-        return false;
+        fatal("Cannot persist heap region %p - %p", region->bottom(), region->end());
       }
     }
   }
-  return true;
 }
 
-bool HeapRegionManager::load_on_restore() {
-  crac::MemoryLoader loader;
-  if (!loader.open("heap_regions.img", "GCGC")) {
-    return false;
-  }
+void HeapRegionManager::load_on_restore() {
+  crac::MemoryLoader loader("heap_regions.img", "GCGC");
 
   size_t page_size = os::vm_page_size();
   for (size_t i = 0; i < _regions.length(); ++i) {
@@ -877,13 +870,12 @@ bool HeapRegionManager::load_on_restore() {
     }
     if (_committed_map.active(i) || _committed_map.inactive(i)) {
       if (!loader.load(region->bottom(), region->used(), region->capacity(), false)) {
-       return false;
+        fatal("Cannot restore heap region %p - %p", region->bottom(), region->end());
       }
     } else {
       if (!loader.load_gap(region->bottom(), region->capacity())) {
-       return false;
+        fatal("Cannot restore heap region %p - %p", region->bottom(), region->end());
       }
     }
   }
-  return true;
 }

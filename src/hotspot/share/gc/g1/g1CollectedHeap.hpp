@@ -1314,15 +1314,13 @@ public:
   // Used to print information about locations in the hs_err file.
   bool print_location(outputStream* st, void* addr) const override;
 
-  bool persist_for_checkpoint() {
-    return _hrm.persist_for_checkpoint() &&
-      _cm->persist_for_checkpoint() &&
-      G1FromCardCache::persist_for_checkpoint();
+  void persist_for_checkpoint() {
+    _hrm.persist_for_checkpoint();
+    _cm->persist_for_checkpoint();
+    G1FromCardCache::persist_for_checkpoint();
   }
   void load_on_restore() {
-    if (!_hrm.load_on_restore()) {
-      fatal("Cannot read heap");
-    }
+    _hrm.load_on_restore();
     _cm->load_on_restore();
     G1FromCardCache::load_on_restore();
   }

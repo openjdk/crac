@@ -260,7 +260,7 @@ public:
   // e.g. for 0000001110001 it would return 4
   size_t count_commit_ranges();
 
-  bool persist_for_checkpoint(crac::MemoryPersister &persister);
+  void persist_for_checkpoint(crac::MemoryPersister &persister);
   void load_on_restore(crac::MemoryLoader &loader);
 
   /// Debug stuff ////

@@ -3058,24 +3058,17 @@ G1PrintRegionLivenessInfoClosure::~G1PrintRegionLivenessInfoClosure() {
 #define MARKSTACK_FILE "g1cmmarkstack.img"
 #define MARKSTACK_TYPE "G1CMMarkStack"
 
-bool G1CMMarkStack::persist_for_checkpoint() {
-  crac::MemoryPersister persister(1);
-  if (!persister.open(MARKSTACK_FILE, MARKSTACK_TYPE)) {
-    return false;
-  }
+void G1CMMarkStack::persist_for_checkpoint() {
+  crac::MemoryPersister persister(1, MARKSTACK_FILE, MARKSTACK_TYPE);
   size_t used = MIN2(_hwm, _chunk_capacity) * sizeof(TaskQueueEntryChunk);
   size_t committed = _chunk_capacity * sizeof(TaskQueueEntryChunk);
   if (!persister.store((void *) _base, used, committed)) {
-    return false;
+    fatal("Cannot persist GC CM Mark stack");
   }
-  return true;
 }
 
 void G1CMMarkStack::load_on_restore() {
-  crac::MemoryLoader loader;
-  if (!loader.open(MARKSTACK_FILE, MARKSTACK_TYPE)) {
-    fatal("Cannot open G1 concurrent mark stack file");
-  }
+  crac::MemoryLoader loader(MARKSTACK_FILE, MARKSTACK_TYPE);
   size_t used = MIN2(_hwm, _chunk_capacity) * sizeof(TaskQueueEntryChunk);
   size_t committed = _chunk_capacity * sizeof(TaskQueueEntryChunk);
   if (!loader.load((void *) _base, used, committed, false)) {

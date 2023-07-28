@@ -1882,11 +1882,8 @@ void CodeCache::print_names(outputStream *out) {
 #define CODECACHE_IMG  "codecache.img"
 #define CODECACHE_TYPE "CodeCache"
 
-bool CodeCache::persist_for_checkpoint() {
-  crac::MemoryPersister persister(3 * _heaps->length());
-  if (!persister.open(CODECACHE_IMG, CODECACHE_TYPE)) {
-    return false;
-  }
+void CodeCache::persist_for_checkpoint() {
+  crac::MemoryPersister persister(3 * _heaps->length(), CODECACHE_IMG, CODECACHE_TYPE);
 
   FOR_ALL_HEAPS(it) {
     CodeHeap *heap = *it;
@@ -1897,17 +1894,13 @@ bool CodeCache::persist_for_checkpoint() {
     if (!persister.store_gap(heap->low_boundary(), heap->low_boundary() - heap->low()) ||
         !persister.store(heap->low(), used, used) ||
         !persister.store_gap(heap->high(), heap->high_boundary() - heap->high())) {
-      return false;
+      fatal("Cannot persist code cache heap at %p - %p", heap->low_boundary(), heap->high_boundary());
     }
   }
-  return true;
 }
 
 void CodeCache::load_on_restore() {
-  crac::MemoryLoader loader;
-  if (!loader.open(CODECACHE_IMG, CODECACHE_TYPE)) {
-    fatal("Could not open " CODECACHE_IMG);
-  }
+  crac::MemoryLoader loader(CODECACHE_IMG, CODECACHE_TYPE);
 
   FOR_ALL_HEAPS(it) {
     CodeHeap *heap = *it;
@@ -1915,7 +1908,7 @@ void CodeCache::load_on_restore() {
     if (!loader.load_gap(heap->low_boundary(), heap->low_boundary() - heap->low()) ||
         !loader.load(heap->low(), used, used, true) ||
         !loader.load_gap(heap->high(), heap->high_boundary() - heap->high())) {
-      fatal("Could not load code cache heap");
+      fatal("Could not load code cache heap at %p - %p", heap->low_boundary(), heap->high_boundary());
     }
   }
 }

@@ -351,31 +351,42 @@ bool VM_Crac::check_fds() {
   return ok;
 }
 
+static bool check_can_write() {
+  char path[PATH_MAX];
+  snprintf(path, PATH_MAX, "%s%s.test", CRaCCheckpointTo, os::file_separator());
+  int fd = os::open(path, O_WRONLY | O_CREAT | O_TRUNC, S_IRUSR | S_IWUSR);
+  if (fd < 0) {
+    tty->print_cr("Cannot create %s: %s\n", path, strerror(errno));
+    return false;
+  }
+  bool success = write(fd, "test", 4) > 0;
+  if (!success) {
+    tty->print_cr("Cannot write to %s: %s\n", path, strerror(errno));
+  }
+  if (::close(fd)) {
+    tty->print_cr("Cannot close %s: %s", path, strerror(errno));
+  }
+  if (::unlink(path)) {
+    tty->print_cr("Cannot remove %s: %s", path, strerror(errno));
+  }
+  return success;
+}
+
 bool VM_Crac::memory_checkpoint() {
   if (CRPersistMemory) {
-    // FILE *fp = fopen("/proc/self/maps", "r");
-    // if (fp) {
-    //   address low, high;
-    //   char buf[256];
-    //   while (!feof(fp)) {
-    //     if (fgets(buf, 256, fp)) {
-    //       fputs(buf, stderr);
-    //     }
-    //   }
-    //   fclose(fp);
-    // }
-    if (!Universe::heap()->persist_for_checkpoint()) {
+    // Check early if the checkpoint directory is writable; from this point
+    // we won't be able to go back
+    if (!check_can_write()) {
       return false;
     }
-    // FIXME: revert on failure. The problem is that if the persist happens partially
-    // we would need to map any persisted chunks again.
+    Universe::heap()->persist_for_checkpoint();
     metaspace::VirtualSpaceList *vsc = metaspace::VirtualSpaceList::vslist_class();
-    if (vsc != NULL && !vsc->persist_for_checkpoint("vslist_class.img")) {
-      fatal("Cannot persist class virtual space list");
+    if (vsc != NULL) {
+      vsc->persist_for_checkpoint("vslist_class.img");
     }
     metaspace::VirtualSpaceList *vsn = metaspace::VirtualSpaceList::vslist_nonclass();
-    if (vsn != NULL && !vsn->persist_for_checkpoint("vslist_nonclass.img")) {
-      fatal("Cannot persist non-class virtual space list");
+    if (vsn != NULL) {
+      vsn->persist_for_checkpoint("vslist_nonclass.img");
     }
   }
   return PerfMemoryLinux::checkpoint(CRaCCheckpointTo);

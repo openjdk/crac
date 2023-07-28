@@ -465,7 +465,7 @@ size_t VirtualSpaceNode::count_commit_ranges() {
   return count;
 }
 
-bool VirtualSpaceNode::persist_for_checkpoint(crac::MemoryPersister &persister) {
+void VirtualSpaceNode::persist_for_checkpoint(crac::MemoryPersister &persister) {
   size_t granule_size = Settings::commit_granule_bytes();
   bool flip = _commit_mask.at(0);
   size_t index = 0;
@@ -475,18 +475,17 @@ bool VirtualSpaceNode::persist_for_checkpoint(crac::MemoryPersister &persister) 
       next = _commit_mask.get_next_zero_offset(index);
       size_t length = (next - index) * granule_size;
       if (!persister.store((char *) _base + index * granule_size, length, length)) {
-        return false;
+        fatal("Failed to persist committed virtual space node range");
       }
     } else {
       next = _commit_mask.get_next_one_offset(index);
       if (!persister.store_gap((char *) _base + index * granule_size, (next - index) * granule_size)) {
-        return false;
+        fatal("Failed to persist uncommitted virtual space node range");
       }
     }
     flip = !flip;
     index = next;
   }
-  return true;
 }
 
 void VirtualSpaceNode::load_on_restore(crac::MemoryLoader &loader) {
@@ -499,7 +498,7 @@ void VirtualSpaceNode::load_on_restore(crac::MemoryLoader &loader) {
       next = _commit_mask.get_next_zero_offset(index);
       size_t length = (next - index) * granule_size;
       if (!loader.load((char *) _base + index * granule_size, length, length, false)) {
-        fatal("Cannot load committed virtual space node");
+        fatal("Cannot restore committed virtual space node");
       }
     } else {
       next = _commit_mask.get_next_one_offset(index);

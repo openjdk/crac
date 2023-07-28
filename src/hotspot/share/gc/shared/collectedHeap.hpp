@@ -539,8 +539,8 @@ class CollectedHeap : public CHeapObj<mtGC> {
 #endif  // #ifndef PRODUCT
 
   // CRaC related
-  virtual bool persist_for_checkpoint() {
-    return true; // by default ignore the request
+  virtual void persist_for_checkpoint() {
+    // by default ignore the request
   }
   virtual void load_on_restore() {}
 };

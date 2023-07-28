@@ -137,6 +137,9 @@ void G1UncommitRegionTask::execute() {
 }
 
 void G1UncommitRegionTask::_wait_if_active() {
+  assert(Thread::current_or_null() != NULL, "no current thread");
+  assert(!Thread::current()->is_ConcurrentGC_thread(), "deadlock prevention");
+
   while (_active) {
     _active_sem.wait();
   }

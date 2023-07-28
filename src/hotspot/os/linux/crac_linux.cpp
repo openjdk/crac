@@ -580,13 +580,13 @@ public:
 
 // copied from minicriu
 static pid_t *gettid_ptr(pthread_t thr) {
-	const size_t header_size =
+  const size_t header_size =
 #if defined(__x86_64__)
-		0x2c0;
+    0x2c0;
 #else
 #error "Unimplemented arch"
 #endif
-		return (pid_t *)((char *)thr + header_size + 2 * sizeof(void *));
+  return (pid_t *)((char *)thr + header_size + 2 * sizeof(void *));
 }
 
 // JavaThreads that are going to be unmapped are parked as we're on safepoint

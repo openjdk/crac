@@ -61,4 +61,19 @@ bool crac::read_bootid(char *dest) {
   return true;
 }
 
+bool crac::MemoryPersister::unmap(void *addr, size_t length) {
+}
+
+bool crac::MemoryLoader::map(void *addr, size_t length, int fd, size_t offset, bool executable) {
+}
+
+bool crac::MemoryLoader::load_gap(void *addr, size_t length) {
+}
+
+void crac::before_threads_persisted() {
+}
+
+void crac::after_threads_restored() {
+}
+
 #endif

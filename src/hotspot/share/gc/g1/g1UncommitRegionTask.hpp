@@ -36,7 +36,7 @@ class G1UncommitRegionTask : public G1ServiceTask {
   // is short, while still making reasonable progress.
   static const uint UncommitSizeLimit = 128 * M;
   // Initial delay in milliseconds after GC before the regions are uncommitted.
-  static const uint UncommitInitialDelayMs = 10*1000; // FIXME: for reproducibility: 10*1000
+  static const uint UncommitInitialDelayMs = 100;
   // The delay between two uncommit task executions.
   static const uint UncommitTaskDelayMs = 10;
 

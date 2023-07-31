@@ -61,6 +61,75 @@ static int kickjvm(pid_t jvm, int code) {
     return 0;
 }
 
+static char *join_args(const char **args) {
+    size_t size = 0;
+    for (const char **argp = args; *argp; ++argp) {
+      size += strlen(*argp) * 4 + 2 + 1;
+    }
+    char *retval = malloc(size);
+    if (!retval) {
+        perror("malloc");
+        exit(1);
+    }
+    char *d = retval;
+    for (const char **argp = args; *argp; ++argp) {
+        if (d != retval) {
+            *d++ = ' ';
+        }
+        // https://unix.stackexchange.com/a/357932/296319
+        if (!strpbrk(*argp, " \t\n!\"#$&'()*,;<=>?[\\]^`{|}~")) {
+            d = stpcpy(d, *argp);
+            continue;
+        }
+        *d++ = '\'';
+        for (const char *s = *argp; *s; ++s) {
+          if (*s != '\'') {
+            *d++ = *s;
+          } else {
+            d = stpcpy(d, "'\\''");
+          }
+        }
+        *d++ = '\'';
+    }
+    *d = 0;
+    return retval;
+}
+
+static char *path_join(const char *path1, const char *path2) {
+    char *retval;
+    if (path2[0] == '/') {
+        retval = strdup(path2);
+        if (!retval) {
+            perror("strdup");
+            exit(1);
+        }
+        return retval;
+    }
+    if (asprintf(&retval, "%s/%s", path1, path2) == -1) {
+        perror("asprintf");
+        exit(1);
+    }
+    return retval;
+}
+
+static char *path_abs(const char *rel) {
+    char *cwd = get_current_dir_name();
+    if (!cwd) {
+        perror("get_current_dir_name");
+        exit(1);
+    }
+    char *retval = path_join(cwd, rel);
+    free(cwd);
+    return retval;
+}
+
+static char *path_abs2(const char *rel1, const char *rel2) {
+    char *rel1_abs = path_abs(rel1);
+    char *retval = path_join(rel1_abs, rel2);
+    free(rel1_abs);
+    return retval;
+}
+
 static int checkpoint(pid_t jvm,
         const char *basedir,
         const char *self,
@@ -99,50 +168,69 @@ static int checkpoint(pid_t jvm,
     char jvmpidchar[32];
     snprintf(jvmpidchar, sizeof(jvmpidchar), "%d", jvm);
 
-    pid_t child = fork();
-    if (!child) {
-        const char* args[32] = {
-            criu,
-            "dump",
-            "-t", jvmpidchar,
-            "-D", imagedir,
-            "--shell-job",
-        };
-        const char** arg = args + 7;
+    const char* args[32] = {
+        criu,
+        "dump",
+        "-t", jvmpidchar,
+        "-D", imagedir,
+        "--shell-job",
+    };
+    const char** arg = args + 7;
 
-        *arg++ = verbosity != NULL ? verbosity : "-v4";
-        *arg++ = "-o";
-        // -D without -W makes criu cd to image dir for logs
-        *arg++ = log_file != NULL ? log_file : "dump4.log";
+    *arg++ = verbosity != NULL ? verbosity : "-v4";
+    *arg++ = "-o";
+    // -D without -W makes criu cd to image dir for logs
+    const char *log_local = log_file != NULL ? log_file : "dump4.log";
+    *arg++ = log_local;
 
-        if (leave_running) {
-            *arg++ = "-R";
-        }
-
-        char *criuopts = getenv("CRAC_CRIU_OPTS");
-        if (criuopts) {
-            char* criuopt = strtok(criuopts, " ");
-            while (criuopt && ARRAY_SIZE(args) >= (size_t)(arg - args) + 1/* account for trailing NULL */) {
-                *arg++ = criuopt;
-                criuopt = strtok(NULL, " ");
-            }
-            if (criuopt) {
-                fprintf(stderr, "Warning: too many arguments in CRAC_CRIU_OPTS (dropped from '%s')\n", criuopt);
-            }
-        }
-        *arg++ = NULL;
-
-        execv(criu, (char**)args);
-        perror("criu dump");
-        exit(1);
+    if (leave_running) {
+        *arg++ = "-R";
     }
 
+    char *criuopts = getenv("CRAC_CRIU_OPTS");
+    if (criuopts) {
+        char* criuopt = strtok(criuopts, " ");
+        while (criuopt && ARRAY_SIZE(args) >= (size_t)(arg - args) + 1/* account for trailing NULL */) {
+            *arg++ = criuopt;
+            criuopt = strtok(NULL, " ");
+        }
+        if (criuopt) {
+            fprintf(stderr, "Warning: too many arguments in CRAC_CRIU_OPTS (dropped from '%s')\n", criuopt);
+        }
+    }
+    *arg++ = NULL;
+
+    pid_t child = fork();
+    if (!child) {
+        execv(criu, (char**)args);
+        fprintf(stderr, "Cannot execute CRIU \"%s\": %m\n", criu);
+        exit(77);
+    }
+
+    char *criu_cmdline = NULL;
+    char *criu_log = NULL;
     int status;
-    if (child != wait(&status) || !WIFEXITED(status) || WEXITSTATUS(status)) {
+    if (child != wait(&status)) {
+        criu_cmdline = join_args(args);
+        fprintf(stderr, "Error waiting for spawned CRIU \"%s\": %m\n", criu_cmdline);
+        kickjvm(jvm, -1);
+    } else if (!WIFEXITED(status)) {
+        criu_cmdline = join_args(args);
+        criu_log = path_abs2(imagedir, log_local);
+        fprintf(stderr, "Spawned CRIU \"%s\" has not properly exited: waitpid status %d - check %s\n", criu_cmdline, status, criu_log);
+        kickjvm(jvm, -1);
+    } else if (WEXITSTATUS(status)) {
+        if (WEXITSTATUS(status) != 77) {
+            criu_cmdline = join_args(args);
+            criu_log = path_abs2(imagedir, log_local);
+            fprintf(stderr, "Spawned CRIU \"%s\" has not properly exited: exit code %d - check %s\n", criu_cmdline, WEXITSTATUS(status), criu_log);
+        }
         kickjvm(jvm, -1);
     } else if (leave_running) {
         kickjvm(jvm, 0);
     }
+    free(criu_cmdline);
+    free(criu_log);
 
     create_cppath(imagedir);
     exit(0);
@@ -159,7 +247,7 @@ static int restore(const char *basedir,
 
     int fd = open(cppathpath, O_RDONLY);
     if (fd < 0) {
-        perror("open cppath");
+        fprintf(stderr, "CRaC restore - cannot open cppath file \"%s\": %m\n", path_abs(cppathpath));
         return 1;
     }
 
@@ -386,19 +474,21 @@ int main(int argc, char *argv[]) {
 
         char *basedir = dirname(strdup(argv[0]));
 
-        char *criu = getenv("CRAC_CRIU_PATH");
+        const char *criu = getenv("CRAC_CRIU_PATH");
         if (!criu) {
-            if (-1 == asprintf(&criu, "%s/criu", basedir)) {
+            if (-1 == asprintf((char **)&criu, "%s/criu", basedir)) {
                 return 1;
             }
             struct stat st;
             if (stat(criu, &st)) {
                 /* some problem with the bundled criu */
-                criu = "/usr/sbin/criu";
-                if (stat(criu, &st)) {
-                    fprintf(stderr, "cannot find CRIU to use\n");
+                const char system_criu[] = "/usr/sbin/criu";
+                if (stat(system_criu, &st)) {
+                    fprintf(stderr, "Cannot find CRIU to use, tried env(CRAC_CRIU_PATH), dirname(argv[0])/criu=%s, %s\n",
+                      criu, system_criu);
                     return 1;
                 }
+                criu = system_criu;
             }
         }
 

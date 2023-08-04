@@ -38,6 +38,8 @@
 #include <signal.h>
 #include <sys/wait.h>
 #include <sys/stat.h>
+#include <string>
+#include <vector>
 
 #define RESTORE_SIGNAL   (SIGRTMIN + 2)
 
@@ -168,23 +170,38 @@ static int checkpoint(pid_t jvm,
     char jvmpidchar[32];
     snprintf(jvmpidchar, sizeof(jvmpidchar), "%d", jvm);
 
-    const char* args[32] = {
+    std::vector<const char *> args = {
         criu,
         "dump",
         "-t", jvmpidchar,
         "-D", imagedir,
         "--shell-job",
     };
-    const char** arg = args + 7;
 
-    *arg++ = verbosity != NULL ? verbosity : "-v4";
-    *arg++ = "-o";
+    args.push_back(verbosity != NULL ? verbosity : "-v4");
+    args.push_back("-o");
     // -D without -W makes criu cd to image dir for logs
-    const char *log_local = log_file != NULL ? log_file : "dump4.log";
-    *arg++ = log_local;
+    args.push_back(log_file != NULL ? log_file : "dump4.log");
 
     if (leave_running) {
-        *arg++ = "-R";
+        args.push_back("-R");
+    }
+
+    char *criuopts = getenv("CRAC_CRIU_OPTS");
+    if (criuopts) {
+        char* criuopt = strtok(criuopts, " ");
+        while (criuopt) {
+            args.push_back(criuopt);
+            criuopt = strtok(NULL, " ");
+        }
+    }
+    args.push_back(NULL);
+
+    pid_t child = fork();
+    if (!child) {
+        execv(criu, const_cast<char **>(args.data()));
+        perror("criu dump");
+        exit(1);
     }
 
     char *criuopts = getenv("CRAC_CRIU_OPTS");
@@ -240,12 +257,9 @@ static int restore(const char *basedir,
         const char *self,
         const char *criu,
         const char *imagedir) {
-    char *cppathpath;
-    if (-1 == asprintf(&cppathpath, "%s/cppath", imagedir)) {
-        return 1;
-    }
+    std::string cppathpath = std::string(imagedir) + "/cppath";
 
-    int fd = open(cppathpath, O_RDONLY);
+    int fd = open(cppathpath.c_str(), O_RDONLY);
     if (fd < 0) {
         fprintf(stderr, "CRaC restore - cannot open cppath file \"%s\": %m\n", path_abs(cppathpath));
         return 1;
@@ -268,21 +282,14 @@ static int restore(const char *basedir,
 
     close(fd);
 
-    char *inherit_perfdata = NULL;
-    char *perfdatapath;
-    if (-1 == asprintf(&perfdatapath, "%s/" PERFDATA_NAME, imagedir)) {
-        return 1;
-    }
-    int perfdatafd = open(perfdatapath, O_RDWR);
+    std::string inherit_perfdata;
+    std::string perfdatapath = std::string(imagedir) + "/" PERFDATA_NAME;
+    int perfdatafd = open(perfdatapath.c_str(), O_RDWR);
     if (0 < perfdatafd) {
-        if (-1 == asprintf(&inherit_perfdata, "fd[%d]:%s/" PERFDATA_NAME,
-                    perfdatafd,
-                    cppath[0] == '/' ? cppath + 1 : cppath)) {
-            return 1;
-        }
+        inherit_perfdata = "fd[" + std::to_string(perfdatafd) + "]:" + std::string(cppath[0] == '/' ? cppath + 1 : cppath) + "/" PERFDATA_NAME;
     }
 
-    const char* args[32] = {
+    std::vector<const char *> args = {
         criu,
         "restore",
         "-W", ".",
@@ -290,39 +297,34 @@ static int restore(const char *basedir,
         "--action-script", self,
         "-D", imagedir,
     };
-    const char** arg = args + 9;
 
-    *arg++ = verbosity != NULL ? verbosity : "-v1";
+    args.push_back(verbosity != NULL ? verbosity : "-v1");
     if (log_file != NULL) {
-        *arg++ = "-o";
-        *arg++ = log_file;
+        args.push_back("-o");
+        args.push_back(log_file);
     }
 
-    if (inherit_perfdata) {
-        *arg++ = "--inherit-fd";
-        *arg++ = inherit_perfdata;
+    if (!inherit_perfdata.empty()) {
+        args.push_back("--inherit-fd");
+        args.push_back(inherit_perfdata.c_str());
     }
-    const char* tail[] = {
-        "--exec-cmd", "--", self, "restorewait",
-        NULL
-    };
     char *criuopts = getenv("CRAC_CRIU_OPTS");
     if (criuopts) {
         char* criuopt = strtok(criuopts, " ");
-        while (criuopt && ARRAY_SIZE(args) >= (size_t)(arg - args + ARRAY_SIZE(tail))) {
-            *arg++ = criuopt;
+        while (criuopt) {
+            args.push_back(criuopt);
             criuopt = strtok(NULL, " ");
-        }
-        if (criuopt) {
-            fprintf(stderr, "Warning: too many arguments in CRAC_CRIU_OPTS (dropped from '%s')\n", criuopt);
         }
     }
 
-    memcpy(arg, tail, sizeof(tail));
+    const std::vector<const char *> tail = {
+        "--exec-cmd", "--", self, "restorewait", NULL,
+    };
+    args.insert(args.end(), tail.begin(), tail.end());
 
     fflush(stderr);
 
-    execv(criu, (char**)args);
+    execv(criu, const_cast<char **>(args.data()));
     perror("exec criu");
     return 1;
 }
@@ -474,18 +476,18 @@ int main(int argc, char *argv[]) {
 
         char *basedir = dirname(strdup(argv[0]));
 
-        const char *criu = getenv("CRAC_CRIU_PATH");
-        if (!criu) {
-            if (-1 == asprintf((char **)&criu, "%s/criu", basedir)) {
-                return 1;
-            }
+        std::string criu;
+        const char *criu_s = getenv("CRAC_CRIU_PATH");
+        if (criu_s) {
+          criu = criu_s;
+        } else {
+            criu = std::string(basedir) + "/criu";
             struct stat st;
-            if (stat(criu, &st)) {
+            if (stat(criu.c_str(), &st)) {
                 /* some problem with the bundled criu */
-                const char system_criu[] = "/usr/sbin/criu";
-                if (stat(system_criu, &st)) {
-                    fprintf(stderr, "Cannot find CRIU to use, tried env(CRAC_CRIU_PATH), dirname(argv[0])/criu=%s, %s\n",
-                      criu, system_criu);
+                criu = "/usr/sbin/criu";
+                if (stat(criu.c_str(), &st)) {
+                    fprintf(stderr, "cannot find CRIU to use\n");
                     return 1;
                 }
                 criu = system_criu;
@@ -495,9 +497,9 @@ int main(int argc, char *argv[]) {
 
         if (!strcmp(action, "checkpoint")) {
             pid_t jvm = getppid();
-            return checkpoint(jvm, basedir, argv[0], criu, imagedir);
+            return checkpoint(jvm, basedir, argv[0], criu.c_str(), imagedir);
         } else if (!strcmp(action, "restore")) {
-            return restore(basedir, argv[0], criu, imagedir);
+            return restore(basedir, argv[0], criu.c_str(), imagedir);
         } else if (!strcmp(action, "restorewait")) { // called by CRIU --exec-cmd
             return restorewait();
         } else {

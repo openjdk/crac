@@ -200,10 +200,7 @@ static int call_crengine() {
   }
   _crengine_args[1] = "checkpoint";
   add_crengine_arg(CRaCCheckpointTo);
-  if (os::exec_child_process_and_wait(_crengine, _crengine_args) == 0)
-    return 0;
-  fprintf(stderr, "CRaC error executing: %s\n", _crengine);
-  return -1;
+  return os::exec_child_process_and_wait(_crengine, _crengine_args);
 }
 
 static int checkpoint_restore(int *shmid) {
@@ -211,6 +208,7 @@ static int checkpoint_restore(int *shmid) {
 
   int cres = call_crengine();
   if (cres < 0) {
+    tty->print_cr("CRaC error executing: %s\n", _crengine);
     return JVM_CHECKPOINT_ERROR;
   }
 

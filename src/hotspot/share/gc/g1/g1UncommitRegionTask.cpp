@@ -27,7 +27,6 @@
 #include "gc/g1/g1UncommitRegionTask.hpp"
 #include "gc/shared/suspendibleThreadSet.hpp"
 #include "runtime/globals.hpp"
-#include "runtime/thread.inline.hpp"
 #include "utilities/ticks.hpp"
 
 G1UncommitRegionTask* G1UncommitRegionTask::_instance = NULL;
@@ -130,24 +129,15 @@ void G1UncommitRegionTask::execute() {
   } else {
     // Nothing more to do, change state and report a summary.
     set_active(false);
-    _active_sem.signal();
     report_summary();
     clear_summary();
   }
 }
 
-void G1UncommitRegionTask::_wait_if_active() {
-  assert(Thread::current_or_null() != NULL, "no current thread");
-  assert(!Thread::current()->is_ConcurrentGC_thread(), "deadlock prevention");
-
-  while (_active) {
-    _active_sem.wait();
-  }
-}
-
-void G1UncommitRegionTask::wait_if_active() {
+void G1UncommitRegionTask::finish_collection() {
   // If _instance is NULL G1 GC is either not in use or its collection has not yet been executed.
   if (_instance) {
-    _instance->_wait_if_active();
+    G1CollectedHeap* g1h = G1CollectedHeap::heap();
+    g1h->uncommit_regions((uint)-1);
   }
 }

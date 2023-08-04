@@ -405,7 +405,7 @@ Handle crac::checkpoint(jarray fd_arr, jobjectArray obj_arr, bool dry_run, jlong
   Universe::heap()->set_cleanup_unused(true);
   Universe::heap()->collect(GCCause::_full_gc_alot);
   Universe::heap()->set_cleanup_unused(false);
-  Universe::heap()->wait_for_collection_finish();
+  Universe::heap()->finish_collection();
 
   VM_Crac cr(fd_arr, obj_arr, dry_run, (bufferedStream*)jcmd_stream);
   {

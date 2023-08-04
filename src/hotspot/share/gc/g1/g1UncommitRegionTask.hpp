@@ -26,7 +26,6 @@
 #define SHARE_GC_G1_G1UNCOMMITREGIONTASK_HPP
 
 #include "gc/g1/g1ServiceThread.hpp"
-#include "runtime/semaphore.hpp"
 #include "utilities/globalDefinitions.hpp"
 #include "utilities/ticks.hpp"
 
@@ -47,8 +46,7 @@ class G1UncommitRegionTask : public G1ServiceTask {
   // The _active state is used to prevent the task from being enqueued on the
   // service thread multiple times. If the task is active, a new requst to
   // enqueue it will be ignored.
-  volatile bool _active;
-  Semaphore _active_sem;
+  bool _active;
 
   // Members to keep a summary of the current concurrent uncommit
   // work. Used for printing when no more work is available.
@@ -63,12 +61,10 @@ class G1UncommitRegionTask : public G1ServiceTask {
   void report_summary();
   void clear_summary();
 
-  void _wait_if_active();
-
 public:
   static void enqueue();
   virtual void execute();
-  static void wait_if_active();
+  static void finish_collection();
 };
 
 #endif

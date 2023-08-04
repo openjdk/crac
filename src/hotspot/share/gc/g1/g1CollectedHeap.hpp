@@ -1146,8 +1146,8 @@ public:
   // Returns whether this collection actually executed.
   bool try_collect(GCCause::Cause cause);
 
-  virtual void wait_for_collection_finish() {
-    G1UncommitRegionTask::wait_if_active();
+  virtual void finish_collection() {
+    G1UncommitRegionTask::finish_collection();
   }
 
   // True iff an evacuation has failed in the most-recent collection.

@@ -29,6 +29,7 @@
 #include <dlfcn.h>
 #include <fcntl.h>
 #include <inttypes.h>
+#include <stdbool.h>
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
@@ -643,11 +644,24 @@ void* SplashProcAddress(const char* name) {
     }
 }
 
+// Instead of waiting on the implicit futex that is located in the address
+// space of the main Java thread stack we'll wait on a global condition here.
+static pthread_mutex_t main_thread_mutex = PTHREAD_MUTEX_INITIALIZER;
+static pthread_cond_t main_thread_cond = PTHREAD_COND_INITIALIZER;
+static bool main_thread_done = false;
+static int main_thread_result = 0;
+
 /*
  * Signature adapter for pthread_create() or thr_create().
  */
 static void* ThreadJavaMain(void* args) {
-    return (void*)(intptr_t)JavaMain(args);
+    main_thread_result = JavaMain(args);
+    void *retval = (void*)(intptr_t) main_thread_result;
+    pthread_mutex_lock(&main_thread_mutex);
+    main_thread_done = true;
+    pthread_cond_signal(&main_thread_cond);
+    pthread_mutex_unlock(&main_thread_mutex);
+    return retval;
 }
 
 static size_t adjustStackSize(size_t stack_size) {
@@ -673,7 +687,8 @@ CallJavaMainInNewThread(jlong stack_size, void* args) {
     pthread_t tid;
     pthread_attr_t attr;
     pthread_attr_init(&attr);
-    pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_JOINABLE);
+    // See main_thread_mutex
+    pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED);
     size_t adjusted_stack_size;
 
     {
@@ -698,9 +713,15 @@ CallJavaMainInNewThread(jlong stack_size, void* args) {
     pthread_attr_setguardsize(&attr, 0); // no pthread guard page on java threads
 
     if (pthread_create(&tid, &attr, ThreadJavaMain, args) == 0) {
-        void* tmp;
-        pthread_join(tid, &tmp);
-        rslt = (int)(intptr_t)tmp;
+        for (;;) {
+            pthread_mutex_lock(&main_thread_mutex);
+            pthread_cond_wait(&main_thread_cond, &main_thread_mutex);
+            if (main_thread_done) {
+                break;
+            }
+            pthread_mutex_unlock(&main_thread_mutex);
+        }
+        rslt = main_thread_result;
     } else {
        /*
         * Continue execution in current thread if for some reason (e.g. out of

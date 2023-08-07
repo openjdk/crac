@@ -578,17 +578,6 @@ public:
   }
 };
 
-// copied from minicriu
-static pid_t *gettid_ptr(pthread_t thr) {
-  const size_t header_size =
-#if defined(__x86_64__)
-    0x2c0;
-#else
-#error "Unimplemented arch"
-#endif
-  return (pid_t *)((char *)thr + header_size + 2 * sizeof(void *));
-}
-
 // JavaThreads that are going to be unmapped are parked as we're on safepoint
 // but the parking syscall likely uses memory that is going to be unmapped.
 // This is fine for the duration of the syscall, but if CREngine restarts
@@ -609,18 +598,8 @@ void crac::before_threads_persisted() {
 
   SignalClosure closure;
   Threads::java_threads_do(&closure);
-  // We need to signal the primordial thread waiting to join Java main thread...
-  pid_t primordial_pid = getpid();
-  if (tgkill(primordial_pid, primordial_pid, SIGUSR1)) {
-    fatal("Cannot signal primordial thread: %s", strerror(errno));
-  }
-  // ... and wake it up from waiting on pthread_join
-  int *main_thread_futex = (int *) gettid_ptr(os::Linux::main_thread());
-  if (syscall(SYS_futex, main_thread_futex, FUTEX_WAKE_PRIVATE, 1, NULL, NULL, 0) < 0) {
-    fatal("Cannot wake up primordial thread: %s", strerror(errno));
-  }
 
-  while ((size_t) persist_waiters < closure._count + 1) {
+  while ((size_t) persist_waiters < closure._count) {
     sched_yield();
   }
 

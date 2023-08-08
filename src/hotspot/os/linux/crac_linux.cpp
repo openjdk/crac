@@ -36,11 +36,15 @@
 #include "classfile/classLoader.hpp"
 
 #include <linux/futex.h>
+#include <linux/rseq.h>
 #include <pthread.h>
 #include <stdint.h>
 #include <string.h>
 #include <sys/mman.h>
+#include <sys/ptrace.h>
 #include <sys/syscall.h>
+#include <sys/wait.h>
+#include <unistd.h>
 
 class FdsInfo {
 public:
@@ -551,25 +555,79 @@ bool crac::MemoryLoader::load_gap(void *addr, size_t length) {
 
 static volatile int persist_waiters = 0;
 static volatile int persist_futex = 0;
+static struct __ptrace_rseq_configuration *rseq_configs = NULL;
 
-static void block_in_other_futex(int signal) {
+static void block_in_other_futex(int signal, siginfo_t *info, void *ctx) {
+  struct __ptrace_rseq_configuration *rseqc = &rseq_configs[info->si_value.sival_int];
+  if (syscall(SYS_rseq, rseqc->rseq_abi_pointer, rseqc->rseq_abi_size, RSEQ_FLAG_UNREGISTER, rseqc->signature)) {
+    perror("Unregister rseq");
+  }
+
   Atomic::add(&persist_waiters, 1);
   // From now on the code must not use stack variables!
+  // TODO: to be on the safe side, set alternative stack for this signal.
+  // However, that's possible only from the calling thread, so we'd need to
+  // reconfigure it before ::add and raise signal again.
   while (persist_futex) {
     syscall(SYS_futex, &persist_futex, FUTEX_WAIT_PRIVATE, 1, NULL, NULL, 0);
   }
+
+  // Register the rseq back after restore
+  if (syscall(SYS_rseq, rseqc->rseq_abi_pointer, rseqc->rseq_abi_size, 0, rseqc->signature) != 0) {
+    perror("Register rseq again");
+  }
+
+  int dec = Atomic::sub(&persist_waiters, 1);
+  if (dec == 0) {
+    FREE_C_HEAP_ARRAY(struct __ptrace_rseq_configuration, rseq_configs);
+    rseq_configs = NULL;
+  }
 }
 
-class SignalClosure: public ThreadClosure {
+class GetRseqClosure: public ThreadClosure {
+private:
+  int _idx;
 public:
-  size_t _count;
+  GetRseqClosure(): _idx(0) {}
 
-  SignalClosure(): _count(0) {}
+  void do_thread(Thread* thread) {
+    pid_t tid = thread->osthread()->thread_id();
+    if (ptrace(PTRACE_SEIZE, tid, 0, 0)) {
+      perror("Cannot seize");
+    }
+    if (ptrace(PTRACE_INTERRUPT, tid, 0, 0)) {
+      perror("Cannot interrupt");
+    }
+    int status;
+    if (waitpid(tid, &status, 0) < 0) {
+      perror("Cannot wait for tracee");
+    }
+    struct __ptrace_rseq_configuration rseqc;
+    if (ptrace(PTRACE_GET_RSEQ_CONFIGURATION, tid, sizeof(rseqc), &rseqc) != sizeof(rseqc)) {
+      perror("Cannot get rseq");
+    }
+    for (size_t i = 0; i < sizeof(rseqc); i += sizeof(long)) {
+      if (ptrace(PTRACE_POKEDATA, tid, (char *)(rseq_configs + _idx) + i, *(long *)((char *)&rseqc + i))) {
+        perror("Cannot write rseq to tracee process");
+      }
+    }
+    if (ptrace(PTRACE_DETACH, tid, 0, 0)) {
+      perror("Cannot detach");
+    }
+    _idx++;
+  }
+};
+
+class SignalClosure: public ThreadClosure {
+private:
+  int _idx;
+public:
+  SignalClosure(): _idx(0) {}
 
   void do_thread(Thread* thread) {
     sigval_t val;
+    val.sival_int = _idx++;
     pthread_sigqueue(thread->osthread()->pthread_id(), SIGUSR1, val);
-    ++_count;
 
     JavaThread *jt = thread->as_Java_thread();
     jt->wakeup_sleep();
@@ -577,6 +635,7 @@ public:
     jt->_ParkEvent->unpark();
   }
 };
+
 
 // JavaThreads that are going to be unmapped are parked as we're on safepoint
 // but the parking syscall likely uses memory that is going to be unmapped.
@@ -588,9 +647,29 @@ public:
 void crac::before_threads_persisted() {
   persist_futex = 1;
 
+  CountThreadsClosure counter;
+  Threads::java_threads_do(&counter);
+
+  rseq_configs = NEW_C_HEAP_ARRAY(
+    struct __ptrace_rseq_configuration, counter.count(), mtInternal);
+  guarantee(rseq_configs, "Cannot allocate %lu rseq structs", counter.count());
+
+  pid_t child = fork();
+  if (child == 0) {
+    GetRseqClosure get_rseq;
+    Threads::java_threads_do(&get_rseq);
+    exit(0);
+  } else {
+    int status;
+    if (waitpid(child, &status, 0) < 0) {
+      perror("Waiting for tracer child");
+    }
+  }
+
+
   struct sigaction action, old;
-  action.sa_handler = block_in_other_futex;
-  action.sa_flags = 0;
+  action.sa_sigaction = block_in_other_futex;
+  action.sa_flags = SA_SIGINFO;
   action.sa_restorer = NULL;
   if (sigaction(SIGUSR1, &action, &old)) {
     fatal("Cannot install SIGUSR1 handler: %s", strerror(errno));
@@ -599,7 +678,7 @@ void crac::before_threads_persisted() {
   SignalClosure closure;
   Threads::java_threads_do(&closure);
 
-  while ((size_t) persist_waiters < closure._count) {
+  while ((size_t) persist_waiters < counter.count()) {
     sched_yield();
   }
 
@@ -610,7 +689,6 @@ void crac::before_threads_persisted() {
 
 void crac::after_threads_restored() {
   persist_futex = 0;
-  persist_waiters = 0;
   if (syscall(SYS_futex, &persist_futex, FUTEX_WAKE_PRIVATE, INT_MAX, NULL, NULL, 0) < 0) {
     fatal("Cannot wake up threads after restore: %s", strerror(errno));
   }

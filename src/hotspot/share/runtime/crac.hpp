@@ -106,4 +106,19 @@ private:
   static jlong javaTimeNanos_offset;
 };
 
+class CountThreadsClosure: public ThreadClosure {
+private:
+  size_t _count;
+public:
+  CountThreadsClosure(): _count(0) {}
+
+  void do_thread(Thread* t) {
+    ++_count;
+  }
+
+  size_t count() {
+    return _count;
+  }
+};
+
 #endif //SHARE_RUNTIME_CRAC_HPP

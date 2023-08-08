@@ -284,21 +284,6 @@ bool VM_Crac::is_claimed_fd(int fd) {
   return false;
 }
 
-class CountThreadsClosure: public ThreadClosure {
-private:
-  size_t _count;
-public:
-  CountThreadsClosure(): _count(0) {}
-
-  void do_thread(Thread* t) {
-    ++_count;
-  }
-
-  size_t count() {
-    return _count;
-  }
-};
-
 class PersistThreadStackClosure: public ThreadClosure {
 private:
   crac::MemoryPersister &_persister;

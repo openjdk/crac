@@ -41,6 +41,7 @@
 #include <stdint.h>
 #include <string.h>
 #include <sys/mman.h>
+#include <sys/prctl.h>
 #include <sys/ptrace.h>
 #include <sys/syscall.h>
 #include <sys/wait.h>
@@ -654,18 +655,27 @@ void crac::before_threads_persisted() {
     struct __ptrace_rseq_configuration, counter.count(), mtInternal);
   guarantee(rseq_configs, "Cannot allocate %lu rseq structs", counter.count());
 
+  sigset_t blocking_set;
+  sigemptyset(&blocking_set);
+  sigaddset(&blocking_set, SIGUSR1);
+  sigprocmask(SIG_BLOCK, &blocking_set, NULL);
   pid_t child = fork();
   if (child == 0) {
+    siginfo_t info;
+    sigwaitinfo(&blocking_set, &info);
     GetRseqClosure get_rseq;
     Threads::java_threads_do(&get_rseq);
     exit(0);
   } else {
+    sigprocmask(SIG_UNBLOCK, &blocking_set, NULL);
+    // Allow child to trace us if /proc/sys/kernel/yama/ptrace_scope = 1
+    prctl(PR_SET_PTRACER, child, 0, 0);
+    kill(child, SIGUSR1);
     int status;
     if (waitpid(child, &status, 0) < 0) {
       perror("Waiting for tracer child");
     }
   }
-
 
   struct sigaction action, old;
   action.sa_sigaction = block_in_other_futex;

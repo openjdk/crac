@@ -560,8 +560,11 @@ static struct __ptrace_rseq_configuration *rseq_configs = NULL;
 
 static void block_in_other_futex(int signal, siginfo_t *info, void *ctx) {
   struct __ptrace_rseq_configuration *rseqc = &rseq_configs[info->si_value.sival_int];
-  if (syscall(SYS_rseq, rseqc->rseq_abi_pointer, rseqc->rseq_abi_size, RSEQ_FLAG_UNREGISTER, rseqc->signature)) {
-    perror("Unregister rseq");
+  if (rseqc->rseq_abi_pointer) {
+    // Unregister rseq to prevent CRIU reading the configuration
+    if (syscall(SYS_rseq, rseqc->rseq_abi_pointer, rseqc->rseq_abi_size, RSEQ_FLAG_UNREGISTER, rseqc->signature)) {
+      perror("Unregister rseq");
+    }
   }
 
   Atomic::add(&persist_waiters, 1);
@@ -573,9 +576,11 @@ static void block_in_other_futex(int signal, siginfo_t *info, void *ctx) {
     syscall(SYS_futex, &persist_futex, FUTEX_WAIT_PRIVATE, 1, NULL, NULL, 0);
   }
 
-  // Register the rseq back after restore
-  if (syscall(SYS_rseq, rseqc->rseq_abi_pointer, rseqc->rseq_abi_size, 0, rseqc->signature) != 0) {
-    perror("Register rseq again");
+  if (rseqc->rseq_abi_pointer) {
+    // Register the rseq back after restore
+    if (syscall(SYS_rseq, rseqc->rseq_abi_pointer, rseqc->rseq_abi_size, 0, rseqc->signature) != 0) {
+      perror("Register rseq again");
+    }
   }
 
   int dec = Atomic::sub(&persist_waiters, 1);

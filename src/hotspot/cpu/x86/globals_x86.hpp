@@ -222,7 +222,7 @@ define_pd_global(intx, InitArrayShortSize, 8*BytesPerLong);
              "Turn off JVM mitigations related to Intel micro code "        \
              "mitigations for the Intel JCC erratum")                       \
                                                                             \
-  product(ccstr, CPUFeatures, NULL, "CPU feature set, "                     \
+  product(ccstr, CPUFeatures, NULL, RESTORE_SETTABLE, "CPU feature set, "   \
       "use -XX:CPUFeatures=0xnumber with -XX:CRaCCheckpointTo when you "    \
       "get an error during -XX:CRaCRestoreFrom on a different machine; "    \
       "-XX:CPUFeatures=native is the default; "                             \

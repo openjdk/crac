@@ -2510,11 +2510,14 @@ void VM_Version::fatal_missing_features(uint64_t features_missing, uint64_t glib
   /* +1 to skip the first ','. */
   tty->print_raw(buf + 1, s - (buf + 1));
   tty->cr();
+  static const char line2[] = "If you are sure it will not crash you can override this check by -XX:CPUFeatures=ignore .";
+  tty->print_raw(line2, sizeof(line2) - 1);
+  tty->cr();
   vm_exit_during_initialization();
 }
 
 void VM_Version::crac_restore() {
-  assert(CRaCCheckpointTo != NULL, "");
+  assert(CRaCRestoreFrom != NULL, "");
 
   if (ShowCPUFeatures) {
     static const char prefix[] = "This snapshot's stored CPU features are: -XX:CPUFeatures=";
@@ -2544,7 +2547,10 @@ void VM_Version::crac_restore() {
   // Workaround JDK-8311164: CPU_HT is set randomly on hybrid CPUs like Alder Lake.
   features_missing &= ~CPU_HT;
 
-  if (features_missing || glibc_features_missing) {
+  if (CPUFeatures && strcmp(CPUFeatures, "ignore") == 0) {
+    ignore_glibc_not_using = true;
+  }
+  if (!ignore_glibc_not_using && (features_missing || glibc_features_missing)) {
     static const char part1[] = "You have to specify -XX:CPUFeatures=";
     tty->print_raw(part1, sizeof(part1) - 1);
     nonlibc_tty_print_uint64_comma_uint64(_features & features_saved, _glibc_features & glibc_features_saved);

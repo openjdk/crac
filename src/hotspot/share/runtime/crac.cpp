@@ -335,14 +335,16 @@ void VM_Crac::doit() {
     }
   }
 
-  VM_Version::crac_restore();
-
   if (shmid <= 0 || !VM_Crac::read_shm(shmid)) {
     _restore_start_time = os::javaTimeMillis();
     _restore_start_nanos = os::javaTimeNanos();
   } else {
     _restore_start_nanos += crac::monotonic_time_offset();
   }
+
+  // VM_Crac::read_shm needs to be already called to read RESTORE_SETTABLE parameters.
+  VM_Version::crac_restore();
+
   memory_restore();
 
   wakeup_threads_in_timedwait();

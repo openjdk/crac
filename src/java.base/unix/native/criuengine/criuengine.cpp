@@ -93,11 +93,10 @@ static std::string join_args(const std::vector<const char *> &args) {
     return retval;
 }
 
-static std::string path_from(std::string cwd, std::string path) {
-    return path[0] == '/' ? path : cwd + "/" + path;
-}
-
 static std::string path_abs(std::string rel) {
+    if (rel[0] == '/') {
+        return rel;
+    }
     char *cwd_s = get_current_dir_name();
     if (!cwd_s) {
         perror("get_current_dir_name");
@@ -105,11 +104,14 @@ static std::string path_abs(std::string rel) {
     }
     std::string cwd = cwd_s;
     free(cwd_s);
-    return path_from(cwd, rel);
+    return cwd + "/" + rel;
 }
 
 static std::string path_abs(std::string rel1, std::string rel2) {
-    return path_from(path_abs(rel1), rel2);
+    if (rel2[0] == '/') {
+        return rel2;
+    }
+    return path_abs(rel1) + "/" + rel2;
 }
 
 static int checkpoint(pid_t jvm,

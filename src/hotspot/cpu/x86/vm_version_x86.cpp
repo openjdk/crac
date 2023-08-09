@@ -1210,6 +1210,14 @@ void VM_Version::print_using_features_cr() {
   }
 }
 
+bool VM_Version::nonlibc_str_equals(const char *a, const char *b) {
+  while (*a && *b) {
+    if (*a++ != *b++)
+      return false;
+  }
+  return !*a && !*b;
+}
+
 void VM_Version::get_processor_features_hardware() {
   _cpu = 4; // 486 by default
   _model = 0;
@@ -2547,9 +2555,21 @@ void VM_Version::crac_restore() {
   // Workaround JDK-8311164: CPU_HT is set randomly on hybrid CPUs like Alder Lake.
   features_missing &= ~CPU_HT;
 
-  if (CPUFeatures && strcmp(CPUFeatures, "ignore") == 0) {
-    ignore_glibc_not_using = true;
+  if (CPUFeatures) {
+    if (nonlibc_str_equals(CPUFeatures, "ignore")) {
+      ignore_glibc_not_using = true;
+    } else {
+      static const char part1[] = "Unsupported -XX:CPUFeatures=";
+      tty->print_raw(part1, sizeof(part1) - 1);
+      for (const char *s = CPUFeatures; *s; ++s)
+        tty->put(*s);
+      static const char part2[] = ", only -XX:CPUFeatures=ignore is supported during -XX:CRaCRestoreFrom";
+      tty->print_raw(part2, sizeof(part2) - 1);
+      tty->cr();
+      vm_exit_during_initialization();
+    }
   }
+
   if (!ignore_glibc_not_using && (features_missing || glibc_features_missing)) {
     static const char part1[] = "You have to specify -XX:CPUFeatures=";
     tty->print_raw(part1, sizeof(part1) - 1);

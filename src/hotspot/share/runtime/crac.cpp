@@ -264,8 +264,66 @@ bool VM_Crac::read_shm(int shmid) {
   if (shmfd < 0) {
     return false;
   }
-  bool ret = _restore_parameters.read_from(shmfd);
+  // deserialize parameters from shared memory
+  bool ret = _restore_parameters.deserialize(shmfd);
+  if (!ret) {
+    fprintf(stderr, "CracRestoreParameters: deserialization failed!\n");
+  }
   close(shmfd);
+
+  // set _restore_start_time and _restore_start_nanos from restored parameters
+  ::_restore_start_time = _restore_parameters.restore_time;
+  ::_restore_start_nanos = _restore_parameters.restore_nanos;
+
+  // update JVM flags from restored parameters
+  for (const char* flag : _restore_parameters.flags) {
+    FormatBuffer<80> err_msg("%s", "");
+    JVMFlag::Error result;
+    if (*flag == '+' || *flag == '-') {
+      result = WriteableFlags::set_flag(
+        flag + 1,
+        *flag == '+' ? "true" : "false",
+        JVMFlagOrigin::CRAC_RESTORE,
+        err_msg
+      );
+      guarantee(
+        result == JVMFlag::Error::SUCCESS,
+        "VM Option '%s' cannot be changed: %d",
+        flag + 1,
+        result
+      );
+    } else {
+      // copy flag to a mutable buffer
+      char buf[4096];
+      strncpy(buf, flag, sizeof(buf));
+      buf[4095] = '\0';
+      // replace '=' with '\0' if found
+      char* eq = strchr(buf, '=');
+      if (eq == NULL) {
+        result = JVMFlag::Error::MISSING_VALUE;
+      } else {
+        *eq = '\0';
+        char* name = buf;
+        char* value = eq + 1;
+        result = WriteableFlags::set_flag(name, value, JVMFlagOrigin::CRAC_RESTORE, err_msg);
+      }
+      guarantee(
+        result == JVMFlag::Error::SUCCESS,
+        "VM Option '%s' cannot be changed: %d",
+        buf,
+        result
+      );
+    }
+  }
+
+  // update environment variables from restored parameters
+  for (const char* env : _restore_parameters.envs) {
+    // putenv() expects char*, but doesn't actually modify its argument,
+    // therefore using const_cast is fine.
+    // setenv() might be safer though.
+    putenv(const_cast<char*>(env));
+  }
+
   return ret;
 }
 
@@ -446,6 +504,126 @@ Handle crac::checkpoint(jarray fd_arr, jobjectArray obj_arr, bool dry_run, jlong
   return ret_cr(JVM_CHECKPOINT_ERROR, Handle(), Handle(), codes, msgs, THREAD);
 }
 
+// Write a jlong to fd.
+// On error, return false.
+static bool write_jlong(int fd, jlong value) {
+  const size_t JLONG_SIZE = sizeof(jlong);
+
+  // serialize jlong with reinterpret_cast
+  int ret = write(fd, reinterpret_cast<char*>(&value), JLONG_SIZE);
+  if (ret != JLONG_SIZE) {
+    if (ret < 0) {
+      perror("write_jlong error");
+    } else {
+      fprintf(stderr, "write_jlong truncated");
+    }
+    return false;
+  }
+  return true;
+}
+
+// Read a jlong from fd into value, which should not be NULL.
+// On error, return false.
+static bool read_jlong(int fd, jlong* value) {
+  const size_t JLONG_SIZE = sizeof(jlong);
+  guarantee(value != NULL, "read_jlong: value is NULL");
+
+  // deserialize jlong with reinterpret_cast
+  int ret = read(fd, reinterpret_cast<char*>(value), JLONG_SIZE);
+  if (ret != JLONG_SIZE) {
+    if (ret < 0) {
+      perror("read_jlong error");
+    } else {
+      fprintf(stderr, "read_jlong truncated");
+    }
+    return false;
+  }
+  return true;
+}
+
+// Write a GrowableArray to fd.
+// On error, return false.
+static bool write_growable_array(int fd, GrowableArray<const char *>* array) {
+  const size_t JLONG_SIZE = sizeof(jlong);
+  guarantee(array != NULL, "write_growable_array: array is NULL");
+
+  // write array length as jlong
+  if (!write_jlong(fd, array->length())) {
+    return false;
+  }
+
+  // write the content (including trailing NULL bytes)
+  for (auto s : *array) {
+    ssize_t len = strlen(s);
+    if (write(fd, s, len + 1) != len + 1) {
+      return false;
+    }
+  }
+  return true;
+}
+
+// Append a GrowableArray from fd to array, which should be initialized.
+// On error, return false.
+static bool read_growable_array(int fd, GrowableArray<const char *>* array) {
+  const size_t JLONG_SIZE = sizeof(jlong);
+  guarantee(array != NULL, "read_growable_array: array is NULL");
+
+  // read array length as jlong
+  jlong len = 0;
+  if (!read_jlong(fd, &len)) {
+    return false;
+  }
+
+  // read the content
+  for (int i = 0; i < len; i++) {
+    // read the string byte-at-a-time, because we don't know where the NULL byte is
+    // calling read() in a loop like this may impact performance
+    char buf[4096] = { 0 };
+    for (int j = 0; j < 4096; j++) {
+      if (read(fd, &buf[j], 1) != 1) {
+        return false;
+      }
+      if (buf[j] == '\0') {
+        break;
+      }
+    }
+    // copy the string onto the heap
+    size_t size = strlen(buf) + 1;
+    char* heap_buf = NEW_C_HEAP_ARRAY(char, size, mtArguments);
+    strncpy(heap_buf, buf, size);
+    array->append(heap_buf);
+  }
+  return true;
+}
+
+CracRestoreParameters::CracRestoreParameters() :
+  restore_time(0),
+  restore_nanos(0),
+  flags(GrowableArray<const char *>(0, mtInternal)),
+  properties(GrowableArray<const char *>(0, mtInternal)),
+  args(GrowableArray<const char *>(0, mtInternal)),
+  envs(GrowableArray<const char *>(0, mtInternal)) {}
+
+bool CracRestoreParameters::serialize(int fd) {
+  if (!write_jlong(fd, restore_time)) return false;
+  if (!write_jlong(fd, restore_nanos)) return false;
+  if (!write_growable_array(fd, &flags)) return false;
+  if (!write_growable_array(fd, &properties)) return false;
+  if (!write_growable_array(fd, &args)) return false;
+  if (!write_growable_array(fd, &envs)) return false;
+  return true;
+}
+
+bool CracRestoreParameters::deserialize(int fd) {
+  if (!read_jlong(fd, &restore_time)) return false;
+  if (!read_jlong(fd, &restore_nanos)) return false;
+  if (!read_growable_array(fd, &flags)) return false;
+  if (!read_growable_array(fd, &properties)) return false;
+  if (!read_growable_array(fd, &args)) return false;
+  if (!read_growable_array(fd, &envs)) return false;
+  return true;
+}
+
 void crac::restore() {
   jlong restore_time = os::javaTimeMillis();
   jlong restore_nanos = os::javaTimeNanos();
@@ -457,16 +635,44 @@ void crac::restore() {
   CracSHM shm(id);
   int shmfd = shm.open(O_RDWR | O_CREAT);
   if (0 <= shmfd) {
-    if (CracRestoreParameters::write_to(
-          shmfd,
-          Arguments::jvm_flags_array(), Arguments::num_jvm_flags(),
-          Arguments::system_properties(),
-          Arguments::java_command() ? Arguments::java_command() : "",
-          restore_time,
-          restore_nanos)) {
+    // passes the context to VM via shared memory as a serialized data structure
+    CracRestoreParameters params;
+
+    // record current time
+    params.restore_time = restore_time;
+    params.restore_nanos = restore_nanos;
+
+    // record JVM flags
+    for (int i = 0; i < Arguments::num_jvm_flags(); i++) {
+      params.flags.append(Arguments::jvm_flags_array()[i]);
+    }
+
+    // record JVM properties
+    for (auto p = Arguments::system_properties(); p != NULL; p = p->next()) {
+      // allocate memory to store properties on the heap
+      // the memory will be freed when the process exits
+      size_t len = strlen(p->key()) + strlen(p->value()) + 1;
+      char* buf = NEW_C_HEAP_ARRAY(char, len, mtArguments);
+      snprintf(buf, len, "%s=%s", p->key(), p->value());
+      params.properties.append(buf);
+    }
+
+    // record command line arguments
+    // TODO: pass argc/argv from JavaMain to here
+    params.args.append(Arguments::java_command() ? Arguments::java_command() : "");
+
+    // record environment variables
+    for (char** env = os::get_environ(); *env != NULL; ++env) {
+      params.envs.append(*env);
+    }
+
+    // serialize parameters into shared memory
+    if (params.serialize(shmfd)) {
       char strid[32];
       snprintf(strid, sizeof(strid), "%d", id);
       LINUX_ONLY(setenv("CRAC_NEW_ARGS_ID", strid, true));
+    } else {
+      fprintf(stderr, "CracRestoreParameters: serialization failed!\n");
     }
     close(shmfd);
   }
@@ -477,77 +683,6 @@ void crac::restore() {
     os::execv(_crengine, _crengine_args);
     warning("cannot execute \"%s restore ...\" (%s)", _crengine, os::strerror(errno));
   }
-}
-
-bool CracRestoreParameters::read_from(int fd) {
-  struct stat st;
-  if (fstat(fd, &st)) {
-    perror("fstat (ignoring restore parameters)");
-    return false;
-  }
-
-  char *contents = NEW_C_HEAP_ARRAY(char, st.st_size, mtInternal);
-  if (read(fd, contents, st.st_size) < 0) {
-    perror("read (ignoring restore parameters)");
-    FREE_C_HEAP_ARRAY(char, contents);
-    return false;
-  }
-
-  _raw_content = contents;
-
-  // parse the contents to read new system properties and arguments
-  header* hdr = (header*)_raw_content;
-  char* cursor = _raw_content + sizeof(header);
-
-  ::_restore_start_time = hdr->_restore_time;
-  ::_restore_start_nanos = hdr->_restore_nanos;
-
-  for (int i = 0; i < hdr->_nflags; i++) {
-    FormatBuffer<80> err_msg("%s", "");
-    JVMFlag::Error result;
-    const char *name = cursor;
-    if (*cursor == '+' || *cursor == '-') {
-      name = cursor + 1;
-      result = WriteableFlags::set_flag(name, *cursor == '+' ? "true" : "false",
-        JVMFlagOrigin::CRAC_RESTORE, err_msg);
-      cursor += strlen(cursor) + 1;
-    } else {
-      char* eq = strchrnul(cursor, '=');
-      if (*eq == '\0') {
-        result = JVMFlag::Error::MISSING_VALUE;
-        cursor = eq + 1;
-      } else {
-        *eq = '\0';
-        char* value = eq + 1;
-        result = WriteableFlags::set_flag(cursor, value, JVMFlagOrigin::CRAC_RESTORE, err_msg);
-        cursor = value + strlen(value) + 1;
-      }
-    }
-    guarantee(result == JVMFlag::Error::SUCCESS, "VM Option '%s' cannot be changed: %d",
-        name, result);
-  }
-
-  for (int i = 0; i < hdr->_nprops; i++) {
-    assert((cursor + strlen(cursor) <= contents + st.st_size), "property length exceeds shared memory size");
-    int idx = _properties->append(cursor);
-    size_t prop_len = strlen(cursor) + 1;
-    cursor = cursor + prop_len;
-  }
-
-  char* env_mem = NEW_C_HEAP_ARRAY(char, hdr->_env_memory_size, mtArguments); // left this pointer unowned, it is freed when process dies
-  memcpy(env_mem, cursor, hdr->_env_memory_size);
-
-  const char* env_end = env_mem + hdr->_env_memory_size;
-  while (env_mem < env_end) {
-    const size_t s = strlen(env_mem) + 1;
-    assert(env_mem + s <= env_end, "env vars exceed memory buffer, maybe ending 0 is lost");
-    putenv(env_mem);
-    env_mem += s;
-  }
-  cursor += hdr->_env_memory_size;
-
-  _args = cursor;
-  return true;
 }
 
 void crac::record_time_before_checkpoint() {

@@ -49,113 +49,23 @@ struct CracFailDep {
   { }
 };
 
-class CracRestoreParameters : public CHeapObj<mtInternal> {
-  char* _raw_content;
-  GrowableArray<const char *>* _properties;
-  const char* _args;
+struct CracRestoreParameters : public StackObj {
+  jlong restore_time;
+  jlong restore_nanos;
+  GrowableArray<const char *> flags;
+  GrowableArray<const char *> properties;
+  GrowableArray<const char *> args;
+  GrowableArray<const char *> envs;
 
-  struct header {
-    jlong _restore_time;
-    jlong _restore_nanos;
-    int _nflags;
-    int _nprops;
-    int _env_memory_size;
-  };
+  CracRestoreParameters();
 
-  static bool write_check_error(int fd, const void *buf, int count) {
-    int wret = write(fd, buf, count);
-    if (wret != count) {
-      if (wret < 0) {
-        perror("shm error");
-      } else {
-        fprintf(stderr, "write shm truncated");
-      }
-      return false;
-    }
-    return true;
-  }
+  // Write parameters into fd.
+  // Return true if successful.
+  bool serialize(int fd);
 
-  static int system_props_length(const SystemProperty* props) {
-    int len = 0;
-    while (props != NULL) {
-      ++len;
-      props = props->next();
-    }
-    return len;
-  }
-
-  static int env_vars_size(const char* const * env) {
-    int len = 0;
-    for (; *env; ++env) {
-      len += (int)strlen(*env) + 1;
-    }
-    return len;
-  }
-
- public:
-  const char *args() const { return _args; }
-  GrowableArray<const char *>* properties() const { return _properties; }
-
-  CracRestoreParameters() :
-    _raw_content(NULL),
-    _properties(new (mtInternal) GrowableArray<const char *>(0, mtInternal)),
-    _args(NULL)
-  {}
-
-  ~CracRestoreParameters() {
-    if (_raw_content) {
-      FREE_C_HEAP_ARRAY(char, _raw_content);
-    }
-    delete _properties;
-  }
-
-  static bool write_to(int fd,
-      const char* const* flags, int num_flags,
-      const SystemProperty* props,
-      const char *args,
-      jlong restore_time,
-      jlong restore_nanos) {
-    header hdr = {
-      restore_time,
-      restore_nanos,
-      num_flags,
-      system_props_length(props),
-      env_vars_size(os::get_environ())
-    };
-
-    if (!write_check_error(fd, (void *)&hdr, sizeof(header))) {
-      return false;
-    }
-
-    for (int i = 0; i < num_flags; ++i) {
-      if (!write_check_error(fd, flags[i], (int)strlen(flags[i]) + 1)) {
-        return false;
-      }
-    }
-
-    const SystemProperty* p = props;
-    while (p != NULL) {
-      char prop[4096];
-      int len = snprintf(prop, sizeof(prop), "%s=%s", p->key(), p->value());
-      guarantee((0 < len) && ((unsigned)len < sizeof(prop)), "property does not fit temp buffer");
-      if (!write_check_error(fd, prop, len+1)) {
-        return false;
-      }
-      p = p->next();
-    }
-
-    // Write env vars
-    for (char** env = os::get_environ(); *env; ++env) {
-      if (!write_check_error(fd, *env, (int)strlen(*env) + 1)) {
-        return false;
-      }
-    }
-
-    return write_check_error(fd, args, (int)strlen(args)+1); // +1 for null char
-  }
-
-  bool read_from(int fd);
-
+  // Read parameters from fd.
+  // Return true if successful.
+  bool deserialize(int fd);
 };
 
 class VM_Crac: public VM_Operation {
@@ -188,8 +98,8 @@ public:
 
   GrowableArray<CracFailDep>* failures() { return _failures; }
   bool ok() { return _ok; }
-  const char* new_args() { return _restore_parameters.args(); }
-  GrowableArray<const char *>* new_properties() { return _restore_parameters.properties(); }
+  const char* new_args() { return _restore_parameters.args.at(0); }
+  GrowableArray<const char *>* new_properties() { return &_restore_parameters.properties; }
   virtual bool allow_nested_vm_operations() const  { return true; }
   VMOp_Type type() const { return VMOp_VM_Crac; }
   void doit();

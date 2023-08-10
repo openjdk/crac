@@ -58,6 +58,7 @@ public:
   // Initialization
   static void initialize();
   static void crac_restore() {}
+  static void crac_restore_finalize() {}
 
   // Asserts
   static void assert_is_initialized() {

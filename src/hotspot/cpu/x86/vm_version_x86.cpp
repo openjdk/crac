@@ -628,14 +628,14 @@ class VM_Version_StubGenerator: public StubCodeGenerator {
 uint64_t VM_Version::CPUFeatures_parse(uint64_t &glibc_features) {
   glibc_features = _glibc_features;
 #ifndef LINUX
-  ignore_glibc_not_using = true;
+  _ignore_glibc_not_using = true;
   return _features;
 #endif
   if (CPUFeatures == NULL || strcmp(CPUFeatures, "native") == 0) {
     return _features;
   }
   if (strcmp(CPUFeatures, "ignore") == 0) {
-    ignore_glibc_not_using = true;
+    _ignore_glibc_not_using = true;
     return _features;
   }
   glibc_features = 0;
@@ -749,7 +749,8 @@ static void pclose_r(const char *arg0, FILE *f, pid_t pid) {
 
 #endif // !INCLUDE_LD_SO_LIST_DIAGNOSTICS
 
-bool VM_Version::ignore_glibc_not_using = false;
+bool VM_Version::_ignore_glibc_not_using = false;
+bool VM_Version::_crac_restore_missing_features;
 #ifdef LINUX
 const char VM_Version::glibc_prefix[] = ":glibc.cpu.hwcaps=";
 const size_t VM_Version::glibc_prefix_len = strlen(glibc_prefix);
@@ -1203,19 +1204,11 @@ void VM_Version::nonlibc_tty_print_uint64_comma_uint64(uint64_t num1, uint64_t n
 }
 
 void VM_Version::print_using_features_cr() {
-  if (ignore_glibc_not_using) {
+  if (_ignore_glibc_not_using) {
     tty->print_cr("CPU features are being kept intact as requested by -XX:CPUFeatures=ignore");
   } else {
     tty->print_cr("CPU features being used are: -XX:CPUFeatures=0x" UINT64_FORMAT_X ",0x" UINT64_FORMAT_X, _features, _glibc_features);
   }
-}
-
-bool VM_Version::nonlibc_str_equals(const char *a, const char *b) {
-  while (*a && *b) {
-    if (*a++ != *b++)
-      return false;
-  }
-  return !*a && !*b;
 }
 
 void VM_Version::get_processor_features_hardware() {
@@ -2500,7 +2493,7 @@ void VM_Version::check_virtualizations() {
 }
 
 // Print the feature names as " = feat1, ..., featN\n";
-void VM_Version::fatal_missing_features(uint64_t features_missing, uint64_t glibc_features_missing) {
+void VM_Version::missing_features(uint64_t features_missing, uint64_t glibc_features_missing) {
   static const char part1[] = "; missing features of this CPU are ";
   tty->print_raw(part1, sizeof(part1) - 1);
   nonlibc_tty_print_uint64_comma_uint64(features_missing, glibc_features_missing);
@@ -2521,7 +2514,6 @@ void VM_Version::fatal_missing_features(uint64_t features_missing, uint64_t glib
   static const char line2[] = "If you are sure it will not crash you can override this check by -XX:CPUFeatures=ignore .";
   tty->print_raw(line2, sizeof(line2) - 1);
   tty->cr();
-  vm_exit_during_initialization();
 }
 
 void VM_Version::crac_restore() {
@@ -2555,29 +2547,15 @@ void VM_Version::crac_restore() {
   // Workaround JDK-8311164: CPU_HT is set randomly on hybrid CPUs like Alder Lake.
   features_missing &= ~CPU_HT;
 
-  if (CPUFeatures) {
-    if (nonlibc_str_equals(CPUFeatures, "ignore")) {
-      ignore_glibc_not_using = true;
-    } else {
-      static const char part1[] = "Unsupported -XX:CPUFeatures=";
-      tty->print_raw(part1, sizeof(part1) - 1);
-      for (const char *s = CPUFeatures; *s; ++s)
-        tty->put(*s);
-      static const char part2[] = ", only -XX:CPUFeatures=ignore is supported during -XX:CRaCRestoreFrom";
-      tty->print_raw(part2, sizeof(part2) - 1);
-      tty->cr();
-      vm_exit_during_initialization();
-    }
-  }
-
-  if (!ignore_glibc_not_using && (features_missing || glibc_features_missing)) {
+  _crac_restore_missing_features = features_missing || glibc_features_missing;
+  if (_crac_restore_missing_features) {
     static const char part1[] = "You have to specify -XX:CPUFeatures=";
     tty->print_raw(part1, sizeof(part1) - 1);
     nonlibc_tty_print_uint64_comma_uint64(_features & features_saved, _glibc_features & glibc_features_saved);
     static const char part2[] = " together with -XX:CRaCCheckpointTo when making a checkpoint file; specified -XX:CRaCRestoreFrom file contains CPU features ";
     tty->print_raw(part2, sizeof(part2) - 1);
     nonlibc_tty_print_uint64_comma_uint64(features_saved, glibc_features_saved);
-    fatal_missing_features(features_missing, glibc_features_missing);
+    missing_features(features_missing, glibc_features_missing);
   }
 
   auto supports_exit = [&](const char *supports, bool file, bool this_cpu) {
@@ -2599,6 +2577,20 @@ void VM_Version::crac_restore() {
 
   if (ShowCPUFeatures)
     print_using_features_cr();
+}
+
+void VM_Version::crac_restore_finalize() {
+  if (CPUFeatures) {
+    if (strcmp(CPUFeatures, "ignore") == 0) {
+      _ignore_glibc_not_using = true;
+    } else {
+      tty->print_cr("Unsupported -XX:CPUFeatures=%s, only -XX:CPUFeatures=ignore is supported during -XX:CRaCRestoreFrom.", CPUFeatures);
+      vm_exit_during_initialization();
+    }
+  }
+  if (_crac_restore_missing_features && !_ignore_glibc_not_using) {
+    vm_exit_during_initialization();
+  }
 }
 
 void VM_Version::initialize() {
@@ -2636,7 +2628,8 @@ void VM_Version::initialize() {
     static const char part2[] = "; this machine's CPU features are ";
     tty->print_raw(part2, sizeof(part2) - 1);
     nonlibc_tty_print_uint64_comma_uint64(_features, _glibc_features);
-    fatal_missing_features(features_missing, glibc_features_missing);
+    missing_features(features_missing, glibc_features_missing);
+    vm_exit_during_initialization();
   }
 
   uint64_t       features_saved =       _features;
@@ -2649,7 +2642,7 @@ void VM_Version::initialize() {
     print_using_features_cr();
 
 #ifdef LINUX
-  if (!ignore_glibc_not_using) {
+  if (!_ignore_glibc_not_using) {
     uint64_t       features_expected =   MAX_CPU - 1;
     uint64_t glibc_features_expected = MAX_GLIBC - 1;
 #if !INCLUDE_CPU_FEATURE_ACTIVE && !INCLUDE_LD_SO_LIST_DIAGNOSTICS

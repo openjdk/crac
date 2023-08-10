@@ -409,10 +409,11 @@ void Threads::initialize_jsr292_core_classes(TRAPS) {
 
 jint Threads::check_for_restore(JavaVMInitArgs* args) {
   if (Arguments::is_restore_option_set(args)) {
-    if (!Arguments::parse_options_for_restore(args)) {
+    JavaMainArgs* main_args;
+    if (!Arguments::parse_options_for_restore(args, &main_args)) {
       return JNI_ERR;
     }
-    crac::restore();
+    crac::restore(main_args);
     if (!CRaCIgnoreRestoreIfUnavailable) {
       // FIXME switch to unified hotspot logging
       warning("cannot restore");

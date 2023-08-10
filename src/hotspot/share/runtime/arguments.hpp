@@ -148,6 +148,15 @@ class SystemProperty : public PathString {
 // Helper class for controlling the lifetime of JavaVMInitArgs objects.
 class ScopedVMInitArgs;
 
+// Arguments passed from JavaMain via the property CRaCJavaMainArgs
+typedef struct {
+    int    argc;
+    char **argv;
+    int    mode;
+    char  *what;
+    // InvocationFunctions ifn;
+} JavaMainArgs;
+
 class Arguments : AllStatic {
   friend class VMStructs;
   friend class JvmtiExport;
@@ -537,7 +546,7 @@ class Arguments : AllStatic {
 
   static bool is_restore_option_set(const JavaVMInitArgs* args);
 
-  static bool parse_options_for_restore(const JavaVMInitArgs* args);
+  static bool parse_options_for_restore(const JavaVMInitArgs* args, JavaMainArgs** main_args);
 
   DEBUG_ONLY(static bool verify_special_jvm_flags(bool check_globals);)
 };

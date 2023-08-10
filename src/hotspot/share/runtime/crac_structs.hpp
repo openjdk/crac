@@ -98,7 +98,7 @@ public:
 
   GrowableArray<CracFailDep>* failures() { return _failures; }
   bool ok() { return _ok; }
-  const char* new_args() { return _restore_parameters.args.at(0); }
+  GrowableArray<const char *>* new_args() { return &_restore_parameters.args; }
   GrowableArray<const char *>* new_properties() { return &_restore_parameters.properties; }
   virtual bool allow_nested_vm_operations() const  { return true; }
   VMOp_Type type() const { return VMOp_VM_Crac; }

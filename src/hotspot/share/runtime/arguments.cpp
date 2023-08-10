@@ -2257,7 +2257,7 @@ bool Arguments::is_restore_option_set(const JavaVMInitArgs* args) {
   return false;
 }
 
-bool Arguments::parse_options_for_restore(const JavaVMInitArgs* args) {
+bool Arguments::parse_options_for_restore(const JavaVMInitArgs* args, JavaMainArgs** main_args) {
   const char *tail = NULL;
 
   // iterate over arguments
@@ -2283,7 +2283,11 @@ bool Arguments::parse_options_for_restore(const JavaVMInitArgs* args) {
         if (old_java_command != NULL) {
           os::free(old_java_command);
         }
-      } else {
+      }
+      else if (strcmp(key, "CRaCJavaMainArgs") == 0) {
+        *main_args = (JavaMainArgs*)(option->extraInfo);
+      }
+      else {
         add_property(tail);
       }
     } else if (match_option(option, "-XX:", &tail)) { // -XX:xxxx

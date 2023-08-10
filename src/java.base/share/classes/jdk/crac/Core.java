@@ -178,7 +178,7 @@ public class Core {
 
         final Object[] bundle = checkpointRestore0(fdArr, null, checkpointException.hasException(), jcmdStream);
         final int retCode = (null == bundle) ? JVM_CHECKPOINT_NONE : (Integer)bundle[0];
-        final String newArguments = (null == bundle) ? null : (String)bundle[1];
+        final String[] newArguments = (null == bundle) ? null : (String[])bundle[1];
         final String[] newProperties = (null == bundle) ? null : (String[])bundle[2];
         final int[] codes = (null == bundle) ? null : (int[])bundle[3];
         final String[] messages = (null == bundle) ? null : (String[])bundle[4];
@@ -228,30 +228,27 @@ public class Core {
             }
         }
 
-        if (newArguments != null && newArguments.length() > 0) {
-            String[] args = newArguments.split(" ");
-            if (args.length > 0) {
-                try {
-                    Method newMain = AccessController.doPrivileged(new PrivilegedExceptionAction<Method>() {
-                       @Override
-                       public Method run() throws Exception {
-                           Class < ?> newMainClass = Class.forName(args[0], false,
-                               ClassLoader.getSystemClassLoader());
-                           Method newMain = newMainClass.getDeclaredMethod("main",
-                               String[].class);
-                           newMain.setAccessible(true);
-                           return newMain;
-                       }
-                    });
-                    newMain.invoke(null,
-                        (Object)Arrays.copyOfRange(args, 1, args.length));
-                } catch (PrivilegedActionException |
-                         InvocationTargetException |
-                         IllegalAccessException e) {
-                    assert !checkpointException.hasException() :
-                        "should not have new arguments";
-                    restoreException.handle(e);
-                }
+        if (newArguments != null && newArguments.length > 0) {
+            try {
+                Method newMain = AccessController.doPrivileged(new PrivilegedExceptionAction<Method>() {
+                    @Override
+                    public Method run() throws Exception {
+                        Class < ?> newMainClass = Class.forName(newArguments[0], false,
+                            ClassLoader.getSystemClassLoader());
+                        Method newMain = newMainClass.getDeclaredMethod("main",
+                            String[].class);
+                        newMain.setAccessible(true);
+                        return newMain;
+                    }
+                });
+                newMain.invoke(null,
+                    (Object)Arrays.copyOfRange(newArguments, 1, newArguments.length));
+            } catch (PrivilegedActionException |
+                        InvocationTargetException |
+                        IllegalAccessException e) {
+                assert !checkpointException.hasException() :
+                    "should not have new arguments";
+                restoreException.handle(e);
             }
         }
 

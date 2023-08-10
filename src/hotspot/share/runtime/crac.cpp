@@ -472,10 +472,15 @@ Handle crac::checkpoint(jarray fd_arr, jobjectArray obj_arr, bool dry_run, jlong
     VMThread::execute(&cr);
   }
   if (cr.ok()) {
-    oop new_args = NULL;
-    if (cr.new_args()) {
-      new_args = java_lang_String::create_oop_from_str(cr.new_args(), CHECK_NH);
+    GrowableArray<const char *>* new_args = cr.new_args();
+    objArrayOop argsObj = oopFactory::new_objArray(vmClasses::String_klass(), new_args->length(), CHECK_NH);
+    objArrayHandle args(THREAD, argsObj);
+
+    for (int i = 0; i < new_args->length(); i++) {
+      oop argObj = java_lang_String::create_oop_from_str(new_args->at(i), CHECK_NH);
+      args->obj_at_put(i, argObj);
     }
+
     GrowableArray<const char *>* new_properties = cr.new_properties();
     objArrayOop propsObj = oopFactory::new_objArray(vmClasses::String_klass(), new_properties->length(), CHECK_NH);
     objArrayHandle props(THREAD, propsObj);
@@ -484,7 +489,7 @@ Handle crac::checkpoint(jarray fd_arr, jobjectArray obj_arr, bool dry_run, jlong
       oop propObj = java_lang_String::create_oop_from_str(new_properties->at(i), CHECK_NH);
       props->obj_at_put(i, propObj);
     }
-    return ret_cr(JVM_CHECKPOINT_OK, Handle(THREAD, new_args), props, Handle(), Handle(), THREAD);
+    return ret_cr(JVM_CHECKPOINT_OK, args, props, Handle(), Handle(), THREAD);
   }
 
   GrowableArray<CracFailDep>* failures = cr.failures();
@@ -624,7 +629,7 @@ bool CracRestoreParameters::deserialize(int fd) {
   return true;
 }
 
-void crac::restore() {
+void crac::restore(JavaMainArgs* main_args) {
   jlong restore_time = os::javaTimeMillis();
   jlong restore_nanos = os::javaTimeNanos();
 
@@ -657,9 +662,13 @@ void crac::restore() {
       params.properties.append(buf);
     }
 
-    // record command line arguments
-    // TODO: pass argc/argv from JavaMain to here
-    params.args.append(Arguments::java_command() ? Arguments::java_command() : "");
+    // record command line arguments (if any)
+    if (main_args->what != NULL) {
+      params.args.append(main_args->what);
+      for (int i = 0; i < main_args->argc; i++) {
+        params.args.append(main_args->argv[i]);
+      }
+    }
 
     // record environment variables
     for (char** env = os::get_environ(); *env != NULL; ++env) {

@@ -27,6 +27,7 @@
 #include "memory/allStatic.hpp"
 #include "runtime/handles.hpp"
 #include "utilities/macros.hpp"
+#include "arguments.hpp"
 
 // xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
 #define UUID_LENGTH 36
@@ -36,7 +37,7 @@ public:
   static void vm_create_start();
   static bool prepare_checkpoint();
   static Handle checkpoint(jarray fd_arr, jobjectArray obj_arr, bool dry_run, jlong jcmd_stream, TRAPS);
-  static void restore();
+  static void restore(JavaMainArgs* main_args);
 
   static jlong restore_start_time();
   static jlong uptime_since_restore();

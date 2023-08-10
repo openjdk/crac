@@ -189,16 +189,17 @@ static int checkpoint(pid_t jvm,
 
     int status;
     if (child != wait(&status)) {
-        std::cerr << "Error waiting for spawned CRIU \"" << join_args(args) << "\": " << strerror(errno) << std::endl;
+        std::cerr << "Error waiting for CRIU: " << strerror(errno) << std::endl
+            << "Command: " << join_args(args) << std::endl;
         kickjvm(jvm, -1);
     } else if (!WIFEXITED(status)) {
-        std::cerr << "Spawned CRIU \"" << join_args(args) << "\" has not properly exited:"
-          " waitpid status %d - check " << path_abs(imagedir, log_local) << std::endl;
+        std::cerr << "CRIU has not properly exited, waitpid status was %d - check " << path_abs(imagedir, log_local) << std::endl
+            << "Command: " << join_args(args) << std::endl;
         kickjvm(jvm, -1);
     } else if (WEXITSTATUS(status)) {
         if (WEXITSTATUS(status) != SUPPRESS_ERROR_IN_PARENT) {
-            std::cerr << "Spawned CRIU \"" << join_args(args) << "\" has not properly exited:"
-              " exit code " << WEXITSTATUS(status) << " - check " << path_abs(imagedir, log_local) << std::endl;
+            std::cerr << "CRIU failed with exit code " << WEXITSTATUS(status) << " - check " << path_abs(imagedir, log_local) << std::endl
+                << "Command: " << join_args(args) << std::endl;
         }
         kickjvm(jvm, -1);
     } else if (leave_running) {

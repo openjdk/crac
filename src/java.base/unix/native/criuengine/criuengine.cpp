@@ -40,12 +40,15 @@
 #include <sys/stat.h>
 #include <string>
 #include <vector>
+#include <iostream>
 
 #define RESTORE_SIGNAL   (SIGRTMIN + 2)
 
 #define PERFDATA_NAME "perfdata"
 
 #define ARRAY_SIZE(x) (sizeof(x) / sizeof(x[0]))
+
+#define SUPPRESS_ERROR_IN_PARENT 77
 
 static int create_cppath(const char *imagedir);
 
@@ -61,6 +64,54 @@ static int kickjvm(pid_t jvm, int code) {
         return 1;
     }
     return 0;
+}
+
+static std::string join_args(const std::vector<const char *> &args) {
+    std::string retval;
+    for (const char *s : args) {
+        if (!s) {
+            continue;
+        }
+        if (!retval.empty()) {
+            retval += ' ';
+        }
+        // https://unix.stackexchange.com/a/357932/296319
+        if (!strpbrk(s, " \t\n!\"#$&'()*,;<=>?[\\]^`{|}~")) {
+            retval += s;
+            continue;
+        }
+        retval += '\'';
+        for (; *s; ++s) {
+            if (*s != '\'') {
+                retval += *s;
+            } else {
+                retval += "'\\''";
+            }
+        }
+        retval += '\'';
+    }
+    return retval;
+}
+
+static std::string path_abs(std::string rel) {
+    if (rel[0] == '/') {
+        return rel;
+    }
+    char *cwd_s = get_current_dir_name();
+    if (!cwd_s) {
+        perror("get_current_dir_name");
+        exit(1);
+    }
+    std::string cwd = cwd_s;
+    free(cwd_s);
+    return cwd + "/" + rel;
+}
+
+static std::string path_abs(std::string rel1, std::string rel2) {
+    if (rel2[0] == '/') {
+        return rel2;
+    }
+    return path_abs(rel1) + "/" + rel2;
 }
 
 static int checkpoint(pid_t jvm,
@@ -112,7 +163,8 @@ static int checkpoint(pid_t jvm,
     args.push_back(verbosity != NULL ? verbosity : "-v4");
     args.push_back("-o");
     // -D without -W makes criu cd to image dir for logs
-    args.push_back(log_file != NULL ? log_file : "dump4.log");
+    const char *log_local = log_file != NULL ? log_file : "dump4.log";
+    args.push_back(log_local);
 
     if (leave_running) {
         args.push_back("-R");
@@ -131,12 +183,24 @@ static int checkpoint(pid_t jvm,
     pid_t child = fork();
     if (!child) {
         execv(criu, const_cast<char **>(args.data()));
-        perror("criu dump");
-        exit(1);
+        std::cerr << "Cannot execute CRIU \"" << join_args(args) << "\": " << strerror(errno) << std::endl;
+        exit(SUPPRESS_ERROR_IN_PARENT);
     }
 
     int status;
-    if (child != wait(&status) || !WIFEXITED(status) || WEXITSTATUS(status)) {
+    if (child != wait(&status)) {
+        std::cerr << "Error waiting for CRIU: " << strerror(errno) << std::endl
+            << "Command: " << join_args(args) << std::endl;
+        kickjvm(jvm, -1);
+    } else if (!WIFEXITED(status)) {
+        std::cerr << "CRIU has not properly exited, waitpid status was %d - check " << path_abs(imagedir, log_local) << std::endl
+            << "Command: " << join_args(args) << std::endl;
+        kickjvm(jvm, -1);
+    } else if (WEXITSTATUS(status)) {
+        if (WEXITSTATUS(status) != SUPPRESS_ERROR_IN_PARENT) {
+            std::cerr << "CRIU failed with exit code " << WEXITSTATUS(status) << " - check " << path_abs(imagedir, log_local) << std::endl
+                << "Command: " << join_args(args) << std::endl;
+        }
         kickjvm(jvm, -1);
     } else if (leave_running) {
         kickjvm(jvm, 0);
@@ -154,7 +218,7 @@ static int restore(const char *basedir,
 
     int fd = open(cppathpath.c_str(), O_RDONLY);
     if (fd < 0) {
-        perror("open cppath");
+        std::cerr << "CRaC restore - cannot open cppath file \"" << path_abs(cppathpath) << "\": " << strerror(errno) << std::endl;
         return 1;
     }
 
@@ -218,7 +282,7 @@ static int restore(const char *basedir,
     fflush(stderr);
 
     execv(criu, const_cast<char **>(args.data()));
-    perror("exec criu");
+    std::cerr << "Cannot execute CRIU \"" << join_args(args) << "\": " << strerror(errno) << std::endl;
     return 1;
 }
 

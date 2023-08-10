@@ -208,6 +208,7 @@ static int checkpoint_restore(int *shmid) {
 
   int cres = call_crengine();
   if (cres < 0) {
+    tty->print_cr("CRaC error executing: %s\n", _crengine);
     return JVM_CHECKPOINT_ERROR;
   }
 

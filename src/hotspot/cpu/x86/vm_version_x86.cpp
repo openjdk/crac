@@ -1397,6 +1397,7 @@ void VM_Version::get_processor_features_hardware() {
   _model = 0;
   _stepping = 0;
   _features = 0;
+  _glibc_features = 0;
   _logical_processors_per_package = 1;
   // i486 internal cache is both I&D and has a 16-byte line size
   _L1_data_cache_line_size = 16;
@@ -2720,8 +2721,19 @@ void VM_Version::crac_restore() {
     tty->cr();
   }
 
-  uint64_t       features_saved =       _features;
-  uint64_t glibc_features_saved = _glibc_features;
+#define SAVE_SET \
+    SAVE(_cpu) \
+    SAVE(_model) \
+    SAVE(_stepping) \
+    SAVE(_features) \
+    SAVE(_glibc_features) \
+    SAVE(_logical_processors_per_package) \
+    SAVE(_L1_data_cache_line_size) \
+    /**/
+#define SAVE(n) auto save##n = VM_Version::n;
+  SAVE_SET
+#undef SAVE
+
 #define SUPPORTS_SET \
     SUPPORTS(supports_cx8) \
     SUPPORTS(supports_atomic_getset4) \
@@ -2735,8 +2747,8 @@ void VM_Version::crac_restore() {
 
   get_processor_features_hardware();
 
-  uint64_t       features_missing =       features_saved & ~      _features;
-  uint64_t glibc_features_missing = glibc_features_saved & ~_glibc_features;
+  uint64_t       features_missing =       save_features & ~      _features;
+  uint64_t glibc_features_missing = save_glibc_features & ~_glibc_features;
 
   // Workaround JDK-8311164: CPU_HT is set randomly on hybrid CPUs like Alder Lake.
   features_missing &= ~CPU_HT;
@@ -2744,10 +2756,10 @@ void VM_Version::crac_restore() {
   if (features_missing || glibc_features_missing) {
     static const char part1[] = "You have to specify -XX:CPUFeatures=";
     tty->print_raw(part1, sizeof(part1) - 1);
-    nonlibc_tty_print_uint64_comma_uint64(_features & features_saved, _glibc_features & glibc_features_saved);
+    nonlibc_tty_print_uint64_comma_uint64(_features & save_features, _glibc_features & save_glibc_features);
     static const char part2[] = " together with -XX:CRaCCheckpointTo when making a checkpoint file; specified -XX:CRaCRestoreFrom file contains CPU features ";
     tty->print_raw(part2, sizeof(part2) - 1);
-    nonlibc_tty_print_uint64_comma_uint64(features_saved, glibc_features_saved);
+    nonlibc_tty_print_uint64_comma_uint64(save_features, save_glibc_features);
     fatal_missing_features(features_missing, glibc_features_missing);
   }
 
@@ -2767,6 +2779,10 @@ void VM_Version::crac_restore() {
   SUPPORTS_SET
 #undef SUPPORTS
 #undef SUPPORTS_SET
+
+#define SAVE(n) VM_Version::n = save##n;
+  SAVE_SET
+#undef SAVE
 
   if (ShowCPUFeatures)
     print_using_features_cr();

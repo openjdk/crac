@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2021, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2021, 2023, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -42,12 +42,7 @@ import java.util.Comparator;
 import java.util.List;
 
 /**
- *  A collection of {@code Comparator} factory methods.
- *
- *  <p><b>This is NOT part of any supported API.
- *  If you write code that depends on this, you do so at your own risk.
- *  This code and its internal interfaces are subject to change or
- *  deletion without notice.</b>
+ * A collection of {@code Comparator} factory methods.
  */
 public class Comparators {
 
@@ -217,17 +212,17 @@ public class Comparators {
     private Comparator<Element> indexUseComparator = null;
 
     /**
-     *  Returns an {@code Element} Comparator for index file presentations, and are sorted as follows.
-     *  If comparing modules and/or packages then simply compare the qualified names,
-     *  if comparing a module or a package with a type/member then compare the
-     *  FullyQualifiedName of the module or a package with the SimpleName of the entity,
-     *  otherwise:
-     *  1. compare the ElementKind ex: Module, Package, Interface etc.
-     *  2a. if equal and if the type is of ExecutableElement(Constructor, Methods),
-     *      a case insensitive comparison of parameter the type signatures
-     *  2b. if equal, case sensitive comparison of the type signatures
-     *  3. if equal, compare the FQNs of the entities
-     *  4. finally, if equal, compare the names of the enclosing modules
+     * Returns an {@code Element} Comparator for index file presentations, and are sorted as follows.
+     * If comparing modules and/or packages then simply compare the qualified names,
+     * if comparing a module or a package with a type/member then compare the
+     * FullyQualifiedName of the module or a package with the SimpleName of the entity,
+     * otherwise:
+     * 1. compare the ElementKind ex: Module, Package, Interface etc.
+     * 2a. if equal and if the type is of ExecutableElement(Constructor, Methods),
+     *     a case insensitive comparison of parameter the type signatures
+     * 2b. if equal, case sensitive comparison of the type signatures
+     * 3. if equal, compare the FQNs of the entities
+     * 4. finally, if equal, compare the names of the enclosing modules
      * @return an element comparator for index file use
      */
     public Comparator<Element> makeIndexElementComparator() {
@@ -243,17 +238,8 @@ public class Comparators {
                  */
                 @Override
                 public int compare(Element e1, Element e2) {
-                    int result;
                     // first, compare names as appropriate
-                    if ((utils.isModule(e1) || utils.isPackage(e1)) && (utils.isModule(e2) || utils.isPackage(e2))) {
-                        result = compareFullyQualifiedNames(e1, e2);
-                    } else if (utils.isModule(e1) || utils.isPackage(e1)) {
-                        result = utils.compareStrings(utils.getFullyQualifiedName(e1), utils.getSimpleName(e2));
-                    } else if (utils.isModule(e2) || utils.isPackage(e2)) {
-                        result = utils.compareStrings(utils.getSimpleName(e1), utils.getFullyQualifiedName(e2));
-                    } else {
-                        result = compareNames(e1, e2);
-                    }
+                    int result = utils.compareStrings(getIndexElementKey(e1), getIndexElementKey(e2));
                     if (result != 0) {
                         return result;
                     }
@@ -277,6 +263,20 @@ public class Comparators {
             };
         }
         return indexUseComparator;
+    }
+
+    /**
+     * {@return the element's primary key for use in the index comparator}
+     * This method can be used by other comparators which need to produce results
+     * that are consistent with the index comparator.
+     *
+     * @param element an element
+     */
+    public String getIndexElementKey(Element element) {
+        return switch (element.getKind()) {
+            case MODULE, PACKAGE -> utils.getFullyQualifiedName(element);
+            default -> utils.getSimpleName(element);
+        };
     }
 
     private Comparator<TypeMirror> typeMirrorClassUseComparator = null;

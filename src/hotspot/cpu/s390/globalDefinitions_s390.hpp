@@ -26,15 +26,13 @@
 #ifndef CPU_S390_GLOBALDEFINITIONS_S390_HPP
 #define CPU_S390_GLOBALDEFINITIONS_S390_HPP
 
-// Convenience macro that produces a string literal with the filename
-// and linenumber of the location where the macro was used.
-#ifndef FILE_AND_LINE
-#define FILE_AND_LINE __FILE__ ":" XSTR(__LINE__)
-#endif
-
 #define ShortenBranches true
 
 const int StackAlignmentInBytes = 16;
+
+// All faults on s390x give the address only on page granularity.
+// Set Pdsegfault_address to minimum one page address.
+const size_t pd_segfault_address = 4096;
 
 #define SUPPORTS_NATIVE_CX8
 
@@ -51,7 +49,5 @@ const bool CCallingConventionRequiresIntsAsLongs = true;
 #define DEFAULT_CACHE_LINE_SIZE 256
 
 #define SUPPORT_RESERVED_STACK_AREA
-
-#define COMPRESSED_CLASS_POINTERS_DEPENDS_ON_COMPRESSED_OOPS false
 
 #endif // CPU_S390_GLOBALDEFINITIONS_S390_HPP

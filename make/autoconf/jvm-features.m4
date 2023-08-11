@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2011, 2021, Oracle and/or its affiliates. All rights reserved.
+# Copyright (c) 2011, 2023, Oracle and/or its affiliates. All rights reserved.
 # DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
 #
 # This code is free software; you can redistribute it and/or modify it
@@ -45,7 +45,7 @@ m4_define(jvm_features_valid, m4_normalize( \
     ifdef([custom_jvm_features_valid], custom_jvm_features_valid) \
     \
     cds compiler1 compiler2 dtrace epsilongc g1gc jfr jni-check \
-    jvmci jvmti link-time-opt management minimal nmt opt-size parallelgc \
+    jvmci jvmti link-time-opt management minimal opt-size parallelgc \
     serialgc services shenandoahgc static-build vm-structs zero zgc \
     cpu_feature_active ld_so_list_diagnostics \
 ))
@@ -69,7 +69,6 @@ m4_define(jvm_feature_desc_jvmti, [enable Java Virtual Machine Tool Interface (J
 m4_define(jvm_feature_desc_link_time_opt, [enable link time optimization])
 m4_define(jvm_feature_desc_management, [enable java.lang.management API support])
 m4_define(jvm_feature_desc_minimal, [support building variant 'minimal'])
-m4_define(jvm_feature_desc_nmt, [include native memory tracking (NMT)])
 m4_define(jvm_feature_desc_opt_size, [optimize the JVM library for size])
 m4_define(jvm_feature_desc_parallelgc, [include the parallel garbage collector])
 m4_define(jvm_feature_desc_serialgc, [include the serial garbage collector])
@@ -249,8 +248,14 @@ AC_DEFUN_ONCE([JVM_FEATURES_CHECK_CDS],
 AC_DEFUN_ONCE([JVM_FEATURES_CHECK_DTRACE],
 [
   JVM_FEATURES_CHECK_AVAILABILITY(dtrace, [
-    AC_MSG_CHECKING([for dtrace tool])
-    if test "x$DTRACE" != "x" && test -x "$DTRACE"; then
+    AC_MSG_CHECKING([for dtrace tool and platform support])
+    if test "x$OPENJDK_TARGET_CPU_ARCH" = "xppc"; then
+      AC_MSG_RESULT([no, $OPENJDK_TARGET_CPU_ARCH])
+      AVAILABLE=false
+    elif test "x$OPENJDK_TARGET_CPU_ARCH" = "xs390"; then
+      AC_MSG_RESULT([no, $OPENJDK_TARGET_CPU_ARCH])
+      AVAILABLE=false
+    elif test "x$DTRACE" != "x" && test -x "$DTRACE"; then
       AC_MSG_RESULT([$DTRACE])
     else
       AC_MSG_RESULT([no])
@@ -267,22 +272,6 @@ AC_DEFUN_ONCE([JVM_FEATURES_CHECK_DTRACE],
 ])
 
 ###############################################################################
-# Check if the feature 'jfr' is available on this platform.
-#
-AC_DEFUN_ONCE([JVM_FEATURES_CHECK_JFR],
-[
-  JVM_FEATURES_CHECK_AVAILABILITY(jfr, [
-    AC_MSG_CHECKING([if platform is supported by JFR])
-    if test "x$OPENJDK_TARGET_OS" = xaix; then
-      AC_MSG_RESULT([no, $OPENJDK_TARGET_OS-$OPENJDK_TARGET_CPU])
-      AVAILABLE=false
-    else
-      AC_MSG_RESULT([yes])
-    fi
-  ])
-])
-
-###############################################################################
 # Check if the feature 'jvmci' is available on this platform.
 #
 AC_DEFUN_ONCE([JVM_FEATURES_CHECK_JVMCI],
@@ -292,6 +281,8 @@ AC_DEFUN_ONCE([JVM_FEATURES_CHECK_JVMCI],
     if test "x$OPENJDK_TARGET_CPU" = "xx86_64"; then
       AC_MSG_RESULT([yes])
     elif test "x$OPENJDK_TARGET_CPU" = "xaarch64"; then
+      AC_MSG_RESULT([yes])
+    elif test "x$OPENJDK_TARGET_CPU" = "xriscv64"; then
       AC_MSG_RESULT([yes])
     else
       AC_MSG_RESULT([no, $OPENJDK_TARGET_CPU])
@@ -308,7 +299,9 @@ AC_DEFUN_ONCE([JVM_FEATURES_CHECK_SHENANDOAHGC],
   JVM_FEATURES_CHECK_AVAILABILITY(shenandoahgc, [
     AC_MSG_CHECKING([if platform is supported by Shenandoah])
     if test "x$OPENJDK_TARGET_CPU_ARCH" = "xx86" || \
-        test "x$OPENJDK_TARGET_CPU" = "xaarch64" ; then
+        test "x$OPENJDK_TARGET_CPU" = "xaarch64" || \
+        test "x$OPENJDK_TARGET_CPU" = "xppc64le" || \
+        test "x$OPENJDK_TARGET_CPU" = "xriscv64"; then
       AC_MSG_RESULT([yes])
     else
       AC_MSG_RESULT([no, $OPENJDK_TARGET_CPU])
@@ -353,6 +346,14 @@ AC_DEFUN_ONCE([JVM_FEATURES_CHECK_ZGC],
       if test "x$OPENJDK_TARGET_OS" = "xlinux" || \
           test "x$OPENJDK_TARGET_OS" = "xwindows" || \
           test "x$OPENJDK_TARGET_OS" = "xmacosx"; then
+        AC_MSG_RESULT([yes])
+      else
+        AC_MSG_RESULT([no, $OPENJDK_TARGET_OS-$OPENJDK_TARGET_CPU])
+        AVAILABLE=false
+      fi
+    elif test "x$OPENJDK_TARGET_CPU" = "xppc64le" || \
+        test "x$OPENJDK_TARGET_CPU" = "xriscv64"; then
+      if test "x$OPENJDK_TARGET_OS" = "xlinux"; then
         AC_MSG_RESULT([yes])
       else
         AC_MSG_RESULT([no, $OPENJDK_TARGET_OS-$OPENJDK_TARGET_CPU])
@@ -529,7 +530,6 @@ AC_DEFUN_ONCE([JVM_FEATURES_PREPARE_PLATFORM],
 
   JVM_FEATURES_CHECK_CDS
   JVM_FEATURES_CHECK_DTRACE
-  JVM_FEATURES_CHECK_JFR
   JVM_FEATURES_CHECK_JVMCI
   JVM_FEATURES_CHECK_SHENANDOAHGC
   JVM_FEATURES_CHECK_STATIC_BUILD
@@ -537,12 +537,6 @@ AC_DEFUN_ONCE([JVM_FEATURES_PREPARE_PLATFORM],
   JVM_FEATURES_CHECK_CPU_FEATURE_ACTIVE
   JVM_FEATURES_CHECK_LD_SO_LIST_DIAGNOSTICS
 
-  # Filter out features by default for all variants on certain platforms.
-  # Make sure to just add to JVM_FEATURES_PLATFORM_FILTER, since it could
-  # have a value already from custom extensions.
-  if test "x$OPENJDK_TARGET_OS" = xaix; then
-    JVM_FEATURES_PLATFORM_FILTER="$JVM_FEATURES_PLATFORM_FILTER jfr"
-  fi
 ])
 
 ###############################################################################
@@ -563,7 +557,7 @@ AC_DEFUN([JVM_FEATURES_PREPARE_VARIANT],
   elif test "x$variant" = "xcore"; then
     JVM_FEATURES_VARIANT_UNAVAILABLE="cds minimal zero"
   elif test "x$variant" = "xzero"; then
-    JVM_FEATURES_VARIANT_UNAVAILABLE="cds compiler1 compiler2 \
+    JVM_FEATURES_VARIANT_UNAVAILABLE="compiler1 compiler2 \
         jvmci minimal zgc"
   else
     JVM_FEATURES_VARIANT_UNAVAILABLE="minimal zero"
@@ -574,7 +568,7 @@ AC_DEFUN([JVM_FEATURES_PREPARE_VARIANT],
     JVM_FEATURES_VARIANT_FILTER="compiler2 jvmci link-time-opt opt-size"
   elif test "x$variant" = "xminimal"; then
     JVM_FEATURES_VARIANT_FILTER="cds compiler2 dtrace epsilongc g1gc \
-        jfr jni-check jvmci jvmti management nmt parallelgc services \
+        jfr jni-check jvmci jvmti management parallelgc services \
         shenandoahgc vm-structs zgc"
     if test "x$OPENJDK_TARGET_CPU" = xarm ; then
       JVM_FEATURES_VARIANT_FILTER="$JVM_FEATURES_VARIANT_FILTER opt-size"
@@ -667,10 +661,6 @@ AC_DEFUN([JVM_FEATURES_VERIFY],
 
   if JVM_FEATURES_IS_ACTIVE(jvmti) && ! JVM_FEATURES_IS_ACTIVE(services); then
     AC_MSG_ERROR([Specified JVM feature 'jvmti' requires feature 'services' for variant '$variant'])
-  fi
-
-  if JVM_FEATURES_IS_ACTIVE(management) && ! JVM_FEATURES_IS_ACTIVE(nmt); then
-    AC_MSG_ERROR([Specified JVM feature 'management' requires feature 'nmt' for variant '$variant'])
   fi
 
   # For backwards compatibility, disable a feature "globally" if one variant

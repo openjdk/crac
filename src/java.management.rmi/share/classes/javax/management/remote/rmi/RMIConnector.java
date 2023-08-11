@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2002, 2021, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2002, 2023, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -185,7 +185,7 @@ public class RMIConnector implements JMXConnector, Serializable, JMXAddressable 
      * syntaxes, for example:</p>
      *
      * <pre>
-     * service:jmx:iiop://<em>[host[:port]]</em>/stub/<em>encoded-stub</em>
+     * service:jmx:myprotocolname://<em>[host[:port]]</em>/stub/<em>encoded-stub</em>
      * </pre>
      *
      * @param url the address of the RMI connector server.
@@ -367,7 +367,7 @@ public class RMIConnector implements JMXConnector, Serializable, JMXAddressable 
         } catch (NamingException e) {
             final String msg = "Failed to retrieve RMIServer stub: " + e;
             if (tracing) logger.trace("connect",idstr + " " + msg);
-            throw EnvHelp.initCause(new IOException(msg),e);
+            throw new IOException(msg, e);
         }
     }
 
@@ -390,6 +390,7 @@ public class RMIConnector implements JMXConnector, Serializable, JMXAddressable 
         return getMBeanServerConnection(null);
     }
 
+    @SuppressWarnings("removal")
     public synchronized MBeanServerConnection
             getMBeanServerConnection(Subject delegationSubject)
             throws IOException {
@@ -543,9 +544,7 @@ public class RMIConnector implements JMXConnector, Serializable, JMXAddressable 
                 throw (IOException) closeException;
             if (closeException instanceof RuntimeException)
                 throw (RuntimeException) closeException;
-            final IOException x =
-                    new IOException("Failed to close: " + closeException);
-            throw EnvHelp.initCause(x,closeException);
+            throw new IOException("Failed to close: " + closeException, closeException);
         }
     }
 
@@ -2218,7 +2217,9 @@ public class RMIConnector implements JMXConnector, Serializable, JMXAddressable 
         if (defaultClassLoader != null)
             AccessController.doPrivileged(new PrivilegedAction<Void>() {
                 public Void run() {
-                    t.setContextClassLoader(defaultClassLoader);
+                    if (t.getContextClassLoader() != defaultClassLoader) {
+                        t.setContextClassLoader(defaultClassLoader);
+                    }
                     return null;
                 }
             });
@@ -2229,7 +2230,10 @@ public class RMIConnector implements JMXConnector, Serializable, JMXAddressable 
     private void popDefaultClassLoader(final ClassLoader old) {
         AccessController.doPrivileged(new PrivilegedAction<Void>() {
             public Void run() {
-                Thread.currentThread().setContextClassLoader(old);
+                Thread t = Thread.currentThread();
+                if (t.getContextClassLoader() != old) {
+                    t.setContextClassLoader(old);
+                }
                 return null;
             }
         });

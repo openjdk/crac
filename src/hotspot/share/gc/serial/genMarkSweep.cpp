@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2001, 2021, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2001, 2023, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -32,6 +32,7 @@
 #include "code/codeCache.hpp"
 #include "code/icBuffer.hpp"
 #include "compiler/oopMap.hpp"
+#include "gc/serial/cardTableRS.hpp"
 #include "gc/serial/genMarkSweep.hpp"
 #include "gc/serial/serialGcRefProcProxyTask.hpp"
 #include "gc/shared/collectedHeap.inline.hpp"
@@ -41,8 +42,8 @@
 #include "gc/shared/gcTraceTime.inline.hpp"
 #include "gc/shared/genCollectedHeap.hpp"
 #include "gc/shared/generation.hpp"
-#include "gc/shared/genOopClosures.inline.hpp"
 #include "gc/shared/modRefBarrierSet.hpp"
+#include "gc/shared/preservedMarks.inline.hpp"
 #include "gc/shared/referencePolicy.hpp"
 #include "gc/shared/referenceProcessorPhaseTimes.hpp"
 #include "gc/shared/space.hpp"
@@ -53,8 +54,8 @@
 #include "oops/oop.inline.hpp"
 #include "prims/jvmtiExport.hpp"
 #include "runtime/handles.inline.hpp"
+#include "runtime/javaThread.hpp"
 #include "runtime/synchronizer.hpp"
-#include "runtime/thread.inline.hpp"
 #include "runtime/vmThread.hpp"
 #include "utilities/copy.hpp"
 #include "utilities/events.hpp"
@@ -63,7 +64,7 @@
 #include "jvmci/jvmci.hpp"
 #endif
 
-void GenMarkSweep::invoke_at_safepoint(ReferenceProcessor* rp, bool clear_all_softrefs) {
+void GenMarkSweep::invoke_at_safepoint(bool clear_all_softrefs) {
   assert(SafepointSynchronize::is_at_safepoint(), "must be at a safepoint");
 
   GenCollectedHeap* gch = GenCollectedHeap::heap();
@@ -72,12 +73,6 @@ void GenMarkSweep::invoke_at_safepoint(ReferenceProcessor* rp, bool clear_all_so
     assert(clear_all_softrefs, "Policy should have been checked earlier");
   }
 #endif
-
-  // hook up weak ref data so it can be used during Mark-Sweep
-  assert(ref_processor() == NULL, "no stomping");
-  assert(rp != NULL, "should be non-NULL");
-  set_ref_processor(rp);
-  rp->setup_policy(clear_all_softrefs);
 
   gch->trace_heap_before_gc(_gc_tracer);
 
@@ -113,27 +108,12 @@ void GenMarkSweep::invoke_at_safepoint(ReferenceProcessor* rp, bool clear_all_so
 
   deallocate_stacks();
 
-  // If compaction completely evacuated the young generation then we
-  // can clear the card table.  Otherwise, we must invalidate
-  // it (consider all cards dirty).  In the future, we might consider doing
-  // compaction within generations only, and doing card-table sliding.
-  CardTableRS* rs = gch->rem_set();
-  Generation* old_gen = gch->old_gen();
+  MarkSweep::_string_dedup_requests->flush();
 
-  // Clear/invalidate below make use of the "prev_used_regions" saved earlier.
-  if (gch->young_gen()->used() == 0) {
-    // We've evacuated the young generation.
-    rs->clear_into_younger(old_gen);
-  } else {
-    // Invalidate the cards corresponding to the currently used
-    // region and clear those corresponding to the evacuated region.
-    rs->invalidate_or_clear(old_gen);
-  }
+  bool is_young_gen_empty = (gch->young_gen()->used() == 0);
+  gch->rem_set()->maintain_old_to_young_invariant(gch->old_gen(), is_young_gen_empty);
 
   gch->prune_scavengable_nmethods();
-
-  // refs processing: clean slate
-  set_ref_processor(NULL);
 
   // Update heap occupancy information which is used as
   // input to soft ref clearing policy at the next gc.
@@ -152,7 +132,7 @@ void GenMarkSweep::allocate_stacks() {
 
   // $$$ To cut a corner, we'll only use the first scratch block, and then
   // revert to malloc.
-  if (scratch != NULL) {
+  if (scratch != nullptr) {
     _preserved_count_max =
       scratch->num_words * HeapWordSize / sizeof(PreservedMark);
   } else {
@@ -161,6 +141,8 @@ void GenMarkSweep::allocate_stacks() {
 
   _preserved_marks = (PreservedMark*)scratch;
   _preserved_count = 0;
+
+  _preserved_overflow_stack_set.init(1);
 }
 
 
@@ -168,8 +150,7 @@ void GenMarkSweep::deallocate_stacks() {
   GenCollectedHeap* gch = GenCollectedHeap::heap();
   gch->release_scratch();
 
-  _preserved_mark_stack.clear(true);
-  _preserved_oop_stack.clear(true);
+  _preserved_overflow_stack_set.reclaim();
   _marking_stack.clear();
   _objarray_stack.clear(true);
 }
@@ -180,25 +161,26 @@ void GenMarkSweep::mark_sweep_phase1(bool clear_all_softrefs) {
 
   GenCollectedHeap* gch = GenCollectedHeap::heap();
 
-  // Need new claim bits before marking starts.
-  ClassLoaderDataGraph::clear_claimed_marks();
+  ClassLoaderDataGraph::verify_claimed_marks_cleared(ClassLoaderData::_claim_stw_fullgc_mark);
+
+  ref_processor()->start_discovery(clear_all_softrefs);
 
   {
     StrongRootsScope srs(0);
 
-    gch->full_process_roots(false, // not the adjust phase
-                            GenCollectedHeap::SO_None,
-                            ClassUnloading, // only strong roots if ClassUnloading
-                                            // is enabled
-                            &follow_root_closure,
-                            &follow_cld_closure);
+    CLDClosure* weak_cld_closure = ClassUnloading ? nullptr : &follow_cld_closure;
+    MarkingCodeBlobClosure mark_code_closure(&follow_root_closure, !CodeBlobToOopClosure::FixRelocations, true);
+    gch->process_roots(GenCollectedHeap::SO_None,
+                       &follow_root_closure,
+                       &follow_cld_closure,
+                       weak_cld_closure,
+                       &mark_code_closure);
   }
 
   // Process reference objects found during marking
   {
     GCTraceTime(Debug, gc, phases) tm_m("Reference Processing", gc_timer());
 
-    ref_processor()->setup_policy(clear_all_softrefs);
     ReferenceProcessorPhaseTimes pt(_gc_timer, ref_processor()->max_num_queues());
     SerialGCRefProcProxyTask task(is_alive, keep_alive, follow_stack_closure);
     const ReferenceProcessorStats& stats = ref_processor()->process_discovered_references(task, pt);
@@ -216,12 +198,13 @@ void GenMarkSweep::mark_sweep_phase1(bool clear_all_softrefs) {
 
   {
     GCTraceTime(Debug, gc, phases) tm_m("Class Unloading", gc_timer());
+    CodeCache::UnloadingScope scope(&is_alive);
 
     // Unload classes and purge the SystemDictionary.
     bool purged_class = SystemDictionary::do_unloading(gc_timer());
 
     // Unload nmethods.
-    CodeCache::do_unloading(&is_alive, purged_class);
+    CodeCache::do_unloading(purged_class);
 
     // Prune dead klasses from subklass/sibling/implementor lists.
     Klass::clean_weak_klass_links(purged_class);
@@ -230,29 +213,18 @@ void GenMarkSweep::mark_sweep_phase1(bool clear_all_softrefs) {
     JVMCI_ONLY(JVMCI::do_unloading(purged_class));
   }
 
-  gc_tracer()->report_object_count_after_gc(&is_alive);
+  {
+    GCTraceTime(Debug, gc, phases) tm_m("Report Object Count", gc_timer());
+    gc_tracer()->report_object_count_after_gc(&is_alive, nullptr);
+  }
 }
 
 
 void GenMarkSweep::mark_sweep_phase2() {
   // Now all live objects are marked, compute the new object addresses.
-
-  // It is imperative that we traverse perm_gen LAST. If dead space is
-  // allowed a range of dead object may get overwritten by a dead int
-  // array. If perm_gen is not traversed last a Klass* may get
-  // overwritten. This is fine since it is dead, but if the class has dead
-  // instances we have to skip them, and in order to find their size we
-  // need the Klass*!
-  //
-  // It is not required that we traverse spaces in the same order in
-  // phase2, phase3 and phase4, but the ValidateMarkSweep live oops
-  // tracking expects us to do so. See comment under phase4.
-
-  GenCollectedHeap* gch = GenCollectedHeap::heap();
-
   GCTraceTime(Info, gc, phases) tm("Phase 2: Compute new object addresses", _gc_timer);
 
-  gch->prepare_for_compaction();
+  GenCollectedHeap::heap()->prepare_for_compaction();
 }
 
 class GenAdjustPointersClosure: public GenCollectedHeap::GenClosure {
@@ -268,18 +240,14 @@ void GenMarkSweep::mark_sweep_phase3() {
   // Adjust the pointers to reflect the new locations
   GCTraceTime(Info, gc, phases) tm("Phase 3: Adjust pointers", gc_timer());
 
-  // Need new claim bits for the pointer adjustment tracing.
-  ClassLoaderDataGraph::clear_claimed_marks();
+  ClassLoaderDataGraph::verify_claimed_marks_cleared(ClassLoaderData::_claim_stw_fullgc_adjust);
 
-  {
-    StrongRootsScope srs(0);
-
-    gch->full_process_roots(true,  // this is the adjust phase
-                            GenCollectedHeap::SO_AllCodeCache,
-                            false, // all roots
-                            &adjust_pointer_closure,
-                            &adjust_cld_closure);
-  }
+  CodeBlobToOopClosure code_closure(&adjust_pointer_closure, CodeBlobToOopClosure::FixRelocations);
+  gch->process_roots(GenCollectedHeap::SO_AllCodeCache,
+                     &adjust_pointer_closure,
+                     &adjust_cld_closure,
+                     &adjust_cld_closure,
+                     &code_closure);
 
   gch->gen_process_weak_roots(&adjust_pointer_closure);
 
@@ -297,20 +265,8 @@ public:
 
 void GenMarkSweep::mark_sweep_phase4() {
   // All pointers are now adjusted, move objects accordingly
-
-  // It is imperative that we traverse perm_gen first in phase4. All
-  // classes must be allocated earlier than their instances, and traversing
-  // perm_gen first makes sure that all Klass*s have moved to their new
-  // location before any instance does a dispatch through it's klass!
-
-  // The ValidateMarkSweep live oops tracking expects us to traverse spaces
-  // in the same order in phase2, phase3 and phase4. We don't quite do that
-  // here (perm_gen first rather than last), so we tell the validate code
-  // to use a higher index (saved from phase2) when verifying perm_gen.
-  GenCollectedHeap* gch = GenCollectedHeap::heap();
-
   GCTraceTime(Info, gc, phases) tm("Phase 4: Move objects", _gc_timer);
 
   GenCompactClosure blk;
-  gch->generation_iterate(&blk, true);
+  GenCollectedHeap::heap()->generation_iterate(&blk, true);
 }

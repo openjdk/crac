@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2021, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2021, 2023, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -24,38 +24,58 @@
 package ir_framework.tests;
 
 import compiler.lib.ir_framework.*;
-import compiler.lib.ir_framework.driver.IRViolationException;
+import compiler.lib.ir_framework.driver.irmatching.IRViolationException;
 import jdk.test.lib.Asserts;
+import jdk.test.lib.Platform;
+import jdk.test.whitebox.WhiteBox;
 
 import java.io.ByteArrayOutputStream;
 import java.io.PrintStream;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.List;
+import java.util.*;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /*
  * @test
- * @requires vm.debug == true & vm.compMode != "Xint" & vm.compiler2.enabled & vm.flagless
+ * @requires vm.debug == true & vm.compMode != "Xint" & vm.compiler1.enabled & vm.compiler2.enabled & vm.flagless
  * @summary Test IR matcher with different default IR node regexes. Use -DPrintIREncoding.
  *          Normally, the framework should be called with driver.
- * @library /test/lib /
- * @run main/othervm -DPrintIREncoding=true ir_framework.tests.TestIRMatching
+ * @library /test/lib /testlibrary_tests /
+ * @build jdk.test.whitebox.WhiteBox
+ * @run driver jdk.test.lib.helpers.ClassFileInstaller jdk.test.whitebox.WhiteBox
+ * @run main/othervm/timeout=240 -Xbootclasspath/a:. -XX:+IgnoreUnrecognizedVMOptions -XX:+UnlockDiagnosticVMOptions
+ *                               -XX:+WhiteBoxAPI -DPrintIREncoding=true  ir_framework.tests.TestIRMatching
  */
 
 public class TestIRMatching {
 
-    public static void main(String[] args) {
-        runFailOnTestsArgs(BadFailOnConstraint.create(AndOr1.class, "test1(int)", 1, "CallStaticJava"), "-XX:TLABRefillWasteFraction=50", "-XX:+UsePerfData", "-XX:+UseTLAB");
-        runFailOnTestsArgs(BadFailOnConstraint.create(AndOr1.class, "test2()", 1, "CallStaticJava"), "-XX:TLABRefillWasteFraction=50", "-XX:-UsePerfData", "-XX:+UseTLAB");
+    private static final Map<Exception, String> exceptions = new LinkedHashMap<>();
+    private static final ByteArrayOutputStream baos = new ByteArrayOutputStream();
+    private static final ByteArrayOutputStream baosErr = new ByteArrayOutputStream();
+    private static final PrintStream ps = new PrintStream(baos);
+    private static final PrintStream psErr = new PrintStream(baosErr);
+    private static final PrintStream oldOut = System.out;
+    private static final PrintStream oldErr = System.err;
 
+    private static void addException(Exception e) {
+        System.out.flush();
+        System.err.flush();
+        exceptions.put(e, baos + System.lineSeparator() + baosErr);
+    }
+
+    public static void main(String[] args) {
+        // Redirect System.out and System.err to reduce noise.
+        System.setOut(ps);
+        System.setErr(psErr);
         runWithArguments(AndOr1.class, "-XX:TLABRefillWasteFraction=52", "-XX:+UsePerfData", "-XX:+UseTLAB");
         runWithArguments(CountComparisons.class, "-XX:TLABRefillWasteFraction=50");
         runWithArguments(GoodCount.class, "-XX:TLABRefillWasteFraction=50");
         runWithArguments(MultipleFailOnGood.class, "-XX:TLABRefillWasteFraction=50");
 
-        String[] allocMatches = { "MyClass", "call,static  wrapper for: _new_instance_Java" };
+        runCheck(new String[] {"-XX:TLABRefillWasteFraction=50", "-XX:+UsePerfData", "-XX:+UseTLAB"}, BadFailOnConstraint.create(AndOr1.class, "test1(int)", 1, "CallStaticJava"));
+        runCheck(new String[] {"-XX:TLABRefillWasteFraction=50", "-XX:-UsePerfData", "-XX:+UseTLAB"}, BadFailOnConstraint.create(AndOr1.class, "test2()", 1, "CallStaticJava"));
+
+        String[] allocMatches = { "MyClass", "wrapper for: _new_instance_Java" };
         runCheck(BadFailOnConstraint.create(MultipleFailOnBad.class, "fail1()", 1, 1, "Store"),
                  BadFailOnConstraint.create(MultipleFailOnBad.class, "fail1()", 1,  3, "Store"),
                  GoodFailOnRegexConstraint.create(MultipleFailOnBad.class, "fail1()", 1,  2, 4),
@@ -88,7 +108,13 @@ public class TestIRMatching {
                  BadCountsConstraint.create(BadCount.class, "bad3()", 2,  1, "Store")
         );
 
-        String[] allocArrayMatches = { "MyClass", "call,static  wrapper for: _new_array_Java"};
+        runCheck(GoodRuleConstraint.create(Calls.class, "calls()", 1),
+                 BadFailOnConstraint.create(Calls.class, "calls()", 2, 1, "CallStaticJava", "dontInline"),
+                 BadFailOnConstraint.create(Calls.class, "calls()", 2, 2, "CallStaticJava", "dontInline"),
+                 GoodRuleConstraint.create(Calls.class, "calls()", 3)
+        );
+
+        String[] allocArrayMatches = { "MyClass", "wrapper for: _new_array_Java"};
         runCheck(BadFailOnConstraint.create(AllocArray.class, "allocArray()", 1, allocArrayMatches),
                  BadFailOnConstraint.create(AllocArray.class, "allocArray()", 2,  allocArrayMatches),
                  GoodFailOnConstraint.create(AllocArray.class, "allocArray()", 3),
@@ -105,7 +131,7 @@ public class TestIRMatching {
                  BadFailOnConstraint.create(RunTests.class, "bad1(int)", 2, "Load")
         );
 
-        runCheck(new String[] {"-XX:-UseCompressedClassPointers"},
+        runCheck(new String[] {"-XX:+IgnoreUnrecognizedVMOptions", "-XX:-UseCompressedClassPointers"},
                  BadFailOnConstraint.create(Loads.class, "load()", 1, 1, "Load"),
                  BadFailOnConstraint.create(Loads.class, "load()", 1, 3, "LoadI"),
                  BadCountsConstraint.create(Loads.class, "load()", 1, 1, 0),
@@ -170,9 +196,12 @@ public class TestIRMatching {
                  BadFailOnConstraint.create(Traps.class, "rangeCheck()", 3, "CallStaticJava", "uncommon_trap", "null_check"),
                  GoodRuleConstraint.create(Traps.class, "rangeCheck()", 4),
                  BadFailOnConstraint.create(Traps.class, "instrinsicOrTypeCheckedInlining()", 1, "CallStaticJava", "uncommon_trap"),
-                 BadFailOnConstraint.create(Traps.class, "instrinsicOrTypeCheckedInlining()", 2, "CallStaticJava", "uncommon_trap", "intrinsic_or_type_checked_inlining"),
-                 BadFailOnConstraint.create(Traps.class, "instrinsicOrTypeCheckedInlining()", 3, "CallStaticJava", "uncommon_trap", "null_check"),
-                 GoodRuleConstraint.create(Traps.class, "instrinsicOrTypeCheckedInlining()", 4)
+                 WhiteBox.getWhiteBox().isJVMCISupportedByGC() ?
+                    BadFailOnConstraint.create(Traps.class, "instrinsicOrTypeCheckedInlining()", 2, "CallStaticJava", "uncommon_trap", "intrinsic_or_type_checked_inlining")
+                    : GoodRuleConstraint.create(Traps.class, "instrinsicOrTypeCheckedInlining()", 2),
+                 BadFailOnConstraint.create(Traps.class, "instrinsicOrTypeCheckedInlining()", 3, "CallStaticJava", "uncommon_trap", "intrinsic"),
+                 BadFailOnConstraint.create(Traps.class, "instrinsicOrTypeCheckedInlining()", 4, "CallStaticJava", "uncommon_trap", "null_check"),
+                 GoodRuleConstraint.create(Traps.class, "instrinsicOrTypeCheckedInlining()", 5)
         );
 
 
@@ -184,92 +213,168 @@ public class TestIRMatching {
 
         runCheck(BadFailOnConstraint.create(ScopeObj.class, "scopeObject()", 1, "ScObj"));
         runCheck(BadFailOnConstraint.create(Membar.class, "membar()", 1, "MemBar"));
-        runCheck(BadFailOnConstraint.create(CheckCastArray.class, "array()", 1, "cmp", "precise klass"),
-                 BadFailOnConstraint.create(CheckCastArray.class, "array()", 2, 1,"cmp", "precise klass", "MyClass"),
-                 BadFailOnConstraint.create(CheckCastArray.class, "array()", 2, 2,"cmp", "precise klass", "ir_framework/tests/MyClass"),
+
+        String cmp;
+        if (Platform.isPPC() || Platform.isX86()) {
+            cmp = "CMP";
+        } else if (Platform.isS390x()){
+            cmp = "CLFI";
+        } else {
+            cmp = "cmp";
+        }
+        runCheck(BadFailOnConstraint.create(CheckCastArray.class, "array()", 1, cmp, "precise"),
+                 BadFailOnConstraint.create(CheckCastArray.class, "array()", 2, 1,cmp, "precise", "MyClass"),
+                 BadFailOnConstraint.create(CheckCastArray.class, "array()", 2, 2,cmp, "precise", "ir_framework/tests/MyClass"),
                  GoodFailOnConstraint.create(CheckCastArray.class, "array()", 3),
-                 BadFailOnConstraint.create(CheckCastArray.class, "arrayCopy(java.lang.Object[],java.lang.Class)", 1, "checkcast_arraycopy")
+                 Platform.isS390x() ? // There is no checkcast_arraycopy stub for C2 on s390
+                     GoodFailOnConstraint.create(CheckCastArray.class, "arrayCopy(java.lang.Object[],java.lang.Class)", 1)
+                     : BadFailOnConstraint.create(CheckCastArray.class, "arrayCopy(java.lang.Object[],java.lang.Class)", 1, "checkcast_arraycopy")
         );
 
-        // Redirect stdout to stream and then check if we find required IR encoding read from socket.
-        ByteArrayOutputStream baos = new ByteArrayOutputStream();
-        PrintStream ps = new PrintStream(baos);
-        PrintStream old = System.out;
-        System.setOut(ps);
-
         try {
-            runWithArguments(CompilationOutputOfFails.class);
-            shouldNotReach();
+            runWithArgumentsFail(CompilationOutputOfFails.class);
+            Asserts.fail("Should have thrown exception");
         } catch (IRViolationException e) {
-            System.out.flush();
-            String output = baos.toString();
-            baos.reset();
-            Pattern pattern = Pattern.compile(">>> Compilation.*both\\d.*\\RPrintIdeal:(?:(?!PrintOpto|>>> Compilation)[\\S\\s])+PrintOptoAssembly");
-            Matcher matcher = pattern.matcher(output);
-            Asserts.assertEQ(matcher.results().count(), (long)7, "Could not find all both methods: " + output);
-            pattern = Pattern.compile(">>> Compilation.*ideal\\d.*\\RPrintIdeal:(?:(?!>>> Compilation)[\\S\\s])+");
-            matcher = pattern.matcher(output);
-            int count = 0;
-            while (matcher.find()) {
-                String match = matcher.group();
-                Asserts.assertFalse(match.contains("PrintOptoAssembly"), "Cannot contain opto assembly: " + output);
-                count++;
+            try {
+                StringBuilder failures = new StringBuilder();
+                System.out.flush();
+                String output = baos.toString();
+                baos.reset();
+                Pattern pattern = Pattern.compile(compilationPrefix() + ".*both\\d.*\\R> Phase \""
+                                                  + CompilePhase.PRINT_IDEAL.getName()
+                                                  + "\":(?:(?!PrintOpto|" + compilationPrefix()
+                                                  + ")[\\S\\s])+PrintOptoAssembly");
+                Matcher matcher = pattern.matcher(output);
+                long bothCount = matcher.results().count();
+                if (bothCount != 7L) {
+                    failures.append("- Could not find all both() methods, expected 7 but found ").append(bothCount)
+                            .append(System.lineSeparator());
+                }
+                pattern = Pattern.compile(compilationPrefix() + ".*ideal\\d.*\\R> Phase \""
+                                          + CompilePhase.PRINT_IDEAL.getName()
+                                          + "\":(?:(?!" + compilationPrefix() + ")[\\S\\s])+");
+                matcher = pattern.matcher(output);
+                int count = 0;
+                while (matcher.find()) {
+                    String match = matcher.group();
+                    if (match.contains("PrintOptoAssembly")) {
+                        failures.append("Cannot contain opto assembly: ").append(System.lineSeparator()).append(match);
+                    }
+                    count++;
+                }
+                if (count != 7) {
+                    failures.append("- Could not find all ideal() methods, expected 7 but found ").append(count)
+                            .append(System.lineSeparator());
+                }
+                pattern = Pattern.compile(compilationPrefix() + ".*opto\\d.*\\R> Phase \"PrintOptoAssembly\":(?:(?!"
+                                          + compilationPrefix()  + ")[\\S\\s])+");
+                matcher = pattern.matcher(output);
+                count = 0;
+                while (matcher.find()) {
+                    String match = matcher.group();
+                    if (match.contains("PrintIdeal")) {
+                        failures.append("Cannot contain print assembly: ").append(System.lineSeparator()).append(match);
+                    }
+                    count++;
+                }
+                if (count != 7) {
+                    failures.append("- Could not find all opto() methods, expected 7 but found ").append(count).append(System.lineSeparator());
+                }
+                if (!failures.isEmpty()) {
+                    addException(new RuntimeException(failures.toString()));
+                }
+            } catch (Exception e1) {
+                addException(e1);
             }
-            Asserts.assertEQ(count, 7, "Could not find all ideal methods: " + output);
-            pattern = Pattern.compile(">>> Compilation.*opto\\d.*\\RPrintOptoAssembly:(?:(?!>>> Compilation)[\\S\\s])+");
-            matcher = pattern.matcher(output);
-            count = 0;
-            while (matcher.find()) {
-                String match = matcher.group();
-                Asserts.assertFalse(match.contains("PrintIdeal"), "Cannot contain opto assembly: " + output);
-                count++;
-            }
-            Asserts.assertEQ(count, 7, "Could not find all opto methods");
+        } catch (Exception e) {
+            addException(e);
         }
 
         runWithArguments(FlagComparisons.class, "-XX:TLABRefillWasteFraction=50");
         System.out.flush();
         String output = baos.toString();
-        baos.reset();
-        findIrIds(output, "testMatchAllIf50", 0, 21);
+        findIrIds(output, "testMatchAllIf50", 1, 22);
         findIrIds(output, "testMatchNoneIf50", -1, -1);
 
         runWithArguments(FlagComparisons.class, "-XX:TLABRefillWasteFraction=49");
         System.out.flush();
         output = baos.toString();
-        baos.reset();
-        findIrIds(output, "testMatchAllIf50", 4, 6, 13, 18);
-        findIrIds(output, "testMatchNoneIf50", 0, 3, 8, 10, 17, 22);
+        findIrIds(output, "testMatchAllIf50", 5, 7, 14, 19);
+        findIrIds(output, "testMatchNoneIf50", 1, 4, 9, 11, 18, 23);
 
         runWithArguments(FlagComparisons.class, "-XX:TLABRefillWasteFraction=51");
         System.out.flush();
         output = baos.toString();
+        findIrIds(output, "testMatchAllIf50", 8, 13, 20, 22);
+        findIrIds(output, "testMatchNoneIf50", 5, 8, 12, 17, 21, 23);
+        System.setOut(oldOut);
+        System.setErr(oldErr);
+
+        if (!exceptions.isEmpty()) {
+            System.err.println("TestIRMatching failed with " + exceptions.size() + " exception(s):");
+            int i = 1;
+            System.err.println("************************");
+            for (Map.Entry<Exception, String> entry : exceptions.entrySet()) {
+                System.err.println("***** Exception " + String.format("%02d", i++) +" *****");
+                System.err.println("************************");
+
+                Exception e = entry.getKey();
+                e.printStackTrace(System.err);
+                System.err.println();
+                System.err.println("===== OUTPUT ======");
+                System.err.println(entry.getValue());
+                System.err.println("MESSAGE: " + e.getMessage());
+                System.err.println("************************");
+            }
+            i = 1;
+            System.err.println("====================================");
+            System.err.println("********************");
+            System.err.println("***** OVERVIEW *****");
+            System.err.println("********************");
+            for (Map.Entry<Exception, String> entry : exceptions.entrySet()) {
+                System.err.print((i++) + ") ");
+                entry.getKey().printStackTrace(System.err);
+                System.err.println("********************");
+            }
+            throw new RuntimeException("TestIRMatching failed with " + exceptions.size() + " exception(s) - check stderr and stdout");
+        }
+    }
+
+    private static void runFramework(TestFramework framework) {
         baos.reset();
-        findIrIds(output, "testMatchAllIf50", 7, 12, 19, 21);
-        findIrIds(output, "testMatchNoneIf50", 4, 7, 11, 16, 20, 22);
-        System.setOut(old);
+        baosErr.reset();
+        framework.start();
     }
 
     private static void runWithArguments(Class<?> clazz, String... args) {
-        new TestFramework(clazz).addFlags(args).start();
+        try {
+            runFramework(new TestFramework(clazz).addFlags(args));
+        } catch (Exception e) {
+            addException(e);
+        }
+    }
+
+    private static void runWithArgumentsFail(Class<?> clazz, String... args) {
+        runFramework(new TestFramework(clazz).addFlags(args));
     }
 
     private static void runCheck(String[] args , Constraint... constraints) {
         try {
-            new TestFramework(constraints[0].getKlass()).addFlags(args).start(); // All constraints have the same class.
-            shouldNotReach();
+            TestFramework framework = new TestFramework(constraints[0].getKlass()); // All constraints have the same class.
+            if (args != null) {
+                framework.addFlags(args);
+            }
+            runFramework(framework);
+            Asserts.fail("Should have thrown exception");
         } catch (IRViolationException e) {
             checkConstraints(e, constraints);
+        } catch (Exception e) {
+            addException(e);
         }
     }
 
     private static void runCheck(Constraint... constraints) {
-        try {
-            TestFramework.run(constraints[0].getKlass()); // All constraints have the same class.
-            shouldNotReach();
-        } catch (IRViolationException e) {
-            checkConstraints(e, constraints);
-        }
+        runCheck(null, constraints);
     }
 
     private static void checkConstraints(IRViolationException e, Constraint[] constraints) {
@@ -279,27 +384,17 @@ public class TestIRMatching {
                 constraint.checkConstraint(e);
             }
         } catch (Exception e1) {
-            System.out.println(TestFramework.getLastTestVMOutput());
+            System.out.println(e.getCompilations());
             System.out.println(message);
-            throw e1;
+            addException(e1);
         }
     }
 
-    // Single constraint
-    private static void runFailOnTestsArgs(Constraint constraint, String... args) {
-        try {
-            new TestFramework(constraint.getKlass()).addFlags(args).start(); // All constraints have the same class.
-            shouldNotReach();
-        } catch (IRViolationException e) {
-            constraint.checkConstraint(e);
-        }
+    private static String compilationPrefix() {
+        return "\\d\\) Compilation";
     }
 
-    public static void shouldNotReach() {
-        throw new ShouldNotReachException("Framework did not fail but it should have!");
-    }
-
-    public static void findIrIds(String output, String method, int... numbers) {
+    private static void findIrIds(String output, String method, int... numbers) {
         StringBuilder builder = new StringBuilder();
         builder.append(method);
         for (int i = 0; i < numbers.length; i+=2) {
@@ -310,8 +405,9 @@ public class TestIRMatching {
                 builder.append(j);
             }
         }
-        Asserts.assertTrue(output.contains(builder.toString()), "Could not find encoding: \"" + builder.toString()
-                                                                + System.lineSeparator());
+        if (!output.contains(builder.toString())) {
+            addException(new RuntimeException("Could not find encoding: \"" + builder + System.lineSeparator()));
+        }
     }
 }
 
@@ -393,7 +489,7 @@ class MultipleFailOnGood {
 class MultipleFailOnBad {
     private int iFld;
     private int myInt;
-    private MyClass myClass;
+    private MyClassEmpty myClass;
 
     @Test
     @IR(failOn = {IRNode.STORE, IRNode.CALL, IRNode.STORE_I, IRNode.LOOP})
@@ -426,21 +522,21 @@ class MultipleFailOnBad {
     }
 
     @Test
-    @IR(failOn = {IRNode.STORE_OF_CLASS, "MyClass", IRNode.ALLOC, IRNode.CALL})
+    @IR(failOn = {IRNode.STORE_OF_CLASS, "MyClassEmpty", IRNode.ALLOC, IRNode.CALL})
     public void fail6() {
-        myClass = new MyClass();
+        myClass = new MyClassEmpty();
     }
 
     @Test
-    @IR(failOn = {IRNode.STORE_OF_CLASS, "UnknownClass", IRNode.ALLOC_OF, "MyClass"})
+    @IR(failOn = {IRNode.STORE_OF_CLASS, "UnknownClass", IRNode.ALLOC_OF, "MyClassEmpty"})
     public void fail7() {
-        myClass = new MyClass();
+        myClass = new MyClassEmpty();
     }
 
     @Test
-    @IR(failOn = {IRNode.STORE_OF_CLASS, "UnknownClass", IRNode.ALLOC_OF, "ir_framework/tests/MyClassSub"})
+    @IR(failOn = {IRNode.STORE_OF_CLASS, "UnknownClass", IRNode.ALLOC_OF, "ir_framework/tests/MyClassEmptySub"})
     public void fail8() {
-        myClass = new MyClassSub();
+        myClass = new MyClassEmptySub();
     }
 
     @Test
@@ -465,20 +561,20 @@ class MultipleFailOnBad {
 class FlagComparisons {
     // Applies all IR rules if TLABRefillWasteFraction=50
     @Test
-    @IR(failOn = IRNode.CALL, applyIf = {"TLABRefillWasteFraction", "50"}) // Index 0
+    @IR(failOn = IRNode.CALL, applyIf = {"TLABRefillWasteFraction", "50"}) // Index 1
     @IR(failOn = IRNode.CALL, applyIf = {"TLABRefillWasteFraction", "=50"})
     @IR(failOn = IRNode.CALL, applyIf = {"TLABRefillWasteFraction", "= 50"})
     @IR(failOn = IRNode.CALL, applyIf = {"TLABRefillWasteFraction", " =   50"})
-    @IR(failOn = IRNode.CALL, applyIf = {"TLABRefillWasteFraction", "<=50"}) // Index 4
+    @IR(failOn = IRNode.CALL, applyIf = {"TLABRefillWasteFraction", "<=50"}) // Index 5
     @IR(failOn = IRNode.CALL, applyIf = {"TLABRefillWasteFraction", "<= 50"})
     @IR(failOn = IRNode.CALL, applyIf = {"TLABRefillWasteFraction", " <=  50"})
-    @IR(failOn = IRNode.CALL, applyIf = {"TLABRefillWasteFraction", ">=50"}) // Index 7
+    @IR(failOn = IRNode.CALL, applyIf = {"TLABRefillWasteFraction", ">=50"}) // Index 8
     @IR(failOn = IRNode.CALL, applyIf = {"TLABRefillWasteFraction", ">= 50"})
     @IR(failOn = IRNode.CALL, applyIf = {"TLABRefillWasteFraction", " >=  50"})
     @IR(failOn = IRNode.CALL, applyIf = {"TLABRefillWasteFraction", ">49"})
     @IR(failOn = IRNode.CALL, applyIf = {"TLABRefillWasteFraction", "> 49"})
     @IR(failOn = IRNode.CALL, applyIf = {"TLABRefillWasteFraction", " >  49"})
-    @IR(failOn = IRNode.CALL, applyIf = {"TLABRefillWasteFraction", "<51"}) // Index 13
+    @IR(failOn = IRNode.CALL, applyIf = {"TLABRefillWasteFraction", "<51"}) // Index 14
     @IR(failOn = IRNode.CALL, applyIf = {"TLABRefillWasteFraction", "< 51"})
     @IR(failOn = IRNode.CALL, applyIf = {"TLABRefillWasteFraction", " <  51"})
     @IR(failOn = IRNode.CALL, applyIf = {"TLABRefillWasteFraction", "!=51"})
@@ -486,34 +582,34 @@ class FlagComparisons {
     @IR(failOn = IRNode.CALL, applyIf = {"TLABRefillWasteFraction", " !=  51"})
     @IR(failOn = IRNode.CALL, applyIf = {"TLABRefillWasteFraction", "!=49"})
     @IR(failOn = IRNode.CALL, applyIf = {"TLABRefillWasteFraction", "!= 49"})
-    @IR(failOn = IRNode.CALL, applyIf = {"TLABRefillWasteFraction", " !=  49"}) // Index 21
+    @IR(failOn = IRNode.CALL, applyIf = {"TLABRefillWasteFraction", " !=  49"}) // Index 22
     public void testMatchAllIf50() {}
 
     // Applies no IR rules if TLABRefillWasteFraction=50
     @Test
-    @IR(failOn = IRNode.CALL, applyIf = {"TLABRefillWasteFraction", "49"}) // Index 0
+    @IR(failOn = IRNode.CALL, applyIf = {"TLABRefillWasteFraction", "49"}) // Index 1
     @IR(failOn = IRNode.CALL, applyIf = {"TLABRefillWasteFraction", "=49"})
     @IR(failOn = IRNode.CALL, applyIf = {"TLABRefillWasteFraction", "= 49"})
     @IR(failOn = IRNode.CALL, applyIf = {"TLABRefillWasteFraction", " =  49"})
-    @IR(failOn = IRNode.CALL, applyIf = {"TLABRefillWasteFraction", "51"}) // Index 4
+    @IR(failOn = IRNode.CALL, applyIf = {"TLABRefillWasteFraction", "51"}) // Index 5
     @IR(failOn = IRNode.CALL, applyIf = {"TLABRefillWasteFraction", "=51"})
     @IR(failOn = IRNode.CALL, applyIf = {"TLABRefillWasteFraction", "= 51"})
     @IR(failOn = IRNode.CALL, applyIf = {"TLABRefillWasteFraction", " =  51"})
-    @IR(failOn = IRNode.CALL, applyIf = {"TLABRefillWasteFraction", "<=49"}) // Index 8
+    @IR(failOn = IRNode.CALL, applyIf = {"TLABRefillWasteFraction", "<=49"}) // Index 9
     @IR(failOn = IRNode.CALL, applyIf = {"TLABRefillWasteFraction", "<= 49"})
     @IR(failOn = IRNode.CALL, applyIf = {"TLABRefillWasteFraction", " <=  49"})
-    @IR(failOn = IRNode.CALL, applyIf = {"TLABRefillWasteFraction", ">=51"}) // Index 11
+    @IR(failOn = IRNode.CALL, applyIf = {"TLABRefillWasteFraction", ">=51"}) // Index 12
     @IR(failOn = IRNode.CALL, applyIf = {"TLABRefillWasteFraction", ">= 51"})
     @IR(failOn = IRNode.CALL, applyIf = {"TLABRefillWasteFraction", " >=  51"})
     @IR(failOn = IRNode.CALL, applyIf = {"TLABRefillWasteFraction", ">50"})
     @IR(failOn = IRNode.CALL, applyIf = {"TLABRefillWasteFraction", "> 50"})
     @IR(failOn = IRNode.CALL, applyIf = {"TLABRefillWasteFraction", " >  50"})
-    @IR(failOn = IRNode.CALL, applyIf = {"TLABRefillWasteFraction", "<50"}) // Index 17
+    @IR(failOn = IRNode.CALL, applyIf = {"TLABRefillWasteFraction", "<50"}) // Index 18
     @IR(failOn = IRNode.CALL, applyIf = {"TLABRefillWasteFraction", "< 50"})
     @IR(failOn = IRNode.CALL, applyIf = {"TLABRefillWasteFraction", " <  50"})
     @IR(failOn = IRNode.CALL, applyIf = {"TLABRefillWasteFraction", "!=50"})
     @IR(failOn = IRNode.CALL, applyIf = {"TLABRefillWasteFraction", "!= 50"})
-    @IR(failOn = IRNode.CALL, applyIf = {"TLABRefillWasteFraction", " !=  50"}) // Index 22
+    @IR(failOn = IRNode.CALL, applyIf = {"TLABRefillWasteFraction", " !=  50"}) // Index 23
     public void testMatchNoneIf50() {}
 }
 
@@ -564,6 +660,7 @@ class GoodCount {
 
     long result;
     MyClass myClass = new MyClass();
+    MyClassEmpty myClassEmpty = new MyClassEmpty();
     MyClass myClassSubPoly = new MyClassSub();
     MyClassSub myClassSub = new MyClassSub();
 
@@ -647,11 +744,11 @@ class GoodCount {
     }
 
     @Test
-    @IR(counts = {IRNode.STORE_OF_FIELD, "myClass", "1", IRNode.STORE_OF_CLASS, "GoodCount", "1",
-                  IRNode.STORE_OF_CLASS, "/GoodCount", "1", IRNode.STORE_OF_CLASS, "MyClass", "0"},
-        failOn = {IRNode.STORE_OF_CLASS, "MyClass"})
+    @IR(counts = {IRNode.STORE_OF_FIELD, "myClassEmpty", "1", IRNode.STORE_OF_CLASS, "GoodCount", "1",
+                  IRNode.STORE_OF_CLASS, "/GoodCount", "1", IRNode.STORE_OF_CLASS, "MyClassEmpty", "0"},
+        failOn = {IRNode.STORE_OF_CLASS, "MyClassEmpty"})
     public void good6() {
-        myClass = new MyClass();
+        myClassEmpty = new MyClassEmpty();
     }
 
     @Test
@@ -728,14 +825,14 @@ class BadCount {
     int iFld;
     int result;
     @Test
-    @IR(counts = {IRNode.LOAD, "!= 1"})
+    @IR(counts = {IRNode.LOAD, "!= 1"}) // fail
     @IR(counts = {IRNode.STORE, "> 0"})
     public void bad1() {
         result = iFld;
     }
 
     @Test
-    @IR(counts = {IRNode.LOAD, "1"})
+    @IR(counts = {IRNode.LOAD, "1"}) // fail
     @IR(counts = {IRNode.STORE, "< 1"})
     public void bad2() {
         result = iFld;
@@ -743,8 +840,8 @@ class BadCount {
 
 
     @Test
-    @IR(counts = {IRNode.LOAD, "0"})
-    @IR(counts = {IRNode.STORE, " <= 0"})
+    @IR(counts = {IRNode.LOAD, "0"}) // fail
+    @IR(counts = {IRNode.STORE, " <= 0"}) // fail
     public void bad3() {
         result = iFld;
     }
@@ -796,6 +893,29 @@ class RunTests {
     }
 }
 
+class Calls {
+
+    @Test
+    @IR(counts = {IRNode.CALL, "1"})
+    @IR(failOn = {IRNode.CALL_OF_METHOD, "dontInline",  // Fails
+                  IRNode.STATIC_CALL_OF_METHOD, "dontInline"}) // Fails
+    @IR(failOn = {IRNode.CALL_OF_METHOD, "forceInline",
+                  IRNode.STATIC_CALL_OF_METHOD, "forceInline",
+                  IRNode.CALL_OF_METHOD, "dontInlines",
+                  IRNode.STATIC_CALL_OF_METHOD, "dontInlines",
+                  IRNode.CALL_OF_METHOD, "dont",
+                  IRNode.STATIC_CALL_OF_METHOD, "dont"})
+    public void calls() {
+        dontInline();
+        forceInline();
+    }
+
+    @DontInline
+    public void dontInline() {}
+
+    @ForceInline
+    public void forceInline() {}
+}
 
 class AllocArray {
     MyClass[] myClassArray;
@@ -851,8 +971,8 @@ class Loops {
 
     @Test
     @IR(failOn = IRNode.LOOP) // fails
-    @IR(failOn = IRNode.COUNTEDLOOP)
-    @IR(failOn = IRNode.COUNTEDLOOP_MAIN)
+    @IR(failOn = IRNode.COUNTED_LOOP)
+    @IR(failOn = IRNode.COUNTED_LOOP_MAIN)
     public void loop() {
         for (int i = 0; i < limit; i++) {
             dontInline();
@@ -861,8 +981,8 @@ class Loops {
 
     @Test
     @IR(failOn = IRNode.LOOP)
-    @IR(failOn = IRNode.COUNTEDLOOP) // fails
-    @IR(failOn = IRNode.COUNTEDLOOP_MAIN)
+    @IR(failOn = IRNode.COUNTED_LOOP) // fails
+    @IR(failOn = IRNode.COUNTED_LOOP_MAIN)
     public void countedLoop() {
         for (int i = 0; i < 2000; i++) {
             dontInline();
@@ -871,8 +991,8 @@ class Loops {
 
     @Test
     @IR(failOn = IRNode.LOOP) // fails
-    @IR(failOn = IRNode.COUNTEDLOOP) // fails
-    @IR(failOn = IRNode.COUNTEDLOOP_MAIN)
+    @IR(failOn = IRNode.COUNTED_LOOP) // fails
+    @IR(failOn = IRNode.COUNTED_LOOP_MAIN)
     public void loopAndCountedLoop() {
         for (int i = 0; i < 2000; i++) {
             for (int j = 0; j < limit; j++) {
@@ -883,8 +1003,8 @@ class Loops {
 
     @Test
     @IR(failOn = IRNode.LOOP)
-    @IR(failOn = IRNode.COUNTEDLOOP) // fails
-    @IR(failOn = IRNode.COUNTEDLOOP_MAIN) // fails
+    @IR(failOn = IRNode.COUNTED_LOOP) // fails
+    @IR(failOn = IRNode.COUNTED_LOOP_MAIN) // fails
     public void countedLoopMain() {
         // Cannot unroll completely -> create pre/main/post
         for (int i = 0; i < 100; i++) {
@@ -894,8 +1014,8 @@ class Loops {
 
     @Test
     @IR(failOn = IRNode.LOOP)
-    @IR(failOn = IRNode.COUNTEDLOOP)
-    @IR(failOn = IRNode.COUNTEDLOOP_MAIN)
+    @IR(failOn = IRNode.COUNTED_LOOP)
+    @IR(failOn = IRNode.COUNTED_LOOP_MAIN)
     public void countedLoopUnrolled() {
         // Completely unrolled -> no pre/main/post
         for (int i = 0; i < 8; i++) {
@@ -923,6 +1043,7 @@ class Traps {
                   IRNode.NULL_ASSERT_TRAP,
                   IRNode.RANGE_CHECK_TRAP,
                   IRNode.CLASS_CHECK_TRAP,
+                  IRNode.INTRINSIC_TRAP,
                   IRNode.INTRINSIC_OR_TYPE_CHECKED_INLINING_TRAP,
                   IRNode.UNHANDLED_TRAP})
     public void noTraps() {
@@ -943,6 +1064,7 @@ class Traps {
                   IRNode.NULL_ASSERT_TRAP,
                   IRNode.RANGE_CHECK_TRAP,
                   IRNode.CLASS_CHECK_TRAP,
+                  IRNode.INTRINSIC_TRAP,
                   IRNode.INTRINSIC_OR_TYPE_CHECKED_INLINING_TRAP,
                   IRNode.UNHANDLED_TRAP})
     public void predicateTrap() {
@@ -962,6 +1084,7 @@ class Traps {
                   IRNode.NULL_ASSERT_TRAP,
                   IRNode.RANGE_CHECK_TRAP,
                   IRNode.CLASS_CHECK_TRAP,
+                  IRNode.INTRINSIC_TRAP,
                   IRNode.INTRINSIC_OR_TYPE_CHECKED_INLINING_TRAP,
                   IRNode.UNHANDLED_TRAP})
     public void nullCheck() {
@@ -978,6 +1101,7 @@ class Traps {
                   IRNode.UNSTABLE_IF_TRAP,
                   IRNode.RANGE_CHECK_TRAP,
                   IRNode.CLASS_CHECK_TRAP,
+                  IRNode.INTRINSIC_TRAP,
                   IRNode.INTRINSIC_OR_TYPE_CHECKED_INLINING_TRAP,
                   IRNode.UNHANDLED_TRAP})
     public Object nullAssert() {
@@ -993,6 +1117,7 @@ class Traps {
                   IRNode.NULL_ASSERT_TRAP,
                   IRNode.RANGE_CHECK_TRAP,
                   IRNode.CLASS_CHECK_TRAP,
+                  IRNode.INTRINSIC_TRAP,
                   IRNode.INTRINSIC_OR_TYPE_CHECKED_INLINING_TRAP,
                   IRNode.UNHANDLED_TRAP})
     public void unstableIf(boolean flag) {
@@ -1011,6 +1136,7 @@ class Traps {
                   IRNode.UNSTABLE_IF_TRAP,
                   IRNode.NULL_ASSERT_TRAP,
                   IRNode.RANGE_CHECK_TRAP,
+                  IRNode.INTRINSIC_TRAP,
                   IRNode.INTRINSIC_OR_TYPE_CHECKED_INLINING_TRAP,
                   IRNode.UNHANDLED_TRAP})
     public void classCheck() {
@@ -1029,6 +1155,7 @@ class Traps {
                   IRNode.UNSTABLE_IF_TRAP,
                   IRNode.NULL_ASSERT_TRAP,
                   IRNode.CLASS_CHECK_TRAP,
+                  IRNode.INTRINSIC_TRAP,
                   IRNode.INTRINSIC_OR_TYPE_CHECKED_INLINING_TRAP,
                   IRNode.UNHANDLED_TRAP})
     public void rangeCheck() {
@@ -1039,6 +1166,7 @@ class Traps {
     @Test
     @IR(failOn = IRNode.TRAP) // fails
     @IR(failOn = IRNode.INTRINSIC_OR_TYPE_CHECKED_INLINING_TRAP) // fails
+    @IR(failOn = IRNode.INTRINSIC_TRAP) // fails
     @IR(failOn = IRNode.NULL_CHECK_TRAP) // fails
     @IR(failOn = {IRNode.PREDICATE_TRAP,
                   IRNode.UNSTABLE_IF_TRAP,
@@ -1122,14 +1250,17 @@ class CheckCastArray {
     public void testArrayCopy() {
         arrayCopy(mArr, MyClass[].class);
         arrayCopy(mArr, Object[].class);
-        arrayCopy(mArr, MyClass2[].class);
+        arrayCopy(mArr, MyClassEmpty[].class);
     }
 }
 
 class CompilationOutputOfFails {
+    private Object obj;
 
     @Test
-    @IR(failOn = IRNode.COUNTEDLOOP + "[\\s\\S]*" + "call")
+    @IR(failOn = IRNode.COUNTED_LOOP)
+    @IR(failOn = {"call"},
+        phase = CompilePhase.PRINT_OPTO_ASSEMBLY)
     public void both1() {
         for (int i = 0; i < 100; i++) {
             dontInline();
@@ -1137,7 +1268,8 @@ class CompilationOutputOfFails {
     }
 
     @Test
-    @IR(failOn = IRNode.COUNTEDLOOP + "|" + "call")
+    @IR(failOn = "CountedLoop|call",
+        phase = {CompilePhase.PRINT_IDEAL, CompilePhase.PRINT_OPTO_ASSEMBLY})
     public void both2() {
         for (int i = 0; i < 100; i++) {
             dontInline();
@@ -1145,8 +1277,8 @@ class CompilationOutputOfFails {
     }
 
     @Test
-    @IR(failOn = IRNode.COUNTEDLOOP)
-    @IR(failOn = "call")
+    @IR(failOn = IRNode.COUNTED_LOOP)
+    @IR(failOn = "call", phase = CompilePhase.PRINT_OPTO_ASSEMBLY)
     public void both3() {
         for (int i = 0; i < 100; i++) {
             dontInline();
@@ -1154,7 +1286,9 @@ class CompilationOutputOfFails {
     }
 
     @Test
-    @IR(counts = {IRNode.COUNTEDLOOP + "[\\s\\S]*" + "call", "0"})
+    @IR(counts = {IRNode.COUNTED_LOOP, "0"})
+    @IR(counts = {"call", "0"},
+        phase = {CompilePhase.PRINT_OPTO_ASSEMBLY})
     public void both4() {
         for (int i = 0; i < 100; i++) {
             dontInline();
@@ -1162,7 +1296,8 @@ class CompilationOutputOfFails {
     }
 
     @Test
-    @IR(counts = {IRNode.COUNTEDLOOP + "|" + "call", "1"})
+    @IR(counts = {"CountedLoop|call", "10"},
+        phase = {CompilePhase.PRINT_IDEAL, CompilePhase.PRINT_OPTO_ASSEMBLY})
     public void both5() {
         for (int i = 0; i < 100; i++) {
             dontInline();
@@ -1170,8 +1305,8 @@ class CompilationOutputOfFails {
     }
 
     @Test
-    @IR(counts = {IRNode.COUNTEDLOOP, "0"})
-    @IR(counts = {"call", "1"})
+    @IR(counts = {IRNode.COUNTED_LOOP, "0"})
+    @IR(counts = {"call", "0"}, phase = CompilePhase.PRINT_OPTO_ASSEMBLY)
     public void both6() {
         for (int i = 0; i < 100; i++) {
             dontInline();
@@ -1179,8 +1314,8 @@ class CompilationOutputOfFails {
     }
 
     @Test
-    @IR(failOn = IRNode.COUNTEDLOOP)
-    @IR(counts = {"call", "1"})
+    @IR(failOn = IRNode.COUNTED_LOOP)
+    @IR(counts = {"call", "0"}, phase = CompilePhase.PRINT_OPTO_ASSEMBLY)
     public void both7() {
         for (int i = 0; i < 100; i++) {
             dontInline();
@@ -1188,7 +1323,7 @@ class CompilationOutputOfFails {
     }
 
     @Test
-    @IR(failOn = IRNode.COUNTEDLOOP)
+    @IR(failOn = IRNode.COUNTED_LOOP)
     public void ideal1() {
         for (int i = 0; i < 100; i++) {
             dontInline();
@@ -1196,7 +1331,7 @@ class CompilationOutputOfFails {
     }
 
     @Test
-    @IR(failOn = IRNode.COUNTEDLOOP)
+    @IR(failOn = IRNode.COUNTED_LOOP)
     @IR(failOn = IRNode.ALLOC) // not fail
     public void ideal2() {
         for (int i = 0; i < 100; i++) {
@@ -1205,7 +1340,7 @@ class CompilationOutputOfFails {
     }
 
     @Test
-    @IR(failOn = IRNode.COUNTEDLOOP)
+    @IR(failOn = IRNode.COUNTED_LOOP)
     @IR(counts = {IRNode.ALLOC, "0"}) // not fail
     public void ideal3() {
         for (int i = 0; i < 100; i++) {
@@ -1214,7 +1349,7 @@ class CompilationOutputOfFails {
     }
 
     @Test
-    @IR(counts = {IRNode.COUNTEDLOOP, "2"})
+    @IR(counts = {IRNode.COUNTED_LOOP, "2"})
     public void ideal4() {
         for (int i = 0; i < 100; i++) {
             dontInline();
@@ -1223,7 +1358,7 @@ class CompilationOutputOfFails {
 
     @Test
     @IR(failOn = IRNode.ALLOC) // not fail
-    @IR(counts = {IRNode.COUNTEDLOOP, "2"})
+    @IR(counts = {IRNode.COUNTED_LOOP, "2"})
     public void ideal5() {
         for (int i = 0; i < 100; i++) {
             dontInline();
@@ -1232,7 +1367,7 @@ class CompilationOutputOfFails {
 
     @Test
     @IR(counts = {IRNode.ALLOC, "0"}) // not fail
-    @IR(counts = {IRNode.COUNTEDLOOP, "2"})
+    @IR(counts = {IRNode.COUNTED_LOOP, "2"})
     public void ideal6() {
         for (int i = 0; i < 100; i++) {
             dontInline();
@@ -1240,8 +1375,8 @@ class CompilationOutputOfFails {
     }
 
     @Test
-    @IR(counts = {IRNode.COUNTEDLOOP, "5"})
-    @IR(counts = {IRNode.COUNTEDLOOP, "2"})
+    @IR(counts = {IRNode.COUNTED_LOOP, "5"})
+    @IR(counts = {IRNode.COUNTED_LOOP, "2"})
     public void ideal7() {
         for (int i = 0; i < 100; i++) {
             dontInline();
@@ -1249,64 +1384,52 @@ class CompilationOutputOfFails {
     }
 
     @Test
-    @IR(failOn = "call")
+    @IR(failOn = IRNode.ALLOC)
     public void opto1() {
-        for (int i = 0; i < 100; i++) {
-            dontInline();
-        }
+        obj = new Object();
     }
 
     @Test
-    @IR(failOn = "call")
-    @IR(failOn = IRNode.STORE) // not fail
+    @IR(failOn = IRNode.ALLOC)
+    @IR(failOn = IRNode.STORE_F) // not fail
     public void opto2() {
-        for (int i = 0; i < 100; i++) {
-            dontInline();
-        }
+        obj = new Object();
     }
 
     @Test
-    @IR(failOn = "call")
-    @IR(counts = {IRNode.COUNTEDLOOP, "1"}) // not fail
+    @IR(failOn = IRNode.ALLOC)
+    @IR(counts = {IRNode.COUNTED_LOOP, "1"}) // not fail
     public void opto3() {
         for (int i = 0; i < 100; i++) {
-            dontInline();
+            obj = new Object();
         }
     }
 
     @Test
-    @IR(counts = {"call", "1"})
+    @IR(counts = {IRNode.ALLOC, "0"})
     public void opto4() {
-        for (int i = 0; i < 100; i++) {
-            dontInline();
-        }
+        obj = new Object();
     }
 
     @Test
-    @IR(failOn = IRNode.STORE) // not fail
-    @IR(counts = {"call", "1"})
+    @IR(failOn = IRNode.STORE_F) // not fail
+    @IR(counts = {IRNode.ALLOC, "0"})
     public void opto5() {
-        for (int i = 0; i < 100; i++) {
-            dontInline();
-        }
+        obj = new Object();
     }
 
     @Test
-    @IR(counts = {IRNode.STORE, "0"}) // not fail
-    @IR(counts = {"call", "1"})
+    @IR(counts = {IRNode.STORE_F, "0"}) // not fail
+    @IR(counts = {IRNode.ALLOC, "0"})
     public void opto6() {
-        for (int i = 0; i < 100; i++) {
-            dontInline();
-        }
+        obj = new Object();
     }
 
     @Test
-    @IR(counts = {"call", "10"})
-    @IR(counts = {"call", "1"})
+    @IR(counts = {IRNode.ALLOC, "10"})
+    @IR(counts = {IRNode.ALLOC, "0"})
     public void opto7() {
-        for (int i = 0; i < 100; i++) {
-            dontInline();
-        }
+        obj = new Object();
     }
 
     @DontInline
@@ -1328,17 +1451,13 @@ class MyClass {
     static long lFldStatic;
 }
 
-class MyClass2 {}
+class MyClassEmpty {}
+
+class MyClassEmptySub extends MyClassEmpty {}
 
 class MyClassSub extends MyClass {
     int iFld;
     static int iFldStatic;
-}
-
-class ShouldNotReachException extends RuntimeException {
-    ShouldNotReachException(String s) {
-        super(s);
-    }
 }
 
 
@@ -1375,7 +1494,7 @@ abstract class Constraint {
 
     @Override
     public String toString() {
-        return "Constraint " + getClass().getSimpleName() + ", method: " + methodName + ", rule: " + ruleIdx;
+        return "Constraint " + getClass().getSimpleName() + ", " + errorPrefix();
     }
 
     public Class<?> getKlass() {
@@ -1383,7 +1502,7 @@ abstract class Constraint {
     }
 
     protected String errorPrefix() {
-        return "Method " + methodName + ", Rule " + ruleIdx;
+        return "Class " + klass.getSimpleName() + ", Method " + methodName + ", Rule " + ruleIdx;
     }
 
     public void checkConstraint(IRViolationException e) {
@@ -1401,12 +1520,10 @@ abstract class Constraint {
                 }
             }
         }
-        Asserts.assertTrue(matched, toString() + " should have been matched");
+        Asserts.assertTrue(matched, this + " should have been matched");
     }
 
     abstract protected void checkIRRule(String irRule);
-
-    protected void checkOnMethod(String method) {}
 }
 
 // Constraint for rule that does not fail.
@@ -1503,10 +1620,10 @@ abstract class RegexConstraint extends Constraint {
     private static Pattern initIRPattern(String category, int ruleIdx) {
         if (category.equals("failOn")) {
             return Pattern.compile("rule " + ruleIdx + ":.*\\R.*- failOn: Graph contains forbidden nodes.*\\R" +
-                                   ".*Regex \\d+:.*\\R.*Matched forbidden node.*");
+                                   ".*Constraint \\d+:.*\\R.*Matched forbidden node.*");
         } else {
             return Pattern.compile("rule " + ruleIdx + ":.*\\R.*- counts: Graph contains wrong number of nodes:\\R" +
-                                   ".*Regex \\d+:.*\\R.*Expected.*");
+                                   ".*Constraint \\d+:.*\\R.*Expected.*");
         }
     }
 
@@ -1526,20 +1643,22 @@ abstract class RegexConstraint extends Constraint {
         Pattern pattern;
         Matcher matcher;
         for (int regexIndex : this.regexIndexes) {
-            pattern = Pattern.compile("Regex " + regexIndex + ":.*");
+            pattern = Pattern.compile("Constraint " + regexIndex + ":.*");
             matcher = pattern.matcher(categoryString);
             if (isGood) {
-                Asserts.assertFalse(matcher.find(), errorPrefix() + " failed with Regex " + regexIndex);
+                Asserts.assertFalse(matcher.find(), errorPrefix() + " failed with Constraint " + regexIndex);
                 matched = true;
             } else {
-                Asserts.assertTrue(matcher.find(), errorPrefix() + " should have failed at Regex " + regexIndex);
-                String[] splitRegex = categoryString.split("Regex ");
+                Asserts.assertTrue(matcher.find(), errorPrefix() + " should have failed at Constraint " + regexIndex);
+                String[] splitRegex = categoryString.split("Constraint ");
                 if (matches != null) {
                     for (int i = 1; i < splitRegex.length; i++) {
                         String regexString = splitRegex[i];
                         if (regexString.startsWith(String.valueOf(regexIndex))) {
-                            Asserts.assertTrue(matches.stream().allMatch(regexString::contains),
-                                               errorPrefix() + " could not find all matches at Regex " + regexIndex);
+                            // Do matching on actual match and not on regex string
+                            String actualMatch = regexString.split("\\R", 2)[1];
+                            Asserts.assertTrue(matches.stream().allMatch(actualMatch::contains),
+                                               errorPrefix() + " could not find all matches at Constraint " + regexIndex);
                             matched = true;
                         }
                     }
@@ -1619,7 +1738,7 @@ class BadCountsConstraint extends RegexConstraint {
 
     private static List<String> getMatchesList(int foundCount, String[] matches, List<String> strings) {
         List<String> matchesList = new ArrayList<>();
-        matchesList.add("but found " + foundCount);
+        matchesList.add("Failed comparison: [found] " + foundCount);
         if (matches != null) {
             matchesList.addAll(strings);
         }

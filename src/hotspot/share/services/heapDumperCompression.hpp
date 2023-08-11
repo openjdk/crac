@@ -38,7 +38,7 @@ public:
   virtual char const* init(size_t block_size, size_t* needed_out_size,
                            size_t* needed_tmp_size) = 0;
 
-  // Does the actual compression. Returns NULL on success and a static error
+  // Does the actual compression. Returns null on success and a static error
   // message otherwise. Sets the 'compressed_size'.
   virtual char const* compress(char* in, size_t in_size, char* out, size_t out_size,
                                char* tmp, size_t tmp_size, size_t* compressed_size) = 0;
@@ -49,10 +49,10 @@ class AbstractWriter : public CHeapObj<mtInternal> {
 public:
   virtual ~AbstractWriter() { }
 
-  // Opens the writer. Returns NULL on success and a static error message otherwise.
+  // Opens the writer. Returns null on success and a static error message otherwise.
   virtual char const* open_writer() = 0;
 
-  // Does the write. Returns NULL on success and a static error message otherwise.
+  // Does the write. Returns null on success and a static error message otherwise.
   virtual char const* write_buf(char* buf, ssize_t size) = 0;
 };
 
@@ -61,17 +61,18 @@ public:
 class FileWriter : public AbstractWriter {
 private:
   char const* _path;
+  bool _overwrite;
   int _fd;
 
 public:
-  FileWriter(char const* path) : _path(path), _fd(-1) { }
+  FileWriter(char const* path, bool overwrite) : _path(path), _overwrite(overwrite), _fd(-1) { }
 
   ~FileWriter();
 
-  // Opens the writer. Returns NULL on success and a static error message otherwise.
+  // Opens the writer. Returns null on success and a static error message otherwise.
   virtual char const* open_writer();
 
-  // Does the write. Returns NULL on success and a static error message otherwise.
+  // Does the write. Returns null on success and a static error message otherwise.
   virtual char const* write_buf(char* buf, ssize_t size);
 };
 
@@ -107,12 +108,12 @@ struct WriteWork {
   size_t _in_used;
   size_t _in_max;
 
-  // The output buffer where the compressed data is. Is NULL when compression is disabled.
+  // The output buffer where the compressed data is. Is null when compression is disabled.
   char* _out;
   size_t _out_used;
   size_t _out_max;
 
-  // The temporary space needed for compression. Is NULL when compression is disabled.
+  // The temporary space needed for compression. Is null when compression is disabled.
   char* _tmp;
   size_t _tmp_max;
 
@@ -145,15 +146,15 @@ public:
   void add_by_id(WriteWork* work);
 
   // Returns the first element.
-  WriteWork* first() { return is_empty() ? NULL : _head._next; }
+  WriteWork* first() { return is_empty() ? nullptr : _head._next; }
 
   // Returns the last element.
-  WriteWork* last() { return is_empty() ? NULL : _head._prev; }
+  WriteWork* last() { return is_empty() ? nullptr : _head._prev; }
 
-  // Removes the first element. Returns NULL if empty.
+  // Removes the first element. Returns null if empty.
   WriteWork* remove_first() { return remove(first()); }
 
-  // Removes the last element. Returns NULL if empty.
+  // Removes the last element. Returns null if empty.
   WriteWork* remove_last() { return remove(first()); }
 };
 
@@ -203,9 +204,10 @@ class CompressionBackend : StackObj {
   WriteWork* get_work();
   void do_compress(WriteWork* work);
   void finish_work(WriteWork* work);
+  void flush_buffer(MonitorLocker* ml);
 
 public:
-  // compressor can be NULL if no compression is used.
+  // compressor can be null if no compression is used.
   // Takes ownership of the writer and compressor.
   // block_size is the buffer size of a WriteWork.
   // max_waste is the maximum number of bytes to leave
@@ -219,14 +221,20 @@ public:
 
   char const* error() const { return _err; }
 
+  // Sets up an internal buffer, fills with external buffer, and sends to compressor.
+  void flush_external_buffer(char* buffer, size_t used, size_t max);
+
   // Commits the old buffer (using the value in *used) and sets up a new one.
-  void get_new_buffer(char** buffer, size_t* used, size_t* max);
+  void get_new_buffer(char** buffer, size_t* used, size_t* max, bool force_reset = false);
 
   // The entry point for a worker thread.
   void thread_loop();
 
   // Shuts down the backend, releasing all threads.
   void deactivate();
+
+  // Flush all compressed data in buffer to file
+  void flush_buffer();
 };
 
 

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2021, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2021, 2023, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -27,16 +27,24 @@ import compiler.lib.ir_framework.*;
 import compiler.lib.ir_framework.shared.TestRunException;
 import jdk.test.lib.Asserts;
 
+import java.io.ByteArrayOutputStream;
+import java.io.PrintStream;
+
 /*
  * @test
  * @requires vm.debug == true & vm.compMode != "Xint" & vm.compiler2.enabled & vm.flagless
  * @summary Test scenarios with the framework.
- * @library /test/lib /
+ * @library /test/lib /testlibrary_tests /
  * @run driver ir_framework.tests.TestScenarios
  */
 
 public class TestScenarios {
     public static void main(String[] args) {
+        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        PrintStream ps = new PrintStream(baos);
+        PrintStream oldOut = System.out;
+        System.setOut(ps);
+
         Scenario sDefault = new Scenario(0);
         Scenario s1 = new Scenario(1, "-XX:TLABRefillWasteFraction=51");
         Scenario s2 = new Scenario(2, "-XX:TLABRefillWasteFraction=52");
@@ -44,16 +52,23 @@ public class TestScenarios {
         Scenario s3dup = new Scenario(3, "-XX:TLABRefillWasteFraction=53");
         try {
             new TestFramework().addScenarios(sDefault, s1, s2, s3).start();
-            Asserts.fail("Should not reach");
+            Asserts.fail("Should have thrown exception");
         } catch (TestRunException e) {
-            Asserts.assertTrue(e.getMessage().contains("The following scenarios have failed: #0, #1, #3"), e.getMessage());
+            if (!e.getMessage().contains("The following scenarios have failed: #0, #1, #3")) {
+                throw e;
+            }
         }
+
+        baos.reset();
         try {
             new TestFramework().addScenarios(s1, s2, s3).start();
-            Asserts.fail("Should not reach");
+            Asserts.fail("Should have thrown exception");
         } catch (TestRunException e) {
-            Asserts.assertTrue(e.getMessage().contains("The following scenarios have failed: #1, #3"), e.getMessage());
+            if (!e.getMessage().contains("The following scenarios have failed: #1, #3")) {
+                throw e;
+            }
         }
+        System.setOut(oldOut);
         new TestFramework(ScenarioTest.class).addScenarios(s1, s2, s3).start();
         try {
             new TestFramework().addScenarios(s1, s3dup, s2, s3).start();
@@ -68,10 +83,7 @@ public class TestScenarios {
             Asserts.assertTrue(s1.getTestVMOutput().contains("Caused by: ir_framework.tests.MyScenarioException"));
             Asserts.assertTrue(s2.getTestVMOutput().contains("Caused by: ir_framework.tests.MyScenarioException"));
             Asserts.assertTrue(s3.getTestVMOutput().contains("Caused by: ir_framework.tests.MyScenarioException"));
-        } catch (Exception e) {
-            Asserts.fail("Should not catch other exceptions");
         }
-
     }
 
     @Test

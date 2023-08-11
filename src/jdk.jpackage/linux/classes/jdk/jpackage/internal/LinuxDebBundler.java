@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012, 2021, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2012, 2023, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -46,6 +46,7 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
+import jdk.internal.util.OperatingSystem;
 import static jdk.jpackage.internal.OverridableResource.createResource;
 import static jdk.jpackage.internal.StandardBundlerParam.ABOUT_URL;
 import static jdk.jpackage.internal.StandardBundlerParam.INSTALLER_NAME;
@@ -108,12 +109,17 @@ public class LinuxDebBundler extends LinuxPackageBundler {
         DEB_ARCH = debArch;
     }
 
+    private static final String releaseSuffix(Map<String, ? super Object> params) {
+        return Optional.ofNullable(RELEASE.fetchFrom(params, false)).map(
+                rel -> "-" + rel).orElse("");
+    }
+
     private static final BundlerParamInfo<String> FULL_PACKAGE_NAME =
             new StandardBundlerParam<>(
                     "linux.deb.fullPackageName", String.class, params -> {
                         return PACKAGE_NAME.fetchFrom(params)
                             + "_" + VERSION.fetchFrom(params)
-                            + "-" + RELEASE.fetchFrom(params)
+                            + releaseSuffix(params)
                             + "_" + DEB_ARCH;
                     }, (s, p) -> s);
 
@@ -275,9 +281,9 @@ public class LinuxDebBundler extends LinuxPackageBundler {
         List<PackageProperty> properties = List.of(
                 new PackageProperty("Package", PACKAGE_NAME.fetchFrom(params),
                         "APPLICATION_PACKAGE", controlFileName),
-                new PackageProperty("Version", String.format("%s-%s",
-                        VERSION.fetchFrom(params), RELEASE.fetchFrom(params)),
-                        "APPLICATION_VERSION-APPLICATION_RELEASE",
+                new PackageProperty("Version", String.format("%s%s",
+                        VERSION.fetchFrom(params), releaseSuffix(params)),
+                        "APPLICATION_VERSION_WITH_RELEASE",
                         controlFileName),
                 new PackageProperty("Architecture", DEB_ARCH, "APPLICATION_ARCH",
                         controlFileName));
@@ -442,6 +448,8 @@ public class LinuxDebBundler extends LinuxPackageBundler {
         data.put("APPLICATION_HOMEPAGE", Optional.ofNullable(
                 ABOUT_URL.fetchFrom(params)).map(value -> "Homepage: " + value).orElse(
                 ""));
+        data.put("APPLICATION_VERSION_WITH_RELEASE", String.format("%s%s",
+                VERSION.fetchFrom(params), releaseSuffix(params)));
 
         return data;
     }
@@ -501,7 +509,7 @@ public class LinuxDebBundler extends LinuxPackageBundler {
 
     @Override
     public boolean supported(boolean runtimeInstaller) {
-        return Platform.isLinux() && (new ToolValidator(TOOL_DPKG_DEB).validate() == null);
+        return OperatingSystem.isLinux() && (new ToolValidator(TOOL_DPKG_DEB).validate() == null);
     }
 
     @Override

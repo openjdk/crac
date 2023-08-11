@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1995, 2017, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 1995, 2023, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -32,7 +32,8 @@ import java.nio.charset.IllegalCharsetNameException;
 import java.nio.charset.UnsupportedCharsetException ;
 import java.util.BitSet;
 import java.util.Objects;
-import sun.security.action.GetPropertyAction;
+
+import jdk.internal.util.StaticProperty;
 
 /**
  * Utility class for HTML form encoding. This class contains static methods
@@ -60,7 +61,7 @@ import sun.security.action.GetPropertyAction;
  *     two-digit hexadecimal representation of the byte.
  *     The recommended encoding scheme to use is UTF-8. However,
  *     for compatibility reasons, if an encoding is not specified,
- *     then the default encoding of the platform is used.
+ *     then the default charset is used.
  * </ul>
  *
  * <p>
@@ -70,13 +71,16 @@ import sun.security.action.GetPropertyAction;
  * &#252; is encoded as two bytes C3 (hex) and BC (hex), and the
  * character @ is encoded as one byte 40 (hex).
  *
+ * @spec https://www.w3.org/TR/html4 HTML 4.01 Specification
+ * @see Charset#defaultCharset()
+ *
  * @author  Herb Jellinek
  * @since   1.0
  */
 public class URLEncoder {
-    static BitSet dontNeedEncoding;
-    static final int caseDiff = ('a' - 'A');
-    static String dfltEncName;
+    private static final BitSet DONT_NEED_ENCODING;
+    private static final int CASE_DIFF = ('a' - 'A');
+    private static final String DEFAULT_ENCODING_NAME;
 
     static {
 
@@ -116,25 +120,19 @@ public class URLEncoder {
          *
          */
 
-        dontNeedEncoding = new BitSet(256);
-        int i;
-        for (i = 'a'; i <= 'z'; i++) {
-            dontNeedEncoding.set(i);
-        }
-        for (i = 'A'; i <= 'Z'; i++) {
-            dontNeedEncoding.set(i);
-        }
-        for (i = '0'; i <= '9'; i++) {
-            dontNeedEncoding.set(i);
-        }
-        dontNeedEncoding.set(' '); /* encoding a space to a + is done
-                                    * in the encode() method */
-        dontNeedEncoding.set('-');
-        dontNeedEncoding.set('_');
-        dontNeedEncoding.set('.');
-        dontNeedEncoding.set('*');
+        DONT_NEED_ENCODING = new BitSet(128);
 
-        dfltEncName = GetPropertyAction.privilegedGetProperty("file.encoding");
+        DONT_NEED_ENCODING.set('a', 'z' + 1);
+        DONT_NEED_ENCODING.set('A', 'Z' + 1);
+        DONT_NEED_ENCODING.set('0', '9' + 1);
+        DONT_NEED_ENCODING.set(' '); /* encoding a space to a + is done
+                                    * in the encode() method */
+        DONT_NEED_ENCODING.set('-');
+        DONT_NEED_ENCODING.set('_');
+        DONT_NEED_ENCODING.set('.');
+        DONT_NEED_ENCODING.set('*');
+
+        DEFAULT_ENCODING_NAME = StaticProperty.fileEncoding();
     }
 
     /**
@@ -144,12 +142,12 @@ public class URLEncoder {
 
     /**
      * Translates a string into {@code x-www-form-urlencoded}
-     * format. This method uses the platform's default encoding
+     * format. This method uses the default charset
      * as the encoding scheme to obtain the bytes for unsafe characters.
      *
      * @param   s   {@code String} to be translated.
-     * @deprecated The resulting string may vary depending on the platform's
-     *             default encoding. Instead, use the encode(String,String)
+     * @deprecated The resulting string may vary depending on the
+     *             default charset. Instead, use the encode(String,String)
      *             method to specify the encoding.
      * @return  the translated {@code String}.
      */
@@ -159,9 +157,9 @@ public class URLEncoder {
         String str = null;
 
         try {
-            str = encode(s, dfltEncName);
+            str = encode(s, DEFAULT_ENCODING_NAME);
         } catch (UnsupportedEncodingException e) {
-            // The system should always have the platform default
+            // The system should always have the default charset
         }
 
         return str;
@@ -172,7 +170,7 @@ public class URLEncoder {
      * format using a specific encoding scheme.
      * <p>
      * This method behaves the same as {@linkplain #encode(String s, Charset charset)}
-     * except that it will {@linkplain java.nio.charset.Charset#forName look up the charset}
+     * except that it will {@linkplain Charset#forName look up the charset}
      * using the given encoding name.
      *
      * @param   s   {@code String} to be translated.
@@ -201,7 +199,7 @@ public class URLEncoder {
 
     /**
      * Translates a string into {@code application/x-www-form-urlencoded}
-     * format using a specific {@linkplain java.nio.charset.Charset Charset}.
+     * format using a specific {@linkplain Charset Charset}.
      * This method uses the supplied charset to obtain the bytes for unsafe
      * characters.
      * <p>
@@ -214,7 +212,8 @@ public class URLEncoder {
      * @param charset the given charset
      * @return  the translated {@code String}.
      * @throws NullPointerException if {@code s} or {@code charset} is {@code null}.
-     * @see URLDecoder#decode(java.lang.String, java.nio.charset.Charset)
+     * @spec https://www.w3.org/TR/html4 HTML 4.01 Specification
+     * @see URLDecoder#decode(java.lang.String, Charset)
      * @since 10
      */
     public static String encode(String s, Charset charset) {
@@ -227,7 +226,7 @@ public class URLEncoder {
         for (int i = 0; i < s.length();) {
             int c = s.charAt(i);
             //System.out.println("Examining character: " + c);
-            if (dontNeedEncoding.get(c)) {
+            if (DONT_NEED_ENCODING.get(c)) {
                 if (c == ' ') {
                     c = '+';
                     needToChange = true;
@@ -270,7 +269,7 @@ public class URLEncoder {
                         }
                     }
                     i++;
-                } while (i < s.length() && !dontNeedEncoding.get((c = s.charAt(i))));
+                } while (i < s.length() && !DONT_NEED_ENCODING.get((c = s.charAt(i))));
 
                 charArrayWriter.flush();
                 String str = charArrayWriter.toString();
@@ -281,12 +280,12 @@ public class URLEncoder {
                     // converting to use uppercase letter as part of
                     // the hex value if ch is a letter.
                     if (Character.isLetter(ch)) {
-                        ch -= caseDiff;
+                        ch -= CASE_DIFF;
                     }
                     out.append(ch);
                     ch = Character.forDigit(b & 0xF, 16);
                     if (Character.isLetter(ch)) {
-                        ch -= caseDiff;
+                        ch -= CASE_DIFF;
                     }
                     out.append(ch);
                 }

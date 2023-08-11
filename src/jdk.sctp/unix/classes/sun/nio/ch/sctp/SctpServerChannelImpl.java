@@ -83,7 +83,7 @@ public class SctpServerChannelImpl extends SctpServerChannel
     };
 
     /* IDs of native thread doing accept, for signalling */
-    private volatile long thread = 0;
+    private volatile long thread;
 
     /* Lock held by thread currently blocked in this channel */
     private final Object lock = new Object();
@@ -103,7 +103,7 @@ public class SctpServerChannelImpl extends SctpServerChannel
 
     /* Binding: Once bound the port will remain constant. */
     int port = -1;
-    private HashSet<InetSocketAddress> localAddresses = new HashSet<InetSocketAddress>();
+    private final HashSet<InetSocketAddress> localAddresses = new HashSet<>();
     /* Has the channel been bound to the wildcard address */
     private boolean wildcard; /* false */
 
@@ -222,7 +222,7 @@ public class SctpServerChannelImpl extends SctpServerChannel
 
     private boolean isBound() {
         synchronized (stateLock) {
-            return port == -1 ? false : true;
+            return port != -1;
         }
     }
 
@@ -289,7 +289,8 @@ public class SctpServerChannelImpl extends SctpServerChannel
     @Override
     public void implCloseSelectableChannel() throws IOException {
         synchronized (stateLock) {
-            SctpNet.preClose(fdVal);
+            if (state != ChannelState.KILLED)
+                SctpNet.preClose(fdVal);
             if (thread != 0)
                 NativeThread.signal(thread);
             if (!isRegistered())
@@ -304,14 +305,15 @@ public class SctpServerChannelImpl extends SctpServerChannel
                 return;
             if (state == ChannelState.UNINITIALIZED) {
                 state = ChannelState.KILLED;
+                SctpNet.close(fdVal);
                 return;
             }
             assert !isOpen() && !isRegistered();
 
             // Postpone the kill if there is a thread in accept
             if (thread == 0) {
-                SctpNet.close(fdVal);
                 state = ChannelState.KILLED;
+                SctpNet.close(fdVal);
             } else {
                 state = ChannelState.KILLPENDING;
             }
@@ -409,19 +411,13 @@ public class SctpServerChannelImpl extends SctpServerChannel
         }
     }
 
-    private static class DefaultOptionsHolder {
-        static final Set<SctpSocketOption<?>> defaultOptions = defaultOptions();
-
-        private static Set<SctpSocketOption<?>> defaultOptions() {
-            HashSet<SctpSocketOption<?>> set = new HashSet<SctpSocketOption<?>>(1);
-            set.add(SctpStandardSocketOptions.SCTP_INIT_MAXSTREAMS);
-            return Collections.unmodifiableSet(set);
-        }
-    }
-
     @Override
     public final Set<SctpSocketOption<?>> supportedOptions() {
-        return DefaultOptionsHolder.defaultOptions;
+        final class Holder {
+            static final Set<SctpSocketOption<?>> DEFAULT_OPTIONS =
+                    Set.of(SctpStandardSocketOptions.SCTP_INIT_MAXSTREAMS);
+        }
+        return Holder.DEFAULT_OPTIONS;
     }
 
     @Override

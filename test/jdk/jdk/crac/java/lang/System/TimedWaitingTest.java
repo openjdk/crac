@@ -52,7 +52,6 @@ import static jdk.test.lib.Asserts.*;
  * @run driver jdk.test.lib.crac.CracTest
  */
 public class TimedWaitingTest implements CracTest {
-    private static final String imageName = Common.imageName("timed-waiting");
     public static final String WAITING = "WAITING";
     public static final int WAIT_TIME_MILLIS = 1000;
 
@@ -61,6 +60,8 @@ public class TimedWaitingTest implements CracTest {
         if (!DockerTestUtils.canTestDocker()) {
             return;
         }
+
+        String imageName = Common.imageName("timed-waiting");
 
         CracBuilder builder = new CracBuilder();
         Path bootIdFile = Files.createTempFile("NanoTimeTest-", "-boot_id");

@@ -22,9 +22,15 @@
  * questions.
  *
  */
+
 #ifndef OS_LINUX_LINUXATTACHOPERATION_HPP
 #define OS_LINUX_LINUXATTACHOPERATION_HPP
+
 #include "services/attachListener.hpp"
+
+class LinuxAttachOperation;
+
+#if INCLUDE_SERVICES
 
 class LinuxAttachOperation: public AttachOperation {
  private:
@@ -46,4 +52,7 @@ class LinuxAttachOperation: public AttachOperation {
     _effectively_completed = false;
   }
 };
+
+#endif // INCLUDE_SERVICES
+
 #endif // OS_LINUX_LINUXATTACHOPERATION_HPP

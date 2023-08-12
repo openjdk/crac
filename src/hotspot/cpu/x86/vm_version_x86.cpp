@@ -2420,7 +2420,7 @@ void VM_Version::get_processor_features_hotspot() {
   }
 
   // Allocation prefetch settings
-  intx cache_line_size = prefetch_data_size();
+  int cache_line_size = checked_cast<int>(prefetch_data_size());
   if (FLAG_IS_DEFAULT(AllocatePrefetchStepSize) &&
       (cache_line_size > AllocatePrefetchStepSize)) {
     FLAG_SET_DEFAULT(AllocatePrefetchStepSize, cache_line_size);

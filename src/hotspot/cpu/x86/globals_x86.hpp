@@ -236,10 +236,7 @@ define_pd_global(intx, InitArrayShortSize, 8*BytesPerLong);
       "-XX:CPUFeatures=generic is compatible but not as slow as 0")         \
                                                                             \
   product(bool, ShowCPUFeatures, false, "Show features of this CPU "        \
-      "to be possibly used for the -XX:CPUFeatures=0xnumber option")        \
-                                                                            \
-  product(bool, CRaCCPUCountInit, false, "Reinitialize number of CPUs "     \
-      "during -XX:CRaCRestoreFrom")
+      "to be possibly used for the -XX:CPUFeatures=0xnumber option")
 
 // end of ARCH_FLAGS
 

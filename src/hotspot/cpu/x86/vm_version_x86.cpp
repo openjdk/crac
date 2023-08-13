@@ -2709,11 +2709,11 @@ void VM_Version::fatal_missing_features(uint64_t features_missing, uint64_t glib
   tty->print_raw(part2, sizeof(part2) - 1);
   char buf[512] = "";
   // insert_features_names() does crash for undefined too high-numbered features.
-  insert_features_names(buf, sizeof(buf)          ,       features_missing & ((  MAX_CPU << 1) - 1));
+  insert_features_names(buf, sizeof(buf)          ,       features_missing & (  MAX_CPU - 1));
   char *s = buf;
   while (*s)
     ++s;
-  insert_features_names(s  , buf + sizeof(buf) - s, glibc_features_missing & ((MAX_GLIBC << 1) - 1));
+  insert_features_names(s  , buf + sizeof(buf) - s, glibc_features_missing & (MAX_GLIBC - 1));
   while (*s)
     ++s;
   /* +1 to skip the first ','. */
@@ -2860,8 +2860,8 @@ void VM_Version::initialize() {
 
 #ifdef LINUX
   if (!ignore_glibc_not_using) {
-    uint64_t       features_expected = (  MAX_CPU << 1) - 1;
-    uint64_t glibc_features_expected = (MAX_GLIBC << 1) - 1;
+    uint64_t       features_expected =   MAX_CPU - 1;
+    uint64_t glibc_features_expected = MAX_GLIBC - 1;
 #if !INCLUDE_CPU_FEATURE_ACTIVE && !INCLUDE_LD_SO_LIST_DIAGNOSTICS
           features_expected =       features_saved;
     glibc_features_expected = glibc_features_saved;

@@ -58,13 +58,18 @@ class LinuxSocketOptions extends PlatformSocketOptions {
         return keepAliveOptionsSupported0();
     }
 
+    @Override
+    boolean ipDontFragmentSupported() {
+        return true;
+    }
+
     boolean peerCredentialsSupported() {
         return true;
     }
 
     @Override
-    void setTcpkeepAliveProbes(int fd, final int value) throws SocketException {
-        setTcpkeepAliveProbes0(fd, value);
+    void setTcpKeepAliveProbes(int fd, final int value) throws SocketException {
+        setTcpKeepAliveProbes0(fd, value);
     }
 
     @Override
@@ -78,8 +83,8 @@ class LinuxSocketOptions extends PlatformSocketOptions {
     }
 
     @Override
-    int getTcpkeepAliveProbes(int fd) throws SocketException {
-        return getTcpkeepAliveProbes0(fd);
+    int getTcpKeepAliveProbes(int fd) throws SocketException {
+        return getTcpKeepAliveProbes0(fd);
     }
 
     @Override
@@ -103,6 +108,16 @@ class LinuxSocketOptions extends PlatformSocketOptions {
     }
 
     @Override
+    void setIpDontFragment(int fd, final boolean value, boolean isIPv6) throws SocketException {
+        setIpDontFragment0(fd, value, isIPv6);
+    }
+
+    @Override
+    boolean getIpDontFragment(int fd, boolean isIPv6) throws SocketException {
+        return getIpDontFragment0(fd, isIPv6);
+    }
+
+    @Override
     UnixDomainPrincipal getSoPeerCred(int fd) throws SocketException {
         long l = getSoPeerCred0(fd);
         int uid = (int)(l >> 32);
@@ -112,12 +127,14 @@ class LinuxSocketOptions extends PlatformSocketOptions {
         return new UnixDomainPrincipal(user, group);
     }
 
-    private static native void setTcpkeepAliveProbes0(int fd, int value) throws SocketException;
+    private static native void setTcpKeepAliveProbes0(int fd, int value) throws SocketException;
     private static native void setTcpKeepAliveTime0(int fd, int value) throws SocketException;
     private static native void setTcpKeepAliveIntvl0(int fd, int value) throws SocketException;
-    private static native int getTcpkeepAliveProbes0(int fd) throws SocketException;
+    private static native void setIpDontFragment0(int fd, boolean value, boolean isIPv6) throws SocketException;
+    private static native int getTcpKeepAliveProbes0(int fd) throws SocketException;
     private static native int getTcpKeepAliveTime0(int fd) throws SocketException;
     private static native int getTcpKeepAliveIntvl0(int fd) throws SocketException;
+    private static native boolean getIpDontFragment0(int fd, boolean isIPv6) throws SocketException;
     private static native void setQuickAck0(int fd, boolean on) throws SocketException;
     private static native boolean getQuickAck0(int fd) throws SocketException;
     private static native long getSoPeerCred0(int fd) throws SocketException;

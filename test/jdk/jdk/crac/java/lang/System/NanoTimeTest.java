@@ -53,8 +53,6 @@ import static jdk.test.lib.Asserts.*;
  * @run driver jdk.test.lib.crac.CracTest -86400 false
  */
 public class NanoTimeTest implements CracTest {
-    private static final String imageName = Common.imageName("system-nanotime");
-
     @CracTestArg(0)
     long monotonicOffset;
 
@@ -68,6 +66,9 @@ public class NanoTimeTest implements CracTest {
         }
         CracBuilder builder = new CracBuilder();
         Path bootIdFile = Files.createTempFile("NanoTimeTest-", "-boot_id");
+
+        String imageName = Common.imageName("system-nanotime");
+
         try {
             // TODO: use more official image
             builder.withBaseImage("ghcr.io/crac/test-base", "latest")

@@ -29,6 +29,7 @@ import sun.font.GlyphList;
 import sun.java2d.SunGraphics2D;
 import sun.java2d.SurfaceData;
 import sun.java2d.pipe.Region;
+import sun.java2d.loops.GraphicsPrimitiveMgr.GeneralPrimitives;
 
 import java.awt.*;
 
@@ -37,10 +38,10 @@ import java.awt.*;
  */
 public class DrawGlyphListColor extends GraphicsPrimitive {
 
-    public final static String methodSignature =
+    public static final String methodSignature =
             "DrawGlyphListColor(...)".toString();
 
-    public final static int primTypeID = makePrimTypeID();
+    public static final int primTypeID = makePrimTypeID();
 
     public static DrawGlyphListColor locate(SurfaceType srctype,
                                             CompositeType comptype,
@@ -67,7 +68,7 @@ public class DrawGlyphListColor extends GraphicsPrimitive {
 
     // This instance is used only for lookup.
     static {
-        GraphicsPrimitiveMgr.registerGeneral(
+        GeneralPrimitives.register(
                                 new DrawGlyphListColor(null, null, null));
     }
 

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998, 2021, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 1998, 2023, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -25,14 +25,13 @@
 
 package javax.crypto.spec;
 
-import jdk.internal.access.JavaxCryptoSpecAccess;
 import jdk.internal.access.SharedSecrets;
 
+import javax.crypto.SecretKey;
 import java.security.MessageDigest;
 import java.security.spec.KeySpec;
 import java.util.Arrays;
 import java.util.Locale;
-import javax.crypto.SecretKey;
 
 /**
  * This class specifies a secret key in a provider-independent fashion.
@@ -61,23 +60,18 @@ public class SecretKeySpec implements KeySpec, SecretKey {
      *
      * @serial
      */
-    private byte[] key;
+    private final byte[] key;
 
     /**
      * The name of the algorithm associated with this key.
      *
      * @serial
      */
-    private String algorithm;
+    private final String algorithm;
 
     static {
         SharedSecrets.setJavaxCryptoSpecAccess(
-                new JavaxCryptoSpecAccess() {
-                    @Override
-                    public void clearSecretKeySpec(SecretKeySpec keySpec) {
-                        keySpec.clear();
-                    }
-                });
+                SecretKeySpec::clear);
     }
 
     /**
@@ -157,12 +151,15 @@ public class SecretKeySpec implements KeySpec, SecretKey {
         if (key.length == 0) {
             throw new IllegalArgumentException("Empty key");
         }
-        if (key.length-offset < len) {
-            throw new IllegalArgumentException
-                ("Invalid offset/length combination");
+        if (offset < 0) {
+            throw new ArrayIndexOutOfBoundsException("offset is negative");
         }
         if (len < 0) {
             throw new ArrayIndexOutOfBoundsException("len is negative");
+        }
+        if (key.length - offset < len) {
+            throw new IllegalArgumentException
+                ("Invalid offset/length combination");
         }
         this.key = new byte[len];
         System.arraycopy(key, offset, this.key, 0, len);
@@ -201,16 +198,13 @@ public class SecretKeySpec implements KeySpec, SecretKey {
      * Calculates a hash code value for the object.
      * Objects that are equal will also have the same hashcode.
      */
+    @Override
     public int hashCode() {
-        int retval = 0;
-        for (int i = 1; i < this.key.length; i++) {
-            retval += this.key[i] * i;
-        }
+        int retval = Arrays.hashCode(key);
         if (this.algorithm.equalsIgnoreCase("TripleDES"))
-            return (retval ^= "desede".hashCode());
+            return retval ^ "desede".hashCode();
         else
-            return (retval ^=
-                    this.algorithm.toLowerCase(Locale.ENGLISH).hashCode());
+            return retval ^ this.algorithm.toLowerCase(Locale.ENGLISH).hashCode();
     }
 
     /**
@@ -224,14 +218,15 @@ public class SecretKeySpec implements KeySpec, SecretKey {
      * @return true if the objects are considered equal, false if
      * <code>obj</code> is null or otherwise.
      */
+    @Override
     public boolean equals(Object obj) {
         if (this == obj)
             return true;
 
-        if (!(obj instanceof SecretKey))
+        if (!(obj instanceof SecretKey that))
             return false;
 
-        String thatAlg = ((SecretKey)obj).getAlgorithm();
+        String thatAlg = that.getAlgorithm();
         if (!(thatAlg.equalsIgnoreCase(this.algorithm))) {
             if ((!(thatAlg.equalsIgnoreCase("DESede"))
                  || !(this.algorithm.equalsIgnoreCase("TripleDES")))
@@ -240,7 +235,7 @@ public class SecretKeySpec implements KeySpec, SecretKey {
             return false;
         }
 
-        byte[] thatKey = ((SecretKey)obj).getEncoded();
+        byte[] thatKey = that.getEncoded();
         try {
             return MessageDigest.isEqual(this.key, thatKey);
         } finally {

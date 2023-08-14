@@ -68,11 +68,24 @@ import jdk.internal.icu.text.UCharacterIterator;
  * Applications are responsible for taking adequate security measures when using
  * international domain names.
  *
+ * @spec https://www.rfc-editor.org/info/rfc1122
+ *      RFC 1122: Requirements for Internet Hosts - Communication Layers
+ * @spec https://www.rfc-editor.org/info/rfc1123
+ *      RFC 1123: Requirements for Internet Hosts - Application and Support
+ * @spec https://www.rfc-editor.org/info/rfc3454
+ *      RFC 3454: Preparation of Internationalized Strings ("stringprep")
+ * @spec https://www.rfc-editor.org/info/rfc3490
+ *      RFC 3490: Internationalizing Domain Names in Applications (IDNA)
+ * @spec https://www.rfc-editor.org/info/rfc3491
+ *      RFC 3491: Nameprep: A Stringprep Profile for Internationalized Domain Names (IDN)
+ * @spec https://www.rfc-editor.org/info/rfc3492
+ *      RFC 3492: Punycode: A Bootstring encoding of Unicode for Internationalized Domain Names in Applications (IDNA)
+ * @spec https://www.unicode.org/reports/tr36
+ *      Unicode Security Considerations
  * @author Edward Wang
  * @since 1.6
  *
  */
-@SuppressWarnings("removal")
 public final class IDN {
     /**
      * Flag to allow processing of unassigned code points
@@ -108,6 +121,8 @@ public final class IDN {
      * @return          the translated {@code String}
      *
      * @throws IllegalArgumentException   if the input string doesn't conform to RFC 3490 specification
+     * @spec https://www.rfc-editor.org/info/rfc3490
+     *      RFC 3490: Internationalizing Domain Names in Applications (IDNA)
      */
     public static String toASCII(String input, int flag)
     {
@@ -147,6 +162,8 @@ public final class IDN {
      * @return          the translated {@code String}
      *
      * @throws IllegalArgumentException   if the input string doesn't conform to RFC 3490 specification
+     * @spec https://www.rfc-editor.org/info/rfc3490
+     *      RFC 3490: Internationalizing Domain Names in Applications (IDNA)
      */
     public static String toASCII(String input) {
         return toASCII(input, 0);
@@ -170,6 +187,8 @@ public final class IDN {
      * @param flag      process flag; can be 0 or any logical OR of possible flags
      *
      * @return          the translated {@code String}
+     * @spec https://www.rfc-editor.org/info/rfc3490
+     *      RFC 3490: Internationalizing Domain Names in Applications (IDNA)
      */
     public static String toUnicode(String input, int flag) {
         int p = 0, q = 0;
@@ -206,6 +225,8 @@ public final class IDN {
      * @param input     the string to be processed
      *
      * @return          the translated {@code String}
+     * @spec https://www.rfc-editor.org/info/rfc3490
+     *      RFC 3490: Internationalizing Domain Names in Applications (IDNA)
      */
     public static String toUnicode(String input) {
         return toUnicode(input, 0);
@@ -224,19 +245,15 @@ public final class IDN {
     private static StringPrep namePrep = null;
 
     static {
-        InputStream stream = null;
-
         try {
             final String IDN_PROFILE = "/sun/net/idn/uidna.spp";
-            if (System.getSecurityManager() != null) {
-                stream = AccessController.doPrivileged(new PrivilegedAction<>() {
-                    public InputStream run() {
-                        return StringPrep.class.getResourceAsStream(IDN_PROFILE);
-                    }
-                });
-            } else {
-                stream = StringPrep.class.getResourceAsStream(IDN_PROFILE);
-            }
+            @SuppressWarnings("removal")
+            InputStream stream = System.getSecurityManager() != null
+                    ? AccessController.doPrivileged(new PrivilegedAction<>() {
+                            public InputStream run() {
+                                return StringPrep.class.getResourceAsStream(IDN_PROFILE);
+                            }})
+                    : StringPrep.class.getResourceAsStream(IDN_PROFILE);
 
             namePrep = new StringPrep(stream);
             stream.close();

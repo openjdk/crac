@@ -28,7 +28,12 @@
  *          generated to access to private methods and fields.
  * @modules jdk.compiler/com.sun.tools.javac.api
  *          jdk.compiler/com.sun.tools.javac.main
- *          jdk.jdeps/com.sun.tools.classfile
+ *          java.base/jdk.internal.classfile
+ *          java.base/jdk.internal.classfile.attribute
+ *          java.base/jdk.internal.classfile.constantpool
+ *          java.base/jdk.internal.classfile.instruction
+ *          java.base/jdk.internal.classfile.components
+ *          java.base/jdk.internal.classfile.impl
  * @library /tools/lib /tools/javac/lib ../lib
  * @build toolbox.ToolBox InMemoryFileManager TestResult
  * @build AccessToPrivateInnerClassMembersTest SyntheticTestDriver ExpectedClass ExpectedClasses
@@ -43,15 +48,13 @@
  * 3. access method for private method function().
  * 4. getter/setter for private field staticVar.
  * 5. access method for private method staticFunction().
- * 6. field this in Inner1.
- * 7. constructor for Inner*.
+ * 6. constructor for Inner*.
  */
 @ExpectedClass(className = "AccessToPrivateInnerClassMembersTest",
         expectedMethods = {"<init>()", "<clinit>()"})
 @ExpectedClass(className = "AccessToPrivateInnerClassMembersTest$Inner1",
         expectedMethods = {"<init>(AccessToPrivateInnerClassMembersTest)", "function()"},
-        expectedFields = "var",
-        expectedNumberOfSyntheticFields = 1)
+        expectedFields = "var")
 @ExpectedClass(className = "AccessToPrivateInnerClassMembersTest$Inner2",
         expectedMethods = {"function()", "staticFunction()", "<init>()"},
         expectedFields = {"staticVar", "var"})

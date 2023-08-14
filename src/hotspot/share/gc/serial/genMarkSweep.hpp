@@ -28,9 +28,8 @@
 #include "gc/serial/markSweep.hpp"
 
 class GenMarkSweep : public MarkSweep {
-  friend class VM_MarkSweep;
  public:
-  static void invoke_at_safepoint(ReferenceProcessor* rp, bool clear_all_softrefs);
+  static void invoke_at_safepoint(bool clear_all_softrefs);
 
  private:
 

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2019, 2021, Red Hat, Inc. All rights reserved.
+ * Copyright (c) 2019, 2022, Red Hat, Inc. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -74,15 +74,15 @@ void ShenandoahNMethod::oops_do(OopClosure* oops, bool fix_relocations) {
 }
 
 void ShenandoahNMethod::heal_nmethod_metadata(ShenandoahNMethod* nmethod_data) {
-  ShenandoahEvacuateUpdateMetadataClosure<> cl;
+  ShenandoahEvacuateUpdateMetadataClosure cl;
   nmethod_data->oops_do(&cl, true /*fix relocation*/);
 }
 
 void ShenandoahNMethod::disarm_nmethod(nmethod* nm) {
   BarrierSetNMethod* const bs = BarrierSet::barrier_set()->barrier_set_nmethod();
-  assert(bs != NULL || !ShenandoahNMethodBarrier,
+  assert(bs != nullptr || !ShenandoahNMethodBarrier,
         "Must have nmethod barrier for concurrent GC");
-  if (bs != NULL && bs->is_armed(nm)) {
+  if (bs != nullptr && bs->is_armed(nm)) {
     bs->disarm(nm);
   }
 }
@@ -100,7 +100,6 @@ ShenandoahReentrantLock* ShenandoahNMethod::lock_for_nmethod(nmethod* nm) {
 }
 
 bool ShenandoahNMethodTable::iteration_in_progress() const {
-  shenandoah_assert_locked_or_safepoint(CodeCache_lock);
   return _itr_cnt > 0;
 }
 

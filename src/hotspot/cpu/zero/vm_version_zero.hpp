@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2003, 2019, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2003, 2021, Oracle and/or its affiliates. All rights reserved.
  * Copyright 2007 Red Hat, Inc.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
@@ -37,6 +37,10 @@ class VM_Version : public Abstract_VM_Version {
 
   // No _features_names[] available on this CPU.
   static void insert_features_names(char* buf, size_t buflen, uint64_t features = _features) {}
+
+  constexpr static bool supports_stack_watermark_barrier() { return true; }
+
+  static void initialize_cpu_information(void);
 };
 
 #endif // CPU_ZERO_VM_VERSION_ZERO_HPP

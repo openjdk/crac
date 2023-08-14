@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2014, 2021, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2014, 2022, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -31,8 +31,8 @@ package gc.arguments;
  * @library /
  * @modules java.base/jdk.internal.misc
  *          java.management
- * @build sun.hotspot.WhiteBox
- * @run driver jdk.test.lib.helpers.ClassFileInstaller sun.hotspot.WhiteBox
+ * @build jdk.test.whitebox.WhiteBox
+ * @run driver jdk.test.lib.helpers.ClassFileInstaller jdk.test.whitebox.WhiteBox
  * @run main/othervm -Xbootclasspath/a:. -XX:+UnlockDiagnosticVMOptions -XX:+WhiteBoxAPI gc.arguments.TestParallelGCThreads
  */
 
@@ -40,9 +40,8 @@ import java.util.ArrayList;
 import java.util.List;
 import jdk.test.lib.Asserts;
 import jdk.test.lib.process.OutputAnalyzer;
-import jdk.test.lib.process.ProcessTools;
 import jtreg.SkippedException;
-import sun.hotspot.gc.GC;
+import jdk.test.whitebox.gc.GC;
 
 public class TestParallelGCThreads {
 
@@ -114,17 +113,14 @@ public class TestParallelGCThreads {
       }
     }
 
-    // 4294967295 == (unsigned int) -1
-    // So setting ParallelGCThreads=4294967295 should give back 4294967295
-    // and setting ParallelGCThreads=4294967296 should give back 0. (SerialGC is ok with ParallelGCThreads=0)
-    for (long i = 4294967295L; i <= 4294967296L; i++) {
-      long count = getParallelGCThreadCount(
-          "-XX:+UseSerialGC",
-          "-XX:ParallelGCThreads=" + i,
-          "-XX:+PrintFlagsFinal",
-          "-version");
-      Asserts.assertEQ(count, i % 4294967296L, "Specifying ParallelGCThreads=" + i + " does not set the thread count properly!");
-    }
+    // Test the max value for ParallelGCThreads
+    // So setting ParallelGCThreads=2147483647 should give back 2147483647
+    long count = getParallelGCThreadCount(
+        "-XX:+UseSerialGC",
+        "-XX:ParallelGCThreads=2147483647",
+        "-XX:+PrintFlagsFinal",
+        "-version");
+    Asserts.assertEQ(count, 2147483647L, "Specifying ParallelGCThreads=2147483647 does not set the thread count properly!");
   }
 
   public static long getParallelGCThreadCount(String... flags) throws Exception {

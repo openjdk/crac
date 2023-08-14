@@ -23,7 +23,7 @@
  */
 
 #include "precompiled.hpp"
-#include "gc/shared/cardTableRS.hpp"
+#include "gc/serial/cardTableRS.hpp"
 #include "gc/shared/collectedHeap.hpp"
 #include "gc/shared/gcArguments.hpp"
 #include "gc/shared/gcConfig.hpp"
@@ -34,7 +34,7 @@
 #include "runtime/arguments.hpp"
 #include "runtime/globals.hpp"
 #include "runtime/globals_extension.hpp"
-#include "runtime/thread.inline.hpp"
+#include "runtime/javaThread.hpp"
 #include "utilities/align.hpp"
 #include "utilities/macros.hpp"
 #include "utilities/powerOfTwo.hpp"
@@ -52,35 +52,6 @@
 // value(s) of the flag(s) on the command line.  In the constraint
 // checking functions,  FLAG_IS_CMDLINE() is used to check if
 // the flag has been set by the user and so should be checked.
-
-// As ParallelGCThreads differs among GC modes, we need constraint function.
-JVMFlag::Error ParallelGCThreadsConstraintFunc(uint value, bool verbose) {
-  JVMFlag::Error status = JVMFlag::SUCCESS;
-
-#if INCLUDE_PARALLELGC
-  status = ParallelGCThreadsConstraintFuncParallel(value, verbose);
-  if (status != JVMFlag::SUCCESS) {
-    return status;
-  }
-#endif
-
-  return status;
-}
-
-// As ConcGCThreads should be smaller than ParallelGCThreads,
-// we need constraint function.
-JVMFlag::Error ConcGCThreadsConstraintFunc(uint value, bool verbose) {
-  // G1 GC use ConcGCThreads.
-  if (GCConfig::is_gc_selected(CollectedHeap::G1) && (value > ParallelGCThreads)) {
-    JVMFlag::printError(verbose,
-                        "ConcGCThreads (" UINT32_FORMAT ") must be "
-                        "less than or equal to ParallelGCThreads (" UINT32_FORMAT ")\n",
-                        value, ParallelGCThreads);
-    return JVMFlag::VIOLATES_CONSTRAINT;
-  }
-
-  return JVMFlag::SUCCESS;
-}
 
 static JVMFlag::Error MinPLABSizeBounds(const char* name, size_t value, bool verbose) {
   if ((GCConfig::is_gc_selected(CollectedHeap::G1) || GCConfig::is_gc_selected(CollectedHeap::Parallel)) &&
@@ -439,3 +410,14 @@ JVMFlag::Error MaxMetaspaceSizeConstraintFunc(size_t value, bool verbose) {
   }
 }
 
+JVMFlag::Error GCCardSizeInBytesConstraintFunc(uint value, bool verbose) {
+  if (!is_power_of_2(value)) {
+    JVMFlag::printError(verbose,
+                        "GCCardSizeInBytes ( %u ) must be "
+                        "a power of 2\n",
+                        value);
+    return JVMFlag::VIOLATES_CONSTRAINT;
+  } else {
+    return JVMFlag::SUCCESS;
+  }
+}

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2017, 2020, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2017, 2023, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -451,7 +451,7 @@ public class TestCharsetMapping {
         String   pkgName;
         String   clzName;
         String   csName;
-        String   hisName;
+        String   histName;
         String   type;
         boolean  isInternal;
         Set<String> aliases = new HashSet<>();
@@ -552,7 +552,7 @@ public class TestCharsetMapping {
                         cs.type = tokens[2];
                         break;
                     case "hisname":
-                        cs.hisName = tokens[2];
+                        cs.histName = tokens[2];
                         break;
                     case "internal":
                         cs.isInternal = Boolean.parseBoolean(tokens[2]);
@@ -569,7 +569,7 @@ public class TestCharsetMapping {
 
     public static void main(String args[]) throws Exception {
         Path dir = Paths.get(System.getProperty("test.src", ".") +
-                             "/../../../../make/data/charsetmapping");
+                             "/../../../../src/java.base/share/data/charsetmapping");
         if (!Files.exists(dir)) {
             // not inside jdk repo, no mappings, exit silently
             log.println("Nothing done, not in a jdk repo: ");

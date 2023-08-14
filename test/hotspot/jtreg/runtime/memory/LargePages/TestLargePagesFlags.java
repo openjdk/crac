@@ -22,7 +22,7 @@
  */
 
 /* @test TestLargePagesFlags
- * @summary Tests how large pages are choosen depending on the given large pages flag combinations.
+ * @summary Tests how large pages are chosen depending on the given large pages flag combinations.
  * @requires vm.gc != "Z"
  * @requires os.family == "linux"
  * @requires vm.flagless
@@ -37,6 +37,7 @@ import jdk.test.lib.Platform;
 import jdk.test.lib.process.ProcessTools;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 
 public class TestLargePagesFlags {
 
@@ -299,6 +300,9 @@ public class TestLargePagesFlags {
         throw new IllegalStateException("Must run use() before expect()");
       }
 
+      System.out.println("Using: " + Arrays.toString(useFlags));
+      System.out.println("Expecting: " + Arrays.toString(expectedFlags));
+
       OutputAnalyzer output = executeNewJVM(useFlags);
 
       for (Flag flag : expectedFlags) {
@@ -381,6 +385,9 @@ public class TestLargePagesFlags {
     public String value() {
       return Boolean.toString(value);
     }
+
+    @Override
+    public String toString() { return flagString(); }
   }
 
   private static interface Flag {

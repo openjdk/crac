@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998, 2020, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 1998, 2022, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -35,7 +35,6 @@ import javax.lang.model.element.ExecutableElement;
 import javax.lang.model.element.TypeElement;
 
 import jdk.javadoc.internal.doclets.formats.html.markup.HtmlTree;
-import jdk.javadoc.internal.doclets.formats.html.markup.Links;
 import jdk.javadoc.internal.doclets.toolkit.Resources;
 import jdk.javadoc.internal.doclets.toolkit.util.DocFile;
 import jdk.javadoc.internal.doclets.toolkit.util.DocFileIOException;
@@ -50,11 +49,6 @@ import jdk.javadoc.internal.doclets.toolkit.util.Utils;
  * in index items: {@code containingModule}, {@code containingPackage},
  * {@code containingClass}, and {@code url}, and to write out the
  * JavaScript files.
- *
- *  <p><b>This is NOT part of any supported API.
- *  If you write code that depends on this, you do so at your own risk.
- *  This code and its internal interfaces are subject to change or
- *  deletion without notice.</b>
  */
 public class HtmlIndexBuilder extends IndexBuilder {
     private final HtmlConfiguration configuration;
@@ -82,12 +76,12 @@ public class HtmlIndexBuilder extends IndexBuilder {
      * After the initial work to add the element items, the remaining fields in
      * the items are also initialized.
      */
+    @Override
     public void addElements() {
         super.addElements();
         if (classesOnly) {
             return;
         }
-
 
         Map<String,Integer> duplicateLabelCheck = new HashMap<>();
         for (Character ch : getFirstCharacters()) {
@@ -136,7 +130,7 @@ public class HtmlIndexBuilder extends IndexBuilder {
             case FIELD:
             case ENUM_CONSTANT:
                 TypeElement containingType = item.getContainingTypeElement();
-                item.setContainingPackage(utils.getPackageName(utils.containingPackage(element)));
+                item.setContainingPackage(utils.getPackageName(utils.containingPackage(containingType)));
                 item.setContainingClass(utils.getSimpleName(containingType));
                 if (configuration.showModules && addModuleInfo) {
                     item.setContainingModule(utils.getFullyQualifiedName(utils.containingModule(element)));
@@ -153,7 +147,6 @@ public class HtmlIndexBuilder extends IndexBuilder {
                 throw new Error();
         }
     }
-
 
     /**
      * Generates the set of index files used by interactive search.

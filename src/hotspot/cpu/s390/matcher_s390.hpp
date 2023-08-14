@@ -1,5 +1,6 @@
 /*
- * Copyright (c) 2021, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2021, 2023, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2017, 2022 SAP SE. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -34,7 +35,7 @@
   // Whether this platform implements the scalable vector feature
   static const bool implements_scalable_vector = false;
 
-  static constexpr const bool supports_scalable_vector() {
+  static constexpr bool supports_scalable_vector() {
     return false;
   }
 
@@ -63,14 +64,14 @@
   }
 
   // Suppress CMOVL. Conditional move available on z/Architecture only from z196 onwards. Not exploited yet.
-  static const int long_cmove_cost() { return ConditionalMoveLimit; }
+  static int long_cmove_cost() { return ConditionalMoveLimit; }
 
   // Suppress CMOVF. Conditional move available on z/Architecture only from z196 onwards. Not exploited yet.
-  static const int float_cmove_cost() { return ConditionalMoveLimit; }
+  static int float_cmove_cost() { return ConditionalMoveLimit; }
 
   // Set this as clone_shift_expressions.
   static bool narrow_oop_use_complex_address() {
-    if (CompressedOops::base() == NULL && CompressedOops::shift() == 0) return true;
+    if (CompressedOops::base() == nullptr && CompressedOops::shift() == 0) return true;
     return false;
   }
 
@@ -83,12 +84,12 @@
 
   static bool const_oop_prefer_decode() {
     // Prefer ConN+DecodeN over ConP in simple compressed oops mode.
-    return CompressedOops::base() == NULL;
+    return CompressedOops::base() == nullptr;
   }
 
   static bool const_klass_prefer_decode() {
     // Prefer ConNKlass+DecodeNKlass over ConP in simple compressed klass mode.
-    return CompressedKlassPointers::base() == NULL;
+    return CompressedKlassPointers::base() == nullptr;
   }
 
   // Is it better to copy float constants, or load them directly from memory?
@@ -128,6 +129,11 @@
     return false;
   }
 
+  // Does the CPU supports vector constant rotate instructions?
+  static constexpr bool supports_vector_constant_rotates(int shift) {
+    return false;
+  }
+
   // Does the CPU supports vector unsigned comparison instructions?
   static constexpr bool supports_vector_comparison_unsigned(int vlen, BasicType bt) {
     return false;
@@ -138,10 +144,44 @@
     return false;
   }
 
-  // true means we have fast l2f convers
+  // true means we have fast l2f conversion
   // false means that conversion is done by runtime call
   static constexpr bool convL2FSupported(void) {
       return true;
+  }
+
+  // Implements a variant of EncodeISOArrayNode that encode ASCII only
+  static const bool supports_encode_ascii_array = true;
+
+  // Some architecture needs a helper to check for alltrue vector
+  static constexpr bool vectortest_needs_second_argument(bool is_alltrue, bool is_predicate) {
+    return false;
+  }
+
+  // BoolTest mask for vector test intrinsics
+  static constexpr BoolTest::mask vectortest_mask(bool is_alltrue, bool is_predicate, int vlen) {
+    return BoolTest::illegal;
+  }
+
+  // Returns pre-selection estimated size of a vector operation.
+  static int vector_op_pre_select_sz_estimate(int vopc, BasicType ety, int vlen) {
+    switch(vopc) {
+      default: return 0;
+      case Op_RoundVF: // fall through
+      case Op_RoundVD: {
+        return 30;
+      }
+    }
+  }
+  // Returns pre-selection estimated size of a scalar operation.
+  static int scalar_op_pre_select_sz_estimate(int vopc, BasicType ety) {
+    switch(vopc) {
+      default: return 0;
+      case Op_RoundF: // fall through
+      case Op_RoundD: {
+        return 30;
+      }
+    }
   }
 
 #endif // CPU_S390_MATCHER_S390_HPP

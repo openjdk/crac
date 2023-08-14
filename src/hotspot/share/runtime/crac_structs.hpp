@@ -98,7 +98,7 @@ class CracRestoreParameters : public CHeapObj<mtInternal> {
 
   CracRestoreParameters() :
     _raw_content(NULL),
-    _properties(new (ResourceObj::C_HEAP, mtInternal) GrowableArray<const char *>(0, mtInternal)),
+    _properties(new (mtInternal) GrowableArray<const char *>(0, mtInternal)),
     _args(NULL)
   {}
 
@@ -174,7 +174,7 @@ public:
     _fd_arr(fd_arr),
     _dry_run(dry_run),
     _ok(false),
-    _failures(new (ResourceObj::C_HEAP, mtInternal) GrowableArray<CracFailDep>(0, mtInternal)),
+    _failures(new (mtInternal) GrowableArray<CracFailDep>(0, mtInternal)),
     _restore_parameters(),
     _ostream(jcmd_stream ? jcmd_stream : tty)
 #ifdef LINUX

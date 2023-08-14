@@ -29,6 +29,7 @@ import jdk.test.lib.Asserts;
 
 /*
  * @test
+ * @key stress randomness
  * @bug 8252219 8256535
  * @requires vm.debug == true & vm.compiler2.enabled
  * @summary Tests that stress compilations with the same seed yield the same
@@ -43,7 +44,7 @@ public class TestStressIGVNAndCCP {
                              int stressSeed) throws Exception {
         String className = TestStressIGVNAndCCP.class.getName();
         String[] procArgs = {
-            "-Xcomp", "-XX:-TieredCompilation", "-XX:-Inline",
+            "-Xcomp", "-XX:-TieredCompilation", "-XX:-Inline", "-XX:+CICountNative",
             "-XX:CompileOnly=" + className + "::sum", "-XX:+" + traceOption,
             "-XX:+" + stressOption, "-XX:StressSeed=" + stressSeed,
             className, "10"};

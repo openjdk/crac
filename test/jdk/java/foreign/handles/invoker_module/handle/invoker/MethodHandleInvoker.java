@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2021, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2021, 2023, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -23,15 +23,15 @@
 
 package handle.invoker;
 
-import jdk.incubator.foreign.Addressable;
-import jdk.incubator.foreign.CLinker;
-import jdk.incubator.foreign.FunctionDescriptor;
-import jdk.incubator.foreign.MemoryAddress;
-import jdk.incubator.foreign.MemoryLayout;
-import jdk.incubator.foreign.MemoryLayouts;
-import jdk.incubator.foreign.ResourceScope;
-import jdk.incubator.foreign.SegmentAllocator;
-import jdk.incubator.foreign.SymbolLookup;
+import java.lang.foreign.AddressLayout;
+import java.lang.foreign.Arena;
+import java.lang.foreign.Linker;
+import java.lang.foreign.FunctionDescriptor;
+import java.lang.foreign.MemoryLayout;
+import java.lang.foreign.MemorySegment;
+import java.lang.foreign.SegmentAllocator;
+import java.lang.foreign.SymbolLookup;
+import java.lang.foreign.ValueLayout;
 
 import java.lang.invoke.MethodHandle;
 import java.lang.invoke.MethodHandles;
@@ -40,6 +40,7 @@ import java.nio.charset.Charset;
 import java.nio.file.Path;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.function.Consumer;
 
 public class MethodHandleInvoker {
     public void call(MethodHandle methodHandle) throws Throwable {
@@ -52,32 +53,51 @@ public class MethodHandleInvoker {
                 throw new AssertionError("Caller module is not lookup_module!");
             }
         } catch (Throwable ex) {
-            throw new AssertionError("Call to restricted method did not fail as expected!");
+            throw new AssertionError("Call to restricted method did not fail as expected!", ex);
         }
     }
 
     static final Map<Class<?>, Object> DEFAULT_VALUES = new HashMap<>();
 
-    static <Z> void addDefaultMapping(Class<Z> carrier, Z value) {
+    static void addDefaultMapping(Class<?> carrier, Object value) {
         DEFAULT_VALUES.put(carrier, value);
     }
 
     static {
-        addDefaultMapping(CLinker.class, CLinker.getInstance());
-        addDefaultMapping(long.class, 0L);
+        addDefaultMapping(Linker.class, Linker.nativeLinker());
         addDefaultMapping(Path.class, Path.of("nonExistent"));
         addDefaultMapping(String.class, "Hello!");
-        addDefaultMapping(Runnable.class, () -> {});
+        addDefaultMapping(Runnable.class, (Runnable)() -> {});
         addDefaultMapping(MethodHandle.class, MethodHandles.identity(int.class));
         addDefaultMapping(Charset.class, Charset.defaultCharset());
         addDefaultMapping(MethodType.class, MethodType.methodType(void.class));
-        addDefaultMapping(MemoryAddress.class, MemoryAddress.NULL);
-        addDefaultMapping(Addressable.class, MemoryAddress.NULL);
-        addDefaultMapping(MemoryLayout.class, MemoryLayouts.JAVA_INT);
+        addDefaultMapping(MemorySegment.class, MemorySegment.NULL);
+        addDefaultMapping(MemoryLayout.class, ValueLayout.JAVA_INT);
         addDefaultMapping(FunctionDescriptor.class, FunctionDescriptor.ofVoid());
+        addDefaultMapping(Arena.class, Arena.ofAuto());
+        addDefaultMapping(MemorySegment.Scope.class, Arena.ofAuto().scope());
+        addDefaultMapping(SegmentAllocator.class, SegmentAllocator.prefixAllocator(MemorySegment.ofArray(new byte[10])));
+        addDefaultMapping(ValueLayout.OfByte.class, ValueLayout.JAVA_BYTE);
+        addDefaultMapping(ValueLayout.OfBoolean.class, ValueLayout.JAVA_BOOLEAN);
+        addDefaultMapping(ValueLayout.OfChar.class, ValueLayout.JAVA_CHAR);
+        addDefaultMapping(ValueLayout.OfShort.class, ValueLayout.JAVA_SHORT);
+        addDefaultMapping(ValueLayout.OfInt.class, ValueLayout.JAVA_INT);
+        addDefaultMapping(ValueLayout.OfFloat.class, ValueLayout.JAVA_FLOAT);
+        addDefaultMapping(ValueLayout.OfLong.class, ValueLayout.JAVA_LONG);
+        addDefaultMapping(ValueLayout.OfDouble.class, ValueLayout.JAVA_DOUBLE);
+        addDefaultMapping(AddressLayout.class, ValueLayout.ADDRESS);
         addDefaultMapping(SymbolLookup.class, SymbolLookup.loaderLookup());
-        addDefaultMapping(ResourceScope.class, ResourceScope.newImplicitScope());
-        addDefaultMapping(SegmentAllocator.class, (size, align) -> null);
+        addDefaultMapping(Consumer.class, (Consumer<Object>)(Object o) -> {});
+        addDefaultMapping(FunctionDescriptor.class, FunctionDescriptor.ofVoid());
+        addDefaultMapping(Linker.Option[].class, null);
+        addDefaultMapping(byte.class, (byte)0);
+        addDefaultMapping(boolean.class, true);
+        addDefaultMapping(char.class, (char)0);
+        addDefaultMapping(short.class, (short)0);
+        addDefaultMapping(int.class, 0);
+        addDefaultMapping(float.class, 0f);
+        addDefaultMapping(long.class, 0L);
+        addDefaultMapping(double.class, 0d);
     }
 
     static Object[] makeArgs(MethodType type) {
@@ -87,10 +107,9 @@ public class MethodHandleInvoker {
     }
 
     static Object makeArg(Class<?> clazz) {
-        Object value = DEFAULT_VALUES.get(clazz);
-        if (value == null) {
+        if (!DEFAULT_VALUES.containsKey(clazz)) {
             throw new UnsupportedOperationException(clazz.getName());
         }
-        return value;
+        return DEFAULT_VALUES.get(clazz);
     }
 }

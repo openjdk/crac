@@ -41,6 +41,7 @@ public class MTLLayer extends CFLayer {
     private static native void nativeSetInsets(long layerPtr, int top, int left);
     private static native void validate(long layerPtr, MTLSurfaceData mtlsd);
     private static native void blitTexture(long layerPtr);
+    private static native void nativeSetOpaque(long layerPtr, boolean opaque);
 
     private int scale = 1;
 
@@ -90,7 +91,7 @@ public class MTLLayer extends CFLayer {
         // break the connection between the layer and the buffer
         validate(null);
         SurfaceData oldData = surfaceData;
-        surfaceData = NullSurfaceData.theInstance;;
+        surfaceData = NullSurfaceData.theInstance;
         if (oldData != null) {
             oldData.flush();
         }
@@ -104,7 +105,11 @@ public class MTLLayer extends CFLayer {
         }
     }
 
-    // ----------------------------------------------------------------------
+    @Override
+    public void setOpaque(boolean opaque) {
+        execute(ptr -> nativeSetOpaque(ptr, opaque));
+    }
+// ----------------------------------------------------------------------
     // NATIVE CALLBACKS
     // ----------------------------------------------------------------------
 

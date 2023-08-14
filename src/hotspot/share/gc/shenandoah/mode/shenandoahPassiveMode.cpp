@@ -25,9 +25,11 @@
 #include "precompiled.hpp"
 #include "gc/shenandoah/heuristics/shenandoahPassiveHeuristics.hpp"
 #include "gc/shenandoah/mode/shenandoahPassiveMode.hpp"
+#include "gc/shenandoah/shenandoahHeap.inline.hpp"
 #include "logging/log.hpp"
 #include "logging/logTag.hpp"
 #include "runtime/globals_extension.hpp"
+#include "runtime/java.hpp"
 
 void ShenandoahPassiveMode::initialize_flags() const {
   // Do not allow concurrent cycles.
@@ -55,9 +57,8 @@ void ShenandoahPassiveMode::initialize_flags() const {
   // No barriers are required to run.
 }
 ShenandoahHeuristics* ShenandoahPassiveMode::initialize_heuristics() const {
-  if (ShenandoahGCHeuristics != NULL) {
-    return new ShenandoahPassiveHeuristics();
+  if (ShenandoahGCHeuristics == nullptr) {
+    vm_exit_during_initialization("Unknown -XX:ShenandoahGCHeuristics option (null)");
   }
-  ShouldNotReachHere();
-  return NULL;
+  return new ShenandoahPassiveHeuristics(ShenandoahHeap::heap());
 }

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2017, 2021, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2017, 2022, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -38,7 +38,7 @@ import javadoc.tester.JavadocTester;
 public class TestPackageSummary extends JavadocTester {
 
     public static void main(String... args) throws Exception {
-        TestPackageSummary tester = new TestPackageSummary();
+        var tester = new TestPackageSummary();
         tester.runTests();
     }
 
@@ -52,7 +52,7 @@ public class TestPackageSummary extends JavadocTester {
         checkOutput("pkg/package-summary.html", true,
                 """
                     <div class="sub-nav">
-                    <div>
+                    <div id="navbar-sub-list">
                     <ul class="sub-nav-list">
                     <li>Package:&nbsp;</li>
                     <li>Description&nbsp;|&nbsp;</li>
@@ -63,7 +63,7 @@ public class TestPackageSummary extends JavadocTester {
         checkOutput("pkg1/package-summary.html", true,
                 """
                     <div class="sub-nav">
-                    <div>
+                    <div id="navbar-sub-list">
                     <ul class="sub-nav-list">
                     <li>Package:&nbsp;</li>
                     <li><a href="#package-description">Description</a>&nbsp;|&nbsp;</li>
@@ -74,7 +74,7 @@ public class TestPackageSummary extends JavadocTester {
         checkOutput("pkg1/sub/package-summary.html", true,
                 """
                     <div class="sub-nav">
-                    <div>
+                    <div id="navbar-sub-list">
                     <ul class="sub-nav-list">
                     <li>Package:&nbsp;</li>
                     <li>Description&nbsp;|&nbsp;</li>

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1997, 2017, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 1997, 2023, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -68,7 +68,7 @@ Java_java_io_FileDescriptor_initIDs(JNIEnv *env, jclass fdClass) {
  */
 
 JNIEXPORT void JNICALL
-Java_java_io_FileDescriptor_sync(JNIEnv *env, jobject this) {
+Java_java_io_FileDescriptor_sync0(JNIEnv *env, jobject this) {
     FD fd = THIS_FD(this);
     if (IO_Sync(fd) == -1) {
         JNU_ThrowByName(env, "java/io/SyncFailedException", "sync failed");
@@ -144,6 +144,7 @@ static char* fmtaddr(char *buf, const char *end, unsigned char* addr, int len) {
     return buf;
 }
 
+__attribute__((__format__ (__printf__, 3, 0)))
 static jstring format_string(JNIEnv *env, struct stat *st, const char *fmt, ...) {
     char details[PATH_MAX];
     va_list va;
@@ -179,12 +180,13 @@ Java_java_io_FileDescriptor_nativeDescription0(JNIEnv *env, jobject this) {
         return format_string(env, &st, "%s: %s", stat2strtype(st.st_mode), link);
     }
 
-    int family;
-    socklen_t famlen = sizeof(int);
-    if (getsockopt(fd, SOL_SOCKET, SO_DOMAIN, &family, &famlen) != 0) {
+    struct sockaddr sa;
+    socklen_t slen = sizeof(sa);
+    if (getsockname(fd, &sa, &slen) != 0) {
         return format_string(env, &st, "socket: %s", link);
     }
 
+    const int family = sa.sa_family;
     int socktype;
     socklen_t typelen = sizeof(int);
     if (getsockopt(fd, SOL_SOCKET, SO_TYPE, &socktype, &typelen) != 0) {

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012, 2020, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2012, 2023, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -497,12 +497,12 @@ public final class Year
     @Override
     public long getLong(TemporalField field) {
         if (field instanceof ChronoField chronoField) {
-            switch (chronoField) {
-                case YEAR_OF_ERA: return (year < 1 ? 1 - year : year);
-                case YEAR: return year;
-                case ERA: return (year < 1 ? 0 : 1);
-            }
-            throw new UnsupportedTemporalTypeException("Unsupported field: " + field);
+            return switch (chronoField) {
+                case YEAR_OF_ERA -> year < 1 ? 1 - year : year;
+                case YEAR -> year;
+                case ERA -> year < 1 ? 0 : 1;
+                default -> throw new UnsupportedTemporalTypeException("Unsupported field: " + field);
+            };
         }
         return field.getFrom(this);
     }
@@ -621,12 +621,12 @@ public final class Year
     public Year with(TemporalField field, long newValue) {
         if (field instanceof ChronoField chronoField) {
             chronoField.checkValidValue(newValue);
-            switch (chronoField) {
-                case YEAR_OF_ERA: return Year.of((int) (year < 1 ? 1 - newValue : newValue));
-                case YEAR: return Year.of((int) newValue);
-                case ERA: return (getLong(ERA) == newValue ? this : Year.of(1 - year));
-            }
-            throw new UnsupportedTemporalTypeException("Unsupported field: " + field);
+            return switch (chronoField) {
+                case YEAR_OF_ERA -> Year.of((int) (year < 1 ? 1 - newValue : newValue));
+                case YEAR -> Year.of((int) newValue);
+                case ERA -> getLong(ERA) == newValue ? this : Year.of(1 - year);
+                default -> throw new UnsupportedTemporalTypeException("Unsupported field: " + field);
+            };
         }
         return field.adjustInto(this, newValue);
     }
@@ -708,14 +708,14 @@ public final class Year
     @Override
     public Year plus(long amountToAdd, TemporalUnit unit) {
         if (unit instanceof ChronoUnit chronoUnit) {
-            switch (chronoUnit) {
-                case YEARS: return plusYears(amountToAdd);
-                case DECADES: return plusYears(Math.multiplyExact(amountToAdd, 10));
-                case CENTURIES: return plusYears(Math.multiplyExact(amountToAdd, 100));
-                case MILLENNIA: return plusYears(Math.multiplyExact(amountToAdd, 1000));
-                case ERAS: return with(ERA, Math.addExact(getLong(ERA), amountToAdd));
-            }
-            throw new UnsupportedTemporalTypeException("Unsupported unit: " + unit);
+            return switch (chronoUnit) {
+                case YEARS     -> plusYears(amountToAdd);
+                case DECADES   -> plusYears(Math.multiplyExact(amountToAdd, 10));
+                case CENTURIES -> plusYears(Math.multiplyExact(amountToAdd, 100));
+                case MILLENNIA -> plusYears(Math.multiplyExact(amountToAdd, 1000));
+                case ERAS      -> with(ERA, Math.addExact(getLong(ERA), amountToAdd));
+                default -> throw new UnsupportedTemporalTypeException("Unsupported unit: " + unit);
+            };
         }
         return unit.addTo(this, amountToAdd);
     }
@@ -915,14 +915,14 @@ public final class Year
         Year end = Year.from(endExclusive);
         if (unit instanceof ChronoUnit chronoUnit) {
             long yearsUntil = ((long) end.year) - year;  // no overflow
-            switch (chronoUnit) {
-                case YEARS: return yearsUntil;
-                case DECADES: return yearsUntil / 10;
-                case CENTURIES: return yearsUntil / 100;
-                case MILLENNIA: return yearsUntil / 1000;
-                case ERAS: return end.getLong(ERA) - getLong(ERA);
-            }
-            throw new UnsupportedTemporalTypeException("Unsupported unit: " + unit);
+            return switch (chronoUnit) {
+                case YEARS     -> yearsUntil;
+                case DECADES   -> yearsUntil / 10;
+                case CENTURIES -> yearsUntil / 100;
+                case MILLENNIA -> yearsUntil / 1000;
+                case ERAS      -> end.getLong(ERA) - getLong(ERA);
+                default -> throw new UnsupportedTemporalTypeException("Unsupported unit: " + unit);
+            };
         }
         return unit.between(this, end);
     }
@@ -1018,7 +1018,10 @@ public final class Year
      * It is "consistent with equals", as defined by {@link Comparable}.
      *
      * @param other  the other year to compare to, not null
-     * @return the comparator value, negative if less, positive if greater
+     * @return the comparator value, that is less than zero if this is before {@code other},
+     *          zero if they are equal, or greater than zero if this is after {@code other}
+     * @see #isBefore
+     * @see #isAfter
      */
     @Override
     public int compareTo(Year other) {

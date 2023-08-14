@@ -24,20 +24,86 @@
 package gc.stringdedup;
 
 /*
- * @test TestStringDeduplicationTableResize
+ * @test id=Serial
  * @summary Test string deduplication table resize
  * @bug 8029075
- * @requires vm.gc == "null" | vm.gc == "G1" | vm.gc == "Shenandoah"
+ * @requires vm.gc.Serial
  * @library /test/lib
  * @library /
  * @modules java.base/jdk.internal.misc:open
  * @modules java.base/java.lang:open
  *          java.management
- * @run driver gc.stringdedup.TestStringDeduplicationTableResize
+ * @run driver gc.stringdedup.TestStringDeduplicationTableResize Serial
+ */
+
+/*
+ * @test id=G1
+ * @summary Test string deduplication table resize
+ * @bug 8029075
+ * @requires vm.gc.G1
+ * @library /test/lib
+ * @library /
+ * @modules java.base/jdk.internal.misc:open
+ * @modules java.base/java.lang:open
+ *          java.management
+ * @run driver gc.stringdedup.TestStringDeduplicationTableResize G1
+ */
+
+/*
+ * @test id=Parallel
+ * @summary Test string deduplication table resize
+ * @bug 8029075
+ * @requires vm.gc.Parallel
+ * @library /test/lib
+ * @library /
+ * @modules java.base/jdk.internal.misc:open
+ * @modules java.base/java.lang:open
+ *          java.management
+ * @run driver gc.stringdedup.TestStringDeduplicationTableResize Parallel
+ */
+
+/*
+ * @test id=Shenandoah
+ * @summary Test string deduplication table resize
+ * @bug 8029075
+ * @requires vm.gc.Shenandoah
+ * @library /test/lib
+ * @library /
+ * @modules java.base/jdk.internal.misc:open
+ * @modules java.base/java.lang:open
+ *          java.management
+ * @run driver gc.stringdedup.TestStringDeduplicationTableResize Shenandoah
+ */
+
+/*
+ * @test id=ZSinglegen
+ * @summary Test string deduplication table resize
+ * @bug 8029075
+ * @requires vm.gc.ZSinglegen
+ * @library /test/lib
+ * @library /
+ * @modules java.base/jdk.internal.misc:open
+ * @modules java.base/java.lang:open
+ *          java.management
+ * @run driver gc.stringdedup.TestStringDeduplicationTableResize Z -XX:-ZGenerational
+ */
+
+/*
+ * @test id=ZGenerational
+ * @summary Test string deduplication table resize
+ * @bug 8029075
+ * @requires vm.gc.ZGenerational
+ * @library /test/lib
+ * @library /
+ * @modules java.base/jdk.internal.misc:open
+ * @modules java.base/java.lang:open
+ *          java.management
+ * @run driver gc.stringdedup.TestStringDeduplicationTableResize Z -XX:+ZGenerational
  */
 
 public class TestStringDeduplicationTableResize {
     public static void main(String[] args) throws Exception {
+        TestStringDeduplicationTools.selectGC(args);
         TestStringDeduplicationTools.testTableResize();
     }
 }

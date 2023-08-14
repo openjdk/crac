@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2011, 2021, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2011, 2022, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -33,6 +33,7 @@
  * @bug 7037122
  * @bug 7123945
  * @bug 8016029
+ * @requires vm.flagless
  * @library /test/lib
  * @modules java.base/jdk.internal.misc
  *          java.desktop
@@ -53,11 +54,6 @@ public class OomWhileParsingRepeatedJsr {
         String jarFile = System.getProperty("test.src") + "/testcase.jar";
         String className = "OOMCrashClass1960_2";
 
-        // limit is 768MB in native words
-        int mallocMaxTestWords = (1024 * 1024 * 768 / 4);
-        if (Platform.is64bit())
-            mallocMaxTestWords = (mallocMaxTestWords / 2);
-
         // ======= extract the test class
         ProcessBuilder pb = new ProcessBuilder(new String[] {
             JDKToolFinder.getJDKTool("jar"),
@@ -66,10 +62,13 @@ public class OomWhileParsingRepeatedJsr {
         output.shouldHaveExitValue(0);
 
         // ======= execute the test
+        // We run the test with MallocLimit set to 768m in oom mode,
+        // in order to trigger and observe a fake os::malloc oom. This needs NMT.
         pb = ProcessTools.createJavaProcessBuilder(
             "-cp", ".",
             "-XX:+UnlockDiagnosticVMOptions",
-            "-XX:MallocMaxTestWords=" + mallocMaxTestWords,
+            "-XX:NativeMemoryTracking=summary",
+            "-XX:MallocLimit=768m:oom",
             className );
 
         output = new OutputAnalyzer(pb.start());

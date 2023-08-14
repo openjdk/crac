@@ -627,7 +627,6 @@ private:
   static void nonlibc_tty_print_uint64(uint64_t num);
   static void nonlibc_tty_print_uint64_comma_uint64(uint64_t num1, uint64_t num2);
   static void print_using_features_cr();
-  static bool nonlibc_str_equals(const char *a, const char *b);
   /*[[noreturn]]*/ static void missing_features(uint64_t features_missing, uint64_t glibc_features_missing);
 
   static uint64_t feature_flags();

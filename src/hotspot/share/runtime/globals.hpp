@@ -180,7 +180,8 @@ const int ObjectAlignmentInBytes = 8;
   product(bool, UnlockDiagnosticVMOptions, trueInDebug, DIAGNOSTIC,         \
           "Enable normal processing of flags relating to field diagnostics")\
                                                                             \
-  product(bool, UnlockExperimentalVMOptions, false, EXPERIMENTAL,           \
+  product(bool, UnlockExperimentalVMOptions, false,                         \
+          EXPERIMENTAL | RESTORE_SETTABLE,                                  \
           "Enable normal processing of flags relating to experimental "     \
           "features")                                                       \
                                                                             \

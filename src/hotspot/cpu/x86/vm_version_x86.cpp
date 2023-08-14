@@ -2708,13 +2708,13 @@ void VM_Version::missing_features(uint64_t features_missing, uint64_t glibc_feat
   /* +1 to skip the first ','. */
   tty->print_raw(buf + 1, s - (buf + 1));
   tty->cr();
-  static const char line2[] = "If you are sure it will not crash you can override this check by -XX:CPUFeatures=ignore .";
+  static const char line2[] = "If you are sure it will not crash you can override this check by -XX:+UnlockExperimentalVMOptions -XX:+IgnoreCPUFeatures .";
   tty->print_raw(line2, sizeof(line2) - 1);
   tty->cr();
 }
 
 void VM_Version::crac_restore() {
-  assert(CRaCRestoreFrom != NULL, "");
+  assert(CRaCCheckpointTo != NULL, "");
 
   if (ShowCPUFeatures) {
     static const char prefix[] = "This snapshot's stored CPU features are: -XX:CPUFeatures=";
@@ -2777,15 +2777,7 @@ void VM_Version::crac_restore() {
 }
 
 void VM_Version::crac_restore_finalize() {
-  if (CPUFeatures) {
-    if (strcmp(CPUFeatures, "ignore") == 0) {
-      _ignore_glibc_not_using = true;
-    } else {
-      tty->print_cr("Unsupported -XX:CPUFeatures=%s, only -XX:CPUFeatures=ignore is supported during -XX:CRaCRestoreFrom.", CPUFeatures);
-      vm_exit_during_initialization();
-    }
-  }
-  if (_crac_restore_missing_features && !_ignore_glibc_not_using) {
+  if (_crac_restore_missing_features && !IgnoreCPUFeatures) {
     vm_exit_during_initialization();
   }
 }

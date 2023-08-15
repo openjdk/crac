@@ -165,9 +165,9 @@ class VM_Crac: public VM_Operation {
   GrowableArray<CracFailDep>* _failures;
   CracRestoreParameters _restore_parameters;
   outputStream* _ostream;
-#ifdef LINUX
+#if defined(LINUX) && INCLUDE_SERVICES
   LinuxAttachOperation* _attach_op;
-#endif //LINUX
+#endif // LINUX && INCLUDE_SERVICES
 
 public:
   VM_Crac(jarray fd_arr, jobjectArray obj_arr, bool dry_run, bufferedStream* jcmd_stream) :
@@ -177,9 +177,9 @@ public:
     _failures(new (mtInternal) GrowableArray<CracFailDep>(0, mtInternal)),
     _restore_parameters(),
     _ostream(jcmd_stream ? jcmd_stream : tty)
-#ifdef LINUX
+#if defined(LINUX) && INCLUDE_SERVICES
     , _attach_op(jcmd_stream ? LinuxAttachListener::get_current_op() : NULL)
-#endif //LINUX
+#endif // LINUX && INCLUDE_SERVICES
   { }
 
   ~VM_Crac() {

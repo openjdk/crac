@@ -399,7 +399,7 @@ protected:
 #define DECLARE_CPU_FEATURE_FLAG(id, name, bit) CPU_##id = (1ULL << bit),
     CPU_FEATURE_FLAGS(DECLARE_CPU_FEATURE_FLAG)
 #undef DECLARE_CPU_FEATURE_FLAG
-    MAX_CPU = CPU_HV << 1
+    MAX_CPU = CPU_AVX512_IFMA << 1
   };
 
   /* Tracking of a CPU feature for glibc */ \

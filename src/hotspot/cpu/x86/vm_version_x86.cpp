@@ -1336,6 +1336,18 @@ void VM_Version::glibc_not_using(uint64_t excessive_CPU, uint64_t excessive_GLIB
   GLIBC_UNSUPPORTED(CPU  , AVX512_VBMI      );
   GLIBC_UNSUPPORTED(CPU  , HV               );
   GLIBC_UNSUPPORTED(CPU  , SSE3             );
+  GLIBC_UNSUPPORTED(CPU  , SERIALIZE        );
+  GLIBC_UNSUPPORTED(CPU  , RDTSCP           );
+  GLIBC_UNSUPPORTED(CPU  , RDPID            );
+  GLIBC_UNSUPPORTED(CPU  , FSRM             );
+  GLIBC_UNSUPPORTED(CPU  , GFNI             );
+  GLIBC_UNSUPPORTED(CPU  , AVX512_BITALG    );
+  GLIBC_UNSUPPORTED(CPU  , F16C             );
+  GLIBC_UNSUPPORTED(CPU  , PKU              );
+  GLIBC_UNSUPPORTED(CPU  , OSPKE            );
+  GLIBC_UNSUPPORTED(CPU  , CET_IBT          );
+  GLIBC_UNSUPPORTED(CPU  , CET_SS           );
+  GLIBC_UNSUPPORTED(CPU  , AVX512_IFMA      );
   // These are handled as an exception above.
   GLIBC_UNSUPPORTED(CPU  , FXSR             );
   GLIBC_UNSUPPORTED(CPU  , MMX              );

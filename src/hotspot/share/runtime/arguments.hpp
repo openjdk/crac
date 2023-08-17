@@ -148,7 +148,7 @@ class SystemProperty : public PathString {
 // Helper class for controlling the lifetime of JavaVMInitArgs objects.
 class ScopedVMInitArgs;
 
-// Arguments passed from JavaMain via the property CRaCJavaMainArgs
+// Arguments passed from JavaMain via the property jdk.internal.crac.mainArgs
 typedef struct {
     int    argc;
     char **argv;

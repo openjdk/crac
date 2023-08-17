@@ -410,9 +410,9 @@ JavaMain(void* _args)
 
     RegisterThread();
 
-    // set the -DCRaCJavaMainArgs pseudo property
+    // set the -Djdk.internal.crac.mainArgs pseudo property
     // this is used by CRaC to supply the restored VM with new args
-    AddOption("-DCRaCJavaMainArgs", args);
+    AddOption("-Djdk.internal.crac.mainArgs", args);
 
     /* Initialize the virtual machine */
     start = CurrentTimeMicros();

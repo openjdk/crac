@@ -2284,7 +2284,7 @@ bool Arguments::parse_options_for_restore(const JavaVMInitArgs* args, JavaMainAr
           os::free(old_java_command);
         }
       }
-      else if (strcmp(key, "CRaCJavaMainArgs") == 0) {
+      else if (strcmp(key, "jdk.internal.crac.mainArgs") == 0) {
         *main_args = (JavaMainArgs*)(option->extraInfo);
       }
       else {

@@ -61,7 +61,7 @@ struct CracRestoreParameters : public StackObj {
 
   // Write parameters into fd.
   // Return true if successful.
-  bool serialize(int fd);
+  bool serialize(int fd) const;
 
   // Read parameters from fd.
   // Return true if successful.

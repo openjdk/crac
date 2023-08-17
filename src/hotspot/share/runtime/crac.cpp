@@ -548,7 +548,7 @@ static bool read_jlong(int fd, jlong* value) {
 
 // Write a GrowableArray to fd.
 // On error, return false.
-static bool write_growable_array(int fd, GrowableArray<const char *>* array) {
+static bool write_growable_array(int fd, const GrowableArray<const char *>* array) {
   const size_t JLONG_SIZE = sizeof(jlong);
   guarantee(array != NULL, "write_growable_array: array is NULL");
 
@@ -609,7 +609,7 @@ CracRestoreParameters::CracRestoreParameters() :
   args(GrowableArray<const char *>(0, mtInternal)),
   envs(GrowableArray<const char *>(0, mtInternal)) {}
 
-bool CracRestoreParameters::serialize(int fd) {
+bool CracRestoreParameters::serialize(int fd) const {
   if (!write_jlong(fd, restore_time)) return false;
   if (!write_jlong(fd, restore_nanos)) return false;
   if (!write_growable_array(fd, &flags)) return false;

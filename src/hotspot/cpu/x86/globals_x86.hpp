@@ -241,10 +241,7 @@ define_pd_global(intx, InitArrayShortSize, 8*BytesPerLong);
                                                                             \
   product(bool, IgnoreCPUFeatures, false, RESTORE_SETTABLE | EXPERIMENTAL,  \
       "Do not refuse to run after -XX:CRaCRestoreFrom finds out some "      \
-      "CPU features are missing")                                           \
-                                                                            \
-  product(bool, CRaCCPUCountInit, false, "Reinitialize number of CPUs "     \
-      "during -XX:CRaCRestoreFrom")
+      "CPU features are missing")
 
 // end of ARCH_FLAGS
 

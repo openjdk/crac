@@ -30,6 +30,9 @@
 #include "jlong.h"
 #include "io_util_md.h"
 
+#include <windows.h>
+#include <winternl.h>
+
 #include "java_io_FileDescriptor.h"
 
 /*******************************************************************/
@@ -93,7 +96,17 @@ Java_java_io_FileCleanable_cleanupClose0(JNIEnv *env, jclass fdClass, jint unuse
     }
 }
 
+#define BufferSize 1024
+
 JNIEXPORT jstring JNICALL
-Java_java_io_FileDescriptor_nativeDescription0(JNIEnv *env, jobject this) {
-    return (*env)->NewStringUTF(env, "(not implemented)");
+Java_java_io_FileDescriptor_nativeDescription0(JNIEnv* env, jobject this) {
+    HANDLE handle = (HANDLE)(*env)->GetLongField(env, this, IO_handle_fdID);
+    char lpszFilePath[BufferSize] = {'\0'};
+
+    const DWORD dwFileType = GetFileType(handle);
+    if (FILE_TYPE_DISK != dwFileType || !GetFinalPathNameByHandleA(handle, lpszFilePath, BufferSize, FILE_NAME_OPENED)) {
+        snprintf(lpszFilePath, sizeof(lpszFilePath) - 1, "Handle 0x%p, type %lu", handle, dwFileType);
+    }
+
+    return (*env)->NewStringUTF(env, lpszFilePath);
 }

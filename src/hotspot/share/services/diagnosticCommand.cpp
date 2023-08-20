@@ -1091,7 +1091,7 @@ void CheckpointDCmd::execute(DCmdSource source, TRAPS) {
     char* out = java_lang_String::as_utf8_string(str);
     if (out[0] != '\0') {
       outputStream* stream = output();
-#ifdef LINUX
+#if defined(LINUX) && INCLUDE_SERVICES
       assert(LinuxAttachListener::get_current_op(), "should exist");
       if (LinuxAttachListener::get_current_op()->is_effectively_completed()) {
         stream = tty;

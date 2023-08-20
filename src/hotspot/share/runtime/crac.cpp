@@ -37,6 +37,9 @@
 #include "runtime/vmThread.hpp"
 #include "services/heapDumper.hpp"
 #include "services/writeableFlags.hpp"
+#ifdef LINUX
+#include "os_linux.hpp"
+#endif
 
 static const char* _crengine = NULL;
 static char* _crengine_arg_str = NULL;

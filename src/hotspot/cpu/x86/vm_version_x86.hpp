@@ -399,7 +399,7 @@ protected:
 #define DECLARE_CPU_FEATURE_FLAG(id, name, bit) CPU_##id = (1ULL << bit),
     CPU_FEATURE_FLAGS(DECLARE_CPU_FEATURE_FLAG)
 #undef DECLARE_CPU_FEATURE_FLAG
-    MAX_CPU = CPU_HV << 1
+    MAX_CPU = CPU_AVX512_IFMA << 1
   };
 
   /* Tracking of a CPU feature for glibc */ \
@@ -551,63 +551,70 @@ protected:
 
     // Space to save zmm registers after signal handle
     int          zmm_save[16*4]; // Save zmm0, zmm7, zmm8, zmm31
+
+    uint64_t feature_flags() const;
+
+#ifdef LINUX
+    uint64_t glibc_flags() const {
+      uint64_t result = 0;
+      if (std_cpuid1_ecx.bits.movbe != 0)
+        result |= GLIBC_MOVBE;
+      if (std_cpuid1_ecx.bits.osxsave != 0)
+        result |= GLIBC_OSXSAVE;
+      if (std_cpuid1_ecx.bits.xsave != 0)
+        result |= GLIBC_XSAVE;
+      if (std_cpuid1_ecx.bits.cmpxchg16 != 0)
+        result |= GLIBC_CMPXCHG16;
+      if (std_cpuid1_ecx.bits.f16c != 0)
+        result |= GLIBC_F16C;
+      if (sef_cpuid7_ecx.bits.cet_ss != 0)
+        result |= GLIBC_SHSTK;
+      if (sef_cpuid7_edx.bits.cet_ibt != 0)
+        result |= GLIBC_IBT;
+      if (ext_cpuid1_ecx.bits.fma4 != 0)
+        result |= GLIBC_FMA4;
+      if (ext_cpuid1_ecx.bits.LahfSahf != 0)
+        result |= GLIBC_LAHFSAHF;
+      if (std_cpuid1_edx.bits.ht != 0)
+        result |= GLIBC_HTT;
+      return result;
+    }
+#endif //LINUX
+
+    void assert_is_initialized() const {
+      assert(std_cpuid1_eax.bits.family != 0, "VM_Version not initialized");
+    }
+
+    // Extractors
+    uint32_t extended_cpu_family() const {
+      uint32_t result = std_cpuid1_eax.bits.family;
+      result += std_cpuid1_eax.bits.ext_family;
+      return result;
+    }
+
+    uint32_t extended_cpu_model() const {
+      uint32_t result = std_cpuid1_eax.bits.model;
+      result |= std_cpuid1_eax.bits.ext_model << 4;
+      return result;
+    }
+
+    uint32_t cpu_stepping() const {
+      uint32_t result = std_cpuid1_eax.bits.stepping;
+      return result;
+    }
   };
 
 private:
   // The actual cpuid info block
   static CpuidInfo _cpuid_info;
 
-  // Extractors and predicates
-  static uint32_t extended_cpu_family() {
-    uint32_t result = _cpuid_info.std_cpuid1_eax.bits.family;
-    result += _cpuid_info.std_cpuid1_eax.bits.ext_family;
-    return result;
-  }
-
-  static uint32_t extended_cpu_model() {
-    uint32_t result = _cpuid_info.std_cpuid1_eax.bits.model;
-    result |= _cpuid_info.std_cpuid1_eax.bits.ext_model << 4;
-    return result;
-  }
-
-  static uint32_t cpu_stepping() {
-    uint32_t result = _cpuid_info.std_cpuid1_eax.bits.stepping;
-    return result;
-  }
-
+  // Extractor
   static uint logical_processor_count() {
     uint result = threads_per_core();
     return result;
   }
 
   static bool compute_has_intel_jcc_erratum();
-
-#ifdef LINUX
-  static uint64_t glibc_flags() {
-    uint64_t result = 0;
-    if (_cpuid_info.std_cpuid1_ecx.bits.movbe != 0)
-      result |= GLIBC_MOVBE;
-    if (_cpuid_info.std_cpuid1_ecx.bits.osxsave != 0)
-      result |= GLIBC_OSXSAVE;
-    if (_cpuid_info.std_cpuid1_ecx.bits.xsave != 0)
-      result |= GLIBC_XSAVE;
-    if (_cpuid_info.std_cpuid1_ecx.bits.cmpxchg16 != 0)
-      result |= GLIBC_CMPXCHG16;
-    if (_cpuid_info.std_cpuid1_ecx.bits.f16c != 0)
-      result |= GLIBC_F16C;
-    if (_cpuid_info.sef_cpuid7_ecx.bits.cet_ss != 0)
-      result |= GLIBC_SHSTK;
-    if (_cpuid_info.sef_cpuid7_edx.bits.cet_ibt != 0)
-      result |= GLIBC_IBT;
-    if (_cpuid_info.ext_cpuid1_ecx.bits.fma4 != 0)
-      result |= GLIBC_FMA4;
-    if (_cpuid_info.ext_cpuid1_ecx.bits.LahfSahf != 0)
-      result |= GLIBC_LAHFSAHF;
-    if (_cpuid_info.std_cpuid1_edx.bits.ht != 0)
-      result |= GLIBC_HTT;
-    return result;
-  }
-#endif //LINUX
 
   static void get_processor_features_hardware();
   static void get_processor_features_hotspot();
@@ -628,7 +635,6 @@ private:
   static void print_using_features_cr();
   /*[[noreturn]]*/ static void fatal_missing_features(uint64_t features_missing, uint64_t glibc_features_missing);
 
-  static uint64_t feature_flags();
   static bool os_supports_avx_vectors();
   static void get_processor_features();
 
@@ -679,7 +685,19 @@ public:
 
   // Asserts
   static void assert_is_initialized() {
-    assert(_cpuid_info.std_cpuid1_eax.bits.family != 0, "VM_Version not initialized");
+    _cpuid_info.assert_is_initialized();
+  }
+
+  static uint32_t extended_cpu_family() {
+    return _cpuid_info.extended_cpu_family();
+  }
+
+  static uint32_t extended_cpu_model() {
+    return _cpuid_info.extended_cpu_model();
+  }
+
+  static uint32_t cpu_stepping() {
+    return _cpuid_info.cpu_stepping();
   }
 
   //

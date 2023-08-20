@@ -26,6 +26,10 @@
 #ifndef OS_LINUX_ATTACHLISTENER_LINUX_HPP
 #define OS_LINUX_ATTACHLISTENER_LINUX_HPP
 
+class LinuxAttachListener;
+
+#if INCLUDE_SERVICES
+
 #include "linuxAttachOperation.hpp"
 #include "services/attachListener.hpp"
 
@@ -88,5 +92,7 @@ class LinuxAttachListener: AllStatic {
   static void reset_current_op();
 
 };
+
+#endif // INCLUDE_SERVICES
 
 #endif // OS_LINUX_ATTACHLISTENERLINUX_HPP

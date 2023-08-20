@@ -76,6 +76,9 @@
   product(bool, UseCpuAllocPath, false, DIAGNOSTIC,                     \
           "Use CPU_ALLOC code path in os::active_processor_count ")     \
                                                                         \
+  product(bool, CRaCCPUCountInit, false, "Reinitialize number of CPUs " \
+      "during -XX:CRaCRestoreFrom")                                     \
+                                                                        \
   product(bool, DumpPerfMapAtExit, false, DIAGNOSTIC,                   \
           "Write map file for Linux perf tool at exit")                 \
                                                                         \
@@ -89,10 +92,10 @@
           "to disable both the override and the printouts."             \
           "See prctl(PR_SET_TIMERSLACK) for more info.")                \
                                                                         \
-  product(bool, DisableTHPStackMitigation, false, DIAGNOSTIC,           \
+  product(bool, THPStackMitigation, true, DIAGNOSTIC,                   \
           "If THPs are unconditionally enabled on the system (mode "    \
           "\"always\"), the JVM will prevent THP from forming in "      \
-          "thread stacks. This switch disables that mitigation and "    \
+          "thread stacks. When disabled, the absence of this mitigation"\
           "allows THPs to form in thread stacks.")                      \
                                                                         \
   develop(bool, DelayThreadStartALot, false,                            \

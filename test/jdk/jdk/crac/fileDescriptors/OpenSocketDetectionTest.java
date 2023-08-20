@@ -23,6 +23,7 @@
 
 import jdk.crac.Core;
 import jdk.test.lib.crac.CracBuilder;
+import jdk.test.lib.crac.CracEngine;
 import jdk.test.lib.crac.CracProcess;
 import jdk.test.lib.crac.CracTest;
 
@@ -37,12 +38,11 @@ import java.util.concurrent.CountDownLatch;
  * @library /test/lib
  * @build OpenSocketDetectionTest
  * @run driver/timeout=10 jdk.test.lib.crac.CracTest
- * @requires (os.family == "linux")
  */
 public class OpenSocketDetectionTest implements CracTest {
     @Override
     public void test() throws Exception {
-        CracProcess cp = new CracBuilder().captureOutput(true)
+        CracProcess cp = new CracBuilder().engine(CracEngine.SIMULATE).captureOutput(true)
                 .startCheckpoint();
         cp.outputAnalyzer()
                 .shouldHaveExitValue(1)

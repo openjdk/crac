@@ -292,12 +292,37 @@ class WakeupClosure: public ThreadClosure {
   }
 };
 
+// Prevent an assertion: Attempting to acquire lock PeriodicTask_lock/safepoint out of order with lock Threads_lock/safepoint-1 -- possible deadlock
+// SafepointSynchronize::begin() did lock Threads_lock.
+// WatcherThread::unpark() requires PeriodicTask_lock to be held locked.
+// But PeriodicTask_lock cannot be locked after Threads_lock so we need a different thread for that.
+// FIXME during merge to trunk: Could be priorities of these locks changed?
+class WatcherUnparkerThread : public NonJavaThread {
+protected:
+  virtual void run() override {
+    MonitorLocker ml(PeriodicTask_lock, Mutex::_no_safepoint_check_flag);
+    WatcherThread::watcher_thread()->unpark();
+  }
+  virtual void post_run() override {
+    NonJavaThread::post_run();
+    // ~Thread() requires current non-null Thread::current but NonJavaThread::post_run() has cleared it.
+    initialize_thread_current();
+    delete this;
+  }
+};
+
 static void wakeup_threads_in_timedwait() {
   WakeupClosure wc;
   Threads::java_threads_do(&wc);
 
-  MonitorLocker ml(PeriodicTask_lock, Mutex::_no_safepoint_check_flag);
-  WatcherThread::watcher_thread()->unpark();
+  auto thread = new WatcherUnparkerThread();
+  if (!os::create_thread(thread, os::watcher_thread)) {
+    delete thread;
+    warning("Failed to create thread for unparking WatcherThread");
+  } else {
+    os::set_priority(thread, MaxPriority);
+    os::start_thread(thread);
+  }
 }
 
 void VM_Crac::doit() {

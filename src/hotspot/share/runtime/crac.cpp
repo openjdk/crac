@@ -292,37 +292,17 @@ class WakeupClosure: public ThreadClosure {
   }
 };
 
-// Prevent an assertion: Attempting to acquire lock PeriodicTask_lock/safepoint out of order with lock Threads_lock/safepoint-1 -- possible deadlock
-// SafepointSynchronize::begin() did lock Threads_lock.
-// WatcherThread::unpark() requires PeriodicTask_lock to be held locked.
-// But PeriodicTask_lock cannot be locked after Threads_lock so we need a different thread for that.
-// FIXME during merge to trunk: Could be priorities of these locks changed?
-class WatcherUnparkerThread : public NonJavaThread {
-protected:
-  virtual void run() override {
-    MonitorLocker ml(PeriodicTask_lock, Mutex::_no_safepoint_check_flag);
-    WatcherThread::watcher_thread()->unpark();
-  }
-  virtual void post_run() override {
-    NonJavaThread::post_run();
-    // ~Thread() requires current non-null Thread::current but NonJavaThread::post_run() has cleared it.
-    initialize_thread_current();
-    delete this;
-  }
-};
-
-static void wakeup_threads_in_timedwait() {
+// It requires Threads_lock to be held so it is being run as a part of VM_Operation.
+static void wakeup_threads_in_timedwait_vm() {
   WakeupClosure wc;
   Threads::java_threads_do(&wc);
+}
 
-  auto thread = new WatcherUnparkerThread();
-  if (!os::create_thread(thread, os::watcher_thread)) {
-    delete thread;
-    warning("Failed to create thread for unparking WatcherThread");
-  } else {
-    os::set_priority(thread, MaxPriority);
-    os::start_thread(thread);
-  }
+// Run it after VM_Operation as it holds Threads_lock which would cause:
+// Attempting to acquire lock PeriodicTask_lock/safepoint out of order with lock Threads_lock/safepoint-1 -- possible deadlock
+static void wakeup_threads_in_timedwait() {
+  MonitorLocker ml(PeriodicTask_lock, Mutex::_safepoint_check_flag);
+  WatcherThread::watcher_thread()->unpark();
 }
 
 void VM_Crac::doit() {
@@ -380,7 +360,7 @@ void VM_Crac::doit() {
 
   memory_restore();
 
-  wakeup_threads_in_timedwait();
+  wakeup_threads_in_timedwait_vm();
 
   _ok = true;
 }
@@ -459,6 +439,9 @@ Handle crac::checkpoint(jarray fd_arr, jobjectArray obj_arr, bool dry_run, jlong
       oop propObj = java_lang_String::create_oop_from_str(new_properties->at(i), CHECK_NH);
       props->obj_at_put(i, propObj);
     }
+
+    wakeup_threads_in_timedwait();
+
     return ret_cr(JVM_CHECKPOINT_OK, Handle(THREAD, new_args), props, Handle(), Handle(), THREAD);
   }
 

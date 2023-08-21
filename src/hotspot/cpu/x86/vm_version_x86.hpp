@@ -628,12 +628,13 @@ private:
   static const char glibc_prefix[];
   static const size_t glibc_prefix_len;
 #endif //LINUX
-  // C++17: Make ignore_glibc_not_using inline.
-  static bool ignore_glibc_not_using;
+  // C++17: Make _ignore_glibc_not_using inline.
+  static bool _ignore_glibc_not_using;
+  static bool _crac_restore_missing_features;
   static void nonlibc_tty_print_uint64(uint64_t num);
   static void nonlibc_tty_print_uint64_comma_uint64(uint64_t num1, uint64_t num2);
   static void print_using_features_cr();
-  /*[[noreturn]]*/ static void fatal_missing_features(uint64_t features_missing, uint64_t glibc_features_missing);
+  /*[[noreturn]]*/ static void missing_features(uint64_t features_missing, uint64_t glibc_features_missing);
 
   static bool os_supports_avx_vectors();
   static void get_processor_features();
@@ -679,6 +680,7 @@ public:
   // Initialization
   static void initialize();
   static void crac_restore();
+  static void crac_restore_finalize();
 
   // Override Abstract_VM_Version implementation
   static void print_platform_virtualization_info(outputStream*);

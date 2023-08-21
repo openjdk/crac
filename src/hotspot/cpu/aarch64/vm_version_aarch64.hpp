@@ -64,6 +64,7 @@ public:
   // Initialization
   static void initialize();
   static void crac_restore() {}
+  static void crac_restore_finalize() {}
   static void check_virtualizations();
 
   static void print_platform_virtualization_info(outputStream*);

@@ -340,6 +340,7 @@ void VM_Crac::doit() {
     }
   }
 
+  // It needs to check CPU features before any other code (such as VM_Crac::read_shm) depends on them.
   VM_Version::crac_restore();
 
   if (shmid <= 0 || !VM_Crac::read_shm(shmid)) {
@@ -348,6 +349,10 @@ void VM_Crac::doit() {
   } else {
     _restore_start_nanos += crac::monotonic_time_offset();
   }
+
+  // VM_Crac::read_shm needs to be already called to read RESTORE_SETTABLE parameters.
+  VM_Version::crac_restore_finalize();
+
   memory_restore();
 
   wakeup_threads_in_timedwait();

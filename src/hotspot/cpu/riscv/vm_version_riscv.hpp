@@ -198,6 +198,7 @@ class VM_Version : public Abstract_VM_Version {
   static void initialize();
   static void initialize_cpu_information();
   static void crac_restore() {}
+  static void crac_restore_finalize() {}
 
   constexpr static bool supports_stack_watermark_barrier() { return true; }
 

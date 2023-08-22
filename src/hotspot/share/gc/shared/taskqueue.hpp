@@ -415,6 +415,9 @@ public:
     TASKQUEUE_STATS_ONLY(stats.record_bias_drop();)
     _last_stolen_queue_id = InvalidQueueId;
   }
+
+  void release_memory();
+  void realloc_memory();
 };
 
 // OverflowTaskQueue is a TaskQueue that also includes an overflow stack for
@@ -504,6 +507,17 @@ public:
   virtual uint tasks() const;
 
   uint size() const { return _n; }
+
+  void dealloc_queues() {
+    for (uint i = 0; i < _n; ++i) {
+      _queues[i]->release_memory();
+    }
+  }
+  void realloc_queues() {
+    for (uint i = 0; i < _n; ++i) {
+      _queues[i]->realloc_memory();
+    }
+  }
 
 #if TASKQUEUE_STATS
 private:

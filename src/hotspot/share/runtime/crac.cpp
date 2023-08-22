@@ -42,6 +42,8 @@
 #include "os_linux.hpp"
 #endif
 
+#include <malloc.h>
+
 static const char* _crengine = NULL;
 static char* _crengine_arg_str = NULL;
 static unsigned int _crengine_argc = 0;
@@ -399,6 +401,8 @@ void VM_Crac::doit() {
   if (CRPersistMemory) {
     CodeCache::persist_for_checkpoint();
   }
+
+  malloc_trim(0);
 
   int shmid = 0;
   if (CRAllowToSkipCheckpoint) {

@@ -622,10 +622,12 @@ public:
 
   void persist_for_checkpoint() {
     _global_mark_stack.persist_for_checkpoint();
+    _task_queues->dealloc_queues();
   }
 
   void load_on_restore() {
     _global_mark_stack.load_on_restore();
+    _task_queues->realloc_queues();
   }
 
 private:

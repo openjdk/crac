@@ -1879,11 +1879,8 @@ void CodeCache::print_names(outputStream *out) {
 }
 //---<  END  >--- CodeHeap State Analytics.
 
-#define CODECACHE_IMG  "codecache.img"
-#define CODECACHE_TYPE "CodeCache"
-
 void CodeCache::persist_for_checkpoint() {
-  crac::MemoryPersister persister(3 * _heaps->length(), CODECACHE_IMG, CODECACHE_TYPE);
+  crac::MemoryPersister persister;
 
   FOR_ALL_HEAPS(it) {
     CodeHeap *heap = *it;
@@ -1900,7 +1897,7 @@ void CodeCache::persist_for_checkpoint() {
 }
 
 void CodeCache::load_on_restore() {
-  crac::MemoryLoader loader(CODECACHE_IMG, CODECACHE_TYPE);
+  crac::MemoryLoader loader;
 
   FOR_ALL_HEAPS(it) {
     CodeHeap *heap = *it;

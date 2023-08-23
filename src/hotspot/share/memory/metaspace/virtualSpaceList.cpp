@@ -211,31 +211,23 @@ VirtualSpaceList* VirtualSpaceList::vslist_nonclass() {
   return MetaspaceContext::context_nonclass() == nullptr ? nullptr : MetaspaceContext::context_nonclass()->vslist();
 }
 
-void VirtualSpaceList::persist_for_checkpoint(const char *filename) {
+void VirtualSpaceList::persist_for_checkpoint() {
   size_t granule_size = Settings::commit_granule_bytes();
 
   VirtualSpaceNode* vsn = _first_node;
-  size_t ranges = 0;
   while (vsn != NULL) {
-    ranges += vsn->count_commit_ranges();
-    vsn = vsn->next();
-  }
-
-  crac::MemoryPersister persister(ranges, filename, "VirtualSpaceList");
-  vsn = _first_node;
-  while (vsn != NULL) {
-    vsn->persist_for_checkpoint(persister);
+    vsn->persist_for_checkpoint();
     vsn = vsn->next();
   }
 }
 
-void VirtualSpaceList::load_on_restore(const char *filename) {
+void VirtualSpaceList::load_on_restore() {
   size_t granule_size = Settings::commit_granule_bytes();
 
-  crac::MemoryLoader loader(filename, "VirtualSpaceList");
+  crac::MemoryLoader loader;
   VirtualSpaceNode* vsn = _first_node;
   while (vsn != NULL) {
-    vsn->load_on_restore(loader);
+    vsn->load_on_restore();
     vsn = vsn->next();
   }
 }

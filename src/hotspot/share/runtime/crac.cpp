@@ -287,37 +287,32 @@ bool VM_Crac::is_claimed_fd(int fd) {
 }
 
 class PersistThreadStackClosure: public ThreadClosure {
-private:
-  crac::MemoryPersister &_persister;
 public:
-  PersistThreadStackClosure(crac::MemoryPersister &persister): _persister(persister) {}
-
   void do_thread(Thread* t) {
+    crac::MemoryPersister persister;
     JavaThread *thread = t->as_Java_thread();
     size_t reserved = thread->stack_overflow_state()->stack_reserved_zone_base() - thread->stack_end();
-    if (!_persister.store_gap(thread->stack_end(), reserved)) {
+    if (!persister.store_gap(thread->stack_end(), reserved)) {
       fatal("Cannot record reserved zone for stack");
     }
     size_t length = thread->stack_size() - reserved;
-    if (!_persister.store(thread->stack_end() + reserved, length, length)) {
+    if (!persister.store(thread->stack_end() + reserved, length, length)) {
       fatal("Cannot persist thread stack");
     }
   }
 };
 
 class LoadThreadStackClosure: public ThreadClosure {
-private:
-  crac::MemoryLoader &_loader;
 public:
-  LoadThreadStackClosure(crac::MemoryLoader &loader): _loader(loader) {}
-    void do_thread(Thread* t) {
+  void do_thread(Thread* t) {
+    crac::MemoryLoader loader;
     JavaThread *thread = t->as_Java_thread();
     size_t reserved = thread->stack_overflow_state()->stack_reserved_zone_base() - thread->stack_end();
-    if (!_loader.load_gap(thread->stack_end(), reserved)) {
+    if (!loader.load_gap(thread->stack_end(), reserved)) {
       fatal("Cannot restore reserved zone for stack");
     }
     size_t length = thread->stack_size() - reserved;
-    if (!_loader.load(thread->stack_end() + reserved, length, length, false)) {
+    if (!loader.load(thread->stack_end() + reserved, length, length, false)) {
       fatal("Cannot load thread stack");
     }
   }
@@ -331,8 +326,7 @@ static void persist_thread_stacks() {
   crac::before_threads_persisted();
   CountThreadsClosure counter;
   Threads::java_threads_do(&counter);
-  crac::MemoryPersister persister(counter.count(), "thread_stacks.img", "Threads");
-  PersistThreadStackClosure closure(persister);
+  PersistThreadStackClosure closure;
   Threads::java_threads_do(&closure);
 #endif
 }
@@ -340,8 +334,7 @@ static void persist_thread_stacks() {
 static void restore_thread_stacks() {
 // Not platform-specific, but skip this on non-Linux
 #ifdef LINUX
-  crac::MemoryLoader loader("thread_stacks.img", "Threads");
-  LoadThreadStackClosure closure(loader);
+  LoadThreadStackClosure closure;
   Threads::java_threads_do(&closure);
   crac::after_threads_restored();
 #endif
@@ -414,6 +407,7 @@ void VM_Crac::doit() {
       // Since VM_Crac instance is allocated on stack of other thread
       // we must not use it from now on
       persist_thread_stacks();
+      crac::MemoryPersister::persist();
     }
     int ret = checkpoint_restore(&shmid);
     if (CRPersistMemory) {
@@ -688,12 +682,6 @@ void crac::update_javaTimeNanos_offset() {
   }
 }
 
-struct persisted_mem_header {
-  const int32_t version;
-  const size_t slots;
-  char type[16];
-};
-
 static bool write_fully(int fd, const char* buf, size_t len) {
   do {
     int n = os::write(fd, buf, len);
@@ -712,71 +700,32 @@ static bool write_fully(int fd, const char* buf, size_t len) {
   return true;
 }
 
-static bool read_fully(int fd, char *dest, size_t n) {
-  size_t rd = 0;
-  do {
-    ssize_t r = os::read(fd, dest + rd, n - rd);
-    if (r == 0) {
-      return false;
-    } else if (r < 0) {
-      if (errno == EINTR) {
-        continue;
-      }
-      return false;
-    }
-    rd += r;
-  } while (rd < n);
-  return true;
-}
+GrowableArray<struct crac::MemoryPersisterBase::record> crac::MemoryPersisterBase::_index(256, mtInternal);
+int crac::MemoryPersisterBase::_fd = -1;
+bool crac::MemoryPersisterBase::_loading = false;
+size_t crac::MemoryPersisterBase::_offset_curr = 0;
 
-void crac::MemoryPersisterBase::allocate_index(size_t slots) {
-  _slots = slots;
-  size_t page_size = os::vm_page_size();
-  _index_begin = sizeof(persisted_mem_header);
-  // end of index/begin of data must be aligned to page size
-  _index_end = (((_index_begin + slots * sizeof(struct record) - 1) & ~(page_size - 1)) + 1) * page_size;
-  _offset_curr = _index_end;
-  _index = NEW_C_HEAP_ARRAY(struct record, slots, mtInternal);
-}
-
-crac::MemoryPersisterBase::~MemoryPersisterBase() {
-  FREE_C_HEAP_ARRAY(struct record, _index);
-  if (_fd < 0) {
+void crac::MemoryPersisterBase::ensure_open(bool loading) {
+  // We don't need any synchronization as only the VM thread persists memory
+  assert(Thread::current()->is_VM_thread(), "All writes should be performed by VM thread");
+  assert(_loading == loading, loading ? "Cannot load during persist" : "Cannot persist when loading");
+  if (_fd >= 0) {
     return;
   }
-  os::close(_fd);
-}
-
-crac::MemoryPersister::~MemoryPersister() {
-  if (_fd < 0) {
-    return;
-  }
-  os::seek_to_file_offset(_fd, _index_begin);
-  write_fully(_fd, (char *) _index, _index_curr * sizeof(struct record));
-}
-
-void crac::MemoryPersisterBase::open(bool loading, const char *filename) {
   char path[PATH_MAX];
-  snprintf(path, PATH_MAX, "%s%s%s", CRaCCheckpointTo, os::file_separator(), filename);
+  snprintf(path, PATH_MAX, "%s%smemory.img", CRaCCheckpointTo, os::file_separator());
   _fd = os::open(path, loading ? O_RDONLY : (O_WRONLY | O_CREAT | O_TRUNC), S_IRUSR | S_IWUSR);
   if (_fd < 0) {
     fatal("Cannot open persisted memory file: %s", strerror(errno));
   }
+  _offset_curr = 0;
 }
 
-crac::MemoryPersister::MemoryPersister(size_t slots, const char *filename, const char type[16]) {
-  allocate_index(slots);
-  MemoryPersisterBase::open(false, filename);
-  struct persisted_mem_header header = {
-    .version = 1,
-    .slots = _slots
-  };
-  memcpy(header.type, type, 16);
-  if (write_fully(_fd, (char *) &header, sizeof(header))) {
-    os::seek_to_file_offset(_fd, _index_end);
-  } else {
-    fatal("Cannot write persisted memory file header");
-  }
+static bool is_all_zeroes(void *addr, size_t page_size) {
+  unsigned long long *ptr = (unsigned long long *) addr;
+  unsigned long long *end = (unsigned long long *)((char *) addr + page_size);
+  while (ptr < end && *ptr == 0) ++ptr;
+  return ptr == end;
 }
 
 bool crac::MemoryPersister::store(void *addr, size_t length, size_t mapped_length) {
@@ -785,42 +734,50 @@ bool crac::MemoryPersister::store(void *addr, size_t length, size_t mapped_lengt
   }
 
   size_t page_size = os::vm_page_size();
-  guarantee(_index_curr < _slots, "No more index space reserved");
   assert(((u_int64_t) addr & (page_size - 1)) == 0, "Unaligned address %p", addr);
   assert(length <= mapped_length, "Useful length %lx shorter than mapped %lx", length, mapped_length);
   assert((mapped_length & (page_size - 1)) == 0, "Unaligned length %lx at %p", length, addr);
 
-// TODO: optimize saving zero pages. This would require dynamic index sizing
-// For simplicity we could keep the index in-memory (in a static variable)
-#if 0
-  size_t pages = 0;
-  for (size_t offset = 0; offset < length; offset += page_size) {
-    unsigned long long *ptr = (unsigned long long *)((char *) addr + offset);
-    unsigned long long *end = (unsigned long long *)((char *) addr + offset + page_size);
-    while (ptr < end && *ptr == 0) ++ptr;
-    if (ptr == end) {
-      pages++;
+  MemoryPersisterBase::ensure_open(false);
+
+  char *curr = (char *) addr;
+  char *end = curr + length;
+  char *start = curr;
+  bool do_zeroes = is_all_zeroes(addr, page_size);
+  while (curr < end) {
+    if (do_zeroes) {
+      do {
+        curr += page_size;
+      } while (curr < end && is_all_zeroes(curr, page_size));
+      os::seek_to_file_offset(_fd, _offset_curr + (curr - (char *) addr));
+      // We don't have to punch holes using fallocate, OS creates holes automatically
+      // when we are seeking over gaps.
+      // Note: in the future it might be useful to record holes explicitly, too,
+      // to support transfer or encryption.
+      do_zeroes = false;
+      start = curr;
+    } else {
+      do {
+        curr += page_size;
+      } while (curr < end && !is_all_zeroes(curr, page_size));
+      size_t to_write = (curr > end ? end : curr) - start;
+      if (!write_fully(_fd, start, to_write)) {
+        tty->print_cr("Cannot store persisted memory");
+        return false;
+      }
+      if (curr > end) {
+        os::seek_to_file_offset(_fd, _offset_curr + (curr - (char *) addr));
+      }
+      do_zeroes = true;
     }
   }
-  if (pages > 0) {
-    fprintf(stderr, "%p: %lu/%lu pages zero\n", addr, pages, align_up(length, page_size)/page_size);
-  }
-#endif
 
-  if (length > 0 && !write_fully(_fd, (char *) addr, length)) {
-    tty->print_cr("Cannot store persisted memory");
-    return false;
-  }
-  size_t aligned_length = align_up(length, page_size);
-  _index[_index_curr++] = {
+  _index.append({
     .addr = (u_int64_t) addr,
     .length = (u_int64_t) length,
     .offset = (u_int64_t) _offset_curr
-  };
-  _offset_curr += aligned_length;
-  if (length != aligned_length) {
-    os::seek_to_file_offset(_fd, _offset_curr);
-  }
+  });
+  _offset_curr += align_up(length, page_size);
   return unmap(addr, mapped_length);
 }
 
@@ -834,61 +791,47 @@ bool crac::MemoryPersister::store_gap(void *addr, size_t length) {
   return unmap(addr, length);
 }
 
-crac::MemoryLoader::MemoryLoader(const char *filename, const char type[16]) {
-  MemoryPersisterBase::open(true, filename);
-  struct persisted_mem_header header = {};
-  if (!read_fully(_fd, (char *) &header, sizeof(header))) {
-    fatal("Cannot read persisted memory file header");
-  } else if (header.version != 1) {
-    fatal("Invalid persisted memory file version");
-  } else if (memcmp(header.type, type, 16)) {
-    fatal("Mismatch for type of persisted memory file");
-  }
-  allocate_index(header.slots);
-
-  if (!read_fully(_fd, (char *) _index, _slots * sizeof(struct record))) {
-    fatal("Cannot read persisted memory file index");
-  }
-}
-
 bool crac::MemoryLoader::load(void *addr, size_t expected_length, size_t mapped_length, bool executable) {
+  ensure_open(true);
   if (mapped_length == 0) {
     return true;
   }
 
-  size_t at = UINT_MAX;
-  // we're not going from 0 to optimize reading in the same order as writing
-  for (size_t i = _index_curr; i < _slots; ++i) {
-    if (_index[i].addr == (u_int64_t) addr) {
-      at = i;
-      break;
-    }
-  }
-  if (at != UINT_MAX) {
-    for (size_t i = 0; i < _index_curr; ++i) {
-      if (_index[i].addr == (u_int64_t) addr) {
-        at = i;
-        break;
-      }
-    }
-  }
-  if (at == UINT_MAX) {
-    tty->print_cr("Cannot find region with address %p", addr);
+  SearchInIndex comparator;
+  bool found;
+  size_t at = (size_t) _index.find_sorted<struct record>(&comparator, { .addr = (u_int64_t) addr }, found);
+  if (!found) {
+    tty->print_cr("Cannot find region with address %p (%d records)", addr, _index.length());
     return false;
   }
-  if (_index[at].length != (u_int64_t) expected_length) {
+  const struct record &r = _index.at(at);
+  if (r.length != (u_int64_t) expected_length) {
     tty->print_cr("Persisted memory region length does not match at %p: %lu vs. %lu",
-    addr, expected_length, _index[at].length);
+    addr, expected_length, r.length);
     return false;
   }
-  size_t offset = _index[at].offset;
   size_t aligned_length = align_up(expected_length, os::vm_page_size());
-  if (expected_length > 0 && !map(addr, expected_length, _fd, offset, executable)) {
+  if (expected_length > 0 && !map(addr, expected_length, _fd, r.offset, executable)) {
     return false;
   }
   if (aligned_length < mapped_length && !map((char *) addr + aligned_length, mapped_length - aligned_length, -1, 0, executable)) {
     return false;
   }
-  _index_curr = at + 1;
   return true;
+}
+
+void crac::MemoryPersister::persist() {
+  if (_fd >= 0) {
+    os::close(_fd);
+    _fd = -1;
+  }
+  _index.sort([](struct record *a, struct record *b) {
+    // simple cast to int doesn't work, let compiler figure it out with cmovs
+    if (a->addr < b->addr) return -1;
+    if (a->addr > b->addr) return 1;
+    return 0;
+  });
+  _loading = true;
+  // Note: here we could persist _index and dallocate it as well but since it's
+  // usually tens or hundreds of 24 byte records, we won't save much.
 }

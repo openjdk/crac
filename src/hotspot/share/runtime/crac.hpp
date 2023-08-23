@@ -56,38 +56,36 @@ public:
       u_int64_t offset;
     };
 
-    int _fd;
-    size_t _slots, _index_curr, _offset_curr;
-    size_t _index_begin, _index_end;
-    struct record *_index;
+    class SearchInIndex: public CompareClosure<struct record> {
+    public:
+      int do_compare(const struct record &a, const struct record &b) {
+        if (a.addr < b.addr) return -1;
+        if (a.addr > b.addr) return 1;
+        return 0;
+      }
+    };
 
-    MemoryPersisterBase(): _fd(-1), _slots(0), _index_curr(0),
-      _index_begin(0), _index_end(0), _index(NULL) {}
-    ~MemoryPersisterBase();
-
-    void open(bool loading, const char *filename);
+    static void ensure_open(bool loading);
     void allocate_index(size_t slots);
+
+    static GrowableArray<struct crac::MemoryPersisterBase::record> _index;
+    static int _fd;
+    static bool _loading;
+    static size_t _offset_curr;
   };
 
   class MemoryPersister: protected MemoryPersisterBase {
   public:
-    MemoryPersister(size_t slots, const char *filename, const char type[16]);
-    ~MemoryPersister();
-
-    void open();
-
-
     bool store(void *addr, size_t length, size_t mapped_length);
     bool store_gap(void *addr, size_t length);
 
+    static void persist();
   private:
     bool unmap(void *addr, size_t length);
   };
 
   class MemoryLoader: protected MemoryPersisterBase {
   public:
-    MemoryLoader(const char *filename, const char type[16]);
-
     bool load(void *addr, size_t expected_length, size_t mapped_length, bool executable);
     bool load_gap(void *addr, size_t length);
   private:

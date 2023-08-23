@@ -3055,11 +3055,8 @@ G1PrintRegionLivenessInfoClosure::~G1PrintRegionLivenessInfoClosure() {
                          bytes_to_mb(_total_code_roots_bytes));
 }
 
-#define MARKSTACK_FILE "g1cmmarkstack.img"
-#define MARKSTACK_TYPE "G1CMMarkStack"
-
 void G1CMMarkStack::persist_for_checkpoint() {
-  crac::MemoryPersister persister(1, MARKSTACK_FILE, MARKSTACK_TYPE);
+  crac::MemoryPersister persister;
   size_t used = MIN2(_hwm, _chunk_capacity) * sizeof(TaskQueueEntryChunk);
   size_t committed = _chunk_capacity * sizeof(TaskQueueEntryChunk);
   if (!persister.store((void *) _base, used, committed)) {
@@ -3068,7 +3065,7 @@ void G1CMMarkStack::persist_for_checkpoint() {
 }
 
 void G1CMMarkStack::load_on_restore() {
-  crac::MemoryLoader loader(MARKSTACK_FILE, MARKSTACK_TYPE);
+  crac::MemoryLoader loader;
   size_t used = MIN2(_hwm, _chunk_capacity) * sizeof(TaskQueueEntryChunk);
   size_t committed = _chunk_capacity * sizeof(TaskQueueEntryChunk);
   if (!loader.load((void *) _base, used, committed, false)) {

@@ -256,12 +256,8 @@ public:
   VirtualSpaceNode* next() const        { return _next; }
   void set_next(VirtualSpaceNode* vsn)  { _next = vsn; }
 
-  // Calculates number of continuous ranges of ones/zeroes in commit mask,
-  // e.g. for 0000001110001 it would return 4
-  size_t count_commit_ranges();
-
-  void persist_for_checkpoint(crac::MemoryPersister &persister);
-  void load_on_restore(crac::MemoryLoader &loader);
+  void persist_for_checkpoint();
+  void load_on_restore();
 
   /// Debug stuff ////
 

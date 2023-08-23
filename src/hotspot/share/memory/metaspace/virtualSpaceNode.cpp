@@ -449,23 +449,8 @@ void VirtualSpaceNode::verify_locked() const {
 
 #endif
 
-size_t VirtualSpaceNode::count_commit_ranges() {
-  size_t count = 0;
-  bool flip = _commit_mask.at(0);
-  size_t index = 0;
-  while (index < _commit_mask.size()) {
-    ++count;
-    if (flip) {
-      index = _commit_mask.get_next_zero_offset(index);
-    } else {
-      index = _commit_mask.get_next_one_offset(index);
-    }
-    flip = !flip;
-  }
-  return count;
-}
-
-void VirtualSpaceNode::persist_for_checkpoint(crac::MemoryPersister &persister) {
+void VirtualSpaceNode::persist_for_checkpoint() {
+  crac::MemoryPersister persister;
   size_t granule_size = Settings::commit_granule_bytes();
   bool flip = _commit_mask.at(0);
   size_t index = 0;
@@ -488,7 +473,8 @@ void VirtualSpaceNode::persist_for_checkpoint(crac::MemoryPersister &persister) 
   }
 }
 
-void VirtualSpaceNode::load_on_restore(crac::MemoryLoader &loader) {
+void VirtualSpaceNode::load_on_restore() {
+  crac::MemoryLoader loader;
   size_t granule_size = Settings::commit_granule_bytes();
   bool flip = _commit_mask.at(0);
   size_t index = 0;

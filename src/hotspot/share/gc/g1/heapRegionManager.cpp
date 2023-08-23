@@ -832,13 +832,7 @@ void HeapRegionManager::rebuild_free_list(WorkerThreads* workers) {
 
 
 void HeapRegionManager::persist_for_checkpoint() {
-  size_t non_null = 0;
-  for (size_t i = 0; i < _regions.length(); ++i) {
-    if (_regions.get_by_index(i) != nullptr) ++non_null;
-  }
-
-  crac::MemoryPersister persister(non_null, "heap_regions.img", "GCGC");
-
+  crac::MemoryPersister persister;
   size_t page_size = os::vm_page_size();
   for (size_t i = 0; i < _regions.length(); ++i) {
     HeapRegion *region = _regions.get_by_index(i);
@@ -860,9 +854,7 @@ void HeapRegionManager::persist_for_checkpoint() {
 }
 
 void HeapRegionManager::load_on_restore() {
-  crac::MemoryLoader loader("heap_regions.img", "GCGC");
-
-  size_t page_size = os::vm_page_size();
+  crac::MemoryLoader loader;
   for (size_t i = 0; i < _regions.length(); ++i) {
     HeapRegion *region = _regions.get_by_index(i);
     if (region == nullptr) {

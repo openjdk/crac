@@ -92,14 +92,11 @@ void G1FromCardCache::clear(uint region_idx) {
   }
 }
 
-#define CACHE_FILE "g1fromcardcache.img"
-#define CACHE_TYPE "G1FromCardCache"
-
 void G1FromCardCache::persist_for_checkpoint() {
   if (_cache == NULL || _static_mem_size == 0) {
     return;
   }
-  crac::MemoryPersister persister(1, CACHE_FILE, CACHE_TYPE);
+  crac::MemoryPersister persister;
   size_t size = align_up(_static_mem_size, os::vm_allocation_granularity());
   if (!persister.store(_cache, size, size)) {
     fatal("Failed to persist G1FromCardCache");
@@ -110,7 +107,7 @@ void G1FromCardCache::load_on_restore() {
   if (_cache == NULL || _static_mem_size == 0) {
     return;
   }
-  crac::MemoryLoader loader(CACHE_FILE, CACHE_TYPE);
+  crac::MemoryLoader loader;
   size_t size = align_up(_static_mem_size, os::vm_allocation_granularity());
   if (!loader.load(_cache, size, size, false)) {
     fatal("Cannot load G1FromCard cache file");

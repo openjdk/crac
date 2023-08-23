@@ -387,11 +387,11 @@ bool VM_Crac::memory_checkpoint() {
     Universe::heap()->persist_for_checkpoint();
     metaspace::VirtualSpaceList *vsc = metaspace::VirtualSpaceList::vslist_class();
     if (vsc != NULL) {
-      vsc->persist_for_checkpoint("vslist_class.img");
+      vsc->persist_for_checkpoint();
     }
     metaspace::VirtualSpaceList *vsn = metaspace::VirtualSpaceList::vslist_nonclass();
     if (vsn != NULL) {
-      vsn->persist_for_checkpoint("vslist_nonclass.img");
+      vsn->persist_for_checkpoint();
     }
   }
   return PerfMemoryLinux::checkpoint(CRaCCheckpointTo);
@@ -402,11 +402,11 @@ void VM_Crac::memory_restore() {
     Universe::heap()->load_on_restore();
     metaspace::VirtualSpaceList *vsc = metaspace::VirtualSpaceList::vslist_class();
     if (vsc != NULL) {
-      vsc->load_on_restore("vslist_class.img");
+      vsc->load_on_restore();
     }
     metaspace::VirtualSpaceList *vsn = metaspace::VirtualSpaceList::vslist_nonclass();
     if (vsn != NULL) {
-      vsn->load_on_restore("vslist_nonclass.img");
+      vsn->load_on_restore();
     }
   }
   PerfMemoryLinux::restore();

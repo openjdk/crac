@@ -296,15 +296,6 @@ static int post_resume(void) {
     }
     int pid = atoi(pidstr);
 
-    // Cannot wait for keypress
-    const char *wait_for_debug = getenv("CRAC_WAIT_FOR_DEBUG");
-    int wait_seconds = wait_for_debug == NULL ? 0 : atoi(wait_for_debug);
-    while (wait_seconds > 0) {
-        fprintf(stderr, "PID is %d, sleeping %d seconds...\n", pid, wait_seconds);
-        sleep(1);
-        wait_seconds--;
-    }
-
     char *strid = getenv("CRAC_NEW_ARGS_ID");
     return kickjvm(pid, strid ? atoi(strid) : 0);
 }

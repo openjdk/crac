@@ -30,6 +30,7 @@
 #include "oops/compressedOops.hpp"
 #include "oops/markWord.hpp"
 #include "oops/oop.inline.hpp"
+#include "runtime/crac.hpp"
 #include "runtime/globals_extension.hpp"
 #include "runtime/java.hpp"
 #include "runtime/os.hpp"
@@ -1070,3 +1071,23 @@ void VirtualSpace::print() const {
 }
 
 #endif
+
+void VirtualSpace::persist_on_checkpoint() {
+  crac::MemoryPersister persister;
+  size_t used = committed_size();
+  if (!persister.store_gap(_low_boundary, _low - _low_boundary) ||
+      !persister.store(_low, used, used) ||
+      !persister.store_gap(_high, _high_boundary - _high)) {
+    fatal("Cannot persist virtual space at %p - %p", _low_boundary, _high_boundary);
+  }
+}
+
+void VirtualSpace::load_on_restore() {
+  crac::MemoryLoader loader;
+  size_t used = committed_size();
+  if (!loader.load_gap(_low_boundary, _low - _low_boundary) ||
+      !loader.load(_low, used, used, true) ||
+      !loader.load_gap(_high, _high_boundary - _high)) {
+    fatal("Could not load virtual space at %p - %p", _low_boundary, _high_boundary);
+  }
+}

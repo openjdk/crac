@@ -851,6 +851,11 @@ void HeapRegionManager::persist_for_checkpoint() {
       }
     }
   }
+  _bot_mapper->persist_for_checkpoint();
+  _card_counts_mapper->persist_for_checkpoint();
+  _cardtable_mapper->persist_for_checkpoint();
+  _prev_bitmap_mapper->persist_for_checkpoint();
+  _next_bitmap_mapper->persist_for_checkpoint();
 }
 
 void HeapRegionManager::load_on_restore() {
@@ -870,4 +875,10 @@ void HeapRegionManager::load_on_restore() {
       }
     }
   }
+
+  _bot_mapper->load_on_restore();
+  _card_counts_mapper->load_on_restore();
+  _cardtable_mapper->load_on_restore();
+  _prev_bitmap_mapper->load_on_restore();
+  _next_bitmap_mapper->load_on_restore();
 }

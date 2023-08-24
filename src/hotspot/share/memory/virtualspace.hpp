@@ -186,7 +186,6 @@ class VirtualSpace {
   size_t _lower_alignment;
   size_t _middle_alignment;
   size_t _upper_alignment;
-
   // MPSS Accessors
   char* lower_high() const { return _lower_high; }
   char* middle_high() const { return _middle_high; }
@@ -242,6 +241,9 @@ class VirtualSpace {
   // Debugging
   void print_on(outputStream* out) const PRODUCT_RETURN;
   void print() const;
+
+  void persist_on_checkpoint();
+  void load_on_restore();
 };
 
 #endif // SHARE_MEMORY_VIRTUALSPACE_HPP

@@ -29,6 +29,7 @@
 #include "oops/markWord.hpp"
 #include "oops/oop.inline.hpp"
 #include "runtime/atomic.hpp"
+#include "runtime/crac.hpp"
 #include "runtime/os.hpp"
 #include "services/memTracker.hpp"
 #include "utilities/align.hpp"
@@ -250,3 +251,49 @@ void G1PageBasedVirtualSpace::print() {
   print_on(tty);
 }
 #endif
+
+void G1PageBasedVirtualSpace::persist_for_checkpoint() {
+  crac::MemoryPersister persister;
+  bool flip = _committed.at(0);
+  size_t index = 0;
+  while (index < _committed.size()) {
+    size_t next;
+    if (flip) {
+      next = _committed.get_next_zero_offset(index);
+      size_t length = (next - index) * _page_size;
+      if (!persister.store((char *) _low_boundary + index * _page_size, length, length)) {
+        fatal("Failed to persist committed virtual space node range");
+      }
+    } else {
+      next = _committed.get_next_one_offset(index);
+      if (!persister.store_gap((char *) _low_boundary + index * _page_size, (next - index) * _page_size)) {
+        fatal("Failed to persist uncommitted virtual space node range");
+      }
+    }
+    flip = !flip;
+    index = next;
+  }
+}
+
+void G1PageBasedVirtualSpace::load_on_restore() {
+  crac::MemoryLoader loader;
+  bool flip = _committed.at(0);
+  size_t index = 0;
+  while (index < _committed.size()) {
+    size_t next;
+    if (flip) {
+      next = _committed.get_next_zero_offset(index);
+      size_t length = (next - index) * _page_size;
+      if (!loader.load((char *) _low_boundary + index * _page_size, length, length, false)) {
+        fatal("Cannot restore committed virtual space node");
+      }
+    } else {
+      next = _committed.get_next_one_offset(index);
+      if (!loader.load_gap((char *) _low_boundary + index * _page_size, (next - index) * _page_size)) {
+        fatal("Cannot map uncommitted virtual space node");
+      }
+    }
+    flip = !flip;
+    index = next;
+  }
+}

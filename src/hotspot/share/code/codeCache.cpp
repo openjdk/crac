@@ -1880,32 +1880,19 @@ void CodeCache::print_names(outputStream *out) {
 //---<  END  >--- CodeHeap State Analytics.
 
 void CodeCache::persist_for_checkpoint() {
-  crac::MemoryPersister persister;
-
   FOR_ALL_HEAPS(it) {
     CodeHeap *heap = *it;
-    if (heap == NULL) {
-      continue;
-    }
-    size_t used = heap->high() - heap->low();
-    if (!persister.store_gap(heap->low_boundary(), heap->low_boundary() - heap->low()) ||
-        !persister.store(heap->low(), used, used) ||
-        !persister.store_gap(heap->high(), heap->high_boundary() - heap->high())) {
-      fatal("Cannot persist code cache heap at %p - %p", heap->low_boundary(), heap->high_boundary());
+    if (heap != nullptr) {
+      heap->persist_for_checkpoint();
     }
   }
 }
 
 void CodeCache::load_on_restore() {
-  crac::MemoryLoader loader;
-
   FOR_ALL_HEAPS(it) {
     CodeHeap *heap = *it;
-    size_t used = heap->high() - heap->low();
-    if (!loader.load_gap(heap->low_boundary(), heap->low_boundary() - heap->low()) ||
-        !loader.load(heap->low(), used, used, true) ||
-        !loader.load_gap(heap->high(), heap->high_boundary() - heap->high())) {
-      fatal("Could not load code cache heap at %p - %p", heap->low_boundary(), heap->high_boundary());
+    if (heap != nullptr) {
+      heap->load_on_restore();
     }
   }
 }

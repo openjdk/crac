@@ -144,6 +144,9 @@ class G1PageBasedVirtualSpace {
   // Debugging
   void print_on(outputStream* out) PRODUCT_RETURN;
   void print();
+
+  void persist_for_checkpoint();
+  void load_on_restore();
 };
 
 #endif // SHARE_GC_G1_G1PAGEBASEDVIRTUALSPACE_HPP

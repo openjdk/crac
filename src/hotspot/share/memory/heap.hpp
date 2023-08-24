@@ -228,6 +228,16 @@ public:
   // Debugging
   void verify() PRODUCT_RETURN;
   void print()  PRODUCT_RETURN;
+
+  void persist_for_checkpoint() {
+    _memory.persist_on_checkpoint();
+    _segmap.persist_on_checkpoint();
+  }
+
+  void load_on_restore() {
+    _memory.load_on_restore();
+    _segmap.load_on_restore();
+  }
 };
 
 #endif // SHARE_MEMORY_HEAP_HPP

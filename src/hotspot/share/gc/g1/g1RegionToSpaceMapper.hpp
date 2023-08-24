@@ -86,6 +86,14 @@ class G1RegionToSpaceMapper : public CHeapObj<mtGC> {
                                               size_t region_granularity,
                                               size_t byte_translation_factor,
                                               MEMFLAGS type);
+
+  void persist_for_checkpoint() {
+    _storage.persist_for_checkpoint();
+  }
+
+  void load_on_restore() {
+    _storage.load_on_restore();
+  }
 };
 
 #endif // SHARE_GC_G1_G1REGIONTOSPACEMAPPER_HPP

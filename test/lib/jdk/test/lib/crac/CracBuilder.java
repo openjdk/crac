@@ -340,7 +340,6 @@ public class CracBuilder {
         cmd.addAll(Arrays.asList("--volume", "cr:/cr"));
         cmd.addAll(Arrays.asList("--volume", CRIU_PATH + ":/criu"));
         cmd.addAll(Arrays.asList("--env", "CRAC_CRIU_PATH=/criu"));
-        cmd.addAll(Arrays.asList("--env", "GLIBC_TUNABLES=glibc.pthread.rseq=0"));
         cmd.addAll(Arrays.asList("--name", CONTAINER_NAME));
         if (debug) {
             cmd.addAll(Arrays.asList("--publish", "5005:5005"));

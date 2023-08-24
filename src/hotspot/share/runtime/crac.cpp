@@ -320,8 +320,6 @@ public:
 
 static void persist_thread_stacks() {
 // Not platform-specific, but skip this on non-Linux
-// Note: if glibc has rseq enabled, the checkpoint will crash in CRIU parasite
-// Use GLIBC_TUNABLES=glibc.pthread.rseq=0
 #ifdef LINUX
   crac::before_threads_persisted();
   CountThreadsClosure counter;

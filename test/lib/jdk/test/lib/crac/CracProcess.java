@@ -26,7 +26,6 @@ public class CracProcess {
             pb.redirectError(ProcessBuilder.Redirect.PIPE);
         }
         pb.environment().putAll(builder.env);
-        pb.environment().put("GLIBC_TUNABLES", "glibc.pthread.rseq=0");
         this.process = pb.command(cmd).start();
     }
 

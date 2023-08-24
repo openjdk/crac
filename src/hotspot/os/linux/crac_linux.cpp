@@ -31,6 +31,7 @@
 #include "runtime/crac.hpp"
 #include "runtime/os.hpp"
 #include "runtime/osThread.hpp"
+#include "runtime/threads.hpp"
 #include "utilities/growableArray.hpp"
 #include "logging/log.hpp"
 #include "classfile/classLoader.hpp"
@@ -361,18 +362,18 @@ static bool check_can_write() {
   snprintf(path, PATH_MAX, "%s%s.test", CRaCCheckpointTo, os::file_separator());
   int fd = os::open(path, O_WRONLY | O_CREAT | O_TRUNC, S_IRUSR | S_IWUSR);
   if (fd < 0) {
-    tty->print_cr("Cannot create %s: %s\n", path, strerror(errno));
+    tty->print_cr("Cannot create %s: %s\n", path, os::strerror(errno));
     return false;
   }
   bool success = write(fd, "test", 4) > 0;
   if (!success) {
-    tty->print_cr("Cannot write to %s: %s\n", path, strerror(errno));
+    tty->print_cr("Cannot write to %s: %s\n", path, os::strerror(errno));
   }
   if (::close(fd)) {
-    tty->print_cr("Cannot close %s: %s", path, strerror(errno));
+    tty->print_cr("Cannot close %s: %s", path, os::strerror(errno));
   }
   if (::unlink(path)) {
-    tty->print_cr("Cannot remove %s: %s", path, strerror(errno));
+    tty->print_cr("Cannot remove %s: %s", path, os::strerror(errno));
   }
   return success;
 }
@@ -635,7 +636,7 @@ public:
     val.sival_int = _idx++;
     pthread_sigqueue(thread->osthread()->pthread_id(), SIGUSR1, val);
 
-    JavaThread *jt = thread->as_Java_thread();
+    JavaThread *jt = JavaThread::cast(thread);
     jt->wakeup_sleep();
     jt->parker()->unpark();
     jt->_ParkEvent->unpark();
@@ -670,7 +671,7 @@ void crac::before_threads_persisted() {
     sigwaitinfo(&blocking_set, &info);
     GetRseqClosure get_rseq;
     Threads::java_threads_do(&get_rseq);
-    exit(0);
+    os::exit(0);
   } else {
     sigprocmask(SIG_UNBLOCK, &blocking_set, NULL);
     // Allow child to trace us if /proc/sys/kernel/yama/ptrace_scope = 1
@@ -687,7 +688,7 @@ void crac::before_threads_persisted() {
   action.sa_flags = SA_SIGINFO;
   action.sa_restorer = NULL;
   if (sigaction(SIGUSR1, &action, &old)) {
-    fatal("Cannot install SIGUSR1 handler: %s", strerror(errno));
+    fatal("Cannot install SIGUSR1 handler: %s", os::strerror(errno));
   }
 
   SignalClosure closure;
@@ -698,13 +699,13 @@ void crac::before_threads_persisted() {
   }
 
   if (sigaction(SIGUSR1, &old, NULL)) {
-    fatal("Cannot restore SIGUSR1 handler: %s", strerror(errno));
+    fatal("Cannot restore SIGUSR1 handler: %s", os::strerror(errno));
   }
 }
 
 void crac::after_threads_restored() {
   persist_futex = 0;
   if (syscall(SYS_futex, &persist_futex, FUTEX_WAKE_PRIVATE, INT_MAX, NULL, NULL, 0) < 0) {
-    fatal("Cannot wake up threads after restore: %s", strerror(errno));
+    fatal("Cannot wake up threads after restore: %s", os::strerror(errno));
   }
 }

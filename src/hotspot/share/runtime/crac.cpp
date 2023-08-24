@@ -290,7 +290,7 @@ class PersistThreadStackClosure: public ThreadClosure {
 public:
   void do_thread(Thread* t) {
     crac::MemoryPersister persister;
-    JavaThread *thread = t->as_Java_thread();
+    JavaThread *thread = JavaThread::cast(t);
     size_t reserved = thread->stack_overflow_state()->stack_reserved_zone_base() - thread->stack_end();
     if (!persister.store_gap(thread->stack_end(), reserved)) {
       fatal("Cannot record reserved zone for stack");
@@ -306,7 +306,7 @@ class LoadThreadStackClosure: public ThreadClosure {
 public:
   void do_thread(Thread* t) {
     crac::MemoryLoader loader;
-    JavaThread *thread = t->as_Java_thread();
+    JavaThread *thread = JavaThread::cast(t);
     size_t reserved = thread->stack_overflow_state()->stack_reserved_zone_base() - thread->stack_end();
     if (!loader.load_gap(thread->stack_end(), reserved)) {
       fatal("Cannot restore reserved zone for stack");
@@ -682,24 +682,6 @@ void crac::update_javaTimeNanos_offset() {
   }
 }
 
-static bool write_fully(int fd, const char* buf, size_t len) {
-  do {
-    int n = os::write(fd, buf, len);
-    if (n < 0) {
-      if (errno != EINTR) {
-        fprintf(stderr, "Addr %p, length %lx\n", buf, len);
-        perror("Cannot write");
-        return false;
-      }
-    } else {
-      buf += n;
-      len -= n;
-    }
-  }
-  while (len > 0);
-  return true;
-}
-
 GrowableArray<struct crac::MemoryPersisterBase::record> crac::MemoryPersisterBase::_index(256, mtInternal);
 int crac::MemoryPersisterBase::_fd = -1;
 bool crac::MemoryPersisterBase::_loading = false;
@@ -716,7 +698,7 @@ void crac::MemoryPersisterBase::ensure_open(bool loading) {
   snprintf(path, PATH_MAX, "%s%smemory.img", CRaCCheckpointTo, os::file_separator());
   _fd = os::open(path, loading ? O_RDONLY : (O_WRONLY | O_CREAT | O_TRUNC), S_IRUSR | S_IWUSR);
   if (_fd < 0) {
-    fatal("Cannot open persisted memory file: %s", strerror(errno));
+    fatal("Cannot open persisted memory file: %s", os::strerror(errno));
   }
   _offset_curr = 0;
 }
@@ -761,7 +743,7 @@ bool crac::MemoryPersister::store(void *addr, size_t length, size_t mapped_lengt
         curr += page_size;
       } while (curr < end && !is_all_zeroes(curr, page_size));
       size_t to_write = (curr > end ? end : curr) - start;
-      if (!write_fully(_fd, start, to_write)) {
+      if (!os::write(_fd, start, to_write)) {
         tty->print_cr("Cannot store persisted memory");
         return false;
       }
@@ -822,7 +804,7 @@ bool crac::MemoryLoader::load(void *addr, size_t expected_length, size_t mapped_
 
 void crac::MemoryPersister::persist() {
   if (_fd >= 0) {
-    os::close(_fd);
+    ::close(_fd);
     _fd = -1;
   }
   _index.sort([](struct record *a, struct record *b) {

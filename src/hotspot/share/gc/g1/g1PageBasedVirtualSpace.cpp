@@ -259,13 +259,13 @@ void G1PageBasedVirtualSpace::persist_for_checkpoint() {
   while (index < _committed.size()) {
     size_t next;
     if (flip) {
-      next = _committed.get_next_zero_offset(index);
+      next = _committed.find_first_clear_bit(index);
       size_t length = (next - index) * _page_size;
       if (!persister.store((char *) _low_boundary + index * _page_size, length, length)) {
         fatal("Failed to persist committed virtual space node range");
       }
     } else {
-      next = _committed.get_next_one_offset(index);
+      next = _committed.find_first_set_bit(index);
       if (!persister.store_gap((char *) _low_boundary + index * _page_size, (next - index) * _page_size)) {
         fatal("Failed to persist uncommitted virtual space node range");
       }
@@ -282,13 +282,13 @@ void G1PageBasedVirtualSpace::load_on_restore() {
   while (index < _committed.size()) {
     size_t next;
     if (flip) {
-      next = _committed.get_next_zero_offset(index);
+      next = _committed.find_first_clear_bit(index);
       size_t length = (next - index) * _page_size;
       if (!loader.load((char *) _low_boundary + index * _page_size, length, length, false)) {
         fatal("Cannot restore committed virtual space node");
       }
     } else {
-      next = _committed.get_next_one_offset(index);
+      next = _committed.find_first_set_bit(index);
       if (!loader.load_gap((char *) _low_boundary + index * _page_size, (next - index) * _page_size)) {
         fatal("Cannot map uncommitted virtual space node");
       }

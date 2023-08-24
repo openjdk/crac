@@ -112,12 +112,12 @@ template<class E, MEMFLAGS F, unsigned int N>
 void GenericTaskQueue<E, F, N>::release_memory() {
   guarantee(size() == 0, "Task queue not empty");
   ArrayAllocator<E>::free(_elems, N);
-  _elems = NULL;
+  _elems = nullptr;
 }
 
 template<class E, MEMFLAGS F, unsigned int N>
 void GenericTaskQueue<E, F, N>::realloc_memory() {
-  guarantee(_elems == NULL, "Task queue not released");
+  guarantee(_elems == nullptr, "Task queue not released");
   _elems = ArrayAllocator<E>::allocate(N, F);
 }
 

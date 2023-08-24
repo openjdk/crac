@@ -93,7 +93,7 @@ void G1FromCardCache::clear(uint region_idx) {
 }
 
 void G1FromCardCache::persist_for_checkpoint() {
-  if (_cache == NULL || _static_mem_size == 0) {
+  if (_cache == nullptr || _static_mem_size == 0) {
     return;
   }
   crac::MemoryPersister persister;
@@ -104,7 +104,7 @@ void G1FromCardCache::persist_for_checkpoint() {
 }
 
 void G1FromCardCache::load_on_restore() {
-  if (_cache == NULL || _static_mem_size == 0) {
+  if (_cache == nullptr || _static_mem_size == 0) {
     return;
   }
   crac::MemoryLoader loader;

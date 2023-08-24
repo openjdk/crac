@@ -1970,7 +1970,7 @@ int os::exec_child_process_and_wait(const char *path, const char *argv[]) {
   // and when some threads have stack unmapped (in-JVM memory persistence)
   // this would crash the process.
   pid_t pid;
-  if (posix_spawn(&pid, path, NULL, NULL, (char * const *) argv, env) != 0) {
+  if (posix_spawn(&pid, path, nullptr, nullptr, (char * const *) argv, env) != 0) {
     perror("Cannot spawn crengine");
     return -1;
   }

@@ -215,7 +215,7 @@ void VirtualSpaceList::persist_for_checkpoint() {
   size_t granule_size = Settings::commit_granule_bytes();
 
   VirtualSpaceNode* vsn = _first_node;
-  while (vsn != NULL) {
+  while (vsn != nullptr) {
     vsn->persist_for_checkpoint();
     vsn = vsn->next();
   }
@@ -226,7 +226,7 @@ void VirtualSpaceList::load_on_restore() {
 
   crac::MemoryLoader loader;
   VirtualSpaceNode* vsn = _first_node;
-  while (vsn != NULL) {
+  while (vsn != nullptr) {
     vsn->load_on_restore();
     vsn = vsn->next();
   }

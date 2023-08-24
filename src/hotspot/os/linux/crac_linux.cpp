@@ -387,11 +387,11 @@ bool VM_Crac::memory_checkpoint() {
     }
     Universe::heap()->persist_for_checkpoint();
     metaspace::VirtualSpaceList *vsc = metaspace::VirtualSpaceList::vslist_class();
-    if (vsc != NULL) {
+    if (vsc != nullptr) {
       vsc->persist_for_checkpoint();
     }
     metaspace::VirtualSpaceList *vsn = metaspace::VirtualSpaceList::vslist_nonclass();
-    if (vsn != NULL) {
+    if (vsn != nullptr) {
       vsn->persist_for_checkpoint();
     }
   }
@@ -402,11 +402,11 @@ void VM_Crac::memory_restore() {
   if (CRPersistMemory) {
     Universe::heap()->load_on_restore();
     metaspace::VirtualSpaceList *vsc = metaspace::VirtualSpaceList::vslist_class();
-    if (vsc != NULL) {
+    if (vsc != nullptr) {
       vsc->load_on_restore();
     }
     metaspace::VirtualSpaceList *vsn = metaspace::VirtualSpaceList::vslist_nonclass();
-    if (vsn != NULL) {
+    if (vsn != nullptr) {
       vsn->load_on_restore();
     }
   }
@@ -557,7 +557,7 @@ bool crac::MemoryLoader::load_gap(void *addr, size_t length) {
 
 static volatile int persist_waiters = 0;
 static volatile int persist_futex = 0;
-static struct __ptrace_rseq_configuration *rseq_configs = NULL;
+static struct __ptrace_rseq_configuration *rseq_configs = nullptr;
 
 static void block_in_other_futex(int signal, siginfo_t *info, void *ctx) {
   struct __ptrace_rseq_configuration *rseqc = &rseq_configs[info->si_value.sival_int];
@@ -574,7 +574,7 @@ static void block_in_other_futex(int signal, siginfo_t *info, void *ctx) {
   // However, that's possible only from the calling thread, so we'd need to
   // reconfigure it before ::add and raise signal again.
   while (persist_futex) {
-    syscall(SYS_futex, &persist_futex, FUTEX_WAIT_PRIVATE, 1, NULL, NULL, 0);
+    syscall(SYS_futex, &persist_futex, FUTEX_WAIT_PRIVATE, 1, nullptr, nullptr, 0);
   }
 
   if (rseqc->rseq_abi_pointer) {
@@ -587,7 +587,7 @@ static void block_in_other_futex(int signal, siginfo_t *info, void *ctx) {
   int dec = Atomic::sub(&persist_waiters, 1);
   if (dec == 0) {
     FREE_C_HEAP_ARRAY(struct __ptrace_rseq_configuration, rseq_configs);
-    rseq_configs = NULL;
+    rseq_configs = nullptr;
   }
 }
 
@@ -664,7 +664,7 @@ void crac::before_threads_persisted() {
   sigset_t blocking_set;
   sigemptyset(&blocking_set);
   sigaddset(&blocking_set, SIGUSR1);
-  sigprocmask(SIG_BLOCK, &blocking_set, NULL);
+  sigprocmask(SIG_BLOCK, &blocking_set, nullptr);
   pid_t child = fork();
   if (child == 0) {
     siginfo_t info;
@@ -673,7 +673,7 @@ void crac::before_threads_persisted() {
     Threads::java_threads_do(&get_rseq);
     os::exit(0);
   } else {
-    sigprocmask(SIG_UNBLOCK, &blocking_set, NULL);
+    sigprocmask(SIG_UNBLOCK, &blocking_set, nullptr);
     // Allow child to trace us if /proc/sys/kernel/yama/ptrace_scope = 1
     prctl(PR_SET_PTRACER, child, 0, 0);
     kill(child, SIGUSR1);
@@ -686,7 +686,7 @@ void crac::before_threads_persisted() {
   struct sigaction action, old;
   action.sa_sigaction = block_in_other_futex;
   action.sa_flags = SA_SIGINFO;
-  action.sa_restorer = NULL;
+  action.sa_restorer = nullptr;
   if (sigaction(SIGUSR1, &action, &old)) {
     fatal("Cannot install SIGUSR1 handler: %s", os::strerror(errno));
   }
@@ -698,14 +698,14 @@ void crac::before_threads_persisted() {
     sched_yield();
   }
 
-  if (sigaction(SIGUSR1, &old, NULL)) {
+  if (sigaction(SIGUSR1, &old, nullptr)) {
     fatal("Cannot restore SIGUSR1 handler: %s", os::strerror(errno));
   }
 }
 
 void crac::after_threads_restored() {
   persist_futex = 0;
-  if (syscall(SYS_futex, &persist_futex, FUTEX_WAKE_PRIVATE, INT_MAX, NULL, NULL, 0) < 0) {
+  if (syscall(SYS_futex, &persist_futex, FUTEX_WAKE_PRIVATE, INT_MAX, nullptr, nullptr, 0) < 0) {
     fatal("Cannot wake up threads after restore: %s", os::strerror(errno));
   }
 }

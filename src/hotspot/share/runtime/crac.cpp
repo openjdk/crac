@@ -292,11 +292,16 @@ class WakeupClosure: public ThreadClosure {
   }
 };
 
-static void wakeup_threads_in_timedwait() {
+// It requires Threads_lock to be held so it is being run as a part of VM_Operation.
+static void wakeup_threads_in_timedwait_vm() {
   WakeupClosure wc;
   Threads::java_threads_do(&wc);
+}
 
-  MonitorLocker ml(PeriodicTask_lock, Mutex::_no_safepoint_check_flag);
+// Run it after VM_Operation as it holds Threads_lock which would cause:
+// Attempting to acquire lock PeriodicTask_lock/safepoint out of order with lock Threads_lock/safepoint-1 -- possible deadlock
+static void wakeup_threads_in_timedwait() {
+  MonitorLocker ml(PeriodicTask_lock, Mutex::_safepoint_check_flag);
   WatcherThread::watcher_thread()->unpark();
 }
 
@@ -355,7 +360,7 @@ void VM_Crac::doit() {
 
   memory_restore();
 
-  wakeup_threads_in_timedwait();
+  wakeup_threads_in_timedwait_vm();
 
   _ok = true;
 }
@@ -434,6 +439,9 @@ Handle crac::checkpoint(jarray fd_arr, jobjectArray obj_arr, bool dry_run, jlong
       oop propObj = java_lang_String::create_oop_from_str(new_properties->at(i), CHECK_NH);
       props->obj_at_put(i, propObj);
     }
+
+    wakeup_threads_in_timedwait();
+
     return ret_cr(JVM_CHECKPOINT_OK, Handle(THREAD, new_args), props, Handle(), Handle(), THREAD);
   }
 

@@ -27,7 +27,12 @@
  * @summary Synthetic anonymous class used as access constructor tag conflicting with a top level class.
  * @modules jdk.compiler/com.sun.tools.javac.api
  *          jdk.compiler/com.sun.tools.javac.main
- *          jdk.jdeps/com.sun.tools.classfile
+ *          java.base/jdk.internal.classfile
+ *          java.base/jdk.internal.classfile.attribute
+ *          java.base/jdk.internal.classfile.constantpool
+ *          java.base/jdk.internal.classfile.instruction
+ *          java.base/jdk.internal.classfile.components
+ *          java.base/jdk.internal.classfile.impl
  * @library /tools/lib /tools/javac/lib ../lib
  * @build toolbox.ToolBox InMemoryFileManager TestResult
  * @build AccessToPrivateInnerClassConstructorsTest SyntheticTestDriver ExpectedClass ExpectedClasses
@@ -44,14 +49,11 @@
                 "<init>(AccessToPrivateInnerClassConstructorsTest)",
                 "<init>(AccessToPrivateInnerClassConstructorsTest, " +
                        "AccessToPrivateInnerClassConstructorsTest$1)"},
-        expectedNumberOfSyntheticFields = 1,
         expectedNumberOfSyntheticMethods = 0)
 @ExpectedClass(className = "AccessToPrivateInnerClassConstructorsTest$1Local",
-        expectedMethods = {"<init>(AccessToPrivateInnerClassConstructorsTest)"},
-        expectedNumberOfSyntheticFields = 1)
+        expectedMethods = {"<init>(AccessToPrivateInnerClassConstructorsTest)"})
 @ExpectedClass(className = "AccessToPrivateInnerClassConstructorsTest$2Local",
-        expectedMethods = {"<init>(AccessToPrivateInnerClassConstructorsTest)"},
-        expectedNumberOfSyntheticFields = 1)
+        expectedMethods = {"<init>(AccessToPrivateInnerClassConstructorsTest)"})
 public class AccessToPrivateInnerClassConstructorsTest {
 
     public static void main(String... args) {

@@ -33,6 +33,11 @@ public class Helper {
     }
 
     @jdk.internal.vm.annotation.ForceInline
+    public static int StringCodingCountPositives(byte[] ba, int off, int len) {
+        return StringCoding.countPositives(ba, off, len);
+    }
+
+    @jdk.internal.vm.annotation.ForceInline
     public static byte[] compressByte(byte[] src, int srcOff, int dstSize, int dstOff, int len) {
         byte[] dst = new byte[dstSize];
         StringUTF16.compress(src, srcOff, dst, dstOff, len);
@@ -70,6 +75,11 @@ public class Helper {
         char[] dst = new char[dstSize];
         StringUTF16.getChars(value, srcBegin, srcEnd, dst, dstBegin);
         return dst;
+    }
+
+    @jdk.internal.vm.annotation.ForceInline
+    public static char getChar(byte[] value, int index) {
+        return StringUTF16.getChar(value, index);
     }
 
     public static void putCharSB(byte[] val, int index, int c) {

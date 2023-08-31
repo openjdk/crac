@@ -24,20 +24,86 @@
 package gc.stringdedup;
 
 /*
- * @test TestStringDeduplicationFullGC
+ * @test id=Serial
  * @summary Test string deduplication during full GC
  * @bug 8029075
- * @requires vm.gc == "null" | vm.gc == "G1" | vm.gc == "Shenandoah"
+ * @requires vm.gc.Serial
  * @library /test/lib
  * @library /
  * @modules java.base/jdk.internal.misc:open
  * @modules java.base/java.lang:open
  *          java.management
- * @run driver gc.stringdedup.TestStringDeduplicationFullGC
+ * @run driver gc.stringdedup.TestStringDeduplicationFullGC Serial
+ */
+
+/*
+ * @test id=G1
+ * @summary Test string deduplication during full GC
+ * @bug 8029075
+ * @requires vm.gc.G1
+ * @library /test/lib
+ * @library /
+ * @modules java.base/jdk.internal.misc:open
+ * @modules java.base/java.lang:open
+ *          java.management
+ * @run driver gc.stringdedup.TestStringDeduplicationFullGC G1
+ */
+
+/*
+ * @test id=Parallel
+ * @summary Test string deduplication during full GC
+ * @bug 8029075
+ * @requires vm.gc.Parallel
+ * @library /test/lib
+ * @library /
+ * @modules java.base/jdk.internal.misc:open
+ * @modules java.base/java.lang:open
+ *          java.management
+ * @run driver gc.stringdedup.TestStringDeduplicationFullGC Parallel
+ */
+
+/*
+ * @test id=Shenandoah
+ * @summary Test string deduplication during full GC
+ * @bug 8029075
+ * @requires vm.gc.Shenandoah
+ * @library /test/lib
+ * @library /
+ * @modules java.base/jdk.internal.misc:open
+ * @modules java.base/java.lang:open
+ *          java.management
+ * @run driver gc.stringdedup.TestStringDeduplicationFullGC Shenandoah
+ */
+
+/*
+ * @test id=ZSinglegen
+ * @summary Test string deduplication during full GC
+ * @bug 8029075
+ * @requires vm.gc.ZSinglegen
+ * @library /test/lib
+ * @library /
+ * @modules java.base/jdk.internal.misc:open
+ * @modules java.base/java.lang:open
+ *          java.management
+ * @run driver gc.stringdedup.TestStringDeduplicationFullGC Z -XX:-ZGenerational
+ */
+
+/*
+ * @test id=ZGenerational
+ * @summary Test string deduplication during full GC
+ * @bug 8029075
+ * @requires vm.gc.ZGenerational
+ * @library /test/lib
+ * @library /
+ * @modules java.base/jdk.internal.misc:open
+ * @modules java.base/java.lang:open
+ *          java.management
+ * @run driver gc.stringdedup.TestStringDeduplicationFullGC Z -XX:+ZGenerational
  */
 
 public class TestStringDeduplicationFullGC {
     public static void main(String[] args) throws Exception {
+        TestStringDeduplicationTools.selectGC(args);
         TestStringDeduplicationTools.testFullGC();
     }
 }

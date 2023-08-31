@@ -32,6 +32,8 @@ package javax.crac;
  * <p>{@code Context} implementation overrides {@code beforeCheckpoint} and {@code afterRestore}, defining how the notification about checkpoint and restore will be distributed by the {@code Context} hierarchy.
  *
  * <p>A {@code Context} implementor is encouraged to respect properties of the global {@code Context}.
+ *
+ * @param <R> Resource
  */
 public abstract class Context<R extends Resource> implements Resource {
 

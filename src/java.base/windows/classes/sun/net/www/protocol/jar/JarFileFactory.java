@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1999, 2021, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 1999, 2022, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -30,9 +30,14 @@ import java.io.FileNotFoundException;
 import java.net.URL;
 import java.net.URLConnection;
 import java.util.HashMap;
+import java.util.WeakHashMap;
 import java.util.jar.JarFile;
 import java.security.Permission;
 import sun.net.util.URLUtil;
+
+import jdk.internal.crac.Core;
+import jdk.crac.Context;
+import jdk.crac.Resource;
 
 /* A factory for cached JAR file. This class is used to both retrieve
  * and cache Jar files.
@@ -40,7 +45,7 @@ import sun.net.util.URLUtil;
  * @author Benjamin Renaud
  * @since 1.2
  */
-class JarFileFactory implements URLJarFile.URLJarFileCloseController {
+class JarFileFactory implements URLJarFile.URLJarFileCloseController, jdk.internal.crac.JDKResource {
 
     /* the url to file cache */
     private static final HashMap<String, JarFile> fileCache = new HashMap<>();
@@ -50,7 +55,9 @@ class JarFileFactory implements URLJarFile.URLJarFileCloseController {
 
     private static final JarFileFactory instance = new JarFileFactory();
 
-    private JarFileFactory() { }
+    private JarFileFactory() {
+        Core.Priority.NORMAL.getContext().register(this);
+    }
 
     public static JarFileFactory getInstance() {
         return instance;
@@ -155,7 +162,8 @@ class JarFileFactory implements URLJarFile.URLJarFileCloseController {
             if (host != null && !host.isEmpty() &&
                     !host.equalsIgnoreCase("localhost")) {
 
-                url = new URL("file", "", "//" + host + url.getPath());
+                @SuppressWarnings("deprecation")
+                var _unused = url = new URL("file", "", "//" + host + url.getPath());
             }
         }
         return url;
@@ -226,11 +234,11 @@ class JarFileFactory implements URLJarFile.URLJarFileCloseController {
                         // fallback to checkRead/checkConnect for pre 1.2
                         // security managers
                         if ((perm instanceof java.io.FilePermission) &&
-                            perm.getActions().indexOf("read") != -1) {
+                            perm.getActions().contains("read")) {
                             sm.checkRead(perm.getName());
                         } else if ((perm instanceof
                             java.net.SocketPermission) &&
-                            perm.getActions().indexOf("connect") != -1) {
+                            perm.getActions().contains("connect")) {
                             sm.checkConnect(url.getHost(), url.getPort());
                         } else {
                             throw se;
@@ -258,5 +266,30 @@ class JarFileFactory implements URLJarFile.URLJarFileCloseController {
         }
 
         return null;
+    }
+
+    @Override
+    public void beforeCheckpoint(Context<? extends Resource> context) throws Exception {
+        // Need to clear cached entries that are held by the factory only (e.g.
+        // after JarURLInputStream.close with useCaches == true).  Creating a
+        // temporary weak cache and triggering GC to get know JARs really in
+        // use.
+        synchronized (instance) {
+            WeakHashMap<JarFile, URL> weakMap = new WeakHashMap<>(urlCache);
+            fileCache.clear();
+            urlCache.clear();
+
+            System.gc();
+
+            weakMap.forEach((JarFile jarFile, URL url) -> {
+                String key = urlKey(url);
+                urlCache.put(jarFile, url);
+                fileCache.put(key, jarFile);
+            });
+        }
+    }
+
+    @Override
+    public void afterRestore(Context<? extends Resource> context) throws Exception {
     }
 }

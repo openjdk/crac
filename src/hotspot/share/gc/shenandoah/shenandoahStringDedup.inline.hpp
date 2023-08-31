@@ -32,8 +32,12 @@
 bool ShenandoahStringDedup::is_string_candidate(oop obj) {
   assert(Thread::current()->is_Worker_thread(),
         "Only from a GC worker thread");
-  return java_lang_String::is_instance_inlined(obj) &&
+  return java_lang_String::is_instance(obj) &&
          java_lang_String::value(obj) != nullptr;
+}
+
+bool ShenandoahStringDedup::dedup_requested(oop obj) {
+  return java_lang_String::test_and_set_deduplication_requested(obj);
 }
 
 bool ShenandoahStringDedup::is_candidate(oop obj) {
@@ -41,17 +45,19 @@ bool ShenandoahStringDedup::is_candidate(oop obj) {
     return false;
   }
 
-  if (StringDedup::is_below_threshold_age(obj->age())) {
-    const markWord mark = obj->mark();
-    // Having/had displaced header, too risk to deal with them, skip
-    if (mark == markWord::INFLATING() || mark.has_displaced_mark_helper()) {
-      return false;
-    }
+  const markWord mark = obj->mark();
 
-    // Increase string age and enqueue it when it rearches age threshold
+  // Having/had displaced header, too risky to deal with them, skip
+  if (mark == markWord::INFLATING() || mark.has_displaced_mark_helper()) {
+    return false;
+  }
+
+  if (StringDedup::is_below_threshold_age(mark.age())) {
+    // Increase string age and enqueue it when it reaches age threshold
     markWord new_mark = mark.incr_age();
     if (mark == obj->cas_set_mark(new_mark, mark)) {
-      return StringDedup::is_threshold_age(new_mark.age());
+      return StringDedup::is_threshold_age(new_mark.age()) &&
+             !dedup_requested(obj);
     }
   }
   return false;

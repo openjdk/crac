@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2003, 2018, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2003, 2023, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -29,6 +29,9 @@
 #include "io_util.h"
 #include "jlong.h"
 #include "io_util_md.h"
+
+#include <windows.h>
+#include <winternl.h>
 
 #include "java_io_FileDescriptor.h"
 
@@ -61,7 +64,7 @@ Java_java_io_FileDescriptor_initIDs(JNIEnv *env, jclass fdClass) {
  */
 
 JNIEXPORT void JNICALL
-Java_java_io_FileDescriptor_sync(JNIEnv *env, jobject this) {
+Java_java_io_FileDescriptor_sync0(JNIEnv *env, jobject this) {
     FD fd = THIS_FD(this);
     if (IO_Sync(fd) == -1) {
         JNU_ThrowByName(env, "java/io/SyncFailedException", "sync failed");
@@ -93,7 +96,17 @@ Java_java_io_FileCleanable_cleanupClose0(JNIEnv *env, jclass fdClass, jint unuse
     }
 }
 
+#define BufferSize 1024
+
 JNIEXPORT jstring JNICALL
-Java_java_io_FileDescriptor_nativeDescription0(JNIEnv *env, jobject this) {
-    return (*env)->NewStringUTF(env, "(not implemented)");
+Java_java_io_FileDescriptor_nativeDescription0(JNIEnv* env, jobject this) {
+    HANDLE handle = (HANDLE)(*env)->GetLongField(env, this, IO_handle_fdID);
+    char lpszFilePath[BufferSize] = {'\0'};
+
+    const DWORD dwFileType = GetFileType(handle);
+    if (FILE_TYPE_DISK != dwFileType || !GetFinalPathNameByHandleA(handle, lpszFilePath, BufferSize, FILE_NAME_OPENED)) {
+        snprintf(lpszFilePath, sizeof(lpszFilePath) - 1, "Handle 0x%p, type %lu", handle, dwFileType);
+    }
+
+    return (*env)->NewStringUTF(env, lpszFilePath);
 }

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2008, 2019, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2008, 2021, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -42,6 +42,7 @@ class VM_Version: public Abstract_VM_Version {
   static void initialize();
   static bool is_initialized()      { return _is_initialized; }
   static void crac_restore() {}
+  static void crac_restore_finalize() {}
 
 
  protected:
@@ -95,8 +96,6 @@ class VM_Version: public Abstract_VM_Version {
   static bool supports_compare_and_exchange() { return true; }
   static bool supports_kuser_cmpxchg32() { return _kuser_helper_version >= KUSER_VERSION_CMPXCHG32; }
   static bool supports_kuser_cmpxchg64() { return _kuser_helper_version >= KUSER_VERSION_CMPXCHG64; }
-  // Override Abstract_VM_Version implementation
-  static bool use_biased_locking();
 
   static bool has_vfp()             { return (_features & vfp_m) != 0; }
   static bool has_vfp3_32()         { return (_features & vfp3_32_m) != 0; }
@@ -109,6 +108,7 @@ class VM_Version: public Abstract_VM_Version {
 
   friend class VM_Version_StubGenerator;
 
+  static void initialize_cpu_information(void);
 };
 
 #endif // CPU_ARM_VM_VERSION_ARM_HPP

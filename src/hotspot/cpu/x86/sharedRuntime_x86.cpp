@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2016, 2017, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2016, 2021, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -24,6 +24,7 @@
 
 #include "precompiled.hpp"
 #include "asm/macroAssembler.hpp"
+#include "runtime/interfaceSupport.inline.hpp"
 #include "runtime/sharedRuntime.hpp"
 #include "vmreg_x86.inline.hpp"
 #ifdef COMPILER1
@@ -49,7 +50,7 @@ void SharedRuntime::inline_check_hashcode_from_object_header(MacroAssembler* mas
   if (method->intrinsic_id() == vmIntrinsics::_identityHashCode) {
     Label Continue;
     // return 0 for null reference input
-    __ cmpptr(obj_reg, (int32_t)NULL_WORD);
+    __ cmpptr(obj_reg, NULL_WORD);
     __ jcc(Assembler::notEqual, Continue);
     __ xorptr(result, result);
     __ ret(0);
@@ -61,12 +62,6 @@ void SharedRuntime::inline_check_hashcode_from_object_header(MacroAssembler* mas
   // check if locked
   __ testptr(result, markWord::unlocked_value);
   __ jcc(Assembler::zero, slowCase);
-
-  if (UseBiasedLocking) {
-    // Check if biased and fall through to runtime if so
-    __ testptr(result, markWord::biased_lock_bit_in_place);
-    __ jcc(Assembler::notZero, slowCase);
-  }
 
   // get hash
 #ifdef _LP64
@@ -89,3 +84,52 @@ void SharedRuntime::inline_check_hashcode_from_object_header(MacroAssembler* mas
 }
 #endif //COMPILER1
 
+#if defined(TARGET_COMPILER_gcc) && !defined(_WIN64)
+JRT_LEAF(jfloat, SharedRuntime::frem(jfloat x, jfloat y))
+  jfloat retval;
+  const bool is_LP64 = LP64_ONLY(true) NOT_LP64(false);
+  if (!is_LP64 || UseAVX < 1 || !UseFMA) {
+  asm ("\
+1:               \n\
+fprem            \n\
+fnstsw %%ax      \n\
+test   $0x4,%%ah \n\
+jne    1b        \n\
+"
+    :"=t"(retval)
+    :"0"(x), "u"(y)
+    :"cc", "ax");
+  } else {
+    assert(StubRoutines::fmod() != nullptr, "");
+    jdouble (*addr)(jdouble, jdouble) = (double (*)(double, double))StubRoutines::fmod();
+    jdouble dx = (jdouble) x;
+    jdouble dy = (jdouble) y;
+
+    retval = (jfloat) (*addr)(dx, dy);
+  }
+  return retval;
+JRT_END
+
+JRT_LEAF(jdouble, SharedRuntime::drem(jdouble x, jdouble y))
+  jdouble retval;
+  const bool is_LP64 = LP64_ONLY(true) NOT_LP64(false);
+  if (!is_LP64 || UseAVX < 1 || !UseFMA) {
+  asm ("\
+1:               \n\
+fprem            \n\
+fnstsw %%ax      \n\
+test   $0x4,%%ah \n\
+jne    1b        \n\
+"
+    :"=t"(retval)
+    :"0"(x), "u"(y)
+    :"cc", "ax");
+  } else {
+    assert(StubRoutines::fmod() != nullptr, "");
+    jdouble (*addr)(jdouble, jdouble) = (double (*)(double, double))StubRoutines::fmod();
+
+    retval = (*addr)(x, y);
+  }
+  return retval;
+JRT_END
+#endif // TARGET_COMPILER_gcc && !_WIN64

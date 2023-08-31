@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012, 2019, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2012, 2023, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -1177,16 +1177,16 @@ public final class LocalDateTime
     @Override
     public LocalDateTime plus(long amountToAdd, TemporalUnit unit) {
         if (unit instanceof ChronoUnit chronoUnit) {
-            switch (chronoUnit) {
-                case NANOS: return plusNanos(amountToAdd);
-                case MICROS: return plusDays(amountToAdd / MICROS_PER_DAY).plusNanos((amountToAdd % MICROS_PER_DAY) * 1000);
-                case MILLIS: return plusDays(amountToAdd / MILLIS_PER_DAY).plusNanos((amountToAdd % MILLIS_PER_DAY) * 1000_000);
-                case SECONDS: return plusSeconds(amountToAdd);
-                case MINUTES: return plusMinutes(amountToAdd);
-                case HOURS: return plusHours(amountToAdd);
-                case HALF_DAYS: return plusDays(amountToAdd / 256).plusHours((amountToAdd % 256) * 12);  // no overflow (256 is multiple of 2)
-            }
-            return with(date.plus(amountToAdd, unit), time);
+            return switch (chronoUnit) {
+                case NANOS     -> plusNanos(amountToAdd);
+                case MICROS    -> plusDays(amountToAdd / MICROS_PER_DAY).plusNanos((amountToAdd % MICROS_PER_DAY) * 1000);
+                case MILLIS    -> plusDays(amountToAdd / MILLIS_PER_DAY).plusNanos((amountToAdd % MILLIS_PER_DAY) * 1000_000);
+                case SECONDS   -> plusSeconds(amountToAdd);
+                case MINUTES   -> plusMinutes(amountToAdd);
+                case HOURS     -> plusHours(amountToAdd);
+                case HALF_DAYS -> plusDays(amountToAdd / 256).plusHours((amountToAdd % 256) * 12); // no overflow (256 is multiple of 2)
+                default -> with(date.plus(amountToAdd, unit), time);
+            };
         }
         return unit.addTo(this, amountToAdd);
     }
@@ -1807,7 +1807,11 @@ public final class LocalDateTime
      * chronology is also considered, see {@link ChronoLocalDateTime#compareTo}.
      *
      * @param other  the other date-time to compare to, not null
-     * @return the comparator value, negative if less, positive if greater
+     * @return the comparator value, that is the comparison of this local date-time with
+     *          the {@code other} local date-time and this chronology with the {@code other} chronology,
+     *          in order, returning the first non-zero result, and otherwise returning zero
+     * @see #isBefore
+     * @see #isAfter
      */
     @Override  // override for Javadoc and performance
     public int compareTo(ChronoLocalDateTime<?> other) {

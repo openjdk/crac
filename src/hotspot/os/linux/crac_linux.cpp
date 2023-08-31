@@ -267,19 +267,25 @@ static int stat2stfail(mode_t mode) {
 
 // If checkpoint is called throught the API, jcmd operation and jcmd output doesn't exist.
 bool VM_Crac::is_socket_from_jcmd(int sock) {
+#if INCLUDE_SERVICES
   if (_attach_op == NULL)
     return false;
   int sock_fd = _attach_op->socket();
   return sock == sock_fd;
+#else
+  return false;
+#endif
 }
 
 void VM_Crac::report_ok_to_jcmd_if_any() {
+#if INCLUDE_SERVICES
   if (_attach_op == NULL)
     return;
   bufferedStream* buf = static_cast<bufferedStream*>(_ostream);
   _attach_op->effectively_complete_raw(JNI_OK, buf);
   // redirect any further output to console
   _ostream = tty;
+#endif
 }
 
 bool VM_Crac::check_fds() {

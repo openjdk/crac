@@ -26,6 +26,10 @@
 #ifndef OS_LINUX_ATTACHLISTENER_LINUX_HPP
 #define OS_LINUX_ATTACHLISTENER_LINUX_HPP
 
+class LinuxAttachListener;
+
+#if INCLUDE_SERVICES
+
 #include "linuxAttachOperation.hpp"
 #include "services/attachListener.hpp"
 
@@ -53,7 +57,6 @@ class LinuxAttachListener: AllStatic {
   static LinuxAttachOperation* read_request(int s);
 
  public:
-
   enum {
     ATTACH_PROTOCOL_VER = 1                     // protocol version
   };
@@ -62,7 +65,7 @@ class LinuxAttachListener: AllStatic {
   };
 
   static void set_path(char* path) {
-    if (path == NULL) {
+    if (path == nullptr) {
       _path[0] = '\0';
       _has_path = false;
     } else {
@@ -87,6 +90,9 @@ class LinuxAttachListener: AllStatic {
   static LinuxAttachOperation* dequeue();
   static LinuxAttachOperation* get_current_op();
   static void reset_current_op();
+
 };
+
+#endif // INCLUDE_SERVICES
 
 #endif // OS_LINUX_ATTACHLISTENERLINUX_HPP

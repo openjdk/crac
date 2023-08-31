@@ -98,7 +98,7 @@ class CracRestoreParameters : public CHeapObj<mtInternal> {
 
   CracRestoreParameters() :
     _raw_content(NULL),
-    _properties(new (ResourceObj::C_HEAP, mtInternal) GrowableArray<const char *>(0, mtInternal)),
+    _properties(new (mtInternal) GrowableArray<const char *>(0, mtInternal)),
     _args(NULL)
   {}
 
@@ -165,21 +165,21 @@ class VM_Crac: public VM_Operation {
   GrowableArray<CracFailDep>* _failures;
   CracRestoreParameters _restore_parameters;
   outputStream* _ostream;
-#ifdef LINUX
+#if defined(LINUX) && INCLUDE_SERVICES
   LinuxAttachOperation* _attach_op;
-#endif //LINUX
+#endif // LINUX && INCLUDE_SERVICES
 
 public:
   VM_Crac(jarray fd_arr, jobjectArray obj_arr, bool dry_run, bufferedStream* jcmd_stream) :
     _fd_arr(fd_arr),
     _dry_run(dry_run),
     _ok(false),
-    _failures(new (ResourceObj::C_HEAP, mtInternal) GrowableArray<CracFailDep>(0, mtInternal)),
+    _failures(new (mtInternal) GrowableArray<CracFailDep>(0, mtInternal)),
     _restore_parameters(),
     _ostream(jcmd_stream ? jcmd_stream : tty)
-#ifdef LINUX
+#if defined(LINUX) && INCLUDE_SERVICES
     , _attach_op(jcmd_stream ? LinuxAttachListener::get_current_op() : NULL)
-#endif //LINUX
+#endif // LINUX && INCLUDE_SERVICES
   { }
 
   ~VM_Crac() {

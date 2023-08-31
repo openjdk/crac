@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2000, 2020, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2000, 2021, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -79,6 +79,13 @@ import java.io.ObjectStreamException;
  * 255 are global. However, the administrative scoping is preferred.
  * Please refer to <a href="http://www.ietf.org/rfc/rfc2365.txt">
  * <i>RFC&nbsp;2365: Administratively Scoped IP Multicast</i></a>
+ *
+ * @spec https://www.rfc-editor.org/info/rfc1918
+ *      RFC 1918: Address Allocation for Private Internets
+ * @spec https://www.rfc-editor.org/info/rfc2365
+ *      RFC 2365: Administratively Scoped IP Multicast
+ * @spec https://www.rfc-editor.org/info/rfc790
+ *      RFC 790: Assigned numbers
  * @since 1.4
  */
 
@@ -106,7 +113,7 @@ class Inet4Address extends InetAddress {
         holder().family = IPv4;
     }
 
-    Inet4Address(String hostName, byte addr[]) {
+    Inet4Address(String hostName, byte[] addr) {
         holder().hostName = hostName;
         holder().family = IPv4;
         if (addr != null) {
@@ -186,7 +193,7 @@ class Inet4Address extends InetAddress {
     }
 
     /**
-     * Utility routine to check if the InetAddress is an link local address.
+     * Utility routine to check if the InetAddress is a link local address.
      *
      * @return a {@code boolean} indicating if the InetAddress is
      * a link local address; or false if address is not a link local unicast address.

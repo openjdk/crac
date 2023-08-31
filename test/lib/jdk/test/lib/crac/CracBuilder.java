@@ -6,8 +6,10 @@ import jdk.test.lib.containers.docker.DockerTestUtils;
 import jdk.test.lib.containers.docker.DockerfileConfig;
 import jdk.test.lib.util.FileUtils;
 
+import javax.imageio.IIOException;
 import java.io.File;
 import java.io.IOException;
+import java.nio.file.NoSuchFileException;
 import java.nio.file.Path;
 import java.util.*;
 import java.util.stream.Collectors;
@@ -271,8 +273,14 @@ public class CracBuilder {
             fail("runContainerDirectly and containerSetupCommand cannot be used together.");
         }
         ensureContainerKilled();
+
+        // FIXME cooperate better with DockerTestUtils
+        try {
+            FileUtils.deleteFileTreeWithRetry(Path.of(".", dockerImageName.replace(":", "-")));
+        } catch (NoSuchFileException ignore) {
+        }
+
         buildDockerImage();
-        FileUtils.deleteFileTreeWithRetry(Path.of(".", "jdk-docker"));
         // Make sure we start with a clean image directory
         DockerTestUtils.execute(Container.ENGINE_COMMAND, "volume", "rm", "cr");
     }
@@ -299,7 +307,7 @@ public class CracBuilder {
             if (dockerImageBaseVersion != null) {
                 System.setProperty(DockerfileConfig.BASE_IMAGE_VERSION, dockerImageBaseVersion);
             }
-            DockerTestUtils.buildJdkDockerImage(dockerImageName, "Dockerfile-is-ignored", "jdk-docker");
+            DockerTestUtils.buildJdkContainerImage(dockerImageName);
         } finally {
             if (previousBaseImageName != null) {
                 System.setProperty(DockerfileConfig.BASE_IMAGE_NAME, previousBaseImageName);

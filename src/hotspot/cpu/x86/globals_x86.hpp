@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2000, 2021, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2000, 2023, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -33,14 +33,16 @@
 
 define_pd_global(bool, ImplicitNullChecks,       true);  // Generate code for implicit null checks
 define_pd_global(bool, TrapBasedNullChecks,      false); // Not needed on x86.
-define_pd_global(bool, UncommonNullCast,         true);  // Uncommon-trap NULLs passed to check cast
+define_pd_global(bool, UncommonNullCast,         true);  // Uncommon-trap nulls passed to check cast
+
+define_pd_global(bool, DelayCompilerStubsGeneration, COMPILER2_OR_JVMCI);
 
 define_pd_global(uintx, CodeCacheSegmentSize,    64 COMPILER1_AND_COMPILER2_PRESENT(+64)); // Tiered compilation has large code-entry alignment.
 // See 4827828 for this change. There is no globals_core_i486.hpp. I can't
 // assign a different value for C2 without touching a number of files. Use
 // #ifdef to minimize the change as it's late in Mantis. -- FIXME.
 // c1 doesn't have this problem because the fix to 4858033 assures us
-// the the vep is aligned at CodeEntryAlignment whereas c2 only aligns
+// the vep is aligned at CodeEntryAlignment whereas c2 only aligns
 // the uep and the vep doesn't get real alignment but just slops on by
 // only assured that the entry instruction meets the 5 byte size requirement.
 #if COMPILER2_OR_JVMCI
@@ -49,7 +51,6 @@ define_pd_global(intx, CodeEntryAlignment,       32);
 define_pd_global(intx, CodeEntryAlignment,       16);
 #endif // COMPILER2_OR_JVMCI
 define_pd_global(intx, OptoLoopAlignment,        16);
-define_pd_global(intx, InlineFrequencyCount,     100);
 define_pd_global(intx, InlineSmallCode,          1000);
 
 #define DEFAULT_STACK_YELLOW_PAGES (NOT_WINDOWS(2) WINDOWS_ONLY(3))
@@ -64,10 +65,10 @@ define_pd_global(intx, InlineSmallCode,          1000);
 // Java_java_net_SocketOutputStream_socketWrite0() uses a 64k buffer on the
 // stack if compiled for unix and LP64. To pass stack overflow tests we need
 // 20 shadow pages.
-#define DEFAULT_STACK_SHADOW_PAGES (NOT_WIN64(20) WIN64_ONLY(7) DEBUG_ONLY(+2))
+#define DEFAULT_STACK_SHADOW_PAGES (NOT_WIN64(20) WIN64_ONLY(8) DEBUG_ONLY(+4))
 // For those clients that do not use write socket, we allow
 // the min range value to be below that of the default
-#define MIN_STACK_SHADOW_PAGES (NOT_WIN64(10) WIN64_ONLY(7) DEBUG_ONLY(+2))
+#define MIN_STACK_SHADOW_PAGES (NOT_WIN64(10) WIN64_ONLY(8) DEBUG_ONLY(+4))
 #else
 #define DEFAULT_STACK_SHADOW_PAGES (4 DEBUG_ONLY(+5))
 #define MIN_STACK_SHADOW_PAGES DEFAULT_STACK_SHADOW_PAGES
@@ -77,6 +78,12 @@ define_pd_global(intx, StackYellowPages, DEFAULT_STACK_YELLOW_PAGES);
 define_pd_global(intx, StackRedPages, DEFAULT_STACK_RED_PAGES);
 define_pd_global(intx, StackShadowPages, DEFAULT_STACK_SHADOW_PAGES);
 define_pd_global(intx, StackReservedPages, DEFAULT_STACK_RESERVED_PAGES);
+
+#ifdef _LP64
+define_pd_global(bool, VMContinuations, true);
+#else
+define_pd_global(bool, VMContinuations, false);
+#endif
 
 define_pd_global(bool, RewriteBytecodes,     true);
 define_pd_global(bool, RewriteFrequentPairs, true);
@@ -101,13 +108,13 @@ define_pd_global(intx, InitArrayShortSize, 8*BytesPerLong);
   product(bool, UseStoreImmI16, true,                                       \
           "Use store immediate 16-bits value instruction on x86")           \
                                                                             \
-  product(intx, UseSSE, 99,                                                 \
+  product(int, UseSSE, 4,                                                   \
           "Highest supported SSE instructions set on x86/x64")              \
-          range(0, 99)                                                      \
+          range(0, 4)                                                       \
                                                                             \
-  product(intx, UseAVX, 3,                                                  \
+  product(int, UseAVX, 3,                                                   \
           "Highest supported AVX instructions set on x86/x64")              \
-          range(0, 99)                                                      \
+          range(0, 3)                                                       \
                                                                             \
   product(bool, UseKNLSetting, false, DIAGNOSTIC,                           \
           "Control whether Knights platform setting should be used")        \
@@ -226,13 +233,15 @@ define_pd_global(intx, InitArrayShortSize, 8*BytesPerLong);
       "use -XX:CPUFeatures=0xnumber with -XX:CRaCCheckpointTo when you "    \
       "get an error during -XX:CRaCRestoreFrom on a different machine; "    \
       "-XX:CPUFeatures=native is the default; "                             \
+      "-XX:CPUFeatures=ignore will disable the CPU features check; "        \
       "-XX:CPUFeatures=generic is compatible but not as slow as 0")         \
                                                                             \
   product(bool, ShowCPUFeatures, false, "Show features of this CPU "        \
       "to be possibly used for the -XX:CPUFeatures=0xnumber option")        \
                                                                             \
-  product(bool, CRaCCPUCountInit, false, "Reinitialize number of CPUs "     \
-      "during -XX:CRaCRestoreFrom")
+  product(bool, IgnoreCPUFeatures, false, RESTORE_SETTABLE | EXPERIMENTAL,  \
+      "Do not refuse to run after -XX:CRaCRestoreFrom finds out some "      \
+      "CPU features are missing")
 
 // end of ARCH_FLAGS
 

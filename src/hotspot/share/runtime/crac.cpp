@@ -32,10 +32,14 @@
 #include "runtime/interfaceSupport.inline.hpp"
 #include "runtime/jniHandles.hpp"
 #include "runtime/jniHandles.inline.hpp"
+#include "runtime/threads.hpp"
 #include "runtime/vm_version.hpp"
 #include "runtime/vmThread.hpp"
 #include "services/heapDumper.hpp"
 #include "services/writeableFlags.hpp"
+#ifdef LINUX
+#include "os_linux.hpp"
+#endif
 
 static const char* _crengine = NULL;
 static char* _crengine_arg_str = NULL;
@@ -144,7 +148,7 @@ static bool compute_crengine() {
 
     struct stat st;
     if (0 != os::stat(path, &st)) {
-      warning("Could not find %s: %s", path, strerror(errno));
+      warning("Could not find %s: %s", path, os::strerror(errno));
       return false;
     }
     _crengine = os::strdup_check_oom(path);
@@ -208,6 +212,7 @@ static int checkpoint_restore(int *shmid) {
 
   int cres = call_crengine();
   if (cres < 0) {
+    tty->print_cr("CRaC error executing: %s\n", _crengine);
     return JVM_CHECKPOINT_ERROR;
   }
 
@@ -280,18 +285,23 @@ bool VM_Crac::is_claimed_fd(int fd) {
 
 class WakeupClosure: public ThreadClosure {
   void do_thread(Thread* thread) {
-    JavaThread *jt = thread->as_Java_thread();
+    JavaThread *jt = JavaThread::cast(thread);
     jt->wakeup_sleep();
     jt->parker()->unpark();
     jt->_ParkEvent->unpark();
   }
 };
 
-static void wakeup_threads_in_timedwait() {
+// It requires Threads_lock to be held so it is being run as a part of VM_Operation.
+static void wakeup_threads_in_timedwait_vm() {
   WakeupClosure wc;
   Threads::java_threads_do(&wc);
+}
 
-  MonitorLocker ml(PeriodicTask_lock, Mutex::_no_safepoint_check_flag);
+// Run it after VM_Operation as it holds Threads_lock which would cause:
+// Attempting to acquire lock PeriodicTask_lock/safepoint out of order with lock Threads_lock/safepoint-1 -- possible deadlock
+static void wakeup_threads_in_timedwait() {
+  MonitorLocker ml(PeriodicTask_lock, Mutex::_safepoint_check_flag);
   WatcherThread::watcher_thread()->unpark();
 }
 
@@ -335,6 +345,7 @@ void VM_Crac::doit() {
     }
   }
 
+  // It needs to check CPU features before any other code (such as VM_Crac::read_shm) depends on them.
   VM_Version::crac_restore();
 
   if (shmid <= 0 || !VM_Crac::read_shm(shmid)) {
@@ -343,9 +354,13 @@ void VM_Crac::doit() {
   } else {
     _restore_start_nanos += crac::monotonic_time_offset();
   }
+
+  // VM_Crac::read_shm needs to be already called to read RESTORE_SETTABLE parameters.
+  VM_Version::crac_restore_finalize();
+
   memory_restore();
 
-  wakeup_threads_in_timedwait();
+  wakeup_threads_in_timedwait_vm();
 
   _ok = true;
 }
@@ -360,11 +375,11 @@ bool crac::prepare_checkpoint() {
     }
   } else {
     if (-1 == os::mkdir(CRaCCheckpointTo)) {
-      warning("cannot create %s: %s", CRaCCheckpointTo, strerror(errno));
+      warning("cannot create %s: %s", CRaCCheckpointTo, os::strerror(errno));
       return false;
     }
     if (-1 == os::rmdir(CRaCCheckpointTo)) {
-      warning("cannot cleanup after check: %s", strerror(errno));
+      warning("cannot cleanup after check: %s", os::strerror(errno));
       // not fatal
     }
   }
@@ -398,7 +413,7 @@ Handle crac::checkpoint(jarray fd_arr, jobjectArray obj_arr, bool dry_run, jlong
   }
 
   if (-1 == os::mkdir(CRaCCheckpointTo) && errno != EEXIST) {
-    warning("cannot create %s: %s", CRaCCheckpointTo, strerror(errno));
+    warning("cannot create %s: %s", CRaCCheckpointTo, os::strerror(errno));
     return ret_cr(JVM_CHECKPOINT_NONE, Handle(), Handle(), Handle(), Handle(), THREAD);
   }
 
@@ -424,6 +439,9 @@ Handle crac::checkpoint(jarray fd_arr, jobjectArray obj_arr, bool dry_run, jlong
       oop propObj = java_lang_String::create_oop_from_str(new_properties->at(i), CHECK_NH);
       props->obj_at_put(i, propObj);
     }
+
+    wakeup_threads_in_timedwait();
+
     return ret_cr(JVM_CHECKPOINT_OK, Handle(THREAD, new_args), props, Handle(), Handle(), THREAD);
   }
 
@@ -473,7 +491,7 @@ void crac::restore() {
     _crengine_args[1] = "restore";
     add_crengine_arg(CRaCRestoreFrom);
     os::execv(_crengine, _crengine_args);
-    warning("cannot execute \"%s restore ...\" (%s)", _crengine, strerror(errno));
+    warning("cannot execute \"%s restore ...\" (%s)", _crengine, os::strerror(errno));
   }
 }
 
@@ -521,8 +539,8 @@ bool CracRestoreParameters::read_from(int fd) {
         cursor = value + strlen(value) + 1;
       }
     }
-    guarantee(result == JVMFlag::Error::SUCCESS, "VM Option '%s' cannot be changed: %s",
-        name, JVMFlag::flag_error_str(result));
+    guarantee(result == JVMFlag::Error::SUCCESS, "VM Option '%s' cannot be changed: %d",
+        name, result);
   }
 
   for (int i = 0; i < hdr->_nprops; i++) {

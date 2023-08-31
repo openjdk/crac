@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020, 2021, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2020, 2023, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -145,7 +145,7 @@ public class RandomSupport {
      * @throws IllegalArgumentException if {@code bound} fails to be positive and finite
      */
     public static void checkBound(float bound) {
-        if (!(bound > 0.0 && bound < Float.POSITIVE_INFINITY)) {
+        if (!(0.0f < bound && bound < Float.POSITIVE_INFINITY)) {
             throw new IllegalArgumentException(BAD_FLOATING_BOUND);
         }
     }
@@ -158,7 +158,7 @@ public class RandomSupport {
      * @throws IllegalArgumentException if {@code bound} fails to be positive and finite
      */
     public static void checkBound(double bound) {
-        if (!(bound > 0.0 && bound < Double.POSITIVE_INFINITY)) {
+        if (!(0.0 < bound && bound < Double.POSITIVE_INFINITY)) {
             throw new IllegalArgumentException(BAD_FLOATING_BOUND);
         }
     }
@@ -195,11 +195,13 @@ public class RandomSupport {
      * @param origin the least value (inclusive) in the range
      * @param bound  the upper bound (exclusive) of the range
      *
-     * @throws IllegalArgumentException if {@code origin} is not finite, {@code bound} is not finite,
-     *                                  or {@code bound - origin} is not finite
+     * @throws IllegalArgumentException if {@code origin} is not finite,
+     *          or {@code bound} is not finite, or {@code origin}
+     *          is greater than or equal to {@code bound}
      */
     public static void checkRange(float origin, float bound) {
-        if (!(origin < bound && (bound - origin) < Float.POSITIVE_INFINITY)) {
+        if (!(Float.NEGATIVE_INFINITY < origin && origin < bound &&
+                bound < Float.POSITIVE_INFINITY)) {
             throw new IllegalArgumentException(BAD_RANGE);
         }
     }
@@ -210,11 +212,13 @@ public class RandomSupport {
      * @param origin the least value (inclusive) in the range
      * @param bound  the upper bound (exclusive) of the range
      *
-     * @throws IllegalArgumentException if {@code origin} is not finite, {@code bound} is not finite,
-     *                                  or {@code bound - origin} is not finite
+     * @throws IllegalArgumentException if {@code origin} is not finite,
+     *          or {@code bound} is not finite, or {@code origin}
+     *          is greater than or equal to {@code bound}
      */
     public static void checkRange(double origin, double bound) {
-        if (!(origin < bound && (bound - origin) < Double.POSITIVE_INFINITY)) {
+        if (!(Double.NEGATIVE_INFINITY < origin && origin < bound &&
+                bound < Double.POSITIVE_INFINITY)) {
             throw new IllegalArgumentException(BAD_RANGE);
         }
     }
@@ -265,7 +269,7 @@ public class RandomSupport {
         final int m = Math.min(seed.length, n << 3);
         // Distribute seed bytes into the words to be formed.
         for (int j = 0; j < m; j++) {
-            result[j>>3] = (result[j>>3] << 8) | seed[j];
+            result[j>>3] = (result[j>>3] << 8) | (seed[j] & 0xFF);
         }
         // If there aren't enough seed bytes for all the words we need,
         // use a SplitMix-style PRNG to fill in the rest.
@@ -308,7 +312,7 @@ public class RandomSupport {
         final int m = Math.min(seed.length, n << 2);
         // Distribute seed bytes into the words to be formed.
         for (int j = 0; j < m; j++) {
-            result[j>>2] = (result[j>>2] << 8) | seed[j];
+            result[j>>2] = (result[j>>2] << 8) | (seed[j] & 0xFF);
         }
         // If there aren't enough seed bytes for all the words we need,
         // use a SplitMix-style PRNG to fill in the rest.
@@ -343,8 +347,8 @@ public class RandomSupport {
      * This is the form of {@link RandomGenerator#nextLong() nextLong}() used by
      * a {@link LongStream} {@link Spliterator} and by the public method
      * {@link RandomGenerator#nextLong(long, long) nextLong}(origin, bound). If
-     * {@code origin} is greater than {@code bound}, then this method simply
-     * calls the unbounded version of
+     * {@code origin} is greater than or equal to {@code bound},
+     * then this method simply calls the unbounded version of
      * {@link RandomGenerator#nextLong() nextLong}(), choosing pseudorandomly
      * from among all 2<sup>64</sup> possible {@code long} values}, and
      * otherwise uses one or more calls to
@@ -508,8 +512,8 @@ public class RandomSupport {
      * This is the form of {@link RandomGenerator#nextInt() nextInt}() used by
      * an {@link IntStream} {@link Spliterator} and by the public method
      * {@link RandomGenerator#nextInt(int, int) nextInt}(origin, bound). If
-     * {@code origin} is greater than {@code bound}, then this method simply
-     * calls the unbounded version of
+     * {@code origin} is greater than or equal to {@code bound},
+     * then this method simply calls the unbounded version of
      * {@link RandomGenerator#nextInt() nextInt}(), choosing pseudorandomly
      * from among all 2<sup>64</sup> possible {@code int} values}, and otherwise
      * uses one or more calls to {@link RandomGenerator#nextInt() nextInt}() to
@@ -604,8 +608,8 @@ public class RandomSupport {
      * used by a {@link DoubleStream} {@link Spliterator} and by the public
      * method
      * {@link RandomGenerator#nextDouble(double, double) nextDouble}(origin, bound).
-     * If {@code origin} is greater than {@code bound}, then this method simply
-     * calls the unbounded version of
+     * {@code origin} is greater than or equal to {@code bound},
+     * then this method simply calls the unbounded version of
      * {@link RandomGenerator#nextDouble() nextDouble}(), and otherwise scales
      * and translates the result of a call to
      * {@link RandomGenerator#nextDouble() nextDouble}() so that it lies between
@@ -643,9 +647,15 @@ public class RandomSupport {
     public static double boundedNextDouble(RandomGenerator rng, double origin, double bound) {
         double r = rng.nextDouble();
         if (origin < bound) {
-            r = r * (bound - origin) + origin;
+            if (bound - origin < Double.POSITIVE_INFINITY) {
+                r = r * (bound - origin) + origin;
+            } else {
+                /* avoids overflow at the cost of 3 more multiplications */
+                double halfOrigin = 0.5 * origin;
+                r = (r * (0.5 * bound - halfOrigin) + halfOrigin) * 2.0;
+            }
             if (r >= bound)  // may need to correct a rounding problem
-                r = Double.longBitsToDouble(Double.doubleToLongBits(bound) - 1);
+                r = Math.nextDown(bound);
         }
         return r;
     }
@@ -677,7 +687,7 @@ public class RandomSupport {
         double r = rng.nextDouble();
         r = r * bound;
         if (r >= bound)  // may need to correct a rounding problem
-            r = Double.longBitsToDouble(Double.doubleToLongBits(bound) - 1);
+            r = Math.nextDown(bound);
         return r;
     }
 
@@ -686,8 +696,8 @@ public class RandomSupport {
      * by a {@link Stream<Float>} {@link Spliterator} (if there were any) and by
      * the public method
      * {@link RandomGenerator#nextFloat(float, float) nextFloat}(origin, bound).
-     * If {@code origin} is greater than {@code bound}, then this method simply
-     * calls the unbounded version of
+     * {@code origin} is greater than or equal to {@code bound},
+     * then this method simply calls the unbounded version of
      * {@link RandomGenerator#nextFloat() nextFloat}(), and otherwise scales and
      * translates the result of a call to
      * {@link RandomGenerator#nextFloat() nextFloat}() so that it lies between
@@ -715,9 +725,15 @@ public class RandomSupport {
     public static float boundedNextFloat(RandomGenerator rng, float origin, float bound) {
         float r = rng.nextFloat();
         if (origin < bound) {
-            r = r * (bound - origin) + origin;
+            if (bound - origin < Float.POSITIVE_INFINITY) {
+                r = r * (bound - origin) + origin;
+            } else {
+                /* avoids overflow at the cost of 3 more multiplications */
+                float halfOrigin = 0.5f * origin;
+                r = (r * (0.5f * bound - halfOrigin) + halfOrigin) * 2.0f;
+            }
             if (r >= bound) // may need to correct a rounding problem
-                r = Float.intBitsToFloat(Float.floatToIntBits(bound) - 1);
+                r = Math.nextDown(bound);
         }
         return r;
     }
@@ -749,7 +765,7 @@ public class RandomSupport {
         float r = rng.nextFloat();
         r = r * bound;
         if (r >= bound) // may need to correct a rounding problem
-            r = Float.intBitsToFloat(Float.floatToIntBits(bound) - 1);
+            r = Math.nextDown(bound);
         return r;
     }
 
@@ -1122,8 +1138,31 @@ public class RandomSupport {
     }
 
     /**
+     * Largest value that {@link #computeNextExponential} can ever return.
+     */
+    private static final double MAX_EXPONENTIAL = 0x1.0p63 * DoubleZigguratTables.exponentialX0;
+
+    /**
      * Implementation support for the {@code nextExponential} method of
      * {@link java.util.random.RandomGenerator}.
+     *
+     * @param rng an instance of {@code RandomGenerator}, used to generate uniformly
+     *            pseudorandomly chosen {@code long} values
+     *
+     * @return a nonnegative {@code double} value chosen pseudorandomly
+     *         from an exponential distribution whose mean is 1
+     */
+    public static double computeNextExponential(RandomGenerator rng) {
+        return computeNextExponentialSoftCapped(rng, MAX_EXPONENTIAL);
+    }
+
+    /**
+     * Generates a pseudorandom value {@code x} such that {@code Math.min(x, maxValue)}
+     * follows the same distribution as it would if {@code x} was exponentially distributed
+     * with mean 1, but with a worst-case number of calls to {@link
+     * RandomGenerator#nextLong()} that's linear with {@code maxValue}. {@code maxValue} is
+     * a "soft" cap in that a value larger than {@code maxValue} may be returned in order
+     * to save a calculation.
      *
      * Certain details of the algorithm used in this method may depend critically
      * on the quality of the low-order bits delivered by {@code nextLong()}.  This method
@@ -1141,7 +1180,7 @@ public class RandomSupport {
      * @return a nonnegative {@code double} value chosen pseudorandomly
      *         from an exponential distribution whose mean is 1
      */
-    public static double computeNextExponential(RandomGenerator rng) {
+    public static double computeNextExponentialSoftCapped(RandomGenerator rng, double maxValue) {
         /*
          * The tables themselves, as well as a number of associated parameters, are
          * defined in class DoubleZigguratTables, which is automatically
@@ -1170,9 +1209,18 @@ public class RandomSupport {
             // This is the fast path (occurring more than 98% of the time).  Make an early exit.
             return DoubleZigguratTables.exponentialX[(int)i] * (U1 >>> 1);
         }
-        // We didn't use the upper part of U1 after all.  We'll be able to use it later.
-
-        for (double extra = 0.0; ; ) {
+        // We didn't use the upper part of U1 after all.  We'll probably be able to use it later.
+        if (maxValue <= 0.0) {
+            return 0.0;
+        }
+        final long maxExtraMinus1;
+        if (maxValue >= MAX_EXPONENTIAL) {
+            maxExtraMinus1 = Long.MAX_VALUE;
+        } else {
+            // Conversion to long rounds toward zero
+            maxExtraMinus1 = (long) (maxValue / DoubleZigguratTables.exponentialX0);
+        }
+        for (long extra = 0; ; ) {
             // Use Walker's alias method to sample an (unsigned) integer j from a discrete
             // probability distribution that includes the tail and all the ziggurat overhangs;
             // j will be less than DoubleZigguratTables.exponentialNumberOfLayers + 1.
@@ -1186,10 +1234,10 @@ public class RandomSupport {
                 // For the exponential distribution, every overhang is convex.
                 final double[] X = DoubleZigguratTables.exponentialX;
                 final double[] Y = DoubleZigguratTables.exponentialY;
-                for (;; U1 = (rng.nextLong() >>> 1)) {
+                // At this point, the high-order bits of U1 have not been used yet,
+                // but we need the value in U1 to be positive.
+                for (U1 = (U1 >>> 1);; U1 = (rng.nextLong() >>> 1)) {
                     long U2 = (rng.nextLong() >>> 1);
-                    // Compute the actual x-coordinate of the randomly chosen point.
-                    double x = (X[j] * 0x1.0p63) + ((X[j-1] - X[j]) * (double)U1);
                     // Does the point lie below the curve?
                     long Udiff = U2 - U1;
                     if (Udiff < 0) {
@@ -1200,26 +1248,32 @@ public class RandomSupport {
                         U2 = U1;
                         U1 -= Udiff;
                     }
+                    // Compute the actual x-coordinate of the randomly chosen point.
+                    double x = (X[j] * 0x1.0p63) + ((X[j-1] - X[j]) * (double)U1);
                     if (Udiff >= DoubleZigguratTables.exponentialConvexMargin) {
-                        return x + extra;   // The chosen point is way below the curve; accept it.
+                        return Math.fma(extra, DoubleZigguratTables.exponentialX0, x);   // The chosen point is way below the curve; accept it.
                     }
                     // Compute the actual y-coordinate of the randomly chosen point.
-                    double y = (Y[j] * 0x1.0p63) + ((Y[j] - Y[j-1]) * (double)U2);
+                    double y = (Y[j] * 0x1.0p63) + ((Y[j-1] - Y[j]) * (double)U2);
                     // Now see how that y-coordinate compares to the curve
                     if (y <= Math.exp(-x)) {
-                        return x + extra;   // The chosen point is below the curve; accept it.
+                        return Math.fma(extra, DoubleZigguratTables.exponentialX0, x);   // The chosen point is below the curve; accept it.
                     }
                     // Otherwise, we reject this sample and have to try again.
                 }
             }
+            if (extra == maxExtraMinus1) {
+                // We've reached the maximum, so don't waste any more time
+                return maxValue;
+            }
             // We are now committed to sampling from the tail.  We could do a recursive call
             // and then add X[0], but we save some time and stack space by using an iterative loop.
-            extra += DoubleZigguratTables.exponentialX0;
-            // This is like the first five lines of this method, but if it returns, it first adds "extra".
+            extra++;
+            // This is like the first five lines of this method, but if it returns, it first adds "extra" times X0.
             U1 = rng.nextLong();
             i = U1 & DoubleZigguratTables.exponentialLayerMask;
             if (i < DoubleZigguratTables.exponentialNumberOfLayers) {
-                return DoubleZigguratTables.exponentialX[(int)i] * (U1 >>> 1) + extra;
+                return Math.fma(extra, DoubleZigguratTables.exponentialX0, DoubleZigguratTables.exponentialX[(int)i] * (U1 >>> 1));
             }
         }
     }
@@ -1323,7 +1377,7 @@ public class RandomSupport {
                     continue;   // The chosen point is way above the curve; reject it.
                 }
                 // Compute the actual y-coordinate of the randomly chosen point.
-                double y = (Y[j] * 0x1.0p63) + ((Y[j] - Y[j-1]) * (double)U2);
+                double y = (Y[j] * 0x1.0p63) + ((Y[j-1] - Y[j]) * (double)U2);
                 // Now see how that y-coordinate compares to the curve
                 if (y <= Math.exp(-0.5*x*x)) {
                     break;   // The chosen point is below the curve; accept it.
@@ -1341,15 +1395,15 @@ public class RandomSupport {
             //    ACM Comput. Surv. 39, 4, Article 11 (November 2007).  See Algorithm 16.
             //    http://doi.org/10.1145/1287620.1287622
             // Compute two separate random exponential samples and then compare them in certain way.
+            double limit;
             do {
                 x = (1.0 / DoubleZigguratTables.normalX0) * computeNextExponential(rng);
-            } while (computeNextExponential(rng) < 0.5*x*x);
+                limit = 0.5*x*x;
+            } while (computeNextExponentialSoftCapped(rng, limit) < limit);
             x += DoubleZigguratTables.normalX0;
         } else if (j < DoubleZigguratTables.normalInflectionIndex) {   // Convex overhang
             for (;; U1 = (rng.nextLong() >>> 1)) {
                 long U2 = (rng.nextLong() >>> 1);
-                // Compute the actual x-coordinate of the randomly chosen point.
-                x = (X[j] * 0x1.0p63) + ((X[j-1] - X[j]) * (double)U1);
                 // Does the point lie below the curve?
                 long Udiff = U2 - U1;
                 if (Udiff < 0) {
@@ -1360,11 +1414,13 @@ public class RandomSupport {
                     U2 = U1;
                     U1 -= Udiff;
                 }
+                // Compute the actual x-coordinate of the randomly chosen point.
+                x = (X[j] * 0x1.0p63) + ((X[j-1] - X[j]) * (double)U1);
                 if (Udiff >= DoubleZigguratTables.normalConvexMargin) {
                     break;   // The chosen point is way below the curve; accept it.
                 }
                 // Compute the actual y-coordinate of the randomly chosen point.
-                double y = (Y[j] * 0x1.0p63) + ((Y[j] - Y[j-1]) * (double)U2);
+                double y = (Y[j] * 0x1.0p63) + ((Y[j-1] - Y[j]) * (double)U2);
                 // Now see how that y-coordinate compares to the curve
                 if (y <= Math.exp(-0.5*x*x)) break; // The chosen point is below the curve; accept it.
                 // Otherwise, we reject this sample and have to try again.
@@ -1374,7 +1430,7 @@ public class RandomSupport {
             for (;; U1 = (rng.nextLong() >>> 1)) {
                 long U2 = (rng.nextLong() >>> 1);
                 // Compute the actual x-coordinate of the randomly chosen point.
-                x = (X[j] * 0x1.0p63) + ((X[j-1] - X[j]) * (double)U1);
+                x = Math.fma(X[j-1] - X[j], (double)U1, X[j] * 0x1.0p63);
                 // Does the point lie below the curve?
                 long Udiff = U2 - U1;
                 if (Udiff >= DoubleZigguratTables.normalConvexMargin) {
@@ -1384,7 +1440,7 @@ public class RandomSupport {
                     continue;   // The chosen point is way above the curve; reject it.
                 }
                 // Compute the actual y-coordinate of the randomly chosen point.
-                double y = (Y[j] * 0x1.0p63) + ((Y[j] - Y[j-1]) * (double)U2);
+                double y = Math.fma(Y[j-1] - Y[j], (double)U2, Y[j] * 0x1.0p63);
                 // Now see how that y-coordinate compares to the curve
                 if (y <= Math.exp(-0.5*x*x)) {
                     break;   // The chosen point is below the curve; accept it.
@@ -1398,7 +1454,7 @@ public class RandomSupport {
     /**
      * This class overrides the stream-producing methods (such as
      * {@link RandomGenerator#ints() ints}()) in class {@link RandomGenerator}
-     * to provide {@link Spliterator}-based implmentations that support
+     * to provide {@link Spliterator}-based implementations that support
      * potentially parallel execution.
      *
      * <p> To implement a pseudorandom number generator, the programmer needs
@@ -2063,7 +2119,7 @@ public class RandomSupport {
         /* ---------------- public methods ---------------- */
 
         /**
-         * Implements the @code{split()} method as
+         * Implements the {@code split()} method as
          * {@link SplittableGenerator#split(SplittableGenerator) split}(this).
          *
          * @return the new {@link SplittableGenerator} instance
@@ -2380,8 +2436,8 @@ public class RandomSupport {
             long bits = nextLong();
             long multiplier = (1L << SALT_SHIFT) - 1;
             long salt = multiplier << (64 - SALT_SHIFT);
-            while ((salt & multiplier) != 0) {
-                long digit = Math.multiplyHigh(bits, multiplier);
+            while ((salt & multiplier) == 0) {
+                long digit = Math.unsignedMultiplyHigh(bits, multiplier);
                 salt = (salt >>> SALT_SHIFT) | (digit << (64 - SALT_SHIFT));
                 bits *= multiplier;
             }

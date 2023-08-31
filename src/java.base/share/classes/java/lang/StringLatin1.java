@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015, 2020, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2015, 2023, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -27,11 +27,9 @@ package java.lang;
 
 import java.util.Arrays;
 import java.util.Locale;
-import java.util.Objects;
 import java.util.Spliterator;
 import java.util.function.Consumer;
 import java.util.function.IntConsumer;
-import java.util.stream.IntStream;
 import java.util.stream.Stream;
 import java.util.stream.StreamSupport;
 import jdk.internal.util.ArraysSupport;
@@ -39,14 +37,13 @@ import jdk.internal.vm.annotation.IntrinsicCandidate;
 
 import static java.lang.String.LATIN1;
 import static java.lang.String.UTF16;
+import static java.lang.String.checkIndex;
 import static java.lang.String.checkOffset;
 
 final class StringLatin1 {
 
     public static char charAt(byte[] value, int index) {
-        if (index < 0 || index >= value.length) {
-            throw new StringIndexOutOfBoundsException(index);
-        }
+        checkIndex(index, value.length);
         return (char)(value[index] & 0xff);
     }
 
@@ -82,11 +79,11 @@ final class StringLatin1 {
         return ret;
     }
 
-    public static void getChars(byte[] value, int srcBegin, int srcEnd, char dst[], int dstBegin) {
+    public static void getChars(byte[] value, int srcBegin, int srcEnd, char[] dst, int dstBegin) {
         inflate(value, srcBegin, dst, dstBegin, srcEnd - srcBegin);
     }
 
-    public static void getBytes(byte[] value, int srcBegin, int srcEnd, byte dst[], int dstBegin) {
+    public static void getBytes(byte[] value, int srcBegin, int srcEnd, byte[] dst, int dstBegin) {
         System.arraycopy(value, srcBegin, dst, dstBegin, srcEnd - srcBegin);
     }
 
@@ -112,12 +109,8 @@ final class StringLatin1 {
 
     public static int compareTo(byte[] value, byte[] other, int len1, int len2) {
         int lim = Math.min(len1, len2);
-        for (int k = 0; k < lim; k++) {
-            if (value[k] != other[k]) {
-                return getChar(value, k) - getChar(other, k);
-            }
-        }
-        return len1 - len2;
+        int k = ArraysSupport.mismatch(value, other, lim);
+        return (k < 0) ? len1 - len2 : getChar(value, k) - getChar(other, k);
     }
 
     @IntrinsicCandidate
@@ -192,25 +185,23 @@ final class StringLatin1 {
     }
 
     public static int hashCode(byte[] value) {
-        int h = 0;
-        for (byte v : value) {
-            h = 31 * h + (v & 0xff);
-        }
-        return h;
+        return switch (value.length) {
+            case 0 -> 0;
+            case 1 -> value[0] & 0xff;
+            default -> ArraysSupport.vectorizedHashCode(value, 0, value.length, 0, ArraysSupport.T_BOOLEAN);
+        };
     }
 
-    public static int indexOf(byte[] value, int ch, int fromIndex) {
+    public static int indexOf(byte[] value, int ch, int fromIndex, int toIndex) {
         if (!canEncode(ch)) {
             return -1;
         }
-        int max = value.length;
-        if (fromIndex < 0) {
-            fromIndex = 0;
-        } else if (fromIndex >= max) {
-            // Note: fromIndex might be near -1>>>1.
+        fromIndex = Math.max(fromIndex, 0);
+        toIndex = Math.min(toIndex, value.length);
+        if (fromIndex >= toIndex) {
             return -1;
         }
-        return indexOfChar(value, ch, fromIndex, max);
+        return indexOfChar(value, ch, fromIndex, toIndex);
     }
 
     @IntrinsicCandidate
@@ -391,17 +382,9 @@ final class StringLatin1 {
                                           byte[] other, int ooffset, int len) {
         int last = toffset + len;
         while (toffset < last) {
-            char c1 = (char)(value[toffset++] & 0xff);
-            char c2 = (char)(other[ooffset++] & 0xff);
-            if (c1 == c2) {
-                continue;
-            }
-            int u1 = CharacterDataLatin1.instance.toUpperCase(c1);
-            int u2 = CharacterDataLatin1.instance.toUpperCase(c2);
-            if (u1 == u2) {
-                continue;
-            }
-            if (Character.toLowerCase(u1) == Character.toLowerCase(u2)) {
+            byte b1 = value[toffset++];
+            byte b2 = other[ooffset++];
+            if (CharacterDataLatin1.equalsIgnoreCase(b1, b2)) {
                 continue;
             }
             return false;

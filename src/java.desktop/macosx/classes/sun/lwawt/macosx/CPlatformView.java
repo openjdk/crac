@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2011, 2021, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2011, 2023, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -41,7 +41,6 @@ import sun.lwawt.LWWindowPeer;
 
 import sun.java2d.SurfaceData;
 import sun.java2d.opengl.CGLLayer;
-import sun.lwawt.macosx.CFLayer;
 
 public class CPlatformView extends CFRetainedResource {
     private native long nativeCreateView(int x, int y, int width, int height, long windowLayerPtr);
@@ -63,6 +62,7 @@ public class CPlatformView extends CFRetainedResource {
         initializeBase(peer, responder);
 
         this.windowLayer = CGraphicsDevice.usingMetalPipeline()? createMTLLayer() : createCGLayer();
+
         setPtr(nativeCreateView(0, 0, 0, 0, getWindowLayerPtr()));
     }
 
@@ -135,6 +135,10 @@ public class CPlatformView extends CFRetainedResource {
         return ref.get();
     }
 
+    public void setWindowLayerOpaque(boolean opaque) {
+        windowLayer.setOpaque(opaque);
+    }
+
     public GraphicsDevice getGraphicsDevice() {
         GraphicsEnvironment ge = GraphicsEnvironment.getLocalGraphicsEnvironment();
         CGraphicsEnvironment cge = (CGraphicsEnvironment)ge;
@@ -183,7 +187,7 @@ public class CPlatformView extends CFRetainedResource {
         int absX = event.getAbsX();
         int absY = event.getAbsY();
 
-        if (event.getType() == CocoaConstants.NSScrollWheel) {
+        if (event.getType() == CocoaConstants.NSEventTypeScrollWheel) {
             responder.handleScrollEvent(x, y, absX, absY, event.getModifierFlags(),
                                         event.getScrollDeltaX(), event.getScrollDeltaY(),
                                         event.getScrollPhase());

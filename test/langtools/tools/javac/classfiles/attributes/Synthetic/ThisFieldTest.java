@@ -27,12 +27,19 @@
  * @summary Checking ACC_SYNTHETIC flag is generated for "this$0" field.
  * @modules jdk.compiler/com.sun.tools.javac.api
  *          jdk.compiler/com.sun.tools.javac.main
- *          jdk.jdeps/com.sun.tools.classfile
+ *          java.base/jdk.internal.classfile
+ *          java.base/jdk.internal.classfile.attribute
+ *          java.base/jdk.internal.classfile.constantpool
+ *          java.base/jdk.internal.classfile.instruction
+ *          java.base/jdk.internal.classfile.components
+ *          java.base/jdk.internal.classfile.impl
  * @library /tools/lib /tools/javac/lib ../lib
  * @build toolbox.ToolBox InMemoryFileManager TestResult TestBase
  * @build ThisFieldTest SyntheticTestDriver ExpectedClass ExpectedClasses
  * @run main SyntheticTestDriver ThisFieldTest
  */
+
+import java.util.Objects;
 
 /**
  * Synthetic members:
@@ -49,9 +56,17 @@
 public class ThisFieldTest {
     {
         class Local {
+            {
+                // access enclosing instance so this$0 field is generated
+                Objects.requireNonNull(ThisFieldTest.this);
+            }
         }
 
         new Local() {
+            {
+                // access enclosing instance so this$0 field is generated
+                Objects.requireNonNull(ThisFieldTest.this);
+            }
         };
     }
 }

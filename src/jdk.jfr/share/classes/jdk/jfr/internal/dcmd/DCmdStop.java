@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012, 2021, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2012, 2023, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -29,7 +29,9 @@ import java.nio.file.InvalidPathException;
 import java.nio.file.Paths;
 
 import jdk.jfr.Recording;
+import jdk.jfr.internal.PrivateAccess;
 import jdk.jfr.internal.SecuritySupport.SafePath;
+import jdk.jfr.internal.WriteableUserPath;
 
 /**
  * JFR.stop
@@ -42,10 +44,11 @@ final class DCmdStop extends AbstractDCmd {
     protected void execute(ArgumentParser parser)  throws DCmdException {
         parser.checkUnknownArguments();
         String name = parser.getOption("name");
-        String filename = parser.getOption("filename");
+        String filename = expandFilename(parser.getOption("filename"));
         try {
-            SafePath safePath = null;
             Recording recording = findRecording(name);
+            WriteableUserPath path = PrivateAccess.getInstance().getPlatformRecording(recording).getDestination();
+            SafePath safePath = path == null ? null : new SafePath(path.getRealPathText());
             if (filename != null) {
                 try {
                     // Ensure path is valid. Don't generate safePath if filename == null, as a user may
@@ -79,6 +82,9 @@ final class DCmdStop extends AbstractDCmd {
                            recording is stopped. If no path is provided, the data from the recording
                            is discarded. (STRING, no default value)
 
+                           Note: If a path is given, '%%p' in the path will be replaced by the PID,
+                           and '%%t' will be replaced by the time in 'yyyy_MM_dd_HH_mm_ss' format.
+
                  name      Name of the recording (STRING, no default value)
 
                Options must be specified using the <key> or <key>=<value> syntax.
@@ -97,11 +103,11 @@ final class DCmdStop extends AbstractDCmd {
     public Argument[] getArgumentInfos() {
         return new Argument[] {
             new Argument("name",
-                "Recording text,.e.g \\\"My Recording\\\"",
-                "STRING", true, null, false),
+                "Recording name, e.g. \\\"My Recording\\\"",
+                "STRING", true, true, null, false),
             new Argument("filename",
                 "Copy recording data to file, e.g. \\\"" + exampleFilename() +  "\\\"",
-                "STRING", false, null, false)
+                "STRING", false, true, null, false)
         };
     }
 }

@@ -336,11 +336,6 @@ public abstract sealed class Reference<T>
             }
 
             @Override
-            public <T> Reference<? extends T> pollReferenceQueue(ReferenceQueue<T> queue, long timeout) throws InterruptedException {
-                return queue.poll(timeout);
-            }
-
-            @Override
             public void wakeupReferenceQueue(ReferenceQueue<?> queue) {
                 queue.wakeup();
             }

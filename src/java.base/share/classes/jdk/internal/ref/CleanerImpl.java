@@ -157,7 +157,7 @@ public final class CleanerImpl implements Runnable, JDKResource {
             try {
                 // Wait for a Ref, with a timeout to avoid getting hung
                 // due to a race with clear/clean
-                Cleanable ref = (Cleanable) javaLangRefAccess.pollReferenceQueue(queue, 60 * 1000L);
+                Cleanable ref = (Cleanable) queue.remove(60 * 1000L);
                 if (ref != null) {
                     ref.clean();
                 }

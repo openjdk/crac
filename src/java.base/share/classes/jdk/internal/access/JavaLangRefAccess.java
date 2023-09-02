@@ -57,11 +57,6 @@ public interface JavaLangRefAccess {
     void runFinalization();
 
     /**
-     * Calls package-private {@link ReferenceQueue#poll(long)}.
-     */
-    <T> Reference<? extends T> pollReferenceQueue(ReferenceQueue<T> queue, long timeout) throws InterruptedException;
-
-    /**
      * Calls package-private {@link ReferenceQueue#wakeup()}.
      */
     void wakeupReferenceQueue(ReferenceQueue<?> queue);

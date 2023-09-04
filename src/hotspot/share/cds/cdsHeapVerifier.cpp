@@ -135,7 +135,6 @@ CDSHeapVerifier::CDSHeapVerifier() : _archived_objs(0), _problems(0)
   ADD_EXCL("sun/invoke/util/ValueConversions",           "ONE_INT",                // E
                                                          "ZERO_INT");              // E
   ADD_EXCL("sun/security/util/SecurityConstants",        "PROVIDER_VER");          // C
-  ADD_EXCL("jdk/crac/impl/GlobalContext",                "IMPL_NAME");             // B
 
 
 # undef ADD_EXCL

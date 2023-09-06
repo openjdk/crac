@@ -556,7 +556,7 @@ close_return:
 }
 
 static void *_crengine_handle;
-typedef void signal_handler(int);
+typedef void signal_handler(int, siginfo_t *info, void *ctx);
 static signal_handler *_crengine_signal_handler = NULL;
 static volatile int _crengine_threads_counter = 0;
 
@@ -572,12 +572,12 @@ static void crengine_raise_restore() {
 
 // This function should be passed to the 'checkpoint' function from CR engine
 // library to perform refcounting of threads in the actual signal handler.
-static void crengine_signal_wrapper(int signal) {
+static void crengine_signal_wrapper(int signal, siginfo_t *info, void *ctx) {
   if (_crengine_signal_handler == NULL) {
     return;
   }
   Atomic::inc(&_crengine_threads_counter);
-  _crengine_signal_handler(signal);
+  _crengine_signal_handler(signal, info, ctx);
   Atomic::dec(&_crengine_threads_counter);
 }
 

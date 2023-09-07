@@ -45,6 +45,7 @@
 #include "gc/g1/g1MonotonicArenaFreePool.hpp"
 #include "gc/g1/g1NUMA.hpp"
 #include "gc/g1/g1SurvivorRegions.hpp"
+#include "gc/g1/g1UncommitRegionTask.hpp"
 #include "gc/g1/g1YoungGCEvacFailureInjector.hpp"
 #include "gc/g1/heapRegionManager.hpp"
 #include "gc/g1/heapRegionSet.hpp"
@@ -1019,6 +1020,10 @@ public:
   // Perform a collection of the heap with the given cause.
   // Returns whether this collection actually executed.
   bool try_collect(GCCause::Cause cause, const G1GCCounters& counters_before);
+
+  virtual void finish_collection() {
+    G1UncommitRegionTask::finish_collection();
+  }
 
   void start_concurrent_gc_for_metadata_allocation(GCCause::Cause gc_cause);
 

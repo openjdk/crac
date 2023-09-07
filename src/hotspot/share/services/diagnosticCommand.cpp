@@ -810,7 +810,7 @@ void JMXStatusDCmd::execute(DCmdSource source, TRAPS) {
   JavaValue result(T_OBJECT);
   JavaCalls::call_static(&result, k, vmSymbols::getAgentStatus_name(), vmSymbols::void_string_signature(), CHECK);
 
-  jvalue* jv = (jvalue*)result.get_value_addr();
+  jvalue* jv = (jvalue*) result.get_value_addr();
   oop str = cast_to_oop(jv->l);
   if (str != nullptr) {
       char* out = java_lang_String::as_utf8_string(str);

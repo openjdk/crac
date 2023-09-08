@@ -97,7 +97,7 @@ public:
   }
 
   static void persist_for_checkpoint();
-  static void load_on_restore();
+  DEBUG_ONLY(static void assert_checkpoint();)
 };
 
 #endif // SHARE_GC_G1_G1FROMCARDCACHE_HPP

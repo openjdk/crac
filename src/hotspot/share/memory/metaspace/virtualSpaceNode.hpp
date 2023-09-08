@@ -257,7 +257,7 @@ public:
   void set_next(VirtualSpaceNode* vsn)  { _next = vsn; }
 
   void persist_for_checkpoint();
-  void load_on_restore();
+  DEBUG_ONLY(void assert_checkpoint();)
 
   /// Debug stuff ////
 

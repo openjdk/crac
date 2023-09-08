@@ -450,7 +450,6 @@ void VirtualSpaceNode::verify_locked() const {
 #endif
 
 void VirtualSpaceNode::persist_for_checkpoint() {
-  crac::MemoryPersister persister;
   size_t granule_size = Settings::commit_granule_bytes();
   bool flip = _commit_mask.at(0);
   size_t index = 0;
@@ -459,12 +458,12 @@ void VirtualSpaceNode::persist_for_checkpoint() {
     if (flip) {
       next = _commit_mask.find_first_clear_bit(index);
       size_t length = (next - index) * granule_size;
-      if (!persister.store((char *) _base + index * granule_size, length, length)) {
+      if (!crac::MemoryPersister::store((char *) _base + index * granule_size, length, length, false)) {
         fatal("Failed to persist committed virtual space node range");
       }
     } else {
       next = _commit_mask.find_first_set_bit(index);
-      if (!persister.store_gap((char *) _base + index * granule_size, (next - index) * granule_size)) {
+      if (!crac::MemoryPersister::store_gap((char *) _base + index * granule_size, (next - index) * granule_size)) {
         fatal("Failed to persist uncommitted virtual space node range");
       }
     }
@@ -473,8 +472,8 @@ void VirtualSpaceNode::persist_for_checkpoint() {
   }
 }
 
-void VirtualSpaceNode::load_on_restore() {
-  crac::MemoryLoader loader;
+#ifdef ASSERT
+void VirtualSpaceNode::assert_checkpoint() {
   size_t granule_size = Settings::commit_granule_bytes();
   bool flip = _commit_mask.at(0);
   size_t index = 0;
@@ -483,18 +482,15 @@ void VirtualSpaceNode::load_on_restore() {
     if (flip) {
       next = _commit_mask.find_first_clear_bit(index);
       size_t length = (next - index) * granule_size;
-      if (!loader.load((char *) _base + index * granule_size, length, length, false)) {
-        fatal("Cannot restore committed virtual space node");
-      }
+      crac::MemoryPersister::assert_mem((char *) _base + index * granule_size, length, length);
     } else {
       next = _commit_mask.find_first_set_bit(index);
-      if (!loader.load_gap((char *) _base + index * granule_size, (next - index) * granule_size)) {
-        fatal("Cannot map uncommitted virtual space node");
-      }
+      crac::MemoryPersister::assert_gap((char *) _base + index * granule_size, (next - index) * granule_size);
     }
     flip = !flip;
     index = next;
   }
 }
+#endif // ASSERT
 
 } // namespace metaspace

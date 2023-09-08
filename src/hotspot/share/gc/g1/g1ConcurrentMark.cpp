@@ -3056,19 +3056,17 @@ G1PrintRegionLivenessInfoClosure::~G1PrintRegionLivenessInfoClosure() {
 }
 
 void G1CMMarkStack::persist_for_checkpoint() {
-  crac::MemoryPersister persister;
   size_t used = MIN2(_hwm, _chunk_capacity) * sizeof(TaskQueueEntryChunk);
   size_t committed = _chunk_capacity * sizeof(TaskQueueEntryChunk);
-  if (!persister.store((void *) _base, used, committed)) {
+  if (!crac::MemoryPersister::store(_base, used, committed, false)) {
     fatal("Cannot persist GC CM Mark stack");
   }
 }
 
-void G1CMMarkStack::load_on_restore() {
-  crac::MemoryLoader loader;
+#ifdef ASSERT
+void G1CMMarkStack::assert_checkpoint() {
   size_t used = MIN2(_hwm, _chunk_capacity) * sizeof(TaskQueueEntryChunk);
   size_t committed = _chunk_capacity * sizeof(TaskQueueEntryChunk);
-  if (!loader.load((void *) _base, used, committed, false)) {
-    fatal("Cannot load G1 concurrent mark stack");
-  }
+  crac::MemoryPersister::assert_mem(_base, used, committed);
 }
+#endif // ASSERT

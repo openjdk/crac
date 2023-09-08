@@ -294,7 +294,7 @@ public:
   void verify_optional() PRODUCT_RETURN;
 
   void persist_for_checkpoint();
-  void load_on_restore();
+  DEBUG_ONLY(void assert_checkpoint();)
 };
 
 // The HeapRegionClaimer is used during parallel iteration over heap regions,

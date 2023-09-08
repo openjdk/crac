@@ -289,34 +289,31 @@ bool VM_Crac::is_claimed_fd(int fd) {
 class PersistThreadStackClosure: public ThreadClosure {
 public:
   void do_thread(Thread* t) {
-    crac::MemoryPersister persister;
     JavaThread *thread = JavaThread::cast(t);
     size_t reserved = thread->stack_overflow_state()->stack_reserved_zone_base() - thread->stack_end();
-    if (!persister.store_gap(thread->stack_end(), reserved)) {
+    if (!crac::MemoryPersister::store_gap(thread->stack_end(), reserved)) {
       fatal("Cannot record reserved zone for stack");
     }
-    size_t length = thread->stack_size() - reserved;
-    if (!persister.store(thread->stack_end() + reserved, length, length)) {
+    // On aarch64 the stack size might be not aligned to page boundaries on the upper end
+    size_t length = align_up(thread->stack_size() - reserved, os::vm_page_size());
+    if (!crac::MemoryPersister::store(thread->stack_end() + reserved, length, length, false)) {
       fatal("Cannot persist thread stack");
     }
   }
 };
 
-class LoadThreadStackClosure: public ThreadClosure {
+#ifdef ASSERT
+class AssertThreadStackClosure: public ThreadClosure {
 public:
   void do_thread(Thread* t) {
-    crac::MemoryLoader loader;
     JavaThread *thread = JavaThread::cast(t);
     size_t reserved = thread->stack_overflow_state()->stack_reserved_zone_base() - thread->stack_end();
-    if (!loader.load_gap(thread->stack_end(), reserved)) {
-      fatal("Cannot restore reserved zone for stack");
-    }
-    size_t length = thread->stack_size() - reserved;
-    if (!loader.load(thread->stack_end() + reserved, length, length, false)) {
-      fatal("Cannot load thread stack");
-    }
+    crac::MemoryPersister::assert_gap(thread->stack_end(), reserved);
+    size_t length = align_up(thread->stack_size() - reserved, os::vm_page_size());
+    crac::MemoryPersister::assert_mem(thread->stack_end() + reserved, length, length);
   }
 };
+#endif // ASSERT
 
 static void persist_thread_stacks() {
 // Not platform-specific, but skip this on non-Linux
@@ -332,8 +329,10 @@ static void persist_thread_stacks() {
 static void restore_thread_stacks() {
 // Not platform-specific, but skip this on non-Linux
 #ifdef LINUX
-  LoadThreadStackClosure closure;
+# ifdef ASSERT
+  AssertThreadStackClosure closure;
   Threads::java_threads_do(&closure);
+# endif // ASSERT
   crac::after_threads_restored();
 #endif
 }
@@ -405,22 +404,20 @@ void VM_Crac::doit() {
       // Since VM_Crac instance is allocated on stack of other thread
       // we must not use it from now on
       persist_thread_stacks();
-      crac::MemoryPersister::persist();
+      crac::MemoryPersister::finalize();
     }
     int ret = checkpoint_restore(&shmid);
     if (CRPersistMemory) {
+      crac::MemoryPersister::load_on_restore();
       restore_thread_stacks();
+#ifdef ASSERT
+      CodeCache::assert_checkpoint();
+#endif // ASSERT
     }
     if (ret == JVM_CHECKPOINT_ERROR) {
       memory_restore();
       return;
     }
-  }
-
-  if (CRPersistMemory) {
-    // CodeCache must be restored before VM_Version::crac_restore as this
-    // generates some code in the code cache on the fly
-    CodeCache::load_on_restore();
   }
 
   // It needs to check CPU features before any other code (such as VM_Crac::read_shm) depends on them.
@@ -681,12 +678,12 @@ void crac::update_javaTimeNanos_offset() {
   }
 }
 
-GrowableArray<struct crac::MemoryPersisterBase::record> crac::MemoryPersisterBase::_index(256, mtInternal);
-int crac::MemoryPersisterBase::_fd = -1;
-bool crac::MemoryPersisterBase::_loading = false;
-size_t crac::MemoryPersisterBase::_offset_curr = 0;
+GrowableArray<struct crac::MemoryPersister::record> crac::MemoryPersister::_index(256, mtInternal);
+int crac::MemoryPersister::_fd = -1;
+DEBUG_ONLY(bool crac::MemoryPersister::_loading = false;)
+size_t crac::MemoryPersister::_offset_curr = 0;
 
-void crac::MemoryPersisterBase::ensure_open(bool loading) {
+void crac::MemoryPersister::ensure_open(bool loading) {
   // We don't need any synchronization as only the VM thread persists memory
   assert(Thread::current()->is_VM_thread(), "All writes should be performed by VM thread");
   assert(_loading == loading, loading ? "Cannot load during persist" : "Cannot persist when loading");
@@ -709,17 +706,19 @@ static bool is_all_zeroes(void *addr, size_t page_size) {
   return ptr == end;
 }
 
-bool crac::MemoryPersister::store(void *addr, size_t length, size_t mapped_length) {
+#define BAD_OFFSET 0xFFFFFFFFBAD0FF5Eull
+
+bool crac::MemoryPersister::store(void *addr, size_t length, size_t mapped_length, bool executable) {
   if (mapped_length == 0) {
     return true;
   }
 
   size_t page_size = os::vm_page_size();
   assert(((u_int64_t) addr & (page_size - 1)) == 0, "Unaligned address %p", addr);
-  assert(length <= mapped_length, "Useful length %lx shorter than mapped %lx", length, mapped_length);
-  assert((mapped_length & (page_size - 1)) == 0, "Unaligned length %lx at %p", length, addr);
+  assert(length <= mapped_length, "Useful length %lx longer than mapped %lx", length, mapped_length);
+  assert((mapped_length & (page_size - 1)) == 0, "Unaligned length %lx at %p (page size %lx)", mapped_length, addr, page_size);
 
-  MemoryPersisterBase::ensure_open(false);
+  MemoryPersister::ensure_open(false);
 
   char *curr = (char *) addr;
   char *end = curr + length;
@@ -733,8 +732,10 @@ bool crac::MemoryPersister::store(void *addr, size_t length, size_t mapped_lengt
       os::seek_to_file_offset(_fd, _offset_curr + (curr - (char *) addr));
       // We don't have to punch holes using fallocate, OS creates holes automatically
       // when we are seeking over gaps.
-      // Note: in the future it might be useful to record holes explicitly, too,
+      // TODO: in the future it might be useful to record holes explicitly, too,
       // to support transfer or encryption.
+      // On the other hand, recording zero-only sections into index individually will
+      // complicate the assertions as there would be > 2 records per one store()
       do_zeroes = false;
       start = curr;
     } else {
@@ -753,12 +754,25 @@ bool crac::MemoryPersister::store(void *addr, size_t length, size_t mapped_lengt
     }
   }
 
-  _index.append({
-    .addr = (u_int64_t) addr,
-    .length = (u_int64_t) length,
-    .offset = (u_int64_t) _offset_curr
-  });
-  _offset_curr += align_up(length, page_size);
+  int execFlag = (executable ? Flags::EXECUTABLE : 0);
+  if (length > 0) {
+    _index.append({
+      .addr = (u_int64_t) addr,
+      .length = (u_int64_t) length,
+      .offset = (u_int64_t) _offset_curr,
+      .flags = Flags::DATA | Flags::ACCESSIBLE | execFlag
+    });
+  }
+  size_t aligned_length = align_up(length, page_size);
+  if (aligned_length < mapped_length) {
+    _index.append({
+      .addr = (u_int64_t) addr + aligned_length,
+      .length = (u_int64_t) mapped_length - aligned_length,
+      .offset = BAD_OFFSET,
+      .flags = Flags::ACCESSIBLE | execFlag
+    });
+  }
+  _offset_curr += aligned_length;
   return unmap(addr, mapped_length);
 }
 
@@ -768,44 +782,92 @@ bool crac::MemoryPersister::store_gap(void *addr, size_t length) {
   if (length == 0) {
     return true;
   }
-  // Not storing anything, not even to index
+  _index.append({
+    .addr = (u_int64_t) addr,
+    .length = (u_int64_t) length,
+    .offset = BAD_OFFSET,
+    .flags = 0
+  });
   return unmap(addr, length);
 }
 
-bool crac::MemoryLoader::load(void *addr, size_t expected_length, size_t mapped_length, bool executable) {
+void crac::MemoryPersister::load_on_restore() {
   ensure_open(true);
-  if (mapped_length == 0) {
-    return true;
+  for (int i = 0; i < _index.length(); ++i) {
+    const struct record &r = _index.at(i);
+    size_t aligned_length = align_up(r.length, os::vm_page_size());
+    int fd = _fd;
+    size_t offset = r.offset;
+    if ((r.flags & Flags::DATA) == 0) {
+      fd = -1;
+      offset = 0;
+    }
+    bool executable = r.flags & Flags::EXECUTABLE;
+    if (r.flags && Flags::ACCESSIBLE) {
+      if (!map((void *) r.addr, aligned_length, fd, offset, executable)) {
+        fatal("Cannot remap memory at %p-%p", (void *) r.addr, (void *)(r.addr + aligned_length));
+      }
+    } else {
+      if (!map_gap((void *) r.addr, aligned_length)) {
+        fatal("Cannot remap non-accessible memory at %p-%p", (void *) r.addr, (void *)(r.addr + aligned_length));
+      }
+    }
   }
-
-  SearchInIndex comparator;
-  bool found;
-  size_t at = (size_t) _index.find_sorted<struct record>(&comparator, { .addr = (u_int64_t) addr }, found);
-  if (!found) {
-    tty->print_cr("Cannot find region with address %p (%d records)", addr, _index.length());
-    return false;
-  }
-  const struct record &r = _index.at(at);
-  if (r.length != (u_int64_t) expected_length) {
-    tty->print_cr("Persisted memory region length does not match at %p: %lu vs. %lu",
-    addr, expected_length, r.length);
-    return false;
-  }
-  size_t aligned_length = align_up(expected_length, os::vm_page_size());
-  if (expected_length > 0 && !map(addr, expected_length, _fd, r.offset, executable)) {
-    return false;
-  }
-  if (aligned_length < mapped_length && !map((char *) addr + aligned_length, mapped_length - aligned_length, -1, 0, executable)) {
-    return false;
-  }
-  return true;
 }
 
-void crac::MemoryPersister::persist() {
+#ifdef ASSERT
+void crac::MemoryPersister::assert_mem(void *addr, size_t used, size_t total) {
+  assert(((u_int64_t) addr & (os::vm_page_size() - 1)) == 0, "Unaligned address %p", addr);
+  assert((total & (os::vm_page_size() - 1)) == 0, "Unaligned length %lx", total);
+
+  if (used > 0) {
+    SearchInIndex comparator;
+    bool found;
+    size_t at = (size_t) _index.find_sorted<struct record>(&comparator, { .addr = (u_int64_t) addr }, found);
+    assert(found, "Cannot find region with address %p (%d records)", addr, _index.length());
+    record &r = _index.at(at);
+    assert(r.length == used, "Persisted memory region length does not match at %p: %lu vs. %lu", addr, used, r.length);
+    assert(r.flags & (Flags::DATA | Flags::ACCESSIBLE), "Bad flags for %p: 0x%x", addr, r.flags);
+    assert(r.offset != BAD_OFFSET, "Invalid offset at %p", addr);
+  }
+  size_t aligned = align_up(used, os::vm_page_size());
+  size_t unused = total - aligned;
+  void *gap_addr = (char *) addr + aligned;
+  if (unused > 0) {
+    SearchInIndex comparator;
+    bool found;
+    size_t at = (size_t) _index.find_sorted<struct record>(&comparator, { .addr = (u_int64_t) gap_addr }, found);
+    assert(found, "Cannot find region with address %p (%d records)", addr, _index.length());
+    record &r = _index.at(at);
+    assert(r.length == unused, "Persisted gap length does not match at %p: %lu vs. %lu", gap_addr, unused, r.length);
+    assert((r.flags & (Flags::DATA | Flags::ACCESSIBLE)) == Flags::ACCESSIBLE, "Bad flags for gap %p: 0x%x", gap_addr, r.flags);
+    assert(r.offset == BAD_OFFSET, "Invalid offset at %p: %lx", gap_addr, r.offset);
+  }
+}
+
+void crac::MemoryPersister::assert_gap(void *addr, size_t length) {
+  assert(((u_int64_t) addr & (os::vm_page_size() - 1)) == 0, "Unaligned address %p", addr);
+  assert((length & (os::vm_page_size() - 1)) == 0, "Unaligned length %lx", length);
+
+  if (length > 0) {
+    SearchInIndex comparator;
+    bool found;
+    size_t at = (size_t) _index.find_sorted<struct record>(&comparator, { .addr = (u_int64_t) addr }, found);
+    assert(found, "Cannot find region with address %p (%d records)", addr, _index.length());
+    record &r = _index.at(at);
+    assert(r.length == length, "Persisted memory region length does not match at %p: %lu vs. %lu", addr, length, r.length);
+    assert((r.flags & (Flags::DATA | Flags::ACCESSIBLE)) == 0, "Bad flags for %p: 0x%x", addr, r.flags);
+    assert(r.offset == BAD_OFFSET, "Invalid offset at %p: %lx", addr, r.offset);
+  }
+}
+#endif // ASSERT
+
+void crac::MemoryPersister::finalize() {
   if (_fd >= 0) {
     ::close(_fd);
     _fd = -1;
   }
+#ifdef ASSERT
   _index.sort([](struct record *a, struct record *b) {
     // simple cast to int doesn't work, let compiler figure it out with cmovs
     if (a->addr < b->addr) return -1;
@@ -813,6 +875,7 @@ void crac::MemoryPersister::persist() {
     return 0;
   });
   _loading = true;
+#endif // ASSERT
   // Note: here we could persist _index and dallocate it as well but since it's
-  // usually tens or hundreds of 24 byte records, we won't save much.
+  // usually tens or hundreds of 32 byte records, we won't save much.
 }

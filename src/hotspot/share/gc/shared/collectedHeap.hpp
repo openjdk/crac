@@ -545,7 +545,7 @@ class CollectedHeap : public CHeapObj<mtGC> {
   virtual void persist_for_checkpoint() {
     // by default ignore the request
   }
-  virtual void load_on_restore() {}
+  virtual void on_restore() {}
 };
 
 // Class to set and reset the GC cause for a CollectedHeap.

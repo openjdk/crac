@@ -400,15 +400,17 @@ bool VM_Crac::memory_checkpoint() {
 
 void VM_Crac::memory_restore() {
   if (CRPersistMemory) {
-    Universe::heap()->load_on_restore();
+    Universe::heap()->on_restore();
+#ifdef ASSERT
     metaspace::VirtualSpaceList *vsc = metaspace::VirtualSpaceList::vslist_class();
     if (vsc != nullptr) {
-      vsc->load_on_restore();
+      vsc->assert_checkpoint();
     }
     metaspace::VirtualSpaceList *vsn = metaspace::VirtualSpaceList::vslist_nonclass();
     if (vsn != nullptr) {
-      vsn->load_on_restore();
+      vsn->assert_checkpoint();
     }
+#endif // ASSERT
   }
   PerfMemoryLinux::restore();
 }
@@ -531,23 +533,16 @@ bool crac::MemoryPersister::unmap(void *addr, size_t length) {
   return true;
 }
 
-bool crac::MemoryLoader::map(void *addr, size_t length, int fd, size_t offset, bool executable) {
+bool crac::MemoryPersister::map(void *addr, size_t length, int fd, size_t offset, bool executable) {
   if (::mmap(addr, length, PROT_READ | PROT_WRITE | (executable ? PROT_EXEC : 0),
       MAP_PRIVATE | MAP_FIXED | (fd < 0 ? MAP_ANONYMOUS : 0), fd, offset) != addr) {
-    perror("::mmap RW");
+    fprintf(stderr, "::mmap %p %lu RW: %m\n", addr, length);
     return false;
   }
   return true;
 }
 
-bool crac::MemoryLoader::load_gap(void *addr, size_t length) {
-  if (length == 0) {
-    return true;
-  }
-
-  assert(((u_int64_t) addr & (os::vm_page_size() - 1)) == 0, "Unaligned address %p", addr);
-  assert((length & (os::vm_page_size() - 1)) == 0, "Unaligned length %lx", length);
-  // Not storing anything, not even to index
+bool crac::MemoryPersister::map_gap(void *addr, size_t length) {
   if (::mmap(addr, length, PROT_NONE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0) != addr) {
     perror("::mmap NONE");
     return false;
@@ -557,9 +552,17 @@ bool crac::MemoryLoader::load_gap(void *addr, size_t length) {
 
 static volatile int persist_waiters = 0;
 static volatile int persist_futex = 0;
+
+#if __GLIBC__ >= 2 && __GLIBC_MINOR__ >= 35
+#define HAS_RSEQ
+#endif
+
+#ifdef HAS_RSEQ
 static struct __ptrace_rseq_configuration *rseq_configs = nullptr;
+#endif
 
 static void block_in_other_futex(int signal, siginfo_t *info, void *ctx) {
+#ifdef HAS_RSEQ
   struct __ptrace_rseq_configuration *rseqc = &rseq_configs[info->si_value.sival_int];
   if (rseqc->rseq_abi_pointer) {
     // Unregister rseq to prevent CRIU reading the configuration
@@ -567,30 +570,55 @@ static void block_in_other_futex(int signal, siginfo_t *info, void *ctx) {
       perror("Unregister rseq");
     }
   }
+#endif // HAS_RSEQ
 
   Atomic::add(&persist_waiters, 1);
   // From now on the code must not use stack variables!
-  // TODO: to be on the safe side, set alternative stack for this signal.
-  // However, that's possible only from the calling thread, so we'd need to
-  // reconfigure it before ::add and raise signal again.
-  while (persist_futex) {
-    syscall(SYS_futex, &persist_futex, FUTEX_WAIT_PRIVATE, 1, nullptr, nullptr, 0);
-  }
+#if defined(__x86_64__)
+  asm volatile (
+			".begin: syscall\n\t"
+      "mov (%%rsi), %%ecx\n\t"
+      "test %%ecx, %%ecx\n\t"
+      "jnz .begin\n\t"
+			: // ignore return value
+			: "a"(SYS_futex), "D"(FUTEX_WAIT_PRIVATE), "S"(&persist_futex), "d"(1)
+			: "memory", "cc", "rcx", "r11");
+#elif defined(__aarch64__)
+  register int sysnum asm ("x8") = SYS_futex;
+  register int op asm ("x0") = FUTEX_WAIT_PRIVATE;
+  register volatile int *futex asm ("x1") = &persist_futex;
+  register int value asm ("x2") = 1;
+  asm volatile (
+			".begin: svc #0\n\t"
+      "ldr w3, [x1]\n\t"
+      "cbnz w3, .begin\n\t"
+			: // ignore return value
+			: "r"(sysnum), "r"(op), "r"(futex), "r"(value)
+			: "memory", "cc", "x3");
+#else
+# error Unimplemented
+  // This is the logic any platform should perform:
+  // while (persist_futex) {
+  //    syscall(SYS_futex, &persist_futex, FUTEX_WAIT_PRIVATE, 1, nullptr, nullptr, 0);
+  // }
+#endif // x86_64 or aarch64
 
+  int dec = Atomic::sub(&persist_waiters, 1);
+#ifdef HAS_RSEQ
   if (rseqc->rseq_abi_pointer) {
     // Register the rseq back after restore
     if (syscall(SYS_rseq, rseqc->rseq_abi_pointer, rseqc->rseq_abi_size, 0, rseqc->signature) != 0) {
       perror("Register rseq again");
     }
   }
-
-  int dec = Atomic::sub(&persist_waiters, 1);
   if (dec == 0) {
     FREE_C_HEAP_ARRAY(struct __ptrace_rseq_configuration, rseq_configs);
     rseq_configs = nullptr;
   }
+#endif // HAS_RSEQ
 }
 
+#ifdef HAS_RSEQ
 class GetRseqClosure: public ThreadClosure {
 private:
   int _idx;
@@ -624,6 +652,7 @@ public:
     _idx++;
   }
 };
+#endif // HAS_RSEQ
 
 class SignalClosure: public ThreadClosure {
 private:
@@ -657,9 +686,11 @@ void crac::before_threads_persisted() {
   CountThreadsClosure counter;
   Threads::java_threads_do(&counter);
 
+#ifdef HAS_RSEQ
   rseq_configs = NEW_C_HEAP_ARRAY(
     struct __ptrace_rseq_configuration, counter.count(), mtInternal);
   guarantee(rseq_configs, "Cannot allocate %lu rseq structs", counter.count());
+#endif // HAS_RSEQ
 
   sigset_t blocking_set;
   sigemptyset(&blocking_set);
@@ -669,8 +700,10 @@ void crac::before_threads_persisted() {
   if (child == 0) {
     siginfo_t info;
     sigwaitinfo(&blocking_set, &info);
+#ifdef HAS_RSEQ
     GetRseqClosure get_rseq;
     Threads::java_threads_do(&get_rseq);
+#endif // HAS_RSEQ
     os::exit(0);
   } else {
     sigprocmask(SIG_UNBLOCK, &blocking_set, nullptr);

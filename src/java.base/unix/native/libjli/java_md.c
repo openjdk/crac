@@ -655,9 +655,9 @@ static int main_thread_result = 0;
  * Signature adapter for pthread_create() or thr_create().
  */
 static void* ThreadJavaMain(void* args) {
+    pthread_mutex_lock(&main_thread_mutex);
     main_thread_result = JavaMain(args);
     void *retval = (void*)(intptr_t) main_thread_result;
-    pthread_mutex_lock(&main_thread_mutex);
     main_thread_done = true;
     pthread_cond_signal(&main_thread_cond);
     pthread_mutex_unlock(&main_thread_mutex);

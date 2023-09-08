@@ -2020,8 +2020,8 @@ const int ObjectAlignmentInBytes = 8;
       "Dump heap on CheckpointException thrown because of CRaC "            \
       "precondition failed")                                                \
                                                                             \
-  product(bool, CRPersistMemory, true, "Persist/load memory from within "   \
-      "the VM rather than relying on C/R engine.")                          \
+  product(bool, CRPersistMemory, true, DIAGNOSTIC, "Persist/load memory "   \
+      "from within the VM rather than relying on the C/R engine.")          \
                                                                             \
   product(bool, CRPrintResourcesOnCheckpoint, false, DIAGNOSTIC,            \
       "Print resources to decide CheckpointException")                      \

@@ -253,7 +253,6 @@ void G1PageBasedVirtualSpace::print() {
 #endif
 
 void G1PageBasedVirtualSpace::persist_for_checkpoint() {
-  crac::MemoryPersister persister;
   bool flip = _committed.at(0);
   size_t index = 0;
   while (index < _committed.size()) {
@@ -261,12 +260,12 @@ void G1PageBasedVirtualSpace::persist_for_checkpoint() {
     if (flip) {
       next = _committed.find_first_clear_bit(index);
       size_t length = (next - index) * _page_size;
-      if (!persister.store((char *) _low_boundary + index * _page_size, length, length)) {
+      if (!crac::MemoryPersister::store((char *) _low_boundary + index * _page_size, length, length, false)) {
         fatal("Failed to persist committed virtual space node range");
       }
     } else {
       next = _committed.find_first_set_bit(index);
-      if (!persister.store_gap((char *) _low_boundary + index * _page_size, (next - index) * _page_size)) {
+      if (!crac::MemoryPersister::store_gap((char *) _low_boundary + index * _page_size, (next - index) * _page_size)) {
         fatal("Failed to persist uncommitted virtual space node range");
       }
     }
@@ -275,8 +274,8 @@ void G1PageBasedVirtualSpace::persist_for_checkpoint() {
   }
 }
 
-void G1PageBasedVirtualSpace::load_on_restore() {
-  crac::MemoryLoader loader;
+#ifdef ASSERT
+void G1PageBasedVirtualSpace::assert_checkpoint() {
   bool flip = _committed.at(0);
   size_t index = 0;
   while (index < _committed.size()) {
@@ -284,16 +283,13 @@ void G1PageBasedVirtualSpace::load_on_restore() {
     if (flip) {
       next = _committed.find_first_clear_bit(index);
       size_t length = (next - index) * _page_size;
-      if (!loader.load((char *) _low_boundary + index * _page_size, length, length, false)) {
-        fatal("Cannot restore committed virtual space node");
-      }
+      crac::MemoryPersister::assert_mem((char *) _low_boundary + index * _page_size, length, length);
     } else {
       next = _committed.find_first_set_bit(index);
-      if (!loader.load_gap((char *) _low_boundary + index * _page_size, (next - index) * _page_size)) {
-        fatal("Cannot map uncommitted virtual space node");
-      }
+      crac::MemoryPersister::assert_gap((char *) _low_boundary + index * _page_size, (next - index) * _page_size);
     }
     flip = !flip;
     index = next;
   }
 }
+#endif // ASSERT

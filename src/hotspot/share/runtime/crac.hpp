@@ -48,12 +48,19 @@ public:
     return javaTimeNanos_offset;
   }
 
-  class MemoryPersisterBase {
+  class MemoryPersister: AllStatic {
   protected:
+    enum Flags {
+      DATA       = 1 << 0,
+      EXECUTABLE = 1 << 1,
+      ACCESSIBLE = 1 << 2,
+    };
+
     struct record {
       u_int64_t addr;
       u_int64_t length;
       u_int64_t offset;
+      int flags;
     };
 
     class SearchInIndex: public CompareClosure<struct record> {
@@ -66,30 +73,27 @@ public:
     };
 
     static void ensure_open(bool loading);
-    void allocate_index(size_t slots);
+    static void allocate_index(size_t slots);
 
-    static GrowableArray<struct crac::MemoryPersisterBase::record> _index;
+    static GrowableArray<struct crac::MemoryPersister::record> _index;
     static int _fd;
     static bool _loading;
     static size_t _offset_curr;
-  };
 
-  class MemoryPersister: protected MemoryPersisterBase {
   public:
-    bool store(void *addr, size_t length, size_t mapped_length);
-    bool store_gap(void *addr, size_t length);
+    static bool store(void *addr, size_t length, size_t mapped_length, bool executable);
+    static bool store_gap(void *addr, size_t length);
 
-    static void persist();
+    static void finalize();
+    static void load_on_restore();
+#ifdef ASSERT
+    static void assert_mem(void *addr, size_t used, size_t total);
+    static void assert_gap(void *addr, size_t length);
+#endif // ASSERT
   private:
-    bool unmap(void *addr, size_t length);
-  };
-
-  class MemoryLoader: protected MemoryPersisterBase {
-  public:
-    bool load(void *addr, size_t expected_length, size_t mapped_length, bool executable);
-    bool load_gap(void *addr, size_t length);
-  private:
-    bool map(void *addr, size_t length, int fd, size_t offset, bool executable);
+    static bool unmap(void *addr, size_t length);
+    static bool map(void *addr, size_t length, int fd, size_t offset, bool executable);
+    static bool map_gap(void *addr, size_t length);
   };
 
   static void before_threads_persisted();

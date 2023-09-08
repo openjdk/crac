@@ -342,7 +342,7 @@ class CodeCache : AllStatic {
   static void print_names(outputStream *out);
 
   static void persist_for_checkpoint();
-  static void load_on_restore();
+  DEBUG_ONLY(static void assert_checkpoint();)
 };
 
 

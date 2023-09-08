@@ -832,7 +832,6 @@ void HeapRegionManager::rebuild_free_list(WorkerThreads* workers) {
 
 
 void HeapRegionManager::persist_for_checkpoint() {
-  crac::MemoryPersister persister;
   size_t page_size = os::vm_page_size();
   for (size_t i = 0; i < _regions.length(); ++i) {
     HeapRegion *region = _regions.get_by_index(i);
@@ -842,11 +841,11 @@ void HeapRegionManager::persist_for_checkpoint() {
     u_int64_t top_aligned = align_up((u_int64_t) region->top(), page_size);
     // both active and inactive are mapped RW
     if (_committed_map.active(i) || _committed_map.inactive(i)) {
-      if (!persister.store(region->bottom(), region->used(), region->capacity())) {
+      if (!crac::MemoryPersister::store(region->bottom(), region->used(), region->capacity(), false)) {
         fatal("Cannot persist heap region %p - %p", region->bottom(), region->end());
       }
     } else {
-      if (!persister.store_gap(region->bottom(), region->capacity())) {
+      if (!crac::MemoryPersister::store_gap(region->bottom(), region->capacity())) {
         fatal("Cannot persist heap region %p - %p", region->bottom(), region->end());
       }
     }
@@ -856,25 +855,22 @@ void HeapRegionManager::persist_for_checkpoint() {
   _bitmap_mapper->persist_for_checkpoint();
 }
 
-void HeapRegionManager::load_on_restore() {
-  crac::MemoryLoader loader;
+#ifdef ASSERT
+void HeapRegionManager::assert_checkpoint() {
   for (size_t i = 0; i < _regions.length(); ++i) {
     HeapRegion *region = _regions.get_by_index(i);
     if (region == nullptr) {
       continue;
     }
     if (_committed_map.active(i) || _committed_map.inactive(i)) {
-      if (!loader.load(region->bottom(), region->used(), region->capacity(), false)) {
-        fatal("Cannot restore heap region %p - %p", region->bottom(), region->end());
-      }
+      crac::MemoryPersister::assert_mem(region->bottom(), region->used(), region->capacity());
     } else {
-      if (!loader.load_gap(region->bottom(), region->capacity())) {
-        fatal("Cannot restore heap region %p - %p", region->bottom(), region->end());
-      }
+      crac::MemoryPersister::assert_gap(region->bottom(), region->capacity());
     }
   }
 
-  _bot_mapper->load_on_restore();
-  _cardtable_mapper->load_on_restore();
-  _bitmap_mapper->load_on_restore();
+  _bot_mapper->assert_checkpoint();
+  _cardtable_mapper->assert_checkpoint();
+  _bitmap_mapper->assert_checkpoint();
 }
+#endif // ASSERT

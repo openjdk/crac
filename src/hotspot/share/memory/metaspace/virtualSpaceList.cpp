@@ -221,15 +221,16 @@ void VirtualSpaceList::persist_for_checkpoint() {
   }
 }
 
-void VirtualSpaceList::load_on_restore() {
+#ifdef ASSERT
+void VirtualSpaceList::assert_checkpoint() {
   size_t granule_size = Settings::commit_granule_bytes();
 
-  crac::MemoryLoader loader;
   VirtualSpaceNode* vsn = _first_node;
   while (vsn != nullptr) {
-    vsn->load_on_restore();
+    vsn->assert_checkpoint();
     vsn = vsn->next();
   }
 }
+#endif // ASSERT
 
 } // namespace metaspace

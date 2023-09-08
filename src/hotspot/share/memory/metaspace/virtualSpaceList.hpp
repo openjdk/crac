@@ -140,7 +140,7 @@ public:
   size_t word_size_of_first_node() const { return _first_node != nullptr ? _first_node->word_size() : 0; }
 
   void persist_for_checkpoint();
-  void load_on_restore();
+  DEBUG_ONLY(void assert_checkpoint();)
 };
 
 } // namespace metaspace

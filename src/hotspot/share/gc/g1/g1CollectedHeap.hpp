@@ -1321,14 +1321,16 @@ public:
 
   void persist_for_checkpoint() {
     _hrm.persist_for_checkpoint();
-    _cm->persist_for_checkpoint();
     G1FromCardCache::persist_for_checkpoint();
+    _cm->persist_for_checkpoint();
     _task_queues->dealloc_queues();
   }
-  void load_on_restore() {
-    _hrm.load_on_restore();
-    _cm->load_on_restore();
-    G1FromCardCache::load_on_restore();
+  void on_restore() {
+  #ifdef ASSERT
+    _hrm.assert_checkpoint();
+    G1FromCardCache::assert_checkpoint();
+  #endif // ASSERT
+    _cm->on_restore();
     _task_queues->realloc_queues();
   }
 };

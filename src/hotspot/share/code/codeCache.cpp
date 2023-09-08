@@ -1888,11 +1888,13 @@ void CodeCache::persist_for_checkpoint() {
   }
 }
 
-void CodeCache::load_on_restore() {
+#ifdef ASSERT
+void CodeCache::assert_checkpoint() {
   FOR_ALL_HEAPS(it) {
     CodeHeap *heap = *it;
     if (heap != nullptr) {
-      heap->load_on_restore();
+      heap->assert_checkpoint();
     }
   }
 }
+#endif // ASSERT

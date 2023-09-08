@@ -96,20 +96,18 @@ void G1FromCardCache::persist_for_checkpoint() {
   if (_cache == nullptr || _static_mem_size == 0) {
     return;
   }
-  crac::MemoryPersister persister;
   size_t size = align_up(_static_mem_size, os::vm_allocation_granularity());
-  if (!persister.store(_cache, size, size)) {
+  if (!crac::MemoryPersister::store(_cache, size, size, false)) {
     fatal("Failed to persist G1FromCardCache");
   }
 }
 
-void G1FromCardCache::load_on_restore() {
+#ifdef ASSERT
+void G1FromCardCache::assert_checkpoint() {
   if (_cache == nullptr || _static_mem_size == 0) {
     return;
   }
-  crac::MemoryLoader loader;
   size_t size = align_up(_static_mem_size, os::vm_allocation_granularity());
-  if (!loader.load(_cache, size, size, false)) {
-    fatal("Cannot load G1FromCard cache file");
-  }
+  crac::MemoryPersister::assert_mem(_cache, size, size);
 }
+#endif //ASSERT

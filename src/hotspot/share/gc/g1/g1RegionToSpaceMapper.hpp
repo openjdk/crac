@@ -91,9 +91,11 @@ class G1RegionToSpaceMapper : public CHeapObj<mtGC> {
     _storage.persist_for_checkpoint();
   }
 
-  void load_on_restore() {
-    _storage.load_on_restore();
+#ifdef ASSERT
+  void assert_checkpoint() {
+    _storage.assert_checkpoint();
   }
+#endif // ASSERT
 };
 
 #endif // SHARE_GC_G1_G1REGIONTOSPACEMAPPER_HPP

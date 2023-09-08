@@ -243,7 +243,7 @@ class VirtualSpace {
   void print() const;
 
   void persist_on_checkpoint();
-  void load_on_restore();
+  DEBUG_ONLY(void assert_checkpoint();)
 };
 
 #endif // SHARE_MEMORY_VIRTUALSPACE_HPP

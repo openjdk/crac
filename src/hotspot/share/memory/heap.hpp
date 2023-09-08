@@ -234,10 +234,12 @@ public:
     _segmap.persist_on_checkpoint();
   }
 
-  void load_on_restore() {
-    _memory.load_on_restore();
-    _segmap.load_on_restore();
+#ifdef ASSERT
+  void assert_checkpoint() {
+    _memory.assert_checkpoint();
+    _segmap.assert_checkpoint();
   }
+#endif // ASSERT
 };
 
 #endif // SHARE_MEMORY_HEAP_HPP

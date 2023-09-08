@@ -209,7 +209,7 @@ private:
   void set_empty();
 
   void persist_for_checkpoint();
-  void load_on_restore();
+  DEBUG_ONLY(void assert_checkpoint());
 
   // Apply Fn to every oop on the mark stack. The mark stack must not
   // be modified while iterating.
@@ -625,8 +625,8 @@ public:
     _task_queues->dealloc_queues();
   }
 
-  void load_on_restore() {
-    _global_mark_stack.load_on_restore();
+  void on_restore() {
+    DEBUG_ONLY(_global_mark_stack.assert_checkpoint();)
     _task_queues->realloc_queues();
   }
 

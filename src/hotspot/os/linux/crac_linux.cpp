@@ -576,25 +576,25 @@ static void block_in_other_futex(int signal, siginfo_t *info, void *ctx) {
   // From now on the code must not use stack variables!
 #if defined(__x86_64__)
   asm volatile (
-			".begin: syscall\n\t"
+      ".begin: syscall\n\t"
       "mov (%%rsi), %%ecx\n\t"
       "test %%ecx, %%ecx\n\t"
       "jnz .begin\n\t"
-			: // ignore return value
-			: "a"(SYS_futex), "D"(FUTEX_WAIT_PRIVATE), "S"(&persist_futex), "d"(1)
-			: "memory", "cc", "rcx", "r11");
+      : // ignore return value
+      : "a"(SYS_futex), "D"(FUTEX_WAIT_PRIVATE), "S"(&persist_futex), "d"(1)
+      : "memory", "cc", "rcx", "r11");
 #elif defined(__aarch64__)
   register int sysnum asm ("x8") = SYS_futex;
   register int op asm ("x0") = FUTEX_WAIT_PRIVATE;
   register volatile int *futex asm ("x1") = &persist_futex;
   register int value asm ("x2") = 1;
   asm volatile (
-			".begin: svc #0\n\t"
+    ".begin: svc #0\n\t"
       "ldr w3, [x1]\n\t"
       "cbnz w3, .begin\n\t"
-			: // ignore return value
-			: "r"(sysnum), "r"(op), "r"(futex), "r"(value)
-			: "memory", "cc", "x3");
+      : // ignore return value
+      : "r"(sysnum), "r"(op), "r"(futex), "r"(value)
+      : "memory", "cc", "x3");
 #else
 # error Unimplemented
   // This is the logic any platform should perform:

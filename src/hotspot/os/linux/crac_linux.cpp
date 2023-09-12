@@ -577,14 +577,20 @@ static void block_in_other_futex(int signal, siginfo_t *info, void *ctx) {
   int retval = 0;
 #if defined(__x86_64__)
   asm volatile (
+    "mov $0, %%r8\n\t"
+    "mov $0, %%r9\n\t"
+    "mov $0, %%r10\n\t"
     ".begin: mov %[sysnum], %%eax\n\t"
     "syscall\n\t"
+    "test %%rax, %%rax\n\t" // exit the loop on error
+    "jnz .end\n\t"
     "mov (%%rdi), %%ecx\n\t"
     "test %%ecx, %%ecx\n\t"
     "jnz .begin\n\t"
+    ".end: nop\n\t"
     : "=a"(retval)
     : [sysnum]"i"(SYS_futex), "D"(&persist_futex), "S"(FUTEX_WAIT_PRIVATE), "d"(1)
-    : "memory", "cc", "rcx", "r11");
+    : "memory", "cc", "rcx", "r8", "r9", "r10", "r11");
 #elif defined(__aarch64__)
   register volatile int *futex asm("x7") = &persist_futex;
   asm volatile (
@@ -596,10 +602,11 @@ static void block_in_other_futex(int signal, siginfo_t *info, void *ctx) {
     ".begin: mov x0, %[futex]\n\t"
     "mov x3, 0\n\t"
     "svc #0\n\t"
+    "cbnz x0, .end\n\t" // exit the loop on error
     "mov x3, %[futex]\n\t"
     "ldr w3, [x3]\n\t"
     "cbnz w3, .begin\n\t"
-    "mov %[retval], x0\n\t"
+    ".end: mov %[retval], x0\n\t"
     : [retval]"=r"(retval)
     : [sysnum]"i"(SYS_futex), [futex]"r"(futex), [op]"i"(FUTEX_WAIT_PRIVATE)
     : "memory", "cc", "x0", "x1", "x2", "x3", "x4", "x5", "x8");
@@ -613,8 +620,13 @@ static void block_in_other_futex(int signal, siginfo_t *info, void *ctx) {
 
   if (retval != 0) {
     errno = -retval;
-    perror("Syscall wait loop");
-    os::exit(1);
+    // EAGAIN = EWOULDBLOCK are returned if persist_futex is already 0 (race with the loop condition)
+    if (errno != EAGAIN && errno != EWOULDBLOCK) {
+      perror("CRaC thread futex wait loop");
+      os::exit(1);
+    }
+    // Another option is EINTR when the thread is signalled; this shouldn't happen,
+    // though, so we'll treat that as an error.
   }
 
 

@@ -319,8 +319,6 @@ static void persist_thread_stacks() {
 // Not platform-specific, but skip this on non-Linux
 #ifdef LINUX
   crac::before_threads_persisted();
-  CountThreadsClosure counter;
-  Threads::java_threads_do(&counter);
   PersistThreadStackClosure closure;
   Threads::java_threads_do(&closure);
 #endif

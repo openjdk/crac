@@ -701,27 +701,24 @@ void crac::before_threads_persisted() {
   CountThreadsClosure counter;
   Threads::java_threads_do(&counter);
 
+  sigset_t blocking_set;
+  sigemptyset(&blocking_set);
+  sigaddset(&blocking_set, SIGUSR1);
+
 #ifdef HAS_RSEQ
   rseq_configs = NEW_C_HEAP_ARRAY(
     struct __ptrace_rseq_configuration, counter.count(), mtInternal);
   guarantee(rseq_configs, "Cannot allocate %lu rseq structs", counter.count());
-#endif // HAS_RSEQ
 
-  sigset_t blocking_set;
-  sigemptyset(&blocking_set);
-  sigaddset(&blocking_set, SIGUSR1);
   sigprocmask(SIG_BLOCK, &blocking_set, nullptr);
   pid_t child = fork();
   if (child == 0) {
     siginfo_t info;
     sigwaitinfo(&blocking_set, &info);
-#ifdef HAS_RSEQ
     GetRseqClosure get_rseq;
     Threads::java_threads_do(&get_rseq);
-#endif // HAS_RSEQ
     os::exit(0);
   } else {
-    sigprocmask(SIG_UNBLOCK, &blocking_set, nullptr);
     // Allow child to trace us if /proc/sys/kernel/yama/ptrace_scope = 1
     prctl(PR_SET_PTRACER, child, 0, 0);
     kill(child, SIGUSR1);
@@ -730,6 +727,9 @@ void crac::before_threads_persisted() {
       perror("Waiting for tracer child");
     }
   }
+#endif // HAS_RSEQ
+  // Make sure the signal is not blocked even if we didn't use it above for rseq
+  sigprocmask(SIG_UNBLOCK, &blocking_set, nullptr);
 
   struct sigaction action, old;
   action.sa_sigaction = block_in_other_futex;

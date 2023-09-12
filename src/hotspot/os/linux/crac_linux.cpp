@@ -574,34 +574,49 @@ static void block_in_other_futex(int signal, siginfo_t *info, void *ctx) {
 
   Atomic::add(&persist_waiters, 1);
   // From now on the code must not use stack variables!
+  int retval = 0;
 #if defined(__x86_64__)
   asm volatile (
-    ".begin: syscall\n\t"
-    "mov (%%rsi), %%ecx\n\t"
+    ".begin: mov %[sysnum], %%eax\n\t"
+    "syscall\n\t"
+    "mov (%%rdi), %%ecx\n\t"
     "test %%ecx, %%ecx\n\t"
     "jnz .begin\n\t"
-    : // ignore return value
-    : "a"(SYS_futex), "D"(FUTEX_WAIT_PRIVATE), "S"(&persist_futex), "d"(1)
+    : "=a"(retval)
+    : [sysnum]"i"(SYS_futex), "D"(&persist_futex), "S"(FUTEX_WAIT_PRIVATE), "d"(1)
     : "memory", "cc", "rcx", "r11");
 #elif defined(__aarch64__)
-  register int sysnum asm ("x8") = SYS_futex;
-  register int op asm ("x0") = FUTEX_WAIT_PRIVATE;
-  register volatile int *futex asm ("x1") = &persist_futex;
-  register int value asm ("x2") = 1;
+  register volatile int *futex asm("x7") = &persist_futex;
   asm volatile (
-    ".begin: svc #0\n\t"
-    "ldr w3, [x1]\n\t"
+    "mov x1, %[op]\n\t"
+    "mov x2, 1\n\t"
+    "mov x4, 0\n\t"
+    "mov x5, 0\n\t"
+    "mov x8, %[sysnum]\n\t"
+    ".begin: mov x0, %[futex]\n\t"
+    "mov x3, 0\n\t"
+    "svc #0\n\t"
+    "mov x3, %[futex]\n\t"
+    "ldr w3, [x3]\n\t"
     "cbnz w3, .begin\n\t"
-    : // ignore return value
-    : "r"(sysnum), "r"(op), "r"(futex), "r"(value)
-    : "memory", "cc", "x3");
+    "mov %[retval], x0\n\t"
+    : [retval]"=r"(retval)
+    : [sysnum]"i"(SYS_futex), [futex]"r"(futex), [op]"i"(FUTEX_WAIT_PRIVATE)
+    : "memory", "cc", "x0", "x1", "x2", "x3", "x4", "x5", "x8");
 #else
 # error Unimplemented
   // This is the logic any platform should perform:
-  // while (persist_futex) {
-  //    syscall(SYS_futex, &persist_futex, FUTEX_WAIT_PRIVATE, 1, nullptr, nullptr, 0);
-  // }
+  while (persist_futex) {
+     syscall(SYS_futex, &persist_futex, FUTEX_WAIT_PRIVATE, 1, nullptr, nullptr, 0);
+  }
 #endif // x86_64 or aarch64
+
+  if (retval != 0) {
+    errno = -retval;
+    perror("Syscall wait loop");
+    os::exit(1);
+  }
+
 
   int dec = Atomic::sub(&persist_waiters, 1);
 #ifdef HAS_RSEQ

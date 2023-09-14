@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2017, 2021, Azul Systems, Inc. All rights reserved.
+ * Copyright (c) 2019, 2021, Azul Systems, Inc. All rights reserved.
  * Copyright (c) 2021, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
@@ -24,65 +24,58 @@
  * questions.
  */
 
-package javax.crac;
+package jdk.crac;
 
-import jdk.crac.impl.BlockingOrderedContext;
-import jdk.crac.impl.OrderedContext;
+class ContextWrapper extends Context<Resource> {
+    private final jdk.internal.crac.mirror.Context<jdk.internal.crac.mirror.Resource> context;
 
-/**
- * The coordination service.
- */
-public class Core {
-
-    /** This class is not instantiable. */
-    private Core() {
+    public ContextWrapper(jdk.internal.crac.mirror.Context<jdk.internal.crac.mirror.Resource> context) {
+        this.context = context;
     }
 
-    private static final Context<Resource> globalContext = new ContextWrapper(
-        jdk.crac.impl.GlobalContext.createGlobalContextImpl());
-
-    static {
-        jdk.crac.Core.getGlobalContext().register(new ResourceWrapper(null, globalContext));
+    private static jdk.internal.crac.mirror.Context<? extends jdk.internal.crac.mirror.Resource> convertContext(
+            Context<? extends Resource> context) {
+        return context instanceof ContextWrapper ?
+                ((ContextWrapper)context).context :
+                null;
     }
 
-    /**
-     * Gets the global {@code Context} for checkpoint/restore notifications.
-     *
-     * @return the global {@code Context}
-     */
-    public static Context<Resource> getGlobalContext() {
-        return globalContext;
-    }
-
-    /**
-     * Requests checkpoint and returns upon a successful restore.
-     * May throw an exception if the checkpoint or restore are unsuccessful.
-     *
-     * @throws CheckpointException if an exception occured during checkpoint
-     * notification and the execution continues in the original Java instance.
-     * @throws RestoreException if an exception occured during restore
-     * notification and execution continues in a new Java instance.
-     * @throws UnsupportedOperationException if checkpoint/restore is not
-     * supported, no notification performed and the execution continues in
-     * the original Java instance.
-     */
-    public static void checkpointRestore() throws
-            CheckpointException,
-            RestoreException {
+    @Override
+    public void beforeCheckpoint(Context<? extends Resource> context)
+            throws CheckpointException {
         try {
-            jdk.crac.Core.checkpointRestore();
-        } catch (jdk.crac.CheckpointException e) {
+            this.context.beforeCheckpoint(convertContext(context));
+        } catch (jdk.internal.crac.mirror.CheckpointException e) {
             CheckpointException newException = new CheckpointException();
             for (Throwable t : e.getSuppressed()) {
                 newException.addSuppressed(t);
             }
             throw newException;
-        } catch (jdk.crac.RestoreException e) {
+        }
+    }
+
+    @Override
+    public void afterRestore(Context<? extends Resource> context)
+            throws RestoreException {
+        try {
+            this.context.afterRestore(convertContext(context));
+        } catch (jdk.internal.crac.mirror.RestoreException e) {
             RestoreException newException = new RestoreException();
             for (Throwable t : e.getSuppressed()) {
                 newException.addSuppressed(t);
             }
             throw newException;
         }
+    }
+
+    @Override
+    public void register(Resource r) {
+        ResourceWrapper wrapper = new ResourceWrapper(this, r);
+        context.register(wrapper);
+    }
+
+    @Override
+    public String toString() {
+        return "ContextWrapper[" + context.toString() + "]";
     }
 }

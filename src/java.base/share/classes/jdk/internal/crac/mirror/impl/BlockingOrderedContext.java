@@ -1,9 +1,9 @@
-package jdk.crac.impl;
+package jdk.internal.crac.mirror.impl;
 
-import jdk.crac.CheckpointException;
-import jdk.crac.Context;
-import jdk.crac.Resource;
-import jdk.crac.RestoreException;
+import jdk.internal.crac.mirror.CheckpointException;
+import jdk.internal.crac.mirror.Context;
+import jdk.internal.crac.mirror.Resource;
+import jdk.internal.crac.mirror.RestoreException;
 import jdk.internal.crac.LoggerContainer;
 
 public class BlockingOrderedContext<R extends Resource> extends OrderedContext<R> {

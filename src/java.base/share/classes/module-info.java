@@ -135,9 +135,6 @@ module java.base {
     exports javax.security.auth.spi;
     exports javax.security.auth.x500;
     exports javax.security.cert;
-    exports javax.crac;
-
-    exports jdk.crac;
 
     // additional qualified exports may be inserted at build time
     // see make/gensrc/GenModuleInfo.gmk
@@ -426,4 +423,9 @@ module java.base {
     provides java.nio.file.spi.FileSystemProvider with
         jdk.internal.jrtfs.JrtFileSystemProvider;
 
+    exports jdk.internal.crac.mirror to
+        jdk.crac;
+
+    exports jdk.internal.crac.mirror.impl to
+        jdk.crac;
 }

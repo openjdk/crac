@@ -24,12 +24,12 @@
  * questions.
  */
 
-package javax.crac;
+package jdk.crac;
 
 import java.lang.ref.WeakReference;
 import java.util.WeakHashMap;
 
-class ResourceWrapper extends WeakReference<Resource> implements jdk.crac.Resource {
+class ResourceWrapper extends WeakReference<Resource> implements jdk.internal.crac.mirror.Resource {
     private static WeakHashMap<Resource, ResourceWrapper> weakMap = new WeakHashMap<>();
 
     // Create strong reference to avoid losing the Resource.
@@ -52,7 +52,7 @@ class ResourceWrapper extends WeakReference<Resource> implements jdk.crac.Resour
     }
 
     @Override
-    public void beforeCheckpoint(jdk.crac.Context<? extends jdk.crac.Resource> context)
+    public void beforeCheckpoint(jdk.internal.crac.mirror.Context<? extends jdk.internal.crac.mirror.Resource> context)
             throws Exception {
         Resource r = get();
         strongRef = r;
@@ -60,7 +60,7 @@ class ResourceWrapper extends WeakReference<Resource> implements jdk.crac.Resour
             try {
                 r.beforeCheckpoint(this.context);
             } catch (CheckpointException e) {
-                Exception newException = new jdk.crac.CheckpointException();
+                Exception newException = new jdk.internal.crac.mirror.CheckpointException();
                 for (Throwable t : e.getSuppressed()) {
                     newException.addSuppressed(t);
                 }
@@ -70,14 +70,14 @@ class ResourceWrapper extends WeakReference<Resource> implements jdk.crac.Resour
     }
 
     @Override
-    public void afterRestore(jdk.crac.Context<? extends jdk.crac.Resource> context) throws Exception {
+    public void afterRestore(jdk.internal.crac.mirror.Context<? extends jdk.internal.crac.mirror.Resource> context) throws Exception {
         Resource r = get();
         strongRef = null;
         if (r != null) {
             try {
                 r.afterRestore(this.context);
             } catch (RestoreException e) {
-                Exception newException = new jdk.crac.RestoreException();
+                Exception newException = new jdk.internal.crac.mirror.RestoreException();
                 for (Throwable t : e.getSuppressed()) {
                     newException.addSuppressed(t);
                 }

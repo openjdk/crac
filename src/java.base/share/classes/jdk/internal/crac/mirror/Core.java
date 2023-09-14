@@ -24,15 +24,14 @@
  * questions.
  */
 
-package jdk.crac;
+package jdk.internal.crac.mirror;
 
-import jdk.crac.impl.*;
 import jdk.internal.access.SharedSecrets;
 import jdk.internal.crac.ClaimedFDs;
 import jdk.internal.crac.JDKResource;
 import jdk.internal.crac.LoggerContainer;
+import jdk.internal.crac.mirror.impl.*;
 import sun.security.action.GetBooleanAction;
-import sun.security.action.GetPropertyAction;
 
 import java.io.PrintWriter;
 import java.io.StringWriter;

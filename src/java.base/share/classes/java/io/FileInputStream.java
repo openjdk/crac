@@ -28,8 +28,8 @@ package java.io;
 import java.nio.channels.FileChannel;
 import java.util.Arrays;
 
-import jdk.crac.Context;
-import jdk.crac.Resource;
+import jdk.internal.crac.mirror.Context;
+import jdk.internal.crac.mirror.Resource;
 import jdk.internal.crac.LoggerContainer;
 import jdk.internal.crac.OpenResourcePolicies;
 import jdk.internal.crac.Core;

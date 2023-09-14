@@ -24,7 +24,7 @@
  * questions.
  */
 
-package jdk.crac.impl;
+package jdk.internal.crac.mirror.impl;
 
 public class CheckpointOpenFileException extends
         CheckpointOpenResourceException {

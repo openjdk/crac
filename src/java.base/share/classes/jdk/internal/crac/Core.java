@@ -26,8 +26,8 @@
 
 package jdk.internal.crac;
 
-import jdk.crac.Context;
-import jdk.crac.impl.BlockingOrderedContext;
+import jdk.internal.crac.mirror.Context;
+import jdk.internal.crac.mirror.impl.BlockingOrderedContext;
 
 public class Core {
     private static ClaimedFDs claimedFDs;
@@ -69,7 +69,7 @@ public class Core {
 
         private final Context<JDKResource> context;
         Priority(Context<JDKResource> context) {
-            jdk.crac.Core.getGlobalContext().register(context);
+            jdk.internal.crac.mirror.Core.getGlobalContext().register(context);
             this.context = context;
         }
 

@@ -21,10 +21,10 @@
  * questions.
  */
 
-import jdk.crac.*;
-import jdk.crac.impl.BlockingOrderedContext;
-import jdk.crac.impl.OrderedContext;
 import jdk.internal.crac.JDKResource;
+import jdk.internal.crac.mirror.*;
+import jdk.internal.crac.mirror.impl.BlockingOrderedContext;
+import jdk.internal.crac.mirror.impl.OrderedContext;
 import jdk.test.lib.Utils;
 
 import java.lang.reflect.Method;
@@ -32,8 +32,7 @@ import java.util.*;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 
-import static jdk.crac.Core.getGlobalContext;
-import static jdk.internal.crac.Core.*;
+import static jdk.internal.crac.mirror.Core.getGlobalContext;
 import static jdk.internal.crac.Core.Priority.*;
 import static jdk.test.lib.Asserts.*;
 
@@ -42,7 +41,8 @@ import static jdk.test.lib.Asserts.*;
  * @requires os.family == "linux"
  * @library /test/lib
  * @modules java.base/jdk.internal.crac:+open
- * @modules java.base/jdk.crac.impl:+open
+ * @modules java.base/jdk.internal.crac.mirror:+open
+ * @modules java.base/jdk.internal.crac.mirror.impl:+open
  * @run main/othervm -ea -XX:CREngine=simengine -XX:CRaCCheckpointTo=ignored ContextOrderTest testOrder
  * @run main/othervm -ea -XX:CREngine=simengine -XX:CRaCCheckpointTo=ignored ContextOrderTest testRegisterBlocks
  * @run main/othervm -ea -XX:CREngine=simengine -XX:CRaCCheckpointTo=ignored ContextOrderTest testThrowing

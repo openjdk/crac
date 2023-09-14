@@ -24,30 +24,13 @@
  * questions.
  */
 
-package javax.crac;
+package jdk.internal.crac.mirror.impl;
 
-/**
- * An interface for receiving checkpoint/restore notifications.
- *
- * <p>The class that is interested in receiving a checkpoint/restore notification
- * implements this interface, and the object created with that class is
- * registered with a {@code Context}, using {@code register} method.
- */
-public interface Resource {
+public class CheckpointOpenSocketException extends
+        CheckpointOpenResourceException {
+    private static final long serialVersionUID = 4778540502218641776L;
 
-    /**
-     * Invoked by a {@code Context} as a notification about checkpoint.
-     *
-     * @param context {@code Context} providing notification
-     * @throws Exception if the method have failed
-     */
-    void beforeCheckpoint(Context<? extends Resource> context) throws Exception;
-
-    /**
-     * Invoked by a {@code Context} as a notification about restore.
-     *
-     * @param context {@code Context} providing notification
-     * @throws Exception if the method have failed
-     */
-    void afterRestore(Context<? extends Resource> context) throws Exception;
+    public CheckpointOpenSocketException(String details, Throwable cause) {
+        super(details, cause);
+    }
 }

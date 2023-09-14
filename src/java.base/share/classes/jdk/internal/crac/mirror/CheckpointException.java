@@ -24,22 +24,20 @@
  * questions.
  */
 
-package javax.crac;
+package jdk.internal.crac.mirror;
 
 /**
  * This exception works as an aggregate for all errors found during checkpoint;
  * these are recorded as {@linkplain #getSuppressed() suppressed exceptions}.
  * The exception does not have any own message, cause nor collects stack trace.
  */
-public final class RestoreException extends Exception {
-    private static final long serialVersionUID = -4091592505524280559L;
+public final class CheckpointException extends Exception {
+    private static final long serialVersionUID = 6859967688386143096L;
 
     /**
-     * Creates a {@code RestoreException}.
+     * Creates a {@code CheckpointException}.
      */
-    public RestoreException() {
+    public CheckpointException() {
         super(null, null, true, false);
     }
 }
-
-

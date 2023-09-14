@@ -94,5 +94,4 @@ restoring instances from the image.
  * @since TBD
  */
 
-package javax.crac;
-
+package jdk.internal.crac.mirror;

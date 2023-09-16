@@ -1039,9 +1039,9 @@ void VM_Version::glibc_reexec() {
 #undef EXEC
 }
 
-void VM_Version::glibc_not_using(uint64_t excessive_CPU, uint64_t excessive_GLIBC) {
+void VM_Version::glibc_not_using(uint64_t shouldnotuse_CPU, uint64_t shouldnotuse_GLIBC) {
 #ifndef ASSERT
-  if (!excessive_CPU && !excessive_GLIBC)
+  if (!shouldnotuse_CPU && !shouldnotuse_GLIBC)
     return;
 #endif
 #if INCLUDE_LD_SO_LIST_DIAGNOSTICS
@@ -1121,11 +1121,11 @@ void VM_Version::glibc_not_using(uint64_t excessive_CPU, uint64_t excessive_GLIB
       // FPU is always present on i686+: (_features & CPU_FPU) &&
       (_features & CPU_SSE2)) {
     // These cannot be disabled by GLIBC_TUNABLES.
-    if (excessive_CPU & (CPU_FXSR | CPU_MMX | CPU_SSE)) {
-      assert(!(excessive_CPU & CPU_SSE2), "CPU_SSE2 in both _features and excessive_CPU cannot happen");
+    if (shouldnotuse_CPU & (CPU_FXSR | CPU_MMX | CPU_SSE)) {
+      assert(!(shouldnotuse_CPU & CPU_SSE2), "CPU_SSE2 in both _features and shouldnotuse_CPU cannot happen");
       // FIXME: The choice should be based on glibc impact, not the feature age.
       // CX8 is i586+, CMOV is i686+ 1995+, SSE2 is 2000+
-      excessive_CPU |= CPU_SSE2;
+      shouldnotuse_CPU |= CPU_SSE2;
     }
     if ((_features & CPU_FXSR) &&
         (_features & CPU_MMX) &&
@@ -1142,11 +1142,11 @@ void VM_Version::glibc_not_using(uint64_t excessive_CPU, uint64_t excessive_GLIB
           (_features & CPU_SSSE3) &&
           (_features & CPU_SSE4_1) &&
           (_features & CPU_SSE4_2)) {
-        if ((excessive_CPU & CPU_SSE3) ||
-            (excessive_GLIBC & (GLIBC_CMPXCHG16 | GLIBC_LAHFSAHF))) {
-          assert(!(excessive_CPU & CPU_SSE4_2), "CPU_SSE4_2 in both _features and excessive_CPU cannot happen");
+        if ((shouldnotuse_CPU & CPU_SSE3) ||
+            (shouldnotuse_GLIBC & (GLIBC_CMPXCHG16 | GLIBC_LAHFSAHF))) {
+          assert(!(shouldnotuse_CPU & CPU_SSE4_2), "CPU_SSE4_2 in both _features and shouldnotuse_CPU cannot happen");
           // POPCNT is 2007+, SSSE3 is 2006+, SSE4_1 is 2007+, SSE4_2 is 2008+.
-          excessive_CPU |= CPU_SSE4_2;
+          shouldnotuse_CPU |= CPU_SSE4_2;
         }
         if ((_features & CPU_SSE3) &&
             (_glibc_features & GLIBC_CMPXCHG16) &&
@@ -1167,10 +1167,10 @@ void VM_Version::glibc_not_using(uint64_t excessive_CPU, uint64_t excessive_GLIB
               (_features & CPU_FMA) &&
               (_features & CPU_LZCNT) &&
               (_glibc_features & GLIBC_MOVBE)) {
-            if (excessive_GLIBC & GLIBC_F16C) {
-              assert(!(excessive_GLIBC & GLIBC_MOVBE), "GLIBC_MOVBE in both _glibc_features and excessive_GLIBC cannot happen");
+            if (shouldnotuse_GLIBC & GLIBC_F16C) {
+              assert(!(shouldnotuse_GLIBC & GLIBC_MOVBE), "GLIBC_MOVBE in both _glibc_features and shouldnotuse_GLIBC cannot happen");
               // FMA is 2012+, AVX2+BMI1+BMI2+LZCNT are 2013+, MOVBE is 2015+
-              excessive_GLIBC |= GLIBC_MOVBE;
+              shouldnotuse_GLIBC |= GLIBC_MOVBE;
             }
             if (_glibc_features & GLIBC_F16C) {
               // glibc: if (CPU_FEATURE_USABLE_P (cpu_features, AVX512F)
@@ -1204,11 +1204,11 @@ void VM_Version::glibc_not_using(uint64_t excessive_CPU, uint64_t excessive_GLIB
 #ifdef ASSERT
   uint64_t handled[KIND_COUNT] = { 0 };
 #endif
-  auto excessive_handled = [&](enum kind kind, uint64_t value) {
+  auto shouldnotuse_handled = [&](enum kind kind, uint64_t value) {
     assert((handled[kind] & value) == 0, "already used " STR(kind) "_" STR(hotspot) );
     DEBUG_ONLY(handled[kind] |= value);
   };
-#define EXCESSIVE_HANDLED(kind, hotspotglibc) excessive_handled(PASTE_TOKENS(KIND_, kind), PASTE_TOKENS3(kind, _, hotspotglibc))
+#define EXCESSIVE_HANDLED(kind, hotspotglibc) shouldnotuse_handled(PASTE_TOKENS(KIND_, kind), PASTE_TOKENS3(kind, _, hotspotglibc))
 
 #if INCLUDE_CPU_FEATURE_ACTIVE
 # define FEATURE_ACTIVE(glibc, hotspot_field, hotspot_union, glibc_index, glibc_reg) CPU_FEATURE_ACTIVE(glibc)
@@ -1222,15 +1222,15 @@ void VM_Version::glibc_not_using(uint64_t excessive_CPU, uint64_t excessive_GLIB
 # define FEATURE_ACTIVE(glibc, hotspot_field, hotspot_union, glibc_index, glibc_reg) true
 #endif
 
-  const uint64_t excessiveval[KIND_COUNT] = { excessive_CPU, excessive_GLIBC };
-  auto excessive = [&](enum kind kind, uint64_t value, const char *hotspotglibcstr, bool feature_active) {
-    excessive_handled(kind, value);
-    if ((excessiveval[kind] & value) != 0 && feature_active) {
+  const uint64_t shouldnotuseval[KIND_COUNT] = { shouldnotuse_CPU, shouldnotuse_GLIBC };
+  auto shouldnotuse = [&](enum kind kind, uint64_t value, const char *hotspotglibcstr, bool feature_active) {
+    shouldnotuse_handled(kind, value);
+    if ((shouldnotuseval[kind] & value) != 0 && feature_active) {
       disable(kind, value, hotspotglibcstr);
     }
   };
 #define EXCESSIVE6(kind, hotspotglibc, hotspot_field, hotspot_union, glibc_index, glibc_reg)               \
-  excessive(PASTE_TOKENS(KIND_, kind), PASTE_TOKENS3(kind, _, hotspotglibc),                               \
+  shouldnotuse(PASTE_TOKENS(KIND_, kind), PASTE_TOKENS3(kind, _, hotspotglibc),                            \
     STR(hotspotglibc), FEATURE_ACTIVE(hotspotglibc, hotspot_field, hotspot_union, glibc_index, glibc_reg))
 #define EXCESSIVE(kind, hotspotglibc, hotspot_field, def...) EXCESSIVE6(kind, hotspotglibc, hotspot_field, def)
 

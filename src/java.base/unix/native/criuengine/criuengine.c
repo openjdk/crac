@@ -45,6 +45,8 @@
 
 #define ARRAY_SIZE(x) (sizeof(x) / sizeof(x[0]))
 
+#define SUPPRESS_ERROR_IN_PARENT 77
+
 static int create_cppath(const char *imagedir);
 
 static int g_pid;
@@ -59,6 +61,68 @@ static int kickjvm(pid_t jvm, int code) {
         return 1;
     }
     return 0;
+}
+
+static void print_args_to_stderr(const char **args) {
+    for (const char **argp = args; *argp != NULL; ++argp) {
+        const char *s = *argp;
+        if (argp != args) {
+            fputc(' ', stderr);
+        }
+        // https://unix.stackexchange.com/a/357932/296319
+        if (!strpbrk(s, " \t\n!\"#$&'()*,;<=>?[\\]^`{|}~")) {
+            fputs(s, stderr);
+            continue;
+        }
+        fputc('\'', stderr);
+        for (; *s; ++s) {
+            if (*s != '\'') {
+                fputc(*s, stderr);
+            } else {
+                fputs("'\\''", stderr);
+            }
+        }
+        fputc('\'', stderr);
+    }
+}
+
+static void print_command_args_to_stderr(const char **args) {
+  fprintf(stderr, "Command: ");
+  print_args_to_stderr(args);
+  fputc('\n', stderr);
+}
+
+static const char *join_path(const char *path1, const char *path2) {
+    char *retval = malloc(strlen(path1) + 1 + strlen(path2) + 1);
+    if (!retval) {
+        perror("malloc");
+        exit(1);
+    }
+    char *d = retval;
+    d = stpcpy(d, path1);
+    *d++ = '/';
+    d = stpcpy(d, path2);
+    *d++ = 0;
+    return retval;
+}
+
+static const char *path_abs(const char *rel) {
+    if (rel[0] == '/') {
+        return rel;
+    }
+    char *cwd = get_current_dir_name();
+    if (!cwd) {
+        perror("get_current_dir_name");
+        exit(1);
+    }
+    return join_path(cwd, rel);
+}
+
+static const char *path_abs2(const char *rel1, const char *rel2) {
+    if (rel2[0] == '/') {
+        return rel2;
+    }
+    return join_path(path_abs(rel1), rel2);
 }
 
 static int checkpoint(pid_t jvm,
@@ -111,7 +175,8 @@ static int checkpoint(pid_t jvm,
     *arg++ = verbosity != NULL ? verbosity : "-v4";
     *arg++ = "-o";
     // -D without -W makes criu cd to image dir for logs
-    *arg++ = log_file != NULL ? log_file : "dump4.log";
+    const char *log_local = log_file != NULL ? log_file : "dump4.log";
+    *arg++ = log_local;
 
     if (leave_running) {
         *arg++ = "-R";
@@ -133,12 +198,26 @@ static int checkpoint(pid_t jvm,
     pid_t child = fork();
     if (!child) {
         execv(criu, (char**)args);
-        perror("criu dump");
-        exit(1);
+        fprintf(stderr, "Cannot execute CRIU \"");
+        print_args_to_stderr(args);
+        fprintf(stderr, "\": %s\n", strerror(errno));
+        exit(SUPPRESS_ERROR_IN_PARENT);
     }
 
     int status;
-    if (child != wait(&status) || !WIFEXITED(status) || WEXITSTATUS(status)) {
+    if (child != wait(&status)) {
+        fprintf(stderr, "Error waiting for CRIU: %s\n", strerror(errno));
+        print_command_args_to_stderr(args);
+        kickjvm(jvm, -1);
+    } else if (!WIFEXITED(status)) {
+        fprintf(stderr, "CRIU has not properly exited, waitpid status was %d - check %s\n", status, path_abs2(imagedir, log_local));
+        print_command_args_to_stderr(args);
+        kickjvm(jvm, -1);
+    } else if (WEXITSTATUS(status)) {
+        if (WEXITSTATUS(status) != SUPPRESS_ERROR_IN_PARENT) {
+            fprintf(stderr, "CRIU failed with exit code %d - check %s\n", WEXITSTATUS(status), path_abs2(imagedir, log_local));
+            print_command_args_to_stderr(args);
+        }
         kickjvm(jvm, -1);
     } else if (leave_running) {
         kickjvm(jvm, 0);
@@ -159,7 +238,7 @@ static int restore(const char *basedir,
 
     int fd = open(cppathpath, O_RDONLY);
     if (fd < 0) {
-        perror("open cppath");
+        fprintf(stderr, "CRaC restore - cannot open cppath file \"%s\": %s\n", path_abs(cppathpath), strerror(errno));
         return 1;
     }
 
@@ -235,7 +314,9 @@ static int restore(const char *basedir,
     fflush(stderr);
 
     execv(criu, (char**)args);
-    perror("exec criu");
+    fprintf(stderr, "Cannot execute CRIU \"");
+    print_args_to_stderr(args);
+    fprintf(stderr, "\": %s\n", strerror(errno));
     return 1;
 }
 

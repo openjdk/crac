@@ -93,11 +93,10 @@ ifeq ($(OPENJDK_TARGET_OS), linux)
   $(eval $(call SetupJdkExecutable, BUILD_CRIUENGINE, \
       NAME := criuengine, \
       SRC := $(TOPDIR)/src/$(MODULE)/unix/native/criuengine, \
-      INCLUDE_FILES := criuengine.cpp, \
+      INCLUDE_FILES := criuengine.c, \
       OPTIMIZATION := HIGH, \
-      CXXFLAGS := $(CXXFLAGS_JDKEXE), \
+      CFLAGS := $(CFLAGS_JDKEXE), \
       LDFLAGS := $(LDFLAGS_JDKEXE), \
-      LD := $(LDCXX), \
       OUTPUT_DIR := $(SUPPORT_OUTPUTDIR)/modules_libs/$(MODULE), \
   ))
   TARGETS += $(BUILD_CRIUENGINE)

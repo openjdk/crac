@@ -99,39 +99,39 @@ static int checkpoint(pid_t jvm,
     char jvmpidchar[32];
     snprintf(jvmpidchar, sizeof(jvmpidchar), "%d", jvm);
 
+    const char* args[32] = {
+        criu,
+        "dump",
+        "-t", jvmpidchar,
+        "-D", imagedir,
+        "--shell-job",
+    };
+    const char** arg = args + 7;
+
+    *arg++ = verbosity != NULL ? verbosity : "-v4";
+    *arg++ = "-o";
+    // -D without -W makes criu cd to image dir for logs
+    *arg++ = log_file != NULL ? log_file : "dump4.log";
+
+    if (leave_running) {
+        *arg++ = "-R";
+    }
+
+    char *criuopts = getenv("CRAC_CRIU_OPTS");
+    if (criuopts) {
+        char* criuopt = strtok(criuopts, " ");
+        while (criuopt && ARRAY_SIZE(args) >= (size_t)(arg - args) + 1/* account for trailing NULL */) {
+            *arg++ = criuopt;
+            criuopt = strtok(NULL, " ");
+        }
+        if (criuopt) {
+            fprintf(stderr, "Warning: too many arguments in CRAC_CRIU_OPTS (dropped from '%s')\n", criuopt);
+        }
+    }
+    *arg++ = NULL;
+
     pid_t child = fork();
     if (!child) {
-        const char* args[32] = {
-            criu,
-            "dump",
-            "-t", jvmpidchar,
-            "-D", imagedir,
-            "--shell-job",
-        };
-        const char** arg = args + 7;
-
-        *arg++ = verbosity != NULL ? verbosity : "-v4";
-        *arg++ = "-o";
-        // -D without -W makes criu cd to image dir for logs
-        *arg++ = log_file != NULL ? log_file : "dump4.log";
-
-        if (leave_running) {
-            *arg++ = "-R";
-        }
-
-        char *criuopts = getenv("CRAC_CRIU_OPTS");
-        if (criuopts) {
-            char* criuopt = strtok(criuopts, " ");
-            while (criuopt && ARRAY_SIZE(args) >= (size_t)(arg - args) + 1/* account for trailing NULL */) {
-                *arg++ = criuopt;
-                criuopt = strtok(NULL, " ");
-            }
-            if (criuopt) {
-                fprintf(stderr, "Warning: too many arguments in CRAC_CRIU_OPTS (dropped from '%s')\n", criuopt);
-            }
-        }
-        *arg++ = NULL;
-
         execv(criu, (char**)args);
         perror("criu dump");
         exit(1);

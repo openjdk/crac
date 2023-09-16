@@ -1179,26 +1179,37 @@ void VM_Version::glibc_not_using(uint64_t excessive_CPU, uint64_t excessive_GLIB
               // glibc:     && CPU_FEATURE_USABLE_P (cpu_features, AVX512DQ)
               // glibc:     && CPU_FEATURE_USABLE_P (cpu_features, AVX512VL))
               // glibc:   isa_level |= GNU_PROPERTY_X86_ISA_1_V4;
-              // All these flags are supported by GLIBC_DISABLE below.
+              // All these flags are supported by disable() below.
             }
           }
         }
       }
     }
   }
-  uint64_t disable_CPU   = 0;
-  uint64_t disable_GLIBC = 0;
+
 #define PASTE_TOKENS3(x, y, z) PASTE_TOKENS(x, PASTE_TOKENS(y, z))
+  enum kind { KIND_CPU = 0, KIND_GLIBC, KIND_COUNT };
+
+  char disable_str[KIND_COUNT * 64 * (10 + 3) + 1];
+  strcpy(disable_str, glibc_prefix);
+  char *disable_end = disable_str + glibc_prefix_len;
+  auto disable = [&](enum kind kind, uint64_t value, const char *hotspotglibcstr) {
+    size_t remains = disable_str + sizeof(disable_str) - disable_end;
+    assert(2 + strlen(hotspotglibcstr) < remains, "internal error: disable_str overflow");
+    *disable_end++ = ',';
+    *disable_end++ = '-';
+    disable_end = stpcpy(disable_end, hotspotglibcstr);
+  };
+
 #ifdef ASSERT
-  uint64_t excessive_handled_CPU   = 0;
-  uint64_t excessive_handled_GLIBC = 0;
-  uint64_t disable_handled_CPU   = 0;
-  uint64_t disable_handled_GLIBC = 0;
+  uint64_t handled[KIND_COUNT] = { 0 };
 #endif
-#define EXCESSIVE_HANDLED(kind, hotspot) do {                                                                                         \
-    assert(!(PASTE_TOKENS(excessive_handled_, kind) & PASTE_TOKENS3(kind, _, hotspot)), "already used " STR(kind) "_" STR(hotspot) ); \
-    DEBUG_ONLY(PASTE_TOKENS(excessive_handled_, kind) |= PASTE_TOKENS3(kind, _, hotspot));                                            \
-  } while (0)
+  auto excessive_handled = [&](enum kind kind, uint64_t value) {
+    assert((handled[kind] & value) == 0, "already used " STR(kind) "_" STR(hotspot) );
+    DEBUG_ONLY(handled[kind] |= value);
+  };
+#define EXCESSIVE_HANDLED(kind, hotspotglibc) excessive_handled(PASTE_TOKENS(KIND_, kind), PASTE_TOKENS3(kind, _, hotspotglibc))
+
 #if INCLUDE_CPU_FEATURE_ACTIVE
 # define FEATURE_ACTIVE(glibc, hotspot_field, hotspot_union, glibc_index, glibc_reg) CPU_FEATURE_ACTIVE(glibc)
 #elif INCLUDE_LD_SO_LIST_DIAGNOSTICS
@@ -1210,13 +1221,19 @@ void VM_Version::glibc_not_using(uint64_t excessive_CPU, uint64_t excessive_GLIB
 #else
 # define FEATURE_ACTIVE(glibc, hotspot_field, hotspot_union, glibc_index, glibc_reg) true
 #endif
-#define EXCESSIVE6(kind, hotspotglibc, hotspot_field, hotspot_union, glibc_index, glibc_reg) do {                                                                      \
-    EXCESSIVE_HANDLED(kind, hotspotglibc);                                                                                                                             \
-    if (PASTE_TOKENS(excessive_, kind) & PASTE_TOKENS3(kind, _, hotspotglibc) && FEATURE_ACTIVE(hotspotglibc, hotspot_field, hotspot_union, glibc_index, glibc_reg)) { \
-      PASTE_TOKENS(disable_, kind) |= PASTE_TOKENS3(kind, _, hotspotglibc);                                                                                            \
-    }                                                                                                                                                                  \
-  } while (0)
-#define EXCESSIVE(kind, hotspotglibc, hotspot_union, def...) EXCESSIVE6(kind, hotspotglibc, hotspot_field, def)
+
+  const uint64_t excessiveval[KIND_COUNT] = { excessive_CPU, excessive_GLIBC };
+  auto excessive = [&](enum kind kind, uint64_t value, const char *hotspotglibcstr, bool feature_active) {
+    excessive_handled(kind, value);
+    if ((excessiveval[kind] & value) != 0 && feature_active) {
+      disable(kind, value, hotspotglibcstr);
+    }
+  };
+#define EXCESSIVE6(kind, hotspotglibc, hotspot_field, hotspot_union, glibc_index, glibc_reg)               \
+  excessive(PASTE_TOKENS(KIND_, kind), PASTE_TOKENS3(kind, _, hotspotglibc),                               \
+    STR(hotspotglibc), FEATURE_ACTIVE(hotspotglibc, hotspot_field, hotspot_union, glibc_index, glibc_reg))
+#define EXCESSIVE(kind, hotspotglibc, hotspot_field, def...) EXCESSIVE6(kind, hotspotglibc, hotspot_field, def)
+
 #define DEF_ExtCpuid1Ecx ExtCpuid1Ecx, CPUID_INDEX_80000001, ecx
 #define DEF_SefCpuid7Ebx SefCpuid7Ebx, CPUID_INDEX_7       , ebx
 #define DEF_SefCpuid7Ecx SefCpuid7Ecx, CPUID_INDEX_7       , ecx
@@ -1253,67 +1270,9 @@ void VM_Version::glibc_not_using(uint64_t excessive_CPU, uint64_t excessive_GLIB
   EXCESSIVE(GLIBC, OSXSAVE , osxsave , DEF_StdCpuid1Ecx);
   EXCESSIVE(GLIBC, HTT     , ht      , DEF_StdCpuid1Edx);
 #undef EXCESSIVE
-#undef EXCESSIVE5
-
-  char disable_str[64 * (10 + 3) + 1];
-  strcpy(disable_str, glibc_prefix);
-  char *disable_end = disable_str + glibc_prefix_len;
-#define GLIBC_DISABLE(kind, hotspot_glibc) do {                                                                                                 \
-    assert(!(PASTE_TOKENS(disable_handled_, kind) & PASTE_TOKENS3(kind, _, hotspot_glibc)), "already used " STR(kind) "_" STR(hotspot_glibc) ); \
-    DEBUG_ONLY(PASTE_TOKENS(disable_handled_, kind) |= PASTE_TOKENS3(kind, _, hotspot_glibc));                                                  \
-    if (PASTE_TOKENS(disable_, kind) & PASTE_TOKENS3(kind, _, hotspot_glibc)) {                                                                 \
-      const char str[] = ",-" STR(hotspot_glibc);                                                                                               \
-      size_t remains = disable_str + sizeof(disable_str) - disable_end;                                                                         \
-      strncpy(disable_end, str, remains);                                                                                                       \
-      size_t len = strnlen(disable_end, remains);                                                                                               \
-      remains -= len;                                                                                                                           \
-      assert(remains > 0, "internal error: disable_str overflow");                                                                              \
-      disable_end += len;                                                                                                                       \
-    }                                                                                                                                           \
-  } while (0);
-  GLIBC_DISABLE(CPU  , AVX)
-  GLIBC_DISABLE(CPU  , CX8)
-  GLIBC_DISABLE(CPU  , FMA)
-  GLIBC_DISABLE(CPU  , RTM)
-  GLIBC_DISABLE(CPU  , AVX2)
-  GLIBC_DISABLE(CPU  , BMI1)
-  GLIBC_DISABLE(CPU  , BMI2)
-  GLIBC_DISABLE(CPU  , CMOV)
-  GLIBC_DISABLE(CPU  , ERMS)
-  GLIBC_DISABLE(CPU  , SSE2)
-  GLIBC_DISABLE(CPU  , LZCNT)
-  GLIBC_DISABLE(CPU  , SSSE3)
-  GLIBC_DISABLE(CPU  , POPCNT)
-  GLIBC_DISABLE(CPU  , SSE4_1)
-  GLIBC_DISABLE(CPU  , SSE4_2)
-  GLIBC_DISABLE(CPU  , AVX512F)
-  GLIBC_DISABLE(CPU  , AVX512CD)
-  GLIBC_DISABLE(CPU  , AVX512BW)
-  GLIBC_DISABLE(CPU  , AVX512DQ)
-  GLIBC_DISABLE(CPU  , AVX512ER)
-  GLIBC_DISABLE(CPU  , AVX512PF)
-  GLIBC_DISABLE(CPU  , AVX512VL)
-  GLIBC_DISABLE(GLIBC, IBT)
-  GLIBC_DISABLE(GLIBC, FMA4)
-  GLIBC_DISABLE(GLIBC, MOVBE)
-  GLIBC_DISABLE(GLIBC, SHSTK)
-  GLIBC_DISABLE(GLIBC, XSAVE)
-  GLIBC_DISABLE(GLIBC, OSXSAVE)
-  GLIBC_DISABLE(GLIBC, HTT)
-#undef GLIBC_DISABLE
-#undef GLIBC_DISABLE2
-  *disable_end = 0;
+#undef EXCESSIVE6
 
 #ifdef ASSERT
-#define CHECK_KIND(kind) do {                                                                                                            \
-    if (PASTE_TOKENS(disable_handled_, kind) != PASTE_TOKENS(excessive_handled_, kind))                                                  \
-      vm_exit_during_initialization(err_msg("internal error: Unsupported disabling of " STR(kind) "_* 0x%" PRIx64 " != used 0x%" PRIx64, \
-                                            PASTE_TOKENS(disable_handled_, kind), PASTE_TOKENS(excessive_handled_, kind)));              \
-  } while (0)
-  CHECK_KIND(CPU  );
-  CHECK_KIND(GLIBC);
-#undef CHECK_KIND
-
   // These cannot be disabled by GLIBC_TUNABLES interface.
 #define GLIBC_UNSUPPORTED(kind, hotspot) EXCESSIVE_HANDLED(kind, hotspot)
   GLIBC_UNSUPPORTED(CPU  , 3DNOW_PREFETCH   );
@@ -1358,16 +1317,19 @@ void VM_Version::glibc_not_using(uint64_t excessive_CPU, uint64_t excessive_GLIB
   GLIBC_UNSUPPORTED(GLIBC, LAHFSAHF         );
   GLIBC_UNSUPPORTED(GLIBC, F16C             );
 #undef GLIBC_UNSUPPORTED
-#define CHECK_KIND(kind) do {                                                                                                                 \
-    if (PASTE_TOKENS(excessive_handled_, kind) != PASTE_TOKENS(MAX_, kind) - 1)                                                               \
-      vm_exit_during_initialization(err_msg("internal error: Unsupported disabling of some " STR(kind) "_* 0x%" PRIx64 " != full 0x%" PRIx64, \
-                                            PASTE_TOKENS(excessive_handled_, kind), PASTE_TOKENS(MAX_, kind) - 1));                           \
-  } while (0)
+
+  auto check_kind = [&](enum kind kind, const char *kindstr, uint64_t mask) {
+    if (handled[kind] != mask) {
+      vm_exit_during_initialization(err_msg("internal error: Unsupported disabling of some %s_* 0x%" PRIx64 " != full 0x%" PRIx64, kindstr, handled[kind], mask));
+    }
+  };
+#define CHECK_KIND(kind) check_kind(PASTE_TOKENS(KIND_, kind), STR(kind), PASTE_TOKENS(MAX_, kind) - 1)
   CHECK_KIND(CPU  );
   CHECK_KIND(GLIBC);
 #undef CHECK_KIND
 #endif // ASSERT
 
+  *disable_end = 0;
   if (disable_end == disable_str + glibc_prefix_len)
     return;
   if (glibc_env_set(disable_str))

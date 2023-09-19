@@ -711,3 +711,13 @@ void LogConfiguration::notify_update_listeners() {
 }
 
 bool LogConfiguration::_async_mode = false;
+
+bool LogConfiguration::is_fd_used(int fd) {
+  assert(fd != -1, "fd must be valid");
+  for (size_t i = 0; i < _n_outputs; i++) {
+    if (fd == _outputs[i]->fd_get()) {
+      return true;
+    }
+  }
+  return false;
+}

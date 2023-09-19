@@ -29,6 +29,7 @@
 #include "runtime/os.hpp"
 #include "utilities/growableArray.hpp"
 #include "logging/log.hpp"
+#include "logging/logConfiguration.hpp"
 #include "classfile/classLoader.hpp"
 
 class FdsInfo {
@@ -381,6 +382,10 @@ static bool is_fd_ignored(int fd, const char *path) {
   if (os::same_files(modules_path, path)) {
     // Path to the modules directory is opened early when JVM is booted up and won't be closed.
     // We can ignore this for purposes of CRaC.
+    return true;
+  }
+
+  if (LogConfiguration::is_fd_used(fd)) {
     return true;
   }
 

@@ -18,7 +18,9 @@ import static jdk.test.lib.Asserts.*;
 
 public class CracBuilder {
     private static final String DEFAULT_IMAGE_DIR = "cr";
-    public static final String CONTAINER_NAME = "crac-test";
+    // Make it unique so that tests running in parallel do not conflict with:
+    // docker: Error response from daemon: Conflict. The container name "/crac-test" is already in use by container "<hash>". You have to remove (or rename) that container to be able to reuse that name.
+    public static final String CONTAINER_NAME = "crac-test" + ProcessHandle.current().pid();
     public static final String JAVA = Utils.TEST_JDK + "/bin/java";
     public static final String DOCKER_JAVA = "/jdk/bin/java";
     private static final List<String> CRIU_CANDIDATES = Arrays.asList(Utils.TEST_JDK + "/lib/criu", "/usr/sbin/criu", "/sbin/criu");

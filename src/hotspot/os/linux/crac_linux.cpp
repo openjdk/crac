@@ -385,6 +385,7 @@ bool VM_Crac::memory_checkpoint() {
     if (!check_can_write()) {
       return false;
     }
+    crac::MemoryPersister::init();
     Universe::heap()->persist_for_checkpoint();
     metaspace::VirtualSpaceList *vsc = metaspace::VirtualSpaceList::vslist_class();
     if (vsc != nullptr) {
@@ -399,19 +400,6 @@ bool VM_Crac::memory_checkpoint() {
 }
 
 void VM_Crac::memory_restore() {
-  if (CRPersistMemory) {
-    Universe::heap()->on_restore();
-#ifdef ASSERT
-    metaspace::VirtualSpaceList *vsc = metaspace::VirtualSpaceList::vslist_class();
-    if (vsc != nullptr) {
-      vsc->assert_checkpoint();
-    }
-    metaspace::VirtualSpaceList *vsn = metaspace::VirtualSpaceList::vslist_nonclass();
-    if (vsn != nullptr) {
-      vsn->assert_checkpoint();
-    }
-#endif // ASSERT
-  }
   PerfMemoryLinux::restore();
 }
 
@@ -533,10 +521,10 @@ bool crac::MemoryPersister::unmap(void *addr, size_t length) {
   return true;
 }
 
-bool crac::MemoryPersister::map(void *addr, size_t length, int fd, size_t offset, bool executable) {
+bool crac::MemoryPersister::map(void *addr, size_t length, bool executable) {
   if (::mmap(addr, length, PROT_READ | PROT_WRITE | (executable ? PROT_EXEC : 0),
-      MAP_PRIVATE | MAP_FIXED | (fd < 0 ? MAP_ANONYMOUS : 0), fd, offset) != addr) {
-    fprintf(stderr, "::mmap %p %lu RW: %m\n", addr, length);
+      MAP_PRIVATE | MAP_FIXED | MAP_ANONYMOUS, -1 , 0) != addr) {
+    fprintf(stderr, "::mmap %p %zu RW: %m\n", addr, length);
     return false;
   }
   return true;
@@ -548,6 +536,14 @@ bool crac::MemoryPersister::map_gap(void *addr, size_t length) {
     return false;
   }
   return true;
+}
+
+void crac::MmappingMemoryReader::read(size_t offset, void *addr, size_t size, bool executable) {
+  assert(_fd >= 0, "File not open!");
+  if (::mmap(addr, size, PROT_READ | PROT_WRITE | (executable ? PROT_EXEC : 0),
+      MAP_PRIVATE | MAP_FIXED, _fd , offset) != addr) {
+    fatal("::mmap %p %zu RW(X): %s", addr, size, os::strerror(errno));
+  }
 }
 
 static volatile int persist_waiters = 0;
@@ -628,7 +624,6 @@ static void block_in_other_futex(int signal, siginfo_t *info, void *ctx) {
     // Another option is EINTR when the thread is signalled; this shouldn't happen,
     // though, so we'll treat that as an error.
   }
-
 
   int dec = Atomic::sub(&persist_waiters, 1);
 #ifdef HAS_RSEQ

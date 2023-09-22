@@ -66,7 +66,6 @@ address VM_Version::_cpuinfo_segv_addr = 0;
 // Address of instruction after the one which causes SEGV
 address VM_Version::_cpuinfo_cont_addr = 0;
 
-static BufferBlob* stub_blob;
 static const int stub_size = 2000;
 
 extern "C" {
@@ -2803,12 +2802,15 @@ static bool _vm_version_initialized = false;
 
 void VM_Version::initialize() {
   ResourceMark rm;
-  // Making this stub must be FIRST use of assembler
-  stub_blob = BufferBlob::create("VM_Version stub", stub_size);
-  if (stub_blob == nullptr) {
+  // With CRaC, the generated code is used early after restore from checkpoint,
+  // before CodeCache is restored. Therefore we need to allocate the memory
+  // outside CodeCache.
+  size_t aligned_size = align_up(stub_size, os::vm_page_size());
+  char *stub_memory = os::reserve_memory(aligned_size, true, mtCode);
+  if (stub_memory == nullptr || !os::commit_memory(stub_memory, aligned_size, true)) {
     vm_exit_during_initialization("Unable to allocate stub for VM_Version");
   }
-  CodeBuffer c(stub_blob);
+  CodeBuffer c((address) stub_memory, aligned_size);
   VM_Version_StubGenerator g(&c);
 
   get_cpu_info_stub = CAST_TO_FN_PTR(get_cpu_info_stub_t,
@@ -2918,7 +2920,6 @@ typedef enum {
    TM_FLAG      = 0x20000000
 } FeatureEdxFlag;
 
-static BufferBlob* cpuid_brand_string_stub_blob;
 static const int   cpuid_brand_string_stub_size = 550;
 
 extern "C" {
@@ -3222,11 +3223,12 @@ const char* const _feature_extended_ecx_id[] = {
 void VM_Version::initialize_tsc(void) {
   ResourceMark rm;
 
-  cpuid_brand_string_stub_blob = BufferBlob::create("getCPUIDBrandString_stub", cpuid_brand_string_stub_size);
-  if (cpuid_brand_string_stub_blob == nullptr) {
+  size_t aligned_size = align_up(cpuid_brand_string_stub_size, os::vm_page_size());
+  char *stub_memory = os::reserve_memory(aligned_size, true, mtCode);
+  if (stub_memory == nullptr || !os::commit_memory(stub_memory, aligned_size, true)) {
     vm_exit_during_initialization("Unable to allocate getCPUIDBrandString_stub");
   }
-  CodeBuffer c(cpuid_brand_string_stub_blob);
+  CodeBuffer c((address) stub_memory, aligned_size);
   VM_Version_StubGenerator g(&c);
   getCPUIDBrandString_stub = CAST_TO_FN_PTR(getCPUIDBrandString_stub_t,
                                    g.generate_getCPUIDBrandString());

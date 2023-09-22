@@ -30,6 +30,7 @@
 
 // xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
 #define UUID_LENGTH 36
+#define BAD_OFFSET 0xFFFFFFFFBAD0FF5Eull
 
 class crac: AllStatic {
 public:
@@ -47,6 +48,41 @@ public:
   static jlong monotonic_time_offset() {
     return javaTimeNanos_offset;
   }
+
+  class MemoryWriter: public CHeapObj<mtInternal> {
+  protected:
+    int _fd;
+    size_t _offset_curr;
+
+  public:
+    MemoryWriter(const char *filename);
+    virtual ~MemoryWriter() {
+      if (_fd >= 0) {
+        ::close(_fd);
+      }
+    }
+    virtual size_t write(void *addr, size_t size) = 0;
+  };
+
+  class MemoryReader: public CHeapObj<mtInternal> {
+  protected:
+    int _fd;
+
+  public:
+    MemoryReader(const char *filename);
+    virtual ~MemoryReader() {
+      if (_fd >= 0) {
+        ::close(_fd);
+      }
+    }
+    virtual void read(size_t offset, void *addr, size_t size, bool executable) = 0;
+  };
+
+  class MmappingMemoryReader: public crac::MemoryReader {
+  public:
+    MmappingMemoryReader(const char *filename): MemoryReader(filename) {}
+    void read(size_t offset, void *addr, size_t size, bool executable) override;
+  };
 
   class MemoryPersister: AllStatic {
   protected:
@@ -72,15 +108,15 @@ public:
       }
     };
 
-    static void ensure_open(bool loading);
     static void allocate_index(size_t slots);
 
     static GrowableArray<struct crac::MemoryPersister::record> _index;
-    static int _fd;
-    static bool _loading;
-    static size_t _offset_curr;
+    static MemoryWriter *_writer;
 
   public:
+    static constexpr char MEMORY_IMG[] = "memory.img";
+
+    static void init();
     static bool store(void *addr, size_t length, size_t mapped_length, bool executable);
     static bool store_gap(void *addr, size_t length);
 
@@ -92,7 +128,7 @@ public:
 #endif // ASSERT
   private:
     static bool unmap(void *addr, size_t length);
-    static bool map(void *addr, size_t length, int fd, size_t offset, bool executable);
+    static bool map(void *addr, size_t length, bool executable);
     static bool map_gap(void *addr, size_t length);
   };
 

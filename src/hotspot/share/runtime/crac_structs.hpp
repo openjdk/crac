@@ -163,7 +163,6 @@ class VM_Crac: public VM_Operation {
   const bool _dry_run;
   bool _ok;
   GrowableArray<CracFailDep>* _failures;
-  CracRestoreParameters _restore_parameters;
   outputStream* _ostream;
 #if defined(LINUX) && INCLUDE_SERVICES
   LinuxAttachOperation* _attach_op;
@@ -175,7 +174,6 @@ public:
     _dry_run(dry_run),
     _ok(false),
     _failures(new (mtInternal) GrowableArray<CracFailDep>(0, mtInternal)),
-    _restore_parameters(),
     _ostream(jcmd_stream ? jcmd_stream : tty)
 #if defined(LINUX) && INCLUDE_SERVICES
     , _attach_op(jcmd_stream ? LinuxAttachListener::get_current_op() : NULL)
@@ -188,8 +186,6 @@ public:
 
   GrowableArray<CracFailDep>* failures() { return _failures; }
   bool ok() { return _ok; }
-  const char* new_args() { return _restore_parameters.args(); }
-  GrowableArray<const char *>* new_properties() { return _restore_parameters.properties(); }
   virtual bool allow_nested_vm_operations() const  { return true; }
   VMOp_Type type() const { return VMOp_VM_Crac; }
   void doit();

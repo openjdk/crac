@@ -188,18 +188,25 @@ public class ReferenceQueue<T> {
     }
 
     Reference<? extends T> poll(long timeout) throws InterruptedException {
-        synchronized (lock) {
+        lock.lock();
+        try {
             Reference<? extends T> r = poll0();
             if (r != null) return r;
             // any wake (including spurious) ends the wait
-            lock.wait(timeout);
+            //noinspection ResultOfMethodCallIgnored
+            notEmpty.await(timeout, TimeUnit.MILLISECONDS);
             return poll0();
+        } finally {
+            lock.unlock();
         }
     }
 
     void wakeup() {
-        synchronized (lock) {
-            lock.notifyAll();
+        lock.lock();
+        try {
+            notEmpty.signalAll();
+        } finally {
+            lock.unlock();
         }
     }
 

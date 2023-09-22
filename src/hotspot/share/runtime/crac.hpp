@@ -26,6 +26,7 @@
 
 #include "memory/allStatic.hpp"
 #include "runtime/handles.hpp"
+#include "utilities/growableArray.hpp"
 #include "utilities/macros.hpp"
 
 // xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx

@@ -2,6 +2,7 @@
 #define SHARE_UTILITIES_HEAP_DUMP_PARSER_HPP
 
 #include "memory/allocation.hpp"
+#include "oops/symbolHandle.hpp"
 #include "utilities/debug.hpp"
 #include "utilities/globalDefinitions.hpp"
 #include "utilities/resizeableResourceHash.hpp"
@@ -48,7 +49,7 @@ struct HeapDumpFormat : AllStatic {
     }
 
     SizeT size() const { return _size; }
-    ElemT *mem() { return _mem; }
+    ElemT *mem() const { return _mem; }
 
     ElemT &operator[](SizeT index) {
       precond(0 <= index && index < _size);
@@ -83,7 +84,7 @@ struct HeapDumpFormat : AllStatic {
 
   struct UTF8Record {
     id_t id;
-    Symbol *str;
+    TempNewSymbol sym;
   };
 
   struct LoadClassRecord {
@@ -126,7 +127,12 @@ struct HeapDumpFormat : AllStatic {
     id_t id;
     u4 stack_trace_serial;
     id_t class_id;
+    // Raw binary data: use read_field() to read it in the correct byte order.
     Array<u1, u4> fields_data;
+
+    // Reads a field from fields data, returns the amount of bytes read where 0
+    // means a error (illegal arguments or the read violates the array bounds).
+    size_t read_field(u4 offset, char sig, u4 id_size, BasicValue *out) const;
   };
 
   struct ObjArrayDumpRecord {
@@ -141,8 +147,23 @@ struct HeapDumpFormat : AllStatic {
     u4 stack_trace_serial;
     u4 elems_num;
     u1 elem_type;
+    // Elements data, already in the correct byte order.
     Array<u1, u4> elems_data;
   };
+
+  static size_t prim2size(u1 type) {
+    switch (type) {
+      case HPROF_BOOLEAN:       return sizeof(jboolean);
+      case HPROF_CHAR:          return sizeof(jchar);
+      case HPROF_FLOAT:         return sizeof(jfloat);
+      case HPROF_DOUBLE:        return sizeof(jdouble);
+      case HPROF_BYTE:          return sizeof(jbyte);
+      case HPROF_SHORT:         return sizeof(jshort);
+      case HPROF_INT:           return sizeof(jint);
+      case HPROF_LONG:          return sizeof(jlong);
+      default:                  return 0;
+    }
+  }
 };
 
 struct ParsedHeapDump : public StackObj {

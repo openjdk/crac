@@ -15,42 +15,11 @@ static bool is_supported_id_size(u4 size) {
          size == sizeof(u1);
 }
 
-class FileReader : public StackObj {
+// Abstarct class for reading bytes as Java types.
+class AbstractReader : public StackObj {
  public:
-  ~FileReader() {
-    if (_file != nullptr && fclose(_file) != 0) {
-      warning("failed to close a heap dump file");
-    }
-  }
-
-  bool open(const char *path) {
-    assert(path != nullptr, "cannot read from null path");
-
-    errno = 0;
-
-    if (_file != nullptr && fclose(_file) != 0) {
-      warning("failed to close a heap dump file");
-      guarantee(errno != 0, "fclose should set errno on error");
-      return false;
-    }
-    guarantee(errno == 0, "fclose shouldn't set errno on success");
-
-    FILE *file = os::fopen(path, "rb");
-    if (file == nullptr) {
-      guarantee(errno != 0, "fopen should set errno on error");
-      return false;
-    }
-
-    _file = file;
-    postcond(_file != nullptr);
-    return true;
-  }
-
-  bool read_raw(void *buf, size_t size) {
-    assert(_file != nullptr, "file must be opened before reading");
-    precond(buf != nullptr || size == 0);
-    return size == 0 || fread(buf, size, 1, _file) == 1;
-  }
+  // Reads size bytes into buf. Returns true on success.
+  virtual bool read_raw(void *buf, size_t size) = 0;
 
   template <class T>
   bool read(T *out) {
@@ -117,22 +86,82 @@ class FileReader : public StackObj {
         ShouldNotReachHere();
     }
   }
+};
+
+// Opens a file and reads from it.
+//
+// Class name "FileReader" is already occupied by the ELF parsing code.
+class BinaryFileReader : public AbstractReader {
+ public:
+  ~BinaryFileReader() {
+    if (_file != nullptr && fclose(_file) != 0) {
+      warning("failed to close a heap dump file");
+    }
+  }
+
+  bool open(const char *path) {
+    assert(path != nullptr, "cannot read from null path");
+
+    errno = 0;
+
+    if (_file != nullptr && fclose(_file) != 0) {
+      warning("failed to close a heap dump file");
+      guarantee(errno != 0, "fclose should set errno on error");
+      return false;
+    }
+    guarantee(errno == 0, "fclose shouldn't set errno on success");
+
+    FILE *file = os::fopen(path, "rb");
+    if (file == nullptr) {
+      guarantee(errno != 0, "fopen should set errno on error");
+      return false;
+    }
+
+    _file = file;
+    postcond(_file != nullptr);
+    return true;
+  }
+
+  bool read_raw(void *buf, size_t size) override {
+    assert(_file != nullptr, "file must be opened before reading");
+    precond(buf != nullptr || size == 0);
+    return size == 0 || fread(buf, size, 1, _file) == 1;
+  }
 
   bool skip(size_t size) {
     precond(_file != nullptr);
     return fseek(_file, size, SEEK_CUR) == 0;
   }
 
-  bool eof() {
+  bool eof() const {
     precond(_file != nullptr);
     return feof(_file) != 0;
   }
 
-  long pos() { return ftell(_file); }
+  long pos() const { return ftell(_file); }
 
  private:
   FILE *_file = nullptr;
   size_t _buf_size = 0;
+};
+
+// Reads from the specified address.
+class AddressReader : public AbstractReader {
+ public:
+  AddressReader(const void *from, size_t max_size) : _from(from), _max_size(max_size) {}
+
+  bool read_raw(void *buf, size_t size) override {
+    precond(buf != nullptr || size == 0);
+    if (size > _max_size) {
+      return false;
+    }
+    memcpy(buf, _from, size);
+    return true;
+  }
+
+ private:
+  const void *_from;
+  size_t _max_size;
 };
 
 static const char ERR_INVAL_HEADER[] = "invalid header";
@@ -163,7 +192,7 @@ const char *hprof_version2str(hdf::Version version) {
 
 class RecordsParser : public StackObj {
  public:
-  RecordsParser(FileReader *reader, ParsedHeapDump *out, hdf::Version version, u4 id_size)
+  RecordsParser(BinaryFileReader *reader, ParsedHeapDump *out, hdf::Version version, u4 id_size)
       : _reader(reader), _out(out), _version(version), _id_size(id_size) {
     precond(_reader != nullptr && _out != nullptr &&
             _version != hdf::Version::UNKNOWN && is_supported_id_size(id_size));
@@ -194,7 +223,7 @@ class RecordsParser : public StackObj {
   }
 
  private:
-  FileReader *_reader;
+  BinaryFileReader *_reader;
   ParsedHeapDump *_out;
 
   hdf::Version _version;
@@ -695,7 +724,7 @@ class RecordsParser : public StackObj {
       log_error(heapdumpparsing)("Failed to read HPROF_UTF8 symbol bytes");
       return Result::FAILED;
     }
-    record->str = SymbolTable::new_symbol(_sym_buf.buf(), sym_size);
+    record->sym = TempNewSymbol(SymbolTable::new_symbol(_sym_buf.buf(), sym_size));
 
     return Result::OK;
   }
@@ -883,29 +912,6 @@ class RecordsParser : public StackObj {
     return Result::OK;
   }
 
-  size_t prim_type2size(u1 type) {
-    switch (type) {
-      case HPROF_BOOLEAN:
-        return sizeof(hdf::BasicValue::as_boolean);
-      case HPROF_CHAR:
-        return sizeof(hdf::BasicValue::as_char);
-      case HPROF_FLOAT:
-        return sizeof(hdf::BasicValue::as_float);
-      case HPROF_DOUBLE:
-        return sizeof(hdf::BasicValue::as_double);
-      case HPROF_BYTE:
-        return sizeof(hdf::BasicValue::as_byte);
-      case HPROF_SHORT:
-        return sizeof(hdf::BasicValue::as_short);
-      case HPROF_INT:
-        return sizeof(hdf::BasicValue::as_int);
-      case HPROF_LONG:
-        return sizeof(hdf::BasicValue::as_long);
-      default:
-        return 0;
-    }
-  }
-
   Result parse_prim_array_dump(decltype(ParsedHeapDump::prim_array_dump_records) *out, u4 *record_size) {
     READ_ID_OR_FAIL(id, "HPROF_GC_PRIM_ARRAY_DUMP ID");
 
@@ -917,7 +923,7 @@ class RecordsParser : public StackObj {
     READ_INTO_OR_FAIL(&record->elems_num, "HPROF_GC_PRIM_ARRAY_DUMP elements number");
     READ_INTO_OR_FAIL(&record->elem_type, "HPROF_GC_PRIM_ARRAY_DUMP element type");
 
-    size_t elem_size = prim_type2size(record->elem_type);
+    size_t elem_size = hdf::prim2size(record->elem_type);
     if (elem_size == 0) {
       log_error(heapdumpparsing)(
           "Unknown element type in HPROF_GC_PRIM_ARRAY_DUMP: " UINT8_FORMAT_X_0,
@@ -927,9 +933,21 @@ class RecordsParser : public StackObj {
     size_t elems_data_size = record->elems_num * elem_size;
 
     record->elems_data.extend_to(elems_data_size);
-    if (!_reader->read_raw(record->elems_data.mem(), elems_data_size)) {
-      log_error(heapdumpparsing)("Failed to read HPROF_GC_PRIM_ARRAY_DUMP elements data");
-      return Result::FAILED;
+    if (!Endian::is_Java_byte_ordering_different() || elem_size == 1) {
+      // Can save the data as is
+      if (!_reader->read_raw(record->elems_data.mem(), elems_data_size)) {
+        log_error(heapdumpparsing)("Failed to read HPROF_GC_PRIM_ARRAY_DUMP elements data");
+        return Result::FAILED;
+      }
+    } else {
+      // Have to save each value byte-wise backwards
+      for (u1 *elem = record->elems_data.mem();
+           elem < record->elems_data.mem() + elems_data_size;
+           elem += elem_size) {
+        for (u1 *byte = elem + elem_size - 1; byte >= elem; byte--) {
+          READ_INTO_OR_FAIL(byte, "HPROF_GC_PRIM_ARRAY_DUMP elements data");
+        }
+      }
     }
 
     *record_size = _id_size + 2 * sizeof(u4) + sizeof(u1) + elems_data_size;
@@ -943,7 +961,7 @@ class RecordsParser : public StackObj {
 #undef READ_ID_OR_FAIL
 };
 
-static hdf::Version parse_header(FileReader *reader) {
+static hdf::Version parse_header(BinaryFileReader *reader) {
   static const char HEADER_102[] = "JAVA PROFILE 1.0.2";
   static const char HEADER_101[] = "JAVA PROFILE 1.0.1";
   STATIC_ASSERT(sizeof(HEADER_102) == sizeof(HEADER_101));
@@ -966,7 +984,7 @@ static hdf::Version parse_header(FileReader *reader) {
   return hdf::Version::UNKNOWN;
 }
 
-static const char *parse_id_size(FileReader *reader, u4 *out) {
+static const char *parse_id_size(BinaryFileReader *reader, u4 *out) {
   u4 id_size;
   if (!reader->read(&id_size)) {
     log_error(heapdumpparsing)("Failed to read ID size");
@@ -988,7 +1006,7 @@ const char *HeapDumpParser::parse(const char *path, ParsedHeapDump *out) {
   log_info(heapdumpparsing)("Started parsing %s", path);
   TraceTime timer("Heap dump parsing timer", TRACETIME_LOG(Info, heapdumpparsing));
 
-  FileReader reader;
+  BinaryFileReader reader;
   if (!reader.open(path)) {
     log_error(heapdumpparsing)("Failed to open %s: %s", path, os::strerror(errno));
     return os::strerror(errno);
@@ -1022,4 +1040,21 @@ const char *HeapDumpParser::parse(const char *path, ParsedHeapDump *out) {
     log_info(heapdumpparsing)("Position in %s after error: %li", path, reader.pos());
   }
   return err_msg;
+}
+
+size_t hdf::InstanceDumpRecord::read_field(u4 offset, char sig, u4 id_size, hdf::BasicValue *out) const {
+  AddressReader reader(&fields_data[offset], fields_data.size() - offset);
+  switch (sig) {
+    case JVM_SIGNATURE_CLASS:
+    case JVM_SIGNATURE_ARRAY:   return reader.read_id(&out->as_object_id, id_size) ? sizeof(out->as_object_id) : 0;
+    case JVM_SIGNATURE_BOOLEAN: return reader.read(&out->as_boolean) ? sizeof(out->as_boolean) : 0;
+    case JVM_SIGNATURE_CHAR:    return reader.read(&out->as_char) ? sizeof(out->as_char) : 0;
+    case JVM_SIGNATURE_FLOAT:   return reader.read(&out->as_float) ? sizeof(out->as_float) : 0;
+    case JVM_SIGNATURE_DOUBLE:  return reader.read(&out->as_double) ? sizeof(out->as_double) : 0;
+    case JVM_SIGNATURE_BYTE:    return reader.read(&out->as_byte) ? sizeof(out->as_byte) : 0;
+    case JVM_SIGNATURE_SHORT:   return reader.read(&out->as_short) ? sizeof(out->as_short) : 0;
+    case JVM_SIGNATURE_INT:     return reader.read(&out->as_int) ? sizeof(out->as_int) : 0;
+    case JVM_SIGNATURE_LONG:    return reader.read(&out->as_long) ? sizeof(out->as_long) : 0;
+    default:                    return 0;
+  }
 }

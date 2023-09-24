@@ -103,7 +103,7 @@ TEST_VM(HeapDumpParser, single_utf8_record) {
   EXPECT_EQ(expected_id, record->id);
   {
     ResourceMark rm;
-    EXPECT_STREQ(expected_str, record->str->as_C_string());
+    EXPECT_STREQ(expected_str, record->sym->as_C_string());
   }
 }
 
@@ -154,7 +154,7 @@ static const char CONTENTS_CLASS_DUMP[] =
     "\x00\x00\x00\x08"                    // ID size
     "\x00\x00\x00\x00\x00\x00\x00\x00"    // Dump timestamp
 
-    "\x0C"                                // HPROF_HEAP_DUMP tag
+    "\x0c"                                // HPROF_HEAP_DUMP tag
     "\x00\x00\x00\x00"                    // Record timestamp
     "\x00\x00\x00\x7e"                    // Body size
 
@@ -251,7 +251,7 @@ static const char CONTENTS_INSTANCE_DUMP[] =
     "\x00\x00\x00\x08"                  // ID size
     "\x00\x00\x00\x00\x00\x00\x00\x00"  // Dump timestamp
 
-    "\x0C"                              // HPROF_HEAP_DUMP tag
+    "\x0c"                              // HPROF_HEAP_DUMP tag
     "\x00\x00\x00\x00"                  // Record timestamp
     "\x00\x00\x00\x1f"                  // Body size
 
@@ -294,12 +294,88 @@ TEST_VM(HeapDumpParser, single_instance_dump_subrecord) {
                  std::equal_to<u1>());
 }
 
+static const char CONTENTS_INSTANCE_DUMP_FIELD_READING[] =
+    "JAVA PROFILE 1.0.1\0"              // Header
+    "\x00\x00\x00\x04"                  // ID size
+    "\x00\x00\x00\x00\x00\x00\x00\x00"  // Dump timestamp
+
+    "\x0c"                              // HPROF_HEAP_DUMP tag
+    "\x00\x00\x00\x00"                  // Record timestamp
+    "\x00\x00\x00\x20"                  // Body size
+
+    "\x21"                              // HPROF_GC_INSTANCE_DUMP tag
+
+    "\x00\x00\x00\x00"                  // ID
+    "\x00\x00\x00\x00"                  // stack trace serial
+    "\x00\x00\x00\x00"                  // class ID
+    "\x00\x00\x00\x0f"                  // following field bytes num
+      "\x12\x34"                          // short = 4660
+      "\xf2\xf4\xf6\xf8"                  // int = -218827016
+      "\x01"                              // boolean = true
+      "\x43\x40\x91\x80"                  // float = 192.568359375 (exact)
+      "\xc7\x89\x91\x24"                  // ID
+    ;
+
+TEST_VM(HeapDumpParser, instance_dump_read_field) {
+  fill_test_file(CONTENTS_INSTANCE_DUMP_FIELD_READING, sizeof(CONTENTS_INSTANCE_DUMP_FIELD_READING) - 1);
+  ASSERT_FALSE(::testing::Test::HasFatalFailure() || ::testing::Test::HasNonfatalFailure());
+
+  ParsedHeapDump heap_dump;
+  const char *err_msg = HeapDumpParser::parse(TEST_FILENAME, &heap_dump);
+  ASSERT_EQ(nullptr, err_msg) << "Parsing error: " << err_msg;
+
+  check_record_amounts({0, 0, 0, 1 /* instance dump */, 0, 0}, heap_dump);
+  ASSERT_FALSE(::testing::Test::HasNonfatalFailure()) << "Unexpected amounts of records parsed";
+
+  u4 expected_id_size = 0x00000004;
+  HeapDumpFormat::id_t expected_id = 0;
+  jshort               expected_field1 = 4660;
+  jint                 expected_field2 = -218827016;
+  jboolean             expected_field3 = 1;
+  jfloat               expected_field4 = 192.568359375F;
+  HeapDumpFormat::id_t expected_field5 = 0xc7899124;
+  u2 expected_field_data_size = sizeof(expected_field1) + sizeof(expected_field2) +
+                                sizeof(expected_field3) + sizeof(expected_field4) + expected_id_size;
+
+  auto *record = heap_dump.instance_dump_records.get(0);
+  ASSERT_NE(nullptr, record) << "Record not found under the expected ID";
+
+  ASSERT_EQ(expected_field_data_size, record->fields_data.size());
+
+  HeapDumpFormat::BasicValue actual_field;
+
+  ASSERT_EQ(sizeof(expected_field1),
+            record->read_field(0,
+                               JVM_SIGNATURE_SHORT, expected_id_size, &actual_field));
+  EXPECT_EQ(expected_field1, actual_field.as_short);
+
+  ASSERT_EQ(sizeof(expected_field2),
+            record->read_field(sizeof(expected_field1),
+                               JVM_SIGNATURE_INT, expected_id_size, &actual_field));
+  EXPECT_EQ(expected_field2, actual_field.as_int);
+
+  ASSERT_EQ(sizeof(expected_field3),
+            record->read_field(sizeof(expected_field1) + sizeof(expected_field2),
+                               JVM_SIGNATURE_BOOLEAN, expected_id_size, &actual_field));
+  EXPECT_EQ(expected_field3, actual_field.as_boolean);
+
+  ASSERT_EQ(sizeof(expected_field4),
+            record->read_field(sizeof(expected_field1) + sizeof(expected_field2) + sizeof(expected_field3),
+                               JVM_SIGNATURE_FLOAT, expected_id_size, &actual_field));
+  EXPECT_EQ(expected_field4, actual_field.as_float);
+
+  ASSERT_EQ(sizeof(expected_field5),
+            record->read_field(sizeof(expected_field1) + sizeof(expected_field2) + sizeof(expected_field3) + sizeof(expected_field4),
+                               JVM_SIGNATURE_CLASS, expected_id_size, &actual_field));
+  EXPECT_EQ(expected_field5, actual_field.as_object_id);
+}
+
 static const char CONTENTS_OBJ_ARRAY_DUMP[] =
     "JAVA PROFILE 1.0.1\0"              // Header
     "\x00\x00\x00\x04"                  // ID size
     "\x00\x00\x00\x00\x00\x00\x00\x00"  // Dump timestamp
 
-    "\x0C"                              // HPROF_HEAP_DUMP tag
+    "\x0c"                              // HPROF_HEAP_DUMP tag
     "\x00\x00\x00\x00"                  // Record timestamp
     "\x00\x00\x00\x1d"                  // Body size
 
@@ -350,7 +426,7 @@ static const char CONTENTS_PRIM_ARRAY_DUMP[] =
     "\x00\x00\x00\x08"                  // ID size
     "\x00\x00\x00\x00\x00\x00\x00\x00"  // Dump timestamp
 
-    "\x0C"                              // HPROF_HEAP_DUMP tag
+    "\x0c"                              // HPROF_HEAP_DUMP tag
     "\x00\x00\x00\x00"                  // Record timestamp
     "\x00\x00\x00\x16"                  // Body size
 
@@ -360,8 +436,8 @@ static const char CONTENTS_PRIM_ARRAY_DUMP[] =
     "\x13\x24\x35\x46"                  // stack trace serial
     "\x00\x00\x00\x02"                  // elements num
     "\x09"                              // element type = short
-      "\x12\x34"                          // elem 0
-      "\xff\xff"                          // elem 1
+      "\x12\x34"                          // elem 0 = 4660
+      "\xff\xff"                          // elem 1 = -1
     ;
 
 TEST_VM(HeapDumpParser, single_prim_array_dump_subrecord) {
@@ -382,7 +458,8 @@ TEST_VM(HeapDumpParser, single_prim_array_dump_subrecord) {
       0x09                 // element type
   };
   expected.elems_data.extend_to(expected.elems_num * sizeof(jshort));
-  memcpy(expected.elems_data.mem(), "\x12\x34\xff\xff", expected.elems_num * sizeof(jshort));
+  jshort expected_elems[] = {4660, -1};
+  memcpy(expected.elems_data.mem(), &expected_elems, expected.elems_num * sizeof(jshort));
 
   auto *record = heap_dump.prim_array_dump_records.get(expected.id);
   ASSERT_NE(nullptr, record) << "Record not found under the expected ID";
@@ -400,7 +477,7 @@ static const char CONTENTS_BASIC_VALUES[] =
     "\x00\x00\x00\x08"                    // ID size
     "\x00\x00\x00\x00\x00\x00\x00\x00"    // Dump timestamp
 
-    "\x0C"                                // HPROF_HEAP_DUMP tag
+    "\x0c"                                // HPROF_HEAP_DUMP tag
     "\x00\x00\x00\x00"                    // Record timestamp
     "\x00\x00\x00\x88"                    // Body size
 
@@ -487,7 +564,7 @@ static const char CONTENTS_SPECIAL_FLOATS[] =
     "\x00\x00\x00\x04"                  // ID size
     "\x00\x00\x00\x00\x00\x00\x00\x00"  // Dump timestamp
 
-    "\x0C"                              // HPROF_HEAP_DUMP tag
+    "\x0c"                              // HPROF_HEAP_DUMP tag
     "\x00\x00\x00\x00"                  // Record timestamp
     "\x00\x00\x00\x6A"                  // Body size
 

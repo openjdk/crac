@@ -37,6 +37,7 @@
 #include "runtime/vmThread.hpp"
 #include "services/heapDumper.hpp"
 #include "services/writeableFlags.hpp"
+#include "utilities/decoder.hpp"
 #ifdef LINUX
 #include "os_linux.hpp"
 #endif
@@ -309,6 +310,7 @@ void VM_Crac::doit() {
   // dry-run fails checkpoint
   bool ok = true;
 
+  Decoder::before_checkpoint();
   if (!check_fds()) {
     ok = false;
   }

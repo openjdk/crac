@@ -33,8 +33,7 @@ import java.nio.file.Path;
 import java.util.*;
 import java.util.stream.Collectors;
 
-import static jdk.test.lib.Asserts.assertEquals;
-import static jdk.test.lib.Asserts.assertTrue;
+import static jdk.test.lib.Asserts.*;
 
 /**
  * This test includes two behaviours:
@@ -61,7 +60,7 @@ public class CheckpointWithOpenFdsTest implements CracTest {
     public void test() throws Exception {
         List<Path> jars = Arrays.stream(System.getProperty("java.class.path").split(File.pathSeparator))
                 .filter(p -> p.endsWith(".jar")).map(Path::of).toList();
-        assertEquals(2, jars.size()); // usually we have javatest.jar and jtreg.jar
+        assertGreaterThanOrEqual(jars.size(), 2); // usually we have at least javatest.jar and jtreg.jar
         assertTrue(jars.stream().allMatch(jar -> jar.toFile().exists()));
         Path firstJar = jars.get(0);
         Path secondJar = jars.get(1);

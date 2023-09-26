@@ -59,7 +59,7 @@ class LogFileStreamOutput : public LogOutput {
   // Write API used by AsyncLogWriter
   virtual int write_blocking(const LogDecorations& decorations, const char* msg);
   virtual void describe(outputStream* out);
-  virtual int fd_get() const { return fileno(_stream); }
+  virtual int fd_get() const override { return fileno(_stream); }
 };
 
 class LogStdoutOutput : public LogFileStreamOutput {

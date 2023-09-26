@@ -465,3 +465,35 @@ void LogFileOutput::describe(outputStream *out) {
              proper_unit_for_byte_size(_rotate_size),
              LogConfiguration::is_async_mode() ? "true" : "false");
 }
+
+int LogFileOutput::fd_get() const {
+  if (_stream == NULL) {
+    return -1;
+  }
+  return LogFileStreamOutput::fd_get();
+}
+
+void LogFileOutput::close() {
+  if (_stream == NULL) {
+    return;
+  }
+  if (fclose(_stream)) {
+    jio_fprintf(defaultStream::error_stream(), "Error closing log file '%s' (%s).\n",
+                _file_name, os::strerror(errno));
+  }
+}
+
+void LogFileOutput::reopen() {
+  assert(_stream == NULL, "reopening an already opened log file");
+
+  // Open the active log file using the same stream as before
+  _stream = os::fopen(_file_name, FileOpenMode);
+  if (_stream == nullptr) {
+    jio_fprintf(defaultStream::error_stream(), "Could not reopen log file '%s' (%s).\n",
+                _file_name, os::strerror(errno));
+    return;
+  }
+
+  // _current_size still keeps how much data we wrote for the rotation purposes.
+  // The log file may contain more data now.
+}

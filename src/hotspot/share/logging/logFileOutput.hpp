@@ -88,6 +88,9 @@ class LogFileOutput : public LogFileStreamOutput {
   virtual int write_blocking(const LogDecorations& decorations, const char* msg);
   virtual void force_rotate();
   virtual void describe(outputStream* out);
+  virtual int fd_get() const override;
+  virtual void close() override;
+  virtual void reopen() override;
 
   virtual const char* name() const {
     return _name;

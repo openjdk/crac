@@ -467,24 +467,25 @@ void LogFileOutput::describe(outputStream *out) {
 }
 
 int LogFileOutput::fd_get() const {
-  if (_stream == NULL) {
+  if (_stream == nullptr) {
     return -1;
   }
   return LogFileStreamOutput::fd_get();
 }
 
 void LogFileOutput::close() {
-  if (_stream == NULL) {
+  if (_stream == nullptr) {
     return;
   }
   if (fclose(_stream)) {
     jio_fprintf(defaultStream::error_stream(), "Error closing log file '%s' (%s).\n",
                 _file_name, os::strerror(errno));
   }
+  _stream = nullptr;
 }
 
 void LogFileOutput::reopen() {
-  assert(_stream == NULL, "reopening an already opened log file");
+  assert(_stream == nullptr, "reopening an already opened log file");
 
   // Open the active log file using the same stream as before
   _stream = os::fopen(_file_name, FileOpenMode);

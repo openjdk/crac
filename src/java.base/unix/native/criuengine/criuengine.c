@@ -93,16 +93,11 @@ static void print_command_args_to_stderr(const char **args) {
 }
 
 static const char *join_path(const char *path1, const char *path2) {
-    char *retval = malloc(strlen(path1) + 1 + strlen(path2) + 1);
-    if (!retval) {
-        perror("malloc");
+    char *retval;
+    if (asprintf(&retval, "%s/%s", path1, path2) == -1) {
+        perror("asprintf");
         exit(1);
     }
-    char *d = retval;
-    d = stpcpy(d, path1);
-    *d++ = '/';
-    d = stpcpy(d, path2);
-    *d++ = 0;
     return retval;
 }
 

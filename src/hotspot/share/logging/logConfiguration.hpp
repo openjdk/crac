@@ -136,6 +136,8 @@ class LogConfiguration : public AllStatic {
 
   // Is this file descriptor in use?
   static bool is_fd_used(int fd);
+  static void close();
+  static void reopen();
 };
 
 #endif // SHARE_LOGGING_LOGCONFIGURATION_HPP

@@ -721,3 +721,15 @@ bool LogConfiguration::is_fd_used(int fd) {
   }
   return false;
 }
+
+void LogConfiguration::close() {
+  for (size_t i = 0; i < _n_outputs; i++) {
+    _outputs[i]->close();
+  }
+}
+
+void LogConfiguration::reopen() {
+  for (size_t i = 0; i < _n_outputs; i++) {
+    _outputs[i]->reopen();
+  }
+}

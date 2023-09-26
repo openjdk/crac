@@ -25,6 +25,8 @@
 
 #include "classfile/classLoader.hpp"
 #include "jvm.h"
+#include "logging/logAsyncWriter.hpp"
+#include "logging/logConfiguration.hpp"
 #include "memory/oopFactory.hpp"
 #include "oops/typeArrayOop.inline.hpp"
 #include "runtime/crac_structs.hpp"
@@ -309,6 +311,8 @@ void VM_Crac::doit() {
   // dry-run fails checkpoint
   bool ok = true;
 
+  LogConfiguration::close();
+
   if (!check_fds()) {
     ok = false;
   }
@@ -359,6 +363,8 @@ void VM_Crac::doit() {
   VM_Version::crac_restore_finalize();
 
   memory_restore();
+
+  LogConfiguration::reopen();
 
   wakeup_threads_in_timedwait_vm();
 
@@ -421,6 +427,8 @@ Handle crac::checkpoint(jarray fd_arr, jobjectArray obj_arr, bool dry_run, jlong
   Universe::heap()->collect(GCCause::_full_gc_alot);
   Universe::heap()->set_cleanup_unused(false);
   Universe::heap()->finish_collection();
+
+  AsyncLogWriter::instance()->flush();
 
   VM_Crac cr(fd_arr, obj_arr, dry_run, (bufferedStream*)jcmd_stream);
   {

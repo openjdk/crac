@@ -1356,36 +1356,19 @@ bool PerfMemoryLinux::checkpoint(const char* checkpoint_path) {
     return true;
   }
 
-  char path[JVM_MAXPATHLEN];
-  int pathlen = snprintf(path, sizeof(path),"%s/%s", checkpoint_path, perfdata_name());
-
-  RESTARTABLE(::open(path, O_RDWR|O_CREAT|O_NOFOLLOW, S_IRUSR|S_IWUSR), checkpoint_fd);
-  if (checkpoint_fd < 0) {
-    tty->print_cr("cannot open checkpoint perfdata: %s", os::strerror(errno));
+  void *anon = ::mmap(nullptr, PerfMemory::capacity(), PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+  if (anon == MAP_FAILED) {
+    tty->print_cr("Cannot allocate new memory for perfdata: %s", os::strerror(errno));
     return false;
   }
-
-  char* p = PerfMemory::start();
-  size_t len = PerfMemory::capacity();
-  do {
-    int result;
-    RESTARTABLE(::write(checkpoint_fd, p, len), result);
-    if (result == OS_ERR) {
-      tty->print_cr("cannot write data to checkpoint perfdata file: %s", os::strerror(errno));
-      ::close(checkpoint_fd);
-      checkpoint_fd = -1;
-      return false;
+  // Note: we might be losing updates that happen between this copy and mremap
+  // TODO: consider acquiring PeriodicTask_lock around this
+  memcpy(anon, PerfMemory::start(), PerfMemory::used());
+  if (mremap(anon, PerfMemory::capacity(), PerfMemory::capacity(), MREMAP_FIXED | MREMAP_MAYMOVE, PerfMemory::start()) == MAP_FAILED) {
+    tty->print_cr("Cannot remap perfdata memory as anonymous: %s", os::strerror(errno));
+    if (munmap(anon, PerfMemory::capacity())) {
+      tty->print_cr("Cannot unmap unused private perfdata memory: %s", os::strerror(errno));
     }
-    p += result;
-    len -= (size_t)result;
-  } while (0 < len);
-
-  void* mmapret = ::mmap(PerfMemory::start(), PerfMemory::capacity(),
-      PROT_READ|PROT_WRITE, MAP_FIXED|MAP_SHARED, checkpoint_fd, 0);
-  if (MAP_FAILED == mmapret) {
-    tty->print_cr("cannot mmap checkpoint perfdata file: %s", os::strerror(errno));
-    ::close(checkpoint_fd);
-    checkpoint_fd = -1;
     return false;
   }
 
@@ -1395,10 +1378,6 @@ bool PerfMemoryLinux::checkpoint(const char* checkpoint_path) {
 }
 
 bool PerfMemoryLinux::restore() {
-  if (checkpoint_fd < 0) {
-    return true;
-  }
-
   int vmid = os::current_process_id();
   char* user_name = get_user_name(geteuid());
   char* dirname = get_user_tmp_dir(user_name, vmid, -1);
@@ -1409,41 +1388,34 @@ bool PerfMemoryLinux::restore() {
   int fd;
   RESTARTABLE(::open(backing_store_file_name, O_RDWR|O_CREAT|O_NOFOLLOW, S_IRUSR|S_IWUSR), fd);
   if (fd == OS_ERR) {
-    tty->print_cr("cannot open restore perfdata file: %s", os::strerror(errno));
-
-    void* mmapret = ::mmap(PerfMemory::start(), PerfMemory::capacity(),
-        PROT_READ|PROT_WRITE, MAP_FIXED|MAP_PRIVATE, checkpoint_fd, 0);
-    if (MAP_FAILED == mmapret) {
-      tty->print_cr("cannot remap checkpoint perfdata file: %s", os::strerror(errno));
-    }
+    tty->print_cr("Cannot open shared perfdata file: %s", os::strerror(errno));
     return false;
   }
 
-  char* p = PerfMemory::start();
-  size_t len = PerfMemory::capacity();
-  do {
-    int result;
-    RESTARTABLE(::write(fd, p, len), result);
-    if (result == OS_ERR) {
-      tty->print_cr("cannot write data to restore perfdata file: %s", os::strerror(errno));
-      ::close(fd);
-      return false;
-    }
-    p += result;
-    len -= (size_t)result;
-  } while (0 < len);
-
-  void* mmapret = ::mmap(PerfMemory::start(), PerfMemory::capacity(),
-      PROT_READ|PROT_WRITE, MAP_FIXED|MAP_SHARED, fd, 0);
-  if (MAP_FAILED == mmapret) {
-    tty->print_cr("cannot mmap restore perfdata file: %s", os::strerror(errno));
+  if (::ftruncate(fd, PerfMemory::capacity())) {
+    tty->print_cr("Cannot restore (ftruncate) perfdata file size: %s", os::strerror(errno));
     ::close(fd);
     return false;
   }
 
+  void* shared = ::mmap(nullptr, PerfMemory::capacity(), PROT_READ|PROT_WRITE, MAP_SHARED, fd, 0);
+  if (MAP_FAILED == shared) {
+    tty->print_cr("cannot mmap shared perfdata file: %s", os::strerror(errno));
+    ::close(fd);
+    return false;
+  }
   ::close(fd);
-  ::close(checkpoint_fd);
-  checkpoint_fd = -1;
+
+  // Here is another place where we might lose the update
+  memcpy(shared, PerfMemory::start(), PerfMemory::used());
+  if (::mremap(shared, PerfMemory::capacity(), PerfMemory::capacity(), MREMAP_FIXED | MREMAP_MAYMOVE, PerfMemory::start()) == MAP_FAILED) {
+    tty->print_cr("Cannot remap shared perfdata: %s", os::strerror(errno));
+    if (munmap(shared, PerfMemory::capacity())) {
+      tty->print_cr("Cannot unmap the shared memory: %s", os::strerror(errno));
+    }
+    return false;
+  }
+
   return true;
 }
 #endif //LINUX

@@ -23,6 +23,7 @@
 
 // no precompiled headers
 #include "jvm.h"
+#include "runtime/crac.hpp"
 #include "runtime/crac_structs.hpp"
 
 #include <sys/mman.h>

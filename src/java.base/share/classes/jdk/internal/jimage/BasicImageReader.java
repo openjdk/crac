@@ -27,8 +27,10 @@ package jdk.internal.jimage;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.lang.reflect.InvocationHandler;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
+import java.lang.reflect.Proxy;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.nio.IntBuffer;
@@ -72,7 +74,7 @@ public class BasicImageReader implements AutoCloseable {
     private final ByteOrder byteOrder;
     private final String name;
     private final ByteBuffer memoryMap;
-    private final FileChannel channel;
+    private FileChannel channel;
     private final ImageHeader header;
     private final long indexSize;
     private final IntBuffer redirect;
@@ -81,8 +83,9 @@ public class BasicImageReader implements AutoCloseable {
     private final ByteBuffer strings;
     private final ImageStringsReader stringsReader;
     private final Decompressor decompressor;
+    private Object cracResource;
 
-    @SuppressWarnings({ "removal", "this-escape" })
+    @SuppressWarnings("this-escape")
     protected BasicImageReader(Path path, ByteOrder byteOrder)
             throws IOException {
         this.imagePath = Objects.requireNonNull(path);
@@ -103,30 +106,8 @@ public class BasicImageReader implements AutoCloseable {
         if (map != null && MAP_ALL) {
             channel = null;
         } else {
-            channel = FileChannel.open(imagePath, StandardOpenOption.READ);
-            // No lambdas during bootstrap
-            AccessController.doPrivileged(new PrivilegedAction<Void>() {
-                @Override
-                public Void run() {
-                    if (BasicImageReader.class.getClassLoader() == null) {
-                        try {
-                            Class<?> fileChannelImpl =
-                                Class.forName("sun.nio.ch.FileChannelImpl");
-                            Method setUninterruptible =
-                                    fileChannelImpl.getMethod("setUninterruptible");
-                            setUninterruptible.invoke(channel);
-                        } catch (ClassNotFoundException |
-                                 NoSuchMethodException |
-                                 IllegalAccessException |
-                                 InvocationTargetException ex) {
-                            // fall thru - will only happen on JDK-8 systems where this code
-                            // is only used by tools using jrt-fs (non-critical.)
-                        }
-                    }
-
-                    return null;
-                }
-            });
+            channel = openFileChannel();
+            registerIfCRaCPresent();
         }
 
         // If no memory map yet and 64 bit jvm then memory map entire file
@@ -173,6 +154,89 @@ public class BasicImageReader implements AutoCloseable {
 
         stringsReader = new ImageStringsReader(this);
         decompressor = new Decompressor();
+    }
+
+    // Since this class must be compatible with JDK 8 and any non-CRaC JDK due to being part of jrtfs.jar
+    // we must register this to CRaC via reflection.
+    private void registerIfCRaCPresent() {
+        try {
+            Class<?> priorityClass = Class.forName("jdk.internal.crac.Core$Priority");
+            Class<?> jdkResourceClass = Class.forName("jdk.internal.crac.JDKResource");
+            Class<?> resourceClass = Class.forName("jdk.crac.Resource");
+            Object[] priorities = priorityClass.getEnumConstants();
+            if (priorities == null) {
+                return;
+            }
+            Object normalPriority = null;
+            for (int i = 0; i < priorities.length; ++i) {
+                if ("NORMAL".equals(priorities[i].toString())) {
+                    normalPriority = priorities[i];
+                }
+            }
+            if (normalPriority == null) {
+                throw new IllegalStateException();
+            }
+            try {
+                Method getContext = priorityClass.getMethod("getContext");
+                Object ctx = getContext.invoke(normalPriority);
+                Method register = ctx.getClass().getMethod("register", resourceClass);
+                cracResource = Proxy.newProxyInstance(null, new Class<?>[] { jdkResourceClass }, new InvocationHandler() {
+                    @Override
+                    public Object invoke(Object proxy, Method method, Object[] args) throws Throwable {
+                        if ("beforeCheckpoint".equals(method.getName())) {
+                            channel.close();
+                        } else if ("afterRestore".equals(method.getName())) {
+                            if (channel != null) {
+                                channel = openFileChannel();
+                            }
+                        } else if ("toString".equals(method.getName())) {
+                            return BasicImageReader.this.toString();
+                        } else if ("hashCode".equals(method.getName())) {
+                            return 0;
+                        } else if ("equals".equals(method.getName())) {
+                            return args[0] == cracResource;
+                        } else {
+                            throw new UnsupportedOperationException(method.toString());
+                        }
+                        return null;
+                    }
+                });
+                register.invoke(ctx, cracResource);
+            } catch (NoSuchMethodException | InvocationTargetException | IllegalAccessException e) {
+                throw new IllegalStateException(e);
+            }
+        } catch (ClassNotFoundException e) {
+            // ignored if class not present
+        }
+    }
+
+    @SuppressWarnings("removal")
+    private FileChannel openFileChannel() throws IOException {
+        FileChannel channel = FileChannel.open(imagePath, StandardOpenOption.READ);
+        // No lambdas during bootstrap
+        AccessController.doPrivileged(new PrivilegedAction<Void>() {
+            @Override
+            public Void run() {
+                if (BasicImageReader.class.getClassLoader() == null) {
+                    try {
+                        Class<?> fileChannelImpl =
+                            Class.forName("sun.nio.ch.FileChannelImpl");
+                        Method setUninterruptible =
+                                fileChannelImpl.getMethod("setUninterruptible");
+                        setUninterruptible.invoke(channel);
+                    } catch (ClassNotFoundException |
+                             NoSuchMethodException |
+                             IllegalAccessException |
+                             InvocationTargetException ex) {
+                        // fall thru - will only happen on JDK-8 systems where this code
+                        // is only used by tools using jrt-fs (non-critical.)
+                    }
+                }
+
+                return null;
+            }
+        });
+        return channel;
     }
 
     protected BasicImageReader(Path imagePath) throws IOException {

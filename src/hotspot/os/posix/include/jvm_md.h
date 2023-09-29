@@ -92,9 +92,8 @@
 #define SHUTDOWN3_SIGNAL SIGTERM
 
 #if defined(LINUX)
+// The signal is blocked by default; this should not break SunMiscSignalTest
 #define RESTORE_SIGNAL   (SIGRTMIN + 2)
-#elif defined(__APPLE__)
-#define RESTORE_SIGNAL   SIGUSR2
 #endif
 
 #endif /* !_JAVASOFT_JVM_MD_H_ */

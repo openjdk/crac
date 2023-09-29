@@ -686,23 +686,28 @@ class RecordsParser : public StackObj {
     log_error(heapdumpparsing)("Multiple occurences of ID " UINT64_FORMAT " in %s records", \
                                id, record_group_name);                                      \
     return Result::REPEATED_ID;                                                             \
-  }
+  }                                                                                         \
+  hashtable->maybe_grow()
 
-#define READ_INTO_OR_FAIL(ptr, what)                       \
-  if (!_reader->read(ptr)) {                               \
-    log_error(heapdumpparsing)("Failed to read %s", what); \
-    return Result::FAILED;                                 \
-  }
+#define READ_INTO_OR_FAIL(ptr, what)                         \
+  do {                                                       \
+    if (!_reader->read(ptr)) {                               \
+      log_error(heapdumpparsing)("Failed to read %s", what); \
+      return Result::FAILED;                                 \
+    }                                                        \
+  } while (false)
 
 #define READ_OR_FAIL(type, var, what) \
   type var;                           \
   READ_INTO_OR_FAIL(&var, what)
 
-#define READ_ID_INTO_OR_FAIL(ptr, what)                    \
-  if (!_reader->read_id(ptr, _id_size)) {                  \
-    log_error(heapdumpparsing)("Failed to read %s", what); \
-    return Result::FAILED;                                 \
-  }
+#define READ_ID_INTO_OR_FAIL(ptr, what)                      \
+  do {                                                       \
+    if (!_reader->read_id(ptr, _id_size)) {                  \
+      log_error(heapdumpparsing)("Failed to read %s", what); \
+      return Result::FAILED;                                 \
+    }                                                        \
+  } while (false)
 
 #define READ_ID_OR_FAIL(var, what) \
   hdf::id_t var;                   \

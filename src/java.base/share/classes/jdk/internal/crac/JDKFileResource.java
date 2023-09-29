@@ -10,13 +10,24 @@ import java.io.File;
 import java.io.FileDescriptor;
 import java.io.IOException;
 import java.nio.file.FileSystems;
+import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.List;
 import java.util.function.Supplier;
 
 public abstract class JDKFileResource extends JDKFdResource {
-    private static final String[] CLASSPATH_ENTRIES =
-        GetPropertyAction.privilegedGetProperty("java.class.path")
-            .split(File.pathSeparator);
+    private static final Path[] CLASSPATH_ENTRIES;
+
+    static {
+        String[] items = GetPropertyAction.privilegedGetProperty("java.class.path")
+                .split(File.pathSeparator);
+        CLASSPATH_ENTRIES = new Path[items.length];
+        for (int i = 0; i < items.length; i++) {
+            CLASSPATH_ENTRIES[i] = Path.of(items[i]);
+        }
+    }
 
     boolean closed;
     boolean error;
@@ -40,9 +51,14 @@ public abstract class JDKFileResource extends JDKFdResource {
     protected abstract void reopenAfterRestore(OpenResourcePolicies.Policy policy) throws IOException;
 
     protected boolean matchClasspath(String path) {
-        for (String cp : CLASSPATH_ENTRIES) {
-            if (cp.equals(path)) {
-                return true;
+        Path p = Path.of(path);
+        for (Path entry : CLASSPATH_ENTRIES) {
+            try {
+                if (Files.isSameFile(p, entry)) {
+                    return true;
+                }
+            } catch (IOException e) {
+                // ignored
             }
         }
         return false;

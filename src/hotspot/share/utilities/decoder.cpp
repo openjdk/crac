@@ -128,10 +128,7 @@ void Decoder::before_checkpoint() {
     delete _shared_decoder;
     _shared_decoder = nullptr;
   }
-  if (_error_handler_decoder != nullptr) {
-    delete _error_handler_decoder;
-    _error_handler_decoder = nullptr;
-  }
+  guarantee(_error_handler_decoder == nullptr, "Error handler decoder should not be present");
 }
 
 #endif // !_WINDOWS

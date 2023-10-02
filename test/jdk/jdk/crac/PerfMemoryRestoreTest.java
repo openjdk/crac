@@ -65,7 +65,11 @@ public class PerfMemoryRestoreTest implements CracTest {
         }
         // Note: we need to check the checkpoint.pid(), which should be restored (when using CRIU),
         // as restored.pid() would be the criuengine restorewait process
-        checkMapped(String.valueOf(checkpoint.pid()), perfdata.toString());
+        String pidString = String.valueOf(checkpoint.pid());
+        checkMapped(pidString, perfdata.toString());
+        builder.runJcmd(pidString, "PerfCounter.print")
+                .shouldHaveExitValue(0)
+                .shouldContain("sun.perfdata.size=");
         restored.input().write('\n');
         restored.input().flush();
         restored.waitForSuccess();

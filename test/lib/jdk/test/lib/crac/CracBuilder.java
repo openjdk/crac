@@ -4,6 +4,7 @@ import jdk.test.lib.Container;
 import jdk.test.lib.Utils;
 import jdk.test.lib.containers.docker.DockerTestUtils;
 import jdk.test.lib.containers.docker.DockerfileConfig;
+import jdk.test.lib.process.OutputAnalyzer;
 import jdk.test.lib.util.FileUtils;
 
 import javax.imageio.IIOException;
@@ -481,14 +482,19 @@ public class CracBuilder {
     }
 
     public void checkpointViaJcmd() throws Exception {
+        runJcmd(main.getName(), "JDK.checkpoint").shouldHaveExitValue(0);
+    }
+
+    public OutputAnalyzer runJcmd(String id, String... command) throws Exception {
         List<String> cmd = new ArrayList<>();
         if (dockerImageName != null) {
             cmd.addAll(Arrays.asList(Container.ENGINE_COMMAND, "exec", CONTAINER_NAME, "/jdk/bin/jcmd"));
         } else {
             cmd.add(Utils.TEST_JDK + "/bin/jcmd");
         }
-        cmd.addAll(Arrays.asList(main().getName(), "JDK.checkpoint"));
+        cmd.add(id);
+        cmd.addAll(Arrays.asList(command));
         // This works for non-docker commands, too
-        DockerTestUtils.execute(cmd).shouldHaveExitValue(0);
+        return DockerTestUtils.execute(cmd);
     }
 }

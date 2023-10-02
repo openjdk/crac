@@ -29,6 +29,8 @@
 #include "utilities/growableArray.hpp"
 #include "utilities/macros.hpp"
 
+#include <unistd.h>
+
 // xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
 #define UUID_LENGTH 36
 #define BAD_OFFSET 0xFFFFFFFFBAD0FF5Eull

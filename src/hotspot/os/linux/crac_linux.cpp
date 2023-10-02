@@ -592,15 +592,14 @@ static void block_in_other_futex(int signal, siginfo_t *info, void *ctx) {
   asm volatile (
     "mov x1, %[op]\n\t"
     "mov x2, 1\n\t"
-    "mov x4, 0\n\t"
-    "mov x5, 0\n\t"
+    "mov x4, xzr\n\t"
+    "mov x5, xzr\n\t"
     "mov x8, %[sysnum]\n\t"
     ".begin: mov x0, %[futex]\n\t"
-    "mov x3, 0\n\t"
+    "mov x3, xzr\n\t"
     "svc #0\n\t"
     "cbnz x0, .end\n\t" // exit the loop on error
-    "mov x3, %[futex]\n\t"
-    "ldr w3, [x3]\n\t"
+    "ldr w3, [%[futex]]\n\t"
     "cbnz w3, .begin\n\t"
     ".end: mov %[retval], x0\n\t"
     : [retval]"=r"(retval)
@@ -608,10 +607,10 @@ static void block_in_other_futex(int signal, siginfo_t *info, void *ctx) {
     : "memory", "cc", "x0", "x1", "x2", "x3", "x4", "x5", "x8");
 #else
 # error Unimplemented
-  // This is the logic any platform should perform:
-  while (persist_futex) {
-     syscall(SYS_futex, &persist_futex, FUTEX_WAIT_PRIVATE, 1, nullptr, nullptr, 0);
-  }
+  // This is the logic any architecture should perform:
+  do {
+    retval = syscall(SYS_futex, &persist_futex, FUTEX_WAIT_PRIVATE, 1, nullptr, nullptr, 0);
+  } while (retval == 0 && persist_futex);
 #endif // x86_64 or aarch64
 
   if (retval != 0) {

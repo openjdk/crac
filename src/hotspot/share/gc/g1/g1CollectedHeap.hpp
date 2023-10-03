@@ -1319,13 +1319,13 @@ public:
   // Used to print information about locations in the hs_err file.
   bool print_location(outputStream* st, void* addr) const override;
 
-  void persist_for_checkpoint() {
+  void persist_for_checkpoint() override {
     _hrm.persist_for_checkpoint();
     G1FromCardCache::persist_for_checkpoint();
     _cm->persist_for_checkpoint();
     _task_queues->dealloc_queues();
   }
-  void on_restore() {
+  void on_restore() override {
   #ifdef ASSERT
     _hrm.assert_checkpoint();
     G1FromCardCache::assert_checkpoint();

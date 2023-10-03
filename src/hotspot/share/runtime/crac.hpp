@@ -38,7 +38,7 @@
 
 // xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
 #define UUID_LENGTH 36
-#define BAD_OFFSET 0xFFFFFFFFBAD0FF5Eull
+#define BAD_OFFSET 0xBAD0FF5Eull
 
 class crac: AllStatic {
 public:

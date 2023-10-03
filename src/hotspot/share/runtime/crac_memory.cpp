@@ -107,8 +107,8 @@ bool crac::MemoryPersister::store(void *addr, size_t length, size_t mapped_lengt
 
   size_t page_size = os::vm_page_size();
   assert(((u_int64_t) addr & (page_size - 1)) == 0, "Unaligned address %p", addr);
-  assert(length <= mapped_length, "Useful length %lx longer than mapped %lx", length, mapped_length);
-  assert((mapped_length & (page_size - 1)) == 0, "Unaligned length %lx at %p (page size %lx)", mapped_length, addr, page_size);
+  assert(length <= mapped_length, "Useful length %zx longer than mapped %zx", length, mapped_length);
+  assert((mapped_length & (page_size - 1)) == 0, "Unaligned length %zx at %p (page size %zx)", mapped_length, addr, page_size);
 
   int execFlag = (executable ? Flags::EXECUTABLE : 0);
   char *curr = (char *) addr;
@@ -209,10 +209,17 @@ void crac::MemoryPersister::load_on_restore() {
   delete reader;
 }
 
+#ifdef _LP64
+# define FMT64X "%lx"
+#else
+# define FMT64X "%llx"
+#endif
+
 #ifdef ASSERT
+
 void crac::MemoryPersister::assert_mem(void *addr, size_t used, size_t total) {
   assert(((u_int64_t) addr & (os::vm_page_size() - 1)) == 0, "Unaligned address %p", addr);
-  assert((total & (os::vm_page_size() - 1)) == 0, "Unaligned length %lx", total);
+  assert((total & (os::vm_page_size() - 1)) == 0, "Unaligned length %zx", total);
 
   size_t aligned = align_up(used, os::vm_page_size());
   size_t unused = total - aligned;
@@ -226,13 +233,13 @@ void crac::MemoryPersister::assert_mem(void *addr, size_t used, size_t total) {
     assert(at < _index.length(), "Overrunning index with 0x%zx used", used);
     const record &r = _index.at(at);
     // fprintf(stderr, "R %d %lx %lx %lx %x\n", at, r.addr, r.length, r.offset, r.flags);
-    assert((void   *) r.addr == addr, "Unexpected address %lx, expected %p", r.addr, addr);
-    assert(r.flags & Flags::ACCESSIBLE, "Bad flags for %lx: 0x%x", r.addr, r.flags);
-    assert(r.length <= used, "Persisted memory region length does not match at %p: %lu vs. %lu", addr, used, r.length);
+    assert((void   *) r.addr == addr, "Unexpected address " FMT64X ", expected %p", r.addr, addr);
+    assert(r.flags & Flags::ACCESSIBLE, "Bad flags for " FMT64X ": 0x%x", r.addr, r.flags);
+    assert(r.length <= used, "Persisted memory region length does not match at %p: %zu vs. " FMT64X, addr, used, r.length);
     if (r.flags & Flags::DATA) {
-      assert(r.offset != BAD_OFFSET, "Invalid offset at %lx", r.addr);
+      assert(r.offset != BAD_OFFSET, "Invalid offset at " FMT64X, r.addr);
     } else {
-      assert(r.offset == BAD_OFFSET, "Invalid offset at %lx: %lx", r.addr, r.offset);
+      assert(r.offset == BAD_OFFSET, "Invalid offset at " FMT64X ": " FMT64X, r.addr, r.offset);
     }
     used -= r.length;
     addr = (char *) addr + r.length;
@@ -240,25 +247,25 @@ void crac::MemoryPersister::assert_mem(void *addr, size_t used, size_t total) {
   }
   if (unused > 0) {
     const record &g = _index.at(at);
-    assert((void *) g.addr == gap_addr, "Invalid address for the gap region: %lx vs. %p", g.addr, gap_addr);
-    assert(g.length == unused, "Persisted gap length does not match at %p: %lu vs. %lu", gap_addr, unused, g.length);
+    assert((void *) g.addr == gap_addr, "Invalid address for the gap region: " FMT64X " vs. %p", g.addr, gap_addr);
+    assert(g.length == unused, "Persisted gap length does not match at %p: %zu vs. " FMT64X, gap_addr, unused, g.length);
     assert((g.flags & (Flags::DATA | Flags::ACCESSIBLE)) == Flags::ACCESSIBLE, "Bad flags for gap %p: 0x%x", gap_addr, g.flags);
-    assert(g.offset == BAD_OFFSET, "Invalid offset at %p: %lx", gap_addr, g.offset);
+    assert(g.offset == BAD_OFFSET, "Invalid offset at %p: " FMT64X, gap_addr, g.offset);
   }
 }
 
 void crac::MemoryPersister::assert_gap(void *addr, size_t length) {
   assert(((u_int64_t) addr & (os::vm_page_size() - 1)) == 0, "Unaligned address %p", addr);
-  assert((length & (os::vm_page_size() - 1)) == 0, "Unaligned length %lx", length);
+  assert((length & (os::vm_page_size() - 1)) == 0, "Unaligned length %zx", length);
   if (length > 0) {
     SearchInIndex comparator;
     bool found;
     int at = _index.find_sorted<struct record>(&comparator, { .addr = (u_int64_t) addr }, found);
     assert(found, "Cannot find region with address %p (%d records)", addr, _index.length());
     const record &r = _index.at(at);
-    assert(r.length == length, "Persisted memory region length does not match at %p: %lu vs. %lu", addr, length, r.length);
+    assert(r.length == length, "Persisted memory region length does not match at %p: %zu vs. " FMT64X, addr, length, r.length);
     assert((r.flags & (Flags::DATA | Flags::ACCESSIBLE)) == 0, "Bad flags for %p: 0x%x", addr, r.flags);
-    assert(r.offset == BAD_OFFSET, "Invalid offset at %p: %lx", addr, r.offset);
+    assert(r.offset == BAD_OFFSET, "Invalid offset at %p: " FMT64X, addr, r.offset);
   }
 }
 #endif // ASSERT

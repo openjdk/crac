@@ -556,7 +556,7 @@ static void block_in_other_futex(int signal, siginfo_t *info, void *ctx) {
   Atomic::add(&persist_waiters, 1);
   // From now on the code must not use stack variables!
   int retval = 0;
-#if defined(__x86_64__)
+#ifdef AMD64
   asm volatile (
     "mov $0, %%r8\n\t"
     "mov $0, %%r9\n\t"
@@ -572,7 +572,23 @@ static void block_in_other_futex(int signal, siginfo_t *info, void *ctx) {
     : "=a"(retval)
     : [sysnum]"i"(SYS_futex), "D"(&persist_futex), "S"(FUTEX_WAIT_PRIVATE), "d"(1)
     : "memory", "cc", "rcx", "r8", "r9", "r10", "r11");
-#elif defined(__aarch64__)
+#elif IA32
+  asm volatile (
+    "mov $0, %%esi\n\t"
+    "mov $0, %%edi\n\t"
+    // note: ebp (6th param) should be zero-ed as well, but GCC does not allow to clobber it
+    ".begin: mov %[sysnum], %%eax\n\t"
+    "int $0x80\n\t"
+    "test %%eax, %%eax\n\t" // exit the loop on error
+    "jnz .end\n\t"
+    "mov (%%ecx), %%esi\n\t"
+    "test %%esi, %%esi\n\t"
+    "jnz .begin\n\t"
+    ".end: nop\n\t"
+    : "=a"(retval)
+    : [sysnum]"i"(SYS_futex), "b"(&persist_futex), "c"(FUTEX_WAIT_PRIVATE), "d"(1)
+    : "memory", "cc", "esi", "edi");
+#elif defined(AARCH64)
   register volatile int *futex asm("x7") = &persist_futex;
   asm volatile (
     "mov x1, %[op]\n\t"

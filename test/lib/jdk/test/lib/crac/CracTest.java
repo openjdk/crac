@@ -193,6 +193,8 @@ public interface CracTest {
 
     /**
      * Used as argument for {@link CracBuilder#args(String...)}.
+     *
+     * @param extraArgs Optional parameters that were not part of the <code>@run</code> jtreg tag
      */
     static String[] args(String... extraArgs) {
         assertNotNull(ArgsHolder.args, "Args are null; are you trying to access them from test method?");

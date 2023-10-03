@@ -693,3 +693,20 @@ void crac::update_javaTimeNanos_offset() {
     }
   }
 }
+
+bool crac::read_all(int fd, char *dest, size_t n) {
+  size_t rd = 0;
+  do {
+    ssize_t r = ::read(fd, dest + rd, n - rd);
+    if (r == 0) {
+      return false;
+    } else if (r < 0) {
+      if (errno == EINTR) {
+        continue;
+      }
+      return false;
+    }
+    rd += r;
+  } while (rd < n);
+  return true;
+}

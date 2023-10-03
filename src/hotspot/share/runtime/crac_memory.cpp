@@ -21,6 +21,7 @@
  * questions.
  */
 #include <limits.h>
+#include <string.h>
 
 #include "runtime/crac.hpp"
 #include "runtime/os.hpp"
@@ -77,8 +78,19 @@ crac::MemoryReader::MemoryReader(const char *filename) {
   }
 }
 
+void crac::FileMemoryReader::read(size_t offset, void *addr, size_t length, bool executable) {
+  assert(_fd >= 0, "File descriptor not open");
+  if (os::seek_to_file_offset(_fd, offset) < 0) {
+    fatal("Cannot seek in persisted memory file: %d, 0x%zx: %s", _fd, offset, os::strerror(errno));
+  }
+  if (!read_all(_fd, (char *) addr, length)) {
+    fatal("Cannot read persisted memory file at %p (0x%zx = %zu): %s", addr, length, length, os::strerror(errno));
+  }
+};
+
 void crac::MemoryPersister::init() {
   _writer = new FileMemoryWriter(MEMORY_IMG, os::vm_page_size());
+  _index.clear();
 }
 
 static bool is_all_zeroes(void *addr, size_t page_size) {
@@ -159,7 +171,17 @@ bool crac::MemoryPersister::store_gap(void *addr, size_t length) {
 }
 
 void crac::MemoryPersister::load_on_restore() {
-  MmappingMemoryReader reader(MEMORY_IMG);
+  MemoryReader *reader;
+  bool should_map = false;
+  // When pauseengine/simengine is used we can do repeated checkpoints;
+  // when the memory is mmapped and we try to write it second time, the file
+  // would be truncated and subsequent attempt to read the data could cause SIGBUS.
+  if (CREngine != nullptr && (!strncmp(CREngine, "pauseengine", 10) || !strncmp(CREngine, "simengine", 8))) {
+    reader = new FileMemoryReader(MEMORY_IMG);
+    should_map = true;
+  } else {
+    reader = new MmappingMemoryReader(MEMORY_IMG);
+  }
   size_t page_size = os::vm_page_size();
   for (int i = 0; i < _index.length(); ++i) {
     const struct record &r = _index.at(i);
@@ -171,7 +193,11 @@ void crac::MemoryPersister::load_on_restore() {
           fatal("Cannot remap memory at %p-%p", (void *) r.addr, (void *)(r.addr + aligned_length));
         }
       } else {
-        reader.read(r.offset, (char *) r.addr, r.length, r.flags & Flags::EXECUTABLE);
+        char *data = (char *) r.addr;
+        if (should_map && !map(data, aligned_length, executable)) {
+          fatal("Cannot remap memory at %p-%p", (void *) r.addr, (void *)(r.addr + aligned_length));
+        }
+        reader->read(r.offset, data, r.length, r.flags & Flags::EXECUTABLE);
       }
     } else {
       // In case of RestoreMemoryNoWait the gaps are already mapped in init_userfault()
@@ -180,6 +206,7 @@ void crac::MemoryPersister::load_on_restore() {
       }
     }
   }
+  delete reader;
 }
 
 #ifdef ASSERT

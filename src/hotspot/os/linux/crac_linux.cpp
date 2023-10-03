@@ -475,23 +475,6 @@ void crac::vm_create_start() {
   _vm_inited_fds.initialize();
 }
 
-static bool read_all(int fd, char *dest, size_t n) {
-  size_t rd = 0;
-  do {
-    ssize_t r = ::read(fd, dest + rd, n - rd);
-    if (r == 0) {
-      return false;
-    } else if (r < 0) {
-      if (errno == EINTR) {
-        continue;
-      }
-      return false;
-    }
-    rd += r;
-  } while (rd < n);
-  return true;
-}
-
 bool crac::read_bootid(char *dest) {
   int fd = ::open("/proc/sys/kernel/random/boot_id", O_RDONLY);
   if (fd < 0 || !read_all(fd, dest, UUID_LENGTH)) {

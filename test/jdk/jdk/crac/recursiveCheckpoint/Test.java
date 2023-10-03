@@ -21,6 +21,9 @@
 import jdk.crac.*;
 import jdk.test.lib.crac.*;
 
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /*
@@ -28,39 +31,60 @@ import java.util.concurrent.atomic.AtomicInteger;
  * @summary check that the recursive checkpoint is not allowed
  * @library /test/lib
  * @build Test
- * @run driver/timeout=60 jdk.test.lib.crac.CracTest 10
+ * @run driver/timeout=15 jdk.test.lib.crac.CracTest 10
  */
 public class Test implements Resource, CracTest {
     private static final AtomicInteger counter = new AtomicInteger(0);
+    private static final AtomicInteger restoreCount = new AtomicInteger(0);
     private static Exception exception = null;
 
-    @CracTestArg
+    @CracTestArg(0)
     int numThreads;
+
+    @CracTestArg(value = 1, optional = true)
+    String restoreCountPath;
 
     @Override
     public void test() throws Exception {
         CracBuilder builder = new CracBuilder().engine(CracEngine.PAUSE);
+        // remove pid file if it exists from previous run
+        builder.imageDir().resolve("pid").toFile().delete();
+        restoreCountPath = builder.imageDir().resolve("restoreCount").toAbsolutePath().toString();
+        builder.imageDir().toFile().mkdirs();
+        Files.writeString(Path.of(restoreCountPath), "0");
+
+        builder.args(CracTest.args(restoreCountPath));
         CracProcess process = builder.startCheckpoint();
         process.waitForPausePid();
         for (int i = 1; i <= numThreads + 1; ++i) {
+            assert process.isAlive();
             System.err.printf("Restore #%d%n", i);
             builder.doRestore();
+            String currentRestore;
+            do {
+                Thread.sleep(20);
+                currentRestore = Files.readString(Path.of(restoreCountPath));
+            } while(!currentRestore.equals(String.valueOf(i)));
         }
         process.waitForSuccess();
     }
 
-    private static class TestThread extends Thread {
+    private class TestThread extends Thread {
 
         @Override
         public void run() {
             try {
-                jdk.crac.Core.checkpointRestore();
+                doCheckpointRestore();
             } catch (CheckpointException e) {
                 if (exception == null)
                     exception = new RuntimeException("Checkpoint in thread ERROR " + e);
             } catch (RestoreException e) {
                 if (exception == null)
                     exception = new RuntimeException("Restore in thread ERROR " + e);
+            } catch (IOException e) {
+                if (exception == null) {
+                    exception = e;
+                }
             }
         }
     };
@@ -109,7 +133,7 @@ public class Test implements Resource, CracTest {
 
     @Override
     public void exec() throws Exception {
-        Core.getGlobalContext().register(new Test());
+        Core.getGlobalContext().register(this);
 
         TestThread[] threads = new TestThread[numThreads];
         for (int i = 0; i < numThreads; i++) {
@@ -119,11 +143,11 @@ public class Test implements Resource, CracTest {
 
         Thread.sleep(100);
         try {
-            jdk.crac.Core.checkpointRestore();
+            doCheckpointRestore();
         } catch (CheckpointException e) {
-            throw new RuntimeException("Checkpoint ERROR " + e);
+            throw new RuntimeException("Checkpoint ERROR", e);
         } catch (RestoreException e) {
-            throw new RuntimeException("Restore ERROR " + e);
+            throw new RuntimeException("Restore ERROR", e);
         }
 
         for (int i = 0; i < numThreads; i++) {
@@ -137,5 +161,12 @@ public class Test implements Resource, CracTest {
             throw exception;
         }
         System.out.println("PASSED");
+    }
+
+    private void doCheckpointRestore() throws CheckpointException, RestoreException, IOException {
+        Core.checkpointRestore();
+        int rc = restoreCount.incrementAndGet();
+        System.err.printf("After restore #%d%n", rc, restoreCountPath);
+        Files.writeString(Path.of(restoreCountPath), String.valueOf(rc));
     }
 }

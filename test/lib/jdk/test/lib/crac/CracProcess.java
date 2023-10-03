@@ -53,6 +53,8 @@ public class CracProcess {
             waitForFileCreated(watcher, imageDir.getParent(), path -> "cr".equals(path.toFile().getName()));
             waitForFileCreated(watcher, imageDir, path -> "pid".equals(path.toFile().getName()));
         }
+        String expectedPid = Files.readString(builder.imageDir().toAbsolutePath().resolve("pid"));
+        assertEquals(expectedPid.trim(), String.valueOf(process.pid()));
     }
 
     private void waitForFileCreated(WatchService watcher, Path dir, Predicate<Path> predicate) throws IOException, InterruptedException {
@@ -127,5 +129,9 @@ public class CracProcess {
                 consumer.accept(line);
             }
         }).process();
+    }
+
+    public boolean isAlive() {
+        return process.isAlive();
     }
 }

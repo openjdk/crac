@@ -87,6 +87,12 @@ public:
     void read(size_t offset, void *addr, size_t size, bool executable) override;
   };
 
+  class FileMemoryReader: public crac::MemoryReader {
+  public:
+    FileMemoryReader(const char *filename): MemoryReader(filename) {}
+    void read(size_t offset, void *addr, size_t size, bool executable) override;
+  };
+
   class MemoryPersister: AllStatic {
   protected:
     enum Flags {
@@ -139,6 +145,7 @@ public:
   static void after_threads_restored();
 
 private:
+  static bool read_all(int fd, char *buf, size_t bytes);
   static bool read_bootid(char *dest);
 
   static jlong checkpoint_millis;

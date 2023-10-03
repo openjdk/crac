@@ -68,7 +68,9 @@ crac::MemoryWriter::MemoryWriter(const char *filename): _offset_curr(0) {
 
 crac::MemoryReader::MemoryReader(const char *filename) {
   char path[PATH_MAX];
-  snprintf(path, PATH_MAX, "%s%s%s", CRaCRestoreFrom, os::file_separator(), filename);
+  // When the checkpoint fails, we need to load the memory from CRaCCheckpointTo
+  const char *dir = CRaCRestoreFrom != nullptr ? CRaCRestoreFrom : CRaCCheckpointTo;
+  snprintf(path, PATH_MAX, "%s%s%s", dir, os::file_separator(), filename);
   _fd = os::open(path, O_RDONLY, S_IRUSR | S_IWUSR);
   if (_fd < 0) {
     fatal("Cannot open persisted memory file %s: %s", path, os::strerror(errno));

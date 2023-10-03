@@ -32,6 +32,8 @@
 #include "runtime/os.hpp"
 #include "runtime/osThread.hpp"
 #include "runtime/threads.hpp"
+#include "runtime/threadSMR.hpp"
+#include "runtime/threadSMR.inline.hpp"
 #include "utilities/growableArray.hpp"
 #include "logging/log.hpp"
 #include "classfile/classLoader.hpp"
@@ -607,17 +609,12 @@ static void block_in_other_futex(int signal, siginfo_t *info, void *ctx) {
     // though, so we'll treat that as an error.
   }
 
-  int dec = Atomic::sub(&persist_waiters, 1);
 #ifdef HAS_RSEQ
   if (rseqc->rseq_abi_pointer) {
     // Register the rseq back after restore
     if (syscall(SYS_rseq, rseqc->rseq_abi_pointer, rseqc->rseq_abi_size, 0, rseqc->signature) != 0) {
       perror("Register rseq again");
     }
-  }
-  if (dec == 0) {
-    FREE_C_HEAP_ARRAY(struct __ptrace_rseq_configuration, rseq_configs);
-    rseq_configs = nullptr;
   }
 #endif // HAS_RSEQ
 }
@@ -687,17 +684,15 @@ public:
 void crac::before_threads_persisted() {
   persist_futex = 1;
 
-  CountThreadsClosure counter;
-  Threads::java_threads_do(&counter);
-
   sigset_t blocking_set;
   sigemptyset(&blocking_set);
   sigaddset(&blocking_set, SIGUSR1);
 
+  uint num_java_threads = ThreadsSMRSupport::get_java_thread_list()->length();
 #ifdef HAS_RSEQ
   rseq_configs = NEW_C_HEAP_ARRAY(
-    struct __ptrace_rseq_configuration, counter.count(), mtInternal);
-  guarantee(rseq_configs, "Cannot allocate %lu rseq structs", counter.count());
+    struct __ptrace_rseq_configuration, num_java_threads, mtInternal);
+  guarantee(rseq_configs, "Cannot allocate %u rseq structs", num_java_threads);
 
   sigprocmask(SIG_BLOCK, &blocking_set, nullptr);
   pid_t child = fork();
@@ -731,7 +726,7 @@ void crac::before_threads_persisted() {
   SignalClosure closure;
   Threads::java_threads_do(&closure);
 
-  while ((size_t) persist_waiters < counter.count()) {
+  while ((uint) persist_waiters < num_java_threads) {
     sched_yield();
   }
 
@@ -745,4 +740,8 @@ void crac::after_threads_restored() {
   if (syscall(SYS_futex, &persist_futex, FUTEX_WAKE_PRIVATE, INT_MAX, nullptr, nullptr, 0) < 0) {
     fatal("Cannot wake up threads after restore: %s", os::strerror(errno));
   }
+#ifdef HAS_RSEQ
+  FREE_C_HEAP_ARRAY(struct __ptrace_rseq_configuration, rseq_configs);
+  rseq_configs = nullptr;
+#endif
 }

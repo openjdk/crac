@@ -311,12 +311,6 @@ void VM_Crac::doit() {
   // dry-run fails checkpoint
   bool ok = true;
 
-  AsyncLogWriter* aio_writer = AsyncLogWriter::instance();
-  if (aio_writer) {
-    aio_writer->stop();
-  }
-  LogConfiguration::close();
-
   if (!check_fds()) {
     ok = false;
   }
@@ -367,11 +361,6 @@ void VM_Crac::doit() {
   VM_Version::crac_restore_finalize();
 
   memory_restore();
-
-  LogConfiguration::reopen();
-  if (aio_writer) {
-    aio_writer->resume();
-  }
 
   wakeup_threads_in_timedwait_vm();
 
@@ -435,12 +424,23 @@ Handle crac::checkpoint(jarray fd_arr, jobjectArray obj_arr, bool dry_run, jlong
   Universe::heap()->set_cleanup_unused(false);
   Universe::heap()->finish_collection();
 
+  AsyncLogWriter* aio_writer = AsyncLogWriter::instance();
+  if (aio_writer) {
+    aio_writer->stop();
+  }
+  LogConfiguration::close();
+
   VM_Crac cr(fd_arr, obj_arr, dry_run, (bufferedStream*)jcmd_stream);
   {
     MutexLocker ml(Heap_lock);
     VMThread::execute(&cr);
   }
   if (cr.ok()) {
+    LogConfiguration::reopen();
+    if (aio_writer) {
+      aio_writer->resume();
+    }
+
     oop new_args = NULL;
     if (cr.new_args()) {
       new_args = java_lang_String::create_oop_from_str(cr.new_args(), CHECK_NH);

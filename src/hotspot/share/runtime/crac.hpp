@@ -29,7 +29,12 @@
 #include "utilities/growableArray.hpp"
 #include "utilities/macros.hpp"
 
-#include <unistd.h>
+#ifdef  _WINDOWS
+# include <io.h>
+# define close _close
+#else
+# include <unistd.h>
+#endif // _WINDOWS
 
 // xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
 #define UUID_LENGTH 36

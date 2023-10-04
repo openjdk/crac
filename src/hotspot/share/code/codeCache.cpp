@@ -1882,7 +1882,10 @@ void CodeCache::print_names(outputStream *out) {
 void CodeCache::persist_for_checkpoint() {
   FOR_ALL_HEAPS(it) {
     CodeHeap *heap = *it;
-    if (heap != nullptr) {
+    // Non-nMethods heap is used for code stubs that are used for atomic operations
+    // on aarch64; as these are used e.g. for all allocations/frees it would be complicated
+    // to avoid those until the memory is fully restored.
+    if (heap != nullptr && heap->code_blob_type() != CodeBlobType::NonNMethod) {
       heap->persist_for_checkpoint();
     }
   }
@@ -1892,7 +1895,7 @@ void CodeCache::persist_for_checkpoint() {
 void CodeCache::assert_checkpoint() {
   FOR_ALL_HEAPS(it) {
     CodeHeap *heap = *it;
-    if (heap != nullptr) {
+    if (heap != nullptr && heap->code_blob_type() != CodeBlobType::NonNMethod) {
       heap->assert_checkpoint();
     }
   }

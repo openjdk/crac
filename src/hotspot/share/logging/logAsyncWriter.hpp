@@ -154,6 +154,8 @@ class AsyncLogWriter : public NonJavaThread {
   Semaphore _flush_sem;
   // Can't use a Monitor here as we need a low-level API that can be used without Thread::current().
   PlatformMonitor _lock;
+  // for asynchronous thread run()
+  PlatformMonitor _block_async;
   bool _data_available;
   volatile bool _initialized;
   AsyncLogMap<AnyObj::C_HEAP> _stats;
@@ -197,8 +199,8 @@ class AsyncLogWriter : public NonJavaThread {
   static AsyncLogWriter* instance();
   static void initialize();
   static void flush();
-  void stop() { _lock.lock(); }
-  void resume() { _lock.unlock(); }
+  void stop() { _block_async.lock(); flush(); }
+  void resume() { _block_async.unlock(); }
 };
 
 #endif // SHARE_LOGGING_LOGASYNCWRITER_HPP

@@ -313,7 +313,6 @@ void VM_Crac::doit() {
 
   AsyncLogWriter* aio_writer = AsyncLogWriter::instance();
   if (aio_writer) {
-    aio_writer->flush();
     aio_writer->stop();
   }
   LogConfiguration::close();

@@ -1325,11 +1325,15 @@ public:
     _cm->persist_for_checkpoint();
     _task_queues->dealloc_queues();
   }
-  void on_restore() override {
-  #ifdef ASSERT
+
+#ifdef ASSERT
+  void assert_checkpoint() override {
     _hrm.assert_checkpoint();
     G1FromCardCache::assert_checkpoint();
-  #endif // ASSERT
+  }
+#endif // ASSERT
+
+  void on_restore() override {
     _cm->on_restore();
     _task_queues->realloc_queues();
   }

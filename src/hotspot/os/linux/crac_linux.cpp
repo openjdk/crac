@@ -499,26 +499,32 @@ bool crac::read_bootid(char *dest) {
 }
 
 bool crac::MemoryPersister::unmap(void *addr, size_t length) {
-  if (::munmap(addr, length) != 0) {
-    perror("::munmap");
-    return false;
+  while (::munmap(addr, length) != 0) {
+    if (errno != EINTR) {
+      perror("::munmap");
+      return false;
+    }
   }
   return true;
 }
 
 bool crac::MemoryPersister::map(void *addr, size_t length, bool executable) {
-  if (::mmap(addr, length, PROT_READ | PROT_WRITE | (executable ? PROT_EXEC : 0),
+  while (::mmap(addr, length, PROT_READ | PROT_WRITE | (executable ? PROT_EXEC : 0),
       MAP_PRIVATE | MAP_FIXED | MAP_ANONYMOUS, -1 , 0) != addr) {
-    fprintf(stderr, "::mmap %p %zu RW: %m\n", addr, length);
-    return false;
+    if (errno != EINTR) {
+      fprintf(stderr, "::mmap %p %zu RW: %m\n", addr, length);
+      return false;
+    }
   }
   return true;
 }
 
 bool crac::MemoryPersister::map_gap(void *addr, size_t length) {
-  if (::mmap(addr, length, PROT_NONE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0) != addr) {
-    perror("::mmap NONE");
-    return false;
+  while (::mmap(addr, length, PROT_NONE, MAP_PRIVATE | MAP_FIXED | MAP_ANONYMOUS, -1, 0) != addr) {
+    if (errno != EINTR) {
+      perror("::mmap NONE");
+      return false;
+    }
   }
   return true;
 }
@@ -547,7 +553,7 @@ static void block_in_other_futex(int signal, siginfo_t *info, void *ctx) {
   struct __ptrace_rseq_configuration *rseqc = &rseq_configs[info->si_value.sival_int];
   if (rseqc->rseq_abi_pointer) {
     // Unregister rseq to prevent CRIU reading the configuration
-    if (syscall(SYS_rseq, rseqc->rseq_abi_pointer, rseqc->rseq_abi_size, RSEQ_FLAG_UNREGISTER, rseqc->signature)) {
+    if (syscall(SYS_rseq, (void *) rseqc->rseq_abi_pointer, rseqc->rseq_abi_size, RSEQ_FLAG_UNREGISTER, rseqc->signature)) {
       perror("Unregister rseq");
     }
   }
@@ -581,7 +587,7 @@ static void block_in_other_futex(int signal, siginfo_t *info, void *ctx) {
     "int $0x80\n\t"
     "test %%eax, %%eax\n\t" // exit the loop on error
     "jnz .end\n\t"
-    "mov (%%ecx), %%esi\n\t"
+    "mov (%%ebx), %%esi\n\t"
     "test %%esi, %%esi\n\t"
     "jnz .begin\n\t"
     ".end: nop\n\t"
@@ -628,9 +634,17 @@ static void block_in_other_futex(int signal, siginfo_t *info, void *ctx) {
 #ifdef HAS_RSEQ
   if (rseqc->rseq_abi_pointer) {
     // Register the rseq back after restore
-    if (syscall(SYS_rseq, rseqc->rseq_abi_pointer, rseqc->rseq_abi_size, 0, rseqc->signature) != 0) {
+    if (syscall(SYS_rseq, (void *) rseqc->rseq_abi_pointer, rseqc->rseq_abi_size, 0, rseqc->signature) != 0) {
       perror("Register rseq again");
     }
+  }
+
+  // We cannot release this in after_threads_restored(), have to wait
+  // until the last thread restores
+  int dec = Atomic::sub(&persist_waiters, 1);
+  if (dec == 0) {
+    FREE_C_HEAP_ARRAY(struct __ptrace_rseq_configuration, rseq_configs);
+    rseq_configs = nullptr;
   }
 #endif // HAS_RSEQ
 }
@@ -756,8 +770,4 @@ void crac::after_threads_restored() {
   if (syscall(SYS_futex, &persist_futex, FUTEX_WAKE_PRIVATE, INT_MAX, nullptr, nullptr, 0) < 0) {
     fatal("Cannot wake up threads after restore: %s", os::strerror(errno));
   }
-#ifdef HAS_RSEQ
-  FREE_C_HEAP_ARRAY(struct __ptrace_rseq_configuration, rseq_configs);
-  rseq_configs = nullptr;
-#endif
 }

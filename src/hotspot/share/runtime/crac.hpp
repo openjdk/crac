@@ -107,9 +107,9 @@ public:
     };
 
     struct record {
-      u_int64_t addr;
-      u_int64_t length;
-      u_int64_t offset;
+      address addr;
+      size_t length;
+      size_t offset;
       int flags;
     };
 
@@ -135,6 +135,11 @@ public:
     static bool store_gap(void *addr, size_t length);
 
     static void finalize();
+    // This method mmaps all memory as non-accessible without loading the data;
+    // the purpose is to do this early (e.g. before reading new parameters)
+    // to prevent other malloc or other code from accidentally mapping memory
+    // in conflicting range.
+    static void reinit_memory();
     static void load_on_restore();
 #ifdef ASSERT
     static void assert_mem(void *addr, size_t used, size_t total);

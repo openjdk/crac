@@ -55,6 +55,7 @@ class CracRestoreParameters : public CHeapObj<mtInternal> {
   const char* _args;
 
   struct header {
+    uint32_t self_size;
     jlong _restore_time;
     jlong _restore_nanos;
     int _nflags;
@@ -116,6 +117,7 @@ class CracRestoreParameters : public CHeapObj<mtInternal> {
       jlong restore_time,
       jlong restore_nanos) {
     header hdr = {
+      (uint32_t) sizeof(struct header),
       restore_time,
       restore_nanos,
       num_flags,

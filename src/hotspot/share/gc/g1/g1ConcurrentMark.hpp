@@ -625,8 +625,13 @@ public:
     _task_queues->dealloc_queues();
   }
 
+#ifdef ASSERT
+  void assert_checkpoint() {
+    _global_mark_stack.assert_checkpoint();
+  }
+#endif
+
   void on_restore() {
-    DEBUG_ONLY(_global_mark_stack.assert_checkpoint();)
     _task_queues->realloc_queues();
   }
 

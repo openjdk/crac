@@ -545,6 +545,9 @@ class CollectedHeap : public CHeapObj<mtGC> {
   virtual void persist_for_checkpoint() {
     // by default ignore the request
   }
+#ifdef ASSERT
+  virtual void assert_checkpoint() {}
+#endif
   virtual void on_restore() {}
 };
 

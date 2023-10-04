@@ -395,7 +395,7 @@ void VM_Crac::doit() {
     CodeCache::persist_for_checkpoint();
   }
 
-  malloc_trim(0);
+  os::trim_native_heap(nullptr);
 
   int shmid = 0;
   if (CRAllowToSkipCheckpoint) {
@@ -412,6 +412,7 @@ void VM_Crac::doit() {
     int ret = checkpoint_restore(&shmid);
     if (ret == JVM_CHECKPOINT_ERROR) {
       if (CRPersistMemory) {
+        crac::MemoryPersister::reinit_memory();
         crac::MemoryPersister::load_on_restore();
         restore_thread_stacks();
       }
@@ -423,6 +424,13 @@ void VM_Crac::doit() {
   // It needs to check CPU features before any other code (such as VM_Crac::read_shm) depends on them.
   VM_Version::crac_restore();
 
+  if (CRPersistMemory) {
+    // Before reinit_memory the code must not change memory layout, e.g. mmapping
+    // or even malloc'ing anything (malloc running out of space could run short and allocate
+    // new regions).
+    crac::MemoryPersister::reinit_memory();
+  }
+
   if (shmid <= 0 || !VM_Crac::read_shm(shmid)) {
     _restore_start_time = os::javaTimeMillis();
     _restore_start_nanos = os::javaTimeNanos();
@@ -433,7 +441,6 @@ void VM_Crac::doit() {
   if (CRPersistMemory) {
 #ifdef ASSERT
     CodeCache::assert_checkpoint();
-    Universe::heap()->on_restore();
     metaspace::VirtualSpaceList *vsc = metaspace::VirtualSpaceList::vslist_class();
     if (vsc != nullptr) {
       vsc->assert_checkpoint();
@@ -442,8 +449,10 @@ void VM_Crac::doit() {
     if (vsn != nullptr) {
       vsn->assert_checkpoint();
     }
+    Universe::heap()->assert_checkpoint();
 #endif // ASSERT
     crac::MemoryPersister::load_on_restore();
+    Universe::heap()->on_restore();
     restore_thread_stacks();
   }
   // VM_Crac::read_shm needs to be already called to read RESTORE_SETTABLE parameters.
@@ -605,6 +614,7 @@ bool CracRestoreParameters::read_from(int fd) {
 
   // parse the contents to read new system properties and arguments
   header* hdr = (header*)_raw_content;
+  guarantee(sizeof(header) == hdr->self_size, "Invalid header: restoring 32 bit image with 64 bit JVM or vice versa?");
   char* cursor = _raw_content + sizeof(header);
 
   ::_restore_start_time = hdr->_restore_time;

@@ -53,12 +53,12 @@ class LogFileStreamOutput : public LogOutput {
   bool flush();
 
  public:
-  virtual bool set_option(const char* key, const char* value, outputStream* errstream);
-  virtual int write(const LogDecorations& decorations, const char* msg);
-  virtual int write(LogMessageBuffer::Iterator msg_iterator);
+  virtual bool set_option(const char* key, const char* value, outputStream* errstream) override;
+  virtual int write(const LogDecorations& decorations, const char* msg) override;
+  virtual int write(LogMessageBuffer::Iterator msg_iterator) override;
   // Write API used by AsyncLogWriter
   virtual int write_blocking(const LogDecorations& decorations, const char* msg);
-  virtual void describe(outputStream* out);
+  virtual void describe(outputStream* out) override;
   virtual int fd_get() const override { return fileno(_stream); }
 };
 

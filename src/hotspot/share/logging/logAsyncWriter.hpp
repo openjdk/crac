@@ -199,8 +199,8 @@ class AsyncLogWriter : public NonJavaThread {
   static AsyncLogWriter* instance();
   static void initialize();
   static void flush();
-  void stop() { _block_async.lock(); flush(); }
-  void resume() { _block_async.unlock(); }
+  void stop();
+  void resume();
 };
 
 #endif // SHARE_LOGGING_LOGASYNCWRITER_HPP

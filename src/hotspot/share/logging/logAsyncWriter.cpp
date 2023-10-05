@@ -230,6 +230,15 @@ void AsyncLogWriter::flush() {
   }
 }
 
+void AsyncLogWriter::stop() {
+  _block_async.lock();
+  flush();
+}
+
+void AsyncLogWriter::resume() {
+  _block_async.unlock();
+}
+
 AsyncLogWriter::BufferUpdater::BufferUpdater(size_t newsize) {
   AsyncLogLocker locker;
   auto p = AsyncLogWriter::_instance;

@@ -435,12 +435,13 @@ Handle crac::checkpoint(jarray fd_arr, jobjectArray obj_arr, bool dry_run, jlong
     MutexLocker ml(Heap_lock);
     VMThread::execute(&cr);
   }
-  if (cr.ok()) {
-    LogConfiguration::reopen();
-    if (aio_writer) {
-      aio_writer->resume();
-    }
 
+  LogConfiguration::reopen();
+  if (aio_writer) {
+    aio_writer->resume();
+  }
+
+  if (cr.ok()) {
     oop new_args = NULL;
     if (cr.new_args()) {
       new_args = java_lang_String::create_oop_from_str(cr.new_args(), CHECK_NH);

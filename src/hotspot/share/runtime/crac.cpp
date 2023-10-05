@@ -43,8 +43,6 @@
 #include "os_linux.hpp"
 #endif
 
-#include <malloc.h>
-
 static const char* _crengine = NULL;
 static char* _crengine_arg_str = NULL;
 static unsigned int _crengine_argc = 0;
@@ -707,7 +705,8 @@ void crac::update_javaTimeNanos_offset() {
 bool crac::read_all(int fd, char *dest, size_t n) {
   size_t rd = 0;
   do {
-    ssize_t r = ::read(fd, dest + rd, n - rd);
+    // without the explicit cast it fails the build on Windows
+    ssize_t r = (ssize_t) ::read(fd, dest + rd, n - rd);
     if (r == 0) {
       return false;
     } else if (r < 0) {

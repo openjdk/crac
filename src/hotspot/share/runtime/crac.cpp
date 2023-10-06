@@ -702,11 +702,16 @@ void crac::update_javaTimeNanos_offset() {
   }
 }
 
+#ifdef WINDOWS
+# define BUFSIZE unsigned
+#else
+# define BUFSIZE size_t
+#endif // !WINDOWS
+
 bool crac::read_all(int fd, char *dest, size_t n) {
   size_t rd = 0;
   do {
-    // using ssize_t fails the build on Windows
-    long r = (long) ::read(fd, dest + rd, n - rd);
+    ssize_t r = ::read(fd, dest + rd, (BUFSIZE)(n - rd));
     if (r == 0) {
       return false;
     } else if (r < 0) {

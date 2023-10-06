@@ -67,7 +67,7 @@ inline void PlatformMonitor::notify_all() {
 
 #ifndef LINUX
 // Stubbed out for OSX
-inline bool os::can_trim_native_heap() { return false; }
+inline bool os::trim_native_heap(os::size_change_t *rss_change) { return false; }
 #endif // LINUX
 
 #endif // OS_POSIX_OS_POSIX_INLINE_HPP

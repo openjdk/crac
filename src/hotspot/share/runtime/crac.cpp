@@ -716,7 +716,7 @@ void crac::update_javaTimeNanos_offset() {
   }
 }
 
-#ifdef WINDOWS
+#ifdef _WINDOWS
 # define BUFSIZE unsigned
 #else
 # define BUFSIZE size_t

@@ -25,6 +25,8 @@
 
 #include "classfile/classLoader.hpp"
 #include "jvm.h"
+#include "logging/logAsyncWriter.hpp"
+#include "logging/logConfiguration.hpp"
 #include "memory/oopFactory.hpp"
 #include "oops/typeArrayOop.inline.hpp"
 #include "runtime/crac_structs.hpp"
@@ -422,11 +424,23 @@ Handle crac::checkpoint(jarray fd_arr, jobjectArray obj_arr, bool dry_run, jlong
   Universe::heap()->set_cleanup_unused(false);
   Universe::heap()->finish_collection();
 
+  AsyncLogWriter* aio_writer = AsyncLogWriter::instance();
+  if (aio_writer) {
+    aio_writer->stop();
+  }
+  LogConfiguration::close();
+
   VM_Crac cr(fd_arr, obj_arr, dry_run, (bufferedStream*)jcmd_stream);
   {
     MutexLocker ml(Heap_lock);
     VMThread::execute(&cr);
   }
+
+  LogConfiguration::reopen();
+  if (aio_writer) {
+    aio_writer->resume();
+  }
+
   if (cr.ok()) {
     oop new_args = NULL;
     if (cr.new_args()) {

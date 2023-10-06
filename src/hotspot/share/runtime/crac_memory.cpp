@@ -183,7 +183,7 @@ void crac::MemoryPersister::reinit_memory() {
   for (int i = 0; i < _index.length(); ++i) {
     const record &r = _index.at(i);
     size_t aligned_length = align_up(r.length, page_size);
-    if (!map_gap(r.addr, aligned_length)) {
+    if (!map(r.addr, aligned_length, os::ProtType::MEM_PROT_NONE)) {
       fatal("Cannot reinit non-accessible memory at %p-%p", r.addr, r.addr + aligned_length);
     }
   }
@@ -205,16 +205,16 @@ void crac::MemoryPersister::load_on_restore() {
   for (int i = 0; i < _index.length(); ++i) {
     const record &r = _index.at(i);
     size_t aligned_length = align_up(r.length, page_size);
-    bool executable = r.flags & Flags::EXECUTABLE;
+    os::ProtType protType = r.flags & Flags::EXECUTABLE ?
+      os::ProtType::MEM_PROT_RWX : os::ProtType::MEM_PROT_RW;
     if (r.flags & Flags::ACCESSIBLE) {
       if ((r.flags & Flags::DATA) == 0) {
-        if (!map(r.addr, aligned_length, executable)) {
+        if (!map(r.addr, aligned_length, protType)) {
           fatal("Cannot remap memory at %p-%p", r.addr, r.addr + aligned_length);
         }
       } else {
         char *data = (char *) r.addr;
-        if (update_protection && !os::protect_memory(data, aligned_length,
-            executable ? os::ProtType::MEM_PROT_RWX : os::ProtType::MEM_PROT_RW)) {
+        if (update_protection && !os::protect_memory(data, aligned_length, protType)) {
           fatal("Cannot remap memory at %p-%p", r.addr, r.addr + aligned_length);
         }
         reader->read(r.offset, data, r.length, r.flags & Flags::EXECUTABLE);

@@ -26,6 +26,7 @@
 
 #include "memory/allStatic.hpp"
 #include "runtime/handles.hpp"
+#include "runtime/os.hpp"
 #include "utilities/growableArray.hpp"
 #include "utilities/macros.hpp"
 
@@ -147,8 +148,7 @@ public:
 #endif // ASSERT
   private:
     static bool unmap(void *addr, size_t length);
-    static bool map(void *addr, size_t length, bool executable);
-    static bool map_gap(void *addr, size_t length);
+    static bool map(void *addr, size_t length, os::ProtType protType);
   };
 
   static void before_threads_persisted();

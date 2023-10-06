@@ -62,18 +62,6 @@ bool crac::read_bootid(char *dest) {
   return true;
 }
 
-bool crac::MemoryPersister::unmap(void *addr, size_t length) {
-  return false;
-}
-
-bool crac::MemoryPersister::map(void *addr, size_t length, bool executable) {
-  return false;
-}
-
-bool crac::MemoryPersister::map_gap(void *addr, size_t length) {
-  return false;
-}
-
 void crac::before_threads_persisted() {
 }
 
@@ -81,3 +69,41 @@ void crac::after_threads_restored() {
 }
 
 #endif
+
+bool crac::MemoryPersister::unmap(void *addr, size_t length) {
+  while (::munmap(addr, length) != 0) {
+    if (errno != EINTR) {
+      perror("::munmap");
+      return false;
+    }
+  }
+  return true;
+}
+
+bool crac::MemoryPersister::map(void *addr, size_t length, os::ProtType protType) {
+  unsigned int p = 0;
+  switch (protType) {
+  case os::ProtType::MEM_PROT_NONE: p = PROT_NONE; break;
+  case os::ProtType::MEM_PROT_READ: p = PROT_READ; break;
+  case os::ProtType::MEM_PROT_RW:   p = PROT_READ|PROT_WRITE; break;
+  case os::ProtType::MEM_PROT_RWX:  p = PROT_READ|PROT_WRITE|PROT_EXEC; break;
+  default:
+    ShouldNotReachHere();
+  }
+  while (::mmap(addr, length, p, MAP_PRIVATE | MAP_FIXED | MAP_ANONYMOUS, -1 , 0) != addr) {
+    if (errno != EINTR) {
+      fprintf(stderr, "::mmap %p %zu RW: %m\n", addr, length);
+      return false;
+    }
+  }
+  return true;
+}
+
+void crac::MmappingMemoryReader::read(size_t offset, void *addr, size_t size, bool executable) {
+  assert(_fd >= 0, "File not open!");
+  if (::mmap(addr, size, PROT_READ | PROT_WRITE | (executable ? PROT_EXEC : 0),
+      MAP_PRIVATE | MAP_FIXED, _fd , offset) != addr) {
+    fatal("::mmap %p %zu RW(X): %s", addr, size, os::strerror(errno));
+  }
+}
+

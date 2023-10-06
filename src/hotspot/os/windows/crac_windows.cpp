@@ -55,15 +55,14 @@ bool crac::read_bootid(char *dest) {
 }
 
 bool crac::MemoryPersister::unmap(void *addr, size_t length) {
-  return false;
+  return true; // Don't fail; just keep memory as-is
 }
 
 bool crac::MemoryPersister::map(void *addr, size_t length, bool executable) {
-  return false;
+  return true; // Don't fail; the memory should not be unmapped
 }
 
-bool crac::MemoryPersister::map_gap(void *addr, size_t length) {
-  return false;
+void crac::MmappingMemoryReader::read(size_t offset, void *addr, size_t size, bool executable) {
 }
 
 void crac::before_threads_persisted() {

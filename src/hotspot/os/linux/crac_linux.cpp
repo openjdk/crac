@@ -498,45 +498,6 @@ bool crac::read_bootid(char *dest) {
   return true;
 }
 
-bool crac::MemoryPersister::unmap(void *addr, size_t length) {
-  while (::munmap(addr, length) != 0) {
-    if (errno != EINTR) {
-      perror("::munmap");
-      return false;
-    }
-  }
-  return true;
-}
-
-bool crac::MemoryPersister::map(void *addr, size_t length, bool executable) {
-  while (::mmap(addr, length, PROT_READ | PROT_WRITE | (executable ? PROT_EXEC : 0),
-      MAP_PRIVATE | MAP_FIXED | MAP_ANONYMOUS, -1 , 0) != addr) {
-    if (errno != EINTR) {
-      fprintf(stderr, "::mmap %p %zu RW: %m\n", addr, length);
-      return false;
-    }
-  }
-  return true;
-}
-
-bool crac::MemoryPersister::map_gap(void *addr, size_t length) {
-  while (::mmap(addr, length, PROT_NONE, MAP_PRIVATE | MAP_FIXED | MAP_ANONYMOUS, -1, 0) != addr) {
-    if (errno != EINTR) {
-      perror("::mmap NONE");
-      return false;
-    }
-  }
-  return true;
-}
-
-void crac::MmappingMemoryReader::read(size_t offset, void *addr, size_t size, bool executable) {
-  assert(_fd >= 0, "File not open!");
-  if (::mmap(addr, size, PROT_READ | PROT_WRITE | (executable ? PROT_EXEC : 0),
-      MAP_PRIVATE | MAP_FIXED, _fd , offset) != addr) {
-    fatal("::mmap %p %zu RW(X): %s", addr, size, os::strerror(errno));
-  }
-}
-
 static volatile int persist_waiters = 0;
 static volatile int persist_futex = 0;
 
@@ -578,7 +539,7 @@ static void block_in_other_futex(int signal, siginfo_t *info, void *ctx) {
     : "=a"(retval)
     : [sysnum]"i"(SYS_futex), "D"(&persist_futex), "S"(FUTEX_WAIT_PRIVATE), "d"(1)
     : "memory", "cc", "rcx", "r8", "r9", "r10", "r11");
-#elif IA32
+#elif defined(IA32)
   asm volatile (
     "mov $0, %%esi\n\t"
     "mov $0, %%edi\n\t"

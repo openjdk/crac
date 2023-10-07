@@ -6,7 +6,7 @@
 
 #include <functional>
 
-static const char TEST_FILENAME[] = "heap_dump_parsing_test.hprof";
+static constexpr char TEST_FILENAME[] = "heap_dump_parsing_test.hprof";
 
 static void fill_test_file(const char *contents, size_t size) {
   FILE *file = os::fopen(TEST_FILENAME, "wb");
@@ -70,7 +70,7 @@ static bool basic_value_eq(HeapDumpFormat::BasicValue l,
   }
 }
 
-static const char CONTENTS_UTF8[] =
+static constexpr char CONTENTS_UTF8[] =
     "JAVA PROFILE 1.0.1\0"                                  // Header
     "\x00\x00\x00\x04"                                      // ID size
     "\x00\x00\x00\x00\x00\x00\x00\x00"                      // Dump timestamp
@@ -94,7 +94,7 @@ TEST_VM(HeapDumpParser, single_utf8_record) {
   check_record_amounts({1 /* UTF-8 */, 0, 0, 0, 0, 0}, heap_dump);
   ASSERT_FALSE(::testing::Test::HasNonfatalFailure()) << "Unexpected amounts of records parsed";
 
-  HeapDumpFormat::id_t expected_id = 123456789;
+  static constexpr HeapDumpFormat::id_t expected_id = 123456789;
   const char expected_str[] = "Hello, world!";
 
   auto *record = heap_dump.utf8_records.get(expected_id);
@@ -107,7 +107,7 @@ TEST_VM(HeapDumpParser, single_utf8_record) {
   }
 }
 
-static const char CONTENTS_LOAD_CLASS[] =
+static constexpr char CONTENTS_LOAD_CLASS[] =
     "JAVA PROFILE 1.0.1\0"              // Header
     "\x00\x00\x00\x08"                  // ID size
     "\x00\x00\x00\x00\x00\x00\x00\x00"  // Dump timestamp
@@ -133,7 +133,7 @@ TEST_VM(HeapDumpParser, single_load_class_record) {
   check_record_amounts({0, 1 /* load class */, 0, 0, 0, 0}, heap_dump);
   ASSERT_FALSE(::testing::Test::HasNonfatalFailure()) << "Unexpected amounts of records parsed";
 
-  HeapDumpFormat::LoadClassRecord expected = {
+  static constexpr HeapDumpFormat::LoadClassRecord expected = {
       0x01020304,          // class serial
       0x00000006c79373b8,  // class ID
       0x00000001,          // stack trace serial
@@ -149,7 +149,7 @@ TEST_VM(HeapDumpParser, single_load_class_record) {
   EXPECT_EQ(expected.class_name_id, record->class_name_id);
 }
 
-static const char CONTENTS_CLASS_DUMP[] =
+static constexpr char CONTENTS_CLASS_DUMP[] =
     "JAVA PROFILE 1.0.1\0"                // Header
     "\x00\x00\x00\x08"                    // ID size
     "\x00\x00\x00\x00\x00\x00\x00\x00"    // Dump timestamp
@@ -210,10 +210,10 @@ TEST_VM(HeapDumpParser, single_class_dump_subrecord) {
       0x00000018           // instance size
   };
   expected.constant_pool.extend_to(1);
-  expected.constant_pool[0] = {/* index */ 0x01, /* type */ 0x09, /* value */ 0x6789};
+  expected.constant_pool[0] = {/* index */ 0x01, /* type */ 0x09, /* value */ {0x6789}};
   expected.static_fields.extend_to(2);
-  expected.static_fields[0] = {{/* name ID */ 0x00007ffa2c13cad0, /* type */ 0x04}, /* value */ 0x01};
-  expected.static_fields[1] = {{/* name ID */ 0x00007ffa94009818, /* type */ 0x0a}, /* value */ 0x12abcdef};
+  expected.static_fields[0] = {{/* name ID */ 0x00007ffa2c13cad0, /* type */ 0x04}, /* value */ {0x01}};
+  expected.static_fields[1] = {{/* name ID */ 0x00007ffa94009818, /* type */ 0x0a}, /* value */ {0x12abcdef}};
   expected.instance_field_infos.extend_to(3);
   expected.instance_field_infos[0] = {/* name ID */ 0x00007ffa9016ad30, /* type */ 0x05};
   expected.instance_field_infos[1] = {/* name ID */ 0x00007ffa94009818, /* type */ 0x02};
@@ -246,7 +246,7 @@ TEST_VM(HeapDumpParser, single_class_dump_subrecord) {
                  });
 }
 
-static const char CONTENTS_INSTANCE_DUMP[] =
+static constexpr char CONTENTS_INSTANCE_DUMP[] =
     "JAVA PROFILE 1.0.1\0"              // Header
     "\x00\x00\x00\x08"                  // ID size
     "\x00\x00\x00\x00\x00\x00\x00\x00"  // Dump timestamp
@@ -291,10 +291,10 @@ TEST_VM(HeapDumpParser, single_instance_dump_subrecord) {
   EXPECT_EQ(expected.stack_trace_serial, record->stack_trace_serial);
   EXPECT_EQ(expected.class_id, record->class_id);
   check_array_eq(expected.fields_data, record->fields_data, "Fields data",
-                 std::equal_to<u1>());
+                 std::equal_to<>());
 }
 
-static const char CONTENTS_INSTANCE_DUMP_FIELD_READING[] =
+static constexpr char CONTENTS_INSTANCE_DUMP_FIELD_READING[] =
     "JAVA PROFILE 1.0.1\0"              // Header
     "\x00\x00\x00\x04"                  // ID size
     "\x00\x00\x00\x00\x00\x00\x00\x00"  // Dump timestamp
@@ -327,15 +327,15 @@ TEST_VM(HeapDumpParser, instance_dump_read_field) {
   check_record_amounts({0, 0, 0, 1 /* instance dump */, 0, 0}, heap_dump);
   ASSERT_FALSE(::testing::Test::HasNonfatalFailure()) << "Unexpected amounts of records parsed";
 
-  u4 expected_id_size = 0x00000004;
-  HeapDumpFormat::id_t expected_id = 0;
-  jshort               expected_field1 = 4660;
-  jint                 expected_field2 = -218827016;
-  jboolean             expected_field3 = 1;
-  jfloat               expected_field4 = 192.568359375F;
-  HeapDumpFormat::id_t expected_field5 = 0xc7899124;
-  u2 expected_field_data_size = sizeof(expected_field1) + sizeof(expected_field2) +
-                                sizeof(expected_field3) + sizeof(expected_field4) + expected_id_size;
+  static constexpr u4 expected_id_size = 0x00000004;
+  static constexpr HeapDumpFormat::id_t expected_id = 0;
+  static constexpr jshort               expected_field1 = 4660;
+  static constexpr jint                 expected_field2 = -218827016;
+  static constexpr jboolean             expected_field3 = 1;
+  static constexpr jfloat               expected_field4 = 192.568359375F;
+  static constexpr HeapDumpFormat::id_t expected_field5 = 0xc7899124;
+  static constexpr u2 expected_field_data_size = sizeof(expected_field1) + sizeof(expected_field2) +
+                                                 sizeof(expected_field3) + sizeof(expected_field4) + expected_id_size;
 
   auto *record = heap_dump.instance_dump_records.get(0);
   ASSERT_NE(nullptr, record) << "Record not found under the expected ID";
@@ -370,7 +370,7 @@ TEST_VM(HeapDumpParser, instance_dump_read_field) {
   EXPECT_EQ(expected_field5, actual_field.as_object_id);
 }
 
-static const char CONTENTS_OBJ_ARRAY_DUMP[] =
+static constexpr char CONTENTS_OBJ_ARRAY_DUMP[] =
     "JAVA PROFILE 1.0.1\0"              // Header
     "\x00\x00\x00\x04"                  // ID size
     "\x00\x00\x00\x00\x00\x00\x00\x00"  // Dump timestamp
@@ -418,10 +418,10 @@ TEST_VM(HeapDumpParser, single_obj_array_dump_subrecord) {
   EXPECT_EQ(expected.stack_trace_serial, record->stack_trace_serial);
   EXPECT_EQ(expected.array_class_id, record->array_class_id);
   check_array_eq(expected.elem_ids, record->elem_ids, "Element IDs",
-                 std::equal_to<HeapDumpFormat::id_t>());
+                 std::equal_to<>());
 }
 
-static const char CONTENTS_PRIM_ARRAY_DUMP[] =
+static constexpr char CONTENTS_PRIM_ARRAY_DUMP[] =
     "JAVA PROFILE 1.0.1\0"              // Header
     "\x00\x00\x00\x08"                  // ID size
     "\x00\x00\x00\x00\x00\x00\x00\x00"  // Dump timestamp
@@ -458,7 +458,7 @@ TEST_VM(HeapDumpParser, single_prim_array_dump_subrecord) {
       0x09                 // element type
   };
   expected.elems_data.extend_to(expected.elems_num * sizeof(jshort));
-  jshort expected_elems[] = {4660, -1};
+  static constexpr jshort expected_elems[] = {4660, -1};
   memcpy(expected.elems_data.mem(), &expected_elems, expected.elems_num * sizeof(jshort));
 
   auto *record = heap_dump.prim_array_dump_records.get(expected.id);
@@ -469,10 +469,10 @@ TEST_VM(HeapDumpParser, single_prim_array_dump_subrecord) {
   EXPECT_EQ(expected.elems_num, record->elems_num);
   EXPECT_EQ(expected.elem_type, record->elem_type);
   check_array_eq(expected.elems_data, record->elems_data, "Elements data",
-                 std::equal_to<u1>());
+                 std::equal_to<>());
 }
 
-static const char CONTENTS_BASIC_VALUES[] =
+static constexpr char CONTENTS_BASIC_VALUES[] =
     "JAVA PROFILE 1.0.1\0"                // Header
     "\x00\x00\x00\x08"                    // ID size
     "\x00\x00\x00\x00\x00\x00\x00\x00"    // Dump timestamp
@@ -559,7 +559,7 @@ TEST_VM(HeapDumpParser, basic_values_get_right_values) {
   EXPECT_EQ(static_cast<jlong>               (9223372036854775807), basic_values[8].value.as_long);
 }
 
-static const char CONTENTS_SPECIAL_FLOATS[] =
+static constexpr char CONTENTS_SPECIAL_FLOATS[] =
     "JAVA PROFILE 1.0.1\0"              // Header
     "\x00\x00\x00\x04"                  // ID size
     "\x00\x00\x00\x00\x00\x00\x00\x00"  // Dump timestamp

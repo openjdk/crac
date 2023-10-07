@@ -53,7 +53,7 @@
 #include "os_linux.hpp"
 #endif
 
-static const char PMODE_HEAP_DUMP_FILENAME[] = "heap.hprof";
+static constexpr char PMODE_HEAP_DUMP_FILENAME[] = "heap.hprof";
 
 static const char* _crengine = NULL;
 static char* _crengine_arg_str = NULL;
@@ -159,7 +159,7 @@ static size_t cr_util_path(char* path, int len) {
 }
 
 static bool compute_crengine() {
-  assert(CREngine != nullptr, "Portable mode requested, should not call this");
+  assert(!crac::is_portable_mode(), "Portable mode requested, should not call this");
 
   // release possible old copies
   os::free((char *) _crengine); // NULL is allowed
@@ -448,10 +448,13 @@ static Handle ret_cr(int ret, Handle new_args, Handle new_props, Handle err_code
 
 static void init_basic_type_mirror_names(TRAPS) {
   for (u1 t = T_BOOLEAN; t <= T_LONG; t++) {
-    Handle mirror = Handle(JavaThread::current(), Universe::java_mirror(static_cast<BasicType>(t)));
+    Handle mirror(Thread::current(), Universe::java_mirror(static_cast<BasicType>(t)));
     java_lang_Class::name(mirror, CHECK);
   }
-  java_lang_Class::name(Handle(JavaThread::current(), Universe::void_mirror()), CHECK);
+  {
+    Handle void_mirror = Handle(Thread::current(), Universe::void_mirror());
+    java_lang_Class::name(void_mirror, CHECK);
+  }
 }
 
 /** Checkpoint main entry.
@@ -544,7 +547,7 @@ Handle crac::checkpoint(jarray fd_arr, jobjectArray obj_arr, bool dry_run, jlong
 }
 
 void crac::restore() {
-  assert(!is_portable_mode(), "Use crac::restore_portable");
+  assert(!is_portable_mode(), "Use crac::restore_portable() instead");
 
   jlong restore_time = os::javaTimeMillis();
   jlong restore_nanos = os::javaTimeNanos();
@@ -695,7 +698,7 @@ class HeapRestorer : public StackObj {
  private:
   // HPROF does not have a special notion for a null reference. We will trear 0
   // ID as such.
-  static const HeapDumpFormat::id_t NULL_ID = 0;
+  static constexpr HeapDumpFormat::id_t NULL_ID = 0;
 
  public:
   explicit HeapRestorer(const ParsedHeapDump &heap_dump) : _heap_dump(heap_dump) {};
@@ -812,7 +815,7 @@ class HeapRestorer : public StackObj {
   void set_system_class_loader_id(const HeapDumpFormat::LoadClassRecord &lcr, TRAPS) {
     // This relies on ClassLoader.getSystemClassLoader() implementation detail:
     // the system class loader is stored in scl static field of j.l.ClassLoader
-    static const char SCL_FIELD_NAME[] = "scl";
+    static constexpr char SCL_FIELD_NAME[] = "scl";
 
     HeapDumpFormat::ClassDumpRecord *dump = get_class_dump(lcr.class_id, CHECK);
     if (dump->class_loader_id != NULL_ID) {
@@ -862,8 +865,8 @@ class HeapRestorer : public StackObj {
     // the built-in platform and app class loaders are stored in
     // PLATFORM_LOADER/APP_LOADER static fields of
     // jdk.internal.loader.ClassLoaders
-    static const char PLATFORM_LOADER_FIELD_NAME[] = "PLATFORM_LOADER";
-    static const char APP_LOADER_FIELD_NAME[] = "APP_LOADER";
+    static constexpr char PLATFORM_LOADER_FIELD_NAME[] = "PLATFORM_LOADER";
+    static constexpr char APP_LOADER_FIELD_NAME[] = "APP_LOADER";
 
     const HeapDumpFormat::ClassDumpRecord *dump = get_class_dump(lcr.class_id, CHECK);
     if (dump->class_loader_id != NULL_ID) {
@@ -919,11 +922,11 @@ class HeapRestorer : public StackObj {
     }
   }
 
-  ResizeableResourceHashtable<HeapDumpFormat::id_t, instanceHandle, AnyObj::C_HEAP> _prepared_class_loaders {11, 1228891};
-  ResizeableResourceHashtable<HeapDumpFormat::id_t, instanceHandle, AnyObj::C_HEAP> _allocated_prot_domains {11, 1228891};
-  ResizeableResourceHashtable<HeapDumpFormat::id_t, Klass *, AnyObj::C_HEAP>        _loaded_classes         {107, 1228891};
-  ResizeableResourceHashtable<HeapDumpFormat::id_t, Klass *, AnyObj::C_HEAP>        _restored_classes       {107, 1228891};
-  ResizeableResourceHashtable<HeapDumpFormat::id_t, Handle, AnyObj::C_HEAP>         _restored_objects       {1009, 1228891};
+  ResizeableResourceHashtable<HeapDumpFormat::id_t, instanceHandle, AnyObj::C_HEAP> _prepared_class_loaders {11,   1228891};
+  ResizeableResourceHashtable<HeapDumpFormat::id_t, instanceHandle, AnyObj::C_HEAP> _allocated_prot_domains {11,   1228891};
+  ResizeableResourceHashtable<HeapDumpFormat::id_t, Klass *,        AnyObj::C_HEAP> _loaded_classes         {107,  1228891};
+  ResizeableResourceHashtable<HeapDumpFormat::id_t, Klass *,        AnyObj::C_HEAP> _restored_classes       {107,  1228891};
+  ResizeableResourceHashtable<HeapDumpFormat::id_t, Handle,         AnyObj::C_HEAP> _restored_objects       {1009, 1228891};
 
   // Gets a value or puts an empty-initialized value if the key is absent.
   template <class V>
@@ -990,7 +993,7 @@ class HeapRestorer : public StackObj {
     precond(vmClasses::ClassLoader_klass()->is_initialized());
 
     if (id == NULL_ID) {  // Bootstrap class loader
-      return instanceHandle();
+      return {};
     }
 
     instanceHandle *ready = get_or_put_stub(id, &_prepared_class_loaders);
@@ -1032,13 +1035,13 @@ class HeapRestorer : public StackObj {
 
   // Partially restores the class loader so it can be used for class definition.
   // If it is dumped as a built-in class loader, it will be set as such.
-  instanceHandle prepare_class_loader(InstanceKlass *klass, const HeapDumpFormat::InstanceDumpRecord &dump, TRAPS) {
+  instanceHandle prepare_class_loader(InstanceKlass *klass, const HeapDumpFormat::InstanceDumpRecord &dump, TRAPS) const {
     precond(klass->is_subclass_of(vmClasses::ClassLoader_klass()));
 
     if (dump.id == _platform_class_loader_id && SystemDictionary::java_platform_loader() != nullptr) {
       warning("Using platform class loader as created by CDS");
-      instanceOop o = reinterpret_cast<instanceOop>(SystemDictionary::java_platform_loader());
-      return instanceHandle(JavaThread::current(), o);
+      auto *o = reinterpret_cast<instanceOop>(SystemDictionary::java_platform_loader());
+      return {Thread::current(), o};
     }
     if (dump.id == _system_class_loader_id && SystemDictionary::java_system_loader() != nullptr) {
       if (dump.id != _builtin_app_class_loader_id) {
@@ -1047,8 +1050,8 @@ class HeapRestorer : public StackObj {
                            "the built-in app class loader " INT64_FORMAT, dump.id, _builtin_app_class_loader_id), {});
       }
       warning("Using system class loader as created by CDS");
-      instanceOop o = reinterpret_cast<instanceOop>(SystemDictionary::java_system_loader());
-      return instanceHandle(JavaThread::current(), o);
+      auto *o = reinterpret_cast<instanceOop>(SystemDictionary::java_system_loader());
+      return {Thread::current(), o};
     }
 
     // TODO for now, we only use the built-in platform and system class loaders
@@ -1061,7 +1064,7 @@ class HeapRestorer : public StackObj {
   // definition.
   instanceHandle get_allocated_prot_domain(HeapDumpFormat::id_t id, TRAPS) {
     if (id == NULL_ID) {
-      return instanceHandle();
+      return {};
     }
     instanceHandle *ready = get_or_put_stub(id, &_allocated_prot_domains);
     if (ready != nullptr) {
@@ -1290,7 +1293,7 @@ class HeapRestorer : public StackObj {
     ik->link_class(CHECK_NULL);
 #ifdef ASSERT
     {
-      MonitorLocker ml(JavaThread::current(), ik->_init_monitor);
+      MonitorLocker ml(Thread::current(), ik->_init_monitor);
       assert(!ik->is_being_initialized() && !ik->is_initialized(),
              "This should be the only thread performing class initialization");
       ik->set_init_state(InstanceKlass::being_initialized);
@@ -1317,7 +1320,7 @@ class HeapRestorer : public StackObj {
       THROW_MSG_(vmSymbols::java_lang_IllegalArgumentException(),
                  err_msg("Unexpected signers object type: %s", signers->klass()->external_name()), {});
     }
-    return objArrayHandle(JavaThread::current(), reinterpret_cast<objArrayOop>(signers()));
+    return {Thread::current(), reinterpret_cast<objArrayOop>(signers())};
   }
 
   // Sets static fields, basic types should have already been verified during
@@ -1392,7 +1395,7 @@ class HeapRestorer : public StackObj {
   }
 
   static Klass *get_field_class(const FieldStream &fs) {
-    JavaThread *current = JavaThread::current();
+    Thread *current = Thread::current();
     InstanceKlass *field_holder = fs.field_descriptor().field_holder();
     Handle loader = Handle(current, field_holder->class_loader());
 
@@ -1420,7 +1423,7 @@ class HeapRestorer : public StackObj {
 
   Handle restore_object(HeapDumpFormat::id_t id, TRAPS) {
     if (id == NULL_ID) {
-      return Handle();
+      return {};
     }
     Handle *ready = _restored_objects.get(id);
     if (ready != nullptr) {
@@ -1448,7 +1451,7 @@ class HeapRestorer : public StackObj {
     }
     if (instance_dump == nullptr && obj_array_dump == nullptr && prim_array_dump == nullptr && class_dump != nullptr) {
       Klass *klass = restore_class(*class_dump, CHECK_NH);
-      return Handle(JavaThread::current(), klass->java_mirror());
+      return {Thread::current(), klass->java_mirror()};
     }
 
     THROW_MSG_(vmSymbols::java_lang_IllegalArgumentException(),
@@ -1625,10 +1628,18 @@ class HeapRestorer : public StackObj {
       klass = ObjArrayKlass::cast(k);
     }
 
+    // Ensure won't overflow array length which is an int
+    if (dump.elem_ids.size() >  std::numeric_limits<int>::max()) {
+      THROW_MSG_(vmSymbols::java_lang_IllegalArgumentException(),
+                 err_msg("Object array dump " UINT64_FORMAT " has too many elements: " UINT32_FORMAT " > %i",
+                         dump.id, dump.elem_ids.size(),  std::numeric_limits<int>::max()), {});
+    }
+    int elems_num = static_cast<int>(dump.elem_ids.size());
+
     objArrayHandle handle;
     {
-      objArrayOop o = klass->allocate(dump.elem_ids.size(), CHECK_({}));
-      handle = objArrayHandle(JavaThread::current(), o);
+      objArrayOop o = klass->allocate(elems_num, CHECK_({}));
+      handle = objArrayHandle(Thread::current(), o);
     }
 
     assert(!_restored_objects.contains(dump.id), "Should still be not restored");
@@ -1636,14 +1647,14 @@ class HeapRestorer : public StackObj {
 
     restore_class(*class_dump, CHECK_({}));
 
-    for (size_t i = 0; i < dump.elem_ids.size(); i++) {
+    for (int i = 0; i < elems_num; i++) {
       Handle elem = restore_object(dump.elem_ids[i], CHECK_({}));
       if (elem.is_null() || elem->klass()->is_subtype_of(klass->element_klass())) {
         handle->obj_at_put(i, elem());
       } else {
         ResourceMark rm;
         THROW_MSG_(vmSymbols::java_lang_IllegalArgumentException(),
-                   err_msg("%s array has element %zu of incompatible type %s in the dump",
+                   err_msg("%s array has element %i of incompatible type %s in the dump",
                            klass->element_klass()->external_name(), i, elem->klass()->external_name()),
                    {});
       }
@@ -1660,53 +1671,61 @@ class HeapRestorer : public StackObj {
     assert(!_restored_objects.contains(dump.id), "Use restore_object() which also checks for ID duplication");
     log_trace(restore)("Restoring primitive array " INT64_FORMAT, dump.id);
 
+    // Ensure won't overflow array length which is an int
+    if (dump.elems_num > std::numeric_limits<int>::max()) {
+      THROW_MSG_(vmSymbols::java_lang_IllegalArgumentException(),
+                 err_msg("Primitive array dump " UINT64_FORMAT " has too many elements: " UINT32_FORMAT " > %i",
+                         dump.id, dump.elems_num,  std::numeric_limits<int>::max()), {});
+    }
+    int elems_num = static_cast<int>(dump.elems_num);
+
     typeArrayOop o;
     switch (dump.elem_type) {
       case HPROF_BOOLEAN:
-        o = oopFactory::new_typeArray_nozero(T_BOOLEAN, dump.elems_num, CHECK_({}));
-        precond(dump.elems_num * sizeof(jboolean) == dump.elems_data.size());
-        if (dump.elems_num > 0) memcpy(o->bool_at_addr(0), dump.elems_data.mem(), dump.elems_data.size());
+        o = oopFactory::new_typeArray_nozero(T_BOOLEAN, elems_num, CHECK_({}));
+        precond(elems_num * sizeof(jboolean) == dump.elems_data.size());
+        if (elems_num > 0) memcpy(o->bool_at_addr(0), dump.elems_data.mem(), dump.elems_data.size());
         break;
       case HPROF_CHAR:
-        o = oopFactory::new_typeArray_nozero(T_CHAR, dump.elems_num, CHECK_({}));
-        precond(dump.elems_num * sizeof(jchar) == dump.elems_data.size());
-        if (dump.elems_num > 0) memcpy(o->char_at_addr(0), dump.elems_data.mem(), dump.elems_data.size());
+        o = oopFactory::new_typeArray_nozero(T_CHAR, elems_num, CHECK_({}));
+        precond(elems_num * sizeof(jchar) == dump.elems_data.size());
+        if (elems_num > 0) memcpy(o->char_at_addr(0), dump.elems_data.mem(), dump.elems_data.size());
         break;
       case HPROF_FLOAT:
-        o = oopFactory::new_typeArray_nozero(T_FLOAT, dump.elems_num, CHECK_({}));
-        precond(dump.elems_num * sizeof(jfloat) == dump.elems_data.size());
-        if (dump.elems_num > 0) memcpy(o->float_at_addr(0), dump.elems_data.mem(), dump.elems_data.size());
+        o = oopFactory::new_typeArray_nozero(T_FLOAT, elems_num, CHECK_({}));
+        precond(elems_num * sizeof(jfloat) == dump.elems_data.size());
+        if (elems_num > 0) memcpy(o->float_at_addr(0), dump.elems_data.mem(), dump.elems_data.size());
         break;
       case HPROF_DOUBLE:
-        o = oopFactory::new_typeArray_nozero(T_DOUBLE, dump.elems_num, CHECK_({}));
-        precond(dump.elems_num * sizeof(jdouble) == dump.elems_data.size());
-        if (dump.elems_num > 0) memcpy(o->double_at_addr(0), dump.elems_data.mem(), dump.elems_data.size());
+        o = oopFactory::new_typeArray_nozero(T_DOUBLE, elems_num, CHECK_({}));
+        precond(elems_num * sizeof(jdouble) == dump.elems_data.size());
+        if (elems_num > 0) memcpy(o->double_at_addr(0), dump.elems_data.mem(), dump.elems_data.size());
         break;
       case HPROF_BYTE:
-        o = oopFactory::new_typeArray_nozero(T_BYTE, dump.elems_num, CHECK_({}));
-        precond(dump.elems_num * sizeof(jbyte) == dump.elems_data.size());
-        if (dump.elems_num > 0) memcpy(o->byte_at_addr(0), dump.elems_data.mem(), dump.elems_data.size());
+        o = oopFactory::new_typeArray_nozero(T_BYTE, elems_num, CHECK_({}));
+        precond(elems_num * sizeof(jbyte) == dump.elems_data.size());
+        if (elems_num > 0) memcpy(o->byte_at_addr(0), dump.elems_data.mem(), dump.elems_data.size());
         break;
       case HPROF_SHORT:
-        o = oopFactory::new_typeArray_nozero(T_SHORT, dump.elems_num, CHECK_({}));
-        precond(dump.elems_num * sizeof(jshort) == dump.elems_data.size());
-        if (dump.elems_num > 0) memcpy(o->short_at_addr(0), dump.elems_data.mem(), dump.elems_data.size());
+        o = oopFactory::new_typeArray_nozero(T_SHORT, elems_num, CHECK_({}));
+        precond(elems_num * sizeof(jshort) == dump.elems_data.size());
+        if (elems_num > 0) memcpy(o->short_at_addr(0), dump.elems_data.mem(), dump.elems_data.size());
         break;
       case HPROF_INT:
-        o = oopFactory::new_typeArray_nozero(T_INT, dump.elems_num, CHECK_({}));
-        precond(dump.elems_num * sizeof(jint) == dump.elems_data.size());
-        if (dump.elems_num > 0) memcpy(o->int_at_addr(0), dump.elems_data.mem(), dump.elems_data.size());
+        o = oopFactory::new_typeArray_nozero(T_INT, elems_num, CHECK_({}));
+        precond(elems_num * sizeof(jint) == dump.elems_data.size());
+        if (elems_num > 0) memcpy(o->int_at_addr(0), dump.elems_data.mem(), dump.elems_data.size());
         break;
       case HPROF_LONG:
-        o = oopFactory::new_typeArray_nozero(T_LONG, dump.elems_num, CHECK_({}));
-        precond(dump.elems_num * sizeof(jlong) == dump.elems_data.size());
-        if (dump.elems_num > 0) memcpy(o->long_at_addr(0), dump.elems_data.mem(), dump.elems_data.size());
+        o = oopFactory::new_typeArray_nozero(T_LONG, elems_num, CHECK_({}));
+        precond(elems_num * sizeof(jlong) == dump.elems_data.size());
+        if (elems_num > 0) memcpy(o->long_at_addr(0), dump.elems_data.mem(), dump.elems_data.size());
         break;
       default:
         ShouldNotReachHere();  // Ensured by the parser
     }
 
-    typeArrayHandle handle(JavaThread::current(), o);
+    typeArrayHandle handle(Thread::current(), o);
     _restored_objects.put_when_absent(dump.id, handle);
     _restored_objects.maybe_grow();
     if (log_is_enabled(Trace, restore)) {
@@ -1719,7 +1738,7 @@ class HeapRestorer : public StackObj {
 
 // Restore in portable mode.
 void crac::restore_portable(TRAPS) {
-  assert(is_portable_mode(), "Use crac::restore instead");
+  assert(is_portable_mode(), "Use crac::restore() instead");
   precond(CRaCRestoreFrom != nullptr);
 
   char path[JVM_MAXPATHLEN];
@@ -1737,6 +1756,6 @@ void crac::restore_portable(TRAPS) {
   if (HAS_PENDING_EXCEPTION) {
     Handle e(Thread::current(), PENDING_EXCEPTION);
     CLEAR_PENDING_EXCEPTION;
-    THROW_MSG_CAUSE(vmSymbols::java_lang_IllegalArgumentException(), err_msg("Restore failed: cannot restore heap"), e);
+    THROW_MSG_CAUSE(vmSymbols::java_lang_IllegalArgumentException(), "Restore failed: cannot restore heap", e);
   }
 }

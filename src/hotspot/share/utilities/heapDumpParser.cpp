@@ -5,8 +5,11 @@
 #include "runtime/timerTrace.hpp"
 #include "utilities/bitCast.hpp"
 #include "utilities/bytes.hpp"
+#include "utilities/debug.hpp"
 #include "utilities/heapDumpParser.hpp"
 #include "utilities/hprofTag.hpp"
+
+#include <limits>
 
 using hdf = HeapDumpFormat;
 
@@ -130,7 +133,8 @@ class BinaryFileReader : public AbstractReader {
 
   bool skip(size_t size) {
     precond(_file != nullptr);
-    return fseek(_file, size, SEEK_CUR) == 0;
+    assert(size <= std::numeric_limits<long>::max(), "must fit into fseek's offset of type long");
+    return fseek(_file, static_cast<long>(size), SEEK_CUR) == 0;
   }
 
   bool eof() const {
@@ -164,17 +168,17 @@ class AddressReader : public AbstractReader {
   size_t _max_size;
 };
 
-static const char ERR_INVAL_HEADER[] = "invalid header";
-static const char ERR_INVAL_ID_SIZE[] = "invalid ID size format";
-static const char ERR_UNSUPPORTED_ID_SIZE[] = "unsupported ID size";
-static const char ERR_INVAL_DUMP_TIMESTAMP[] = "invalid dump timestamp format";
+static constexpr char ERR_INVAL_HEADER[] = "invalid header";
+static constexpr char ERR_INVAL_ID_SIZE[] = "invalid ID size format";
+static constexpr char ERR_UNSUPPORTED_ID_SIZE[] = "unsupported ID size";
+static constexpr char ERR_INVAL_DUMP_TIMESTAMP[] = "invalid dump timestamp format";
 
-static const char ERR_INVAL_RECORD_PREAMBLE[] = "invalid (sub-)record preamble";
-static const char ERR_INVAL_RECORD_BODY[] = "invalid (sub-)record body";
-static const char ERR_INVAL_RECORD_TAG_POS[] = "illegal position of a (sub-)record tag";
-static const char ERR_UNKNOWN_RECORD_TAG[] = "unknown (sub-)record tag";
+static constexpr char ERR_INVAL_RECORD_PREAMBLE[] = "invalid (sub-)record preamble";
+static constexpr char ERR_INVAL_RECORD_BODY[] = "invalid (sub-)record body";
+static constexpr char ERR_INVAL_RECORD_TAG_POS[] = "illegal position of a (sub-)record tag";
+static constexpr char ERR_UNKNOWN_RECORD_TAG[] = "unknown (sub-)record tag";
 
-static const char ERR_REPEATED_ID[] = "found a repeated ID";
+static constexpr char ERR_REPEATED_ID[] = "found a repeated ID";
 
 // For logging.
 const char *hprof_version2str(hdf::Version version) {
@@ -392,7 +396,7 @@ class RecordsParser : public StackObj {
     u4 _remaining_record_size = 0;
 
     // For logging.
-    const char *position2str(Position position) {
+    static const char *position2str(Position position) {
       switch (position) {
         case Position::TOPLEVEL:
           return "TOPLEVEL";
@@ -583,31 +587,21 @@ class RecordsParser : public StackObj {
       default:  // Other subrecord types are skipped
         switch (tag) {
           case HPROF_GC_ROOT_UNKNOWN:
+          case HPROF_GC_ROOT_STICKY_CLASS:
+          case HPROF_GC_ROOT_MONITOR_USED:
             body_size = _id_size;
             break;
           case HPROF_GC_ROOT_JNI_GLOBAL:
             body_size = 2 * _id_size;
             break;
           case HPROF_GC_ROOT_JNI_LOCAL:
-            body_size = _id_size + 2 * sizeof(u4);
-            break;
           case HPROF_GC_ROOT_JAVA_FRAME:
+          case HPROF_GC_ROOT_THREAD_OBJ:
             body_size = _id_size + 2 * sizeof(u4);
             break;
           case HPROF_GC_ROOT_NATIVE_STACK:
-            body_size = _id_size + sizeof(u4);
-            break;
-          case HPROF_GC_ROOT_STICKY_CLASS:
-            body_size = _id_size;
-            break;
           case HPROF_GC_ROOT_THREAD_BLOCK:
             body_size = _id_size + sizeof(u4);
-            break;
-          case HPROF_GC_ROOT_MONITOR_USED:
-            body_size = _id_size;
-            break;
-          case HPROF_GC_ROOT_THREAD_OBJ:
-            body_size = _id_size + 2 * sizeof(u4);
             break;
           default:
             return ERR_UNKNOWN_RECORD_TAG;
@@ -681,13 +675,13 @@ class RecordsParser : public StackObj {
 
 #define ALLOC_NEW_RECORD(hashtable, id, record_group_name)                                  \
   bool is_new;                                                                              \
-  auto *record = hashtable->put_if_absent(id, &is_new);                                     \
+  auto *record = (hashtable)->put_if_absent(id, &is_new);                                   \
   if (!is_new) {                                                                            \
     log_error(heapdumpparsing)("Multiple occurences of ID " UINT64_FORMAT " in %s records", \
                                id, record_group_name);                                      \
     return Result::REPEATED_ID;                                                             \
   }                                                                                         \
-  hashtable->maybe_grow()
+  (hashtable)->maybe_grow()
 
 #define READ_INTO_OR_FAIL(ptr, what)                         \
   do {                                                       \
@@ -699,7 +693,7 @@ class RecordsParser : public StackObj {
 
 #define READ_OR_FAIL(type, var, what) \
   type var;                           \
-  READ_INTO_OR_FAIL(&var, what)
+  READ_INTO_OR_FAIL(&(var), what)
 
 #define READ_ID_INTO_OR_FAIL(ptr, what)                      \
   do {                                                       \
@@ -711,7 +705,7 @@ class RecordsParser : public StackObj {
 
 #define READ_ID_OR_FAIL(var, what) \
   hdf::id_t var;                   \
-  READ_ID_INTO_OR_FAIL(&var, what)
+  READ_ID_INTO_OR_FAIL(&(var), what)
 
   Result parse_UTF8(u4 size, decltype(ParsedHeapDump::utf8_records) *out) {
     if (size < _id_size) {
@@ -724,12 +718,20 @@ class RecordsParser : public StackObj {
     record->id = id;
 
     u4 sym_size = size - _id_size;
+    if (sym_size > std::numeric_limits<int>::max()) {
+      // SymbolTable::new_symbol() takes length as an int
+      log_error(heapdumpparsing)("HPROF_UTF8 symbol is too large for the symbol table: " UINT32_FORMAT " > %i",
+                                 sym_size,  std::numeric_limits<int>::max());
+      return Result::FAILED;
+    }
     _sym_buf.ensure_fits(sym_size);
+
     if (!_reader->read_raw(_sym_buf.buf(), sym_size)) {
       log_error(heapdumpparsing)("Failed to read HPROF_UTF8 symbol bytes");
       return Result::FAILED;
     }
-    record->sym = TempNewSymbol(SymbolTable::new_symbol(_sym_buf.buf(), sym_size));
+
+    record->sym = TempNewSymbol(SymbolTable::new_symbol(_sym_buf.buf(), static_cast<int>(sym_size)));
 
     return Result::OK;
   }
@@ -835,7 +837,8 @@ class RecordsParser : public StackObj {
       if (!read_basic_value(constant.type, &constant.value, &value_size)) {
         log_error(heapdumpparsing)("Failed to read a constant's value in HPROF_GC_CLASS_DUMP");
         return Result::FAILED;
-      } else if (value_size == 0) {
+      }
+      if (value_size == 0) {
         log_error(heapdumpparsing)("Unknown constant type in "
                                    "HPROF_GC_CLASS_DUMP: " UINT8_FORMAT_X_0,
                                    constant.type);
@@ -855,7 +858,8 @@ class RecordsParser : public StackObj {
       if (!read_basic_value(field.info.type, &field.value, &value_size)) {
         log_error(heapdumpparsing)("Failed to read a static field's value in HPROF_GC_CLASS_DUMP");
         return Result::FAILED;
-      } else if (value_size == 0) {
+      }
+      if (value_size == 0) {
         log_error(heapdumpparsing)("Unknown static field type in "
                                    "HPROF_GC_CLASS_DUMP: " UINT8_FORMAT_X_0,
                                    field.info.type);
@@ -967,8 +971,8 @@ class RecordsParser : public StackObj {
 };
 
 static hdf::Version parse_header(BinaryFileReader *reader) {
-  static const char HEADER_102[] = "JAVA PROFILE 1.0.2";
-  static const char HEADER_101[] = "JAVA PROFILE 1.0.1";
+  static constexpr char HEADER_102[] = "JAVA PROFILE 1.0.2";
+  static constexpr char HEADER_101[] = "JAVA PROFILE 1.0.1";
   STATIC_ASSERT(sizeof(HEADER_102) == sizeof(HEADER_101));
 
   char header[sizeof(HEADER_102)];

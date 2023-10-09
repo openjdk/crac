@@ -22,11 +22,9 @@
  */
 
 // no precompiled headers
-#include "gc/shared/collectedHeap.hpp"
 #include "jvm.h"
 #include "memory/universe.hpp"
 #include "memory/metaspace/virtualSpaceList.hpp"
-#include "perfMemory_linux.hpp"
 #include "runtime/crac_structs.hpp"
 #include "runtime/crac.hpp"
 #include "runtime/os.hpp"
@@ -358,52 +356,6 @@ bool VM_Crac::check_fds() {
   }
 
   return ok;
-}
-
-static bool check_can_write() {
-  char path[PATH_MAX];
-  snprintf(path, PATH_MAX, "%s%s.test", CRaCCheckpointTo, os::file_separator());
-  int fd = os::open(path, O_WRONLY | O_CREAT | O_TRUNC, S_IRUSR | S_IWUSR);
-  if (fd < 0) {
-    tty->print_cr("Cannot create %s: %s\n", path, os::strerror(errno));
-    return false;
-  }
-  bool success = write(fd, "test", 4) > 0;
-  if (!success) {
-    tty->print_cr("Cannot write to %s: %s\n", path, os::strerror(errno));
-  }
-  if (::close(fd)) {
-    tty->print_cr("Cannot close %s: %s", path, os::strerror(errno));
-  }
-  if (::unlink(path)) {
-    tty->print_cr("Cannot remove %s: %s", path, os::strerror(errno));
-  }
-  return success;
-}
-
-bool VM_Crac::memory_checkpoint() {
-  if (CRPersistMemory) {
-    // Check early if the checkpoint directory is writable; from this point
-    // we won't be able to go back
-    if (!check_can_write()) {
-      return false;
-    }
-    crac::MemoryPersister::init();
-    Universe::heap()->persist_for_checkpoint();
-    metaspace::VirtualSpaceList *vsc = metaspace::VirtualSpaceList::vslist_class();
-    if (vsc != nullptr) {
-      vsc->persist_for_checkpoint();
-    }
-    metaspace::VirtualSpaceList *vsn = metaspace::VirtualSpaceList::vslist_nonclass();
-    if (vsn != nullptr) {
-      vsn->persist_for_checkpoint();
-    }
-  }
-  return PerfMemoryLinux::checkpoint(CRaCCheckpointTo);
-}
-
-void VM_Crac::memory_restore() {
-  PerfMemoryLinux::restore();
 }
 
 static char modules_path[JVM_MAXPATHLEN] = { '\0' };

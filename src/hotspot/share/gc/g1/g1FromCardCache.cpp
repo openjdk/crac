@@ -108,6 +108,6 @@ void G1FromCardCache::assert_checkpoint() {
     return;
   }
   size_t size = align_up(_static_mem_size, os::vm_allocation_granularity());
-  crac::MemoryPersister::assert_mem(_cache, size, size);
+  crac::MemoryPersister::assert_mem(_cache, size, size, false);
 }
 #endif //ASSERT

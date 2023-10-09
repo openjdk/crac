@@ -1085,7 +1085,7 @@ void VirtualSpace::persist_on_checkpoint() {
 void VirtualSpace::assert_checkpoint() {
   size_t used = _high - _low;
   crac::MemoryPersister::assert_gap(_low_boundary, _low - _low_boundary);
-  crac::MemoryPersister::assert_mem(_low, used, used);
+  crac::MemoryPersister::assert_mem(_low, used, used, true);
   crac::MemoryPersister::assert_gap(_high, _high_boundary - _high);
 }
 #endif //ASSERT

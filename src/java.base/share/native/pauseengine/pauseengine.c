@@ -29,11 +29,13 @@
 #include <stdlib.h>
 #include <signal.h>
 
-#ifdef LINUX
-#include <unistd.h>
-#define RESTORE_SIGNAL   (SIGRTMIN + 2)
+#ifndef _WINDOWS
+# include <unistd.h>
 #else
 typedef int pid_t;
+#endif
+#ifdef LINUX
+#define RESTORE_SIGNAL   (SIGRTMIN + 2)
 #endif //LINUX
 
 static int kickjvm(pid_t jvm, int code) {
@@ -57,7 +59,7 @@ int main(int argc, char *argv[]) {
     }
 
     if (!strcmp(action, "checkpoint")) {
-#ifdef LINUX
+#ifndef _WINDOWS
         pid_t jvm = getppid();
 #else
         pid_t jvm = -1;

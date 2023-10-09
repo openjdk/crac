@@ -20,14 +20,28 @@
  * or visit www.oracle.com if you need additional information or have any
  * questions.
  */
+#include "precompiled.hpp"
+
 #include <limits.h>
 #include <string.h>
+#include <sys/stat.h>
 
 #include "memory/resourceArea.hpp"
 #include "runtime/crac.hpp"
 #include "runtime/os.hpp"
 
-const char crac::MemoryPersister::MEMORY_IMG[11];
+#ifndef PATH_MAX // Windows?
+# define PATH_MAX MAX_PATH
+#endif
+#ifndef S_IRUSR
+# define S_IRUSR _S_IREAD
+#endif
+#ifndef S_IWUSR
+# define S_IWUSR _S_IWRITE
+#endif
+
+
+const char *crac::MemoryPersister::MEMORY_IMG = "memory.img";
 GrowableArray<struct crac::MemoryPersister::record> crac::MemoryPersister::_index(256, mtInternal);
 crac::MemoryWriter *crac::MemoryPersister::_writer = nullptr;
 
@@ -102,9 +116,18 @@ static bool is_all_zeroes(void *addr, size_t page_size) {
 }
 
 bool crac::MemoryPersister::store(void *addr, size_t length, size_t mapped_length, bool executable) {
+  assert(_writer != nullptr, "MemoryPersister not initialized");
   if (mapped_length == 0) {
     return true;
   }
+#ifdef __APPLE__
+  if (executable) {
+    // On Apple it is not possible to create a RWX mapping without MAP_JIT flag;
+    // however the combination MAP_JIT and MAP_FIXED is prohibites. That means
+    // that if we unmap this region we wouldn't be able to remap it again.
+    return true;
+  }
+#endif // _APPLE_
 
   size_t page_size = os::vm_page_size();
   assert(is_aligned(addr, page_size), "Unaligned address %p", addr);
@@ -121,12 +144,7 @@ bool crac::MemoryPersister::store(void *addr, size_t length, size_t mapped_lengt
       do {
         curr += page_size;
       } while (curr < end && is_all_zeroes(curr, page_size));
-      _index.append({
-        .addr = start,
-        .length = (size_t) (curr - start),
-        .offset = BAD_OFFSET,
-        .flags = Flags::ACCESSIBLE | execFlag
-      });
+      _index.append({ start, (size_t) (curr - start), BAD_OFFSET, Flags::ACCESSIBLE | execFlag });
       do_zeroes = false;
     } else {
       do {
@@ -134,24 +152,14 @@ bool crac::MemoryPersister::store(void *addr, size_t length, size_t mapped_lengt
       } while (curr < end && !is_all_zeroes(curr, page_size));
       size_t to_write = (curr > end ? end : curr) - start;
       size_t offset = _writer->write(start, to_write);
-      _index.append({
-        .addr = start,
-        .length = to_write,
-        .offset = offset,
-        .flags = Flags::DATA | Flags::ACCESSIBLE | execFlag
-      });
+      _index.append({ start, to_write, offset, Flags::DATA | Flags::ACCESSIBLE | execFlag });
       do_zeroes = true;
     }
   }
 
   size_t aligned_length = align_up(length, page_size);
   if (aligned_length < mapped_length) {
-    _index.append({
-      .addr = (address) addr + aligned_length,
-      .length = mapped_length - aligned_length,
-      .offset = BAD_OFFSET,
-      .flags = Flags::ACCESSIBLE | execFlag
-    });
+    _index.append({ (address) addr + aligned_length, mapped_length - aligned_length, BAD_OFFSET, Flags::ACCESSIBLE | execFlag });
   }
   return unmap(addr, mapped_length);
 }
@@ -169,12 +177,7 @@ bool crac::MemoryPersister::store_gap(void *addr, size_t length) {
       "Overlapping regions %p-%p and %p-%p", r.addr, r.addr + r.length, addr, (address) addr + length);
   }
 #endif
-  _index.append({
-    .addr = (address) addr,
-    .length = length,
-    .offset = BAD_OFFSET,
-    .flags = 0
-  });
+  _index.append({ (address) addr, length, BAD_OFFSET, 0 });
   return unmap(addr, length);
 }
 
@@ -215,7 +218,7 @@ void crac::MemoryPersister::load_on_restore() {
       } else {
         char *data = (char *) r.addr;
         if (update_protection && !os::protect_memory(data, aligned_length, protType)) {
-          fatal("Cannot remap memory at %p-%p", r.addr, r.addr + aligned_length);
+          fatal("Cannot update memory protection (%d) at %p-%p", protType, r.addr, r.addr + aligned_length);
         }
         reader->read(r.offset, data, r.length, r.flags & Flags::EXECUTABLE);
       }
@@ -226,9 +229,16 @@ void crac::MemoryPersister::load_on_restore() {
 
 
 #ifdef ASSERT
-void crac::MemoryPersister::assert_mem(void *addr, size_t used, size_t total) {
+void crac::MemoryPersister::assert_mem(void *addr, size_t used, size_t total, bool executable) {
   assert(is_aligned(addr, os::vm_page_size()), "Unaligned address %p", addr);
   assert(is_aligned(total, os::vm_page_size()), "Unaligned length %zx", total);
+
+#ifdef __APPLE__
+  if (executable) {
+    // not present in index; see ::store(...)
+    return;
+  }
+#endif // _APPLE_
 
   size_t aligned = align_up(used, os::vm_page_size());
   size_t unused = total - aligned;
@@ -236,7 +246,7 @@ void crac::MemoryPersister::assert_mem(void *addr, size_t used, size_t total) {
 
   SearchInIndex comparator;
   bool found;
-  int at = _index.find_sorted<struct record>(&comparator, { .addr = (address) addr }, found);
+  int at = _index.find_sorted<struct record>(&comparator, { (address) addr, 0, 0, 0 }, found);
   assert(found, "Cannot find region with address %p (%d records)", addr, _index.length());
   while (used > 0) {
     assert(at < _index.length(), "Overrunning index with 0x%zx used", used);
@@ -244,6 +254,7 @@ void crac::MemoryPersister::assert_mem(void *addr, size_t used, size_t total) {
     // fprintf(stderr, "R %d %lx %lx %lx %x\n", at, r.addr, r.length, r.offset, r.flags);
     assert((void   *) r.addr == addr, "Unexpected address %p, expected %p", r.addr, addr);
     assert(r.flags & Flags::ACCESSIBLE, "Bad flags for %p: 0x%x", r.addr, r.flags);
+    assert(!!(r.flags & Flags::EXECUTABLE) == executable, "Bad flags for %p: 0x%x (executable %d)", r.addr, r.flags, executable);
     assert(r.length <= used, "Persisted memory region length does not match at %p: 0x%zx vs. 0x%zx", addr, used, r.length);
     if (r.flags & Flags::DATA) {
       assert(r.offset != BAD_OFFSET, "Invalid offset at %p", r.addr);
@@ -269,7 +280,7 @@ void crac::MemoryPersister::assert_gap(void *addr, size_t length) {
   if (length > 0) {
     SearchInIndex comparator;
     bool found;
-    int at = _index.find_sorted<struct record>(&comparator, { .addr = (address) addr }, found);
+    int at = _index.find_sorted<struct record>(&comparator, { (address) addr, 0, 0, 0 }, found);
     assert(found, "Cannot find region with address %p (%d records)", addr, _index.length());
     const record &r = _index.at(at);
     assert(r.length == length, "Persisted memory region length does not match at %p: 0x%zx vs. 0x%zx", addr, length, r.length);

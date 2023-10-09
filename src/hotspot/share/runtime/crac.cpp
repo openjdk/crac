@@ -26,6 +26,7 @@
 #include "code/codeCache.hpp"
 #include "classfile/classLoader.hpp"
 #include "jvm.h"
+#include "gc/shared/collectedHeap.hpp"
 #include "logging/logAsyncWriter.hpp"
 #include "logging/logConfiguration.hpp"
 #include "memory/metaspace/virtualSpaceList.hpp"
@@ -36,6 +37,7 @@
 #include "runtime/interfaceSupport.inline.hpp"
 #include "runtime/jniHandles.hpp"
 #include "runtime/jniHandles.inline.hpp"
+#include "runtime/os.inline.hpp"
 #include "runtime/threads.hpp"
 #include "runtime/vm_version.hpp"
 #include "runtime/vmThread.hpp"
@@ -43,6 +45,7 @@
 #include "services/writeableFlags.hpp"
 #ifdef LINUX
 #include "os_linux.hpp"
+#include "perfMemory_linux.hpp"
 #endif
 
 static const char* _crengine = NULL;
@@ -291,55 +294,6 @@ bool VM_Crac::is_claimed_fd(int fd) {
   return false;
 }
 
-class PersistThreadStackClosure: public ThreadClosure {
-public:
-  void do_thread(Thread* t) {
-    JavaThread *thread = JavaThread::cast(t);
-    size_t reserved = thread->stack_overflow_state()->stack_reserved_zone_base() - thread->stack_end();
-    if (!crac::MemoryPersister::store_gap(thread->stack_end(), reserved)) {
-      fatal("Cannot record reserved zone for stack");
-    }
-    // On aarch64 the stack size might be not aligned to page boundaries on the upper end
-    size_t length = align_up(thread->stack_size() - reserved, os::vm_page_size());
-    if (!crac::MemoryPersister::store(thread->stack_end() + reserved, length, length, false)) {
-      fatal("Cannot persist thread stack");
-    }
-  }
-};
-
-#ifdef ASSERT
-class AssertThreadStackClosure: public ThreadClosure {
-public:
-  void do_thread(Thread* t) {
-    JavaThread *thread = JavaThread::cast(t);
-    size_t reserved = thread->stack_overflow_state()->stack_reserved_zone_base() - thread->stack_end();
-    crac::MemoryPersister::assert_gap(thread->stack_end(), reserved);
-    size_t length = align_up(thread->stack_size() - reserved, os::vm_page_size());
-    crac::MemoryPersister::assert_mem(thread->stack_end() + reserved, length, length);
-  }
-};
-#endif // ASSERT
-
-static void persist_thread_stacks() {
-// Not platform-specific, but skip this on non-Linux
-#ifdef LINUX
-  crac::before_threads_persisted();
-  PersistThreadStackClosure closure;
-  Threads::java_threads_do(&closure);
-#endif
-}
-
-static void restore_thread_stacks() {
-// Not platform-specific, but skip this on non-Linux
-#ifdef LINUX
-# ifdef ASSERT
-  AssertThreadStackClosure closure;
-  Threads::java_threads_do(&closure);
-# endif // ASSERT
-  crac::after_threads_restored();
-#endif
-}
-
 class WakeupClosure: public ThreadClosure {
   void do_thread(Thread* thread) {
     JavaThread *jt = JavaThread::cast(thread);
@@ -385,14 +339,8 @@ void VM_Crac::doit() {
     return;
   }
 
-  if (!memory_checkpoint()) {
+  if (!crac::memory_checkpoint()) {
     return;
-  }
-
-  // We don't invoke this inside memory_checkpoint() for symmetry;
-  // CodeCache must be restored earlier (see below)
-  if (CRPersistMemory) {
-    CodeCache::persist_for_checkpoint();
   }
 
   os::trim_native_heap(nullptr);
@@ -406,17 +354,12 @@ void VM_Crac::doit() {
     if (CRPersistMemory) {
       // Since VM_Crac instance is allocated on stack of other thread
       // we must not use it from now on
-      persist_thread_stacks();
+      crac::threads_checkpoint();
       crac::MemoryPersister::finalize();
     }
     int ret = checkpoint_restore(&shmid);
     if (ret == JVM_CHECKPOINT_ERROR) {
-      if (CRPersistMemory) {
-        crac::MemoryPersister::reinit_memory();
-        crac::MemoryPersister::load_on_restore();
-        restore_thread_stacks();
-      }
-      memory_restore();
+      crac::memory_restore(false);
       return;
     }
   }
@@ -438,32 +381,133 @@ void VM_Crac::doit() {
     _restore_start_nanos += crac::monotonic_time_offset();
   }
 
-  if (CRPersistMemory) {
-#ifdef ASSERT
-    CodeCache::assert_checkpoint();
-    metaspace::VirtualSpaceList *vsc = metaspace::VirtualSpaceList::vslist_class();
-    if (vsc != nullptr) {
-      vsc->assert_checkpoint();
-    }
-    metaspace::VirtualSpaceList *vsn = metaspace::VirtualSpaceList::vslist_nonclass();
-    if (vsn != nullptr) {
-      vsn->assert_checkpoint();
-    }
-    Universe::heap()->assert_checkpoint();
-#endif // ASSERT
-    crac::MemoryPersister::load_on_restore();
-    Universe::heap()->on_restore();
-    restore_thread_stacks();
-  }
+  crac::memory_restore(true);
+
   // VM_Crac::read_shm needs to be already called to read RESTORE_SETTABLE parameters.
   VM_Version::crac_restore_finalize();
-
-  memory_restore();
 
   wakeup_threads_in_timedwait_vm();
 
   _ok = true;
 }
+
+static bool check_can_write() {
+  char path[PATH_MAX];
+  snprintf(path, PATH_MAX, "%s%s.test", CRaCCheckpointTo, os::file_separator());
+  int fd = os::open(path, O_WRONLY | O_CREAT | O_TRUNC, S_IRUSR | S_IWUSR);
+  if (fd < 0) {
+    tty->print_cr("Cannot create %s: %s\n", path, os::strerror(errno));
+    return false;
+  }
+  bool success = write(fd, "test", 4) > 0;
+  if (!success) {
+    tty->print_cr("Cannot write to %s: %s\n", path, os::strerror(errno));
+  }
+  if (::close(fd)) {
+    tty->print_cr("Cannot close %s: %s", path, os::strerror(errno));
+  }
+  if (::unlink(path)) {
+    tty->print_cr("Cannot remove %s: %s", path, os::strerror(errno));
+  }
+  return success;
+}
+
+bool crac::memory_checkpoint() {
+  if (CRPersistMemory) {
+    // Check early if the checkpoint directory is writable; from this point
+    // we won't be able to go back
+    if (!check_can_write()) {
+      return false;
+    }
+    MemoryPersister::init();
+    Universe::heap()->persist_for_checkpoint();
+    metaspace::VirtualSpaceList *vsc = metaspace::VirtualSpaceList::vslist_class();
+    if (vsc != nullptr) {
+      vsc->persist_for_checkpoint();
+    }
+    metaspace::VirtualSpaceList *vsn = metaspace::VirtualSpaceList::vslist_nonclass();
+    if (vsn != nullptr) {
+      vsn->persist_for_checkpoint();
+    }
+    CodeCache::persist_for_checkpoint();
+  }
+  bool success = true;
+#ifdef LINUX
+  success = PerfMemoryLinux::checkpoint(CRaCCheckpointTo);
+#endif
+  return success;
+}
+
+class PersistThreadStackClosure: public ThreadClosure {
+public:
+  void do_thread(Thread* t) {
+    JavaThread *thread = JavaThread::cast(t);
+    size_t reserved = thread->stack_overflow_state()->stack_reserved_zone_base() - thread->stack_end();
+    if (!crac::MemoryPersister::store_gap(thread->stack_end(), reserved)) {
+      fatal("Cannot record reserved zone for stack");
+    }
+    // On aarch64 the stack size might be not aligned to page boundaries on the upper end
+    size_t length = align_up(thread->stack_size() - reserved, os::vm_page_size());
+    if (!crac::MemoryPersister::store(thread->stack_end() + reserved, length, length, false)) {
+      fatal("Cannot persist thread stack");
+    }
+  }
+};
+
+void crac::threads_checkpoint() {
+  crac::before_threads_persisted();
+  // We cannot unmap non-Linux thread stacks as the implementation
+  // of before_threads_persisted is dummy
+#ifdef LINUX
+  PersistThreadStackClosure closure;
+  Threads::java_threads_do(&closure);
+#endif // LINUX
+}
+
+void crac::memory_restore(bool successful) {
+  if (CRPersistMemory) {
+    if (successful) {
+#ifdef ASSERT
+      CodeCache::assert_checkpoint();
+      metaspace::VirtualSpaceList *vsc = metaspace::VirtualSpaceList::vslist_class();
+      if (vsc != nullptr) {
+        vsc->assert_checkpoint();
+      }
+      metaspace::VirtualSpaceList *vsn = metaspace::VirtualSpaceList::vslist_nonclass();
+      if (vsn != nullptr) {
+        vsn->assert_checkpoint();
+      }
+      Universe::heap()->assert_checkpoint();
+
+      class AssertThreadStackClosure: public ThreadClosure {
+      public:
+        void do_thread(Thread* t) {
+          JavaThread *thread = JavaThread::cast(t);
+          size_t reserved = thread->stack_overflow_state()->stack_reserved_zone_base() - thread->stack_end();
+          crac::MemoryPersister::assert_gap(thread->stack_end(), reserved);
+          size_t length = align_up(thread->stack_size() - reserved, os::vm_page_size());
+          crac::MemoryPersister::assert_mem(thread->stack_end() + reserved, length, length, false);
+        }
+      };
+
+# ifdef LINUX
+      AssertThreadStackClosure closure;
+      Threads::java_threads_do(&closure);
+# endif // LINUX
+#endif // ASSERT
+    } else {
+      // on success we've reinitialized earlier
+      MemoryPersister::reinit_memory();
+    }
+    MemoryPersister::load_on_restore();
+    Universe::heap()->on_restore();
+    after_threads_restored();
+  }
+#ifdef LINUX
+  PerfMemoryLinux::restore();
+#endif
+}
+
 
 bool crac::prepare_checkpoint() {
   struct stat st;

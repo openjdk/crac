@@ -129,7 +129,7 @@ public:
     static MemoryWriter *_writer;
 
   public:
-    static constexpr char MEMORY_IMG[] = "memory.img";
+    static const char *MEMORY_IMG;
 
     static void init();
     static bool store(void *addr, size_t length, size_t mapped_length, bool executable);
@@ -143,7 +143,7 @@ public:
     static void reinit_memory();
     static void load_on_restore();
 #ifdef ASSERT
-    static void assert_mem(void *addr, size_t used, size_t total);
+    static void assert_mem(void *addr, size_t used, size_t total, bool executable);
     static void assert_gap(void *addr, size_t length);
 #endif // ASSERT
   private:
@@ -151,12 +151,16 @@ public:
     static bool map(void *addr, size_t length, os::ProtType protType);
   };
 
-  static void before_threads_persisted();
-  static void after_threads_restored();
+  static bool memory_checkpoint();
+  static void threads_checkpoint();
+  static void memory_restore(bool successful);
 
 private:
   static bool read_all(int fd, char *buf, size_t bytes);
   static bool read_bootid(char *dest);
+
+  static void before_threads_persisted();
+  static void after_threads_restored();
 
   static jlong checkpoint_millis;
   static jlong checkpoint_nanos;

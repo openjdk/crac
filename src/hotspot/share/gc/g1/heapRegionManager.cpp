@@ -833,12 +833,11 @@ void HeapRegionManager::rebuild_free_list(WorkerThreads* workers) {
 
 void HeapRegionManager::persist_for_checkpoint() {
   size_t page_size = os::vm_page_size();
-  for (size_t i = 0; i < _regions.length(); ++i) {
+  for (uint i = 0; i < _regions.length(); ++i) {
     HeapRegion *region = _regions.get_by_index(i);
     if (region == nullptr) {
       continue;
     }
-    u_int64_t top_aligned = align_up((u_int64_t) region->top(), page_size);
     // both active and inactive are mapped RW
     if (_committed_map.active(i) || _committed_map.inactive(i)) {
       if (!crac::MemoryPersister::store(region->bottom(), region->used(), region->capacity(), false)) {
@@ -857,13 +856,13 @@ void HeapRegionManager::persist_for_checkpoint() {
 
 #ifdef ASSERT
 void HeapRegionManager::assert_checkpoint() {
-  for (size_t i = 0; i < _regions.length(); ++i) {
+  for (uint i = 0; i < _regions.length(); ++i) {
     HeapRegion *region = _regions.get_by_index(i);
     if (region == nullptr) {
       continue;
     }
     if (_committed_map.active(i) || _committed_map.inactive(i)) {
-      crac::MemoryPersister::assert_mem(region->bottom(), region->used(), region->capacity());
+      crac::MemoryPersister::assert_mem(region->bottom(), region->used(), region->capacity(), false);
     } else {
       crac::MemoryPersister::assert_gap(region->bottom(), region->capacity());
     }

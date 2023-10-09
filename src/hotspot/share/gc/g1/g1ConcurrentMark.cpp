@@ -3067,6 +3067,6 @@ void G1CMMarkStack::persist_for_checkpoint() {
 void G1CMMarkStack::assert_checkpoint() {
   size_t used = MIN2(_hwm, _chunk_capacity) * sizeof(TaskQueueEntryChunk);
   size_t committed = _chunk_capacity * sizeof(TaskQueueEntryChunk);
-  crac::MemoryPersister::assert_mem(_base, used, committed);
+  crac::MemoryPersister::assert_mem(_base, used, committed, false);
 }
 #endif // ASSERT

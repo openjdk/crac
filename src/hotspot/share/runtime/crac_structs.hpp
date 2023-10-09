@@ -200,8 +200,6 @@ private:
   void print_resources(const char* msg, ...);
   void trace_cr(const char* msg, ...);
   bool check_fds();
-  bool memory_checkpoint();
-  void memory_restore();
 };
 
 class CracSHM {

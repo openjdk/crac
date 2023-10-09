@@ -482,7 +482,7 @@ void VirtualSpaceNode::assert_checkpoint() {
     if (flip) {
       next = _commit_mask.find_first_clear_bit(index);
       size_t length = (next - index) * granule_size;
-      crac::MemoryPersister::assert_mem((char *) _base + index * granule_size, length, length);
+      crac::MemoryPersister::assert_mem((char *) _base + index * granule_size, length, length, false);
     } else {
       next = _commit_mask.find_first_set_bit(index);
       crac::MemoryPersister::assert_gap((char *) _base + index * granule_size, (next - index) * granule_size);

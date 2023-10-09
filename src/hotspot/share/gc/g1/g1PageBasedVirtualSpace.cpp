@@ -283,7 +283,7 @@ void G1PageBasedVirtualSpace::assert_checkpoint() {
     if (flip) {
       next = _committed.find_first_clear_bit(index);
       size_t length = (next - index) * _page_size;
-      crac::MemoryPersister::assert_mem((char *) _low_boundary + index * _page_size, length, length);
+      crac::MemoryPersister::assert_mem((char *) _low_boundary + index * _page_size, length, length, false);
     } else {
       next = _committed.find_first_set_bit(index);
       crac::MemoryPersister::assert_gap((char *) _low_boundary + index * _page_size, (next - index) * _page_size);

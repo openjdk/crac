@@ -36,13 +36,6 @@ bool VM_Crac::check_fds() {
   return true;
 }
 
-bool VM_Crac::memory_checkpoint() {
-  return true;
-}
-
-void VM_Crac::memory_restore() {
-}
-
 int CracSHM::open(int mode) {
   return -1;
 }
@@ -58,7 +51,7 @@ bool crac::MemoryPersister::unmap(void *addr, size_t length) {
   return true; // Don't fail; just keep memory as-is
 }
 
-bool crac::MemoryPersister::map(void *addr, size_t length, bool executable) {
+bool crac::MemoryPersister::map(void *addr, size_t length, os::ProtType protType) {
   return true; // Don't fail; the memory should not be unmapped
 }
 

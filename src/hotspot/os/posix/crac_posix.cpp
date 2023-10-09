@@ -51,13 +51,6 @@ bool VM_Crac::check_fds() {
   return true;
 }
 
-bool VM_Crac::memory_checkpoint() {
-  return true;
-}
-
-void VM_Crac::memory_restore() {
-}
-
 bool crac::read_bootid(char *dest) {
   return true;
 }
@@ -90,9 +83,15 @@ bool crac::MemoryPersister::map(void *addr, size_t length, os::ProtType protType
   default:
     ShouldNotReachHere();
   }
-  while (::mmap(addr, length, p, MAP_PRIVATE | MAP_FIXED | MAP_ANONYMOUS, -1 , 0) != addr) {
+  int mode = MAP_PRIVATE | MAP_FIXED | MAP_ANONYMOUS;
+#ifdef __APPLE__
+  // Apple requires either R-X or RW- mappings unless MAP_JIT is present
+  // but combination of MAP_FIXED and MAP_JIT is prohibited.
+  assert(protType != os::ProtType::MEM_PROT_RWX, "Cannot create RWX mapping.");
+#endif
+  while (::mmap(addr, length, p, mode, -1 , 0) != addr) {
     if (errno != EINTR) {
-      fprintf(stderr, "::mmap %p %zu RW: %m\n", addr, length);
+      fprintf(stderr, "::mmap %p %zu RW: %s\n", addr, length, os::strerror(errno));
       return false;
     }
   }

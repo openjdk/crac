@@ -30,6 +30,13 @@
 #include "runtime/crac.hpp"
 #include "runtime/os.hpp"
 
+#ifdef  _WINDOWS
+# include <io.h>
+# define close _close
+#else
+# include <unistd.h>
+#endif // _WINDOWS
+
 #ifndef PATH_MAX // Windows?
 # define PATH_MAX MAX_PATH
 #endif
@@ -44,6 +51,18 @@
 const char *crac::MemoryPersister::MEMORY_IMG = "memory.img";
 GrowableArray<struct crac::MemoryPersister::record> crac::MemoryPersister::_index(256, mtInternal);
 crac::MemoryWriter *crac::MemoryPersister::_writer = nullptr;
+
+crac::MemoryWriter::~MemoryWriter() {
+  if (_fd >= 0) {
+    ::close(_fd);
+  }
+}
+
+crac::MemoryReader::~MemoryReader() {
+  if (_fd >= 0) {
+    ::close(_fd);
+  }
+}
 
 class FileMemoryWriter: public crac::MemoryWriter {
 private:
@@ -304,4 +323,25 @@ void crac::MemoryPersister::finalize() {
 #endif // ASSERT
   // Note: here we could persist _index and dallocate it as well but since it's
   // usually tens or hundreds of 32 byte records, we won't save much.
+}
+
+bool crac::can_write_image() {
+  char path[PATH_MAX];
+  snprintf(path, PATH_MAX, "%s%s.test", CRaCCheckpointTo, os::file_separator());
+  int fd = os::open(path, O_WRONLY | O_CREAT | O_TRUNC, S_IRUSR | S_IWUSR);
+  if (fd < 0) {
+    tty->print_cr("Cannot create %s: %s\n", path, os::strerror(errno));
+    return false;
+  }
+  bool success = write(fd, "test", 4) > 0;
+  if (!success) {
+    tty->print_cr("Cannot write to %s: %s\n", path, os::strerror(errno));
+  }
+  if (::close(fd)) {
+    tty->print_cr("Cannot close %s: %s", path, os::strerror(errno));
+  }
+  if (::unlink(path)) {
+    tty->print_cr("Cannot remove %s: %s", path, os::strerror(errno));
+  }
+  return success;
 }

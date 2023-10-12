@@ -30,13 +30,6 @@
 #include "utilities/growableArray.hpp"
 #include "utilities/macros.hpp"
 
-#ifdef  _WINDOWS
-# include <io.h>
-# define close _close
-#else
-# include <unistd.h>
-#endif // _WINDOWS
-
 // xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
 #define UUID_LENGTH 36
 #define BAD_OFFSET 0xBAD0FF5Eull
@@ -65,11 +58,7 @@ public:
 
   public:
     MemoryWriter(const char *filename);
-    virtual ~MemoryWriter() {
-      if (_fd >= 0) {
-        ::close(_fd);
-      }
-    }
+    virtual ~MemoryWriter();
     virtual size_t write(void *addr, size_t size) = 0;
   };
 
@@ -79,11 +68,7 @@ public:
 
   public:
     MemoryReader(const char *filename);
-    virtual ~MemoryReader() {
-      if (_fd >= 0) {
-        ::close(_fd);
-      }
-    }
+    virtual ~MemoryReader();
     virtual void read(size_t offset, void *addr, size_t size, bool executable) = 0;
   };
 
@@ -161,6 +146,7 @@ private:
 
   static void before_threads_persisted();
   static void after_threads_restored();
+  static bool can_write_image();
 
   static jlong checkpoint_millis;
   static jlong checkpoint_nanos;

@@ -2810,7 +2810,7 @@ void VM_Version::initialize() {
   if (stub_memory == nullptr || !os::commit_memory(stub_memory, aligned_size, true)) {
     vm_exit_during_initialization("Unable to allocate stub for VM_Version");
   }
-  CodeBuffer c((address) stub_memory, aligned_size);
+  CodeBuffer c((address) stub_memory, (int) aligned_size);
   VM_Version_StubGenerator g(&c);
 
   get_cpu_info_stub = CAST_TO_FN_PTR(get_cpu_info_stub_t,
@@ -3228,7 +3228,7 @@ void VM_Version::initialize_tsc(void) {
   if (stub_memory == nullptr || !os::commit_memory(stub_memory, aligned_size, true)) {
     vm_exit_during_initialization("Unable to allocate getCPUIDBrandString_stub");
   }
-  CodeBuffer c((address) stub_memory, aligned_size);
+  CodeBuffer c((address) stub_memory, (int) aligned_size);
   VM_Version_StubGenerator g(&c);
   getCPUIDBrandString_stub = CAST_TO_FN_PTR(getCPUIDBrandString_stub_t,
                                    g.generate_getCPUIDBrandString());

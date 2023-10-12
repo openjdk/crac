@@ -29,7 +29,7 @@
 #include <stdlib.h>
 #include <signal.h>
 
-#ifndef _WINDOWS
+#ifndef WIN32
 # include <unistd.h>
 #else
 typedef int pid_t;
@@ -59,11 +59,11 @@ int main(int argc, char *argv[]) {
     }
 
     if (!strcmp(action, "checkpoint")) {
-#ifndef _WINDOWS
+#ifndef WIN32
         pid_t jvm = getppid();
 #else
         pid_t jvm = -1;
-#endif //LINUX
+#endif // WIN32
 
         FILE *pidfile = fopen(pidpath, "w");
         if (!pidfile) {

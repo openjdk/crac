@@ -391,32 +391,11 @@ void VM_Crac::doit() {
   _ok = true;
 }
 
-static bool check_can_write() {
-  char path[PATH_MAX];
-  snprintf(path, PATH_MAX, "%s%s.test", CRaCCheckpointTo, os::file_separator());
-  int fd = os::open(path, O_WRONLY | O_CREAT | O_TRUNC, S_IRUSR | S_IWUSR);
-  if (fd < 0) {
-    tty->print_cr("Cannot create %s: %s\n", path, os::strerror(errno));
-    return false;
-  }
-  bool success = write(fd, "test", 4) > 0;
-  if (!success) {
-    tty->print_cr("Cannot write to %s: %s\n", path, os::strerror(errno));
-  }
-  if (::close(fd)) {
-    tty->print_cr("Cannot close %s: %s", path, os::strerror(errno));
-  }
-  if (::unlink(path)) {
-    tty->print_cr("Cannot remove %s: %s", path, os::strerror(errno));
-  }
-  return success;
-}
-
 bool crac::memory_checkpoint() {
   if (CRPersistMemory) {
     // Check early if the checkpoint directory is writable; from this point
     // we won't be able to go back
-    if (!check_can_write()) {
+    if (!can_write_image()) {
       return false;
     }
     MemoryPersister::init();

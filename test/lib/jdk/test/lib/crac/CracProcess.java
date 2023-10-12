@@ -54,7 +54,11 @@ public class CracProcess {
             waitForFileCreated(watcher, imageDir, path -> "pid".equals(path.toFile().getName()));
         }
         String expectedPid = Files.readString(builder.imageDir().toAbsolutePath().resolve("pid"));
-        assertEquals(expectedPid.trim(), String.valueOf(process.pid()));
+        // On Windows pauseengine does not write the actual PID to the file
+        expectedPid = expectedPid.trim();
+        if (!expectedPid.equals("-1")) {
+            assertEquals(expectedPid, String.valueOf(process.pid()));
+        }
     }
 
     private void waitForFileCreated(WatchService watcher, Path dir, Predicate<Path> predicate) throws IOException, InterruptedException {

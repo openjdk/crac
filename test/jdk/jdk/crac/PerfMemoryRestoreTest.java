@@ -47,7 +47,9 @@ public class PerfMemoryRestoreTest implements CracTest {
         CracBuilder builder = new CracBuilder();
         CracProcess checkpoint = builder.startCheckpoint();
         String pid = String.valueOf(checkpoint.pid());
-        Path perfdata = Path.of(System.getProperty("java.io.tmpdir"), "hsperfdata_" + System.getProperty("user.name"), pid);
+        // This test is run only on Linux where the path is hardcoded
+        // in os::get_temp_directory() to /tmp rather than using System.getProperty("java.io.tmpdir")
+        Path perfdata = Path.of("/tmp", "hsperfdata_" + System.getProperty("user.name"), pid);
         long start = System.nanoTime();
         while (!perfdata.toFile().exists()) {
             if (System.nanoTime() - start > TimeUnit.SECONDS.toNanos(10)) {

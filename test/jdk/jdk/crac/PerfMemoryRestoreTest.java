@@ -29,6 +29,7 @@ import jdk.test.lib.crac.CracTest;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.concurrent.TimeUnit;
 
 import static jdk.test.lib.Asserts.*;
 
@@ -47,7 +48,11 @@ public class PerfMemoryRestoreTest implements CracTest {
         CracProcess checkpoint = builder.startCheckpoint();
         String pid = String.valueOf(checkpoint.pid());
         Path perfdata = Path.of(System.getProperty("java.io.tmpdir"), "hsperfdata_" + System.getProperty("user.name"), pid);
+        long start = System.nanoTime();
         while (!perfdata.toFile().exists()) {
+            if (System.nanoTime() - start > TimeUnit.SECONDS.toNanos(10)) {
+                throw new IllegalStateException("Perf data file did not appear within time limit in the checkpointed process: " + perfdata);
+            }
             //noinspection BusyWait
             Thread.sleep(10);
         }
@@ -59,7 +64,11 @@ public class PerfMemoryRestoreTest implements CracTest {
         assertFalse(perfdata.toFile().exists());
 
         CracProcess restored = builder.startRestore();
+        start = System.nanoTime();
         while (!perfdata.toFile().exists()) {
+            if (System.nanoTime() - start > TimeUnit.SECONDS.toNanos(10)) {
+                throw new IllegalStateException("Perf data file did not appear within time limit in the restored process: " + perfdata);
+            }
             //noinspection BusyWait
             Thread.sleep(10);
         }

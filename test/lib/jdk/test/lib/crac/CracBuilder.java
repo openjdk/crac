@@ -482,7 +482,7 @@ public class CracBuilder {
     }
 
     public void checkpointViaJcmd() throws Exception {
-        runJcmd(main.getName(), "JDK.checkpoint").shouldHaveExitValue(0);
+        runJcmd(main().getName(), "JDK.checkpoint").shouldHaveExitValue(0);
     }
 
     public OutputAnalyzer runJcmd(String id, String... command) throws Exception {

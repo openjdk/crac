@@ -10,7 +10,7 @@ bash configure
 make images
 mv build/linux-x86_64-server-release/images/jdk/ .
 ```
-2. Download a build of [modified CRIU](https://github.com/org-crac/criu/releases/tag/release-crac)
+2. Download a build of [modified CRIU](https://github.com/CRaC/criu/releases/tag/release-1.4)
 3. Extract and copy `criu` binary over a same named file in the JDK
 ```
 cp criu-dist/sbin/criu jdk/lib/criu

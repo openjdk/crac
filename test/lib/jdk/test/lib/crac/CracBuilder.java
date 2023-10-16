@@ -7,7 +7,6 @@ import jdk.test.lib.containers.docker.DockerfileConfig;
 import jdk.test.lib.process.OutputAnalyzer;
 import jdk.test.lib.util.FileUtils;
 
-import javax.imageio.IIOException;
 import java.io.File;
 import java.io.IOException;
 import java.nio.file.NoSuchFileException;

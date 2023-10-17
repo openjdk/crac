@@ -97,7 +97,7 @@ bool VM_Version::supports_clflush() {
   if (FLAG_IS_DEFAULT(CPUFeatures)) {
     vm_exit_during_initialization("clflush should be available");
   }
-  vm_exit_during_initialization(err_msg("-XX:CPUFeatures option requires FLUSH flag to be set: 0x%" PRIx64, CPU_FLUSH));
+  vm_exit_during_initialization(err_msg("-XX:CPUFeatures option requires FLUSH flag to be set: " UINT64_FORMAT_X, CPU_FLUSH));
   return false;
 }
 #endif
@@ -1401,7 +1401,7 @@ void VM_Version::print_using_features_cr() {
   if (_ignore_glibc_not_using) {
     tty->print_cr("CPU features are being kept intact as requested by -XX:CPUFeatures=ignore");
   } else {
-    tty->print_cr("CPU features being used are: -XX:CPUFeatures=0x" UINT64_FORMAT_X ",0x" UINT64_FORMAT_X, _features, _glibc_features);
+    tty->print_cr("CPU features being used are: -XX:CPUFeatures=" UINT64_FORMAT_X "," UINT64_FORMAT_X, _features, _glibc_features);
   }
 }
 
@@ -1453,7 +1453,7 @@ void VM_Version::get_processor_features_hotspot() {
   // OS should support SSE for x64 and hardware should support at least SSE2.
   if (!VM_Version::supports_sse2()) {
     if (!FLAG_IS_DEFAULT(CPUFeatures))
-      vm_exit_during_initialization(err_msg("-XX:CPUFeatures option requires SSE2 flag to be set: 0x%" PRIx64 ",0x%" PRIx64, CPU_SSE2, (uint64_t)0));
+      vm_exit_during_initialization(err_msg("-XX:CPUFeatures option requires SSE2 flag to be set: " UINT64_FORMAT_X "," UINT64_FORMAT_X, CPU_SSE2, (uint64_t)0));
     vm_exit_during_initialization("Unknown x64 processor: SSE2 not supported");
   }
   // in 64 bit the use of SSE2 is the minimum

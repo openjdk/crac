@@ -23,6 +23,7 @@
 
 // no precompiled headers
 #include "jvm.h"
+#include "os_posix.hpp"
 #include "perfMemory_linux.hpp"
 #include "runtime/crac_structs.hpp"
 #include "runtime/crac.hpp"
@@ -461,4 +462,8 @@ bool crac::read_bootid(char *dest) {
     perror("CRaC: Cannot close system boot ID file");
   }
   return true;
+}
+
+void crac::initialize_time_counters() {
+  os::Posix::init();
 }

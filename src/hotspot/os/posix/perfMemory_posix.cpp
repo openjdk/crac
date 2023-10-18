@@ -1401,6 +1401,9 @@ bool PerfMemoryLinux::restore() {
 
   int vmid = os::current_process_id();
   char* user_name = get_user_name(geteuid());
+  if (!user_name) {
+    return false;
+  }
   char* dirname = get_user_tmp_dir(user_name, vmid, -1);
   if (!make_user_tmp_dir(dirname)) {
     return false;

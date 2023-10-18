@@ -64,6 +64,7 @@ protected:
 public:
   static void init(void);  // early initialization - no logging available
   static void init_2(void);// later initialization - logging available
+  static void initialize_time_counters(void);
 
   // Return default stack size for the specified thread type
   static size_t default_stack_size(os::ThreadType thr_type);

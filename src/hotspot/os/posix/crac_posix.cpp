@@ -40,6 +40,10 @@ void CracSHM::unlink() {
   shm_unlink(_path);
 }
 
+void crac::initialize_time_counters() {
+  os::Posix::initialize_time_counters();
+}
+
 #ifndef LINUX
 void crac::vm_create_start() {
 }

@@ -23,6 +23,7 @@
 
 import jdk.crac.Core;
 import jdk.test.lib.crac.CracBuilder;
+import jdk.test.lib.crac.CracEngine;
 import jdk.test.lib.crac.CracTest;
 import jdk.test.lib.crac.CracTestArg;
 import jdk.test.lib.Utils;
@@ -31,17 +32,17 @@ import java.lang.management.ManagementFactory;
 import java.nio.file.Path;
 import java.util.*;
 
-import static jdk.test.lib.Asserts.assertLessThan;
+import static jdk.test.lib.Asserts.assertLT;
+import static jdk.test.lib.Asserts.assertLTE;
 
 /**
  * @test
  * @library /test/lib
- * @build SimpleTest
- * @requires (os.family == "linux")
+ * @build ResetStartTimeTest
  * @run driver/timeout=60 jdk.test.lib.crac.CracTest false
  * @run driver/timeout=60 jdk.test.lib.crac.CracTest true
  */
-public class SimpleTest implements CracTest {
+public class ResetStartTimeTest implements CracTest {
 
     @CracTestArg(0)
     boolean resetUptime;
@@ -50,12 +51,14 @@ public class SimpleTest implements CracTest {
 
     @Override
     public void test() throws Exception {
-        CracBuilder builder = new CracBuilder();
-        builder.startCheckpoint().waitForCheckpointed();
+        CracBuilder builder = new CracBuilder().engine(CracEngine.SIMULATE);
         if (resetUptime) {
             builder.vmOption("-XX:+CRaCResetStartTime");
         }
-        builder.captureOutput(true).doRestore().outputAnalyzer().shouldContain(RESTORED_MESSAGE);
+        var output = builder.captureOutput(true)
+                .startCheckpoint().waitForSuccess()
+                .outputAnalyzer();
+        output.shouldContain(RESTORED_MESSAGE);
     }
 
     @Override
@@ -65,14 +68,13 @@ public class SimpleTest implements CracTest {
 
         Core.checkpointRestore();
         System.out.println(RESTORED_MESSAGE);
-
         final long uptime1 = ManagementFactory.getRuntimeMXBean().getUptime();
 
         if (resetUptime) {
-            assertLessThan(uptime1, uptime0);
-            assertLessThan(uptime1, WAIT_TIMEOUT);
+            assertLT(uptime1, uptime0);
+            assertLT(uptime1, WAIT_TIMEOUT);
         } else {
-            assertLessThan(uptime0, uptime1);
+            assertLTE(uptime0, uptime1);
         }
     }
 }

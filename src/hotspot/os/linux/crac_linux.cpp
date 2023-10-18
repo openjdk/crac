@@ -463,7 +463,3 @@ bool crac::read_bootid(char *dest) {
   }
   return true;
 }
-
-void crac::initialize_time_counters() {
-  os::Posix::init();
-}

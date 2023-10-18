@@ -1255,6 +1255,10 @@ void os::Posix::init(void) {
     }
   }
 
+  initialize_time_counters();
+}
+
+void os::Posix::initialize_time_counters(void) {
   initial_time_count = javaTimeNanos();
 }
 

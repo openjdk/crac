@@ -6,7 +6,6 @@ import jdk.test.lib.containers.docker.DockerTestUtils;
 import jdk.test.lib.containers.docker.DockerfileConfig;
 import jdk.test.lib.util.FileUtils;
 
-import javax.imageio.IIOException;
 import java.io.File;
 import java.io.IOException;
 import java.nio.file.NoSuchFileException;
@@ -46,6 +45,9 @@ public class CracBuilder {
     Class<?> main;
     String[] args;
     boolean captureOutput;
+    Path stdinPath;
+    Path stdoutPath;
+    Path stderrPath;
     String dockerImageBaseName;
     String dockerImageBaseVersion;
     String dockerImageName;
@@ -196,6 +198,17 @@ public class CracBuilder {
 
     public CracBuilder captureOutput(boolean captureOutput) {
         this.captureOutput = captureOutput;
+        return this;
+    }
+
+    public CracBuilder inputFrom(Path stdinPath) {
+        this.stdinPath = stdinPath;
+        return this;
+    }
+
+    public CracBuilder outputTo(Path stdoutPath, Path stderrPath) {
+        this.stdoutPath = stdoutPath;
+        this.stderrPath = stderrPath;
         return this;
     }
 

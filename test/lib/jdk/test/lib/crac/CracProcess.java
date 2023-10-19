@@ -3,6 +3,7 @@ package jdk.test.lib.crac;
 import jdk.test.lib.process.OutputAnalyzer;
 import jdk.test.lib.process.StreamPumper;
 
+import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.file.*;
@@ -24,6 +25,17 @@ public class CracProcess {
         if (builder.captureOutput) {
             pb.redirectOutput(ProcessBuilder.Redirect.PIPE);
             pb.redirectError(ProcessBuilder.Redirect.PIPE);
+            assertNull(builder.stdoutPath);
+            assertNull(builder.stderrPath);
+        }
+        if (builder.stdinPath != null) {
+            pb.redirectInput(builder.stdinPath.toFile());
+        }
+        if (builder.stdoutPath != null) {
+            pb.redirectOutput(builder.stdoutPath.toFile());
+        }
+        if (builder.stderrPath != null) {
+            pb.redirectError(builder.stderrPath.toFile());
         }
         pb.environment().putAll(builder.env);
         this.process = pb.command(cmd).start();

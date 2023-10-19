@@ -32,6 +32,10 @@
 #include "logging/logConfiguration.hpp"
 #include "classfile/classLoader.hpp"
 
+#include <limits.h>
+#include <string.h>
+#include <sys/prctl.h>
+
 class FdsInfo {
 public:
 
@@ -461,4 +465,47 @@ bool crac::read_bootid(char *dest) {
     perror("CRaC: Cannot close system boot ID file");
   }
   return true;
+}
+
+void crac::set_terminate_with_parent() {
+  if (prctl(PR_SET_PDEATHSIG, SIGTERM)) {
+    perror("CRaC: Cannot setup parent termination signal");
+    return;
+  }
+  // We need to check if the parent was not already terminated (though
+  // since this happens very early, such situation should be rare).
+  // We cannot just check if getppid() == 1 because modern kernels
+  // support any process becoming child reaper for its subtree, using
+  // prctl(PR_SET_CHILD_SUBREAPER, 1)
+  pid_t ppid = getppid();
+  char buf[PATH_MAX];
+  snprintf(buf, sizeof(buf), "/proc/%d/comm", ppid);
+  int comm_fd = open(buf, O_RDONLY);
+  if (comm_fd < 0) {
+    perror("Cannot open parent process comm!");
+  } else {
+    size_t rd = 0;
+    do {
+      ssize_t r = ::read(comm_fd, buf + rd, sizeof(buf) - rd);
+      if (r == 0) {
+        break;
+      } else if (r < 0) {
+        if (errno == EINTR) {
+          continue;
+        }
+        perror("Cannot read parent process comm!");
+      }
+      rd += r;
+    } while (rd < sizeof(buf));
+    close(comm_fd);
+    if (rd == sizeof(buf)) {
+      fprintf(stderr, "Parent process comm too long, terminating.");
+      raise(SIGTERM);
+    }
+    // criu sometimes does not manage to exec into criuengine restorewait
+    if (strncmp(buf, "criuengine\n", rd) && strncmp(buf, "criu\n", rd)) {
+      fprintf(stderr, "Parent process is neither criu nor criuengine, terminating.");
+      raise(SIGTERM);
+    }
+  }
 }

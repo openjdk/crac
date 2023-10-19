@@ -209,6 +209,15 @@ static int call_crengine() {
   return os::exec_child_process_and_wait(_crengine, _crengine_args);
 }
 
+static bool ends_with(const char *str, const char *suffix) {
+  size_t str_len = strlen(str);
+  size_t suffix_len = strlen(suffix);
+  if (suffix_len > str_len) {
+    return false;
+  }
+  return !strcmp(str + str_len - suffix_len, suffix);
+}
+
 static int checkpoint_restore(int *shmid) {
   crac::record_time_before_checkpoint();
 
@@ -236,6 +245,10 @@ static int checkpoint_restore(int *shmid) {
 #else
   // TODO add sync processing
 #endif //LINUX
+
+  if (ends_with(_crengine, "criuengine")) {
+    LINUX_ONLY(crac::set_terminate_with_parent());
+  }
 
   crac::update_javaTimeNanos_offset();
 

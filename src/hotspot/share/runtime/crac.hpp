@@ -43,6 +43,13 @@ public:
 
   static void record_time_before_checkpoint();
   static void update_javaTimeNanos_offset();
+#ifdef LINUX
+  // With criuengine the restored process gets restorewait process
+  // as its parent; scripts not expecting two processes might signal
+  // (e.g. terminate) the parent process but the actual restored
+  // process would get orphaned.
+  static void set_terminate_with_parent();
+#endif
 
   static jlong monotonic_time_offset() {
     return javaTimeNanos_offset;

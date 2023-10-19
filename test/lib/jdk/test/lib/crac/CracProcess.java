@@ -128,4 +128,8 @@ public class CracProcess {
             }
         }).process();
     }
+
+    public long pid() {
+        return process.pid();
+    }
 }

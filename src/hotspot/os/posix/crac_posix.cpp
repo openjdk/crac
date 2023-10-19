@@ -23,6 +23,7 @@
 
 // no precompiled headers
 #include "jvm.h"
+#include "os_posix.hpp"
 #include "runtime/crac.hpp"
 #include "runtime/crac_structs.hpp"
 

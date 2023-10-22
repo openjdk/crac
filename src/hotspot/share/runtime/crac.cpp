@@ -21,6 +21,7 @@
  * questions.
  */
 
+#include "oops/symbolHandle.hpp"
 #include "precompiled.hpp"
 #include "classfile/classLoader.hpp"
 #include "classfile/symbolTable.hpp"
@@ -1397,17 +1398,20 @@ class HeapRestorer : public StackObj {
     InstanceKlass *field_holder = fs.field_descriptor().field_holder();
     Handle loader = Handle(current, field_holder->class_loader());
 
-    // Strip the envelope, if any
-    TempNewSymbol class_name = fs.signature();
-    if (Signature::has_envelope(class_name)) {
-      ResourceMark rm;
-      class_name = SymbolTable::new_symbol(class_name->as_C_string() + 1, class_name->utf8_length() - 2);
-    }
-
     // TODO after dictionary restoration for initiating loaders is implemented,
     // use SystemDictionary::find_instance_or_array_klass() -- it should
     // produce the same results then
-    Klass *field_class = SystemDictionary::find_constrained_instance_or_array_klass(current, class_name, loader);
+    Klass *field_class;
+    {
+      Symbol *class_name = fs.signature();
+      if (!Signature::has_envelope(class_name)) {
+        field_class = SystemDictionary::find_constrained_instance_or_array_klass(current, class_name, loader);
+      } else {  // Strip the envelope
+        TempNewSymbol temp_class_name = SymbolTable::new_symbol(class_name, 1, class_name->utf8_length() - 1);
+        field_class = SystemDictionary::find_constrained_instance_or_array_klass(current, temp_class_name, loader);
+      }
+    }
+
 #ifdef ASSERT
     {
       ResourceMark rm;

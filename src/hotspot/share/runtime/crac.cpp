@@ -21,7 +21,6 @@
  * questions.
  */
 
-#include "oops/symbolHandle.hpp"
 #include "precompiled.hpp"
 #include "classfile/classLoader.hpp"
 #include "classfile/symbolTable.hpp"
@@ -32,6 +31,7 @@
 #include "logging/logAsyncWriter.hpp"
 #include "logging/logConfiguration.hpp"
 #include "memory/oopFactory.hpp"
+#include "oops/symbolHandle.hpp"
 #include "oops/typeArrayOop.inline.hpp"
 #include "os.inline.hpp"
 #include "runtime/crac.hpp"

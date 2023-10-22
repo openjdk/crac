@@ -31,7 +31,6 @@
 #include "logging/logAsyncWriter.hpp"
 #include "logging/logConfiguration.hpp"
 #include "memory/oopFactory.hpp"
-#include "oops/symbolHandle.hpp"
 #include "oops/typeArrayOop.inline.hpp"
 #include "os.inline.hpp"
 #include "runtime/crac.hpp"
@@ -1373,11 +1372,12 @@ class HeapRestorer : public StackObj {
       case JVM_SIGNATURE_ARRAY: {
         Handle restored = restore_object(val.as_object_id, CHECK);
         // Only basic type has been validated until now, so validate the class
-        if (restored.not_null() && !restored->klass()->is_subtype_of(get_field_class(fs))) {
+        Klass *field_class = get_field_class(fs, CHECK);
+        if (restored.not_null() && !restored->klass()->is_subtype_of(field_class)) {
           ResourceMark rm;
           THROW_MSG(vmSymbols::java_lang_IllegalArgumentException(),
                     err_msg("Field referencing a %s is dumped as an incompatible %s instance",
-                            get_field_class(fs)->external_name(), restored->klass()->external_name()));
+                            field_class->external_name(), restored->klass()->external_name()));
         }
         obj->obj_field_put(fs.offset(), restored());
         break;
@@ -1394,32 +1394,23 @@ class HeapRestorer : public StackObj {
     }
   }
 
-  static Klass *get_field_class(const FieldStream &fs) {
+  static Klass *get_field_class(const FieldStream &fs, TRAPS) {
     Thread *current = Thread::current();
     InstanceKlass *field_holder = fs.field_descriptor().field_holder();
     Handle loader = Handle(current, field_holder->class_loader());
 
     // TODO after dictionary restoration for initiating loaders is implemented,
-    // use SystemDictionary::find_instance_or_array_klass() -- it should
-    // produce the same results then
-    Klass *field_class;
-    {
-      Symbol *class_name = fs.signature();
-      if (!Signature::has_envelope(class_name)) {
-        field_class = SystemDictionary::find_constrained_instance_or_array_klass(current, class_name, loader);
-      } else {  // Strip the envelope
-        TempNewSymbol temp_class_name = SymbolTable::new_symbol(class_name, 1, class_name->utf8_length() - 1);
-        field_class = SystemDictionary::find_constrained_instance_or_array_klass(current, temp_class_name, loader);
-      }
-    }
-
-#ifdef ASSERT
-    {
+    // use SystemDictionary::find_instance_or_array_klass() instead
+    Klass *field_class = SystemDictionary::resolve_or_fail(fs.signature(), loader, Handle(), false, THREAD);
+    if (HAS_PENDING_EXCEPTION) {
+      Handle e(Thread::current(), PENDING_EXCEPTION);
+      CLEAR_PENDING_EXCEPTION;
       ResourceMark rm;
-      assert(field_class != nullptr, "Cannot find field class: field %s with signature %s, holder class %s",
-             fs.name()->as_C_string(), fs.signature()->as_C_string(), field_holder->external_name());
+      THROW_MSG_CAUSE_NULL(vmSymbols::java_lang_IllegalArgumentException(),
+                           err_msg("Cannot find field class: field %s with signature %s in object of class %s",
+                                   fs.name()->as_C_string(), fs.signature()->as_C_string(), field_holder->external_name()),
+                           e);
     }
-#endif
 
     return field_class;
   }

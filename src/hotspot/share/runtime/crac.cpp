@@ -707,7 +707,8 @@ class HeapRestorer : public StackObj {
   void restore_heap(TRAPS) {
     // For now we rely on CDS to pre-initialize the built-in class loaders
     if (SystemDictionary::java_platform_loader() == nullptr || SystemDictionary::java_system_loader() == nullptr) {
-      Unimplemented();
+      THROW_MSG(vmSymbols::java_lang_UnsupportedOperationException(),
+                "Not implemented: the built-in class loaders must be pre-initialized (by CDS)");
     }
 
     // Look through the dump to find platform and system class loaders' IDs

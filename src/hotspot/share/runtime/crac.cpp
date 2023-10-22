@@ -1040,8 +1040,7 @@ class HeapRestorer : public StackObj {
 
     if (dump.id == _platform_class_loader_id && SystemDictionary::java_platform_loader() != nullptr) {
       warning("Using platform class loader as created by CDS");
-      auto *o = reinterpret_cast<instanceOop>(SystemDictionary::java_platform_loader());
-      return {Thread::current(), o};
+      return {Thread::current(), static_cast<instanceOop>(SystemDictionary::java_platform_loader())};
     }
     if (dump.id == _system_class_loader_id && SystemDictionary::java_system_loader() != nullptr) {
       if (dump.id != _builtin_app_class_loader_id) {
@@ -1050,8 +1049,7 @@ class HeapRestorer : public StackObj {
                            "the built-in app class loader " INT64_FORMAT, dump.id, _builtin_app_class_loader_id), {});
       }
       warning("Using system class loader as created by CDS");
-      auto *o = reinterpret_cast<instanceOop>(SystemDictionary::java_system_loader());
-      return {Thread::current(), o};
+      return {Thread::current(), static_cast<instanceOop>(SystemDictionary::java_system_loader())};
     }
 
     // TODO for now, we only use the built-in platform and system class loaders
@@ -1320,7 +1318,7 @@ class HeapRestorer : public StackObj {
       THROW_MSG_(vmSymbols::java_lang_IllegalArgumentException(),
                  err_msg("Unexpected signers object type: %s", signers->klass()->external_name()), {});
     }
-    return {Thread::current(), reinterpret_cast<objArrayOop>(signers())};
+    return {Thread::current(), static_cast<objArrayOop>(signers())};
   }
 
   // Sets static fields, basic types should have already been verified during
@@ -1572,7 +1570,7 @@ class HeapRestorer : public StackObj {
                          "but found class instance dump named %s", name_str), {});
     }
 
-    instanceHandle handle(Thread::current(), reinterpret_cast<instanceOop>(Universe::java_mirror(type)));
+    instanceHandle handle(Thread::current(), static_cast<instanceOop>(Universe::java_mirror(type)));
     assert(handle.not_null(), "Primitive class mirror must not be null");
     return handle;
   }

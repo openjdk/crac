@@ -1348,9 +1348,7 @@ void PerfMemory::detach(char* addr, size_t bytes) {
 }
 
 #ifdef LINUX
-bool PerfMemoryLinux::checkpoint(const char* checkpoint_path) {
-  assert(checkpoint_path, "should be set");
-
+bool PerfMemoryLinux::checkpoint() {
   if (!backing_store_file_name) {
     return true;
   }

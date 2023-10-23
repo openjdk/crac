@@ -30,7 +30,7 @@
 class PerfMemoryLinux : AllStatic {
 
 public:
-  static bool checkpoint(const char* checkpoint_path);
+  static bool checkpoint();
   static bool restore();
 };
 

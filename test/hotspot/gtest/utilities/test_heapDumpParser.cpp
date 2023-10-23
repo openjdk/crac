@@ -1,10 +1,10 @@
 #include "precompiled.hpp"
+
+#include "memory/resourceArea.hpp"
 #include "runtime/os.hpp"
+#include "unittest.hpp"
 #include "utilities/globalDefinitions.hpp"
 #include "utilities/heapDumpParser.hpp"
-#include "unittest.hpp"
-
-#include <functional>
 
 static constexpr char TEST_FILENAME[] = "heap_dump_parsing_test.hprof";
 
@@ -13,7 +13,7 @@ static void fill_test_file(const char *contents, size_t size) {
   ASSERT_NE(nullptr, file) << "Cannot open " << TEST_FILENAME
                            << " for writing: " << os::strerror(errno);
   EXPECT_EQ(1U, fwrite(contents, size, 1, file)) << "Cannot write test data into "
-                                                        << TEST_FILENAME << ": " << os::strerror(errno);
+                                                 << TEST_FILENAME << ": " << os::strerror(errno);
   ASSERT_EQ(0, fclose(file)) << "Cannot close the test file: " << os::strerror(errno);
 }
 
@@ -67,6 +67,7 @@ static bool basic_value_eq(HeapDumpFormat::BasicValue l,
     default:
       EXPECT_TRUE(false) << "Unknown basic value type: " << type;
       ShouldNotReachHere();
+      return false;  // Make compilers happy
   }
 }
 

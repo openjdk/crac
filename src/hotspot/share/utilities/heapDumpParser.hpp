@@ -119,9 +119,9 @@ struct HeapDumpFormat : AllStatic {
 
     u4 instance_size;
 
-    Array<ConstantPoolEntry, u2> constant_pool;
-    Array<Field, u2> static_fields;
-    Array<Field::Info, u2> instance_field_infos;
+    Array<ConstantPoolEntry, u2> constant_pool = {};
+    Array<Field, u2> static_fields = {};
+    Array<Field::Info, u2> instance_field_infos = {};
   };
 
   struct InstanceDumpRecord {
@@ -129,18 +129,18 @@ struct HeapDumpFormat : AllStatic {
     u4 stack_trace_serial;
     id_t class_id;
     // Raw binary data: use read_field() to read it in the correct byte order.
-    Array<u1, u4> fields_data;
+    Array<u1, u4> fields_data = {};
 
     // Reads a field from fields data, returns the amount of bytes read, where 0
     // means a error (illegal arguments or the read violates the array bounds).
-    size_t read_field(u4 offset, char sig, u4 id_size, BasicValue *out) const;
+    u4 read_field(u4 offset, char sig, u4 id_size, BasicValue *out) const;
   };
 
   struct ObjArrayDumpRecord {
     id_t id;
     u4 stack_trace_serial;
     id_t array_class_id;
-    Array<id_t, u4> elem_ids;
+    Array<id_t, u4> elem_ids = {};
   };
 
   struct PrimArrayDumpRecord {
@@ -149,10 +149,10 @@ struct HeapDumpFormat : AllStatic {
     u4 elems_num;
     u1 elem_type;
     // Elements data, already in the correct byte order.
-    Array<u1, u4> elems_data;
+    Array<u1, u4> elems_data = {};
   };
 
-  static size_t prim2size(u1 type) {
+  static u1 prim2size(u1 type) {
     switch (type) {
       case HPROF_BOOLEAN: return sizeof(jboolean);
       case HPROF_CHAR:    return sizeof(jchar);

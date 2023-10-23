@@ -9,7 +9,7 @@
 #include "utilities/heapDumpParser.hpp"
 #include "utilities/hprofTag.hpp"
 
-#include <limits>
+#include <type_traits>
 
 using hdf = HeapDumpFormat;
 
@@ -24,12 +24,20 @@ class AbstractReader : public StackObj {
   // Reads size bytes into buf. Returns true on success.
   virtual bool read_raw(void *buf, size_t size) = 0;
 
-  template <class T>
+  template <class T, ENABLE_IF(std::is_integral<T>::value && (sizeof(T) == sizeof(u1) ||
+                                                              sizeof(T) == sizeof(u2) ||
+                                                              sizeof(T) == sizeof(u4) ||
+                                                              sizeof(T) == sizeof(u8)))>
   bool read(T *out) {
     if (!read_raw(out, sizeof(T))) {
       return false;
     }
-    *out = Bytes::get_Java<T>(static_cast<address>(static_cast<void *>(out)));
+    switch (sizeof(T)) {
+      case sizeof(u1): break;
+      case sizeof(u2): *out = Bytes::get_Java_u2(static_cast<address>(static_cast<void *>(out))); break;
+      case sizeof(u4): *out = Bytes::get_Java_u4(static_cast<address>(static_cast<void *>(out))); break;
+      case sizeof(u8): *out = Bytes::get_Java_u8(static_cast<address>(static_cast<void *>(out))); break;
+    }
     return true;
   }
 
@@ -87,6 +95,7 @@ class AbstractReader : public StackObj {
       }
       default:
         ShouldNotReachHere();
+        return false;  // Make compilers happy
     }
   }
 };
@@ -133,7 +142,7 @@ class BinaryFileReader : public AbstractReader {
 
   bool skip(size_t size) {
     precond(_file != nullptr);
-    assert(size <= std::numeric_limits<long>::max(), "must fit into fseek's offset of type long");
+    assert(size <= LONG_MAX, "must fit into fseek's offset of type long");
     return fseek(_file, static_cast<long>(size), SEEK_CUR) == 0;
   }
 
@@ -191,6 +200,7 @@ const char *hprof_version2str(hdf::Version version) {
       return "<unknown version>";
     default:
       ShouldNotReachHere();
+      return nullptr;  // Make compilers happy
   }
 }
 
@@ -408,6 +418,7 @@ class RecordsParser : public StackObj {
           return "AMONG_HEAP_DUMP_SEGMENTS";
         default:
           ShouldNotReachHere();
+          return nullptr;  // Make compilers happy
       }
     }
   };
@@ -500,6 +511,7 @@ class RecordsParser : public StackObj {
         return ERR_REPEATED_ID;
       default:
         ShouldNotReachHere();
+        return nullptr;  // Make compilers happy
     }
   }
 
@@ -626,6 +638,7 @@ class RecordsParser : public StackObj {
         return ERR_REPEATED_ID;
       default:
         ShouldNotReachHere();
+        return nullptr;  // Make compilers happy
     }
   }
 
@@ -718,10 +731,10 @@ class RecordsParser : public StackObj {
     record->id = id;
 
     u4 sym_size = size - _id_size;
-    if (sym_size > std::numeric_limits<int>::max()) {
+    if (sym_size > INT_MAX) {
       // SymbolTable::new_symbol() takes length as an int
       log_error(heapdumpparsing)("HPROF_UTF8 symbol is too large for the symbol table: " UINT32_FORMAT " > %i",
-                                 sym_size,  std::numeric_limits<int>::max());
+                                 sym_size, INT_MAX);
       return Result::FAILED;
     }
     _sym_buf.ensure_fits(sym_size);
@@ -755,7 +768,7 @@ class RecordsParser : public StackObj {
     return Result::OK;
   }
 
-  bool read_basic_value(u1 type, hdf::BasicValue *value_out, size_t *size_out) {
+  bool read_basic_value(u1 type, hdf::BasicValue *value_out, u4 *size_out) {
     switch (type) {
       case HPROF_NORMAL_OBJECT:
         if (!_reader->read_id(&value_out->as_object_id, _id_size)) return false;
@@ -833,7 +846,7 @@ class RecordsParser : public StackObj {
       READ_INTO_OR_FAIL(&constant.index, "HPROF_GC_CLASS_DUMP constant index");
       READ_INTO_OR_FAIL(&constant.type, "HPROF_GC_CLASS_DUMP constant type");
 
-      size_t value_size;
+      u4 value_size;
       if (!read_basic_value(constant.type, &constant.value, &value_size)) {
         log_error(heapdumpparsing)("Failed to read a constant's value in HPROF_GC_CLASS_DUMP");
         return Result::FAILED;
@@ -854,7 +867,7 @@ class RecordsParser : public StackObj {
       READ_ID_INTO_OR_FAIL(&field.info.name_id, "HPROF_GC_CLASS_DUMP static field name ID");
       READ_INTO_OR_FAIL(&field.info.type, "HPROF_GC_CLASS_DUMP static field type");
 
-      size_t value_size;
+      u4 value_size;
       if (!read_basic_value(field.info.type, &field.value, &value_size)) {
         log_error(heapdumpparsing)("Failed to read a static field's value in HPROF_GC_CLASS_DUMP");
         return Result::FAILED;
@@ -932,14 +945,14 @@ class RecordsParser : public StackObj {
     READ_INTO_OR_FAIL(&record->elems_num, "HPROF_GC_PRIM_ARRAY_DUMP elements number");
     READ_INTO_OR_FAIL(&record->elem_type, "HPROF_GC_PRIM_ARRAY_DUMP element type");
 
-    size_t elem_size = hdf::prim2size(record->elem_type);
+    u1 elem_size = hdf::prim2size(record->elem_type);
     if (elem_size == 0) {
       log_error(heapdumpparsing)(
           "Unknown element type in HPROF_GC_PRIM_ARRAY_DUMP: " UINT8_FORMAT_X_0,
           record->elem_type);
       return Result::FAILED;
     }
-    size_t elems_data_size = record->elems_num * elem_size;
+    u4 elems_data_size = record->elems_num * elem_size;
 
     record->elems_data.extend_to(elems_data_size);
     if (!Endian::is_Java_byte_ordering_different() || elem_size == 1) {
@@ -1051,7 +1064,7 @@ const char *HeapDumpParser::parse(const char *path, ParsedHeapDump *out) {
   return err_msg;
 }
 
-size_t hdf::InstanceDumpRecord::read_field(u4 offset, char sig, u4 id_size, hdf::BasicValue *out) const {
+u4 hdf::InstanceDumpRecord::read_field(u4 offset, char sig, u4 id_size, hdf::BasicValue *out) const {
   AddressReader reader(&fields_data[offset], fields_data.size() - offset);
   switch (sig) {
     case JVM_SIGNATURE_CLASS:

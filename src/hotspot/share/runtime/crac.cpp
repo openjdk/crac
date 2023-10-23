@@ -130,6 +130,7 @@ bool crac::is_portable_mode() {
 
 // Checkpoint in portable mode.
 static void checkpoint_portable() {
+#if INCLUDE_SERVICES
   char path[JVM_MAXPATHLEN];
   os::snprintf_checked(path, sizeof(path), "%s%s%s", CRaCCheckpointTo,
                        os::file_separator(), PMODE_HEAP_DUMP_FILENAME);
@@ -141,9 +142,11 @@ static void checkpoint_portable() {
                   false,    // Don't overwrite
                   HeapDumper::default_num_of_dump_threads()) != 0) {
     ResourceMark rm;
-    warning("Failed to dump heap into %s for checkpoint: %s",
-            path, dumper.error_as_C_string());
+    warning("Failed to dump heap into %s for checkpoint: %s", path, dumper.error_as_C_string());
   }
+#else  // INCLUDE_SERVICES
+  warning("This JVM cannot create checkpoints in portable mode: it is compiled without \"services\" feature");
+#endif  // INCLUDE_SERVICES
 }
 
 static size_t cr_util_path(char* path, int len) {
@@ -833,7 +836,7 @@ class HeapRestorer : public StackObj {
                 err_msg("Class %s has multiple dumps", vmClasses::ClassLoader_klass()->external_name()));
     }
 
-    for (size_t i = 0; i < dump->static_fields.size(); i++) {
+    for (u2 i = 0; i < dump->static_fields.size(); i++) {
       const HeapDumpFormat::ClassDumpRecord::Field &field_dump = dump->static_fields[i];
       if (field_dump.info.type != HPROF_NORMAL_OBJECT) {
         continue;
@@ -883,7 +886,7 @@ class HeapRestorer : public StackObj {
                         vmClasses::jdk_internal_loader_ClassLoaders_klass()->external_name()));
     }
 
-    for (size_t i = 0; i < dump->static_fields.size(); i++) {
+    for (u2 i = 0; i < dump->static_fields.size(); i++) {
       const HeapDumpFormat::ClassDumpRecord::Field &field_dump = dump->static_fields[i];
       if (field_dump.info.type != HPROF_NORMAL_OBJECT) {
         continue;
@@ -1125,8 +1128,8 @@ class HeapRestorer : public StackObj {
     FieldStream fs(klass,
                    true /* local fields only: super's fields are verified when processing supers */,
                    true /* no interfaces (if the class is an interface it's still gonna be processed) */);
-    size_t static_i = 0;
-    size_t instance_i = 0;
+    u2 static_i = 0;
+    u2 instance_i = 0;
 
     while (!fs.eos()) {
       bool is_static = fs.access_flags().is_static();
@@ -1217,6 +1220,7 @@ class HeapRestorer : public StackObj {
     // TODO prepare the name like SystemDictionary::resolve_or_null() does, then
     // call SystemDictionary::resolve_from_stream()
     Unimplemented();
+    return nullptr;  // Make compilers happy
   }
 
   // Loads the class, initializes it by restoring its static fields, and
@@ -1326,7 +1330,7 @@ class HeapRestorer : public StackObj {
   // the class loading.
   void set_static_fields(InstanceKlass *ik, const HeapDumpFormat::ClassDumpRecord &dump, TRAPS) {
     FieldStream fs(ik, true, true);
-    size_t static_i = 0;
+    u2 static_i = 0;
 
     while (!fs.eos() && static_i < dump.static_fields.size()) {
       if (!fs.access_flags().is_static()) {
@@ -1523,8 +1527,8 @@ class HeapRestorer : public StackObj {
     }
 #endif  // ASSERT
 
-    size_t name_field_offset = 0;
-    for (size_t i = 0; i < class_dump.instance_field_infos.size(); i++) {
+    u4 name_field_offset = 0;
+    for (u2 i = 0; i < class_dump.instance_field_infos.size(); i++) {
       const HeapDumpFormat::ClassDumpRecord::Field::Info &field_info = class_dump.instance_field_infos[i];
       if (field_info.type != HPROF_NORMAL_OBJECT) {
         assert(HeapDumpFormat::prim2size(field_info.type) != 0, "Must be a primitive type");
@@ -1577,7 +1581,7 @@ class HeapRestorer : public StackObj {
     precond(handle.not_null());
 
     FieldStream fs(InstanceKlass::cast(handle->klass()), false, false);
-    size_t dump_offset = 0;
+    u4 dump_offset = 0;
 
     for (; !fs.eos() && dump_offset < dump.fields_data.size(); fs.next()) {
       if (fs.access_flags().is_static()) {
@@ -1585,7 +1589,7 @@ class HeapRestorer : public StackObj {
       }
 
       HeapDumpFormat::BasicValue value;
-      size_t bytes_read = dump.read_field(dump_offset, fs.signature()->char_at(0), _heap_dump.id_size, &value);
+      u4 bytes_read = dump.read_field(dump_offset, fs.signature()->char_at(0), _heap_dump.id_size, &value);
       if (bytes_read == 0) {  // Reading violates dumped fields array bounds
         break;
       }
@@ -1623,10 +1627,10 @@ class HeapRestorer : public StackObj {
     }
 
     // Ensure won't overflow array length which is an int
-    if (dump.elem_ids.size() >  std::numeric_limits<int>::max()) {
+    if (dump.elem_ids.size() > INT_MAX) {
       THROW_MSG_(vmSymbols::java_lang_IllegalArgumentException(),
                  err_msg("Object array dump " UINT64_FORMAT " has too many elements: " UINT32_FORMAT " > %i",
-                         dump.id, dump.elem_ids.size(),  std::numeric_limits<int>::max()), {});
+                         dump.id, dump.elem_ids.size(), INT_MAX), {});
     }
     int elems_num = static_cast<int>(dump.elem_ids.size());
 
@@ -1666,10 +1670,10 @@ class HeapRestorer : public StackObj {
     log_trace(restore)("Restoring primitive array " INT64_FORMAT, dump.id);
 
     // Ensure won't overflow array length which is an int
-    if (dump.elems_num > std::numeric_limits<int>::max()) {
+    if (dump.elems_num > INT_MAX) {
       THROW_MSG_(vmSymbols::java_lang_IllegalArgumentException(),
                  err_msg("Primitive array dump " UINT64_FORMAT " has too many elements: " UINT32_FORMAT " > %i",
-                         dump.id, dump.elems_num,  std::numeric_limits<int>::max()), {});
+                         dump.id, dump.elems_num, INT_MAX), {});
     }
     int elems_num = static_cast<int>(dump.elems_num);
 

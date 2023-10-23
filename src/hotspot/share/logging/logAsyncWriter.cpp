@@ -99,7 +99,7 @@ void AsyncLogWriter::enqueue(LogFileStreamOutput& output, LogMessageBuffer::Iter
 }
 
 AsyncLogWriter::AsyncLogWriter()
-  : _flush_sem(0), _lock(), _data_available(false),
+  : _flush_sem(0), _lock(), _block_async(), _data_available(false),
     _initialized(false),
     _stats() {
 
@@ -179,6 +179,9 @@ void AsyncLogWriter::run() {
     }
 
     write();
+
+    _block_async.lock();
+    _block_async.unlock();
   }
 }
 
@@ -225,6 +228,15 @@ void AsyncLogWriter::flush() {
 
     _instance->_flush_sem.wait();
   }
+}
+
+void AsyncLogWriter::stop() {
+  _block_async.lock();
+  flush();
+}
+
+void AsyncLogWriter::resume() {
+  _block_async.unlock();
 }
 
 AsyncLogWriter::BufferUpdater::BufferUpdater(size_t newsize) {

@@ -133,3 +133,11 @@ void G1UncommitRegionTask::execute() {
     clear_summary();
   }
 }
+
+void G1UncommitRegionTask::finish_collection() {
+  // If _instance is NULL G1 GC is either not in use or its collection has not yet been executed.
+  if (_instance) {
+    G1CollectedHeap* g1h = G1CollectedHeap::heap();
+    g1h->uncommit_regions((uint)-1);
+  }
+}

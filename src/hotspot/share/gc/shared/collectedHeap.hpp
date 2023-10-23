@@ -392,6 +392,9 @@ class CollectedHeap : public CHeapObj<mtGC> {
   void set_cleanup_unused(bool value) { _cleanup_unused = value; }
   bool do_cleanup_unused() const { return _cleanup_unused; }
 
+  // G1UncommitRegionTask may be still pending after collect() has returned.
+  virtual void finish_collection() {}
+
   // Total number of GC collections (started)
   unsigned int total_collections() const { return _total_collections; }
   unsigned int total_full_collections() const { return _total_full_collections;}

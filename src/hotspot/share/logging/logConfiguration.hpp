@@ -133,6 +133,11 @@ class LogConfiguration : public AllStatic {
   static void set_async_mode(bool value) {
     _async_mode = value;
   }
+
+  // Is this file descriptor in use?
+  static bool is_fd_used(int fd);
+  static void close();
+  static void reopen();
 };
 
 #endif // SHARE_LOGGING_LOGCONFIGURATION_HPP

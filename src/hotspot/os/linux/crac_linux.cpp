@@ -29,6 +29,7 @@
 #include "runtime/os.hpp"
 #include "utilities/growableArray.hpp"
 #include "logging/log.hpp"
+#include "logging/logConfiguration.hpp"
 #include "classfile/classLoader.hpp"
 
 #include <dlfcn.h>
@@ -193,7 +194,7 @@ void FdsInfo::initialize() {
 
   DIR *dir = opendir("/proc/self/fd");
   int dfd = dirfd(dir);
-  while (dp = readdir(dir)) {
+  while ((dp = readdir(dir))) {
     if (dp->d_name[0] == '.') {
       // skip "." and ".."
       continue;
@@ -388,6 +389,10 @@ static bool is_fd_ignored(int fd, const char *path) {
     return true;
   }
 
+  if (LogConfiguration::is_fd_used(fd)) {
+    return true;
+  }
+
   return false;
 }
 
@@ -403,7 +408,7 @@ static void close_extra_descriptors() {
   struct dirent *dp;
 
   DIR *dir = opendir("/proc/self/fd");
-  while (dp = readdir(dir)) {
+  while ((dp = readdir(dir))) {
     int fd = atoi(dp->d_name);
     if (fd > 2 && fd != dirfd(dir)) {
       int r = readfdlink(fd, path, sizeof(path));

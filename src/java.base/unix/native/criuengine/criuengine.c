@@ -31,6 +31,7 @@
 #include <libgen.h>
 #include <limits.h>
 #include <stdlib.h>
+#include <dirent.h>
 #include <errno.h>
 #include <unistd.h>
 #include <fcntl.h>
@@ -38,6 +39,7 @@
 #include <signal.h>
 #include <sys/wait.h>
 #include <sys/stat.h>
+#include <sys/types.h>
 
 #define RESTORE_SIGNAL   (SIGRTMIN + 2)
 
@@ -50,6 +52,7 @@
 static int create_cppath(const char *imagedir);
 
 static int g_pid;
+static int g_tty_fd = -1;
 
 static char *verbosity = NULL; // default differs for checkpoint and restore
 static char *log_file = NULL;
@@ -356,13 +359,40 @@ static int create_cppath(const char *imagedir) {
     return 0;
 }
 
+
 static void sighandler(int sig, siginfo_t *info, void *uc) {
+    // criuengine restorewait should not have foreground; pass it to the java process
+    if (g_tty_fd >= 0) {
+        pid_t current;
+        while ((current = tcgetpgrp(g_tty_fd)) < 0 && errno == EINTR);
+        if (current == getpid()) {
+            while (tcsetpgrp(g_tty_fd, g_pid) && errno == EINTR);
+        }
+    }
     if (0 <= g_pid) {
-        kill(g_pid, sig);
+        if (sig != SIGCHLD) {
+            kill(g_pid, sig);
+        }
     }
 }
 
 static int restorewait(void) {
+    // standard input and outputs go to /dev/null but
+    // some open FDs can still tell which tty are we part of.
+    DIR *dir = opendir("/proc/self/fd");
+    int dfd = dirfd(dir);
+    struct dirent *dp;
+    while ((dp = readdir(dir))) {
+        if (dp->d_name[0] == '.') {
+            continue; // skip "." and ".."
+        }
+        int fd = atoi(dp->d_name);
+        if (isatty(fd)) {
+            g_tty_fd = fd;
+        }
+    }
+    closedir(dir);
+
     char *pidstr = getenv("CRTOOLS_INIT_PID");
     if (!pidstr) {
         fprintf(stderr, MSGPREFIX "no CRTOOLS_INIT_PID: signals may not be delivered\n");

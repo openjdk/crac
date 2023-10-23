@@ -342,7 +342,7 @@ bool VM_Crac::check_fds() {
 }
 
 bool VM_Crac::memory_checkpoint() {
-  return PerfMemoryLinux::checkpoint(CRaCCheckpointTo);
+  return PerfMemoryLinux::checkpoint();
 }
 
 void VM_Crac::memory_restore() {

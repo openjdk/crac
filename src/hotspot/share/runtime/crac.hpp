@@ -58,15 +58,9 @@ private:
   static char checkpoint_bootid[UUID_LENGTH];
   static jlong javaTimeNanos_offset;
 
-  static const char* _crengine;
-  static unsigned int _crengine_argc;
-  static const char* _crengine_args[32];
+  static void *_crengine_handle;
 
-  static bool compute_crengine();
-  static void add_crengine_arg(const char *arg);
-  static bool is_dynamic_library(const char *crengine);
-  static int call_crengine_library(bool is_checkpoint, const char *image_path);
-
+  static bool init_crengine();
 };
 
 #endif //SHARE_RUNTIME_CRAC_HPP

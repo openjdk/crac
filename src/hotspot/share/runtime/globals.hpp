@@ -2001,9 +2001,9 @@ const int ObjectAlignmentInBytes = 8;
       "optional extra parameters as a comma-separated list: "               \
       "-XX:CREngine=program,--key,value,--anotherkey results in calling "   \
       "'program --key value --anotherkey'. Commas used as part of args "    \
-      "should be escaped with a backslash character ('\\')."                \
-      "If the path points to a dynamic (shared) library, function "         \
-      "'checkpoint' or 'restore' is loaded and invoked respectively.")      \
+      "should be escaped with a backslash character ('\\').")               \
+                                                                            \
+  product(ccstr, CREngineLibrary, "crexec", "Library used to invoke C/R.")  \
                                                                             \
   product(bool, CRaCIgnoreRestoreIfUnavailable, false, RESTORE_SETTABLE,    \
       "Ignore -XX:CRaCRestoreFrom and continue initialization if restore "  \

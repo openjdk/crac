@@ -43,10 +43,7 @@
 #include "os_linux.hpp"
 #endif
 
-const char* crac::_crengine = NULL;
-static char* _crengine_arg_str = NULL;
-unsigned int crac::_crengine_argc = 0;
-const char* crac::_crengine_args[32];
+void *crac::_crengine_handle = NULL;
 static jlong _restore_start_time;
 static jlong _restore_start_nanos;
 
@@ -112,112 +109,59 @@ static char * strchrnul(char * str, char c) {
 }
 #endif //__APPLE__ || _WINDOWS
 
-static size_t cr_util_path(char* path, int len) {
-  os::jvm_path(path, len);
+bool crac::init_crengine() {
+  assert(_crengine_handle == nullptr, "CREngineLibrary should be loaded only once.");
+
+  // Arguments::get_dll_dir() might not be initialized yet
+  char dll_dir[JVM_MAXPATHLEN];
+  os::jvm_path(dll_dir, sizeof(dll_dir));
   // path is ".../lib/server/libjvm.so", or "...\bin\server\libjvm.dll"
-  assert(1 == strlen(os::file_separator()), "file separator must be a single-char, not a string");
   char *after_elem = NULL;
   for (int i = 0; i < 2; ++i) {
-    after_elem = strrchr(path, *os::file_separator());
+    after_elem = strrchr(dll_dir, *os::file_separator());
     *after_elem = '\0';
   }
-  return after_elem - path;
-}
 
-bool crac::compute_crengine() {
-  // release possible old copies
-  os::free((char *) _crengine); // NULL is allowed
-  _crengine = NULL;
-  os::free((char *) _crengine_arg_str);
-  _crengine_arg_str = NULL;
+  char error_buf[1024];
+  char path[JVM_MAXPATHLEN];
+  if (!os::dll_locate_lib(path, sizeof(path), dll_dir, CREngineLibrary)) {
+    tty->print_cr("Cannot find CREngineLibrary %s", CREngineLibrary);
+    return false;
+  }
 
-  if (!CREngine) {
-    return true;
+  _crengine_handle = os::dll_load(path, error_buf, (int) sizeof(error_buf));
+  if (_crengine_handle == nullptr) {
+    tty->print_cr("Cannot load CREngineLibrary %s from %s: %s", CREngineLibrary, path, error_buf);
+    return false;
   }
-  char *exec = os::strdup_check_oom(CREngine);
-  char *comma = strchr(exec, ',');
-  if (comma != NULL) {
-    *comma = '\0';
-    _crengine_arg_str = os::strdup_check_oom(comma + 1);
-  }
-  if (os::is_path_absolute(exec)) {
-    _crengine = exec;
-  } else {
-    char path[JVM_MAXPATHLEN];
-    size_t pathlen = cr_util_path(path, sizeof(path));
-    strcat(path + pathlen, os::file_separator());
-    strcat(path + pathlen, exec);
 
-    struct stat st;
-    if (0 != os::stat(path, &st)) {
-      warning("Could not find %s: %s", path, os::strerror(errno));
-      return false;
-    }
-    _crengine = os::strdup_check_oom(path);
-    // we have read and duplicated args from exec, now we can release
-    os::free(exec);
+  typedef void (*setter_func_t)(const char *path);
+  setter_func_t set_engine_path = (setter_func_t) os::dll_lookup(_crengine_handle, "set_engine_path");
+  // The presence of this function is optional
+  if (set_engine_path != nullptr) {
+    set_engine_path(dll_dir);
   }
-  _crengine_args[0] = _crengine;
-  _crengine_argc = 2;
 
-  if (_crengine_arg_str != NULL) {
-    char *arg = _crengine_arg_str;
-    char *target = _crengine_arg_str;
-    bool escaped = false;
-    for (char *c = arg; *c != '\0'; ++c) {
-      if (_crengine_argc >= ARRAY_SIZE(_crengine_args) - 2) {
-        warning("Too many options to CREngine; cannot proceed with these: %s", arg);
-        return false;
-      }
-      if (!escaped) {
-        switch(*c) {
-        case '\\':
-          escaped = true;
-          continue; // for
-        case ',':
-          *target++ = '\0';
-          _crengine_args[_crengine_argc++] = arg;
-          arg = target;
-          continue; // for
-        }
-      }
-      escaped = false;
-      *target++ = *c;
-    }
-    *target = '\0';
-    _crengine_args[_crengine_argc++] = arg;
-    _crengine_args[_crengine_argc] = NULL;
-  }
   return true;
 }
 
-void crac::add_crengine_arg(const char *arg) {
-  if (_crengine_argc >= ARRAY_SIZE(_crengine_args) - 1) {
-      warning("Too many options to CREngine; cannot add %s", arg);
-      return;
-  }
-  _crengine_args[_crengine_argc++] = arg;
-  _crengine_args[_crengine_argc] = NULL;
-}
 
 int crac::checkpoint_restore(int *shmid) {
   crac::record_time_before_checkpoint();
 
-  int cres = -1;
-  if (_crengine != nullptr) {
-    if (is_dynamic_library(_crengine)) {
-      cres = call_crengine_library(true, CRaCCheckpointTo);
-    } else {
-      _crengine_args[1] = "checkpoint";
-      add_crengine_arg(CRaCCheckpointTo);
-      cres = os::exec_child_process_and_wait(_crengine, _crengine_args);
-    }
+  typedef bool (*checkpoint_func_t)(const char *image_location, const char *crengine);
+  checkpoint_func_t checkpoint = (checkpoint_func_t) os::dll_lookup(_crengine_handle, "checkpoint");
+  if (checkpoint == nullptr) {
+    tty->print_cr("Cannot find function 'checkpoint' in CREngineLibrary %s", CREngineLibrary);
+    return JVM_CHECKPOINT_ERROR;
   }
-  if (cres < 0) {
-    tty->print_cr("CRaC error executing: %s\n", _crengine);
+  if (!checkpoint(CRaCCheckpointTo, CREngine)) {
+    tty->print_cr("Error executing checkpoint(%s, %s) via %s\n", CRaCCheckpointTo, CREngine, CREngineLibrary);
     return JVM_CHECKPOINT_ERROR;
   }
 
+// TODO: the restore signals are implementation detail for the library as well:
+// synchronous execution won't require that
 #ifdef LINUX
   sigset_t waitmask;
   sigemptyset(&waitmask);
@@ -386,7 +330,7 @@ bool crac::prepare_checkpoint() {
     }
   }
 
-  if (!compute_crengine()) {
+  if (!init_crengine()) {
     return false;
   }
 
@@ -481,8 +425,6 @@ void crac::restore() {
   jlong restore_time = os::javaTimeMillis();
   jlong restore_nanos = os::javaTimeNanos();
 
-  compute_crengine();
-
   const int id = os::current_process_id();
 
   CracSHM shm(id);
@@ -502,18 +444,15 @@ void crac::restore() {
     close(shmfd);
   }
 
-  if (_crengine) {
-    if (is_dynamic_library(_crengine)) {
-      // This function should not return on success
-      call_crengine_library(false, CRaCRestoreFrom);
-      warning("cannot restore from dynamic library %s", _crengine);
-    } else {
-      _crengine_args[1] = "restore";
-      add_crengine_arg(CRaCRestoreFrom);
-      os::execv(_crengine, _crengine_args);
-      warning("cannot execute \"%s restore ...\" (%s)", _crengine, os::strerror(errno));
-    }
+  init_crengine();
+
+  typedef void (*restore_func_t)(const char *image_location, const char *crengine);
+  restore_func_t restore = (restore_func_t) os::dll_lookup(_crengine_handle, "restore");
+  if (restore == nullptr) {
+    warning("Cannot find function 'restore' in CREngineLibrary %s", CREngineLibrary);
+    return;
   }
+  restore(CRaCRestoreFrom, CREngine);
 }
 
 bool CracRestoreParameters::read_from(int fd) {

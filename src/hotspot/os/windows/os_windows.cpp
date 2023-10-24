@@ -5620,11 +5620,6 @@ int os::fork_and_exec(const char* cmd) {
   return (int)exit_code;
 }
 
-int os::exec_child_process_and_wait(const char *path, const char *argv[]) {
-  const int status = _spawnv(_P_WAIT, path, argv); // env is inherited by a child process
-  return 0 == status ? 0 : -1;
-}
-
 int os::execv(const char *path, const char *argv[]) {
   return _execv(path, argv);
 }

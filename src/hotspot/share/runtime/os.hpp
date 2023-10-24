@@ -609,8 +609,6 @@ class os: AllStatic {
   // Note: only safe to use in fatal error situations.
   static int fork_and_exec(const char *cmd);
 
-  static int exec_child_process_and_wait(const char *path, const char *argv[]);
-
   static int execv(const char *path, const char *argv[]);
 
   // Call ::exit() on all platforms

@@ -1962,32 +1962,6 @@ int os::fork_and_exec(const char* cmd) {
   }
 }
 
-int os::exec_child_process_and_wait(const char *path, const char *argv[]) {
-  char** env = os::get_environ();
-
-  pid_t pid = fork();
-  if (pid == -1) {
-    perror("cannot fork for crengine");
-    return -1;
-  }
-  if (pid == 0) {
-    execve(path, (char* const*)argv, env);
-    perror("execve");
-    exit(1);
-  }
-
-  int status;
-  int ret;
-  do {
-    ret = waitpid(pid, &status, 0);
-  } while (ret == -1 && errno == EINTR);
-
-  if (ret == -1 || !WIFEXITED(status)) {
-    return -1;
-  }
-  return WEXITSTATUS(status) == 0 ? 0 : -1;
-}
-
 int os::execv(const char *path, const char *argv[]) {
   return ::execv(path, (char * const *)argv);
 }

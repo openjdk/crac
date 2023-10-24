@@ -233,3 +233,15 @@ ifeq ($(ENABLE_FALLBACK_LINKER), true)
 
   TARGETS += $(BUILD_LIBFALLBACKLINKER)
 endif
+
+################################################################################
+# Checkpoint/restore exec library
+
+ifeq ($(call isTargetOs, macosx linux windows), true)
+  $(eval $(call SetupJdkLibrary, BUILD_LIBCREXEC, \
+      NAME := crexec, \
+      CFLAGS := $(CFLAGS_JDKLIB), \
+      LDFLAGS := $(LDFLAGS_JDKLIB), \
+  ))
+  TARGETS += $(BUILD_LIBCREXEC)
+endif

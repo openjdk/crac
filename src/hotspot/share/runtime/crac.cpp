@@ -357,6 +357,10 @@ void VM_Crac::doit() {
     _restore_start_nanos += crac::monotonic_time_offset();
   }
 
+  if (CRaCResetStartTime) {
+    crac::initialize_time_counters();
+  }
+
   // VM_Crac::read_shm needs to be already called to read RESTORE_SETTABLE parameters.
   VM_Version::crac_restore_finalize();
 

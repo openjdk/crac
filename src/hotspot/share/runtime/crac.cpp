@@ -521,8 +521,20 @@ bool CracRestoreParameters::read_from(int fd) {
     return false;
   }
 
-  char *contents = NEW_C_HEAP_ARRAY(char, st.st_size, mtInternal);
-  if (read(fd, contents, st.st_size) < 0) {
+  // crac_restore_finalize() may terminate the process if we run on (older) CPU where glibc string functions may crash.
+  // The flag is stored separately as all the code of this function below is difficult to implement without the string functions.
+  bool IgnoreCPUFeatures_local;
+  if (read(fd, &IgnoreCPUFeatures_local, sizeof(IgnoreCPUFeatures_local)) != sizeof(IgnoreCPUFeatures_local)) {
+    perror("read (ignoring restore parameters)");
+    return false;
+  }
+  if (!IgnoreCPUFeatures_local) {
+    VM_Version::crac_restore_finalize();
+  }
+
+  size_t contents_size = st.st_size - sizeof(IgnoreCPUFeatures_local);
+  char *contents = NEW_C_HEAP_ARRAY(char, contents_size, mtInternal);
+  if (read(fd, contents, contents_size) < 0) {
     perror("read (ignoring restore parameters)");
     FREE_C_HEAP_ARRAY(char, contents);
     return false;
@@ -563,7 +575,7 @@ bool CracRestoreParameters::read_from(int fd) {
   }
 
   for (int i = 0; i < hdr->_nprops; i++) {
-    assert((cursor + strlen(cursor) <= contents + st.st_size), "property length exceeds shared memory size");
+    assert((cursor + strlen(cursor) <= contents + contents_size), "property length exceeds shared memory size");
     int idx = _properties->append(cursor);
     size_t prop_len = strlen(cursor) + 1;
     cursor = cursor + prop_len;

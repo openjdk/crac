@@ -30,7 +30,8 @@
 #include <sys/mman.h>
 
 int CracSHM::open(int mode) {
-  int shmfd = shm_open(_path, mode, 0600);
+  // shm_open() is using glibc string functions, therefore it cannot be used before calling crac_restore_finalize().
+  int shmfd = ::open(_path, mode, 0600);
   if (-1 == shmfd) {
     perror("shm_open");
   }
@@ -38,7 +39,7 @@ int CracSHM::open(int mode) {
 }
 
 void CracSHM::unlink() {
-  shm_unlink(_path);
+  ::unlink(_path);
 }
 
 void crac::initialize_time_counters() {

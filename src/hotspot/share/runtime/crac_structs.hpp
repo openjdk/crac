@@ -115,6 +115,10 @@ class CracRestoreParameters : public CHeapObj<mtInternal> {
       const char *args,
       jlong restore_time,
       jlong restore_nanos) {
+    if (!write_check_error(fd, (void *)&IgnoreCPUFeatures, sizeof(IgnoreCPUFeatures))) {
+      return false;
+    }
+
     header hdr = {
       restore_time,
       restore_nanos,
@@ -208,12 +212,23 @@ private:
 
 class CracSHM {
   char _path[128];
+  static void write_dec(char *&d, int id) {
+    if (!id)
+      return;
+    write_dec(d, id / 10);
+    *d++ = '0' + id % 10;
+  }
 public:
   CracSHM(int id) {
-    int shmpathlen = snprintf(_path, sizeof(_path), "/crac_%d", id);
-    if (shmpathlen < 0 || sizeof(_path) <= (size_t)shmpathlen) {
-      fprintf(stderr, "shmpath is too long: %d\n", shmpathlen);
+    assert(id > 0, "id is expected to be a PID and therefore > 0");
+    char *d = _path;
+    const char prefix[] = "/tmp/cracshm.";
+    const char *cs = prefix;
+    while (*cs) {
+      *d++ = *cs++;
     }
+    write_dec(d, id);
+    *d = 0;
   }
 
   int open(int mode);

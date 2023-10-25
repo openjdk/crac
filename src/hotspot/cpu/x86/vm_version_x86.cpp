@@ -1398,11 +1398,16 @@ void VM_Version::nonlibc_tty_print_uint64_comma_uint64(uint64_t num1, uint64_t n
 }
 
 void VM_Version::print_using_features_cr() {
+  // We are running still before crac_restore_finalize() so we cannot use string functions.
   if (_ignore_glibc_not_using) {
-    tty->print_cr("CPU features are being kept intact as requested by -XX:CPUFeatures=ignore");
+    static const char msg[] = "CPU features are being kept intact as requested by -XX:CPUFeatures=ignore";
+    tty->print_raw(msg, sizeof(msg) - 1);
   } else {
-    tty->print_cr("CPU features being used are: -XX:CPUFeatures=" UINT64_FORMAT_X "," UINT64_FORMAT_X, _features, _glibc_features);
+    static const char prefix[] = "CPU features being used are: -XX:CPUFeatures=";
+    tty->print_raw(prefix, sizeof(prefix) - 1);
+    nonlibc_tty_print_uint64_comma_uint64(_features, _glibc_features);
   }
+  tty->cr();
 }
 
 void VM_Version::get_processor_features_hardware() {

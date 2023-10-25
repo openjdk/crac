@@ -77,3 +77,10 @@ bool exec_child_process_and_wait(const char *path, const char *argv[]) {
 void exec_in_this_process(const char *path, const char *argv[]) {
   execv(path, (char **) argv);
 }
+
+void get_current_directory(char *buf, size_t size) {
+  if (size > 0) {
+    buf[0] = '\0';
+  }
+  getcwd(buf, size);
+}

@@ -72,3 +72,6 @@ void exec_in_this_process(const char *path, const char *argv[]) {
   _execv(path, argv);
 }
 
+void get_current_directory(char *buf, size_t size) {
+  _getcwd(buf, size);
+}

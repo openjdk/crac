@@ -24,6 +24,7 @@
 #include "precompiled.hpp"
 
 #include "classfile/classLoader.hpp"
+#include "crlib.h"
 #include "jvm.h"
 #include "logging/logAsyncWriter.hpp"
 #include "logging/logConfiguration.hpp"
@@ -44,6 +45,8 @@
 #endif
 
 void *crac::_crengine_handle = NULL;
+// this is static global to prevent including crengine.h in crac.hpp
+static crlib_api _crlib_api;
 static jlong _restore_start_time;
 static jlong _restore_start_nanos;
 
@@ -135,12 +138,19 @@ bool crac::init_crengine() {
     return false;
   }
 
-  typedef void (*setter_func_t)(const char *path);
-  setter_func_t set_engine_path = (setter_func_t) os::dll_lookup(_crengine_handle, "set_engine_path");
-  // The presence of this function is optional
-  if (set_engine_path != nullptr) {
-    set_engine_path(dll_dir);
+  memset(&_crlib_api, 0, sizeof(_crlib_api));
+  init_api_func_t init_api = (init_api_func_t) os::dll_lookup(_crengine_handle, CRLIB_API_INIT_FUNC);
+  if (init_api == nullptr) {
+    tty->print_cr("Cannot load entrypoint '" CRLIB_API_INIT_FUNC "' for CREngineLibrary %s from %s",
+      CREngineLibrary, path);
+    return false;
   }
+  if (!init_api(CRLIB_API_VERSION, &_crlib_api, sizeof(_crlib_api))) {
+    tty->print_cr("Cannot initialize CREngineLibrary descriptor: incompatible version?");
+    return false;
+  }
+  _crlib_api.library_path = os::strdup_check_oom(dll_dir, mtInternal);
+  _crlib_api.args = CREngine;
 
   return true;
 }
@@ -149,36 +159,19 @@ bool crac::init_crengine() {
 int crac::checkpoint_restore(int *shmid) {
   crac::record_time_before_checkpoint();
 
-  typedef bool (*checkpoint_func_t)(const char *image_location, const char *crengine);
-  checkpoint_func_t checkpoint = (checkpoint_func_t) os::dll_lookup(_crengine_handle, "checkpoint");
-  if (checkpoint == nullptr) {
-    tty->print_cr("Cannot find function 'checkpoint' in CREngineLibrary %s", CREngineLibrary);
-    return JVM_CHECKPOINT_ERROR;
-  }
-  if (!checkpoint(CRaCCheckpointTo, CREngine)) {
+  _crlib_api.image_location = CRaCCheckpointTo;
+  // TODO: provide user-facing API for this
+  _crlib_api.leave_running = getenv("CRAC_CRIU_LEAVE_RUNNING") != nullptr;
+  if (!_crlib_api.checkpoint(&_crlib_api)) {
     tty->print_cr("Error executing checkpoint(%s, %s) via %s\n", CRaCCheckpointTo, CREngine, CREngineLibrary);
     return JVM_CHECKPOINT_ERROR;
   }
+  *shmid = _crlib_api.shmid;
 
-// TODO: the restore signals are implementation detail for the library as well:
-// synchronous execution won't require that
 #ifdef LINUX
-  sigset_t waitmask;
-  sigemptyset(&waitmask);
-  sigaddset(&waitmask, RESTORE_SIGNAL);
-
-  siginfo_t info;
-  int sig;
-  do {
-    sig = sigwaitinfo(&waitmask, &info);
-  } while (sig == -1 && errno == EINTR);
-  assert(sig == RESTORE_SIGNAL, "got what requested");
-
   if (CRaCCPUCountInit) {
     os::Linux::initialize_cpu_count();
   }
-#else
-  // TODO add sync processing
 #endif //LINUX
 
   crac::update_javaTimeNanos_offset();
@@ -187,22 +180,6 @@ int crac::checkpoint_restore(int *shmid) {
     tty->print_cr("STARTUPTIME " JLONG_FORMAT " restore-native", os::javaTimeNanos());
   }
 
-#ifdef LINUX
-  if (info.si_code != SI_QUEUE || info.si_int < 0) {
-    tty->print("JVM: invalid info for restore provided: %s", info.si_code == SI_QUEUE ? "queued" : "not queued");
-    if (info.si_code == SI_QUEUE) {
-      tty->print(" code %d", info.si_int);
-    }
-    tty->cr();
-    return JVM_CHECKPOINT_ERROR;
-  }
-
-  if (0 < info.si_int) {
-    *shmid = info.si_int;
-  }
-#else
-  *shmid = 0;
-#endif //LINUX
   return JVM_CHECKPOINT_OK;
 }
 
@@ -428,6 +405,7 @@ void crac::restore() {
   const int id = os::current_process_id();
 
   CracSHM shm(id);
+  int shmid = 0;
   int shmfd = shm.open(O_RDWR | O_CREAT);
   if (0 <= shmfd) {
     if (CracRestoreParameters::write_to(
@@ -437,22 +415,16 @@ void crac::restore() {
           Arguments::java_command() ? Arguments::java_command() : "",
           restore_time,
           restore_nanos)) {
-      char strid[32];
-      snprintf(strid, sizeof(strid), "%d", id);
-      LINUX_ONLY(setenv("CRAC_NEW_ARGS_ID", strid, true));
+      shmid = id;
     }
     close(shmfd);
   }
 
   init_crengine();
 
-  typedef void (*restore_func_t)(const char *image_location, const char *crengine);
-  restore_func_t restore = (restore_func_t) os::dll_lookup(_crengine_handle, "restore");
-  if (restore == nullptr) {
-    warning("Cannot find function 'restore' in CREngineLibrary %s", CREngineLibrary);
-    return;
-  }
-  restore(CRaCRestoreFrom, CREngine);
+  _crlib_api.image_location = CRaCRestoreFrom;
+  _crlib_api.shmid = shmid;
+  _crlib_api.restore(&_crlib_api);
 }
 
 bool CracRestoreParameters::read_from(int fd) {

@@ -31,6 +31,13 @@
 #include <string.h>
 
 #include "jni.h"
+#include "jvm.h"
+#include "crlib.h"
+
+#ifdef LINUX
+#include <stdlib.h>
+#include <signal.h>
+#endif // LINUX
 
 // crexec_md.c
 const char *file_separator();
@@ -38,29 +45,26 @@ int is_path_absolute(const char *path);
 bool path_exists(const char *path);
 bool exec_child_process_and_wait(const char *path, const char *argv[]);
 void exec_in_this_process(const char *path, const char *argv[]);
+void get_current_directory(char *buf, size_t size);
 
 #define ARRAY_SIZE(x) (sizeof(x)/sizeof(*x))
-
-static const char *engine_path = NULL;
 
 static const char* engine = NULL;
 static char* arg_str = NULL;
 unsigned int argc = 0;
 const char* args[32];
 
-JNIEXPORT void JNICALL set_engine_path(const char* path) {
-  engine_path = strdup(path);
-  if (engine_path == NULL) {
-    perror("Out of memory");
-  }
-}
-
-static bool parse_crengine(const char *crengine) {
+static bool parse_crengine(const char *dll_path, const char *crengine) {
     // release possible old copies
   free((char *) engine); // NULL is allowed
   engine = NULL;
   free((char *) arg_str);
   arg_str = NULL;
+
+  if (crengine == NULL) {
+    fprintf(stderr, "No CREngine set\n");
+    return false;
+  }
 
   char *exec = strdup(crengine);
   if (exec == NULL) {
@@ -80,8 +84,14 @@ static bool parse_crengine(const char *crengine) {
     engine = exec;
   } else {
     char path[PATH_MAX];
-    size_t pathlen = strlen(engine_path);
-    strncpy(path, engine_path, sizeof(path));
+    size_t pathlen;
+    if (dll_path != NULL) {
+      pathlen = strlen(dll_path);
+      strncpy(path, dll_path, sizeof(path));
+    } else {
+      get_current_directory(path, sizeof(path));
+      pathlen = strlen(path);
+    }
     strncpy(path + pathlen, file_separator(), sizeof(path) - pathlen);
     strncpy(path + pathlen + 1, exec, sizeof(path) - pathlen - 1);
     path[sizeof(path) - 1] = '\0';
@@ -141,30 +151,66 @@ static void add_crengine_arg(const char *arg) {
   args[argc] = NULL;
 }
 
-JNIEXPORT bool JNICALL checkpoint(const char *image_location, const char *crengine) {
-  parse_crengine(crengine);
-  args[1] = "checkpoint";
-  add_crengine_arg(image_location);
-  return exec_child_process_and_wait(engine, args);
-}
-
-#if 0
-static void crengine_raise_restore() {
-  int pid = os::current_process_id();
-  union sigval val = {
-    .sival_int = pid
-  };
-  if (sigqueue(pid, RESTORE_SIGNAL, val)) {
-    perror("Cannot raise restore signal");
+static bool checkpoint(crlib_api *api) {
+  if (!parse_crengine(api->dll_path, api->args)) {
+    return false;
   }
+  args[1] = "checkpoint";
+  if (api->leave_running) {
+#ifdef LINUX
+    if (setenv("CRAC_CRIU_LEAVE_RUNNING", "", true)) {
+      perror("Cannot set CRAC_CRIU_LEAVE_RUNNING");
+    }
+#endif // LINUX
+  }
+  add_crengine_arg(api->image_location);
+  if (!exec_child_process_and_wait(engine, args)) {
+    return false;
+  }
+
+#ifdef LINUX
+  siginfo_t info;
+  sigset_t waitmask;
+  sigemptyset(&waitmask);
+  sigaddset(&waitmask, RESTORE_SIGNAL);
+
+  int sig;
+  do {
+    sig = sigwaitinfo(&waitmask, &info);
+  } while (sig == -1 && errno == EINTR);
+
+  if (info.si_code != SI_QUEUE) {
+    return false;
+  }
+  api->shmid = info.si_int;
+#endif // LINUX
+  return true;
 }
-#endif
 
-
-JNIEXPORT void JNICALL restore(const char *image_location, const char *crengine) {
-  parse_crengine(crengine);
+static void restore(crlib_api *api) {
+  parse_crengine(api->library_path, api->args);
   args[1] = "restore";
-  add_crengine_arg(image_location);
+  add_crengine_arg(api->image_location);
+
+#ifdef LINUX
+  char strid[32];
+  snprintf(strid, sizeof(strid), "%d", api->shmid);
+  setenv("CRAC_NEW_ARGS_ID", strid, true);
+#endif // LINUX
+
   exec_in_this_process(engine, args);
   fprintf(stderr, "Restore failed\n");
+}
+
+JNIEXPORT bool JNICALL CRLIB_API_INIT(int api_version, crlib_api *api, size_t api_size) {
+  if (api_version != CRLIB_API_VERSION) {
+    return false;
+  }
+  if (sizeof(crlib_api) != api_size) {
+    return false; // wrong bitness?
+  }
+  memset(api, 0, sizeof(*api));
+  api->checkpoint = checkpoint;
+  api->restore = restore;
+  return true;
 }

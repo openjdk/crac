@@ -53,6 +53,7 @@ public class ResetStartTimeTest implements CracTest {
     public void test() throws Exception {
         CracBuilder builder = new CracBuilder().engine(CracEngine.SIMULATE);
         if (!resetUptime) {
+            builder.vmOption("-XX:+UnlockDiagnosticVMOptions");
             builder.vmOption("-XX:-CRaCResetStartTime");
         }
         var output = builder.captureOutput(true)

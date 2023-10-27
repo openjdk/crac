@@ -122,6 +122,8 @@ public:
 
   static void print_state_on(outputStream* st);
 
+  static void before_checkpoint();
+
 protected:
   // shared decoder instance, _shared_instance_lock is needed
   static AbstractDecoder* get_shared_instance();

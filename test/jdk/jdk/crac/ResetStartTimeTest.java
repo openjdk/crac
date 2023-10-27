@@ -52,8 +52,8 @@ public class ResetStartTimeTest implements CracTest {
     @Override
     public void test() throws Exception {
         CracBuilder builder = new CracBuilder().engine(CracEngine.SIMULATE);
-        if (resetUptime) {
-            builder.vmOption("-XX:+CRaCResetStartTime");
+        if (!resetUptime) {
+            builder.vmOption("-XX:-CRaCResetStartTime");
         }
         var output = builder.captureOutput(true)
                 .startCheckpoint().waitForSuccess()

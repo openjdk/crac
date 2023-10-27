@@ -2773,6 +2773,7 @@ void VM_Version::crac_restore() {
     print_using_features_cr();
 }
 
+// This function may be called twice.
 void VM_Version::crac_restore_finalize() {
   if (_crac_restore_missing_features && !IgnoreCPUFeatures) {
     vm_exit_during_initialization();

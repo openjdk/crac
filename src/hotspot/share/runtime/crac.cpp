@@ -351,18 +351,18 @@ void VM_Crac::doit() {
   VM_Version::crac_restore();
 
   if (shmid <= 0 || !VM_Crac::read_shm(shmid)) {
+    VM_Version::crac_restore_finalize();
+
     _restore_start_time = os::javaTimeMillis();
     _restore_start_nanos = os::javaTimeNanos();
   } else {
+    // VM_Version::crac_restore_finalize() has been already called by VM_Crac::read_shm().
     _restore_start_nanos += crac::monotonic_time_offset();
   }
 
   if (CRaCResetStartTime) {
     crac::initialize_time_counters();
   }
-
-  // VM_Crac::read_shm needs to be already called to read RESTORE_SETTABLE parameters.
-  VM_Version::crac_restore_finalize();
 
   memory_restore();
 
@@ -523,9 +523,8 @@ bool CracRestoreParameters::read_from(int fd) {
     perror("read (ignoring restore parameters)");
     return false;
   }
-  if (!hdr._ignore_cpu_features) {
-    VM_Version::crac_restore_finalize();
-  }
+  IgnoreCPUFeatures = hdr._ignore_cpu_features;
+  VM_Version::crac_restore_finalize();
 
   struct stat st;
   if (fstat(fd, &st) || st.st_size < (ssize_t)sizeof(hdr)) {

@@ -218,12 +218,12 @@ class CracSHM {
     write_dec(d, id / 10);
     *d++ = '0' + id % 10;
   }
+  static const char _prefix[];
 public:
   CracSHM(int id) {
     assert(id > 0, "id is expected to be a PID and therefore > 0");
     char *d = _path;
-    const char prefix[] = "/tmp/cracshm.";
-    const char *cs = prefix;
+    const char *cs = _prefix;
     while (*cs) {
       *d++ = *cs++;
     }

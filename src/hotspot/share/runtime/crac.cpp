@@ -515,24 +515,25 @@ void crac::restore() {
 }
 
 bool CracRestoreParameters::read_from(int fd) {
+  // crac_restore_finalize() may terminate the process if we run on (older) CPU where glibc string functions may crash.
+  // The header is read first as all the code of this function below is difficult to implement without the string functions.
+  header hdr;
+  // FIXME: Fix incomplete reads.
+  if (read(fd, &hdr, sizeof(hdr)) != sizeof(hdr)) {
+    perror("read (ignoring restore parameters)");
+    return false;
+  }
+  if (!hdr._ignore_cpu_features) {
+    VM_Version::crac_restore_finalize();
+  }
+
   struct stat st;
-  if (fstat(fd, &st)) {
+  if (fstat(fd, &st) || st.st_size < (ssize_t)sizeof(hdr)) {
     perror("fstat (ignoring restore parameters)");
     return false;
   }
 
-  // crac_restore_finalize() may terminate the process if we run on (older) CPU where glibc string functions may crash.
-  // The flag is stored separately as all the code of this function below is difficult to implement without the string functions.
-  bool IgnoreCPUFeatures_local;
-  if (read(fd, &IgnoreCPUFeatures_local, sizeof(IgnoreCPUFeatures_local)) != sizeof(IgnoreCPUFeatures_local)) {
-    perror("read (ignoring restore parameters)");
-    return false;
-  }
-  if (!IgnoreCPUFeatures_local) {
-    VM_Version::crac_restore_finalize();
-  }
-
-  size_t contents_size = st.st_size - sizeof(IgnoreCPUFeatures_local);
+  size_t contents_size = st.st_size - sizeof(hdr);
   char *contents = NEW_C_HEAP_ARRAY(char, contents_size, mtInternal);
   if (read(fd, contents, contents_size) < 0) {
     perror("read (ignoring restore parameters)");
@@ -543,13 +544,12 @@ bool CracRestoreParameters::read_from(int fd) {
   _raw_content = contents;
 
   // parse the contents to read new system properties and arguments
-  header* hdr = (header*)_raw_content;
-  char* cursor = _raw_content + sizeof(header);
+  char* cursor = contents;
 
-  ::_restore_start_time = hdr->_restore_time;
-  ::_restore_start_nanos = hdr->_restore_nanos;
+  ::_restore_start_time = hdr._restore_time;
+  ::_restore_start_nanos = hdr._restore_nanos;
 
-  for (int i = 0; i < hdr->_nflags; i++) {
+  for (int i = 0; i < hdr._nflags; i++) {
     FormatBuffer<80> err_msg("%s", "");
     JVMFlag::Error result;
     const char *name = cursor;
@@ -574,24 +574,24 @@ bool CracRestoreParameters::read_from(int fd) {
         name, result);
   }
 
-  for (int i = 0; i < hdr->_nprops; i++) {
+  for (int i = 0; i < hdr._nprops; i++) {
     assert((cursor + strlen(cursor) <= contents + contents_size), "property length exceeds shared memory size");
     int idx = _properties->append(cursor);
     size_t prop_len = strlen(cursor) + 1;
     cursor = cursor + prop_len;
   }
 
-  char* env_mem = NEW_C_HEAP_ARRAY(char, hdr->_env_memory_size, mtArguments); // left this pointer unowned, it is freed when process dies
-  memcpy(env_mem, cursor, hdr->_env_memory_size);
+  char* env_mem = NEW_C_HEAP_ARRAY(char, hdr._env_memory_size, mtArguments); // left this pointer unowned, it is freed when process dies
+  memcpy(env_mem, cursor, hdr._env_memory_size);
 
-  const char* env_end = env_mem + hdr->_env_memory_size;
+  const char* env_end = env_mem + hdr._env_memory_size;
   while (env_mem < env_end) {
     const size_t s = strlen(env_mem) + 1;
     assert(env_mem + s <= env_end, "env vars exceed memory buffer, maybe ending 0 is lost");
     putenv(env_mem);
     env_mem += s;
   }
-  cursor += hdr->_env_memory_size;
+  cursor += hdr._env_memory_size;
 
   _args = cursor;
   return true;

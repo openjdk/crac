@@ -60,6 +60,7 @@ class CracRestoreParameters : public CHeapObj<mtInternal> {
     int _nflags;
     int _nprops;
     int _env_memory_size;
+    bool _ignore_cpu_features;
   };
 
   static bool write_check_error(int fd, const void *buf, int count) {
@@ -115,16 +116,13 @@ class CracRestoreParameters : public CHeapObj<mtInternal> {
       const char *args,
       jlong restore_time,
       jlong restore_nanos) {
-    if (!write_check_error(fd, (void *)&IgnoreCPUFeatures, sizeof(IgnoreCPUFeatures))) {
-      return false;
-    }
-
     header hdr = {
       restore_time,
       restore_nanos,
       num_flags,
       system_props_length(props),
-      env_vars_size(os::get_environ())
+      env_vars_size(os::get_environ()),
+      IgnoreCPUFeatures
     };
 
     if (!write_check_error(fd, (void *)&hdr, sizeof(header))) {

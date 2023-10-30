@@ -523,7 +523,8 @@ bool CracRestoreParameters::read_from(int fd) {
     perror("read (ignoring restore parameters)");
     return false;
   }
-  IgnoreCPUFeatures = hdr._ignore_cpu_features;
+  if (hdr._ignore_cpu_features)
+    IgnoreCPUFeatures = hdr._ignore_cpu_features == '+';
   VM_Version::crac_restore_finalize();
 
   struct stat st;

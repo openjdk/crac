@@ -60,7 +60,7 @@ class CracRestoreParameters : public CHeapObj<mtInternal> {
     int _nflags;
     int _nprops;
     int _env_memory_size;
-    bool _ignore_cpu_features;
+    char _ignore_cpu_features; // IgnoreCPUFeatures: 0 to keep the checkpointed value, '+' for true, '-' for false
   };
 
   static bool write_check_error(int fd, const void *buf, int count) {
@@ -122,8 +122,14 @@ class CracRestoreParameters : public CHeapObj<mtInternal> {
       num_flags,
       system_props_length(props),
       env_vars_size(os::get_environ()),
-      IgnoreCPUFeatures
+      0 // _ignore_cpu_features
     };
+
+    for (int i = 0; i < num_flags; ++i) {
+      if ((flags[i][0] == '+' || flags[i][0] == '-') && strcmp(flags[i] + 1, "IgnoreCPUFeatures") == 0) {
+        hdr._ignore_cpu_features = flags[i][0];
+      }
+    }
 
     if (!write_check_error(fd, (void *)&hdr, sizeof(header))) {
       return false;

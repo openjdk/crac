@@ -526,12 +526,13 @@ bool CracRestoreParameters::read_from(int fd) {
   VM_Version::crac_restore_finalize(hdr._ignore_cpu_features);
 
   struct stat st;
-  if (fstat(fd, &st) || st.st_size < (ssize_t)sizeof(hdr)) {
+  if (fstat(fd, &st) || st.st_size < (ssize_t)sizeof(hdr) || st.st_size > UINT_MAX) {
     perror("fstat (ignoring restore parameters)");
     return false;
   }
 
-  size_t contents_size = st.st_size - sizeof(hdr);
+  // size_t: MSVC: conversion from 'size_t' to 'unsigned int', possible loss of data
+  unsigned contents_size = st.st_size - sizeof(hdr);
   char *contents = NEW_C_HEAP_ARRAY(char, contents_size, mtInternal);
   if (read(fd, contents, contents_size) < 0) {
     perror("read (ignoring restore parameters)");

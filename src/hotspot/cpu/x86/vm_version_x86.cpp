@@ -2774,7 +2774,9 @@ void VM_Version::crac_restore() {
 }
 
 // This function may be called twice.
-void VM_Version::crac_restore_finalize() {
+void VM_Version::crac_restore_finalize(char ignore_cpu_features) {
+  if (ignore_cpu_features)
+    IgnoreCPUFeatures = ignore_cpu_features == '+';
   if (_crac_restore_missing_features && !IgnoreCPUFeatures) {
     vm_exit_during_initialization();
   }

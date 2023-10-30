@@ -351,7 +351,7 @@ void VM_Crac::doit() {
   VM_Version::crac_restore();
 
   if (shmid <= 0 || !VM_Crac::read_shm(shmid)) {
-    VM_Version::crac_restore_finalize();
+    VM_Version::crac_restore_finalize(0);
 
     _restore_start_time = os::javaTimeMillis();
     _restore_start_nanos = os::javaTimeNanos();
@@ -523,9 +523,7 @@ bool CracRestoreParameters::read_from(int fd) {
     perror("read (ignoring restore parameters)");
     return false;
   }
-  if (hdr._ignore_cpu_features)
-    IgnoreCPUFeatures = hdr._ignore_cpu_features == '+';
-  VM_Version::crac_restore_finalize();
+  VM_Version::crac_restore_finalize(hdr._ignore_cpu_features);
 
   struct stat st;
   if (fstat(fd, &st) || st.st_size < (ssize_t)sizeof(hdr)) {

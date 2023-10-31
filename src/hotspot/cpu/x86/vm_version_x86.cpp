@@ -44,10 +44,8 @@
 #if INCLUDE_CPU_FEATURE_ACTIVE
 # include <sys/platform/x86.h>
 #endif
-#if INCLUDE_LD_SO_LIST_DIAGNOSTICS
-# include <link.h>
-# include <sys/wait.h>
-#endif
+#include <link.h> //#if INCLUDE_LD_SO_LIST_DIAGNOSTICS
+#include <sys/wait.h> //#if INCLUDE_LD_SO_LIST_DIAGNOSTICS
 
 int VM_Version::_cpu;
 int VM_Version::_model;
@@ -855,8 +853,7 @@ uint64_t VM_Version::CPUFeatures_parse(uint64_t &glibc_features) {
   return -1;
 }
 
-#if INCLUDE_LD_SO_LIST_DIAGNOSTICS
-
+//#if INCLUDE_LD_SO_LIST_DIAGNOSTICS
 static int ld_so_name_iterate_phdr(struct dl_phdr_info *info, size_t size, void *data_voidp) {
   const char **retval_return = (const char **)data_voidp;
   assert(size >= offsetof(struct dl_phdr_info, dlpi_adds), "missing PHDRs for the java executable");
@@ -873,6 +870,7 @@ static int ld_so_name_iterate_phdr(struct dl_phdr_info *info, size_t size, void 
   return -1;
 }
 
+//#if INCLUDE_LD_SO_LIST_DIAGNOSTICS
 static const char *ld_so_name() {
   const char *retval;
   int err = dl_iterate_phdr(ld_so_name_iterate_phdr, &retval);
@@ -880,8 +878,10 @@ static const char *ld_so_name() {
   return retval;
 }
 
+//#if INCLUDE_LD_SO_LIST_DIAGNOSTICS
 #define ARG1 "--list-diagnostics"
 
+//#if INCLUDE_LD_SO_LIST_DIAGNOSTICS
 static FILE *popen_r(const char *arg0, pid_t *pid_return) {
   union {
     int fds[2];
@@ -896,8 +896,8 @@ static FILE *popen_r(const char *arg0, pid_t *pid_return) {
     case -1:
       vm_exit_during_initialization(err_msg("Error fork-ing: %m"));
     case 0:
-      if (close(fds.readfd))
-        vm_exit_during_initialization(err_msgt("Error closing read pipe in child: %m"));
+      if (close(fds.readfd)) {
+        vm_exit_during_initialization(err_msg("Error closing read pipe in child: %m"));
       }
       if (dup2(fds.writefd, STDOUT_FILENO) != STDOUT_FILENO)
         vm_exit_during_initialization(err_msg("Error closing preparing write pipe in child: %m"));
@@ -916,6 +916,7 @@ static FILE *popen_r(const char *arg0, pid_t *pid_return) {
   return f;
 }
 
+//#if INCLUDE_LD_SO_LIST_DIAGNOSTICS
 static void pclose_r(const char *arg0, FILE *f, pid_t pid) {
   if (fclose(f))
     vm_exit_during_initialization(err_msg("Error closing fdopen-ed %s " ARG1 ": %m", arg0));
@@ -929,8 +930,6 @@ static void pclose_r(const char *arg0, FILE *f, pid_t pid) {
     vm_exit_during_initialization(err_msg("Child command %s " ARG1 " did exit with an error: exit code = %d", arg0, WEXITSTATUS(wstatus)));
 }
 
-#endif // !INCLUDE_LD_SO_LIST_DIAGNOSTICS
-
 bool VM_Version::_ignore_glibc_not_using = false;
 bool VM_Version::_crac_restore_missing_features;
 #ifdef LINUX
@@ -942,12 +941,12 @@ bool VM_Version::glibc_env_set(char *disable_str) {
   char *env_val = disable_str;
   const char *env = getenv(TUNABLES_NAME);
   if (env && strcmp(env, env_val) == 0) {
-#if !INCLUDE_CPU_FEATURE_ACTIVE && !INCLUDE_LD_SO_LIST_DIAGNOSTICS
-    if (ShowCPUFeatures) {
-      tty->print_cr("Environment variable already set, both glibc CPU_FEATURE_ACTIVE and ld.so --list-diagnostics are unavailable - re-exec suppressed: " TUNABLES_NAME "=%s", env);
+    if (!INCLUDE_CPU_FEATURE_ACTIVE && !INCLUDE_LD_SO_LIST_DIAGNOSTICS) {
+      if (ShowCPUFeatures) {
+        tty->print_cr("Environment variable already set, both glibc CPU_FEATURE_ACTIVE and ld.so --list-diagnostics are unavailable - re-exec suppressed: " TUNABLES_NAME "=%s", env);
+      }
+      return true;
     }
-    return true;
-#endif
   }
   char env_buf[strlen(disable_str) + (!env ? 0 : strlen(env) + 100)];
   if (env) {
@@ -1044,68 +1043,68 @@ void VM_Version::glibc_not_using(uint64_t excessive_CPU, uint64_t excessive_GLIB
   if (!excessive_CPU && !excessive_GLIBC)
     return;
 #endif
-#if INCLUDE_LD_SO_LIST_DIAGNOSTICS
-  // sysdeps/x86/include/cpu-features.h CPUID_INDEX_14_ECX_0 == 8
-  const int CPUID_INDEX_CEIL = 8;
-  // /usr/include/bits/platform/x86.h
-  enum
-  {
-    CPUID_INDEX_1 = 0,
-    CPUID_INDEX_7,
-    CPUID_INDEX_80000001,
-    CPUID_INDEX_D_ECX_1,
-    CPUID_INDEX_80000007,
-    CPUID_INDEX_80000008,
-    CPUID_INDEX_7_ECX_1,
-    CPUID_INDEX_19,
-    CPUID_INDEX_14_ECX_0
-  };
-  const int index_max = CPUID_INDEX_CEIL + 1;
-  enum { eax = 0, ebx, ecx, edx, reg_max };
-  unsigned active[index_max][reg_max] = { 0 };
-  const char *arg0 = ld_so_name();
-  pid_t f_child;
-  FILE *f = popen_r(arg0, &f_child);
-  if (!f)
-    vm_exit_during_initialization(err_msg("Cannot popen %s " ARG1 ": %m", arg0));
-  for (;;) {
-    char line[LINE_MAX];
-    char *s = fgets(line, sizeof(line), f);
-    if (!s)
-      break;
-    s = line;
-    // x86.cpu_features.features[0x0].active[0x2]=0x7ed83203
-    const char prefix[] = "x86.cpu_features.features[";
-    if (strncmp(s, prefix, sizeof(prefix) - 1) != 0)
-      continue;
-    s += sizeof(prefix) - 1;
-    unsigned long index = strtoul(s, &s, 0);
-    if (index >= index_max)
-      continue;
-    const char mid[] = "].active[";
-    if (strncmp(s, mid, sizeof(mid) - 1) != 0)
-      continue;
-    s += sizeof(mid) - 1;
-    unsigned long reg = strtoul(s, &s, 0);
-    if (reg >= reg_max)
-      continue;
-    if (s[0] != ']' || s[1] != '=')
-      continue;
-    s += 2;
-    unsigned long val = strtoul(s, &s, 0);
-    if (val > UINT_MAX)
-      continue;
-    if (s[0] != '\n' || s[1] != 0)
-      continue;
-    active[index][reg] = val;
+  if (INCLUDE_LD_SO_LIST_DIAGNOSTICS) {
+    // sysdeps/x86/include/cpu-features.h CPUID_INDEX_14_ECX_0 == 8
+    const int CPUID_INDEX_CEIL = 8;
+    // /usr/include/bits/platform/x86.h
+    enum
+    {
+      CPUID_INDEX_1 = 0,
+      CPUID_INDEX_7,
+      CPUID_INDEX_80000001,
+      CPUID_INDEX_D_ECX_1,
+      CPUID_INDEX_80000007,
+      CPUID_INDEX_80000008,
+      CPUID_INDEX_7_ECX_1,
+      CPUID_INDEX_19,
+      CPUID_INDEX_14_ECX_0
+    };
+    const int index_max = CPUID_INDEX_CEIL + 1;
+    enum { eax = 0, ebx, ecx, edx, reg_max };
+    unsigned active[index_max][reg_max] = { 0 };
+    const char *arg0 = ld_so_name();
+    pid_t f_child;
+    FILE *f = popen_r(arg0, &f_child);
+    if (!f)
+      vm_exit_during_initialization(err_msg("Cannot popen %s " ARG1 ": %m", arg0));
+    for (;;) {
+      char line[LINE_MAX];
+      char *s = fgets(line, sizeof(line), f);
+      if (!s)
+        break;
+      s = line;
+      // x86.cpu_features.features[0x0].active[0x2]=0x7ed83203
+      const char prefix[] = "x86.cpu_features.features[";
+      if (strncmp(s, prefix, sizeof(prefix) - 1) != 0)
+        continue;
+      s += sizeof(prefix) - 1;
+      unsigned long index = strtoul(s, &s, 0);
+      if (index >= index_max)
+        continue;
+      const char mid[] = "].active[";
+      if (strncmp(s, mid, sizeof(mid) - 1) != 0)
+        continue;
+      s += sizeof(mid) - 1;
+      unsigned long reg = strtoul(s, &s, 0);
+      if (reg >= reg_max)
+        continue;
+      if (s[0] != ']' || s[1] != '=')
+        continue;
+      s += 2;
+      unsigned long val = strtoul(s, &s, 0);
+      if (val > UINT_MAX)
+        continue;
+      if (s[0] != '\n' || s[1] != 0)
+        continue;
+      active[index][reg] = val;
+    }
+    if (ferror(f))
+      vm_exit_during_initialization(err_msg("Error reading popen-ed %s " ARG1 ": %m", arg0));
+    if (!feof(f))
+      vm_exit_during_initialization(err_msg("EOF not reached on popen-ed %s " ARG1, arg0));
+    pclose_r(arg0, f, f_child);
   }
-  if (ferror(f))
-    vm_exit_during_initialization(err_msg("Error reading popen-ed %s " ARG1 ": %m", arg0));
-  if (!feof(f))
-    vm_exit_during_initialization(err_msg("EOF not reached on popen-ed %s " ARG1, arg0));
-  pclose_r(arg0, f, f_child);
 #undef ARG1
-#endif // INCLUDE_LD_SO_LIST_DIAGNOSTICS
 
   // glibc: sysdeps/x86/get-isa-level.h:
   // glibc: if (CPU_FEATURE_USABLE_P (cpu_features, CMOV)
@@ -2853,10 +2852,10 @@ void VM_Version::initialize() {
   if (!_ignore_glibc_not_using) {
     uint64_t       features_expected =   MAX_CPU - 1;
     uint64_t glibc_features_expected = MAX_GLIBC - 1;
-#if !INCLUDE_CPU_FEATURE_ACTIVE && !INCLUDE_LD_SO_LIST_DIAGNOSTICS
-          features_expected =       features_saved;
-    glibc_features_expected = glibc_features_saved;
-#endif
+    if (!INCLUDE_CPU_FEATURE_ACTIVE && !INCLUDE_LD_SO_LIST_DIAGNOSTICS) {
+            features_expected =       features_saved;
+      glibc_features_expected = glibc_features_saved;
+    }
     glibc_not_using(      features_expected & ~      _features,
                     glibc_features_expected & ~_glibc_features);
   }

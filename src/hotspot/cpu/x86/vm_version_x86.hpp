@@ -408,8 +408,6 @@ protected:
     decl(FMA4,              "fma4",               0) \
     decl(MOVBE,             "movbe",              1) \
     decl(OSXSAVE,           "osxsave",            2) \
-    decl(IBT,               "ibt",                3) \
-    decl(SHSTK,             "shstk",              4) /* Also known as cet_ss */ \
     decl(XSAVE,             "xsave",              5) \
     decl(CMPXCHG16,         "cmpxchg16",          6) /* Also known in cpuinfo as cx16 and in glibc as cmpxchg16b */ \
     decl(LAHFSAHF,          "lahfsahf",           7) /* Also known in cpuinfo as lahf_lm and in glibc as lahf64_sahf64 */ \
@@ -567,10 +565,6 @@ protected:
         result |= GLIBC_CMPXCHG16;
       if (std_cpuid1_ecx.bits.f16c != 0)
         result |= GLIBC_F16C;
-      if (sef_cpuid7_ecx.bits.cet_ss != 0)
-        result |= GLIBC_SHSTK;
-      if (sef_cpuid7_edx.bits.cet_ibt != 0)
-        result |= GLIBC_IBT;
       if (ext_cpuid1_ecx.bits.fma4 != 0)
         result |= GLIBC_FMA4;
       if (ext_cpuid1_ecx.bits.LahfSahf != 0)

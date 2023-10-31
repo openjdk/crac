@@ -1210,13 +1210,14 @@ void VM_Version::glibc_not_using(uint64_t excessive_CPU, uint64_t excessive_GLIB
 #else
 # define FEATURE_ACTIVE(glibc, hotspot_field, hotspot_union, glibc_index, glibc_reg) true
 #endif
-#define EXCESSIVE6(kind, hotspotglibc, hotspot_field, hotspot_union, glibc_index, glibc_reg) do {                                                                      \
-    EXCESSIVE_HANDLED(kind, hotspotglibc);                                                                                                                             \
-    if (PASTE_TOKENS(excessive_, kind) & PASTE_TOKENS3(kind, _, hotspotglibc) && FEATURE_ACTIVE(hotspotglibc, hotspot_field, hotspot_union, glibc_index, glibc_reg)) { \
-      PASTE_TOKENS(disable_, kind) |= PASTE_TOKENS3(kind, _, hotspotglibc);                                                                                            \
-    }                                                                                                                                                                  \
+#define EXCESSIVE7(kind, hotspot, glibc, hotspot_field, hotspot_union, glibc_index, glibc_reg) do {                                                        \
+    EXCESSIVE_HANDLED(kind, hotspot);                                                                                                                      \
+    if (PASTE_TOKENS(excessive_, kind) & PASTE_TOKENS3(kind, _, hotspot) && FEATURE_ACTIVE(glibc, hotspot_field, hotspot_union, glibc_index, glibc_reg)) { \
+      PASTE_TOKENS(disable_, kind) |= PASTE_TOKENS3(kind, _, hotspot);                                                                                     \
+    }                                                                                                                                                      \
   } while (0)
-#define EXCESSIVE(kind, hotspotglibc, hotspot_union, def...) EXCESSIVE6(kind, hotspotglibc, hotspot_union, def)
+#define EXCESSIVE(kind, hotspotglibc, hotspot_union, def...) EXCESSIVE7(kind, hotspotglibc, hotspotglibc, hotspot_union, def)
+#define EXCESSIVE5(kind, hotspot, glibc, hotspot_union, def...) EXCESSIVE7(kind, hotspot, glibc, hotspot_union, def)
 #define DEF_ExtCpuid1Ecx ExtCpuid1Ecx, CPUID_INDEX_80000001, ecx
 #define DEF_SefCpuid7Ebx SefCpuid7Ebx, CPUID_INDEX_7       , ebx
 #define DEF_SefCpuid7Ecx SefCpuid7Ecx, CPUID_INDEX_7       , ecx
@@ -1245,8 +1246,8 @@ void VM_Version::glibc_not_using(uint64_t excessive_CPU, uint64_t excessive_GLIB
   EXCESSIVE(CPU  , AVX512ER, avx512er, DEF_SefCpuid7Ebx);
   EXCESSIVE(CPU  , AVX512PF, avx512pf, DEF_SefCpuid7Ebx);
   EXCESSIVE(CPU  , AVX512VL, avx512vl, DEF_SefCpuid7Ebx);
-  EXCESSIVE(CPU  , CET_IBT , cet_ibt , DEF_SefCpuid7Edx);
-  EXCESSIVE(CPU  , CET_SS  , cet_ss  , DEF_SefCpuid7Ecx);
+  EXCESSIVE5(CPU , CET_IBT , IBT  , cet_ibt, DEF_SefCpuid7Edx);
+  EXCESSIVE5(CPU , CET_SS  , SHSTK, cet_ss , DEF_SefCpuid7Ecx);
   EXCESSIVE(GLIBC, FMA4    , fma4    , DEF_ExtCpuid1Ecx);
   EXCESSIVE(GLIBC, MOVBE   , movbe   , DEF_StdCpuid1Ecx);
   EXCESSIVE(GLIBC, XSAVE   , xsave   , DEF_StdCpuid1Ecx);

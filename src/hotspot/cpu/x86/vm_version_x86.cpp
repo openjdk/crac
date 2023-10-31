@@ -44,8 +44,10 @@
 #if INCLUDE_CPU_FEATURE_ACTIVE
 # include <sys/platform/x86.h>
 #endif
-#include <link.h> //#if INCLUDE_LD_SO_LIST_DIAGNOSTICS
-#include <sys/wait.h> //#if INCLUDE_LD_SO_LIST_DIAGNOSTICS
+#ifdef LINUX // for INCLUDE_LD_SO_LIST_DIAGNOSTICS
+# include <link.h>
+# include <sys/wait.h>
+#endif
 
 int VM_Version::_cpu;
 int VM_Version::_model;
@@ -853,7 +855,9 @@ uint64_t VM_Version::CPUFeatures_parse(uint64_t &glibc_features) {
   return -1;
 }
 
-// This function is used only for INCLUDE_LD_SO_LIST_DIAGNOSTICS.
+// These functions are used only if INCLUDE_LD_SO_LIST_DIAGNOSTICS. But they are always compiled to check build regressions.
+#ifdef LINUX
+
 static int ld_so_name_iterate_phdr(struct dl_phdr_info *info, size_t size, void *data_voidp) {
   const char **retval_return = (const char **)data_voidp;
   assert(size >= offsetof(struct dl_phdr_info, dlpi_adds), "missing PHDRs for the java executable");
@@ -871,7 +875,6 @@ static int ld_so_name_iterate_phdr(struct dl_phdr_info *info, size_t size, void 
   return -1;
 }
 
-// This function is used only for INCLUDE_LD_SO_LIST_DIAGNOSTICS.
 static const char *ld_so_name() {
   const char *retval;
   int err = dl_iterate_phdr(ld_so_name_iterate_phdr, &retval);
@@ -879,10 +882,8 @@ static const char *ld_so_name() {
   return retval;
 }
 
-// This macro is used only for INCLUDE_LD_SO_LIST_DIAGNOSTICS.
 #define ARG1 "--list-diagnostics"
 
-// This function is used only for INCLUDE_LD_SO_LIST_DIAGNOSTICS.
 static FILE *popen_r(const char *arg0, pid_t *pid_return) {
   union {
     int fds[2];
@@ -917,7 +918,6 @@ static FILE *popen_r(const char *arg0, pid_t *pid_return) {
   return f;
 }
 
-// This function is used only for INCLUDE_LD_SO_LIST_DIAGNOSTICS.
 static void pclose_r(const char *arg0, FILE *f, pid_t pid) {
   if (fclose(f))
     vm_exit_during_initialization(err_msg("Error closing fdopen-ed %s " ARG1 ": %m", arg0));
@@ -930,6 +930,8 @@ static void pclose_r(const char *arg0, FILE *f, pid_t pid) {
   if (WEXITSTATUS(wstatus) != 0)
     vm_exit_during_initialization(err_msg("Child command %s " ARG1 " did exit with an error: exit code = %d", arg0, WEXITSTATUS(wstatus)));
 }
+
+#endif // LINUX
 
 bool VM_Version::_ignore_glibc_not_using = false;
 bool VM_Version::_crac_restore_missing_features;
@@ -1044,7 +1046,8 @@ void VM_Version::glibc_not_using(uint64_t excessive_CPU, uint64_t excessive_GLIB
   if (!excessive_CPU && !excessive_GLIBC)
     return;
 #endif
-  // This block is used only for INCLUDE_LD_SO_LIST_DIAGNOSTICS.
+// This block of code is used only if INCLUDE_LD_SO_LIST_DIAGNOSTICS. But it is always compiled to check build regressions.
+#ifdef LINUX
   // sysdeps/x86/include/cpu-features.h CPUID_INDEX_14_ECX_0 == 8
   const int CPUID_INDEX_CEIL = 8;
   // /usr/include/bits/platform/x86.h
@@ -1107,6 +1110,7 @@ void VM_Version::glibc_not_using(uint64_t excessive_CPU, uint64_t excessive_GLIB
     pclose_r(arg0, f, f_child);
   }
 #undef ARG1
+#endif // LINUX
 
   // glibc: sysdeps/x86/get-isa-level.h:
   // glibc: if (CPU_FEATURE_USABLE_P (cpu_features, CMOV)

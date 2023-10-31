@@ -526,7 +526,7 @@ bool CracRestoreParameters::read_from(int fd) {
   VM_Version::crac_restore_finalize(hdr._ignore_cpu_features);
 
   struct stat st;
-  if (fstat(fd, &st) || st.st_size < (ssize_t)sizeof(hdr) || st.st_size > UINT_MAX) {
+  if (fstat(fd, &st) || st.st_size < (ssize_t)sizeof(hdr) || st.st_size > INT_MAX) {
     perror("fstat (ignoring restore parameters)");
     return false;
   }

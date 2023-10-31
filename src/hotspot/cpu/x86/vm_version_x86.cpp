@@ -860,7 +860,8 @@ static int ld_so_name_iterate_phdr(struct dl_phdr_info *info, size_t size, void 
   if (strcmp(info->dlpi_name, "") != 0)
     vm_exit_during_initialization(err_msg("Unexpected name of first dl_phdr_info: %s", info->dlpi_name));
   for (size_t phdr_ix = 0; phdr_ix < info->dlpi_phnum; ++phdr_ix) {
-    const Elf64_Phdr *phdr = info->dlpi_phdr + phdr_ix;
+    // Elf64_Phdr / Elf32_Phdr
+    const auto *phdr = info->dlpi_phdr + phdr_ix;
     if (phdr->p_type == PT_INTERP) {
       *retval_return = (const char *)(phdr->p_vaddr + info->dlpi_addr);
       return 42;
@@ -1348,7 +1349,6 @@ void VM_Version::glibc_not_using(uint64_t excessive_CPU, uint64_t excessive_GLIB
   GLIBC_UNSUPPORTED(CPU  , F16C             );
   GLIBC_UNSUPPORTED(CPU  , PKU              );
   GLIBC_UNSUPPORTED(CPU  , OSPKE            );
-  GLIBC_UNSUPPORTED(CPU  , CET_SS           );
   GLIBC_UNSUPPORTED(CPU  , AVX512_IFMA      );
   // These are handled as an exception above.
   GLIBC_UNSUPPORTED(CPU  , FXSR             );

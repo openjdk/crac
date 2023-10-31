@@ -408,11 +408,11 @@ protected:
     decl(FMA4,              "fma4",               0) \
     decl(MOVBE,             "movbe",              1) \
     decl(OSXSAVE,           "osxsave",            2) \
-    decl(XSAVE,             "xsave",              5) \
-    decl(CMPXCHG16,         "cmpxchg16",          6) /* Also known in cpuinfo as cx16 and in glibc as cmpxchg16b */ \
-    decl(LAHFSAHF,          "lahfsahf",           7) /* Also known in cpuinfo as lahf_lm and in glibc as lahf64_sahf64 */ \
-    decl(F16C,              "f16c",               8) \
-    decl(HTT,               "htt",                9) /* hotspot calls it 'ht' but it is affected by threads_per_core() */
+    decl(XSAVE,             "xsave",              3) \
+    decl(CMPXCHG16,         "cmpxchg16",          4) /* Also known in cpuinfo as cx16 and in glibc as cmpxchg16b */ \
+    decl(LAHFSAHF,          "lahfsahf",           5) /* Also known in cpuinfo as lahf_lm and in glibc as lahf64_sahf64 */ \
+    decl(F16C,              "f16c",               6) \
+    decl(HTT,               "htt",                7) /* hotspot calls it 'ht' but it is affected by threads_per_core() */
 
 #define DECLARE_GLIBC_FEATURE_FLAG(id, name, bit) GLIBC_##id = (1ULL << bit),
     GLIBC_FEATURE_FLAGS(DECLARE_GLIBC_FEATURE_FLAG)

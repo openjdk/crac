@@ -22,6 +22,8 @@
  */
 
 // no precompiled headers
+#include <string.h>
+
 #include "jvm.h"
 #include "perfMemory_linux.hpp"
 #include "runtime/crac_structs.hpp"
@@ -325,6 +327,15 @@ bool VM_Crac::check_fds() {
         print_resources("OK: jcmd socket\n");
         continue;
       }
+    }
+
+    // On some systems using SSSD files in this directory are left open
+    // after calling getpwuid_r, getpwname_r, getgrgid_r, getgrname_r
+    // or other functions in this family.
+#define SSS_NSS_MEMCACHE "/var/lib/sss/mc/"
+    if (!strncmp(details, SSS_NSS_MEMCACHE, sizeof(SSS_NSS_MEMCACHE) - 1)) {
+      print_resources("OK: SSSD cache\n");
+      continue;
     }
 
     print_resources("BAD: opened by application\n");

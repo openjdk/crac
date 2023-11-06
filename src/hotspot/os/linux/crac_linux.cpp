@@ -332,8 +332,8 @@ bool VM_Crac::check_fds() {
     // On some systems using SSSD files in this directory are left open
     // after calling getpwuid_r, getpwname_r, getgrgid_r, getgrname_r
     // or other functions in this family.
-#define SSS_NSS_MEMCACHE "/var/lib/sss/mc/"
-    if (!strncmp(details, SSS_NSS_MEMCACHE, sizeof(SSS_NSS_MEMCACHE) - 1)) {
+    constexpr const char *sss_nss_memcache = "/var/lib/sss/mc/";
+    if (!strncmp(details, sss_nss_memcache, strlen(sss_nss_memcache))) {
       print_resources("OK: SSSD cache\n");
       continue;
     }

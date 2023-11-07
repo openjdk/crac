@@ -113,5 +113,6 @@ define_pd_global(size_t, PreTouchParallelChunkSize, 4 * M);
 define_pd_global(bool, UseLargePages, false);
 define_pd_global(bool, UseLargePagesIndividualAllocation, false);
 define_pd_global(bool, UseThreadPriorities, true) ;
+define_pd_global(ccstrlist, CRAllowedOpenFilePrefixes, "/var/lib/sss/mc/");
 
 #endif // OS_LINUX_GLOBALS_LINUX_HPP

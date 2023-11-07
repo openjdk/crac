@@ -329,13 +329,26 @@ bool VM_Crac::check_fds() {
       }
     }
 
-    // On some systems using SSSD files in this directory are left open
-    // after calling getpwuid_r, getpwname_r, getgrgid_r, getgrname_r
-    // or other functions in this family.
-    constexpr const char *sss_nss_memcache = "/var/lib/sss/mc/";
-    if (!strncmp(details, sss_nss_memcache, strlen(sss_nss_memcache))) {
-      print_resources("OK: SSSD cache\n");
-      continue;
+    if (CRAllowedOpenFilePrefixes != nullptr) {
+      const char *prefix = CRAllowedOpenFilePrefixes;
+      // JDK appends to ccstrlist using newline, on command line that would be comma
+      size_t prefix_length = strcspn(prefix, ",\n");
+      bool matched = false;
+      while (prefix_length > 0) {
+        if (!strncmp(details, prefix, prefix_length)) {
+          matched = true;
+          break;
+        }
+        if (prefix[prefix_length] == '\0') {
+          break;
+        }
+        prefix += prefix_length + 1;
+        prefix_length = strcspn(prefix, ",\n");
+      }
+      if (matched) {
+        print_resources("OK: allowed in -XX:CRAllowedOpenFilePrefixes\n");
+        continue;
+      }
     }
 
     print_resources("BAD: opened by application\n");

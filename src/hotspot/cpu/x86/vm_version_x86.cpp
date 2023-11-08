@@ -864,7 +864,7 @@ bool VM_Version::glibc_env_set(char *disable_str) {
   if (env && strcmp(env, env_val) == 0) {
     if (!INCLUDE_CPU_FEATURE_ACTIVE) {
       if (ShowCPUFeatures) {
-        tty->print_cr("Environment variable already set, both glibc CPU_FEATURE_ACTIVE is unavailable - re-exec suppressed: " TUNABLES_NAME "=%s", env);
+        tty->print_cr("Environment variable already set, glibc CPU_FEATURE_ACTIVE is unavailable - re-exec suppressed: " TUNABLES_NAME "=%s", env);
       }
       return true;
     }

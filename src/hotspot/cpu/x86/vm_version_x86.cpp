@@ -1058,55 +1058,48 @@ void VM_Version::glibc_not_using(uint64_t excessive_CPU, uint64_t excessive_GLIB
     DEBUG_ONLY(PASTE_TOKENS(excessive_handled_, kind) |= PASTE_TOKENS3(kind, _, hotspot));                                            \
   } while (0)
 #if INCLUDE_CPU_FEATURE_ACTIVE
-# define FEATURE_ACTIVE(glibc, hotspot_field, hotspot_union, glibc_index, glibc_reg) CPU_FEATURE_ACTIVE(glibc)
+# define FEATURE_ACTIVE(glibc) CPU_FEATURE_ACTIVE(glibc)
 #else
-# define FEATURE_ACTIVE(glibc, hotspot_field, hotspot_union, glibc_index, glibc_reg) true
+# define FEATURE_ACTIVE(glibc) true
 #endif
-#define EXCESSIVE7(kind, hotspot, glibc, hotspot_field, hotspot_union, glibc_index, glibc_reg) do {                                                        \
-    EXCESSIVE_HANDLED(kind, hotspot);                                                                                                                      \
-    if (PASTE_TOKENS(excessive_, kind) & PASTE_TOKENS3(kind, _, hotspot) && FEATURE_ACTIVE(glibc, hotspot_field, hotspot_union, glibc_index, glibc_reg)) { \
-      PASTE_TOKENS(disable_, kind) |= PASTE_TOKENS3(kind, _, hotspot);                                                                                     \
-    }                                                                                                                                                      \
+#define EXCESSIVE3(kind, hotspot, glibc) do {                                                        \
+    EXCESSIVE_HANDLED(kind, hotspot);                                                                \
+    if (PASTE_TOKENS(excessive_, kind) & PASTE_TOKENS3(kind, _, hotspot) && FEATURE_ACTIVE(glibc)) { \
+      PASTE_TOKENS(disable_, kind) |= PASTE_TOKENS3(kind, _, hotspot);                               \
+    }                                                                                                \
   } while (0)
-#define EXCESSIVE(kind, hotspotglibc, hotspot_union, def...) EXCESSIVE7(kind, hotspotglibc, hotspotglibc, hotspot_union, def)
-#define EXCESSIVE5(kind, hotspot, glibc, hotspot_union, def...) EXCESSIVE7(kind, hotspot, glibc, hotspot_union, def)
-#define DEF_ExtCpuid1Ecx ExtCpuid1Ecx, CPUID_INDEX_80000001, ecx
-#define DEF_SefCpuid7Ebx SefCpuid7Ebx, CPUID_INDEX_7       , ebx
-#define DEF_SefCpuid7Ecx SefCpuid7Ecx, CPUID_INDEX_7       , ecx
-#define DEF_SefCpuid7Edx SefCpuid7Edx, CPUID_INDEX_7       , edx
-#define DEF_StdCpuid1Ecx StdCpuid1Ecx, CPUID_INDEX_1       , ecx
-#define DEF_StdCpuid1Edx StdCpuid1Edx, CPUID_INDEX_1       , edx
-  EXCESSIVE(CPU  , AVX     , avx     , DEF_StdCpuid1Ecx);
-  EXCESSIVE(CPU  , CX8     , cmpxchg8, DEF_StdCpuid1Edx);
-  EXCESSIVE(CPU  , FMA     , fma     , DEF_StdCpuid1Ecx);
-  EXCESSIVE(CPU  , RTM     , rtm     , DEF_SefCpuid7Ebx);
-  EXCESSIVE(CPU  , AVX2    , avx2    , DEF_SefCpuid7Ebx);
-  EXCESSIVE(CPU  , BMI1    , bmi1    , DEF_SefCpuid7Ebx);
-  EXCESSIVE(CPU  , BMI2    , bmi2    , DEF_SefCpuid7Ebx);
-  EXCESSIVE(CPU  , CMOV    , cmov    , DEF_StdCpuid1Edx);
-  EXCESSIVE(CPU  , ERMS    , erms    , DEF_SefCpuid7Ebx);
-  EXCESSIVE(CPU  , SSE2    , sse2    , DEF_StdCpuid1Edx);
-  EXCESSIVE(CPU  , LZCNT   , fma4    , DEF_ExtCpuid1Ecx);
-  EXCESSIVE(CPU  , SSSE3   , ssse3   , DEF_StdCpuid1Ecx);
-  EXCESSIVE(CPU  , POPCNT  , popcnt  , DEF_StdCpuid1Ecx);
-  EXCESSIVE(CPU  , SSE4_1  , sse4_1  , DEF_StdCpuid1Ecx);
-  EXCESSIVE(CPU  , SSE4_2  , sse4_2  , DEF_StdCpuid1Ecx);
-  EXCESSIVE(CPU  , AVX512F , avx512f , DEF_SefCpuid7Ebx);
-  EXCESSIVE(CPU  , AVX512CD, avx512cd, DEF_SefCpuid7Ebx);
-  EXCESSIVE(CPU  , AVX512BW, avx512bw, DEF_SefCpuid7Ebx);
-  EXCESSIVE(CPU  , AVX512DQ, avx512dq, DEF_SefCpuid7Ebx);
-  EXCESSIVE(CPU  , AVX512ER, avx512er, DEF_SefCpuid7Ebx);
-  EXCESSIVE(CPU  , AVX512PF, avx512pf, DEF_SefCpuid7Ebx);
-  EXCESSIVE(CPU  , AVX512VL, avx512vl, DEF_SefCpuid7Ebx);
-  EXCESSIVE5(CPU , CET_IBT , IBT  , cet_ibt, DEF_SefCpuid7Edx);
-  EXCESSIVE5(CPU , CET_SS  , SHSTK, cet_ss , DEF_SefCpuid7Ecx);
-  EXCESSIVE(GLIBC, FMA4    , fma4    , DEF_ExtCpuid1Ecx);
-  EXCESSIVE(GLIBC, MOVBE   , movbe   , DEF_StdCpuid1Ecx);
-  EXCESSIVE(GLIBC, XSAVE   , xsave   , DEF_StdCpuid1Ecx);
-  EXCESSIVE(GLIBC, OSXSAVE , osxsave , DEF_StdCpuid1Ecx);
-  EXCESSIVE(GLIBC, HTT     , ht      , DEF_StdCpuid1Edx);
+#define EXCESSIVE(kind, hotspotglibc) EXCESSIVE3(kind, hotspotglibc, hotspotglibc)
+  EXCESSIVE(CPU  , AVX     );
+  EXCESSIVE(CPU  , CX8     );
+  EXCESSIVE(CPU  , FMA     );
+  EXCESSIVE(CPU  , RTM     );
+  EXCESSIVE(CPU  , AVX2    );
+  EXCESSIVE(CPU  , BMI1    );
+  EXCESSIVE(CPU  , BMI2    );
+  EXCESSIVE(CPU  , CMOV    );
+  EXCESSIVE(CPU  , ERMS    );
+  EXCESSIVE(CPU  , SSE2    );
+  EXCESSIVE(CPU  , LZCNT   );
+  EXCESSIVE(CPU  , SSSE3   );
+  EXCESSIVE(CPU  , POPCNT  );
+  EXCESSIVE(CPU  , SSE4_1  );
+  EXCESSIVE(CPU  , SSE4_2  );
+  EXCESSIVE(CPU  , AVX512F );
+  EXCESSIVE(CPU  , AVX512CD);
+  EXCESSIVE(CPU  , AVX512BW);
+  EXCESSIVE(CPU  , AVX512DQ);
+  EXCESSIVE(CPU  , AVX512ER);
+  EXCESSIVE(CPU  , AVX512PF);
+  EXCESSIVE(CPU  , AVX512VL);
+  EXCESSIVE3(CPU , CET_IBT , IBT  );
+  EXCESSIVE3(CPU , CET_SS  , SHSTK);
+  EXCESSIVE(GLIBC, FMA4    );
+  EXCESSIVE(GLIBC, MOVBE   );
+  EXCESSIVE(GLIBC, XSAVE   );
+  EXCESSIVE(GLIBC, OSXSAVE );
+  EXCESSIVE(GLIBC, HTT     );
 #undef EXCESSIVE
-#undef EXCESSIVE5
+#undef EXCESSIVE3
 
   char disable_str[64 * (10 + 3) + 1];
   strcpy(disable_str, glibc_prefix);

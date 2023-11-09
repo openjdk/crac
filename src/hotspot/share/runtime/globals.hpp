@@ -177,7 +177,8 @@ const int ObjectAlignmentInBytes = 8;
   product(bool, AlwaysSafeConstructors, false, EXPERIMENTAL,                \
           "Force safe construction, as if all fields are final.")           \
                                                                             \
-  product(bool, UnlockDiagnosticVMOptions, trueInDebug, DIAGNOSTIC,         \
+  product(bool, UnlockDiagnosticVMOptions, trueInDebug,                     \
+          DIAGNOSTIC | RESTORE_SETTABLE,                                    \
           "Enable normal processing of flags relating to field diagnostics")\
                                                                             \
   product(bool, UnlockExperimentalVMOptions, false,                         \
@@ -1996,8 +1997,8 @@ const int ObjectAlignmentInBytes = 8;
       "Mininal PID value for checkpoint'ed process")                        \
       range(1, UINT_MAX)                                                    \
                                                                             \
-  product(bool, CRaCResetStartTime, false, RESTORE_SETTABLE,                    \
-      "Reset JVM's start time and uptime on restore")                     \
+  product(bool, CRaCResetStartTime, true, DIAGNOSTIC | RESTORE_SETTABLE,    \
+      "Reset JVM's start time and uptime on restore")                       \
                                                                             \
   product(ccstr, CREngine, "criuengine", RESTORE_SETTABLE,                  \
       "Path or name of a program implementing checkpoint/restore and "      \

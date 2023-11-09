@@ -41,6 +41,7 @@ import static jdk.test.lib.Asserts.assertLTE;
  * @build ResetStartTimeTest
  * @run driver/timeout=60 jdk.test.lib.crac.CracTest false
  * @run driver/timeout=60 jdk.test.lib.crac.CracTest true
+ * @requires (os.family == "linux")
  */
 public class ResetStartTimeTest implements CracTest {
 
@@ -51,14 +52,14 @@ public class ResetStartTimeTest implements CracTest {
 
     @Override
     public void test() throws Exception {
-        CracBuilder builder = new CracBuilder().engine(CracEngine.SIMULATE);
-        if (resetUptime) {
-            builder.vmOption("-XX:+CRaCResetStartTime");
+        CracBuilder builder = new CracBuilder();
+        builder.startCheckpoint().waitForCheckpointed();
+        if (!resetUptime) {
+            builder.vmOption("-XX:+UnlockDiagnosticVMOptions");
+            builder.vmOption("-XX:-CRaCResetStartTime");
         }
-        var output = builder.captureOutput(true)
-                .startCheckpoint().waitForSuccess()
-                .outputAnalyzer();
-        output.shouldContain(RESTORED_MESSAGE);
+        builder.captureOutput(true).doRestore().waitForSuccess()
+                .outputAnalyzer().shouldContain(RESTORED_MESSAGE);
     }
 
     @Override

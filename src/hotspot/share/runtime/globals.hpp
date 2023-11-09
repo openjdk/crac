@@ -2017,6 +2017,12 @@ const int ObjectAlignmentInBytes = 8;
       "excluded automatically) not in this list are closed when the VM "    \
       "is started.")                                                        \
                                                                             \
+  product_pd(ccstrlist, CRAllowedOpenFilePrefixes, "List of path prefixes " \
+      "for files that can be open during checkpoint; CRaC won't error "     \
+      "upon detecting these and will leave the handling up to C/R engine. " \
+      "This option applies only to files opened by native code; for files " \
+      "opened by Java code use -Djdk.crac.resource-policies=...")           \
+                                                                            \
   product(bool, CRAllowToSkipCheckpoint, false, DIAGNOSTIC,                 \
           "Allow implementation to not call Checkpoint if helper not found")\
                                                                             \

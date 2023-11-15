@@ -1498,7 +1498,9 @@ void DumpMerger::merge_done() {
 }
 
 void DumpMerger::merge_file(char* path) {
-  assert(!SafepointSynchronize::is_at_safepoint(), "merging happens outside safepoint");
+  // CRaC's portable mode dumps heap entirely on a safepoint making this fail
+  // assert(!SafepointSynchronize::is_at_safepoint(), "merging happens outside safepoint");
+
   TraceTime timer("Merge segmented heap file", TRACETIME_LOG(Info, heapdump));
 
   fileStream segment_fs(path, "rb");
@@ -1527,7 +1529,9 @@ void DumpMerger::merge_file(char* path) {
 }
 
 void DumpMerger::do_merge() {
-  assert(!SafepointSynchronize::is_at_safepoint(), "merging happens outside safepoint");
+  // CRaC's portable mode dumps heap entirely on a safepoint making this fail
+  // assert(!SafepointSynchronize::is_at_safepoint(), "merging happens outside safepoint");
+
   TraceTime timer("Merge heap files complete", TRACETIME_LOG(Info, heapdump));
 
   // Since contents in segmented heap file were already zipped, we don't need to zip

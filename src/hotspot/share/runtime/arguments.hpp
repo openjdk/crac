@@ -382,10 +382,10 @@ class Arguments : AllStatic {
   static jint parse(const JavaVMInitArgs* args);
   // Parse a string for a unsigned integer.  Returns true if value
   // is an unsigned integer greater than or equal to the minimum
-  // parameter passed and returns the value in uintx_arg.  Returns
-  // false otherwise, with uintx_arg undefined.
-  static bool parse_uintx(const char* value, uintx* uintx_arg,
-                          uintx min_size);
+  // parameter passed and returns the value in uint_arg.  Returns
+  // false otherwise, with uint_arg undefined.
+  static bool parse_uint(const char* value, uint* uintx_arg,
+                         uint min_size);
   // Apply ergonomics
   static jint apply_ergo();
   // Adjusts the arguments after the OS have adjusted the arguments
@@ -528,12 +528,6 @@ class Arguments : AllStatic {
   static bool atojulong(const char *s, julong* result);
 
   static bool has_jfr_option() NOT_JFR_RETURN_(false);
-
-  static bool is_dumping_archive() { return DumpSharedSpaces || DynamicDumpSharedSpaces; }
-
-  static void assert_is_dumping_archive() {
-    assert(Arguments::is_dumping_archive(), "dump time only");
-  }
 
   static bool is_restore_option_set(const JavaVMInitArgs* args);
 

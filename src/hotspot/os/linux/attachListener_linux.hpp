@@ -85,7 +85,7 @@ class LinuxAttachListener: AllStatic {
   static int listener()                 { return _listener; }
 
   // write the given buffer to a socket
-  static int write_fully(int s, char* buf, int len);
+  static int write_fully(int s, char* buf, size_t len);
 
   static LinuxAttachOperation* dequeue();
   static LinuxAttachOperation* get_current_op();

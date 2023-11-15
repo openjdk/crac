@@ -180,7 +180,7 @@
 
 #define VM_STRUCTS(nonstatic_field,                                                                                                  \
                    static_field,                                                                                                     \
-                   static_ptr_volatile_field,                                                                                        \
+                   volatile_static_field,                                                                                            \
                    unchecked_nonstatic_field,                                                                                        \
                    volatile_nonstatic_field,                                                                                         \
                    nonproduct_nonstatic_field,                                                                                       \
@@ -194,6 +194,7 @@
   /*************/                                                                                                                    \
                                                                                                                                      \
   VM_STRUCTS_GC(nonstatic_field,                                                                                                     \
+                volatile_static_field,                                                                                               \
                 volatile_nonstatic_field,                                                                                            \
                 static_field,                                                                                                        \
                 unchecked_nonstatic_field)                                                                                           \
@@ -447,7 +448,7 @@
      static_field(PerfMemory,                  _top,                                          char*)                                 \
      static_field(PerfMemory,                  _capacity,                                     size_t)                                \
      static_field(PerfMemory,                  _prologue,                                     PerfDataPrologue*)                     \
-     static_field(PerfMemory,                  _initialized,                                  int)                                   \
+     volatile_static_field(PerfMemory,         _initialized,                                  int)                                   \
                                                                                                                                      \
   /********************/                                                                                                             \
   /* SystemDictionary */                                                                                                             \
@@ -477,7 +478,7 @@
   volatile_nonstatic_field(ClassLoaderData,    _klasses,                                      Klass*)                                \
   nonstatic_field(ClassLoaderData,             _has_class_mirror_holder,                      bool)                                  \
                                                                                                                                      \
-  static_ptr_volatile_field(ClassLoaderDataGraph, _head,                                      ClassLoaderData*)                      \
+  volatile_static_field(ClassLoaderDataGraph, _head,                                          ClassLoaderData*)                      \
                                                                                                                                      \
   /**********/                                                                                                                       \
   /* Arrays */                                                                                                                       \
@@ -638,7 +639,7 @@
   static_field(Threads,                     _number_of_non_daemon_threads,                    int)                                   \
   static_field(Threads,                     _return_code,                                     int)                                   \
                                                                                                                                      \
-  static_ptr_volatile_field(ThreadsSMRSupport, _java_thread_list,                             ThreadsList*)                          \
+  volatile_static_field(ThreadsSMRSupport, _java_thread_list,                                 ThreadsList*)                          \
   nonstatic_field(ThreadsList,                 _length,                                       const uint)                            \
   nonstatic_field(ThreadsList,                 _threads,                                      JavaThread *const *const)              \
                                                                                                                                      \
@@ -946,9 +947,6 @@
      static_field(Abstract_VM_Version,         _vm_minor_version,                             int)                                   \
      static_field(Abstract_VM_Version,         _vm_security_version,                          int)                                   \
      static_field(Abstract_VM_Version,         _vm_build_number,                              int)                                   \
-                                                                                                                                     \
-     static_field(JDK_Version,                 _current,                                      JDK_Version)                           \
-  nonstatic_field(JDK_Version,                 _major,                                        unsigned char)                         \
                                                                                                                                      \
   /*************************/                                                                                                        \
   /* JVMTI */                                                                                                                        \
@@ -1495,6 +1493,7 @@
   declare_c2_type(CastPPNode, ConstraintCastNode)                         \
   declare_c2_type(CheckCastPPNode, TypeNode)                              \
   declare_c2_type(Conv2BNode, Node)                                       \
+  declare_c2_type(ConvertNode, TypeNode)                                  \
   declare_c2_type(ConvD2FNode, Node)                                      \
   declare_c2_type(ConvD2INode, Node)                                      \
   declare_c2_type(ConvD2LNode, Node)                                      \
@@ -1750,12 +1749,7 @@
   declare_c2_type(MinVNode, VectorNode)                                   \
   declare_c2_type(LoadVectorNode, LoadNode)                               \
   declare_c2_type(StoreVectorNode, StoreNode)                             \
-  declare_c2_type(ReplicateBNode, VectorNode)                             \
-  declare_c2_type(ReplicateSNode, VectorNode)                             \
-  declare_c2_type(ReplicateINode, VectorNode)                             \
-  declare_c2_type(ReplicateLNode, VectorNode)                             \
-  declare_c2_type(ReplicateFNode, VectorNode)                             \
-  declare_c2_type(ReplicateDNode, VectorNode)                             \
+  declare_c2_type(ReplicateNode, VectorNode)                              \
   declare_c2_type(PopulateIndexNode, VectorNode)                          \
   declare_c2_type(PackNode, VectorNode)                                   \
   declare_c2_type(PackBNode, PackNode)                                    \
@@ -1873,7 +1867,6 @@
   /********************/                                                  \
                                                                           \
   declare_toplevel_type(Abstract_VM_Version)                              \
-  declare_toplevel_type(JDK_Version)                                      \
                                                                           \
   /*************/                                                         \
   /* Arguments */                                                         \
@@ -2690,7 +2683,7 @@ VMStructEntry VMStructs::localHotSpotVMStructs[] = {
 
   VM_STRUCTS(GENERATE_NONSTATIC_VM_STRUCT_ENTRY,
              GENERATE_STATIC_VM_STRUCT_ENTRY,
-             GENERATE_STATIC_PTR_VOLATILE_VM_STRUCT_ENTRY,
+             GENERATE_VOLATILE_STATIC_VM_STRUCT_ENTRY,
              GENERATE_UNCHECKED_NONSTATIC_VM_STRUCT_ENTRY,
              GENERATE_NONSTATIC_VM_STRUCT_ENTRY,
              GENERATE_NONPRODUCT_NONSTATIC_VM_STRUCT_ENTRY,
@@ -2892,7 +2885,7 @@ JNIEXPORT uint64_t gHotSpotVMLongConstantEntryArrayStride = STRIDE(gHotSpotVMLon
 void VMStructs::init() {
   VM_STRUCTS(CHECK_NONSTATIC_VM_STRUCT_ENTRY,
              CHECK_STATIC_VM_STRUCT_ENTRY,
-             CHECK_STATIC_PTR_VOLATILE_VM_STRUCT_ENTRY,
+             CHECK_VOLATILE_STATIC_VM_STRUCT_ENTRY,
              CHECK_NO_OP,
              CHECK_VOLATILE_NONSTATIC_VM_STRUCT_ENTRY,
              CHECK_NONPRODUCT_NONSTATIC_VM_STRUCT_ENTRY,
@@ -3038,7 +3031,7 @@ static int recursiveFindType(VMTypeEntry* origtypes, const char* typeName, bool 
   }
   if (start != nullptr) {
     const char * end = strrchr(typeName, '>');
-    int len = end - start + 1;
+    int len = pointer_delta_as_int(end, start) + 1;
     char * s = NEW_C_HEAP_ARRAY(char, len, mtInternal);
     strncpy(s, start, len - 1);
     s[len-1] = '\0';

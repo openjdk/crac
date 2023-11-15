@@ -26,6 +26,7 @@
 #include "cds/archiveBuilder.hpp"
 #include "cds/archiveHeapLoader.inline.hpp"
 #include "cds/archiveHeapWriter.hpp"
+#include "cds/cdsConfig.hpp"
 #include "cds/filemap.hpp"
 #include "cds/heapShared.hpp"
 #include "classfile/altHashing.hpp"
@@ -154,7 +155,7 @@ class StringTableConfig : public StackObj {
     StringTable::item_added();
     return AllocateHeap(size, mtSymbol);
   }
-  static void free_node(void* context, void* memory, Value const& value) {
+  static void free_node(void* context, void* memory, Value& value) {
     value.release(StringTable::_oop_storage);
     FreeHeap(memory);
     StringTable::item_removed();
@@ -176,11 +177,9 @@ class StringTableLookupJchar : StackObj {
   uintx get_hash() const {
     return _hash;
   }
-  bool equals(WeakHandle* value, bool* is_dead) {
+  bool equals(WeakHandle* value) {
     oop val_oop = value->peek();
     if (val_oop == nullptr) {
-      // dead oop, mark this hash dead for cleaning
-      *is_dead = true;
       return false;
     }
     bool equals = java_lang_String::equals(val_oop, _str, _len);
@@ -190,6 +189,10 @@ class StringTableLookupJchar : StackObj {
     // Need to resolve weak handle and Handleize through possible safepoint.
      _found = Handle(_thread, value->resolve());
     return true;
+  }
+  bool is_dead(WeakHandle* value) {
+    oop val_oop = value->peek();
+    return val_oop == nullptr;
   }
 };
 
@@ -208,11 +211,9 @@ class StringTableLookupOop : public StackObj {
     return _hash;
   }
 
-  bool equals(WeakHandle* value, bool* is_dead) {
+  bool equals(WeakHandle* value) {
     oop val_oop = value->peek();
     if (val_oop == nullptr) {
-      // dead oop, mark this hash dead for cleaning
-      *is_dead = true;
       return false;
     }
     bool equals = java_lang_String::equals(_find(), val_oop);
@@ -222,6 +223,11 @@ class StringTableLookupOop : public StackObj {
     // Need to resolve weak handle and Handleize through possible safepoint.
     _found = Handle(_thread, value->resolve());
     return true;
+  }
+
+  bool is_dead(WeakHandle* value) {
+    oop val_oop = value->peek();
+    return val_oop == nullptr;
   }
 };
 
@@ -800,7 +806,7 @@ oop StringTable::lookup_shared(const jchar* name, int len) {
 // This should be called when we know no more strings will be added (which will be easy
 // to guarantee because CDS runs with a single Java thread. See JDK-8253495.)
 void StringTable::allocate_shared_strings_array(TRAPS) {
-  assert(DumpSharedSpaces, "must be");
+  assert(CDSConfig::is_dumping_heap(), "must be");
   if (_items_count > (size_t)max_jint) {
     fatal("Too many strings to be archived: %zu", _items_count);
   }

@@ -506,8 +506,6 @@ public class FileInputStream extends InputStream
      * this method should be prepared to handle possible reentrant invocation.
      *
      * @throws     IOException  {@inheritDoc}
-     *
-     * @revised 1.4
      */
     @Override
     public void close() throws IOException {

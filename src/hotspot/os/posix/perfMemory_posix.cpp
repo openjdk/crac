@@ -30,6 +30,7 @@
 #include "logging/log.hpp"
 #include "memory/allocation.inline.hpp"
 #include "memory/resourceArea.hpp"
+#include "nmt/memTracker.hpp"
 #include "oops/oop.inline.hpp"
 //#include "os_linux.inline.hpp"
 #include "os_posix.inline.hpp"
@@ -37,7 +38,6 @@
 #include "runtime/handles.inline.hpp"
 #include "runtime/os.hpp"
 #include "runtime/perfMemory.hpp"
-#include "services/memTracker.hpp"
 #include "utilities/exceptions.hpp"
 #if defined(LINUX)
 #include "os_linux.hpp"

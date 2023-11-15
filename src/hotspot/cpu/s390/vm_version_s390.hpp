@@ -572,6 +572,7 @@ class VM_Version: public Abstract_VM_Version {
   static void insert_features_names(char* buf, size_t buflen, unsigned long features[] = _features) {}
 
   static void initialize_cpu_information(void);
+  static bool profile_all_receivers_at_type_check() { return false; }
 };
 
 #endif // CPU_S390_VM_VERSION_S390_HPP

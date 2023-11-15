@@ -24,6 +24,7 @@
 
 #include "precompiled.hpp"
 #include "cds/archiveBuilder.hpp"
+#include "cds/cdsConfig.hpp"
 #include "cds/dynamicArchive.hpp"
 #include "classfile/altHashing.hpp"
 #include "classfile/classLoaderData.hpp"
@@ -219,7 +220,7 @@ void SymbolTable::create_table ()  {
   if (symbol_alloc_arena_size == 0) {
     _arena = new (mtSymbol) Arena(mtSymbol);
   } else {
-    _arena = new (mtSymbol) Arena(mtSymbol, symbol_alloc_arena_size);
+    _arena = new (mtSymbol) Arena(mtSymbol, Arena::Tag::tag_other, symbol_alloc_arena_size);
   }
 }
 
@@ -374,7 +375,11 @@ public:
   uintx get_hash() const {
     return _hash;
   }
-  bool equals(Symbol* value, bool* is_dead) {
+  // Note: When equals() returns "true", the symbol's refcount is incremented. This is
+  // needed to ensure that the symbol is kept alive before equals() returns to the caller,
+  // so that another thread cannot clean the symbol up concurrently. The caller is
+  // responsible for decrementing the refcount, when the symbol is no longer needed.
+  bool equals(Symbol* value) {
     assert(value != nullptr, "expected valid value");
     Symbol *sym = value;
     if (sym->equals(_str, _len)) {
@@ -383,13 +388,14 @@ public:
         return true;
       } else {
         assert(sym->refcount() == 0, "expected dead symbol");
-        *is_dead = true;
         return false;
       }
     } else {
-      *is_dead = (sym->refcount() == 0);
       return false;
     }
+  }
+  bool is_dead(Symbol* value) {
+    return value->refcount() == 0;
   }
 };
 
@@ -666,10 +672,11 @@ size_t SymbolTable::estimate_size_for_archive() {
 void SymbolTable::write_to_archive(GrowableArray<Symbol*>* symbols) {
   CompactHashtableWriter writer(int(_items_count), ArchiveBuilder::symbol_stats());
   copy_shared_symbol_table(symbols, &writer);
-  if (!DynamicDumpSharedSpaces) {
+  if (CDSConfig::is_dumping_static_archive()) {
     _shared_table.reset();
     writer.dump(&_shared_table, "symbol");
   } else {
+    assert(CDSConfig::is_dumping_dynamic_archive(), "must be");
     _dynamic_shared_table.reset();
     writer.dump(&_dynamic_shared_table, "symbol");
   }

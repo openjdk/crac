@@ -60,6 +60,8 @@ import static java.net.StandardProtocolFamily.INET6;
 import static java.net.StandardProtocolFamily.UNIX;
 
 import jdk.internal.crac.JDKSocketResource;
+import jdk.internal.event.SocketReadEvent;
+import jdk.internal.event.SocketWriteEvent;
 import sun.net.ConnectionResetException;
 import sun.net.NetHooks;
 import sun.net.ext.ExtendedSocketOptions;
@@ -403,8 +405,7 @@ class SocketChannelImpl
         throw new SocketException("Connection reset");
     }
 
-    @Override
-    public int read(ByteBuffer buf) throws IOException {
+    private int implRead(ByteBuffer buf) throws IOException {
         Objects.requireNonNull(buf);
 
         readLock.lock();
@@ -445,8 +446,7 @@ class SocketChannelImpl
         }
     }
 
-    @Override
-    public long read(ByteBuffer[] dsts, int offset, int length)
+    private long implRead(ByteBuffer[] dsts, int offset, int length)
         throws IOException
     {
         Objects.checkFromIndexSize(offset, length, dsts.length);
@@ -487,6 +487,31 @@ class SocketChannelImpl
         } finally {
             readLock.unlock();
         }
+    }
+
+    @Override
+    public int read(ByteBuffer buf) throws IOException {
+        if (!SocketReadEvent.enabled()) {
+            return implRead(buf);
+        }
+        long start = SocketReadEvent.timestamp();
+        int nbytes = implRead(buf);
+        SocketReadEvent.offer(start, nbytes, remoteAddress(), 0);
+        return nbytes;
+    }
+
+
+    @Override
+    public long read(ByteBuffer[] dsts, int offset, int length)
+        throws IOException
+    {
+        if (!SocketReadEvent.enabled()) {
+            return implRead(dsts, offset, length);
+        }
+        long start = SocketReadEvent.timestamp();
+        long nbytes = implRead(dsts, offset, length);
+        SocketReadEvent.offer(start, nbytes, remoteAddress(), 0);
+        return nbytes;
     }
 
     /**
@@ -530,8 +555,7 @@ class SocketChannelImpl
         }
     }
 
-    @Override
-    public int write(ByteBuffer buf) throws IOException {
+    private int implWrite(ByteBuffer buf) throws IOException {
         Objects.requireNonNull(buf);
         writeLock.lock();
         try {
@@ -559,8 +583,7 @@ class SocketChannelImpl
         }
     }
 
-    @Override
-    public long write(ByteBuffer[] srcs, int offset, int length)
+    private long implWrite(ByteBuffer[] srcs, int offset, int length)
         throws IOException
     {
         Objects.checkFromIndexSize(offset, length, srcs.length);
@@ -589,6 +612,30 @@ class SocketChannelImpl
         } finally {
             writeLock.unlock();
         }
+    }
+
+    @Override
+    public int write(ByteBuffer buf) throws IOException {
+        if (!SocketWriteEvent.enabled()) {
+            return implWrite(buf);
+        }
+        long start = SocketWriteEvent.timestamp();
+        int nbytes = implWrite(buf);
+        SocketWriteEvent.offer(start, nbytes, remoteAddress());
+        return nbytes;
+    }
+
+    @Override
+    public long write(ByteBuffer[] srcs, int offset, int length)
+        throws IOException
+    {
+        if (!SocketWriteEvent.enabled()) {
+            return implWrite(srcs, offset, length);
+        }
+        long start = SocketWriteEvent.timestamp();
+        long nbytes = implWrite(srcs, offset, length);
+        SocketWriteEvent.offer(start, nbytes, remoteAddress());
+        return nbytes;
     }
 
     /**

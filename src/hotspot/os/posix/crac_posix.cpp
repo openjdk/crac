@@ -23,6 +23,7 @@
 
 // no precompiled headers
 #include "jvm.h"
+#include "os_posix.hpp"
 #include "runtime/crac.hpp"
 #include "runtime/crac_structs.hpp"
 
@@ -38,6 +39,10 @@ int CracSHM::open(int mode) {
 
 void CracSHM::unlink() {
   shm_unlink(_path);
+}
+
+void crac::initialize_time_counters() {
+  os::Posix::initialize_time_counters();
 }
 
 #ifndef LINUX

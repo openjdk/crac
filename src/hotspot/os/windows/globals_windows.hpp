@@ -49,5 +49,6 @@ define_pd_global(size_t, PreTouchParallelChunkSize, 1 * G);
 define_pd_global(bool, UseLargePages, false);
 define_pd_global(bool, UseLargePagesIndividualAllocation, true);
 define_pd_global(bool, UseThreadPriorities, true) ;
+define_pd_global(ccstrlist, CRAllowedOpenFilePrefixes, nullptr);
 
 #endif // OS_WINDOWS_GLOBALS_WINDOWS_HPP

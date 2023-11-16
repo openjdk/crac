@@ -22,6 +22,8 @@
  */
 
 // no precompiled headers
+#include <string.h>
+
 #include "jvm.h"
 #include "perfMemory_linux.hpp"
 #include "runtime/crac_structs.hpp"
@@ -327,6 +329,28 @@ bool VM_Crac::check_fds() {
       }
     }
 
+    if (CRAllowedOpenFilePrefixes != nullptr) {
+      const char *prefix = CRAllowedOpenFilePrefixes;
+      // JDK appends to ccstrlist using newline, on command line that would be comma
+      size_t prefix_length = strcspn(prefix, ",\n");
+      bool matched = false;
+      while (prefix_length > 0) {
+        if (!strncmp(details, prefix, prefix_length)) {
+          matched = true;
+          break;
+        }
+        if (prefix[prefix_length] == '\0') {
+          break;
+        }
+        prefix += prefix_length + 1;
+        prefix_length = strcspn(prefix, ",\n");
+      }
+      if (matched) {
+        print_resources("OK: allowed in -XX:CRAllowedOpenFilePrefixes\n");
+        continue;
+      }
+    }
+
     print_resources("BAD: opened by application\n");
     ok = false;
 
@@ -342,7 +366,7 @@ bool VM_Crac::check_fds() {
 }
 
 bool VM_Crac::memory_checkpoint() {
-  return PerfMemoryLinux::checkpoint(CRaCCheckpointTo);
+  return PerfMemoryLinux::checkpoint();
 }
 
 void VM_Crac::memory_restore() {

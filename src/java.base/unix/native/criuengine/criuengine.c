@@ -49,8 +49,6 @@
 
 #define SUPPRESS_ERROR_IN_PARENT 77
 
-static int create_cppath(const char *imagedir);
-
 static int g_pid;
 static int g_tty_fd = -1;
 
@@ -221,7 +219,6 @@ static int checkpoint(pid_t jvm,
         kickjvm(jvm, 0);
     }
 
-    create_cppath(imagedir);
     exit(0);
 }
 
@@ -229,48 +226,6 @@ static int restore(const char *basedir,
         const char *self,
         const char *criu,
         const char *imagedir) {
-    char *cppathpath;
-    if (-1 == asprintf(&cppathpath, "%s/cppath", imagedir)) {
-        return 1;
-    }
-
-    int fd = open(cppathpath, O_RDONLY);
-    if (fd < 0) {
-        fprintf(stderr, "CRaC restore - cannot open cppath file \"%s\": %s\n", path_abs(cppathpath), strerror(errno));
-        return 1;
-    }
-
-    char cppath[PATH_MAX];
-    int cppathlen = 0;
-    int r;
-    while ((r = read(fd, cppath + cppathlen, sizeof(cppath) - cppathlen - 1)) != 0) {
-        if (r < 0 && errno == EINTR) {
-            continue;
-        }
-        if (r < 0) {
-            perror("read cppath");
-            return 1;
-        }
-        cppathlen += r;
-    }
-    cppath[cppathlen] = '\0';
-
-    close(fd);
-
-    char *inherit_perfdata = NULL;
-    char *perfdatapath;
-    if (-1 == asprintf(&perfdatapath, "%s/" PERFDATA_NAME, imagedir)) {
-        return 1;
-    }
-    int perfdatafd = open(perfdatapath, O_RDWR);
-    if (0 < perfdatafd) {
-        if (-1 == asprintf(&inherit_perfdata, "fd[%d]:%s/" PERFDATA_NAME,
-                    perfdatafd,
-                    cppath[0] == '/' ? cppath + 1 : cppath)) {
-            return 1;
-        }
-    }
-
     const char* args[32] = {
         criu,
         "restore",
@@ -287,10 +242,6 @@ static int restore(const char *basedir,
         *arg++ = log_file;
     }
 
-    if (inherit_perfdata) {
-        *arg++ = "--inherit-fd";
-        *arg++ = inherit_perfdata;
-    }
     const char* tail[] = {
         "--exec-cmd", "--", self, "restorewait",
         NULL
@@ -331,34 +282,6 @@ static int post_resume(void) {
     char *strid = getenv("CRAC_NEW_ARGS_ID");
     return kickjvm(pid, strid ? atoi(strid) : 0);
 }
-
-static int create_cppath(const char *imagedir) {
-    char realdir[PATH_MAX];
-
-    if (!realpath(imagedir, realdir)) {
-        fprintf(stderr, MSGPREFIX "cannot canonicalize %s: %s\n", imagedir, strerror(errno));
-        return 1;
-    }
-
-    int dirfd = open(realdir, O_DIRECTORY);
-    if (dirfd < 0) {
-        fprintf(stderr, MSGPREFIX "can not open image dir %s: %s\n", realdir, strerror(errno));
-        return 1;
-    }
-
-    int fd = openat(dirfd, "cppath", O_CREAT | O_WRONLY | O_TRUNC, 0644);
-    if (fd < 0) {
-        fprintf(stderr, MSGPREFIX "can not open file %s/cppath: %s\n", realdir, strerror(errno));
-        return 1;
-    }
-
-    if (write(fd, realdir, strlen(realdir)) < 0) {
-        fprintf(stderr, MSGPREFIX "can not write %s/cppath: %s\n", realdir, strerror(errno));
-        return 1;
-    }
-    return 0;
-}
-
 
 static void sighandler(int sig, siginfo_t *info, void *uc) {
     // criuengine restorewait should not have foreground; pass it to the java process

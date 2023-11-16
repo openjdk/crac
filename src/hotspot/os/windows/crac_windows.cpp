@@ -53,3 +53,7 @@ void CracSHM::unlink() {
 bool crac::read_bootid(char *dest) {
   return true;
 }
+
+void crac::initialize_time_counters() {
+  os::win32::initialize_performance_counter();
+}

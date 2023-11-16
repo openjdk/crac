@@ -39,6 +39,7 @@
 #include "runtime/vmThread.hpp"
 #include "services/heapDumper.hpp"
 #include "services/writeableFlags.hpp"
+#include "utilities/decoder.hpp"
 #ifdef LINUX
 #include "os_linux.hpp"
 #endif
@@ -311,6 +312,7 @@ void VM_Crac::doit() {
   // dry-run fails checkpoint
   bool ok = true;
 
+  Decoder::before_checkpoint();
   if (!check_fds()) {
     ok = false;
   }
@@ -355,6 +357,10 @@ void VM_Crac::doit() {
     _restore_start_nanos = os::javaTimeNanos();
   } else {
     _restore_start_nanos += crac::monotonic_time_offset();
+  }
+
+  if (CRaCResetStartTime) {
+    crac::initialize_time_counters();
   }
 
   // VM_Crac::read_shm needs to be already called to read RESTORE_SETTABLE parameters.

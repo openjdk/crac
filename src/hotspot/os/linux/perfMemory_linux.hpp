@@ -30,11 +30,7 @@
 class PerfMemoryLinux : AllStatic {
 
 public:
-  static inline const char* perfdata_name() {
-    return "perfdata";
-  }
-
-  static bool checkpoint(const char* checkpoint_path);
+  static bool checkpoint();
   static bool restore();
 };
 

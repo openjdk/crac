@@ -389,6 +389,7 @@ static int restorewait(void) {
         int fd = atoi(dp->d_name);
         if (isatty(fd)) {
             g_tty_fd = fd;
+            break;
         }
     }
     closedir(dir);

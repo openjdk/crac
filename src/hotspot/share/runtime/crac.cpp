@@ -49,11 +49,13 @@
 #include "utilities/decoder.hpp"
 #include "utilities/exceptions.hpp"
 #include "utilities/heapDumpParser.hpp"
+#include "utilities/stackDumper.hpp"
 #ifdef LINUX
 #include "os_linux.hpp"
 #endif
 
 static constexpr char PMODE_HEAP_DUMP_FILENAME[] = "heap.hprof";
+static constexpr char PMODE_STACK_DUMP_FILENAME[] = "stacks.bin";
 
 static const char* _crengine = NULL;
 static char* _crengine_arg_str = NULL;
@@ -130,19 +132,31 @@ bool crac::is_portable_mode() {
 
 // Checkpoint in portable mode.
 static void checkpoint_portable() {
-#if INCLUDE_SERVICES
+#if INCLUDE_SERVICES // HeapDumper is a service
   char path[JVM_MAXPATHLEN];
-  os::snprintf_checked(path, sizeof(path), "%s%s%s", CRaCCheckpointTo,
-                       os::file_separator(), PMODE_HEAP_DUMP_FILENAME);
 
-  HeapDumper dumper(false /* No GC: it's already done by crac::checkpoint */);
-  if (dumper.dump(path,
-                  nullptr,  // No additional output
-                  -1,       // No compression, TODO: enable this when the parser supports it
-                  false,    // Don't overwrite
-                  HeapDumper::default_num_of_dump_threads()) != 0) {
+  // Dump heap
+  os::snprintf_checked(path, sizeof(path), "%s%s%s",
+                       CRaCCheckpointTo, os::file_separator(), PMODE_HEAP_DUMP_FILENAME);
+  {
+    HeapDumper dumper(false /* No GC: it's already done by crac::checkpoint */);
+    if (dumper.dump(path,
+                    nullptr,  // No additional output
+                    -1,       // No compression, TODO: enable this when the parser supports it
+                    false,    // Don't overwrite
+                    HeapDumper::default_num_of_dump_threads()) != 0) {
+      ResourceMark rm;
+      warning("Failed to dump heap into %s while checkpointing: %s", path, dumper.error_as_C_string());
+    }
+  }
+
+  // Dump thread stacks
+  os::snprintf_checked(path, sizeof(path), "%s%s%s",
+                       CRaCCheckpointTo, os::file_separator(), PMODE_STACK_DUMP_FILENAME);
+  const char *error = StackDumper::dump(path);
+  if (error != nullptr) {
     ResourceMark rm;
-    warning("Failed to dump heap into %s for checkpoint: %s", path, dumper.error_as_C_string());
+    warning("Failed to dump thread stacks into %s while checkpointing: %s", path, error);
   }
 #else  // INCLUDE_SERVICES
   warning("This JVM cannot create checkpoints in portable mode: it is compiled without \"services\" feature");
@@ -701,7 +715,7 @@ class HeapRestorer : public StackObj {
  private:
   // HPROF does not have a special notion for a null reference. We will trear 0
   // ID as such.
-  static constexpr HeapDumpFormat::id_t NULL_ID = 0;
+  static constexpr HeapDump::ID NULL_ID = 0;
 
  public:
   explicit HeapRestorer(const ParsedHeapDump &heap_dump) : _heap_dump(heap_dump) {};
@@ -716,8 +730,8 @@ class HeapRestorer : public StackObj {
     // Look through the dump to find platform and system class loaders' IDs
     find_base_class_loader_ids(CHECK);
 
-    _heap_dump.class_dump_records.iterate(
-      [&](HeapDumpFormat::id_t _, const HeapDumpFormat::ClassDumpRecord &dump) -> bool {
+    _heap_dump.class_dumps.iterate(
+      [&](HeapDump::ID _, const HeapDump::ClassDump &dump) -> bool {
         // For now we only restore user-provided classes
         if (dump.class_loader_id == _system_class_loader_id) {
           restore_class(dump, CHECK_false);
@@ -730,7 +744,7 @@ class HeapRestorer : public StackObj {
     // TODO this can be removed after object restoration is implemented, since
     // these are just subsets of all dumped objects
     {
-      auto restore_iter = [&](HeapDumpFormat::id_t id, const instanceHandle &_) -> bool {
+      auto restore_iter = [&](HeapDump::ID id, const instanceHandle &_) -> bool {
         restore_object(id, CHECK_false);
         return true;
       };
@@ -745,49 +759,49 @@ class HeapRestorer : public StackObj {
  private:
   const ParsedHeapDump &_heap_dump;
 
-  Symbol *get_dumped_symbol(HeapDumpFormat::id_t id, TRAPS) const {
-    HeapDumpFormat::UTF8Record *utf8 = _heap_dump.utf8_records.get(id);
+  Symbol *get_dumped_symbol(HeapDump::ID id, TRAPS) const {
+    HeapDump::UTF8 *utf8 = _heap_dump.utf8s.get(id);
     if (utf8 != nullptr) return utf8->sym;
     THROW_MSG_(vmSymbols::java_lang_IllegalArgumentException(),
                err_msg("UTF-8 record " INT64_FORMAT " referenced but absent", id), {});
   }
 
-  Symbol *get_dumped_class_name(HeapDumpFormat::id_t class_id, TRAPS) const {
-    HeapDumpFormat::LoadClassRecord *lcr = _heap_dump.load_class_records.get(class_id);
-    if (lcr == nullptr) {
+  Symbol *get_dumped_class_name(HeapDump::ID class_id, TRAPS) const {
+    HeapDump::LoadClass *lc = _heap_dump.load_classes.get(class_id);
+    if (lc == nullptr) {
       THROW_MSG_NULL(vmSymbols::java_lang_IllegalArgumentException(),
                      err_msg("Class loading record " INT64_FORMAT " referenced but absent", class_id));
     }
-    Symbol *name = get_dumped_symbol(lcr->class_name_id, CHECK_NULL);
+    Symbol *name = get_dumped_symbol(lc->class_name_id, CHECK_NULL);
     return name;
   }
 
-  HeapDumpFormat::ClassDumpRecord *get_class_dump(HeapDumpFormat::id_t id, TRAPS) const {
-    HeapDumpFormat::ClassDumpRecord *dump = _heap_dump.class_dump_records.get(id);
+  HeapDump::ClassDump *get_class_dump(HeapDump::ID id, TRAPS) const {
+    HeapDump::ClassDump *dump = _heap_dump.class_dumps.get(id);
     if (dump != nullptr) return dump;
     THROW_MSG_NULL(vmSymbols::java_lang_IllegalArgumentException(),
                    err_msg("Class dump " INT64_FORMAT " referenced but absent", id));
   }
 
-  HeapDumpFormat::InstanceDumpRecord *get_instance_dump(HeapDumpFormat::id_t id, TRAPS) const {
-    HeapDumpFormat::InstanceDumpRecord *dump = _heap_dump.instance_dump_records.get(id);
+  HeapDump::InstanceDump *get_instance_dump(HeapDump::ID id, TRAPS) const {
+    HeapDump::InstanceDump *dump = _heap_dump.instance_dumps.get(id);
     if (dump != nullptr) return dump;
     THROW_MSG_NULL(vmSymbols::java_lang_IllegalArgumentException(),
                    err_msg("Instance dump " INT64_FORMAT " referenced but absent", id));
   }
 
-  HeapDumpFormat::id_t _platform_class_loader_id = NULL_ID;
-  HeapDumpFormat::id_t _builtin_app_class_loader_id = NULL_ID;
-  HeapDumpFormat::id_t _system_class_loader_id = NULL_ID;
+  HeapDump::ID _platform_class_loader_id = NULL_ID;
+  HeapDump::ID _builtin_app_class_loader_id = NULL_ID;
+  HeapDump::ID _system_class_loader_id = NULL_ID;
 
   // Finds platform and system class loaders' IDs in the dump.
   void find_base_class_loader_ids(TRAPS) {
-    _heap_dump.load_class_records.iterate([&](HeapDumpFormat::id_t _, const HeapDumpFormat::LoadClassRecord &lcr) -> bool {
-      Symbol *name = get_dumped_symbol(lcr.class_name_id, CHECK_false);
+    _heap_dump.load_classes.iterate([&](HeapDump::ID _, const HeapDump::LoadClass &lc) -> bool {
+      Symbol *name = get_dumped_symbol(lc.class_name_id, CHECK_false);
       if (name == vmSymbols::java_lang_ClassLoader()) {
-        set_system_class_loader_id(lcr, CHECK_false);
+        set_system_class_loader_id(lc, CHECK_false);
       } else if (name ==  vmSymbols::jdk_internal_loader_ClassLoaders()) {
-        set_builtin_class_loader_ids(lcr, CHECK_false);
+        set_builtin_class_loader_ids(lc, CHECK_false);
       }
       return true;
     });
@@ -798,15 +812,15 @@ class HeapRestorer : public StackObj {
       THROW_MSG_CAUSE(vmSymbols::java_lang_IllegalArgumentException(), "Cannot find dumped built-in class loaders", e);
     }
     if (_platform_class_loader_id == NULL_ID ||
-        !_heap_dump.instance_dump_records.contains(_platform_class_loader_id)) {
+        !_heap_dump.instance_dumps.contains(_platform_class_loader_id)) {
       THROW_MSG(vmSymbols::java_lang_IllegalArgumentException(), "Cannot find dumped platform class loader");
     }
     if (_builtin_app_class_loader_id == NULL_ID ||
-        !_heap_dump.instance_dump_records.contains(_builtin_app_class_loader_id)) {
+        !_heap_dump.instance_dumps.contains(_builtin_app_class_loader_id)) {
       THROW_MSG(vmSymbols::java_lang_IllegalArgumentException(), "Cannot find dumped built-in app class loader");
     }
     if (_system_class_loader_id == NULL_ID ||
-        !_heap_dump.instance_dump_records.contains(_system_class_loader_id)) {
+        !_heap_dump.instance_dumps.contains(_system_class_loader_id)) {
       THROW_MSG(vmSymbols::java_lang_IllegalArgumentException(), "Cannot find dumped system class loader");
     }
     if (_platform_class_loader_id == _builtin_app_class_loader_id ||
@@ -816,12 +830,12 @@ class HeapRestorer : public StackObj {
     }
   }
 
-  void set_system_class_loader_id(const HeapDumpFormat::LoadClassRecord &lcr, TRAPS) {
+  void set_system_class_loader_id(const HeapDump::LoadClass &lc, TRAPS) {
     // This relies on ClassLoader.getSystemClassLoader() implementation detail:
     // the system class loader is stored in scl static field of j.l.ClassLoader
     static constexpr char SCL_FIELD_NAME[] = "scl";
 
-    HeapDumpFormat::ClassDumpRecord *dump = get_class_dump(lcr.class_id, CHECK);
+    HeapDump::ClassDump *dump = get_class_dump(lc.class_id, CHECK);
     if (dump->class_loader_id != NULL_ID) {
       // Classes from java.* packages cannot be non-boot-loaded
       ResourceMark rm;
@@ -837,7 +851,7 @@ class HeapRestorer : public StackObj {
     }
 
     for (u2 i = 0; i < dump->static_fields.size(); i++) {
-      const HeapDumpFormat::ClassDumpRecord::Field &field_dump = dump->static_fields[i];
+      const HeapDump::ClassDump::Field &field_dump = dump->static_fields[i];
       if (field_dump.info.type != HPROF_NORMAL_OBJECT) {
         continue;
       }
@@ -864,7 +878,7 @@ class HeapRestorer : public StackObj {
     }
   }
 
-  void set_builtin_class_loader_ids(const HeapDumpFormat::LoadClassRecord &lcr, TRAPS) {
+  void set_builtin_class_loader_ids(const HeapDump::LoadClass &lc, TRAPS) {
     // This relies on the ClassLoader.get*ClassLoader() implementation detail:
     // the built-in platform and app class loaders are stored in
     // PLATFORM_LOADER/APP_LOADER static fields of
@@ -872,7 +886,7 @@ class HeapRestorer : public StackObj {
     static constexpr char PLATFORM_LOADER_FIELD_NAME[] = "PLATFORM_LOADER";
     static constexpr char APP_LOADER_FIELD_NAME[] = "APP_LOADER";
 
-    const HeapDumpFormat::ClassDumpRecord *dump = get_class_dump(lcr.class_id, CHECK);
+    const HeapDump::ClassDump *dump = get_class_dump(lc.class_id, CHECK);
     if (dump->class_loader_id != NULL_ID) {
       // Classes from jdk.* packages can be non-boot-loaded, but we need the one
       // that is
@@ -887,7 +901,7 @@ class HeapRestorer : public StackObj {
     }
 
     for (u2 i = 0; i < dump->static_fields.size(); i++) {
-      const HeapDumpFormat::ClassDumpRecord::Field &field_dump = dump->static_fields[i];
+      const HeapDump::ClassDump::Field &field_dump = dump->static_fields[i];
       if (field_dump.info.type != HPROF_NORMAL_OBJECT) {
         continue;
       }
@@ -926,15 +940,15 @@ class HeapRestorer : public StackObj {
     }
   }
 
-  ResizeableResourceHashtable<HeapDumpFormat::id_t, instanceHandle, AnyObj::C_HEAP> _prepared_class_loaders {11,   1228891};
-  ResizeableResourceHashtable<HeapDumpFormat::id_t, instanceHandle, AnyObj::C_HEAP> _allocated_prot_domains {11,   1228891};
-  ResizeableResourceHashtable<HeapDumpFormat::id_t, Klass *,        AnyObj::C_HEAP> _loaded_classes         {107,  1228891};
-  ResizeableResourceHashtable<HeapDumpFormat::id_t, Klass *,        AnyObj::C_HEAP> _restored_classes       {107,  1228891};
-  ResizeableResourceHashtable<HeapDumpFormat::id_t, Handle,         AnyObj::C_HEAP> _restored_objects       {1009, 1228891};
+  ResizeableResourceHashtable<HeapDump::ID, instanceHandle, AnyObj::C_HEAP> _prepared_class_loaders {11,   1228891};
+  ResizeableResourceHashtable<HeapDump::ID, instanceHandle, AnyObj::C_HEAP> _allocated_prot_domains {11,   1228891};
+  ResizeableResourceHashtable<HeapDump::ID, Klass *,        AnyObj::C_HEAP> _loaded_classes         {107,  1228891};
+  ResizeableResourceHashtable<HeapDump::ID, Klass *,        AnyObj::C_HEAP> _restored_classes       {107,  1228891};
+  ResizeableResourceHashtable<HeapDump::ID, Handle,         AnyObj::C_HEAP> _restored_objects       {1009, 1228891};
 
   // Gets a value or puts an empty-initialized value if the key is absent.
   template <class V>
-  V *get_or_put_stub(HeapDumpFormat::id_t id, ResizeableResourceHashtable<HeapDumpFormat::id_t, V, AnyObj::C_HEAP> *table) {
+  V *get_or_put_stub(HeapDump::ID id, ResizeableResourceHashtable<HeapDump::ID, V, AnyObj::C_HEAP> *table) {
     V *value = table->get(id);
     if (value == nullptr) {
       table->put_when_absent(id, {});
@@ -944,7 +958,7 @@ class HeapRestorer : public StackObj {
   }
 
   // Loads the class without restoring it.
-  Klass *load_class(const HeapDumpFormat::ClassDumpRecord &dump, TRAPS) {
+  Klass *load_class(const HeapDump::ClassDump &dump, TRAPS) {
     Klass **ready = get_or_put_stub(dump.id, &_loaded_classes);
     if (ready != nullptr) {
       if (*ready == nullptr) {
@@ -958,7 +972,7 @@ class HeapRestorer : public StackObj {
     // TODO have to also load interfaces, because otherwise the standard
     // resolution mechanism will be called for them which may call the user code
     if (dump.super_id != NULL_ID) {
-      HeapDumpFormat::ClassDumpRecord *super_dump = get_class_dump(dump.super_id, CHECK_NULL);
+      HeapDump::ClassDump *super_dump = get_class_dump(dump.super_id, CHECK_NULL);
       load_class(*super_dump, CHECK_NULL);
     }
 
@@ -993,7 +1007,7 @@ class HeapRestorer : public StackObj {
 
   // Returns the class loader with its state partially restored so it can be
   // used for class definition.
-  instanceHandle get_prepared_class_loader(HeapDumpFormat::id_t id, TRAPS) {
+  instanceHandle get_prepared_class_loader(HeapDump::ID id, TRAPS) {
     precond(vmClasses::ClassLoader_klass()->is_initialized());
 
     if (id == NULL_ID) {  // Bootstrap class loader
@@ -1010,7 +1024,7 @@ class HeapRestorer : public StackObj {
     }
     log_trace(restore)("Preparing class loader " INT64_FORMAT, id);
 
-    HeapDumpFormat::InstanceDumpRecord *instance_dump = get_instance_dump(id, CHECK_({}));
+    HeapDump::InstanceDump *instance_dump = get_instance_dump(id, CHECK_({}));
 
     InstanceKlass *klass = load_instance_class(instance_dump->class_id, true, THREAD);
     if (HAS_PENDING_EXCEPTION) {
@@ -1039,7 +1053,7 @@ class HeapRestorer : public StackObj {
 
   // Partially restores the class loader so it can be used for class definition.
   // If it is dumped as a built-in class loader, it will be set as such.
-  instanceHandle prepare_class_loader(InstanceKlass *klass, const HeapDumpFormat::InstanceDumpRecord &dump, TRAPS) const {
+  instanceHandle prepare_class_loader(InstanceKlass *klass, const HeapDump::InstanceDump &dump, TRAPS) const {
     precond(klass->is_subclass_of(vmClasses::ClassLoader_klass()));
 
     if (dump.id == _platform_class_loader_id && SystemDictionary::java_platform_loader() != nullptr) {
@@ -1064,7 +1078,7 @@ class HeapRestorer : public StackObj {
 
   // Returns an allocated protection domain so it can be used for class
   // definition.
-  instanceHandle get_allocated_prot_domain(HeapDumpFormat::id_t id, TRAPS) {
+  instanceHandle get_allocated_prot_domain(HeapDump::ID id, TRAPS) {
     if (id == NULL_ID) {
       return {};
     }
@@ -1078,7 +1092,7 @@ class HeapRestorer : public StackObj {
     }
     log_trace(restore)("Allocating protection domain " INT64_FORMAT, id);
 
-    HeapDumpFormat::InstanceDumpRecord *instance_dump = get_instance_dump(id, CHECK_({}));
+    HeapDump::InstanceDump *instance_dump = get_instance_dump(id, CHECK_({}));
 
     InstanceKlass *klass = load_instance_class(instance_dump->class_id, true, THREAD);
     if (HAS_PENDING_EXCEPTION) {
@@ -1105,13 +1119,13 @@ class HeapRestorer : public StackObj {
     return handle;
   }
 
-  InstanceKlass *load_instance_class(HeapDumpFormat::id_t id, bool check_instantiable, TRAPS) {
-    HeapDumpFormat::ClassDumpRecord *dump = get_class_dump(id, CHECK_NULL);
+  InstanceKlass *load_instance_class(HeapDump::ID id, bool check_instantiable, TRAPS) {
+    HeapDump::ClassDump *dump = get_class_dump(id, CHECK_NULL);
     InstanceKlass *ik = load_instance_class(*dump, check_instantiable, CHECK_NULL);
     return ik;
   }
 
-  InstanceKlass *load_instance_class(const HeapDumpFormat::ClassDumpRecord &dump, bool check_instantiable, TRAPS) {
+  InstanceKlass *load_instance_class(const HeapDump::ClassDump &dump, bool check_instantiable, TRAPS) {
     Klass *k = load_class(dump, CHECK_NULL);
     if (check_instantiable) {
       k->check_valid_for_instantiation(false, CHECK_NULL);
@@ -1124,7 +1138,7 @@ class HeapRestorer : public StackObj {
   }
 
   // Verifies that names and basic types of all fields match.
-  void verify_fields(InstanceKlass *klass, const HeapDumpFormat::ClassDumpRecord &dump, TRAPS) const {
+  void verify_fields(InstanceKlass *klass, const HeapDump::ClassDump &dump, TRAPS) const {
     FieldStream fs(klass,
                    true /* local fields only: super's fields are verified when processing supers */,
                    true /* no interfaces (if the class is an interface it's still gonna be processed) */);
@@ -1145,9 +1159,9 @@ class HeapRestorer : public StackObj {
                           klass->external_name(), dump.id));
       }
 
-      const HeapDumpFormat::ClassDumpRecord::Field::Info &field_info = is_static ?
-                                                                       dump.static_fields[static_i++].info :
-                                                                       dump.instance_field_infos[instance_i++];
+      const HeapDump::ClassDump::Field::Info &field_info = is_static ?
+                                                           dump.static_fields[static_i++].info :
+                                                           dump.instance_field_infos[instance_i++];
       Symbol *field_name = get_dumped_symbol(field_info.name_id, CHECK);
       if (field_name == vmSymbols::resolved_references_name()) {
         continue;  // Not a real field
@@ -1165,7 +1179,7 @@ class HeapRestorer : public StackObj {
 
     // Skip any remaining dumped resolved references
     while (static_i < dump.static_fields.size()) {
-      const HeapDumpFormat::ClassDumpRecord::Field::Info &field_info = dump.static_fields[static_i].info;
+      const HeapDump::ClassDump::Field::Info &field_info = dump.static_fields[static_i].info;
       Symbol *field_name = get_dumped_symbol(field_info.name_id, CHECK);
       if (field_name == vmSymbols::resolved_references_name()) {
         static_i++;
@@ -1215,7 +1229,7 @@ class HeapRestorer : public StackObj {
 
   // Defines the specified class with the classfile using the provided class
   // loader and protection domain.
-  static Klass *define_dumped_class(Symbol *name, const HeapDumpFormat::ClassDumpRecord &dump,
+  static Klass *define_dumped_class(Symbol *name, const HeapDump::ClassDump &dump,
                                     instanceHandle class_loader, Handle prot_domain, TRAPS) {
     // TODO prepare the name like SystemDictionary::resolve_or_null() does, then
     // call SystemDictionary::resolve_from_stream()
@@ -1225,7 +1239,7 @@ class HeapRestorer : public StackObj {
 
   // Loads the class, initializes it by restoring its static fields, and
   // verifies names and basic types of its non-static fields.
-  Klass *restore_class(const HeapDumpFormat::ClassDumpRecord &dump, TRAPS) {
+  Klass *restore_class(const HeapDump::ClassDump &dump, TRAPS) {
     Klass **ready = _restored_classes.get(dump.id);
     if (ready != nullptr) {
       return *ready;
@@ -1271,7 +1285,7 @@ class HeapRestorer : public StackObj {
     }
 
     if (dump.super_id != NULL_ID && klass->java_super() != nullptr) {
-      HeapDumpFormat::ClassDumpRecord *super_dump = get_class_dump(dump.super_id, CHECK_NULL);
+      HeapDump::ClassDump *super_dump = get_class_dump(dump.super_id, CHECK_NULL);
       Klass *super = restore_class(*super_dump, CHECK_NULL);
       if (super != klass->java_super()) {
         ResourceMark rm;
@@ -1316,7 +1330,7 @@ class HeapRestorer : public StackObj {
     return klass;
   }
 
-  objArrayHandle restore_signers(HeapDumpFormat::id_t id, TRAPS) {
+  objArrayHandle restore_signers(HeapDump::ID id, TRAPS) {
     Handle signers = restore_object(id, CHECK_({}));
     if (signers.not_null() && !signers->is_objArray()) {
       ResourceMark rm;
@@ -1328,7 +1342,7 @@ class HeapRestorer : public StackObj {
 
   // Sets static fields, basic types should have already been verified during
   // the class loading.
-  void set_static_fields(InstanceKlass *ik, const HeapDumpFormat::ClassDumpRecord &dump, TRAPS) {
+  void set_static_fields(InstanceKlass *ik, const HeapDump::ClassDump &dump, TRAPS) {
     FieldStream fs(ik, true, true);
     u2 static_i = 0;
 
@@ -1338,7 +1352,7 @@ class HeapRestorer : public StackObj {
         continue;
       }
 
-      const HeapDumpFormat::ClassDumpRecord::Field &field = dump.static_fields[static_i++];
+      const HeapDump::ClassDump::Field &field = dump.static_fields[static_i++];
 
       Symbol *field_name = get_dumped_symbol(field.info.name_id, CHECK);
       if (field_name == vmSymbols::resolved_references_name()) {
@@ -1354,7 +1368,7 @@ class HeapRestorer : public StackObj {
 
     // Process any remaining dumped resolved references
     while (static_i < dump.static_fields.size()) {
-      const HeapDumpFormat::ClassDumpRecord::Field::Info &field_info = dump.static_fields[static_i].info;
+      const HeapDump::ClassDump::Field::Info &field_info = dump.static_fields[static_i].info;
       Symbol *field_name = get_dumped_symbol(field_info.name_id, CHECK);
       if (field_name == vmSymbols::resolved_references_name()) {
         // TODO restore and apply the resolved references?
@@ -1370,7 +1384,7 @@ class HeapRestorer : public StackObj {
 #endif
   }
 
-  void set_field(oop obj, const FieldStream &fs, const HeapDumpFormat::BasicValue &val, TRAPS) {
+  void set_field(oop obj, const FieldStream &fs, const HeapDump::BasicValue &val, TRAPS) {
     switch (fs.signature()->char_at(0)) {
       case JVM_SIGNATURE_CLASS:
       case JVM_SIGNATURE_ARRAY: {
@@ -1419,7 +1433,7 @@ class HeapRestorer : public StackObj {
     return field_class;
   }
 
-  Handle restore_object(HeapDumpFormat::id_t id, TRAPS) {
+  Handle restore_object(HeapDump::ID id, TRAPS) {
     if (id == NULL_ID) {
       return {};
     }
@@ -1428,12 +1442,12 @@ class HeapRestorer : public StackObj {
       return *ready;
     }
 
-    HeapDumpFormat::InstanceDumpRecord  *instance_dump   = _heap_dump.instance_dump_records.get(id);
-    HeapDumpFormat::ObjArrayDumpRecord  *obj_array_dump  = _heap_dump.obj_array_dump_records.get(id);
-    HeapDumpFormat::PrimArrayDumpRecord *prim_array_dump = _heap_dump.prim_array_dump_records.get(id);
+    HeapDump::InstanceDump  *instance_dump   = _heap_dump.instance_dumps.get(id);
+    HeapDump::ObjArrayDump  *obj_array_dump  = _heap_dump.obj_array_dumps.get(id);
+    HeapDump::PrimArrayDump *prim_array_dump = _heap_dump.prim_array_dumps.get(id);
     // HeapDumper does not include Class<*> instances of non-primitive classes
     // in the instance dumps
-    HeapDumpFormat::ClassDumpRecord     *class_dump =      _heap_dump.class_dump_records.get(id);
+    HeapDump::ClassDump     *class_dump =      _heap_dump.class_dumps.get(id);
 
     if (instance_dump != nullptr && obj_array_dump == nullptr && prim_array_dump == nullptr && class_dump == nullptr) {
       Handle handle = restore_instance(*instance_dump, CHECK_NH);
@@ -1456,11 +1470,11 @@ class HeapRestorer : public StackObj {
                err_msg("Object dump " INT64_FORMAT " occurs in none or multiple dump categories", id), {});
   }
 
-  instanceHandle restore_instance(const HeapDumpFormat::InstanceDumpRecord &dump, TRAPS) {
+  instanceHandle restore_instance(const HeapDump::InstanceDump &dump, TRAPS) {
     assert(!_restored_objects.contains(dump.id), "Use restore_object() which also checks for ID duplication");
     log_trace(restore)("Restoring instance " INT64_FORMAT, dump.id);
 
-    HeapDumpFormat::ClassDumpRecord *class_dump = get_class_dump(dump.class_id, CHECK_({}));
+    HeapDump::ClassDump *class_dump = get_class_dump(dump.class_id, CHECK_({}));
     InstanceKlass *klass = load_instance_class(*class_dump, false, THREAD);
     if (HAS_PENDING_EXCEPTION) {
       Handle e(Thread::current(), PENDING_EXCEPTION);
@@ -1517,8 +1531,8 @@ class HeapRestorer : public StackObj {
     return handle;
   }
 
-  instanceHandle get_primitive_class_mirror(const HeapDumpFormat::ClassDumpRecord &class_dump,
-                                            const HeapDumpFormat::InstanceDumpRecord &instance_dump, TRAPS) {
+  instanceHandle get_primitive_class_mirror(const HeapDump::ClassDump &class_dump,
+                                            const HeapDump::InstanceDump &instance_dump, TRAPS) {
     // We rely on j.l.Class name field to reveal the primitive type
 #ifdef ASSERT
     {
@@ -1529,10 +1543,10 @@ class HeapRestorer : public StackObj {
 
     u4 name_field_offset = 0;
     for (u2 i = 0; i < class_dump.instance_field_infos.size(); i++) {
-      const HeapDumpFormat::ClassDumpRecord::Field::Info &field_info = class_dump.instance_field_infos[i];
+      const HeapDump::ClassDump::Field::Info &field_info = class_dump.instance_field_infos[i];
       if (field_info.type != HPROF_NORMAL_OBJECT) {
-        assert(HeapDumpFormat::prim2size(field_info.type) != 0, "Must be a primitive type");
-        name_field_offset += HeapDumpFormat::prim2size(field_info.type);
+        assert(HeapDump::prim2size(field_info.type) != 0, "Must be a primitive type");
+        name_field_offset += HeapDump::prim2size(field_info.type);
         continue;
       }
       Symbol *field_name = get_dumped_symbol(field_info.name_id, CHECK_({}));
@@ -1547,7 +1561,7 @@ class HeapRestorer : public StackObj {
                  err_msg("Incorrect class instance dump " INT64_FORMAT ": no name field", instance_dump.id), {});
     }
 
-    HeapDumpFormat::BasicValue name_id;
+    HeapDump::BasicValue name_id;
     if (instance_dump.read_field(name_field_offset, JVM_SIGNATURE_CLASS, _heap_dump.id_size, &name_id) == 0) {
       THROW_MSG_(vmSymbols::java_lang_IllegalArgumentException(),
                  err_msg("Unexpected fields data size in class instance dump " INT64_FORMAT, instance_dump.id), {});
@@ -1577,7 +1591,7 @@ class HeapRestorer : public StackObj {
 
   // Sets non-static fields, basic types should have already been verified
   // during the class loading.
-  void set_instance_fields(instanceHandle handle, const HeapDumpFormat::InstanceDumpRecord &dump, TRAPS) {
+  void set_instance_fields(instanceHandle handle, const HeapDump::InstanceDump &dump, TRAPS) {
     precond(handle.not_null());
 
     FieldStream fs(InstanceKlass::cast(handle->klass()), false, false);
@@ -1588,7 +1602,7 @@ class HeapRestorer : public StackObj {
         continue;
       }
 
-      HeapDumpFormat::BasicValue value;
+      HeapDump::BasicValue value;
       u4 bytes_read = dump.read_field(dump_offset, fs.signature()->char_at(0), _heap_dump.id_size, &value);
       if (bytes_read == 0) {  // Reading violates dumped fields array bounds
         break;
@@ -1609,11 +1623,11 @@ class HeapRestorer : public StackObj {
     }
   }
 
-  objArrayHandle restore_obj_array(const HeapDumpFormat::ObjArrayDumpRecord &dump, TRAPS) {
+  objArrayHandle restore_obj_array(const HeapDump::ObjArrayDump &dump, TRAPS) {
     assert(!_restored_objects.contains(dump.id), "Use restore_object() which also checks for ID duplication");
     log_trace(restore)("Restoring object array " INT64_FORMAT, dump.id);
 
-    HeapDumpFormat::ClassDumpRecord *class_dump = get_class_dump(dump.array_class_id, CHECK_({}));
+    HeapDump::ClassDump *class_dump = get_class_dump(dump.array_class_id, CHECK_({}));
     ObjArrayKlass *klass;
     {
       Klass *k = load_class(*class_dump, CHECK_({}));
@@ -1665,7 +1679,7 @@ class HeapRestorer : public StackObj {
     return handle;
   }
 
-  typeArrayHandle restore_prim_array(const HeapDumpFormat::PrimArrayDumpRecord &dump, TRAPS) {
+  typeArrayHandle restore_prim_array(const HeapDump::PrimArrayDump &dump, TRAPS) {
     assert(!_restored_objects.contains(dump.id), "Use restore_object() which also checks for ID duplication");
     log_trace(restore)("Restoring primitive array " INT64_FORMAT, dump.id);
 

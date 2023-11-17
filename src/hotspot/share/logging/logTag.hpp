@@ -177,6 +177,8 @@ class outputStream;
   LOG_TAG(setting) \
   LOG_TAG(smr) \
   LOG_TAG(stackbarrier) \
+  LOG_TAG(stackdump) \
+  LOG_TAG(stackdumpparsing) \
   LOG_TAG(stackmap) \
   LOG_TAG(stacktrace) \
   LOG_TAG(stackwalk) \

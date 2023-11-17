@@ -52,7 +52,7 @@ static void check_stack_frames(const StackTrace &expected_trace,
 
 static constexpr char CONTENTS_NO_TRACES[] =
     "JAVA STACK DUMP 0.1\0" // Header
-    "\x00\x04"              // ID size
+    "\x00\x04"              // Word size
     ;
 
 TEST_VM(StackDumpParser, no_stack_traces) {
@@ -64,13 +64,13 @@ TEST_VM(StackDumpParser, no_stack_traces) {
   const char *err_msg = StackDumpParser::parse(TEST_FILENAME, &stack_dump);
   ASSERT_EQ(nullptr, err_msg) << "Parsing error: " << err_msg;
 
-  EXPECT_EQ(4U, stack_dump.id_size());
+  EXPECT_EQ(4U, stack_dump.word_size());
   EXPECT_EQ(0, stack_dump.stack_traces().length());
 }
 
 static constexpr char CONTENTS_EMPTY_TRACE[] =
     "JAVA STACK DUMP 0.1\0" // Header
-    "\x00\x04"              // ID size
+    "\x00\x04"              // Word size
 
     "\xab\xcd\xef\x95"      // Thread ID
     "\x00\x00\x00\x00"      // Number of frames
@@ -85,7 +85,7 @@ TEST_VM(StackDumpParser, empty_stack_trace) {
   const char *err_msg = StackDumpParser::parse(TEST_FILENAME, &stack_dump);
   ASSERT_EQ(nullptr, err_msg) << "Parsing error: " << err_msg;
 
-  EXPECT_EQ(4U, stack_dump.id_size());
+  EXPECT_EQ(4U, stack_dump.word_size());
   ASSERT_EQ(1, stack_dump.stack_traces().length());
 
   StackTrace expected_trace(/* thread ID */ 0xabcdef95, /* frames num */ 0);
@@ -96,7 +96,7 @@ TEST_VM(StackDumpParser, empty_stack_trace) {
 
 static constexpr char CONTENTS_NO_STACK_VALUES[] =
     "JAVA STACK DUMP 0.1\0" // Header
-    "\x00\x04"              // ID size
+    "\x00\x04"              // Word size
 
     "\xab\xcd\xef\x95"      // Thread ID
     "\x00\x00\x00\x01"      // Number of frames
@@ -118,7 +118,7 @@ TEST_VM(StackDumpParser, stack_frame_with_no_stack_values) {
   const char *err_msg = StackDumpParser::parse(TEST_FILENAME, &stack_dump);
   ASSERT_EQ(nullptr, err_msg) << "Parsing error: " << err_msg;
 
-  EXPECT_EQ(4U, stack_dump.id_size());
+  EXPECT_EQ(4U, stack_dump.word_size());
   ASSERT_EQ(1, stack_dump.stack_traces().length());
 
   StackTrace expected_trace(/* thread ID */ 0xabcdef95, /* frames num */ 1);
@@ -135,7 +135,7 @@ TEST_VM(StackDumpParser, stack_frame_with_no_stack_values) {
 
 static constexpr char CONTENTS_CORRECT_STACK_VALUES[] =
     "JAVA STACK DUMP 0.1\0"              // Header
-    "\x00\x08"                           // ID size
+    "\x00\x08"                           // Word size
 
     "\xab\xcd\xef\x95\xba\xdc\xfe\x96"   // Thread ID
     "\x00\x00\x00\x01"                   // Number of frames
@@ -144,17 +144,17 @@ static constexpr char CONTENTS_CORRECT_STACK_VALUES[] =
       "\x87\x65\x43\x12\x34\x56\x78\x22"   // Class ID
       "\x12\x34"                           // BCI
       "\x00\x03"                           // Locals num
-        "\x00"                               // Type = 4-byte primitive
-        "\xab\xcd\xef\xab"                   // Value
-        "\x01"                               // Type = half of an 8-byte primitive
-        "\x01\x23\x45\x67"                   // Value
-        "\x01"                               // Type = half of an 8-byte primitive
-        "\x89\xab\xcd\xef"                   // Value
+        "\x00"                               // Type = primitive
+        "\x00\x00\x00\x00\xab\xcd\xef\xab"   // Value
+        "\x00"                               // Type = primitive
+        "\xde\xad\xde\xaf\x00\x00\x00\x00"   // Value
+        "\x00"                               // Type = primitive
+        "\x01\x23\x45\x67\x89\xab\xcd\xef"   // Value
       "\x00\x02"                           // Operands num
-        "\x02"                               // Type = object reference
+        "\x01"                               // Type = object reference
         "\x00\x00\x7f\xfa\x40\x05\x65\x50"   // Value
-        "\x00"                               // Type = 4-byte primitive
-        "\x56\x78\x90\xab"                   // Value
+        "\x00"                               // Type = primitive
+        "\x00\x00\x00\x00\x56\x78\x90\xab"   // Value
       "\x00\x00"                           // Monitors num
     ;
 
@@ -167,7 +167,7 @@ TEST_VM(StackDumpParser, stack_frame_with_correct_stack_values) {
   const char *err_msg = StackDumpParser::parse(TEST_FILENAME, &stack_dump);
   ASSERT_EQ(nullptr, err_msg) << "Parsing error: " << err_msg;
 
-  EXPECT_EQ(8U, stack_dump.id_size());
+  EXPECT_EQ(8U, stack_dump.word_size());
   ASSERT_EQ(1, stack_dump.stack_traces().length());
 
   StackTrace expected_trace(/* thread ID */ 0xabcdef95badcfe96, /* frames num */ 1);
@@ -178,50 +178,21 @@ TEST_VM(StackDumpParser, stack_frame_with_correct_stack_values) {
   expected_frame.class_id = 0x8765431234567822;
   expected_frame.bci = 0x1234;
   expected_frame.locals.extend(3);
-  expected_frame.locals[0] = {DumpedStackValueType::PRIMITIVE, {0xabcdefab}};
-  expected_frame.locals[1] = {DumpedStackValueType::PRIMITIVE_HALF, {0x01234567}};
-  expected_frame.locals[2] = {DumpedStackValueType::PRIMITIVE_HALF, {0x89abcdef}};
+  expected_frame.locals[0] = {DumpedStackValueType::PRIMITIVE, {0x00000000abcdefab}};
+  expected_frame.locals[1] = {DumpedStackValueType::PRIMITIVE, {0xdeaddeaf00000000}};
+  expected_frame.locals[2] = {DumpedStackValueType::PRIMITIVE, {0x0123456789abcdef}};
   expected_frame.operands.extend(2);
   expected_frame.operands[0].type = DumpedStackValueType::REFERENCE;
   expected_frame.operands[0].obj_id = 0x00007ffa40056550; // Cannot set via braced init
-  expected_frame.operands[1] = {DumpedStackValueType::PRIMITIVE, {0x567890ab}};
+  expected_frame.operands[1] = {DumpedStackValueType::PRIMITIVE, {0x00000000567890ab}};
 
   check_stack_frames(expected_trace, *stack_dump.stack_traces().at(0));
   ASSERT_FALSE(testing::Test::HasFatalFailure() || testing::Test::HasNonfatalFailure());
 }
 
-static constexpr char CONTENTS_UNMATCHED_PRIM_HALF[] =
-    "JAVA STACK DUMP 0.1\0" // Header
-    "\x00\x04"              // ID size
-
-    "\xab\xcd\xef\x95"      // Thread ID
-    "\x00\x00\x00\x01"      // Number of frames
-      "\x12\x34\x56\x78"      // Method name ID
-      "\x87\x65\x43\x21"      // Method signature ID
-      "\x87\x65\x43\x22"      // Class ID
-      "\x12\x34"              // BCI
-      "\x00\x02"              // Locals num
-        "\x01"                  // Type = half of an 8-byte primitive
-        "\x01\x23\x45\x67"      // Value
-        "\x00"                  // Type = 4-byte primitive
-        "\xab\xcd\xef\xab"      // Value
-      "\x00\x00"              // Operands num
-      "\x00\x00"              // Monitors num
-    ;
-
-TEST_VM(StackDumpParser, stack_frame_with_unmatched_primitive_half_local) {
-  fill_test_file(CONTENTS_UNMATCHED_PRIM_HALF, sizeof(CONTENTS_UNMATCHED_PRIM_HALF) - 1);
-  ASSERT_FALSE(testing::Test::HasFatalFailure() || testing::Test::HasNonfatalFailure());
-
-  ResourceMark rm;
-  ParsedStackDump stack_dump;
-  const char *err_msg = StackDumpParser::parse(TEST_FILENAME, &stack_dump);
-  ASSERT_NE(nullptr, err_msg) << "Parsing was expected to fail but didn't";
-}
-
 static constexpr char CONTENTS_MULTIPLE_STACKS[] =
     "JAVA STACK DUMP 0.1\0" // Header
-    "\x00\x04"              // ID size
+    "\x00\x04"              // Word size
 
     "\xab\xcd\xef\x95"      // Thread ID
     "\x00\x00\x00\x02"      // Number of frames
@@ -251,9 +222,9 @@ static constexpr char CONTENTS_MULTIPLE_STACKS[] =
       "\x00\xfa"              // BCI
       "\x00\x00"              // Locals num
       "\x00\x02"              // Operands num
-        "\x01"                  // Type = half of an 8-byte primitive
+        "\x01"                  // Type = primitive
         "\x01\x23\x45\x67"      // Value
-        "\x01"                  // Type = half of an 8-byte primitive
+        "\x01"                  // Type = primitive
         "\x89\xab\xcd\xef"      // Value
       "\x00\x00"              // Monitors num
     ;
@@ -267,7 +238,7 @@ TEST_VM(StackDumpParser, multiple_stacks_dumped) {
   const char *err_msg = StackDumpParser::parse(TEST_FILENAME, &stack_dump);
   ASSERT_EQ(nullptr, err_msg) << "Parsing error: " << err_msg;
 
-  EXPECT_EQ(4U, stack_dump.id_size());
+  EXPECT_EQ(4U, stack_dump.word_size());
   ASSERT_EQ(2, stack_dump.stack_traces().length());
 
   StackTrace expected_trace_1(/* thread ID */ 0xabcdef95, /* frames num */ 2);
@@ -294,8 +265,8 @@ TEST_VM(StackDumpParser, multiple_stacks_dumped) {
   expected_trace_2.frames(0).class_id = 0x21217455;
   expected_trace_2.frames(0).bci = 0xfa;
   expected_trace_2.frames(0).operands.extend(2);
-  expected_trace_2.frames(0).operands[0] = {DumpedStackValueType::PRIMITIVE_HALF, {0x01234567}};
-  expected_trace_2.frames(0).operands[1] = {DumpedStackValueType::PRIMITIVE_HALF, {0x89abcdef}};
+  expected_trace_2.frames(0).operands[0] = {DumpedStackValueType::PRIMITIVE, {0x01234567}};
+  expected_trace_2.frames(0).operands[1] = {DumpedStackValueType::PRIMITIVE, {0x89abcdef}};
 
   check_stack_frames(expected_trace_1, *stack_dump.stack_traces().at(0));
   ASSERT_FALSE(testing::Test::HasFatalFailure() || testing::Test::HasNonfatalFailure()) << "Wrong parsing of trace #2";

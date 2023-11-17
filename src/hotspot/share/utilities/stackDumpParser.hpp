@@ -10,14 +10,13 @@
 // Parsed stack trace.
 class StackTrace : public CHeapObj<mtInternal> {
  public:
-  // Assuming dumped ID type fits into 8 bytes. This is checked when parsing.
-  using ID = u8;
+  using ID = u8; // ID type always fits into 8 bytes
 
   struct Frame : public CHeapObj<mtInternal> {
     struct Value {
       DumpedStackValueType type;
       union {
-        u4 prim;
+        u8 prim; // Primitive stack slots are either 4 or 8 bytes
         ID obj_id;
       };
     };
@@ -60,15 +59,15 @@ class ParsedStackDump : public StackObj {
     }
   }
 
-  // Actual size of IDs in the dump.
-  u2 id_size() const                                      { return _id_size; }
-  void set_id_size(u2 value)                              { _id_size = value; }
+  // Size of IDs and stack slots in the dump.
+  u2 word_size() const                                    { return _word_size; }
+  void set_word_size(u2 value)                            { _word_size = value; }
   // Parsed stack traces.
   const GrowableArray<StackTrace *> &stack_traces() const { return _stack_traces; }
   GrowableArray<StackTrace *> &stack_traces()             { return _stack_traces; }
 
  private:
-  u2 _id_size = 0;
+  u2 _word_size = 0;
   GrowableArray<StackTrace *> _stack_traces;
 };
 

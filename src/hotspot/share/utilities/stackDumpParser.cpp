@@ -16,15 +16,15 @@ constexpr char ERR_UNSUPPORTED_ID_SIZE[] = "unsupported ID size";
 constexpr char ERR_INVAL_STACK_PREAMBLE[] = "invalid stack trace preamble";
 constexpr char ERR_INVAL_FRAME[] = "invalid frame contents";
 
-static constexpr bool is_supported_id_size(u2 size) {
-  return size == sizeof(u8) || size == sizeof(u4) || size == sizeof(u2) || size == sizeof(u1);
+static constexpr bool is_supported_word_size(u2 size) {
+  return size == sizeof(u8) || size == sizeof(u4);
 }
 
 class StackTracesParser : public StackObj {
  public:
-  StackTracesParser(FileBasicTypeReader *reader, GrowableArray<StackTrace *> *out, u2 id_size)
-      : _reader(reader), _out(out), _id_size(id_size) {
-    precond(_reader != nullptr && _out != nullptr && is_supported_id_size(_id_size));
+  StackTracesParser(FileBasicTypeReader *reader, GrowableArray<StackTrace *> *out, u2 word_size)
+      : _reader(reader), _out(out), _word_size(word_size) {
+    precond(_reader != nullptr && _out != nullptr && is_supported_word_size(_word_size));
   }
 
   const char *parse_stacks() {
@@ -60,7 +60,7 @@ class StackTracesParser : public StackObj {
  private:
   FileBasicTypeReader *_reader;
   GrowableArray<StackTrace *> *_out;
-  u2 _id_size;
+  u2 _word_size;
 
   struct TracePreamble {
     bool finish;
@@ -70,7 +70,7 @@ class StackTracesParser : public StackObj {
 
   bool parse_stack_preamble(TracePreamble *preamble) {
     // Parse thread ID
-    u1 buf[sizeof(StackTrace::ID)]; // Using _id_size causes error C2131 on MSVC
+    u1 buf[sizeof(StackTrace::ID)]; // Using _word_size causes error C2131 on MSVC
     // Read the first byte separately to detect a possible correct EOF
     if (!_reader->read_raw(buf, 1)) {
       if (_reader->eof()) {
@@ -81,14 +81,12 @@ class StackTracesParser : public StackObj {
       return false;
     }
     // Read the rest of the ID
-    if (!_reader->read_raw(buf + 1, _id_size - 1)) {
+    if (!_reader->read_raw(buf + 1, _word_size - 1)) {
       log_error(stackdumpparsing)("Failed to read thread ID");
       return false;
     }
     // Convert to the ID type
-    switch (_id_size) {
-      case sizeof(u1): preamble->thread_id = buf[0]; break;
-      case sizeof(u2): preamble->thread_id = Bytes::get_Java_u2(buf); break;
+    switch (_word_size) {
       case sizeof(u4): preamble->thread_id = Bytes::get_Java_u4(buf); break;
       case sizeof(u8): preamble->thread_id = Bytes::get_Java_u8(buf); break;
       default: ShouldNotReachHere();
@@ -106,15 +104,15 @@ class StackTracesParser : public StackObj {
   }
 
   bool parse_frame(StackTrace::Frame *frame) {
-    if (!_reader->read_uint(&frame->method_name_id, _id_size)) {
+    if (!_reader->read_uint(&frame->method_name_id, _word_size)) {
       log_error(stackdumpparsing)("Failed to read method name ID");
       return false;
     }
-    if (!_reader->read_uint(&frame->method_sig_id, _id_size)) {
+    if (!_reader->read_uint(&frame->method_sig_id, _word_size)) {
       log_error(stackdumpparsing)("Failed to read method signature ID");
       return false;
     }
-    if (!_reader->read_uint(&frame->class_id, _id_size)) {
+    if (!_reader->read_uint(&frame->class_id, _word_size)) {
       log_error(stackdumpparsing)("Failed to read class ID");
       return false;
     }
@@ -146,7 +144,6 @@ class StackTracesParser : public StackObj {
     values->extend(values_num);
     log_trace(stackdumpparsing)("Parsing %i value(s)", values_num);
 
-    bool expecting_prim_half = false; // Validate that PRIMITIVE_HALF values go in pairs
     for (u2 i = 0; i < values_num; i++) {
       u1 type;
       if (!_reader->read(&type)) {
@@ -154,21 +151,15 @@ class StackTracesParser : public StackObj {
         return false;
       }
 
-      if (expecting_prim_half && type != DumpedStackValueType::PRIMITIVE_HALF) {
-        log_error(stackdumpparsing)("Value #%i is the first half of a primitive "
-                                    "but the next value has type " UINT8_FORMAT_X_0, i - 1, type);
-        return false;
-      }
-
-      if (type == DumpedStackValueType::PRIMITIVE || type == DumpedStackValueType::PRIMITIVE_HALF) {
+      if (type == DumpedStackValueType::PRIMITIVE) {
         (*values)[i].type = static_cast<DumpedStackValueType>(type);
-        if (!_reader->read(&(*values)[i].prim)) {
+        if (!_reader->read_uint(&(*values)[i].prim, _word_size)) {
           log_error(stackdumpparsing)("Failed to read value #%i as a primitive", i);
           return false;
         }
       } else if (type == DumpedStackValueType::REFERENCE) {
         (*values)[i].type = DumpedStackValueType::REFERENCE;
-        if (!_reader->read_uint(&(*values)[i].obj_id, _id_size)) {
+        if (!_reader->read_uint(&(*values)[i].obj_id, _word_size)) {
           log_error(stackdumpparsing)("Failed to read value #%i as a reference", i);
           return false;
         }
@@ -176,12 +167,6 @@ class StackTracesParser : public StackObj {
         log_error(stackdumpparsing)("Unknown type of value #%i: " UINT8_FORMAT_X_0, i, type);
         return false;
       }
-
-      expecting_prim_half = type == DumpedStackValueType::PRIMITIVE_HALF && !expecting_prim_half;
-    }
-    if (expecting_prim_half) {
-      log_error(stackdumpparsing)("The last value is the first half of a primitive, the second half is missing");
-      return false;
     }
 
     return true;
@@ -202,7 +187,7 @@ class StackTracesParser : public StackObj {
   }
 };
 
-static const char *parse_header(BasicTypeReader *reader, u2 *id_size) {
+static const char *parse_header(BasicTypeReader *reader, u2 *word_size) {
   constexpr char HEADER_STR[] = "JAVA STACK DUMP 0.1";
 
   char header_str[sizeof(HEADER_STR)];
@@ -216,12 +201,12 @@ static const char *parse_header(BasicTypeReader *reader, u2 *id_size) {
     return ERR_INVAL_HEADER_STR;
   }
 
-  if (!reader->read(id_size)) {
+  if (!reader->read(word_size)) {
     log_error(stackdumpparsing)("Failed to read ID size");
     return ERR_INVAL_ID_SIZE;
   }
-  if (!is_supported_id_size(*id_size)) {
-    log_error(stackdumpparsing)("ID size %i is not supported -- use 1, 2, 4, or 8", *id_size);
+  if (!is_supported_word_size(*word_size)) {
+    log_error(stackdumpparsing)("Word size %i is not supported: should be 4 or 8", *word_size);
     return ERR_UNSUPPORTED_ID_SIZE;
   }
 
@@ -239,15 +224,15 @@ const char *StackDumpParser::parse(const char *path, ParsedStackDump *out) {
     log_error(stackdumpparsing)("Failed to open %s: %s", path, os::strerror(errno));
   }
 
-  u2 id_size;
-  const char *err_msg = parse_header(&reader, &id_size);
+  u2 word_size;
+  const char *err_msg = parse_header(&reader, &word_size);
   if (err_msg != nullptr) {
     return err_msg;
   }
-  log_debug(stackdumpparsing)("ID size: %i", id_size);
-  out->set_id_size(id_size);
+  log_debug(stackdumpparsing)("Word size: %i", word_size);
+  out->set_word_size(word_size);
 
-  err_msg = StackTracesParser(&reader, &out->stack_traces(), id_size).parse_stacks();
+  err_msg = StackTracesParser(&reader, &out->stack_traces(), word_size).parse_stacks();
   if (err_msg == nullptr) {
     log_info(stackdumpparsing)("Successfully parsed %s", path);
   } else {

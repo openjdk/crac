@@ -8,7 +8,18 @@
 //
 // Header:
 //   u1... -- null-termiminated string "JAVA STACK DUMP 0.1"
-//   u2    -- ID size in bytes
+//   u2    -- word size in bytes:
+//            4 -- IDs and primitives (PRs) are 4 byte, longs and doubles are
+//                 split in half into their slot pairs with the most significant
+//                 bits placed in the first slot
+//            8 -- IDs and primitives (PRs) are 8 byte, longs and doubles are
+//                 stored in the second slot of their slot pairs, while the
+//                 contents of the first slot are unspecified
+//   TODO to get rid of this 32-/64-bit difference in how primitives are stored
+//    we need to be able to differentiate between longs/doubles and other
+//    primitives when dumping the stack. This data is kinda available for
+//    compiled frames (see StackValue::create_stack_value() which creates
+//    StackValues for compiled frames), but not for interpreted ones.
 // Stack traces:
 //   ID -- ID of the Thread object
 //   u4 -- number of frames that follow
@@ -21,29 +32,18 @@
 //           frame
 //     u2 -- number of locals that follow
 //     Locals array:
-//       u1       -- type:
-//                   0 == boolean, byte, char, short, int, or float
-//                   1 == long or double, stored in two consequtive elements
-//                        with the most significant bits in the first element
-//                   2 == object
-//       u4 or ID -- value: u4 if type is 0 or 1, ID if type is 2
+//       u1    -- type: 0 -- primitive, 1 -- object reference
+//       u1... -- value: PR if the type is 0, ID if the type is 1
 //     u2 -- number of operands that follow
 //     Operand stack, from oldest to youngest:
-//       u1       -- type (same as for locals)
-//       u4 or ID -- value (same as for locals)
+//       u1    -- type (same as for locals)
+//       u1... -- value (same as for locals)
 //     u2 -- number of monitors that follow
 //     Monitor infos:
 //       TODO describe the monitor info format
 
 // Types of dumped locals and operands.
-enum DumpedStackValueType : u1 {
-  // boolean, byte, char, short, int, or float.
-  PRIMITIVE,
-  // Half of long or double (most significant bits are in the first half).
-  PRIMITIVE_HALF,
-  // Object reference.
-  REFERENCE
-};
+enum DumpedStackValueType : u1 { PRIMITIVE, REFERENCE };
 
 // Dumps Java frames (until the first CallStub) of non-internal Java threads.
 // Dumped IDs are oops to be compatible with HeapDumper's object IDs.

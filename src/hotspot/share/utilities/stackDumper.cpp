@@ -21,17 +21,16 @@
 #include <type_traits>
 
 #ifdef _LP64
-#define OOP_UINT_T u8
+#define WORD_UINT_T u8
 #else // _LP64
-#define OOP_UINT_T u4
+#define WORD_UINT_T u4
 #endif // _LP64
+STATIC_ASSERT(sizeof(WORD_UINT_T) == sizeof(intptr_t)); // Primitive stack slots
+STATIC_ASSERT(sizeof(WORD_UINT_T) == oopSize);          // IDs
 
-static OOP_UINT_T oop2uint(oop o) {
-  STATIC_ASSERT(oopSize == sizeof(OOP_UINT_T));
-  return cast_from_oop<OOP_UINT_T>(o);
+static WORD_UINT_T oop2uint(oop o) {
+  return cast_from_oop<WORD_UINT_T>(o);
 }
-
-#undef OOP_UINT_T
 
 // Opens a file and writes into it.
 //
@@ -150,8 +149,7 @@ class StackDumpWriter : public StackObj {
     constexpr char HEADER[] = "JAVA STACK DUMP 0.1";
     WRITE_RAW(HEADER, sizeof(HEADER));
 
-    STATIC_ASSERT(oopSize == sizeof(u4) || oopSize == sizeof(u8));
-    WRITE_CASTED(u2, oopSize); // ID size
+    WRITE_CASTED(u2, sizeof(WORD_UINT_T)); // Word size
 
     return true;
   }
@@ -235,14 +233,10 @@ class StackDumpWriter : public StackObj {
       const StackValue &value = *values.at(i);
       switch (value.type()) {
         case T_INT:
-          // TODO need to differentiate between 4-byte and 8-byte primitives;
-          //  also, on 64-bit machines longs and doubles only occupy one slot
-          //  instead of two as specified in JVMS (the slot with higher index is
-          //  used, while the slot with lower index contains junk)
           log_trace(stackdump)("  %i - primitive: " INTX_FORMAT " (intptr), " INT32_FORMAT " (jint), " UINTX_FORMAT_X " (hex)",
                                i, value.get_intptr(), value.get_jint(), value.get_intptr());
           WRITE_CASTED(u1, DumpedStackValueType::PRIMITIVE);
-          WRITE_CASTED(u4, value.get_jint()); // Write 4 bytes at 0 offset
+          WRITE_CASTED(WORD_UINT_T, value.get_intptr()); // Write the whole slot, i.e. 4 or 8 bytes
           break;
         case T_OBJECT:
           log_trace(stackdump)("  %i - oop: " UINTX_FORMAT "%s",
@@ -256,7 +250,7 @@ class StackDumpWriter : public StackObj {
           WRITE_CASTED(u1, DumpedStackValueType::PRIMITIVE);
           // Deopt code says this should be zero/null in case it is actually
           // a reference to prevent GC from following it
-          WRITE_CASTED(u4, 0);
+          WRITE_CASTED(WORD_UINT_T, 0);
           break;
         default:
           ShouldNotReachHere();
@@ -269,6 +263,7 @@ class StackDumpWriter : public StackObj {
 #undef WRITE_CASTED
 #undef WRITE_RAW
 #undef WRITE
+#undef WORD_UINT_T
 };
 
 const char *StackDumper::dump(const char *path, bool overwrite) {

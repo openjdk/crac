@@ -34,6 +34,8 @@
 #include "logging/logConfiguration.hpp"
 #include "classfile/classLoader.hpp"
 
+#include <netinet/in.h>
+
 class FdsInfo {
 public:
 
@@ -310,6 +312,14 @@ bool VM_Crac::check_fds() {
     const char* type = stat2strtype(st->st_mode);
     int linkret = readfdlink(fd, detailsbuf, sizeof(detailsbuf));
     const char* details = 0 < linkret ? detailsbuf : "";
+    {
+      sockaddr_in sa;
+      socklen_t slen = sizeof(sa);
+      if (S_ISSOCK(st->st_mode) && 0 == getsockname(fd, (sockaddr*)&sa, &slen)) {
+        const size_t len = strlen(detailsbuf);
+        snprintf(detailsbuf + len, sizeof(detailsbuf) - len, ",port=%d", (int)ntohs(sa.sin_port));
+      }
+    }
     print_resources("JVM: FD fd=%d type=%s path=\"%s\" ", fd, type, details);
 
     if (is_claimed_fd(fd)) {

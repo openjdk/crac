@@ -38,14 +38,14 @@ import jdk.test.lib.crac.CracTest;
 
 public class JvmtiEventTest implements CracTest {
 
-    private static final String JAVA_LIBRARY_PATH = System.getProperty("java.library.path");
+    private static final String JAVA_LIBRARY_PATH = System.getProperty("java.library.path") + File.separator;
     private static final String AGENT_CALLBACK_BEFORE_CHECKPOINT = "callbackBeforeCheckpoint";
     private static final String AGENT_CALLBACK_AFTER_RESTORE = "callbackAfterRestore";
 
     @Override
     public void test() throws Exception {
         CracBuilder builder = new CracBuilder().engine(CracEngine.SIMULATE);
-        builder.vmOption("-agentpath:" + JAVA_LIBRARY_PATH + File.separator + "libCracJvmtiAgent.so");
+        builder.vmOption("-agentpath:" + JAVA_LIBRARY_PATH + System.mapLibraryName("CracJvmtiAgent"));
 
         CracProcess process = builder.captureOutput(true).startCheckpoint();
         process.waitForSuccess();

@@ -29,6 +29,7 @@
 #include "logging/logConfiguration.hpp"
 #include "memory/oopFactory.hpp"
 #include "oops/typeArrayOop.inline.hpp"
+#include "prims/jvmtiExport.hpp"
 #include "runtime/crac_structs.hpp"
 #include "runtime/crac.hpp"
 #include "runtime/interfaceSupport.inline.hpp"
@@ -423,6 +424,10 @@ Handle crac::checkpoint(jarray fd_arr, jobjectArray obj_arr, bool dry_run, jlong
     return ret_cr(JVM_CHECKPOINT_NONE, Handle(), Handle(), Handle(), Handle(), THREAD);
   }
 
+#if INCLUDE_JVMTI
+  JvmtiExport::post_crac_before_checkpoint();
+#endif
+
   Universe::heap()->set_cleanup_unused(true);
   Universe::heap()->collect(GCCause::_full_gc_alot);
   Universe::heap()->set_cleanup_unused(false);
@@ -451,6 +456,10 @@ Handle crac::checkpoint(jarray fd_arr, jobjectArray obj_arr, bool dry_run, jlong
     MutexLocker ml(Heap_lock);
     VMThread::execute(&cr);
   }
+
+#if INCLUDE_JVMTI
+  JvmtiExport::post_crac_after_restore();
+#endif
 
   LogConfiguration::reopen();
   if (aio_writer) {

@@ -57,7 +57,7 @@ public:
       return _event_threaded[num];
     }
     if (num >= EXT_MIN_EVENT_TYPE_VAL && num <= EXT_MAX_EVENT_TYPE_VAL) {
-      return (num != EXT_EVENT_CLASS_UNLOAD);
+      return (num != EXT_EVENT_CLASS_UNLOAD && num != EXT_EVENT_CRAC_BEFORE_CHECKPOINT && num != EXT_EVENT_CRAC_AFTER_RESTORE);
     }
     ShouldNotReachHere();
     return false;

@@ -24,29 +24,37 @@ class StackTrace : public CHeapObj<mtInternal> {
     ID method_name_id;                        // ID of method name string
     ID method_sig_id;                         // ID of method signature string
     ID class_id;                              // ID of class containing the method
-    u2 bci;                                   // Index of the bytecode being/to be executed
+    u2 bci;                                   // Index of the current bytecode
     ExtendableArray<Value, u2> locals = {};   // Local variables
     ExtendableArray<Value, u2> operands = {}; // Operand/expression stack
     // TODO monitors
   };
 
-  StackTrace(ID thread_id, u4 frames_num)
-      : _thread_id(thread_id), _frames_num(frames_num), _frames(new Frame[_frames_num]) {}
+  StackTrace(ID thread_id, bool should_reexecute_youngest, u4 frames_num)
+      : _thread_id(thread_id), _should_reexecute_youngest(should_reexecute_youngest),
+        _frames_num(frames_num), _frames(new Frame[_frames_num]) {
+    assert(_frames_num > 0 || !_should_reexecute_youngest, "should_reexecute_youngest must be false for empty trace");
+  }
 
   ~StackTrace() { delete[] _frames; }
 
   NONCOPYABLE(StackTrace);
 
   // ID of the thread whose stack this is.
-  ID thread_id() const            { return _thread_id; }
+  ID thread_id() const                   { return _thread_id; }
   // Number of frames in the stack.
-  u4 frames_num() const           { return _frames_num; }
+  u4 frames_num() const                  { return _frames_num; }
   // Stack frames from youngest to oldest.
-  const Frame &frames(u4 i) const { precond(i < frames_num()); return _frames[i]; }
-  Frame &frames(u4 i)             { precond(i < frames_num()); return _frames[i]; }
+  const Frame &frames(u4 i) const        { precond(i < frames_num()); return _frames[i]; }
+  Frame &frames(u4 i)                    { precond(i < frames_num()); return _frames[i]; }
+  // For the youngest frame, whether BCI specifies the bytecode to be executed
+  // or already executed. For the other frames such info is not needed because
+  // their BCIs should always specify the invoke bytecode being executed.
+  bool should_reexecute_youngest() const { return _should_reexecute_youngest; };
 
  private:
   const ID _thread_id;
+  const bool _should_reexecute_youngest;
   const u4 _frames_num;
   Frame *const _frames;
 };

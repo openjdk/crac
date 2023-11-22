@@ -11,6 +11,7 @@
 #include "runtime/threadSMR.hpp"
 #include "runtime/vframe.hpp"
 #include "runtime/vframe.inline.hpp"
+#include "runtime/vframe_hp.hpp"
 #include "utilities/bitCast.hpp"
 #include "utilities/debug.hpp"
 #include "utilities/globalDefinitions.hpp"
@@ -164,6 +165,19 @@ class StackDumpWriter : public StackObj {
     GrowableArray<javaVFrame *> frames;
     for (vframeStream vfs(thread, /* Stop on CallStub */ true); !vfs.at_end(); vfs.next()) {
       frames.push(vfs.asJavaVFrame());
+    }
+
+    // Whether the current bytecode in the youngest frame is to be re-executed
+    // TODO for interpreted frames, make sure it is always true that we want to
+    //  re-execute, for compiled frames, investigate whether the exec_mode used
+    //  by deoptimization to decide on re-execution is also required for us here
+    if (frames.length() == 0 || frames.first()->is_interpreted_frame()) {
+      log_trace(stackdump)("Re-exec youngest: false (empty trace or the youngest is interpreted)");
+      WRITE_CASTED(u1, false);
+    } else {
+      bool should_reexecute = compiledVFrame::cast(frames.first())->should_reexecute();
+      log_trace(stackdump)("Re-exec youngest: %s (according to the compiled youngest)", BOOL_TO_STR(should_reexecute));
+      WRITE_CASTED(u1, should_reexecute);
     }
 
     log_trace(stackdump)("%i frames", frames.length());

@@ -41,7 +41,7 @@ class StackTracesParser : public StackObj {
       log_debug(stackdumpparsing)("Parsing " UINT32_FORMAT " frame(s) of thread " UINT64_FORMAT,
                                   preamble.frames_num, preamble.thread_id);
 
-      auto *trace = new StackTrace(preamble.thread_id, preamble.frames_num);
+      auto *trace = new StackTrace(preamble.thread_id, preamble.should_reexecute_youngest, preamble.frames_num);
       for (u4 i = 0; i < trace->frames_num(); i++) {
         log_trace(stackdumpparsing)("Parsing frame " UINT32_FORMAT, i);
         if (!parse_frame(&trace->frames(i))) {
@@ -65,11 +65,12 @@ class StackTracesParser : public StackObj {
   struct TracePreamble {
     bool finish;
     StackTrace::ID thread_id;
+    bool should_reexecute_youngest;
     u4 frames_num;
   };
 
   bool parse_stack_preamble(TracePreamble *preamble) {
-    // Parse thread ID
+    // Thread ID
     u1 buf[sizeof(StackTrace::ID)]; // Using _word_size causes error C2131 on MSVC
     // Read the first byte separately to detect a possible correct EOF
     if (!_reader->read_raw(buf, 1)) {
@@ -92,9 +93,29 @@ class StackTracesParser : public StackObj {
       default: ShouldNotReachHere();
     }
 
-    // Parse the number of frames dumped
+    // Should re-execute youngest
+    u1 should_reexecute_youngest;
+    if (!_reader->read(&should_reexecute_youngest)) {
+      log_error(stackdumpparsing)("Failed to read the meaning of the youngest BCI of thread " UINT64_FORMAT,
+                                  preamble->thread_id);
+      return false;
+    }
+    if (should_reexecute_youngest >= 2U) {
+      log_error(stackdumpparsing)("Illegal meaning of the youngest BCI of thread " UINT64_FORMAT ": %i",
+                                  preamble->thread_id, should_reexecute_youngest);
+      return false;
+    }
+    preamble->should_reexecute_youngest = (should_reexecute_youngest == 1U);
+
+    // Number of frames dumped
     if (!_reader->read(&preamble->frames_num)) {
       log_error(stackdumpparsing)("Failed to read number of frames in stack of thread " UINT64_FORMAT,
+                                  preamble->thread_id);
+      return false;
+    }
+    if (preamble->frames_num == 0U && preamble->should_reexecute_youngest) {
+      log_error(stackdumpparsing)("Thread " UINT64_FORMAT " is specified as having no frames specified, "
+                                  "but with the current bytecode of its youngest frame to be re-executed",
                                   preamble->thread_id);
       return false;
     }

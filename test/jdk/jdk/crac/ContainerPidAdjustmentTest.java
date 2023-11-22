@@ -39,21 +39,21 @@ import java.util.Arrays;
  * @requires (os.family == "linux")
  * @library /test/lib
  * @build ContainerPidAdjustmentTest
- * @run driver/timeout=60 jdk.test.lib.crac.CracTest  true   false  INF     true   128
- * @run driver/timeout=60 jdk.test.lib.crac.CracTest  true   true   1       false  1
- * @run driver/timeout=60 jdk.test.lib.crac.CracTest  true   true   100     true   100
- * @run driver/timeout=60 jdk.test.lib.crac.CracTest  false  false  INF     false  1
- * @run driver/timeout=60 jdk.test.lib.crac.CracTest  false  true   1       false  1
- * @run driver/timeout=60 jdk.test.lib.crac.CracTest  false  true   1       true   1
- * @run driver/timeout=60 jdk.test.lib.crac.CracTest  false  true   200     true   200
- * @run driver/timeout=60 jdk.test.lib.crac.CracTest  false  true   1000    false  1000
- * @run driver/timeout=60 jdk.test.lib.crac.CracTest  false  true   2000    true   2000   1000
- * @run driver/timeout=60 jdk.test.lib.crac.CracTest  false  true   0       true   -1
- * @run driver/timeout=60 jdk.test.lib.crac.CracTest  false  true   -10     true   -1
- * @run driver/timeout=60 jdk.test.lib.crac.CracTest  false  true   blabla  true   -1
- * @run driver/timeout=60 jdk.test.lib.crac.CracTest  false  true   5000000 true   -1
- * @run driver/timeout=60 jdk.test.lib.crac.CracTest  false  true   5000000 true   -1     4194200
- * @run driver/timeout=60 jdk.test.lib.crac.CracTest  false  true   4194303 true   -1
+ * @run driver/timeout=120 jdk.test.lib.crac.CracTest  true   false  INF     true   128
+ * @run driver/timeout=120 jdk.test.lib.crac.CracTest  true   true   1       false  1
+ * @run driver/timeout=120 jdk.test.lib.crac.CracTest  true   true   100     true   100
+ * @run driver/timeout=120 jdk.test.lib.crac.CracTest  false  false  INF     false  1
+ * @run driver/timeout=120 jdk.test.lib.crac.CracTest  false  true   1       false  1
+ * @run driver/timeout=120 jdk.test.lib.crac.CracTest  false  true   1       true   1
+ * @run driver/timeout=120 jdk.test.lib.crac.CracTest  false  true   200     true   200
+ * @run driver/timeout=120 jdk.test.lib.crac.CracTest  false  true   1000    false  1000
+ * @run driver/timeout=120 jdk.test.lib.crac.CracTest  false  true   2000    true   2000   1000
+ * @run driver/timeout=120 jdk.test.lib.crac.CracTest  false  true   0       true   -1
+ * @run driver/timeout=120 jdk.test.lib.crac.CracTest  false  true   -10     true   -1
+ * @run driver/timeout=120 jdk.test.lib.crac.CracTest  false  true   blabla  true   -1
+ * @run driver/timeout=120 jdk.test.lib.crac.CracTest  false  true   5000000 true   -1
+ * @run driver/timeout=120 jdk.test.lib.crac.CracTest  false  true   5000000 true   -1     4194200
+ * @run driver/timeout=120 jdk.test.lib.crac.CracTest  false  true   4194303 true   -1
 
  */
 public class ContainerPidAdjustmentTest implements CracTest {

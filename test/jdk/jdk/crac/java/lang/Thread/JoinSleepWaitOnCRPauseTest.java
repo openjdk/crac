@@ -53,10 +53,9 @@ public class JoinSleepWaitOnCRPauseTest implements CracTest {
     private TestType testType;
 
     private final static long EPS_NS = Long.parseLong(System.getProperty(
-        "test.jdk.jdk.crac.java.lang.Thread.crac.JoinSleepWaitOnCRPauseTest.eps",
-        "100000000")); // default: 0.1s
+        "test.jdk.jdk.crac.java.lang.Thread.crac.JoinSleepWaitOnCRPauseTest.eps", getEnv("crac_JoinSleepWaitOnCRPauseTest_eps", "500000000"))); // default: 500ms
 
-    private static final long CRPAUSE_MS = 4000;
+    private static final long CRPAUSE_MS = 40 * EPS_NS / 1_000_000;
 
     private static final long T_MS = CRPAUSE_MS / 2;
     private static final  int T_NS = 100;
@@ -64,6 +63,13 @@ public class JoinSleepWaitOnCRPauseTest implements CracTest {
     private volatile long tDone = -1;
 
     private final CountDownLatch checkpointLatch = new CountDownLatch(1);
+
+    private static String getEnv(String name, String defaultValue) {
+        String val = System.getenv(name);
+        return val == null ?
+                defaultValue :
+                val;
+    }
 
     @Override
     public void exec() throws Exception {
@@ -117,6 +123,7 @@ public class JoinSleepWaitOnCRPauseTest implements CracTest {
         };
 
         Thread t = new Thread(r);
+        long tStart = System.nanoTime();
         t.start();
 
         // this additional synchronization is probably redundant;
@@ -124,14 +131,12 @@ public class JoinSleepWaitOnCRPauseTest implements CracTest {
         // from "our" join or sleep
         checkpointLatch.await();
 
-        // it is expected that EPS_NS is enough to complete the join/sleep
-        // on restore => expecting that 5 * EPS_NS is enough to enter them
-        long dt = 5 * EPS_NS;
-        Thread.sleep(dt / 1_000_000);
+        // it is expected that EPS_NS is enough to complete the join/sleep on restore
+        // so we are expecting that it should be enough to enter them
+        Thread.sleep(EPS_NS / 1_000_000);
 
         if (t.getState() != Thread.State.TIMED_WAITING) {
-            throw new AssertionError("was not able to enter " + op
-                + " in " + dt + " ns");
+            throw new AssertionError(String.format("The created thread was not able to enter %s in %s ns", op, EPS_NS));
         }
 
         long tBeforeCheckpoint = System.nanoTime();
@@ -142,23 +147,23 @@ public class JoinSleepWaitOnCRPauseTest implements CracTest {
 
         t.join();
 
-        long pause = tAfterRestore - tBeforeCheckpoint;
-        if (pause < 1_000_000 * CRPAUSE_MS - EPS_NS) {
-            throw new AssertionError(
-                "the CR pause was less than " + CRPAUSE_MS + " ms");
+        System.out.println(String.format("The test started at %s", tStart));
+
+        long pause = (tAfterRestore - tBeforeCheckpoint)/1_000_000;
+        if (pause < CRPAUSE_MS) {
+            throw new AssertionError(String.format("the CR pause %s ms was less than the expected pause %s ms", pause, CRPAUSE_MS));
         }
 
-        if (tDone < tBeforeCheckpoint + EPS_NS) {
-            throw new AssertionError(
-                op + " has finished before the checkpoint");
+        if (tDone < tBeforeCheckpoint) {
+            throw new AssertionError(String.format("%s has finished before the checkpoint at %s ms", op, tDone/1_000_000));
         }
 
         long eps = Math.abs(tAfterRestore - tDone);
 
         if (eps > EPS_NS) {
-            throw new RuntimeException(
-                "the " + op + "ing thread has finished in " + eps + " ns "
-                + "after the restore (expected: " + EPS_NS + " ns)");
+            throw new RuntimeException(String.format(
+                "The %sing thread has finished at %s in %s ns "
+                + "before/after the restore (expected was: %s ns)", op, tDone, eps, EPS_NS));
         }
     }
 

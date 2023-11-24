@@ -29,6 +29,10 @@ import jdk.crac.*;
 import jdk.test.lib.crac.CracBuilder;
 import jdk.test.lib.crac.CracEngine;
 import jdk.test.lib.crac.CracTest;
+import jdk.test.lib.process.OutputAnalyzer;
+
+import static jdk.test.lib.Asserts.assertGreaterThan;
+import static jdk.test.lib.Asserts.assertTrue;
 
 /**
  * @test DryRunTest
@@ -50,8 +54,17 @@ public class DryRunTest implements CracTest {
 
     @Override
     public void test() throws Exception {
-        new CracBuilder().engine(CracEngine.SIMULATE).printResources(true)
-                .startCheckpoint().waitForSuccess();
+        OutputAnalyzer output = new CracBuilder().engine(CracEngine.SIMULATE).printResources(true).captureOutput(true)
+                .startCheckpoint().outputAnalyzer().shouldHaveExitValue(0);
+        String err = output.getStderr();
+        assertTrue(err.contains("CheckpointException: Failed with 2 inner exceptions"), err);
+        int firstCause = err.indexOf("Cause 1/2: java.lang.RuntimeException: should not pass");
+        int secondCause = err.indexOf("Cause 2/2: jdk.crac.impl.CheckpointOpenFileException");
+        assertGreaterThan(firstCause, 0, err);
+        assertGreaterThan(secondCause, 0, err);
+        // check if stacks are present
+        assertTrue(err.substring(firstCause, secondCause).contains("\tat "));
+        assertTrue(err.substring(secondCause).contains("\tat "));
     }
 
     @Override

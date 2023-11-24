@@ -26,6 +26,11 @@
 
 package javax.crac;
 
+import jdk.crac.impl.ExceptionPrinter;
+
+import java.io.PrintStream;
+import java.io.PrintWriter;
+
 /**
  * This exception works as an aggregate for all errors found during checkpoint;
  * these are recorded as {@linkplain #getSuppressed() suppressed exceptions}.
@@ -39,6 +44,16 @@ public final class RestoreException extends Exception {
      */
     public RestoreException() {
         super(null, null, true, false);
+    }
+
+    @Override
+    public void printStackTrace(PrintStream s) {
+        ExceptionPrinter.print(this, s);
+    }
+
+    @Override
+    public void printStackTrace(PrintWriter w) {
+        ExceptionPrinter.print(this, w);
     }
 }
 

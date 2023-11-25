@@ -12,13 +12,10 @@
 #include "runtime/vframe.hpp"
 #include "runtime/vframe.inline.hpp"
 #include "runtime/vframe_hp.hpp"
-#include "utilities/bitCast.hpp"
 #include "utilities/debug.hpp"
 #include "utilities/globalDefinitions.hpp"
 #include "utilities/growableArray.hpp"
-#include "utilities/macros.hpp"
 #include "utilities/stackDumper.hpp"
-#include <cstdint>
 #include <type_traits>
 
 #ifdef _LP64
@@ -112,13 +109,16 @@ class StackDumpWriter : public StackObj {
     // TODO decide what to do with threads executing native code
     //  (thread->thread_state() == _thread_in_native)
     for (JavaThreadIteratorWithHandle jtiwh; JavaThread *thread = jtiwh.next();) {
-      // Not excluding JVMTI agent and AttachListener threads since they may
-      // execute user-visible operations
-      if (thread->is_exiting() ||
-          thread->is_hidden_from_external_view() ||
-          thread->is_Compiler_thread() ||
-          (strcmp(thread->name(), "Notification Thread") == 0 && java_lang_Thread::threadGroup(thread->threadObj()) == Universe::system_thread_group())) {
-        continue;
+      {
+        ResourceMark rm; // Thread name
+        // Not excluding JVMTI agent and AttachListener threads since they may
+        // execute user-visible operations
+        if (thread->is_exiting() ||
+            thread->is_hidden_from_external_view() ||
+            thread->is_Compiler_thread() ||
+            (strcmp(thread->name(), "Notification Thread") == 0 && java_lang_Thread::threadGroup(thread->threadObj()) == Universe::system_thread_group())) {
+          continue;
+        }
       }
       if (!write_stack(thread)) {
         return false;
@@ -213,6 +213,9 @@ class StackDumpWriter : public StackObj {
         return false;
       }
 
+      log_trace(stackdump)("Monitors: not implemented");
+      WRITE_CASTED(u2, 0);
+
       log_trace(stackdump)("=======================");
     }
 
@@ -221,19 +224,27 @@ class StackDumpWriter : public StackObj {
 
   bool write_method(const javaVFrame &frame) {
     Method *method = frame.method();
-    ResourceMark rm;
 
     Symbol *name = method->name();
-    log_trace(stackdump)("Method name: %s", name->as_C_string());
-    WRITE_RAW(name->as_C_string(), name->utf8_length());
+    if (log_is_enabled(Trace, stackdump)) {
+      ResourceMark rm;
+      log_trace(stackdump)("Method name: " UINTX_FORMAT " - %s",  reinterpret_cast<uintptr_t>(name), name->as_C_string());
+    }
+    WRITE(reinterpret_cast<uintptr_t>(name));
 
     Symbol *signature = method->signature();
-    log_trace(stackdump)("Method signature: %s", signature->as_C_string());
-    WRITE_RAW(signature->as_C_string(), signature->utf8_length());
+    if (log_is_enabled(Trace, stackdump)) {
+      ResourceMark rm;
+      log_trace(stackdump)("Method signature: " UINTX_FORMAT " - %s", reinterpret_cast<uintptr_t>(signature), signature->as_C_string());
+    }
+    WRITE(reinterpret_cast<uintptr_t>(signature));
 
-    log_trace(stackdump)("Class: " UINTX_FORMAT " - %s",
-                         cast_from_oop<uintptr_t>(method->method_holder()->java_mirror()), method->method_holder()->external_name());
-    WRITE(oop2uint(method->method_holder()->java_mirror()));
+    InstanceKlass *holder = method->method_holder();
+    if (log_is_enabled(Trace, stackdump)) {
+      ResourceMark rm;
+      log_trace(stackdump)("Class: " UINTX_FORMAT " - %s", cast_from_oop<uintptr_t>(holder->java_mirror()), holder->external_name());
+    }
+    WRITE(oop2uint(holder->java_mirror()));
 
     return true;
   }

@@ -91,8 +91,8 @@ class JavaCallArguments : public StackObj {
                                    // should be called instead of the normal target
 #endif
   // TODO incorporate this into _alternative_target?
-  bool        _use_restore_stub;   // Use RestoreBlob as an entry point instead of the normal
-                                   // method entry
+  bool        _use_restore_stub = false; // Use RestoreBlob as an entry point instead of the normal
+                                         // method entry
 
   void initialize() {
     // Starts at first element to support set_receiver.
@@ -102,8 +102,6 @@ class JavaCallArguments : public StackObj {
     _max_size = _default_size;
     _size = 0;
     _start_at_zero = false;
-
-    _use_restore_stub = false;
   }
 
  public:

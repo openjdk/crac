@@ -75,6 +75,7 @@ private:
   static jlong javaTimeNanos_offset;
 
   static JavaValue restore_current_thread(TRAPS);
+  static void clear_restoration_data();
 
   static ParsedHeapDump  *_heap_dump;
   static ParsedStackDump *_stack_dump;

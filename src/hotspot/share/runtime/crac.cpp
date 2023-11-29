@@ -1530,7 +1530,7 @@ class HeapRestorer : public StackObj {
       Klass *klass = restore_class(*class_dump, CHECK_NULL);
       jobject *handle_ptr = _restored_objects->get(id); // May have got added during static fields restoration
       if (handle_ptr == nullptr) {
-        jobject handle = JNIHandles::make_local(klass->java_mirror());
+        jobject handle = JNIHandles::make_global(Handle(Thread::current(), klass->java_mirror()));
         _restored_objects->put_when_absent(id, handle);
         return handle;
       }
@@ -1584,7 +1584,7 @@ class HeapRestorer : public StackObj {
       handle = klass->allocate_instance_handle(CHECK_({}));
     }
 
-    jobject jni_handle = JNIHandles::make_local(handle());
+    jobject jni_handle = JNIHandles::make_global(handle);
     assert(!_restored_objects->contains(dump.id), "Should still not be restored");
     _restored_objects->put_when_absent(dump.id, jni_handle);
     _restored_objects->maybe_grow();
@@ -1665,7 +1665,7 @@ class HeapRestorer : public StackObj {
                          "but found class instance dump named %s", name_str), {});
     }
 
-    jobject handle = JNIHandles::make_local(static_cast<instanceOop>(Universe::java_mirror(type)));
+    jobject handle = JNIHandles::make_global(Handle(Thread::current(), Universe::java_mirror(type)));
     assert(handle != nullptr, "Primitive class mirror must not be null");
     assert(!_restored_objects->contains(instance_dump.id), "Should still not be restored");
     _restored_objects->put_when_absent(instance_dump.id, handle);
@@ -1735,7 +1735,7 @@ class HeapRestorer : public StackObj {
     jobject handle;
     {
       objArrayOop o = klass->allocate(elems_num, CHECK_({}));
-      handle = JNIHandles::make_local(o);
+      handle = JNIHandles::make_global(Handle(Thread::current(), o));
     }
 
     assert(!_restored_objects->contains(dump.id), "Should still be not restored");
@@ -1826,7 +1826,7 @@ class HeapRestorer : public StackObj {
         ShouldNotReachHere();  // Ensured by the parser
     }
 
-    jobject handle = JNIHandles::make_local(o);
+    jobject handle = JNIHandles::make_global(Handle(Thread::current(), o));
     _restored_objects->put_when_absent(dump.id, handle);
     _restored_objects->maybe_grow();
     if (log_is_enabled(Trace, restore)) {
@@ -2162,10 +2162,7 @@ JavaValue crac::restore_current_thread(TRAPS) {
     if (stack->frames_num() == 0) { // TODO should this be considered an error?
       log_info(restore)("Thread %p: no frames in stack snapshot (ID " UINT64_FORMAT ")", current, stack->thread_id());
       if (_stack_dump->stack_traces().is_empty()) {
-        delete _heap_dump;
-        delete _stack_dump;
-        delete _portable_loaded_classes;
-        delete _portable_restored_objects; // TODO destroy JNI handles?
+        clear_restoration_data();
       }
       delete stack;
       return {};
@@ -2176,10 +2173,7 @@ JavaValue crac::restore_current_thread(TRAPS) {
                                          *crac::_portable_restored_objects,
                                          crac::_heap_dump->utf8s, THREAD);
     if (_stack_dump->stack_traces().is_empty()) {
-      delete _heap_dump;
-      delete _stack_dump;
-      delete _portable_loaded_classes;
-      delete _portable_restored_objects; // TODO destroy JNI handles?
+      clear_restoration_data();
     }
     if (HAS_PENDING_EXCEPTION) {
       ResourceMark rm; // Thread name
@@ -2298,4 +2292,13 @@ void crac::restore_threads(TRAPS) {
   if (!HAS_PENDING_EXCEPTION) {
     log_info(restore)("Main thread execution resulted in type: %s", type2name(result.get_type()));
   }
+}
+
+void crac::clear_restoration_data() {
+  delete _heap_dump;
+  delete _stack_dump;
+  delete _portable_loaded_classes;
+  // TODO we iterate the whole restored heap here, is there a faster way?
+  _portable_restored_objects->iterate_all([](HeapDump::ID _, jobject h) -> void { JNIHandles::destroy_global(h); });
+  delete _portable_restored_objects;
 }

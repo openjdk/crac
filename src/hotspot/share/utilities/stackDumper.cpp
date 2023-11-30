@@ -6,6 +6,7 @@
 #include "memory/universe.hpp"
 #include "oops/oopsHierarchy.hpp"
 #include "runtime/os.hpp"
+#include "runtime/safepoint.hpp"
 #include "runtime/stackValue.hpp"
 #include "runtime/stackValueCollection.hpp"
 #include "runtime/threadSMR.hpp"
@@ -16,20 +17,101 @@
 #include "utilities/globalDefinitions.hpp"
 #include "utilities/growableArray.hpp"
 #include "utilities/stackDumper.hpp"
-#include <cstdint>
 #include <type_traits>
 
-#ifdef _LP64
-#define WORD_UINT_T u8
-#else // _LP64
-#define WORD_UINT_T u4
-#endif // _LP64
-STATIC_ASSERT(sizeof(WORD_UINT_T) == sizeof(intptr_t)); // Primitive stack slots
-STATIC_ASSERT(sizeof(WORD_UINT_T) == oopSize);          // IDs
+// Retrieves Java vframes from all non-internal Java threads in the VM.
+class ThreadStackStream : public StackObj {
+ public:
+  enum class Status { OK, END, NON_JAVA_IN_MID, NON_JAVA_ON_TOP };
 
-static WORD_UINT_T oop2uint(oop o) {
-  return cast_from_oop<WORD_UINT_T>(o);
-}
+  Status next() {
+    if (!_started) {
+      _started = true;
+    } else {
+      _thread_i++;
+    }
+
+    for (; _thread_i < _tlh.length(); _thread_i++) {
+      JavaThread *thread = _tlh.thread_at(_thread_i);
+      if (!should_include(thread)) {
+        if (log_is_enabled(Debug, stackdump)) {
+          ResourceMark rm;
+          log_debug(stackdump)("Skipping thread %p (%s)", thread, thread->name());
+        }
+        continue;
+      }
+      if (thread->thread_state() < _thread_in_Java) {
+        if (log_is_enabled(Debug, stackdump)) {
+          ResourceMark rm;
+          log_debug(stackdump)("Thread %p (%s) not in Java: state = %i",
+                               thread, thread->name(), thread->thread_state());
+        }
+        return Status::NON_JAVA_ON_TOP;
+      }
+      if (log_is_enabled(Debug, stackdump)) {
+        ResourceMark rm;
+        log_debug(stackdump)("Will try to dump thread %p (%s): state = %i",
+                             thread, thread->name(), thread->thread_state());
+      }
+
+      _frames.clear();
+      vframeStream vfs(thread, /* stop_at_java_call_stub = */ true);
+      for (; !vfs.at_end(); vfs.next()) {
+        if (!vfs.method()->is_native()) {
+          _frames.push(vfs.asJavaVFrame());
+        } else {
+          guarantee(_frames.is_empty(), "Native frame must be the youngest in the series of Java frames");
+          if (log_is_enabled(Debug, stackdump)) {
+            ResourceMark rm;
+            log_debug(stackdump)("Thread %p (%s) not in Java: its current method %s is native",
+                                 thread, thread->name(), vfs.method()->external_name());
+          }
+          return Status::NON_JAVA_ON_TOP;
+        }
+      }
+
+      if (_frames.is_empty() || vfs.reached_first_entry_frame()) {
+        return Status::OK;
+      }
+
+      if (log_is_enabled(Debug, stackdump)) {
+        ResourceMark rm;
+        log_debug(stackdump)("Thread %p (%s) has intermediate non-Java frame after %i Java frames",
+                             thread, thread->name(), _frames.length());
+      }
+      return Status::NON_JAVA_IN_MID;
+    }
+
+    postcond(_thread_i == _tlh.length());
+    return Status::END;
+  }
+
+  JavaThread *thread()                            const { assert(_started, "Call next() first"); return _tlh.thread_at(_thread_i); }
+  const GrowableArrayView<javaVFrame *> &frames() const { assert(_started, "Call next() first"); return _frames; };
+
+ private:
+  bool _started = false;
+  ThreadsListHandle _tlh;
+  uint _thread_i = 0;
+  GrowableArray<javaVFrame *> _frames;
+
+  static bool should_include(JavaThread *thread) {
+    ResourceMark rm; // Thread name
+    // TODO for now we only include the main thread, but there seems to be no
+    //  way to reliably determine that a thread is the main thread.
+    //
+    // Not excluding JVMTI agent and AttachListener threads since they may
+    // execute user-visible operations
+    // if (thread->is_exiting() ||
+    //     thread->is_hidden_from_external_view() ||
+    //     thread->is_Compiler_thread() ||
+    //     (strcmp(thread->name(), "Notification Thread") == 0 && java_lang_Thread::threadGroup(thread->threadObj()) == Universe::system_thread_group())) {
+    //   continue;
+    // }
+    return !thread->is_exiting() &&
+           java_lang_Thread::threadGroup(thread->threadObj()) == Universe::main_thread_group() && strcmp(thread->name(), "main") == 0;
+  }
+};
 
 // Opens a file and writes into it.
 //
@@ -76,20 +158,16 @@ class BinaryFileWriter : public StackObj {
     return size == 0 || fwrite(buf, size, 1, _file) == 1;
   }
 
-  template <class T, ENABLE_IF(std::is_same<T, u1>::value || std::is_same<T, u2>::value ||
-                               std::is_same<T, u4>::value || std::is_same<T, u8>::value)>
+  template <class T, ENABLE_IF(std::is_integral<T>::value &&
+                               (sizeof(T) == sizeof(u1) || sizeof(T) == sizeof(u2) ||
+                                sizeof(T) == sizeof(u4) || sizeof(T) == sizeof(u8)))>
   bool write(T value) {
     T tmp;
-    if (std::is_same<T, u1>::value) {
-      tmp = value;
-    } else if (std::is_same<T, u2>::value) {
-      Bytes::put_Java_u2(reinterpret_cast<address>(&tmp), value);
-    } else if (std::is_same<T, u4>::value) {
-      Bytes::put_Java_u4(reinterpret_cast<address>(&tmp), value);
-    } else if (std::is_same<T, u8>::value) {
-      Bytes::put_Java_u8(reinterpret_cast<address>(&tmp), value);
-    } else {
-      ShouldNotReachHere();
+    switch (sizeof(value)) {
+      case sizeof(u1): tmp = value; break;
+      case sizeof(u2): Bytes::put_Java_u2(reinterpret_cast<address>(&tmp), value); break;
+      case sizeof(u4): Bytes::put_Java_u4(reinterpret_cast<address>(&tmp), value); break;
+      case sizeof(u8): Bytes::put_Java_u8(reinterpret_cast<address>(&tmp), value); break;
     }
     return write_raw(&tmp, sizeof(tmp));
   }
@@ -99,80 +177,30 @@ class BinaryFileWriter : public StackObj {
 };
 
 class StackDumpWriter : public StackObj {
- public:
-  explicit StackDumpWriter(BinaryFileWriter *writer) : _writer(writer) {}
-
-  bool write_dump() {
-    if (!write_header()) {
-      return false;
-    }
-
-    // TODO decide what to do with threads executing native code
-    //  (thread->thread_state() == _thread_in_native)
-    for (JavaThreadIteratorWithHandle jtiwh; JavaThread *thread = jtiwh.next();) {
-      {
-        ResourceMark rm; // Thread name
-        // TODO for now we only dump the main thread, but there seems to be no
-        //  way to reliably determine that a thread is the main thread
-        if (thread->is_exiting() ||
-            !(java_lang_Thread::threadGroup(thread->threadObj()) == Universe::main_thread_group() && strcmp(thread->name(), "main") == 0)) {
-          continue;
-        }
-        // Not excluding JVMTI agent and AttachListener threads since they may
-        // execute user-visible operations
-        // if (thread->is_exiting() ||
-        //     thread->is_hidden_from_external_view() ||
-        //     thread->is_Compiler_thread() ||
-        //     (strcmp(thread->name(), "Notification Thread") == 0 && java_lang_Thread::threadGroup(thread->threadObj()) == Universe::system_thread_group())) {
-        //   continue;
-        // }
-      }
-      if (!write_stack(thread)) {
-        return false;
-      }
-    }
-
-    return true;
-  }
-
  private:
   BinaryFileWriter *_writer;
 
-#define WRITE(value)                          \
-  do {                                        \
-    if (!_writer->write(value)) return false; \
-  } while (false)
+#define WRITE(value) do { if (!_writer->write(value))                     return false; } while (false)
+#define WRITE_RAW(value, size) do { if (!_writer->write_raw(value, size)) return false; } while (false)
+#define WRITE_CASTED(t, value) do { if (!_writer->write<t>(value))        return false; } while (false)
 
-#define WRITE_RAW(value, size)                          \
-  do {                                                  \
-    if (!_writer->write_raw(value, size)) return false; \
-  } while (false)
-
-#define WRITE_CASTED(t, value)                   \
-  do {                                           \
-    if (!_writer->write<t>(value)) return false; \
-  } while (false)
+ public:
+  explicit StackDumpWriter(BinaryFileWriter *writer) : _writer(writer) {}
 
   bool write_header() {
     constexpr char HEADER[] = "JAVA STACK DUMP 0.1";
     WRITE_RAW(HEADER, sizeof(HEADER));
 
-    WRITE_CASTED(u2, sizeof(WORD_UINT_T)); // Word size
+    STATIC_ASSERT(sizeof(uintptr_t) == sizeof(u4) || sizeof(uintptr_t) == sizeof(u8));
+    WRITE_CASTED(u2, sizeof(uintptr_t)); // Word size
 
     return true;
   }
 
-  bool write_stack(JavaThread *thread) {
+  bool write_stack(const JavaThread *thread, const GrowableArrayView<javaVFrame *> &frames) {
     log_trace(stackdump)("Stack for thread " UINTX_FORMAT " - %s",
                          cast_from_oop<uintptr_t>(thread->threadObj()), thread->name());
     WRITE(oop2uint(thread->threadObj())); // Thread ID
-
-    ResourceMark rm; // vframes are resource-allocated
-
-    GrowableArray<javaVFrame *> frames;
-    for (vframeStream vfs(thread, /* Stop on CallStub */ true); !vfs.at_end(); vfs.next()) {
-      frames.push(vfs.asJavaVFrame());
-    }
 
     // Whether the current bytecode in the youngest frame is to be re-executed
     // TODO for interpreted frames, make sure it is always true that we want to
@@ -229,6 +257,13 @@ class StackDumpWriter : public StackObj {
     return true;
   }
 
+ private:
+  static uintptr_t oop2uint(oop o) {
+    STATIC_ASSERT(sizeof(uintptr_t) == sizeof(intptr_t)); // Primitive stack slots
+    STATIC_ASSERT(sizeof(uintptr_t) == oopSize);          // IDs
+    return cast_from_oop<uintptr_t>(o);
+  }
+
   bool write_method(const javaVFrame &frame) {
     Method *method = frame.method();
 
@@ -237,14 +272,14 @@ class StackDumpWriter : public StackObj {
       ResourceMark rm;
       log_trace(stackdump)("Method name: " UINTX_FORMAT " - %s",  reinterpret_cast<uintptr_t>(name), name->as_C_string());
     }
-    WRITE(reinterpret_cast<WORD_UINT_T>(name));
+    WRITE(reinterpret_cast<uintptr_t>(name));
 
     Symbol *signature = method->signature();
     if (log_is_enabled(Trace, stackdump)) {
       ResourceMark rm;
       log_trace(stackdump)("Method signature: " UINTX_FORMAT " - %s", reinterpret_cast<uintptr_t>(signature), signature->as_C_string());
     }
-    WRITE(reinterpret_cast<WORD_UINT_T>(signature));
+    WRITE(reinterpret_cast<uintptr_t>(signature));
 
     InstanceKlass *holder = method->method_holder();
     if (log_is_enabled(Trace, stackdump)) {
@@ -268,7 +303,7 @@ class StackDumpWriter : public StackObj {
           log_trace(stackdump)("  %i - primitive: " INTX_FORMAT " (intptr), " INT32_FORMAT " (jint), " UINTX_FORMAT_X " (hex)",
                                i, value.get_intptr(), value.get_jint(), value.get_intptr());
           WRITE_CASTED(u1, DumpedStackValueType::PRIMITIVE);
-          WRITE_CASTED(WORD_UINT_T, value.get_intptr()); // Write the whole slot, i.e. 4 or 8 bytes
+          WRITE_CASTED(uintptr_t, value.get_intptr()); // Write the whole slot, i.e. 4 or 8 bytes
           break;
         case T_OBJECT:
           log_trace(stackdump)("  %i - oop: " UINTX_FORMAT "%s",
@@ -282,7 +317,7 @@ class StackDumpWriter : public StackObj {
           WRITE_CASTED(u1, DumpedStackValueType::PRIMITIVE);
           // Deopt code says this should be zero/null in case it is actually
           // a reference to prevent GC from following it
-          WRITE_CASTED(WORD_UINT_T, 0);
+          WRITE_CASTED(uintptr_t, 0);
           break;
         default:
           ShouldNotReachHere();
@@ -295,16 +330,38 @@ class StackDumpWriter : public StackObj {
 #undef WRITE_CASTED
 #undef WRITE_RAW
 #undef WRITE
-#undef WORD_UINT_T
 };
 
-const char *StackDumper::dump(const char *path, bool overwrite) {
-  BinaryFileWriter writer;
-  if (!writer.open(path, overwrite)) {
-    return os::strerror(errno);
+StackDumper::Result StackDumper::dump(const char *path, bool overwrite) {
+  guarantee(SafepointSynchronize::is_at_safepoint(),
+            "Need safepoint so threads won't change their states after we check them");
+
+  BinaryFileWriter file_writer;
+  if (!file_writer.open(path, overwrite)) {
+    return {Result::Code::IO_ERROR, os::strerror(errno)};
   }
-  if (!StackDumpWriter(&writer).write_dump()) {
-    return "couldn't write into the opened file";
+
+  StackDumpWriter dump_writer(&file_writer);
+  if (!dump_writer.write_header()) {
+    return {Result::Code::IO_ERROR, "failed to write into the opened file"};
   }
-  return nullptr;
+
+  ResourceMark rm; // Frames are resource-allocated
+  ThreadStackStream tss;
+  ThreadStackStream::Status tss_status = tss.next();
+  for (; tss_status == ThreadStackStream::Status::OK; tss_status = tss.next()) {
+    if (!dump_writer.write_stack(tss.thread(), tss.frames())) {
+      return {Result::Code::IO_ERROR, "failed to write into the opened file"};
+    }
+  }
+  switch (tss_status) {
+    case ThreadStackStream::Status::OK:              ShouldNotReachHere();
+    case ThreadStackStream::Status::END:             return {};
+    case ThreadStackStream::Status::NON_JAVA_ON_TOP: return {Result::Code::NON_JAVA_ON_TOP, tss.thread()};
+    case ThreadStackStream::Status::NON_JAVA_IN_MID: return {Result::Code::NON_JAVA_IN_MID, tss.thread()};
+  }
+
+  // Make the compiler happy
+  ShouldNotReachHere();
+  return {};
 }

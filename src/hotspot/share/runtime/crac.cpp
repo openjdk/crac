@@ -160,9 +160,38 @@ bool crac::is_portable_mode() {
 }
 
 // Checkpoint in portable mode.
-static void checkpoint_portable() {
+static VM_Crac::Outcome checkpoint_portable() {
 #if INCLUDE_SERVICES // HeapDumper is a service
   char path[JVM_MAXPATHLEN];
+
+  // Dump thread stacks
+  os::snprintf_checked(path, sizeof(path), "%s%s%s",
+                       CRaCCheckpointTo, os::file_separator(), PMODE_STACK_DUMP_FILENAME);
+  {
+    const StackDumper::Result res = StackDumper::dump(path);
+    switch (res.code()) {
+      case StackDumper::Result::Code::OK: break;
+      case StackDumper::Result::Code::IO_ERROR: {
+        warning("Cannot dump thread stacks into %s: %s", path, res.io_error_msg());
+        if (remove(path) != 0) warning("Cannot remove %s: %s", path, os::strerror(errno));
+        return VM_Crac::Outcome::FAIL; // User action required
+      }
+      case StackDumper::Result::Code::NON_JAVA_IN_MID: {
+        ResourceMark rm;
+        warning("Cannot checkpoint now: thread %s has Java frames interleaved with native frames",
+                res.problematic_thread()->name());
+        if (remove(path) != 0) warning("Cannot remove %s: %s", path, os::strerror(errno));
+        return VM_Crac::Outcome::FAIL; // It'll probably take too long to wait until all such frames are gone
+      }
+      case StackDumper::Result::Code::NON_JAVA_ON_TOP: {
+        ResourceMark rm;
+        warning("Cannot checkpoint now: thread %s is executing native code",
+                res.problematic_thread()->name());
+        if (remove(path) != 0) warning("Cannot remove %s: %s", path, os::strerror(errno));
+        return VM_Crac::Outcome::RETRY; // Hoping the thread will get out of non-Java code shortly
+      }
+    }
+  }
 
   // Dump heap
   os::snprintf_checked(path, sizeof(path), "%s%s%s",
@@ -175,20 +204,15 @@ static void checkpoint_portable() {
                     false,    // Don't overwrite
                     HeapDumper::default_num_of_dump_threads()) != 0) {
       ResourceMark rm;
-      warning("Failed to dump heap into %s while checkpointing: %s", path, dumper.error_as_C_string());
+      warning("Cannot dump heap into %s: %s", path, dumper.error_as_C_string());
+      return VM_Crac::Outcome::FAIL; // User action required (most likely)
     }
   }
 
-  // Dump thread stacks
-  os::snprintf_checked(path, sizeof(path), "%s%s%s",
-                       CRaCCheckpointTo, os::file_separator(), PMODE_STACK_DUMP_FILENAME);
-  const char *error = StackDumper::dump(path);
-  if (error != nullptr) {
-    ResourceMark rm;
-    warning("Failed to dump thread stacks into %s while checkpointing: %s", path, error);
-  }
+  return VM_Crac::Outcome::OK;
 #else  // INCLUDE_SERVICES
   warning("This JVM cannot create checkpoints in portable mode: it is compiled without \"services\" feature");
+  return VM_Crac::Outcome::FAIL;
 #endif  // INCLUDE_SERVICES
 }
 
@@ -387,6 +411,13 @@ static void wakeup_threads_in_timedwait() {
 }
 
 void VM_Crac::doit() {
+  // Clear the state (partially: JCMD connection might be gone) if trying again
+  if (_outcome == Outcome::RETRY) {
+    _outcome = Outcome::FAIL;
+    _failures->clear_and_deallocate();
+    _restore_parameters.clear();
+  }
+
   // dry-run fails checkpoint
   bool ok = true;
 
@@ -406,7 +437,7 @@ void VM_Crac::doit() {
   if (!ok && CRDoThrowCheckpointException) {
     return;
   } else if (_dry_run) {
-    _ok = ok;
+    _outcome = ok ? Outcome::OK : Outcome::FAIL;
     return;
   }
 
@@ -415,13 +446,14 @@ void VM_Crac::doit() {
   }
 
   int shmid = 0;
+  Outcome outcome = Outcome::OK;
   if (CRAllowToSkipCheckpoint) {
     trace_cr("Skip Checkpoint");
   } else {
     trace_cr("Checkpoint ...");
     report_ok_to_jcmd_if_any();
     if (crac::is_portable_mode()) {
-      checkpoint_portable();
+      outcome = checkpoint_portable();
     } else if (checkpoint_restore(&shmid) == JVM_CHECKPOINT_ERROR) {
       memory_restore();
       return;
@@ -449,7 +481,7 @@ void VM_Crac::doit() {
 
   wakeup_threads_in_timedwait_vm();
 
-  _ok = true;
+  _outcome = outcome;
 }
 
 bool crac::prepare_checkpoint() {
@@ -546,9 +578,22 @@ Handle crac::checkpoint(jarray fd_arr, jobjectArray obj_arr, bool dry_run, jlong
   LogConfiguration::close();
 
   VM_Crac cr(fd_arr, obj_arr, dry_run, (bufferedStream*)jcmd_stream);
-  {
-    MutexLocker ml(Heap_lock);
-    VMThread::execute(&cr);
+
+  // TODO make these consts configurable
+  constexpr int RETRIES_NUM = 10;
+  constexpr int RETRY_TIMEOUT_MS = 100;
+  for (int i = 0; i <= RETRIES_NUM; i++) {
+    {
+      MutexLocker ml(Heap_lock);
+      VMThread::execute(&cr);
+    }
+    if (cr.outcome() != VM_Crac::Outcome::RETRY) {
+      break;
+    }
+    if (i < RETRIES_NUM) {
+      warning("Retry %i/%i in %i ms...", i + 1, RETRIES_NUM, RETRY_TIMEOUT_MS);
+      os::naked_short_sleep(RETRY_TIMEOUT_MS);
+    }
   }
 
   LogConfiguration::reopen();
@@ -556,12 +601,12 @@ Handle crac::checkpoint(jarray fd_arr, jobjectArray obj_arr, bool dry_run, jlong
     aio_writer->resume();
   }
 
-  if (cr.ok()) {
+  if (cr.outcome() == VM_Crac::Outcome::OK) {
     oop new_args = NULL;
     if (cr.new_args()) {
       new_args = java_lang_String::create_oop_from_str(cr.new_args(), CHECK_NH);
     }
-    GrowableArray<const char *>* new_properties = cr.new_properties();
+    const GrowableArray<const char *>* new_properties = cr.new_properties();
     objArrayOop propsObj = oopFactory::new_objArray(vmClasses::String_klass(), new_properties->length(), CHECK_NH);
     objArrayHandle props(THREAD, propsObj);
 
@@ -575,7 +620,7 @@ Handle crac::checkpoint(jarray fd_arr, jobjectArray obj_arr, bool dry_run, jlong
     return ret_cr(JVM_CHECKPOINT_OK, Handle(THREAD, new_args), props, Handle(), Handle(), THREAD);
   }
 
-  GrowableArray<CracFailDep>* failures = cr.failures();
+  const GrowableArray<CracFailDep>* failures = cr.failures();
 
   typeArrayOop codesObj = oopFactory::new_intArray(failures->length(), CHECK_NH);
   typeArrayHandle codes(THREAD, codesObj);

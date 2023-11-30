@@ -2,6 +2,7 @@
 #define SHARE_UTILITIES_STACK_DUMPER_HPP
 
 #include "memory/allStatic.hpp"
+#include "runtime/javaThread.hpp"
 #include "utilities/globalDefinitions.hpp"
 
 // Thread stack dumping in the big-endian binary format described below.
@@ -53,10 +54,44 @@ enum DumpedStackValueType : u1 { PRIMITIVE, REFERENCE };
 // Dumps Java frames (until the first CallStub) of non-internal Java threads.
 // Dumped IDs are oops to be compatible with HeapDumper's object IDs.
 struct StackDumper : public AllStatic {
+  class Result {
+   public:
+    enum class Code {
+      OK,              // Success
+      IO_ERROR,        // File IO error, static message is in io_error_msg
+      NON_JAVA_ON_TOP, // problematic_thread is running native code
+      NON_JAVA_IN_MID  // problematic_thread is running Java code but with a native frame somewhere deeper in its stack
+    };
+
+    Result() : _code(Code::OK) {}
+
+    Result(Code code, const char *io_error_msg) : _code(Code::OK), _io_error_msg(io_error_msg) {
+      assert(code == Code::IO_ERROR && io_error_msg != nullptr, "Use another constructor for this code");
+    }
+
+    Result(Code code, JavaThread *problematic_thread) : _code(code), _problematic_thread(problematic_thread) {
+      assert(code > Code::IO_ERROR && problematic_thread != nullptr, "Use another constructor for this code");
+    }
+
+    Code code()                      const { return _code; }
+    // If the code indicates an IO error, holds its description. Null otherwise.
+    const char *io_error_msg()       const { return _io_error_msg; }
+    // If the code indicates a non-IO error, holds the thread for which stack
+    // dump failed. Null otherwise.
+    JavaThread *problematic_thread() const { return _problematic_thread; }
+
+   private:
+    const Code _code;
+    const char * const _io_error_msg = nullptr;
+    JavaThread * const _problematic_thread = nullptr;
+  };
+
   // Dumps the stacks to the specified file, possibly overwriting it if the
   // corresponding parameter is set to true, Returns nullptr on success, or a
   // pointer to a static error message otherwise.
-  static const char *dump(const char *path, bool overwrite = false);
+  //
+  // Safepoint is required.
+  static Result dump(const char *path, bool overwrite = false);
 };
 
 #endif // SHARE_UTILITIES_STACK_DUMPER_HPP

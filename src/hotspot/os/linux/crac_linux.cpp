@@ -288,6 +288,8 @@ void VM_Crac::report_ok_to_jcmd_if_any() {
     return;
   bufferedStream* buf = static_cast<bufferedStream*>(_ostream);
   _attach_op->effectively_complete_raw(JNI_OK, buf);
+  // ensure won't reuse after completion in case of a retry
+  _attach_op = NULL;
   // redirect any further output to console
   _ostream = tty;
 #endif

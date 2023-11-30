@@ -310,6 +310,7 @@ class vframeStreamCommon : StackObj {
   void security_next();
 
   bool at_end() const { return _mode == at_end_mode; }
+  bool reached_first_entry_frame() const { return _frame.is_entry_frame() && _frame.entry_frame_is_first(); }
 
   // Implements security traversal. Skips depth no. of frame including
   // special security frames and prefixed native methods

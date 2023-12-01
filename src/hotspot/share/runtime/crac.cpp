@@ -1980,6 +1980,8 @@ class vframeRestoreArrayElement : public vframeArrayElement {
       }
       method_class = InstanceKlass::cast(*c);
     }
+    assert(method_class->is_linked(), "Must be rewritten before executing its methods");
+
     Symbol *method_name;
     {
       HeapDump::UTF8 *r = symbols.get(snapshot.method_name_id);
@@ -1989,6 +1991,7 @@ class vframeRestoreArrayElement : public vframeArrayElement {
       }
       method_name = r->sym;
     }
+
     Symbol *method_sig;
     {
       HeapDump::UTF8 *r = symbols.get(snapshot.method_sig_id);

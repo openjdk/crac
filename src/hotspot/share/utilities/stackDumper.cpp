@@ -203,15 +203,18 @@ class StackDumpWriter : public StackObj {
     WRITE(oop2uint(thread->threadObj())); // Thread ID
 
     // Whether the current bytecode in the youngest frame is to be re-executed
-    // TODO for interpreted frames, make sure it is always true that we want to
-    //  re-execute, for compiled frames, investigate whether the exec_mode used
-    //  by deoptimization to decide on re-execution is also required for us here
-    if (frames.length() == 0 || frames.first()->is_interpreted_frame()) {
-      log_trace(stackdump)("Re-exec youngest: false (empty trace or the youngest is interpreted)");
+    if (frames.length() == 0) {
+      log_trace(stackdump)("Re-exec youngest: false (empty trace)");
       WRITE_CASTED(u1, false);
+    } else if (frames.first()->is_interpreted_frame()) {
+      // TODO is it true that we always want to re-execute?
+      log_trace(stackdump)("Re-exec youngest: true (interpreted frame)");
+      WRITE_CASTED(u1, true);
     } else {
+      // TODO investigate whether the exec_mode used by deoptimization to decide
+      //  on re-execution is also required for us here
       bool should_reexecute = compiledVFrame::cast(frames.first())->should_reexecute();
-      log_trace(stackdump)("Re-exec youngest: %s (according to the compiled youngest)", BOOL_TO_STR(should_reexecute));
+      log_trace(stackdump)("Re-exec youngest: %s (should_reexecute of compiled frame)", BOOL_TO_STR(should_reexecute));
       WRITE_CASTED(u1, should_reexecute);
     }
 

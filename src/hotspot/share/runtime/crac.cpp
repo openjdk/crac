@@ -2126,6 +2126,9 @@ JRT_LEAF(void, crac::fill_in_frames())
   delete array;
   delete current->deopt_mark();
   current->set_deopt_mark(nullptr);
+
+  // TODO more verifications, like the ones Deoptimization::unpack_frames() does
+  DEBUG_ONLY(current->validate_frame_layout();)
 JRT_END
 
 // Fills the provided arguments with null-values according to the provided

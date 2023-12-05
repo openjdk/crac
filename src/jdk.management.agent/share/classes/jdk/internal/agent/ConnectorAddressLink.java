@@ -28,10 +28,8 @@ package jdk.internal.agent;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
-import java.util.HashMap;
-import java.util.Iterator;
-import java.util.List;
-import java.util.Map;
+import java.nio.charset.StandardCharsets;
+import java.util.*;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import jdk.internal.perf.Perf;
@@ -59,6 +57,16 @@ public class ConnectorAddressLink {
         private void putLong(long l) {
             this.bb = bb.clear();
             this.bb.asLongBuffer().put(l);
+        }
+
+        private void putString(String str) {
+            byte[] bytes = str.getBytes(StandardCharsets.UTF_8);
+            if (bytes.length + 1 > bb.capacity()) {
+                throw new IllegalArgumentException("Address is too long");
+            }
+            bb.clear();
+            bb.put(0, bytes, 0, bytes.length);
+            bb.put(bytes.length, (byte) 0);
         }
     }
 
@@ -99,6 +107,7 @@ public class ConnectorAddressLink {
     private static final AtomicInteger counter = new AtomicInteger();
 
     private static PerfHandle remotePerfHandle = null;
+    private static PerfHandle localPerfHandle = null;
 
     /**
      * Exports the specified connector address to the instrumentation buffer
@@ -111,13 +120,26 @@ public class ConnectorAddressLink {
         if (address == null || address.length() == 0) {
             throw new IllegalArgumentException("address not specified");
         }
-        Perf perf = Perf.getPerf();
-        perf.createString(
-            CONNECTOR_ADDRESS_COUNTER, 1, Units.STRING.intValue(), address);
+        if (localPerfHandle == null) {
+            Perf perf = Perf.getPerf();
+            byte[] addressBytes = address.getBytes(StandardCharsets.UTF_8);
+            // These 2kB is a magic constant - should we make it tunable via system property?
+            byte[] bytes = new byte[Math.max(addressBytes.length + 1, 2048)];
+            System.arraycopy(addressBytes, 0, bytes, 0, addressBytes.length);
+            Arrays.fill(bytes, addressBytes.length, bytes.length, (byte) 0);
+            localPerfHandle = new PerfHandle(perf.createString(
+                    CONNECTOR_ADDRESS_COUNTER, 3, Units.STRING.intValue(), address));
+        } else {
+            localPerfHandle.putString(address);
+        }
     }
 
     public static void unexportRemote() {
         unexport(remotePerfHandle);
+    }
+
+    public static void unexportLocal() {
+        localPerfHandle.putString("");
     }
 
     private static void unexport(PerfHandle ph) {

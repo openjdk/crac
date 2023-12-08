@@ -224,10 +224,23 @@ static int checkpoint_restore(int *shmid) {
   sigemptyset(&waitmask);
   sigaddset(&waitmask, RESTORE_SIGNAL);
 
+  struct timespec timeout;
+  timeout.tv_sec = CRaCCheckpointTimeout;
+  timeout.tv_nsec = 0;
+
   siginfo_t info;
   int sig;
   do {
-    sig = sigwaitinfo(&waitmask, &info);
+    if (timeout.tv_sec == 0) {
+      sig = sigwaitinfo(&waitmask, &info);
+    } else {
+      sig = sigtimedwait(&waitmask, &info, &timeout);
+      if (sig == -1 && errno == EAGAIN) {
+        tty->print_cr("The checkpoint was not generated within %d seconds.", CRaCCheckpointTimeout);
+        tty->print_cr("You can change the time-out period by -XX:CRaCCheckpointTimeout=.");
+        return JVM_CHECKPOINT_ERROR;
+      }
+    }
   } while (sig == -1 && errno == EINTR);
   assert(sig == RESTORE_SIGNAL, "got what requested");
 

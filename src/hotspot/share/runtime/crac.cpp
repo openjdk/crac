@@ -40,9 +40,7 @@
 #include "services/heapDumper.hpp"
 #include "services/writeableFlags.hpp"
 #include "utilities/decoder.hpp"
-#ifdef LINUX
-#include "os_linux.inline.hpp"
-#endif
+#include "os.inline.hpp"
 
 static const char* _crengine = NULL;
 static char* _crengine_arg_str = NULL;

@@ -41,7 +41,7 @@
 #include "services/writeableFlags.hpp"
 #include "utilities/decoder.hpp"
 #ifdef LINUX
-#include "os_linux.hpp"
+#include "os_linux.inline.hpp"
 #endif
 
 static const char* _crengine = NULL;

@@ -63,6 +63,7 @@ class outputStream;
   LOG_TAG(continuations) \
   LOG_TAG(coops) \
   LOG_TAG(cpu) \
+  LOG_TAG(crac) \
   LOG_TAG(cset) \
   LOG_TAG(data) \
   LOG_TAG(datacreation) \

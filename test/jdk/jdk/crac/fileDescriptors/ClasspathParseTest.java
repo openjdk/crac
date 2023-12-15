@@ -23,6 +23,7 @@
 
 import jdk.test.lib.Utils;
 
+import java.io.File;
 import java.io.IOException;
 
 import static jdk.test.lib.Asserts.assertEquals;
@@ -38,6 +39,7 @@ public class ClasspathParseTest {
     public static void main(String[] args) throws IOException, InterruptedException {
         if (args.length == 0) {
             String classpath = ClasspathParseTest.class.getProtectionDomain().getCodeSource().getLocation().getPath();
+            classpath += File.pathSeparator + "file:/C:\\some\\invalid/path";
             int exit = new ProcessBuilder().command(JAVA, "-cp", classpath, ClasspathParseTest.class.getName(), "ignored")
                     .inheritIO().start().waitFor();
             assertEquals(0, exit);

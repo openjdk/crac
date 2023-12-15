@@ -2044,7 +2044,7 @@ const int ObjectAlignmentInBytes = 8;
   product(bool, CRPauseOnCheckpointError, false, DIAGNOSTIC,                \
       "Pauses the checkpoint when a problem is found on VM level.")         \
                                                                             \
-  product(uint, CRaCCheckpointTimeout, 600,                                 \
+  product(uint, CRaCCheckpointTimeout, 0,                                 \
       "Timeout, in seconds, to limit the time spent on checkpoint."         \
       "A value of zero means no timeout.")                                  \
       range(0, UINT_MAX)                                                    \

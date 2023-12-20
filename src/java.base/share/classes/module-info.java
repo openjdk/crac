@@ -176,6 +176,8 @@ module java.base {
         jdk.sctp,
         jdk.crypto.cryptoki;
     exports jdk.internal.crac to
+        java.rmi,
+        jdk.management.agent,
         jdk.sctp;
     exports jdk.internal.foreign to
         jdk.incubator.vector;
@@ -424,7 +426,9 @@ module java.base {
         jdk.internal.jrtfs.JrtFileSystemProvider;
 
     exports jdk.internal.crac.mirror to
-        jdk.crac;
+	java.rmi,
+        jdk.crac,
+	jdk.management.agent;
 
     exports jdk.internal.crac.mirror.impl to
         jdk.crac;

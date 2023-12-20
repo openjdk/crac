@@ -65,6 +65,11 @@ import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
+
+import jdk.internal.crac.mirror.Context;
+import jdk.internal.crac.mirror.Resource;
+import jdk.internal.crac.Core;
+import jdk.internal.crac.JDKResource;
 import sun.rmi.runtime.Log;
 import sun.rmi.runtime.NewThreadAction;
 import sun.rmi.transport.Channel;
@@ -285,7 +290,7 @@ public class TCPTransport extends Transport {
             tcpLog.log(Log.VERBOSE,
                     "server socket: " + server + ", exportCount: " + exportCount);
         }
-        if (exportCount == 0 && getEndpoint().getListenPort() != 0) {
+        if (exportCount == 0) {
             ServerSocket ss = server;
             server = null;
             try {
@@ -650,7 +655,7 @@ public class TCPTransport extends Transport {
     /**
      * Services messages on accepted connection
      */
-    private class ConnectionHandler implements Runnable {
+    private class ConnectionHandler implements Runnable, JDKResource {
 
         /** int value of "POST" in ASCII (Java's specified data formats
          *  make this once-reviled tactic again socially acceptable) */
@@ -673,6 +678,7 @@ public class TCPTransport extends Transport {
         ConnectionHandler(Socket socket, String remoteHost) {
             this.socket = socket;
             this.remoteHost = remoteHost;
+            Core.Priority.NORMAL.getContext().register(this);
         }
 
         String getClientHost() {
@@ -863,6 +869,16 @@ public class TCPTransport extends Transport {
             } finally {
                 closeSocket(socket);
             }
+        }
+
+        @Override
+        public void beforeCheckpoint(Context<? extends Resource> context) throws Exception {
+            closeSocket(socket);
+        }
+
+        @Override
+        public void afterRestore(Context<? extends Resource> context) throws Exception {
+            // noop, the connection is not reopened
         }
     }
 }

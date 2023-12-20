@@ -52,6 +52,11 @@ import javax.management.remote.JMXConnectorServer;
 import javax.management.remote.JMXServiceURL;
 
 import static jdk.internal.agent.AgentConfigurationError.*;
+
+import jdk.internal.crac.Core;
+import jdk.internal.crac.JDKResource;
+import jdk.internal.crac.mirror.Context;
+import jdk.internal.crac.mirror.Resource;
 import jdk.internal.vm.VMSupport;
 import sun.management.jdp.JdpController;
 import sun.management.jdp.JdpException;
@@ -257,8 +262,10 @@ public class Agent {
 
     // The only active agent allowed
     private static JMXConnectorServer jmxServer = null;
+    private static JMXConnectorServer localServer = null;
     // The properties used to configure the server
     private static Properties configProps = null;
+    private static JDKResource cracResource;
 
     // Parse string com.sun.management.prop=xxx,com.sun.management.prop=yyyy
     // and return property set if args is null or empty
@@ -315,8 +322,8 @@ public class Agent {
 
         // start local connector if not started
         if (agentProps.get(LOCAL_CONNECTOR_ADDRESS_PROP) == null) {
-            JMXConnectorServer cs = ConnectorBootstrap.startLocalConnectorServer();
-            String address = cs.getAddress().toString();
+            localServer = ConnectorBootstrap.startLocalConnectorServer();
+            String address = localServer.getAddress().toString();
             // Add the local connector address to the agent properties
             agentProps.put(LOCAL_CONNECTOR_ADDRESS_PROP, address);
 
@@ -329,6 +336,20 @@ public class Agent {
                 warning(EXPORT_ADDRESS_FAILED, x.getMessage());
             }
         }
+    }
+
+    private static synchronized void stopLocalManagementAgent() throws IOException {
+        Properties agentProps = VMSupport.getAgentProperties();
+        agentProps.remove(LOCAL_CONNECTOR_ADDRESS_PROP);
+        try {
+            localServer.stop();
+            localServer = null;
+        } catch (IOException e) {
+            warning(CONNECTOR_SERVER_IO_ERROR, e.getMessage());
+            // rethrowing to fail the checkpoint
+            throw e;
+        }
+        ConnectorAddressLink.unexportLocal();
     }
 
     /*
@@ -448,6 +469,21 @@ public class Agent {
                     startDiscoveryService(props);
                 }
                 startLocalManagementAgent();
+            }
+            if (cracResource == null) {
+                cracResource = new JDKResource() {
+                    @Override
+                    public void beforeCheckpoint(Context<? extends Resource> context) throws Exception {
+                        stopRemoteManagementAgent();
+                        stopLocalManagementAgent();
+                    }
+
+                    @Override
+                    public void afterRestore(Context<? extends Resource> context) throws Exception {
+                        startAgent();
+                    }
+                };
+                Core.Priority.NORMAL.getContext().register(cracResource);
             }
 
         } catch (AgentConfigurationError e) {

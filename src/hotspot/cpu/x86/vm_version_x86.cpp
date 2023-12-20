@@ -830,7 +830,7 @@ uint64_t VM_Version::CPUFeatures_parse(uint64_t &glibc_features) {
       | CPU_CX8 // gcc detects it to set cpu "pentium" (=32-bit only), used by OpenJDK
       | CPU_CMOV // gcc detects it to set cpu "pentiumpro" (=32-bit only), used by OpenJDK
       | CPU_FLUSH // ="clflush" in cpuinfo, not used by gcc, required by OpenJDK
-      // GLIBC_MOVBE is disabled in 'gcc -Q --help=target' and some CPUs do not support it: https://stackoverflow.com/a/5246553/2995591
+      // GLIBC_MOVBE is disabled in 'gcc -Q --help=target' and for example i7-720QM does not support it
       // GLIBC_LAHFSAHF is disabled in 'gcc -Q --help=target' and "Early Intel Pentium 4 CPUs with Intel 64 support ... lacked the LAHF and SAHF instructions"
 #endif
     ;

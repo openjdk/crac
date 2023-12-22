@@ -3211,3 +3211,39 @@ JvmtiGCMarker::~JvmtiGCMarker() {
     JvmtiExport::post_garbage_collection_finish();
   }
 }
+
+void JvmtiExport::post_crac_before_checkpoint() {
+  JavaThread *thread = JavaThread::current();
+  HandleMark hm(thread);
+  EVT_TRIG_TRACE(EXT_EVENT_CRAC_BEFORE_CHECKPOINT, ("Trg CRaC Before Checkpoint event triggered"));
+  JvmtiEnvIterator it;
+  for (JvmtiEnv* env = it.first(); env != nullptr; env = it.next(env)) {
+    if (env->is_enabled((jvmtiEvent)EXT_EVENT_CRAC_BEFORE_CHECKPOINT)) {
+      EVT_TRACE(EXT_EVENT_CRAC_BEFORE_CHECKPOINT, ("[?] Evt Before Checkpoint sent"));
+      JvmtiEventMark jem(thread);
+      JvmtiJavaThreadEventTransition jet(thread);
+      jvmtiExtensionEvent callback = env->ext_callbacks()->CracBeforeCheckpoint;
+      if (callback != nullptr) {
+        (*callback)(env->jvmti_external());
+      }
+    }
+  }
+}
+
+void JvmtiExport::post_crac_after_restore() {
+  JavaThread *thread = JavaThread::current();
+  HandleMark hm(thread);
+  EVT_TRIG_TRACE(EXT_EVENT_CRAC_AFTER_RESTORE, ("Trg CRaC After Restore event triggered"));
+  JvmtiEnvIterator it;
+  for (JvmtiEnv* env = it.first(); env != nullptr; env = it.next(env)) {
+    if (env->is_enabled((jvmtiEvent)EXT_EVENT_CRAC_AFTER_RESTORE)) {
+      EVT_TRACE(EXT_EVENT_CRAC_AFTER_RESTORE, ("[?] Evt After Restore sent"));
+      JvmtiEventMark jem(thread);
+      JvmtiJavaThreadEventTransition jet(thread);
+      jvmtiExtensionEvent callback = env->ext_callbacks()->CracAfterRestore;
+      if (callback != nullptr) {
+        (*callback)(env->jvmti_external());
+      }
+    }
+  }
+}

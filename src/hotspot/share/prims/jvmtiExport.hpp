@@ -360,6 +360,9 @@ class JvmtiExport : public AllStatic {
   static void post_vthread_mount         (jthread vthread) NOT_JVMTI_RETURN;
   static void post_vthread_unmount       (jthread vthread) NOT_JVMTI_RETURN;
 
+  static void post_crac_before_checkpoint() NOT_JVMTI_RETURN;
+  static void post_crac_after_restore() NOT_JVMTI_RETURN;
+
   static void continuation_yield_cleanup (JavaThread* thread, jint continuation_frame_count) NOT_JVMTI_RETURN;
 
   // Support for java.lang.instrument agent loading.

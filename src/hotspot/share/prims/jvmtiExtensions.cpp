@@ -239,6 +239,12 @@ void JvmtiExtensions::register_extensions() {
     { (char*)"JNI Environment", JVMTI_KIND_IN_PTR, JVMTI_TYPE_JNIENV, JNI_FALSE },
     { (char*)"Virtual Thread", JVMTI_KIND_IN, JVMTI_TYPE_JTHREAD, JNI_FALSE }
   };
+  static jvmtiParamInfo crac_before_checkpoint_params[] = {
+    { (char*)"JNI Environment", JVMTI_KIND_IN_PTR, JVMTI_TYPE_JNIENV, JNI_FALSE }
+  };
+  static jvmtiParamInfo crac_after_restore_params[] = {
+    { (char*)"JNI Environment", JVMTI_KIND_IN_PTR, JVMTI_TYPE_JNIENV, JNI_FALSE }
+  };
 
   static jvmtiExtensionEventInfo class_unload_ext_event = {
     EXT_EVENT_CLASS_UNLOAD,
@@ -261,10 +267,26 @@ void JvmtiExtensions::register_extensions() {
     sizeof(virtual_thread_event_params)/sizeof(virtual_thread_event_params[0]),
     virtual_thread_event_params
   };
+  static jvmtiExtensionEventInfo crac_before_checkpoint_ext_event = {
+    EXT_EVENT_CRAC_BEFORE_CHECKPOINT,
+    (char*)"jdk.crac.events.BeforeCheckpoint",
+    (char*)"CRAC_BEFORE_CHECKPOINT event",
+    sizeof(crac_before_checkpoint_params)/sizeof(crac_before_checkpoint_params[0]),
+    crac_before_checkpoint_params
+  };
+  static jvmtiExtensionEventInfo crac_after_restore_ext_event = {
+    EXT_EVENT_CRAC_AFTER_RESTORE,
+    (char*)"jdk.crac.events.AfterRestore",
+    (char*)"CRAC_AFTER_RESTORE event",
+    sizeof(crac_after_restore_params)/sizeof(crac_after_restore_params[0]),
+    crac_after_restore_params
+  };
 
   _ext_events->append(&class_unload_ext_event);
   _ext_events->append(&virtual_thread_mount_ext_event);
   _ext_events->append(&virtual_thread_unmount_ext_event);
+  _ext_events->append(&crac_before_checkpoint_ext_event);
+  _ext_events->append(&crac_after_restore_ext_event);
 }
 
 

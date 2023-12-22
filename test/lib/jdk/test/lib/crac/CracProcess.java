@@ -160,4 +160,8 @@ public class CracProcess {
         input.write('\n');
         input.flush();
     }
+
+    public void destroyForcibly() {
+        process.destroyForcibly();
+    }
 }

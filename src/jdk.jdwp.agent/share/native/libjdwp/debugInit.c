@@ -24,6 +24,7 @@
  */
 
 #include <ctype.h>
+#include <stdbool.h>
 
 #include "util.h"
 #include "commonRef.h"
@@ -101,6 +102,8 @@ static void JNICALL cbEarlyException(jvmtiEnv*, JNIEnv *,
 
 static void initialize(JNIEnv *env, jthread thread, EventIndex triggering_ei, EventInfo *opt_info);
 static jboolean parseOptions(char *str);
+
+static void subscribe_crac_events(jvmtiEnv*);
 
 /*
  * Phase 1: Initial load.
@@ -327,6 +330,8 @@ DEF_Agent_OnLoad(JavaVM *vm, char *options, void *reserved)
                         jvmtiErrorText(error), error));
         return JNI_ERR;
     }
+
+    subscribe_crac_events(gdata->jvmti);
 
     LOG_MISC(("OnLoad: DONE"));
     return JNI_OK;
@@ -1344,4 +1349,52 @@ debugInit_exit(jvmtiError error, const char *msg)
 
     // Last chance to die, this kills the entire process.
     forceExit(EXIT_JVMTI_ERROR);
+}
+
+static void JNICALL
+cbBeforeCheckpoint(jvmtiEnv* jvmti_env, ...)
+{
+    gdata->checkpointInProgress = JNI_TRUE;
+    transport_before_checkpoint();
+    gdata->checkpointInProgress = JNI_FALSE;
+}
+
+static void JNICALL
+cbAfterRestore(jvmtiEnv* jvmti_env, ...)
+{
+    gdata->restoreInProgress = JNI_TRUE;
+    debugInit_reset(getEnv());
+    gdata->restoreInProgress = JNI_FALSE;
+}
+
+static void
+subscribe_crac_events(jvmtiEnv* jvmti)
+{
+    jint extensionEventCount = 0;
+    jvmtiExtensionEventInfo* extensionEvents = NULL;
+    jvmtiError err = (*jvmti)->GetExtensionEvents(jvmti, &extensionEventCount, &extensionEvents);
+    if (JVMTI_ERROR_NONE != err) {
+        TTY_MESSAGE(("Failed enumerating JVMTI extension events: %s(%d)", jvmtiErrorText(err), (int)err));
+        return;
+    }
+
+    bool beforeCheckpointFound = false;
+    bool afterRestoreFound = false;
+    for (jint i = 0; i < extensionEventCount && (!beforeCheckpointFound || !afterRestoreFound); ++i) {
+        if (0 == strcmp("jdk.crac.events.BeforeCheckpoint", extensionEvents[i].id)) {
+            (*jvmti)->SetExtensionEventCallback(jvmti, extensionEvents[i].extension_event_index, &cbBeforeCheckpoint);
+            beforeCheckpointFound = true;
+        }
+        else if (0 == strcmp("jdk.crac.events.AfterRestore", extensionEvents[i].id)) {
+            (*jvmti)->SetExtensionEventCallback(jvmti, extensionEvents[i].extension_event_index, &cbAfterRestore);
+            afterRestoreFound = true;
+        }
+    }
+    if (beforeCheckpointFound != afterRestoreFound) {
+        ERROR_MESSAGE(("Failed subscribing CRaC events: beforeCheckpoint %d, afterRestore %d", beforeCheckpointFound, afterRestoreFound));
+        forceExit(1);
+    }
+    if (!beforeCheckpointFound) {
+        TTY_MESSAGE(("CRaC JVMTI extension events not found"));
+    }
 }

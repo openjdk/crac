@@ -194,7 +194,9 @@ debugLoop_run(void)
     transport_close();
 
     /* Reset for a new connection to this VM if it's still alive */
-    if ( ! gdata->vmDead ) {
+    if (gdata->checkpointInProgress) {
+        // Do nothing - avoid restarting a transport
+    } else if ( ! gdata->vmDead ) {
         debugInit_reset(getEnv());
     }
 }

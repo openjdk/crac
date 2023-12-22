@@ -36,6 +36,9 @@ static unsigned transportVersion = JDWPTRANSPORT_VERSION_1_0;
 static jrawMonitorID listenerLock;
 static jrawMonitorID sendLock;
 
+static const char* const jdwpListenerThreadName = "JDWP Transport Listener: ";
+static jdwpTransportEnv *listeningTransport = NULL;
+
 /*
  * data structure used for passing transport info from thread to thread
  */
@@ -237,6 +240,10 @@ loadTransport(const char *name, TransportInfo *info)
             }
         }
 
+        if (gdata->restoreInProgress && JNI_EEXIST == rc) {
+            rc = JNI_OK;
+        }
+
         if (rc != JNI_OK) {
             switch (rc) {
                 case JNI_ENOMEM :
@@ -365,7 +372,10 @@ acceptThread(jvmtiEnv* jvmti_env, JNIEnv* jni_env, void* arg)
     /* TransportInfo data no longer needed */
     freeTransportInfo(info);
 
-    if (rc != JDWPTRANSPORT_ERROR_NONE) {
+    if (gdata->checkpointInProgress) {
+        TTY_MESSAGE(("Exiting accept thread because of checkpoint"));
+        (*t)->StopListening(t);
+    } else if (rc != JDWPTRANSPORT_ERROR_NONE) {
         /*
          * If accept fails it probably means a timeout, or another fatal error
          * We thus exit the VM after stopping the listener.
@@ -374,6 +384,7 @@ acceptThread(jvmtiEnv* jvmti_env, JNIEnv* jni_env, void* arg)
         (*t)->StopListening(t);
         EXIT_ERROR(JVMTI_ERROR_NONE, "could not connect, timeout or fatal error");
     } else {
+        listeningTransport = NULL;
         (*t)->StopListening(t);
         connectionInitiated(t);
     }
@@ -584,10 +595,11 @@ transport_startTransport(jboolean isServer, char *name, char *address,
         jvmtiDeallocate(prop_value);
 
 
-        (void)strcpy(threadName, "JDWP Transport Listener: ");
+        (void)strcpy(threadName, jdwpListenerThreadName);
         (void)strcat(threadName, name);
 
         func = &acceptThread;
+        listeningTransport = info->transport;
         error = spawnNewThread(func, (void*)info, threadName);
         if (error != JVMTI_ERROR_NONE) {
             serror = map2jdwpError(error);
@@ -642,7 +654,7 @@ handleError:
          /*
           * Start the transport loop in a separate thread
           */
-         (void)strcpy(threadName, "JDWP Transport Listener: ");
+         (void)strcpy(threadName, jdwpListenerThreadName);
          (void)strcat(threadName, name);
 
          func = &attachThread;
@@ -724,4 +736,51 @@ transport_receivePacket(jdwpPacket *packet)
         return (jint)-1;
     }
     return 0;
+}
+
+static void
+joinListeningThread()
+{
+    JNIEnv* env = getEnv();
+    jvmtiEnv* jvmti = gdata->jvmti;
+    jint threadCount;
+    jthread* threads;
+    jthread thread = NULL;
+    jvmtiError err = (*jvmti)->GetAllThreads(jvmti, &threadCount, &threads);
+    if (err == JVMTI_ERROR_NONE) {
+        for (int i = 0; !thread && i < threadCount; ++i) {
+            jvmtiThreadInfo info;
+            err = (*jvmti)->GetThreadInfo(jvmti, threads[i], &info);
+            if (err != JVMTI_ERROR_NONE) {
+                continue;
+            }
+            if (0 == strncmp(info.name, jdwpListenerThreadName, strlen(jdwpListenerThreadName))) {
+                thread = (jthread)(*env)->NewGlobalRef(env, threads[i]);
+            }
+            (*jvmti)->Deallocate(jvmti, (unsigned char*)info.name);
+        }
+        (*jvmti)->Deallocate(jvmti, (unsigned char*)threads);
+    }
+    if (thread) {
+        JNIEnv* env = getEnv();
+        jclass cls = (*env)->GetObjectClass(env, thread);
+        jmethodID methodId = (*env)->GetMethodID(env, cls, "join", "()V");
+        if (methodId) {
+            (*env)->CallVoidMethod(env, thread, methodId);
+        }
+        (*env)->DeleteGlobalRef(env, thread);
+    }
+}
+
+void
+transport_before_checkpoint(void)
+{
+    jdwpTransportEnv *listenTrans = listeningTransport;
+    if (listenTrans != NULL) {
+        (*listenTrans)->StopListening(listenTrans);
+    }
+    transport_reset();
+    joinListeningThread();
+    transport = NULL;
+    listeningTransport = NULL;
 }

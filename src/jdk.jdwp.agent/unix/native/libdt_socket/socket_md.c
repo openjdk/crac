@@ -153,6 +153,24 @@ int dbgsysSocketClose(int fd) {
         rv = close(fd);
     } while (rv == -1 && errno == EINTR);
 #else
+#if defined(LINUX)
+    // In case of multi-threading socket processing, a 'close' call may hang as long as other thread
+    // still use a socket with 'select' or whatever. This is exactly the case I met on WSL Ubuntu 22.04.
+    // This is why 'shutdown' call is needed here (as well for AIX and Windows) - it stops all the
+    // communications via socket, so all system calls using this socket will exit with an error.
+    //
+    // On the other hand, a socket may be set with SO_LINGER property controlling a socket behaviour on close.
+    // This affects both 'close' and 'shutdown' calls, so, if SO_LINGER set, it doesn't make sense to call
+    // 'shutdown'. So, here we make 'shutdown' call only of SO_LINGER isn't set.
+    struct linger l;
+    socklen_t len = sizeof(l);
+
+    if (getsockopt(fd, SOL_SOCKET, SO_LINGER, (char *)&l, &len) == 0) {
+        if (l.l_onoff == 0) {
+            shutdown(fd, SHUT_RDWR);
+        }
+    }
+#endif
     rv = close(fd);
 #endif
 

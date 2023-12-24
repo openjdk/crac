@@ -205,6 +205,14 @@ static int call_crengine() {
   }
   _crengine_args[1] = "checkpoint";
   add_crengine_arg(CRaCCheckpointTo);
+  if (CREngine &&
+      (strstr(CREngine, "-d,true") || strstr(CREngine, "--debug,true"))) {
+      tty->print("CRaC info executing: ");
+      for (unsigned int i=0; i < _crengine_argc; i++) {
+          tty->print("%s ", _crengine_args[i]);
+      }
+      tty->print_cr("");
+  }
   return os::exec_child_process_and_wait(_crengine, _crengine_args);
 }
 

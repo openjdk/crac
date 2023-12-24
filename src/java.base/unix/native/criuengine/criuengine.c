@@ -51,6 +51,7 @@ static int g_pid;
 
 static char *verbosity = NULL; // default differs for checkpoint and restore
 static char *log_file = NULL;
+static bool debug = false;
 
 static int kickjvm(pid_t jvm, int code) {
     union sigval sv = { .sival_int = code };
@@ -187,6 +188,9 @@ static int checkpoint(pid_t jvm,
         }
     }
     *arg++ = NULL;
+    if (debug) {
+        print_command_args_to_stderr(args);
+    }
 
     pid_t child = fork();
     if (!child) {
@@ -356,10 +360,15 @@ static char *parse_options(int argc, char *argv[]) {
         .has_arg = 1,
         .flag = NULL,
         .val = 'o',
+    }, {
+        .name = "debug",
+        .has_arg = 1,
+        .flag = NULL,
+        .val = 'd',
     }, { NULL, 0, NULL, 0} };
     bool processing = true;
     do {
-        switch (getopt_long(argc, argv, "v:o:", opts, NULL)) {
+        switch (getopt_long(argc, argv, "v:o:d:", opts, NULL)) {
             case -1:
             case '?':
                 processing = false;
@@ -372,6 +381,11 @@ static char *parse_options(int argc, char *argv[]) {
                 break;
             case 'o':
                 log_file = optarg;
+                break;
+            case 'd':
+                if (!strcmp(optarg, "true")) {
+                    debug = true;
+                }
                 break;
         }
     } while (processing);

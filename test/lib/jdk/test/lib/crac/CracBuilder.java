@@ -283,8 +283,6 @@ public class CracBuilder {
         }
 
         buildDockerImage();
-        // Make sure we start with a clean image directory
-        DockerTestUtils.execute(Container.ENGINE_COMMAND, "volume", "rm", "cr");
     }
 
     private void containerSetup() throws Exception {
@@ -339,7 +337,8 @@ public class CracBuilder {
         for (var entry : Utils.TEST_CLASS_PATH.split(File.pathSeparator)) {
             cmd.addAll(Arrays.asList("--volume", entry + ":/cp/" + (entryCounter++)));
         }
-        cmd.addAll(Arrays.asList("--volume", "cr:/cr"));
+        new File(System.getProperty("user.dir") + "/cr").mkdirs(); // create "cr" dir under the current user, to be able to delete it later.
+        cmd.addAll(Arrays.asList("--volume", System.getProperty("user.dir") + "/cr:/cr"));
         cmd.addAll(Arrays.asList("--volume", CRIU_PATH + ":/criu"));
         cmd.addAll(Arrays.asList("--env", "CRAC_CRIU_PATH=/criu"));
         cmd.addAll(Arrays.asList("--name", CONTAINER_NAME));
@@ -367,6 +366,14 @@ public class CracBuilder {
     public void recreateContainer(String imageName, String... options) throws Exception {
         assertTrue(containerStarted);
         DockerTestUtils.execute(Container.ENGINE_COMMAND, "kill", CONTAINER_NAME).getExitValue();
+
+        // Docker needs some time to remove a container after kill
+        OutputAnalyzer oa = null;
+        do {
+            oa = DockerTestUtils.execute(Container.ENGINE_COMMAND, "ps");
+            oa.getExitValue();
+        } while (oa.getStdout().contains(CONTAINER_NAME));
+
         List<String> cmd = prepareContainerCommand(imageName, options);
         log("Recreating docker container:\n" + String.join(" ", cmd));
         assertEquals(0, new ProcessBuilder().inheritIO().command(cmd).start().waitFor());
@@ -480,7 +487,14 @@ public class CracBuilder {
         doRestore();
     }
 
+    public void checkpointViaJcmd(long pid) throws Exception {
+        runJcmd(Long.toString(pid), "JDK.checkpoint").shouldHaveExitValue(0);
+    }
+
     public void checkpointViaJcmd() throws Exception {
+        if (null == dockerImageName) {
+            fail("Docker container is not set. Use checkpointViaJcmd(long pid) to run jcmd for non-container tests.");
+        }
         runJcmd(main().getName(), "JDK.checkpoint").shouldHaveExitValue(0);
     }
 

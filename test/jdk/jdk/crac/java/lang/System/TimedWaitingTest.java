@@ -64,7 +64,7 @@ public class TimedWaitingTest implements CracTest {
         String imageName = Common.imageName("timed-waiting");
 
         CracBuilder builder = new CracBuilder();
-        Path bootIdFile = Files.createTempFile("NanoTimeTest-", "-boot_id");
+        Path bootIdFile = Files.createTempFile("TimedWaitingTest-", "-boot_id");
         try {
             builder.withBaseImage("ghcr.io/crac/test-base", "latest")
                     .dockerOptions("-v", bootIdFile + ":/fake_boot_id")

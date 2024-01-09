@@ -61,7 +61,7 @@ public class DaemonAfterRestore implements CracTest {
                 firstOutputFuture.cancel(false);
             });
         firstOutputFuture.get(10, TimeUnit.SECONDS);
-        builder.checkpointViaJcmd();
+        builder.checkpointViaJcmd(checkpointProcess.pid());
         checkpointProcess.waitForCheckpointed();
 
         builder.startRestore().waitForSuccess()

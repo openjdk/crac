@@ -23,18 +23,21 @@
 
 import jdk.crac.*;
 import jdk.test.lib.crac.CracBuilder;
+import jdk.test.lib.crac.CracEngine;
 import jdk.test.lib.crac.CracProcess;
 import jdk.test.lib.crac.CracTest;
 import jdk.test.lib.crac.CracTestArg;
 
 import com.sun.jdi.Bootstrap;
-import com.sun.jdi.VMDisconnectedException;
-import com.sun.jdi.VirtualMachine;
 import com.sun.jdi.connect.AttachingConnector;
 import com.sun.jdi.connect.Connector;
 import com.sun.jdi.connect.IllegalConnectorArgumentsException;
+import com.sun.jdi.VirtualMachine;
+import com.sun.jdi.VMDisconnectedException;
 
 import java.io.InputStream;
+import java.io.InputStreamReader;
+import java.io.BufferedReader;
 import java.io.IOException;
 import java.util.Map;
 import java.util.concurrent.CountDownLatch;
@@ -61,6 +64,9 @@ public class JdwpTransportTest implements CracTest {
     private static String ATTACH_CONNECTOR = "com.sun.jdi.SocketAttach";
     private static String ADDRESS = "127.0.0.1";
     private static String PORT = "5555";
+    private static String DEBUGEE = "Listening for transport dt_socket at address: 5555";
+    private static String STARTED = "APP: Started";
+    private static String CHECKPOINT = "CR: Checkpoint";
 
     private VirtualMachine attachDebugger() throws Exception {
         AttachingConnector ac = Bootstrap.virtualMachineManager().attachingConnectors()
@@ -82,16 +88,12 @@ public class JdwpTransportTest implements CracTest {
         return vm;
     }
 
-    private void waitForDebuggee(CracProcess process) throws InterruptedException {
-        CountDownLatch latch = new CountDownLatch(1);
-        process.watch(output -> {
-            System.out.println(output);
-            if (output.contains("Listening for transport dt_socket at address: 5555")) {
-                latch.countDown();
-            }
-        }, System.err::println);
-        latch.await(5, TimeUnit.SECONDS);
-        assertTrue(0 == latch.getCount());
+    private void waitForString(BufferedReader reader, String str) throws IOException {
+        for (String line = reader.readLine(); true; line = reader.readLine()) {
+            System.out.println(line);
+            if (line.contains(str)) 
+                break;
+        }
     }
 
     @Override
@@ -99,62 +101,52 @@ public class JdwpTransportTest implements CracTest {
         final String suspendArg = ",suspend=" + (suspendOnJdwpStart ? "y" : "n");
         CracBuilder builder = new CracBuilder()
             .vmOption("-agentlib:jdwp=transport=dt_socket,server=y,address=0.0.0.0:" + PORT + suspendArg);
+        builder.engine(CracEngine.SIMULATE);
 
-        long pid = 0;
-        {
-            CracProcess process = builder.captureOutput(true).startCheckpoint();
-            pid = process.pid();
-            try {
-                if (!suspendOnJdwpStart) {
-                    process.waitForCheckpointed();
-                } else {
-                    waitForDebuggee(process);
-                    VirtualMachine vm = attachDebugger();
-                    if (keepDebuggingBeforeCheckpoint) {
-                        vm.resume();
-                        System.out.println("TEST: Debugger resume.");
-                        try {
-                            process.waitForCheckpointed();
-                            vm.dispose();
-                            fail("VMDisconnectedException isn't thrown. The debugger should be disconnected by a debuggee.");
-                        } catch (VMDisconnectedException e) {
-                        }
-                    } else {
-                        vm.dispose();
-                        vm = null;
-                        System.out.println("TEST: Debugger done.");
-                        process.waitForCheckpointed();
-                    }
-                }
-            } finally {
-                process.destroyForcibly();
-            }
-        }
-
-        builder.clearVmOptions();
-        {
-            CracProcess restoredProcess = builder.captureOutput(true).startRestore();
-
-            try {
-                waitForDebuggee(restoredProcess);
+        CracProcess process = builder.captureOutput(true).startCheckpoint();
+        try {
+            var reader = new BufferedReader(new InputStreamReader(process.output()));
+            if (!suspendOnJdwpStart) {
+                waitForString(reader, STARTED);
+            } else {
+                waitForString(reader, DEBUGEE);
                 VirtualMachine vm = attachDebugger();
-                vm.dispose();
-                System.out.println("TEST: Debugger done.");
-                System.out.flush();
+                if (keepDebuggingBeforeCheckpoint) {
+                    vm.resume();
+                    System.out.println("TEST: Debugger resume.");
+                    try {
+                        waitForString(reader, CHECKPOINT);
+                        vm.dispose();
+                        fail("VMDisconnectedException isn't thrown. The debugger should be disconnected by a debuggee.");
+                    } catch (VMDisconnectedException e) {
+                    }
+                } else {
+                    vm.dispose();
+                    vm = null;
+                    System.out.println("TEST: Debugger done.");
 
-                restoredProcess.input().write(0); // Resume app
-                restoredProcess.input().flush();
-
-                restoredProcess.waitForSuccess();
-            } finally {
-                ProcessHandle.of(pid).ifPresent(ProcessHandle::destroyForcibly);
+                    waitForString(reader, STARTED);
+                }
             }
+
+            // After checkpoint/restore
+            waitForString(reader, DEBUGEE);
+            VirtualMachine vm = attachDebugger();
+            vm.dispose();
+            System.out.println("TEST: Debugger done.");
+            System.out.flush();
+            process.input().write(0); // Resume app
+            process.input().flush();
+
+            process.waitForSuccess();
+        } finally {
+            process.destroyForcibly();
         }
     }
 
     @Override
     public void exec() throws Exception {
-        System.out.println("APP: Started");
+        System.out.println(STARTED);
         Core.checkpointRestore();
         System.out.println("APP: Restored");
         System.in.read(); // Wait for debugger is attached and done

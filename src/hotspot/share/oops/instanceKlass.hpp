@@ -556,6 +556,7 @@ public:
   void link_class(TRAPS);
   bool link_class_or_fail(TRAPS); // returns false on failure
   void rewrite_class(TRAPS);
+  void finish_linking(bool check_vtable_constraints, TRAPS);
   void link_methods(TRAPS);
   Method* class_initializer() const;
 
@@ -848,6 +849,7 @@ public:
   // initialization
   void call_class_initializer(TRAPS);
   void set_initialization_state_and_notify(ClassState state, JavaThread* current);
+  void set_linked_to_be_initialized_state_and_notify(JavaThread* current);
 
   // OopMapCache support
   OopMapCache* oop_map_cache()               { return _oop_map_cache; }

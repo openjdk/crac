@@ -901,7 +901,7 @@ InstanceKlass* SystemDictionary::resolve_class_from_stream(
   if (is_parallelCapable(class_loader)) {
     k = find_or_define_instance_class(h_name, class_loader, k, CHECK_NULL);
   } else {
-    define_instance_class(k, class_loader, THREAD);
+    define_instance_class(k, class_loader, true, THREAD);
 
     // If defining the class throws an exception register 'k' for cleanup.
     if (HAS_PENDING_EXCEPTION) {
@@ -1337,6 +1337,9 @@ InstanceKlass* SystemDictionary::load_instance_class_impl(Symbol* class_name, Ha
 }
 
 void SystemDictionary::record_initiating_loader(InstanceKlass* loaded_class, Handle class_loader, TRAPS) {
+  assert(loaded_class->class_loader() != class_loader(), "defining loader already is initiating");
+  assert(!loaded_class->is_hidden(), "hidden classes cannot have non-defining initiating loaders");
+
   ClassLoaderData* loader_data = class_loader_data(class_loader);
   check_constraints(loaded_class, loader_data, false, CHECK);
 
@@ -1379,7 +1382,7 @@ static void post_class_define_event(InstanceKlass* k, const ClassLoaderData* def
   }
 }
 
-void SystemDictionary::define_instance_class(InstanceKlass* k, Handle class_loader, TRAPS) {
+void SystemDictionary::define_instance_class(InstanceKlass* k, Handle class_loader, bool publicize, TRAPS) {
 
   ClassLoaderData* loader_data = k->class_loader_data();
   assert(loader_data->class_loader() == class_loader(), "they must be the same");
@@ -1426,38 +1429,12 @@ void SystemDictionary::define_instance_class(InstanceKlass* k, Handle class_load
   // Grabs and releases SystemDictionary_lock
   update_dictionary(THREAD, k, loader_data);
 
-  // notify jvmti
-  if (JvmtiExport::should_post_class_load()) {
-    JvmtiExport::post_class_load(THREAD, k);
-  }
-  post_class_define_event(k, loader_data);
-}
-
-// Define a class being restored by CRaC's portable mode:
-// 1. No lock check since class restoration is currently performed in a single
-// thread. TODO this is actually not guaranteed and must be fixed.
-// 2. Don't call addClass because the classes array will be filled by CRaC when
-// restoring the class loader object.
-// 3. No immediate linking of hidden classes -- this will be done by CRaC.
-// 3. No JVM TI and JFR events because we want to make it seem like the class
-// was already loaded.
-void SystemDictionary::define_recreated_instance_class(InstanceKlass* created_class, TRAPS) {
-  ClassLoaderData *const loader_data = created_class->class_loader_data();
-
-  if (loader_data->has_class_mirror_holder()) { // Non-strong hidden class
-    assert(created_class->is_hidden(), "non-strong hidden implies hidden");
-    loader_data->initialize_holder(Handle(THREAD, created_class->java_mirror()));
-    postcond(created_class->is_non_strong_hidden());
-  }
-
-  if (!created_class->is_hidden()) {
-    check_constraints(created_class, loader_data, true, CHECK);
-  }
-
-  created_class->add_to_hierarchy(CHECK);
-
-  if (!created_class->is_hidden()) {
-    update_dictionary(THREAD, created_class, loader_data);
+  if (publicize) {
+    // notify jvmti
+    if (JvmtiExport::should_post_class_load()) {
+      JvmtiExport::post_class_load(THREAD, k);
+    }
+    post_class_define_event(k, loader_data);
   }
 }
 
@@ -1482,7 +1459,7 @@ void SystemDictionary::define_recreated_instance_class(InstanceKlass* created_cl
 // you need to find_and_remove it before returning.
 // So be careful to not exit with a CHECK_ macro between these calls.
 InstanceKlass* SystemDictionary::find_or_define_helper(Symbol* class_name, Handle class_loader,
-                                                       InstanceKlass* k, TRAPS) {
+                                                       InstanceKlass* k, bool restoration, TRAPS) {
 
   Symbol* name_h = k->name();
   ClassLoaderData* loader_data = class_loader_data(class_loader);
@@ -1492,7 +1469,7 @@ InstanceKlass* SystemDictionary::find_or_define_helper(Symbol* class_name, Handl
   {
     MutexLocker mu(THREAD, SystemDictionary_lock);
     // First check if class already defined
-    if (is_parallelDefine(class_loader)) {
+    if (restoration || is_parallelDefine(class_loader)) {
       InstanceKlass* check = dictionary->find_class(THREAD, name_h);
       if (check != nullptr) {
         return check;
@@ -1527,7 +1504,7 @@ InstanceKlass* SystemDictionary::find_or_define_helper(Symbol* class_name, Handl
     }
   }
 
-  define_instance_class(k, class_loader, THREAD);
+  define_instance_class(k, class_loader, /*publicize:*/ !restoration, THREAD);
 
   // definer must notify any waiting threads
   {
@@ -1549,7 +1526,7 @@ InstanceKlass* SystemDictionary::find_or_define_helper(Symbol* class_name, Handl
 // find_or_define_instance_class may return a different InstanceKlass
 InstanceKlass* SystemDictionary::find_or_define_instance_class(Symbol* class_name, Handle class_loader,
                                                                InstanceKlass* k, TRAPS) {
-  InstanceKlass* defined_k = find_or_define_helper(class_name, class_loader, k, THREAD);
+  InstanceKlass* defined_k = find_or_define_helper(class_name, class_loader, k, false, THREAD);
   // Clean up original InstanceKlass if duplicate or error
   if (!HAS_PENDING_EXCEPTION && defined_k != k) {
     // If a parallel capable class loader already defined this class, register 'k' for cleanup.
@@ -1560,6 +1537,53 @@ InstanceKlass* SystemDictionary::find_or_define_instance_class(Symbol* class_nam
     k->class_loader_data()->add_to_deallocate_list(k);
   }
   return defined_k;
+}
+
+// Portable CRaC support.
+InstanceKlass *SystemDictionary::find_or_define_recreated_class(InstanceKlass *k, TRAPS) {
+  JavaThread* const thread = JavaThread::current();
+  ClassLoaderData* const loader_data = k->class_loader_data();
+  guarantee(!java_lang_ClassLoader::is_reflection_class_loader(loader_data->class_loader()),
+            "defining class loader must be non-reflectional");
+
+  if (k->is_hidden()) {
+    if (loader_data->has_class_mirror_holder()) {
+      precond(k->is_non_strong_hidden());
+      loader_data->initialize_holder(Handle(thread, k->java_mirror()));
+    }
+    k->add_to_hierarchy(thread);
+    // Will be linked later, or it can be not dumped as linked if there was a
+    // linkage error and the class wasn't deallocated
+    return k;
+  }
+
+  const Handle loader(thread, loader_data->class_loader());
+  if (is_parallelCapable(loader)) {
+    InstanceKlass* const defined = SystemDictionary::find_or_define_helper(k->name(), loader, k, /*restoration:*/ true, THREAD);
+    if (HAS_PENDING_EXCEPTION) {
+      precond(defined == nullptr);
+      loader_data->add_to_deallocate_list(k);
+      return nullptr;
+    }
+  }
+
+  ObjectLocker ol(loader, thread);
+
+  {
+    MutexLocker mu(THREAD, SystemDictionary_lock);
+    InstanceKlass* const predefined = loader_data->dictionary()->find_class(thread, k->name());
+    if (predefined != nullptr) {
+      return predefined;
+    }
+  }
+
+  SystemDictionary::define_instance_class(k, loader, /*publicize:*/ false, THREAD);
+  if (HAS_PENDING_EXCEPTION) {
+    loader_data->add_to_deallocate_list(k);
+    return nullptr;
+  }
+
+  return k;
 }
 
 

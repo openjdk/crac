@@ -149,10 +149,15 @@ class CracInstanceClassDumpParser : public StackObj /* constructor allocates res
       _loader_data(loader_data) {
     precond(reader != nullptr);
     precond(loader_data != nullptr);
+    log_trace(crac, class, parser)("Parsing instance class " HDID_FORMAT, class_dump.id);
     parse_class(CHECK);
     create_class(CHECK);
     _finished = true;
     postcond(_ik != nullptr);
+    if (log_is_enabled(Debug, crac, class, parser)) {
+      ResourceMark rm;
+      log_debug(crac, class, parser)("Parsed and created instance class " HDID_FORMAT " (%s)", class_dump.id, _ik->external_name());
+    }
   }
 
   InstanceKlass *created_class()     const           { precond(_finished); return _ik; }
@@ -1579,391 +1584,11 @@ class CracInstanceClassDumpParser : public StackObj /* constructor allocates res
   }
 };
 
-// Parses dump of a particular class without creating its representation.
-class CracInstanceClassDumpSkipper : public ClassDumpReader {
- public:
-  CracInstanceClassDumpSkipper(u2 id_size, BasicTypeReader *reader, TRAPS) : ClassDumpReader(reader, id_size) {
-    precond(reader != nullptr);
-    parse_class(CHECK);
-  }
-
- private:
-  bool _is_rewritten;
-  u2 _nest_host_index;
-
-  template <class UINT_T, ENABLE_IF((std::is_same<UINT_T, u1>::value || std::is_same<UINT_T, u2>::value ||
-                                     std::is_same<UINT_T, u4>::value || std::is_same<UINT_T, u8>::value))>
-  void skip_uint_array(TRAPS) {
-    const auto len = read<u4>(CHECK);
-    if (len == CracClassDumper::NO_ARRAY_SENTINEL) {
-      return;
-    }
-    skip(len * sizeof(UINT_T), CHECK);
-  }
-
-  void parse_class_state(TRAPS) {
-    const auto raw_state = read<u1>(CHECK);
-    guarantee(raw_state == InstanceKlass::loaded || raw_state == InstanceKlass::linked ||
-              raw_state == InstanceKlass::fully_initialized || raw_state == InstanceKlass::initialization_error,
-              "illegal class state: %i", raw_state);
-    const auto class_state = static_cast<InstanceKlass::ClassState>(raw_state);
-
-    if (raw_state == InstanceKlass::initialization_error) {
-      skip(id_size(), CHECK);
-    }
-
-    log_trace(crac, class, parser)("  Skipped class state");
-  }
-
-  void parse_class_flags(TRAPS) {
-    skip(sizeof(u4), CHECK); // Access flags
-    const u2 internal_flags = read<u2>(CHECK);
-    skip(sizeof(u1), CHECK); // Internal statuses
-    const InstanceKlassFlags ik_flags(internal_flags, /* internal statuses */ 0);
-    _is_rewritten = ik_flags.rewritten();
-    log_trace(crac, class, parser)("  Skipped class flags");
-  }
-
-  void parse_source_debug_extension_attr(TRAPS) {
-    const bool has_sde = read_bool(CHECK);
-    if (has_sde) {
-      const auto len = read<jint>(CHECK);
-      skip(len, CHECK);
-    }
-  }
-
-  void parse_record_attr(TRAPS) {
-    const auto has_record = read_bool(CHECK);
-    if (!has_record) {
-      return;
-    }
-
-    const auto components_num = read<u2>(CHECK);
-    for (u2 i = 0; i < components_num; i++) {
-      skip(4 * sizeof(u2), CHECK);
-      skip_uint_array<u1>(CHECK);
-      skip_uint_array<u1>(CHECK);
-    }
-  }
-
-  void parse_class_attrs(TRAPS) {
-    skip(2 * sizeof(u2), CHECK); // SourceFileName, Signature
-    _nest_host_index = read<u2>(CHECK);
-    skip(id_size(), CHECK);      // Resolved nest host
-    skip_uint_array<u2>(CHECK);  // NestMembers
-    skip_uint_array<u2>(CHECK);  // InnerClasses
-    parse_source_debug_extension_attr(CHECK);
-    skip_uint_array<u2>(CHECK);  // BootstrapMethods
-    parse_record_attr(CHECK);
-    skip_uint_array<u2>(CHECK);  // PermittedSubclasses
-    skip_uint_array<u1>(CHECK);  // Runtime(In)VisibleAnnotations
-    skip_uint_array<u1>(CHECK);  // Runtime(In)VisibleTypeAnnotations
-    log_trace(crac, class, parser)("  Skipped class attributes");
-  }
-
-  void parse_resolution_error_symbols(bool is_nest_host_error, TRAPS) {
-    skip(2 * id_size(), CHECK); // Error and message IDs
-    const HeapDump::ID cause_sym_id = read_id(true, CHECK);
-    if (cause_sym_id != HeapDump::NULL_ID) {
-      skip(id_size(), CHECK); // Cause message ID
-    }
-    if (is_nest_host_error) {
-      const auto nest_host_err_len = read<u4>(CHECK);
-      skip(nest_host_err_len, CHECK);
-    }
-  }
-
-  void parse_constant_pool(TRAPS) {
-    const auto pool_len = read<u2>(CHECK);
-    skip(sizeof(u2), CHECK); // Number of classes
-    log_trace(crac, class, parser)("  Skipping %i constant pool slots", pool_len);
-    for (u2 pool_i = 1 /* index 0 is unused */; pool_i < pool_len; pool_i++) {
-      const auto tag = read<u1>(CHECK);
-      switch (tag) {
-        case JVM_CONSTANT_Utf8: skip(id_size(), CHECK); break;
-        case JVM_CONSTANT_NameAndType: skip(2 * sizeof(u2), CHECK); break;
-
-        case JVM_CONSTANT_Integer: skip(sizeof(jint), CHECK); break;
-        case JVM_CONSTANT_Float: skip(sizeof(jfloat), CHECK); break;
-        case JVM_CONSTANT_Long:
-          skip(sizeof(jlong), CHECK);
-          guarantee(++pool_i != pool_len, "long occupies two constant pool slots and thus cannot start on the last slot");
-          break;
-        case JVM_CONSTANT_Double:
-          skip(sizeof(jdouble), CHECK);
-          guarantee(++pool_i != pool_len, "double occupies two constant pool slots and thus cannot start on the last slot");
-          break;
-        case JVM_CONSTANT_String: skip(id_size(), CHECK); break;
-
-        case JVM_CONSTANT_Class:
-        case JVM_CONSTANT_UnresolvedClass:
-        case JVM_CONSTANT_UnresolvedClassInError:
-          skip(sizeof(u2), CHECK);
-          if (tag == JVM_CONSTANT_Class) {
-            skip(id_size(), CHECK);
-            if (pool_i == _nest_host_index) {
-              const bool has_nest_host_res_error = read_bool(CHECK);
-              if (has_nest_host_res_error) {
-                parse_resolution_error_symbols(true, CHECK);
-              }
-            }
-          } else if (tag == JVM_CONSTANT_UnresolvedClassInError) {
-            parse_resolution_error_symbols(false, CHECK);
-          }
-          break;
-        case JVM_CONSTANT_Fieldref:
-        case JVM_CONSTANT_Methodref:
-        case JVM_CONSTANT_InterfaceMethodref:
-          skip(2 * sizeof(u2), CHECK);
-          break;
-        case JVM_CONSTANT_MethodType:
-        case JVM_CONSTANT_MethodTypeInError:
-          skip(sizeof(u2), CHECK);
-          if (tag == JVM_CONSTANT_MethodTypeInError) {
-            parse_resolution_error_symbols(false, CHECK);
-          }
-          break;
-        case JVM_CONSTANT_MethodHandle:
-        case JVM_CONSTANT_MethodHandleInError:
-          skip(sizeof(u1) + sizeof(u2), CHECK);
-          if (tag == JVM_CONSTANT_MethodHandleInError) {
-            parse_resolution_error_symbols(false, CHECK);
-          }
-          break;
-        case JVM_CONSTANT_Dynamic:
-        case JVM_CONSTANT_DynamicInError:
-        case JVM_CONSTANT_InvokeDynamic:
-          skip(2 * sizeof(u2), CHECK);
-          if (tag == JVM_CONSTANT_DynamicInError) {
-            parse_resolution_error_symbols(false, CHECK);
-          }
-          break;
-
-        default:
-          guarantee(false, "illegal tag %i at constant pool slot %i", tag, pool_i);
-      }
-      log_trace(crac, class, parser)("    Skipped constant pool slot with tag %i", tag);
-    }
-
-    log_trace(crac, class, parser)("  Skipped constant pool");
-  }
-
-  void parse_constant_pool_cache(TRAPS) {
-    const auto field_entries_len = read<u2>(CHECK);
-    const auto method_entries_len = read<jint>(CHECK); // AKA cache length
-    const auto indy_entries_len = read<jint>(CHECK);
-    guarantee(method_entries_len >= 0, "amount of resolved methods cannot be negative");
-    guarantee(indy_entries_len >= 0, "amount of resolved invokedynamic instructions cannot be negative");
-
-    for (u2 field_i = 0; field_i < field_entries_len; field_i++) {
-      skip(sizeof(u2), CHECK); // Constant pool index
-
-      const auto get_code = read<u1>(CHECK);
-      skip(sizeof(u1), CHECK); // put code
-
-      if (get_code != 0) {
-        skip(id_size(), CHECK); // Holder class ID
-        skip(sizeof(u2) + 2 * sizeof(u1), CHECK); // Field info
-      }
-    }
-
-    for (int cache_i = 0; cache_i < method_entries_len; cache_i++) {
-      skip(sizeof(u2), CHECK); // Constant pool index
-
-      const auto raw_bytecode1 = read<u1>(CHECK);
-      const auto raw_bytecode2 = read<u1>(CHECK);
-      guarantee(Bytecodes::is_defined(raw_bytecode1), "undefined method resolution bytecode 1: %i", raw_bytecode1);
-      guarantee(Bytecodes::is_defined(raw_bytecode2), "undefined method resolution bytecode 2: %i", raw_bytecode2);
-
-      if (raw_bytecode1 > 0 || raw_bytecode2 > 0) { // If resolved
-        const auto flags = read<u1>(CHECK);
-        const bool is_forced_virtual = is_set_nth_bit(flags, CracClassDumper::is_forced_virtual_shift);
-        const bool is_vfinal = is_set_nth_bit(flags, CracClassDumper::is_vfinal_shift);
-        const bool has_appendix = is_set_nth_bit(flags, CracClassDumper::has_appendix_shift);
-        skip(2 * sizeof(u1), CHECK); // ToS state, number of parameters
-
-        // f1
-        const Bytecodes::Code bytecode1 = Bytecodes::cast(raw_bytecode1);
-        switch (bytecode1) {
-          case Bytecodes::_invokestatic:
-          case Bytecodes::_invokespecial:
-          case Bytecodes::_invokehandle:
-            skip(id_size() + sizeof(u2), CHECK);
-            break;
-          case Bytecodes::_invokeinterface:
-            if (!is_forced_virtual) {
-              skip(id_size(), CHECK);
-            }
-            break;
-          case 0: // bytecode1 is not set
-            break;
-          default:
-            guarantee(false, "illegal method resolution bytecode 1: %s", Bytecodes::name(bytecode1));
-        }
-
-        // f2
-        const Bytecodes::Code bytecode2 = Bytecodes::cast(raw_bytecode2);
-        guarantee(bytecode2 == 0 || bytecode2 == Bytecodes::_invokevirtual, "illegal method resolution bytecode 2: %s", Bytecodes::name(bytecode2));
-        if (is_vfinal || (bytecode1 == Bytecodes::_invokeinterface && !is_forced_virtual)) {
-          skip(id_size() + sizeof(u2), CHECK);
-        } else if (bytecode1 == Bytecodes::_invokeinterface || bytecode2 == Bytecodes::_invokevirtual ||
-                  (bytecode1 == Bytecodes::_invokehandle && has_appendix)) {
-          skip(sizeof(jint), CHECK);
-        }
-      }
-    }
-
-    for (int indy_i = 0; indy_i < indy_entries_len; indy_i++) {
-      skip(2 * sizeof(u2), CHECK); // Constant pool index
-
-      const auto extended_flags = read<u1>(CHECK);
-      const bool is_resolution_failed = is_set_nth_bit(extended_flags, 0); // TODO define the shift in ResolvedIndyEntry
-      const bool is_resolved          = is_set_nth_bit(extended_flags, ResolvedIndyEntry::num_flags);
-
-      if (is_resolved) {
-        skip(id_size() + 2 * sizeof(u2) + sizeof(u1), CHECK);
-      } else if (is_resolution_failed) {
-        parse_resolution_error_symbols(false, CHECK);
-      }
-    }
-
-    skip_uint_array<u2>(CHECK); // Resolved references map
-
-    log_trace(crac, class, parser)("  Skipped constant pool cache");
-  }
-
-  void parse_interfaces(TRAPS) {
-    const auto interfaces_num = read<u2>(CHECK);
-    for (u2 i = 0; i < interfaces_num; i++) {
-      skip(id_size(), CHECK);
-    }
-    log_trace(crac, class, parser)("  Skipped %i local interfaces", interfaces_num);
-  }
-
-  void parse_fields(TRAPS) {
-    const auto java_fields_num = read<u2>(CHECK);
-    const auto injected_fields_num = read<u2>(CHECK);
-    for (u2 i = 0; i < java_fields_num + injected_fields_num; i++) {
-      skip(5 * sizeof(u2) + sizeof(jshort) + 2 * sizeof(u1), CHECK);
-      if (i < java_fields_num) { // Non-injected fields have annotations
-        skip_uint_array<u1>(CHECK); // Runtime(In)VisibleAnnotations
-        skip_uint_array<u1>(CHECK); // Runtime(In)VisibleTypeAnnotations
-      }
-    }
-
-    log_trace(crac, class, parser)("  Skipped %i fields", java_fields_num + injected_fields_num);
-  }
-
-  InlineTableSizes parse_method_inline_table_sizes(const ConstMethodFlags &flags, TRAPS) {
-    const u2 exception_table_length = !flags.has_exception_table() ? 0 : read<u2>(CHECK_({}));
-    const jint compressed_linenumber_size = !flags.has_linenumber_table() ? 0 : read<jint>(CHECK_({}));
-    const u2 localvariable_table_length = !flags.has_localvariable_table() ? 0 : read<u2>(CHECK_({}));
-    const u2 checked_exceptions_length = !flags.has_checked_exceptions() ? 0 : read<u2>(CHECK_({}));
-    const int method_parameters_length = !flags.has_method_parameters() ? 0 : read<u1>(CHECK_({})); // Not using -1 to ease skipping
-    const u2 generic_signature_index = !flags.has_generic_signature() ? 0 : read<u2>(CHECK_({}));
-    const jint method_annotations_length = !flags.has_method_annotations() ? 0 : read<jint>(CHECK_({}));
-    const jint parameter_annotations_length = !flags.has_parameter_annotations() ? 0 : read<jint>(CHECK_({}));
-    const jint type_annotations_length = !flags.has_type_annotations() ? 0 : read<jint>(CHECK_({}));
-    const jint default_annotations_length = !flags.has_default_annotations() ? 0 : read<jint>(CHECK_({}));
-#define INLINE_TABLE_NAME_PARAM(name) name,
-    return {
-      INLINE_TABLES_DO(INLINE_TABLE_NAME_PARAM)
-      0 /* end of iteration */
-    };
-#undef INLINE_TABLE_NAME_PARAM
-  }
-
-  void parse_code_attr(const ConstMethodFlags &flags, u2 code_size, const InlineTableSizes &table_sizes, TRAPS) {
-    skip(2 * sizeof(u2) + code_size, CHECK); // Max stack, max locals, bytecodes
-    if (flags.has_exception_table()) {
-      STATIC_ASSERT(sizeof(ExceptionTableElement) == 4 * sizeof(u2)); // Check no padding
-      const size_t size = table_sizes.exception_table_length() * sizeof(ExceptionTableElement);
-      skip(size, CHECK);
-    }
-    if (flags.has_linenumber_table()) {
-      skip(table_sizes.compressed_linenumber_size(), CHECK);
-    }
-    if (flags.has_localvariable_table()) {
-      STATIC_ASSERT(sizeof(LocalVariableTableElement) == 6 * sizeof(u2)); // Check no padding
-      const size_t size = table_sizes.localvariable_table_length() * sizeof(LocalVariableTableElement);
-      skip(size, CHECK);
-    }
-    skip_uint_array<u1>(CHECK); // StackMap table
-  }
-
-  void parse_method(TRAPS) {
-    skip(3 * sizeof(u2), CHECK); // idnums and access flags
-
-    const auto raw_flags = read<jint>(CHECK);
-    const ConstMethodFlags flags(raw_flags);
-
-    skip(sizeof(jint) + 2 * sizeof(u2), CHECK); // Statuses, name and signature indices
-
-    const auto code_size = read<u2>(CHECK);
-    const InlineTableSizes table_sizes = parse_method_inline_table_sizes(flags, CHECK);
-
-    if (code_size > 0) {
-      parse_code_attr(flags, code_size, table_sizes, CHECK);
-    }
-
-    STATIC_ASSERT(sizeof(CheckedExceptionElement) == sizeof(u2)); // Check no padding
-    const size_t checked_exceptions_table_size = table_sizes.checked_exceptions_length() * sizeof(CheckedExceptionElement);
-
-    STATIC_ASSERT(sizeof(MethodParametersElement) == 2 * sizeof(u2)); // Check no padding
-    const size_t method_params_table_size = table_sizes.method_parameters_length() * sizeof(MethodParametersElement);
-
-    skip(checked_exceptions_table_size + method_params_table_size +
-         table_sizes.method_annotations_length() + table_sizes.parameter_annotations_length() +
-         table_sizes.type_annotations_length() + table_sizes.default_annotations_length() +
-         sizeof(u1) /* is compiled lambda form */, CHECK);
-  }
-
-  void parse_methods(TRAPS) {
-    const auto methods_num = read<u2>(CHECK);
-    for (u2 i = 0; i < methods_num; i++) {
-      skip(sizeof(u2), CHECK); // Original index
-      parse_method(CHECK);
-    }
-    log_trace(crac, class, parser)("Skipped %i methods", methods_num);
-
-    const u2 default_methods_num = read<u2>(CHECK);
-    for (u2 i = 0; i < default_methods_num; i++) {
-      skip(id_size() + sizeof(u2), CHECK);
-    }
-    log_trace(crac, class, parser)("Skipped %i default methods", default_methods_num);
-  }
-
-  void parse_cached_class_file(TRAPS) {
-    const auto len = read<jint>(CHECK);
-    if (len != CracClassDumper::NO_CACHED_CLASS_FILE_SENTINEL) {
-      skip(len, CHECK);
-    }
-    log_trace(crac, class, parser)("  Skipped cached class file");
-  }
-
-  void parse_class(TRAPS) {
-    parse_class_state(CHECK);
-    skip(2 * sizeof(u2) + sizeof(jint), CHECK); // Class versions
-    parse_class_flags(CHECK);
-    parse_class_attrs(CHECK);
-    parse_constant_pool(CHECK);
-    if (_is_rewritten) {
-      parse_constant_pool_cache(CHECK);
-    }
-    skip(sizeof(u2), CHECK);                    // this_class index
-    parse_interfaces(CHECK);
-    parse_fields(CHECK);
-    parse_methods(CHECK);
-    parse_cached_class_file(CHECK);
-    log_trace(crac, class, parser)("  Instance class dump skipped");
-  }
-};
-
 void CracClassDumpParser::parse(const char *path, const ParsedHeapDump &heap_dump,
                                 ClassLoaderProvider *loader_provider,
                                 HeapDumpTable<InstanceKlass *, AnyObj::C_HEAP> *iks,
                                 HeapDumpTable<ArrayKlass *, AnyObj::C_HEAP> *aks,
-                                HeapDumpTable<ClassHeapDeps, AnyObj::C_HEAP> *heap_deps, TRAPS) {
+                                HeapDumpTable<UnfilledClassInfo, AnyObj::C_HEAP> *unfilled_infos, TRAPS) {
   precond(path != nullptr && loader_provider != nullptr && iks != nullptr && aks != nullptr);
   log_info(crac, class, parser)("Started parsing class dump %s", path);
 
@@ -1973,12 +1598,12 @@ void CracClassDumpParser::parse(const char *path, const ParsedHeapDump &heap_dum
               err_msg("Cannot open %s for reading: %s", path, os::strerror(errno)));
   }
 
-  CracClassDumpParser dump_parser(&reader, heap_dump, loader_provider, iks, aks, heap_deps, THREAD);
+  CracClassDumpParser dump_parser(&reader, heap_dump, loader_provider, iks, aks, unfilled_infos, THREAD);
   if (HAS_PENDING_EXCEPTION) {
     Handle cause(Thread::current(), PENDING_EXCEPTION);
     CLEAR_PENDING_EXCEPTION;
     THROW_MSG_CAUSE(vmSymbols::java_lang_IllegalArgumentException(),
-                    err_msg("Failed to create re-classes from dump %s", path), cause);
+                    err_msg("Failed to create classes from dump %s", path), cause);
   } else {
     log_info(crac, class, parser)("Successfully parsed class dump %s", path);
   }
@@ -1986,8 +1611,8 @@ void CracClassDumpParser::parse(const char *path, const ParsedHeapDump &heap_dum
 
 CracClassDumpParser::CracClassDumpParser(BasicTypeReader *reader, const ParsedHeapDump &heap_dump, ClassLoaderProvider *loader_provider,
                                          HeapDumpTable<InstanceKlass *, AnyObj::C_HEAP> *iks, HeapDumpTable<ArrayKlass *, AnyObj::C_HEAP> *aks,
-                                         HeapDumpTable<ClassHeapDeps, AnyObj::C_HEAP> *heap_deps, TRAPS) :
-    ClassDumpReader(reader), _heap_dump(heap_dump), _loader_provider(loader_provider), _iks(iks), _aks(aks), _heap_deps(heap_deps) {
+                                         HeapDumpTable<UnfilledClassInfo, AnyObj::C_HEAP> *unfilled_infos, TRAPS) :
+    ClassDumpReader(reader), _heap_dump(heap_dump), _loader_provider(loader_provider), _iks(iks), _aks(aks), _unfilled_infos(unfilled_infos) {
   if (Arguments::is_dumping_archive()) {
     // TODO should do something like ClassLoader::record_result() after loading each class
     log_warning(crac, class, parser, cds)("Classes restored by CRaC will not be included into the CDS archive");
@@ -2106,6 +1731,23 @@ CracClassDumpParser::ClassPreamble CracClassDumpParser::parse_instance_class_pre
 }
 
 Handle CracClassDumpParser::get_class_loader(HeapDump::ID loader_id, TRAPS) {
+#ifdef ASSERT
+  if (loader_id != HeapDump::NULL_ID) {
+    const HeapDump::InstanceDump &loader_dump = _heap_dump.get_instance_dump(loader_id);
+    assert(_iks->contains(loader_dump.class_id), "incorrect dump order: class dumped before its class loader");
+    const InstanceKlass &loader_class = **_iks->get(loader_dump.class_id);
+    if (!loader_class.is_being_restored()) {
+      precond(loader_class.is_initialized() || loader_class.is_in_error_state());
+      assert(loader_class.is_initialized(), "class loader " HDID_FORMAT " cannot be used to load classes: "
+             "its class %s has failed to initialize", loader_id, loader_class.external_name());
+    } else {
+      precond(_unfilled_infos->contains(loader_dump.class_id));
+      assert(_unfilled_infos->get(loader_dump.class_id)->target_state == InstanceKlass::fully_initialized,
+             "class loader " HDID_FORMAT " cannot be used to load classes: its class %s was not initialized at dump time",
+             loader_id, loader_class.external_name());
+    }
+  }
+#endif
   const Handle class_loader = _loader_provider->get_class_loader(loader_id, CHECK_NH);
   postcond(class_loader.is_null() || class_loader->klass()->is_class_loader_instance_klass());
   guarantee(!java_lang_ClassLoader::is_reflection_class_loader(class_loader()),
@@ -2113,59 +1755,30 @@ Handle CracClassDumpParser::get_class_loader(HeapDump::ID loader_id, TRAPS) {
   return class_loader;
 }
 
-// TODO should not just skip, but synchronize the state somehow, e.g. the
-//  class may be not initialized now but if it was dumped as such, we need to
-//  also mark it as initialized now. But it's unclear what to do if the state
-//  differs (e.g. it was initialized but now it is in the error state).
-InstanceKlass *CracClassDumpParser::skip_instance_class_if_exists(const HeapDump::ClassDump &class_dump,
-                                                                  const Handle &class_loader, TRAPS) {
-  // TODO What to do with hidden classes? They have uniquely-generated names,
-  //  so we won't find them by (class loader, class name) pair even if we
-  //  iterate through all CLDs of the loader and all classes recorded it these
-  //  CLD's class lists. This is a problem since we'll restore such classes
-  //  even if they exist thus duplicating them.
-  Symbol *const class_name = _heap_dump.get_class_name(class_dump.id);
-  InstanceKlass *const ik = SystemDictionary::find_instance_klass(Thread::current(), class_name, class_loader, Handle());
-  if (ik == nullptr) {
-    return nullptr;
-  }
-  guarantee(!ik->is_being_restored(), "pre-loaded classes are not restored");
-
-  CracInstanceClassDumpSkipper(id_size(), reader(), CHECK_NULL);
-  if (log_is_enabled(Debug, crac, class, parser)) {
-    ResourceMark rm;
-    log_debug(crac, class, parser)("Skipped class " HDID_FORMAT " (%s) as pre-loaded", class_dump.id, ik->external_name());
-  }
-
-  return ik;
-}
-
-InstanceKlass *CracClassDumpParser::parse_instance_class(const HeapDump::ClassDump &class_dump,
-                                                         ClassLoaderData *loader_data,
-                                                         InterclassRefs *refs_out, TRAPS) {
-  log_trace(crac, class, parser)("Parsing instance class " HDID_FORMAT, class_dump.id);
-  CracInstanceClassDumpParser ik_parser(id_size(), reader(), _heap_dump, *_iks, class_dump, loader_data, THREAD);
-  if (!HAS_PENDING_EXCEPTION) {
-    CracClassStateRestorer::apply_state(ik_parser.created_class(), ik_parser.class_state(), THREAD);
-  }
+InstanceKlass *CracClassDumpParser::parse_and_define_instance_class(const HeapDump::ClassDump &class_dump,
+                                                                    ClassLoaderData *loader_data,
+                                                                    InterclassRefs *refs_out, TRAPS) {
+  const CracInstanceClassDumpParser ik_parser(id_size(), reader(), _heap_dump, *_iks, class_dump, loader_data, THREAD);
   if (HAS_PENDING_EXCEPTION) {
     const Handle cause(Thread::current(), PENDING_EXCEPTION);
     CLEAR_PENDING_EXCEPTION;
-    THROW_MSG_CAUSE_(vmSymbols::java_lang_RuntimeException(), err_msg("Cannot create class " HDID_FORMAT, class_dump.id), cause, {});
+    THROW_MSG_CAUSE_(vmSymbols::java_lang_Exception(), err_msg("Cannot create class " HDID_FORMAT, class_dump.id), cause, {});
   }
 
-  precond(!_heap_deps->contains(class_dump.id));
-  if (ik_parser.class_initialization_error_id() != HeapDump::NULL_ID) {
-    _heap_deps->put_when_absent(class_dump.id, {ik_parser.class_initialization_error_id()});
-    _heap_deps->maybe_grow();
+  InstanceKlass *const ik = CracClassStateRestorer::define_created_class(ik_parser.created_class(), ik_parser.class_state(), CHECK_NULL);
+  precond(!_iks->contains(class_dump.id));
+  _iks->put_when_absent(class_dump.id, ik);
+  _iks->maybe_grow();
+
+  precond(!_unfilled_infos->contains(class_dump.id));
+  if (ik->is_being_restored()) {
+    _unfilled_infos->put_when_absent(class_dump.id, {ik_parser.class_state(), ik_parser.class_initialization_error_id()});
+    _unfilled_infos->maybe_grow();
   }
 
-  if (log_is_enabled(Debug, crac, class, parser)) {
-    ResourceMark rm;
-    log_debug(crac, class, parser)("Parsed instance class " HDID_FORMAT " (%s)", class_dump.id, ik_parser.created_class()->external_name());
-  }
   *refs_out = ik_parser.interclass_references();
-  return ik_parser.created_class();
+
+  return ik;
 }
 
 GrowableArray<Pair<HeapDump::ID, InterclassRefs>> CracClassDumpParser::parse_instance_and_obj_array_classes(TRAPS) {
@@ -2179,20 +1792,18 @@ GrowableArray<Pair<HeapDump::ID, InterclassRefs>> CracClassDumpParser::parse_ins
     const HeapDump::ClassDump *class_dump = _heap_dump.class_dumps.get(preamble.class_id);
     guarantee(class_dump != nullptr, "class " HDID_FORMAT " not found in heap dump", preamble.class_id);
 
+    // TODO What to do with hidden classes? They have uniquely-generated names,
+    //  so we won't find them by (class loader, class name) pair even if we
+    //  iterate through all CLDs of the loader and all classes recorded it these
+    //  CLD's class lists. This is a problem since we'll restore such classes
+    //  even if they exist thus duplicating them.
+
     const Handle loader = get_class_loader(class_dump->class_loader_id, CHECK_({}));
-    InstanceKlass *ik = nullptr;
-    using Kind = CracClassDumper::ClassLoadingKind;
-    if (preamble.loading_kind == Kind::NORMAL) {
-      ik = skip_instance_class_if_exists(*class_dump, loader, CHECK_({}));
-    }
-    if (ik == nullptr) {
-      ClassLoaderData *const loader_data = SystemDictionary::register_loader(loader, preamble.loading_kind == Kind::NON_STRONG_HIDDEN);
-      InterclassRefs refs;
-      ik = parse_instance_class(*class_dump, loader_data, &refs, CHECK_({}));
-      interclass_refs.append({class_dump->id, refs});
-    }
-    _iks->put_when_absent(class_dump->id, ik);
-    _iks->maybe_grow();
+    ClassLoaderData *const loader_data = SystemDictionary::register_loader(loader, preamble.loading_kind == CracClassDumper::ClassLoadingKind::NON_STRONG_HIDDEN);
+
+    InterclassRefs refs;
+    InstanceKlass *const ik = parse_and_define_instance_class(*class_dump, loader_data, &refs, CHECK_({}));
+    interclass_refs.append({class_dump->id, refs});
 
     parse_obj_array_classes(ik, CHECK_({}));
   }

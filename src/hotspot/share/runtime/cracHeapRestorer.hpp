@@ -52,7 +52,7 @@ class ClassLoaderProvider : public StackObj {
   virtual instanceHandle get_class_loader(HeapDump::ID id, TRAPS) = 0;
 };
 
-struct ClassHeapDeps;
+struct UnfilledClassInfo;
 class StackTrace;
 
 // Restores heap based on an HPROF dump created by HeapDumper (there are some
@@ -74,7 +74,7 @@ class CracHeapRestorer : public ClassLoaderProvider {
 
   instanceHandle get_class_loader(HeapDump::ID id, TRAPS) override;
 
-  void restore_heap(const HeapDumpTable<ClassHeapDeps, AnyObj::C_HEAP> &class_heap_deps,
+  void restore_heap(const HeapDumpTable<UnfilledClassInfo, AnyObj::C_HEAP> &class_infos,
                     const GrowableArrayView<StackTrace *> &stack_traces, TRAPS);
 
  private:

@@ -5,6 +5,7 @@
 #include "memory/allocation.hpp"
 #include "oops/arrayKlass.hpp"
 #include "oops/instanceKlass.hpp"
+#include "runtime/handles.hpp"
 #include "utilities/exceptions.hpp"
 #include "utilities/globalDefinitions.hpp"
 #include "utilities/growableArray.hpp"
@@ -49,14 +50,21 @@ struct InterclassRefs : public ResourceObj {
 };
 
 struct CracClassStateRestorer : public AllStatic {
-  // Defines the class and brings it up to the requested state.
-  static void apply_state(InstanceKlass *ik, InstanceKlass::ClassState state, TRAPS);
-  // Fills the specified interclass references of the class.
+  // Defines the created class and makes the current thread hold its init state
+  // if needed. Returns the defined class which may differ from the created one
+  // iff the class has been pre-defined.
+  static InstanceKlass *define_created_class(InstanceKlass *created_ik, InstanceKlass::ClassState target_state, TRAPS);
+
   static void fill_interclass_references(InstanceKlass *ik,
                                          const HeapDumpTable<InstanceKlass *, AnyObj::C_HEAP> &iks,
                                          const HeapDumpTable<ArrayKlass *, AnyObj::C_HEAP> &aks,
                                          const InterclassRefs &refs);
-  static void fill_initialization_error(InstanceKlass *ik, Handle error);
+
+  static void apply_init_state(InstanceKlass *ik, InstanceKlass::ClassState state, Handle init_error);
+
+  // Checks that initialization state of this class is consistent with the
+  // states of its super class and implemented interfaces.
+  static void assert_hierarchy_init_states_are_consistent(const InstanceKlass &ik) NOT_DEBUG_RETURN;
 };
 
 #endif // SHARE_UTILITIES_CRACCLASSSTATERESTORER_HPP

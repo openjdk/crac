@@ -823,8 +823,8 @@ void crac::restore_heap(TRAPS) {
   }
 
   os::snprintf_checked(path, sizeof(path), "%s%s%s", CRaCRestoreFrom, os::file_separator(), PMODE_CLASS_DUMP_FILENAME);
-  HeapDumpTable<ClassHeapDeps, AnyObj::C_HEAP> heap_deps(107, 10000);
-  CracClassDumpParser::parse(path, *_heap_dump, &heap_restorer, _portable_restored_classes, &array_classes, &heap_deps, THREAD);
+  HeapDumpTable<UnfilledClassInfo, AnyObj::C_HEAP> class_infos(107, 10000);
+  CracClassDumpParser::parse(path, *_heap_dump, &heap_restorer, _portable_restored_classes, &array_classes, &class_infos, THREAD);
   if (HAS_PENDING_EXCEPTION) {
     clear_restoration_data();
     const Handle e(Thread::current(), PENDING_EXCEPTION);
@@ -832,7 +832,7 @@ void crac::restore_heap(TRAPS) {
     THROW_MSG_CAUSE(vmSymbols::java_lang_IllegalArgumentException(), "Restore failed: cannot create classes", e);
   }
 
-  heap_restorer.restore_heap(heap_deps, _stack_dump->stack_traces(), THREAD);
+  heap_restorer.restore_heap(class_infos, _stack_dump->stack_traces(), THREAD);
   if (HAS_PENDING_EXCEPTION) {
     clear_restoration_data();
     const Handle e(Thread::current(), PENDING_EXCEPTION);

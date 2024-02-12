@@ -770,8 +770,9 @@ void InstanceKlass::link_class(TRAPS) {
 void InstanceKlass::check_link_state_and_wait(JavaThread* current) {
   MonitorLocker ml(current, _init_monitor);
 
-  // Another thread is linking this class, wait.
-  while (is_being_linked() && !is_init_thread(current)) {
+  // Another thread is linking or restoring this class, wait.
+  while ((is_being_linked() || is_being_restored()) && !is_init_thread(current)) {
+    assert(!(is_being_restored() && is_init_thread(current)), "restoring thread should not call this");
     ml.wait();
   }
 
@@ -897,33 +898,8 @@ bool InstanceKlass::link_class_impl(TRAPS) {
         SystemDictionaryShared::check_verification_constraints(this, CHECK_false);
       }
 
-      // relocate jsrs and link methods after they are all rewritten
-      link_methods(CHECK_false);
+      finish_linking(true, CHECK_false);
 
-      // Initialize the vtable and interface table after
-      // methods have been rewritten since rewrite may
-      // fabricate new Method*s.
-      // also does loader constraint checking
-      //
-      // initialize_vtable and initialize_itable need to be rerun
-      // for a shared class if
-      // 1) the class is loaded by custom class loader or
-      // 2) the class is loaded by built-in class loader but failed to add archived loader constraints or
-      // 3) the class was not verified during dump time
-      bool need_init_table = true;
-      if (is_shared() && verified_at_dump_time() &&
-          SystemDictionaryShared::check_linking_constraints(THREAD, this)) {
-        need_init_table = false;
-      }
-      if (need_init_table) {
-        vtable().initialize_vtable_and_check_constraints(CHECK_false);
-        itable().initialize_itable_and_check_constraints(CHECK_false);
-      }
-#ifdef ASSERT
-      vtable().verify(tty, true);
-      // In case itable verification is ever added.
-      // itable().verify(tty, true);
-#endif
       set_initialization_state_and_notify(linked, THREAD);
       if (JvmtiExport::should_post_class_prepare()) {
         JvmtiExport::post_class_prepare(THREAD, this);
@@ -944,6 +920,44 @@ void InstanceKlass::rewrite_class(TRAPS) {
   }
   Rewriter::rewrite(this, CHECK);
   set_rewritten();
+}
+
+void InstanceKlass::finish_linking(bool check_vtable_constraints, TRAPS) {
+  precond(is_rewritten());
+
+  // relocate jsrs and link methods after they are all rewritten
+  link_methods(CHECK);
+
+  // Initialize the vtable and interface table after
+  // methods have been rewritten since rewrite may
+  // fabricate new Method*s.
+  // also does loader constraint checking
+  //
+  // initialize_vtable and initialize_itable need to be rerun
+  // for a shared class if
+  // 1) the class is loaded by custom class loader or
+  // 2) the class is loaded by built-in class loader but failed to add archived loader constraints or
+  // 3) the class was not verified during dump time
+  bool need_init_table = true;
+  if (is_shared() && verified_at_dump_time() &&
+      SystemDictionaryShared::check_linking_constraints(THREAD, this)) {
+    need_init_table = false;
+  }
+  if (need_init_table) {
+    static constexpr bool is_debug = DEBUG_ONLY(true) NOT_DEBUG(false);
+    if (check_vtable_constraints || is_debug) {
+      vtable().initialize_vtable_and_check_constraints(CHECK);
+      itable().initialize_itable_and_check_constraints(CHECK);
+    } else {
+      vtable().initialize_vtable();
+      itable().initialize_itable();
+    }
+  }
+#ifdef ASSERT
+  vtable().verify(tty, true);
+  // In case itable verification is ever added.
+  // itable().verify(tty, true);
+#endif
 }
 
 // Now relocate and link method entry points after class is rewritten.
@@ -1076,8 +1090,9 @@ void InstanceKlass::initialize_impl(TRAPS) {
   {
     MonitorLocker ml(THREAD, _init_monitor);
 
-    // Step 2
-    while (is_being_initialized() && !is_init_thread(jt)) {
+    // Step 2 (ammended with portable CRaC support)
+    while ((is_being_initialized() || is_being_restored()) && !is_init_thread(jt)) {
+      assert(!(is_being_restored() && is_init_thread(jt)), "restoring thread should not call this");
       wait = true;
       jt->set_class_to_be_initialized(this);
       ml.wait();
@@ -1233,6 +1248,35 @@ void InstanceKlass::set_initialization_state_and_notify(ClassState state, JavaTh
   } else {
     set_init_thread(nullptr); // reset _init_thread before changing _init_state
     set_init_state(state);
+  }
+  ml.notify_all();
+}
+
+// Like the above but to set being_linked -> linked -> being_initialized in a
+// single critical section.
+void InstanceKlass::set_linked_to_be_initialized_state_and_notify(JavaThread* current) {
+  MonitorLocker ml(current, _init_monitor);
+  precond(_init_state == being_linked);
+
+  if (UseVtableBasedCHA && Universe::is_fully_initialized()) {
+    DeoptimizationScope deopt_scope;
+    {
+      // Now mark all code that assumes the class is not linked.
+      // Set state under the Compile_lock also.
+      MutexLocker ml(current, Compile_lock);
+
+      set_init_thread(nullptr); // reset _init_thread before changing _init_state
+      set_init_state(being_initialized);
+      set_init_thread(current); // set it back
+
+      CodeCache::mark_dependents_on(&deopt_scope, this);
+    }
+    // Perform the deopt handshake outside Compile_lock.
+    deopt_scope.deoptimize_marked();
+  } else {
+    set_init_thread(nullptr); // reset _init_thread before changing _init_state
+    set_init_state(being_initialized);
+    set_init_thread(current); // set it back
   }
   ml.notify_all();
 }

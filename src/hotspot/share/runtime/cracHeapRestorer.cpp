@@ -397,7 +397,7 @@ instanceHandle CracHeapRestorer::prepare_class_loader(HeapDump::ID id, TRAPS) {
             "class loader " HDID_FORMAT " is of class %s (" HDID_FORMAT ") "
             "which does not subclass %s", id, loader_klass.external_name(), dump.class_id,
             vmSymbols::java_lang_ClassLoader()->as_klass_external_name());
-  guarantee(!loader_klass.should_be_initialized(), "class loader " HDID_FORMAT " cannot be an instance of "
+  guarantee(loader_klass.is_being_restored() || loader_klass.is_initialized(), "class loader " HDID_FORMAT " cannot be an instance of "
             "uninitialized class %s (" HDID_FORMAT ")", dump.id, loader_klass.external_name(), dump.class_id);
   loader_klass.check_valid_for_instantiation(true, CHECK_({}));
 
@@ -463,7 +463,7 @@ instanceHandle CracHeapRestorer::get_class_loader(HeapDump::ID id, TRAPS) {
 
 // Heap restoration driver
 
-void CracHeapRestorer::restore_heap(const HeapDumpTable<ClassHeapDeps, AnyObj::C_HEAP> &class_heap_deps,
+void CracHeapRestorer::restore_heap(const HeapDumpTable<UnfilledClassInfo, AnyObj::C_HEAP> &class_infos,
                                     const GrowableArrayView<StackTrace *> &stack_traces, TRAPS) {
   log_info(crac)("Started heap restoration");
   HandleMark hm(Thread::current());
@@ -482,29 +482,39 @@ void CracHeapRestorer::restore_heap(const HeapDumpTable<ClassHeapDeps, AnyObj::C
     return;
   }
 
+  // Restore objects reachable from classes being restored.
   // TODO should also restore array and primitive mirrors?
   _instance_classes.iterate([&](HeapDump::ID class_id, InstanceKlass *ik) -> bool {
     if (!ik->is_being_restored()) {
-      return true; // Skip pre-created since they may already have a new state
+      return true; // Skip pre-initialized since they may already have a new state
     }
+
+    precond(class_infos.contains(class_id));
+    const UnfilledClassInfo &info = *class_infos.get(class_id);
+
     restore_class_mirror(class_id, CHECK_false);
-    if (ik->is_in_error_state()) {
-      const ClassHeapDeps *deps = class_heap_deps.get(class_id);
-      if (deps != nullptr && deps->class_initialization_error_id != HeapDump::NULL_ID) {
-        const Handle init_error = restore_object(deps->class_initialization_error_id, CHECK_false);
-        guarantee(init_error->is_instance(), "initialization exception " HDID_FORMAT " of class %s is not an instance",
-                  deps->class_initialization_error_id, init_error->klass()->external_name());
-        CracClassStateRestorer::fill_initialization_error(ik, init_error);
-      }
+
+    Handle init_error;
+    if (info.class_initialization_error_id != HeapDump::NULL_ID) {
+      init_error = restore_object(info.class_initialization_error_id, CHECK_false);
+      guarantee(init_error->is_instance(), "%s's initialization exception " HDID_FORMAT " is an array",
+                init_error->klass()->external_name(), info.class_initialization_error_id);
     }
-    ik->set_is_being_restored(false);
+    CracClassStateRestorer::apply_init_state(ik, info.target_state, init_error);
+
     return true;
   });
   if (HAS_PENDING_EXCEPTION) {
     return;
   }
+#ifdef ASSERT
+  _instance_classes.iterate_all([](HeapDump::ID _, const InstanceKlass *ik) {
+    CracClassStateRestorer::assert_hierarchy_init_states_are_consistent(*ik);
+  });
+#endif // ASSERT
   guarantee(_prepared_loaders.number_of_entries() == 0, "some prepared class loaders have not defined any classes");
 
+  // Restore objects reachable from thread stacks to be restored.
   for (const auto *trace : stack_traces) {
     for (u4 i = 0; i < trace->frames_num(); i++) {
       const StackTrace::Frame &frame = trace->frames(i);
@@ -703,6 +713,8 @@ bool CracHeapRestorer::set_field_if_special(instanceHandle obj, const FieldStrea
       return true;
     }
 
+    // TODO "classes" field: ArrayList into which mirrors of defined classes are put
+
     // The rest of the fields are untouched by the preparation and should be
     // restored as usual
     return false;
@@ -884,8 +896,11 @@ void CracHeapRestorer::restore_static_fields(InstanceKlass *ik, const HeapDump::
                 "resolved references must be stored in an array "
                 "but they are dumped as a %s in class %s (ID " HDID_FORMAT ") as static field #%i",
                 type2name(HeapDump::htype2btype(field.info.type)), ik->external_name(), dump.id, static_i);
-      const Handle restored = restore_object(field.value.as_object_id, CHECK);
-      set_resolved_references(ik, restored);
+      // Restore the references if they aren't pre-created
+      if (!ik->is_linked() /*pre-linked*/ && !(ik->is_rewritten() && ik->is_shared() /*pre-rewritten*/)) {
+        const Handle restored = restore_object(field.value.as_object_id, CHECK);
+        set_resolved_references(ik, restored);
+      }
       continue; // No fs.next() because there is no actual field for this
     }
 

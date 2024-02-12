@@ -151,6 +151,7 @@ class constantTag {
   jbyte value() const                { return _tag; }
   jbyte error_value() const;
   jbyte non_error_value() const;
+  jbyte external_value() const;
 
   BasicType basic_type() const;        // if used with ldc, what kind of value gets pushed?
 

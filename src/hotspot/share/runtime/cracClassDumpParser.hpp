@@ -2,6 +2,7 @@
 #define SHARE_RUNTIME_CRACCLASSDUMPPARSER_HPP
 
 #include "memory/allocation.hpp"
+#include "oops/instanceKlass.hpp"
 #include "oops/oopsHierarchy.hpp"
 #include "runtime/handles.hpp"
 #include "utilities/basicTypeReader.hpp"
@@ -10,11 +11,10 @@
 #include "utilities/heapDumpParser.hpp"
 #include "utilities/pair.hpp"
 
-// Objects on which an instance class depends. They are recorded because they
-// are absent at the moment of class creation and need to be filled-in later
-// after they are restored.
-struct ClassHeapDeps {
-  HeapDump::ID class_initialization_error_id;
+// Parsed class info that cannot be applied when parsing the dump.
+struct UnfilledClassInfo {
+  InstanceKlass::ClassState target_state;     // State of the class at dump time
+  HeapDump::ID class_initialization_error_id; // Exception object ID
 };
 
 // Convenience BasicTypeReader wrapper.
@@ -55,21 +55,21 @@ struct InterclassRefs;
 class CracClassDumpParser: public ClassDumpReader {
  public:
   static void parse(const char *path, const ParsedHeapDump &heap_dump, ClassLoaderProvider *loader_provider,
-                    HeapDumpTable<InstanceKlass *, AnyObj::C_HEAP> *created_iks,
-                    HeapDumpTable<ArrayKlass *,    AnyObj::C_HEAP> *created_aks,
-                    HeapDumpTable<ClassHeapDeps,   AnyObj::C_HEAP> *heap_deps, TRAPS);
+                    HeapDumpTable<InstanceKlass *,   AnyObj::C_HEAP> *created_iks,
+                    HeapDumpTable<ArrayKlass *,      AnyObj::C_HEAP> *created_aks,
+                    HeapDumpTable<UnfilledClassInfo, AnyObj::C_HEAP> *unfilled_infos, TRAPS);
 
  private:
   const ParsedHeapDump &_heap_dump;
   ClassLoaderProvider *const _loader_provider;
 
-  HeapDumpTable<InstanceKlass *, AnyObj::C_HEAP> *const _iks;
-  HeapDumpTable<ArrayKlass *,    AnyObj::C_HEAP> *const _aks;
-  HeapDumpTable<ClassHeapDeps,   AnyObj::C_HEAP> *const _heap_deps;
+  HeapDumpTable<InstanceKlass *,   AnyObj::C_HEAP> *const _iks;
+  HeapDumpTable<ArrayKlass *,      AnyObj::C_HEAP> *const _aks;
+  HeapDumpTable<UnfilledClassInfo, AnyObj::C_HEAP> *const _unfilled_infos;
 
   CracClassDumpParser(BasicTypeReader *reader, const ParsedHeapDump &heap_dump, ClassLoaderProvider *loader_provider,
                       HeapDumpTable<InstanceKlass *, AnyObj::C_HEAP> *iks, HeapDumpTable<ArrayKlass *, AnyObj::C_HEAP> *aks,
-                      HeapDumpTable<ClassHeapDeps, AnyObj::C_HEAP> *heap_deps, TRAPS);
+                      HeapDumpTable<UnfilledClassInfo, AnyObj::C_HEAP> *unfilled_infos, TRAPS);
 
   struct ClassPreamble;
 
@@ -80,8 +80,7 @@ class CracClassDumpParser: public ClassDumpReader {
   Handle get_class_loader(HeapDump::ID loader_id, TRAPS);
 
   ClassPreamble parse_instance_class_preamble(TRAPS);
-  InstanceKlass *skip_instance_class_if_exists(const HeapDump::ClassDump &class_dump, const Handle &class_loader, TRAPS);
-  InstanceKlass *parse_instance_class(const HeapDump::ClassDump &class_dump, ClassLoaderData *loader_data, InterclassRefs *refs_out, TRAPS);
+  InstanceKlass *parse_and_define_instance_class(const HeapDump::ClassDump &class_dump, ClassLoaderData *loader_data, InterclassRefs *refs_out, TRAPS);
   GrowableArray<Pair<HeapDump::ID, InterclassRefs>> parse_instance_and_obj_array_classes(TRAPS);
 
   void parse_initiating_loaders(TRAPS);

@@ -274,6 +274,32 @@ void ConstantPool::klass_at_put(int class_index, Klass* k) {
   release_tag_at_put(class_index, JVM_CONSTANT_Class);
 }
 
+// Portable CRaC support:
+Klass *ConstantPool::klass_at_put_and_get(int class_index, Klass* k) {
+  assert(k != nullptr, "must be valid klass");
+  CPKlassSlot kslot = klass_slot_at(class_index);
+  int resolved_klass_index = kslot.resolved_klass_index();
+  Klass** adr = resolved_klasses()->adr_at(resolved_klass_index);
+  Klass* old_k = Atomic::cmpxchg(adr, static_cast<Klass*>(nullptr), k);
+
+  // The interpreter assumes when the tag is stored, the klass is resolved
+  // and the Klass* stored in _resolved_klasses is non-null, so we need
+  // hardware store ordering here.
+  // We also need to CAS to not overwrite an error from a racing thread.
+  jbyte old_tag = Atomic::cmpxchg((jbyte*)tag_addr_at(class_index),
+                                  (jbyte)JVM_CONSTANT_UnresolvedClass,
+                                  (jbyte)JVM_CONSTANT_Class);
+  switch (old_tag) {
+    case JVM_CONSTANT_UnresolvedClassInError:
+      // Remove klass.
+      resolved_klasses()->at_put(resolved_klass_index, nullptr);
+      return nullptr;
+    case JVM_CONSTANT_UnresolvedClass: return k;
+    case JVM_CONSTANT_Class:           return old_k;
+    default: ShouldNotReachHere();     return nullptr;
+  }
+}
+
 #if INCLUDE_CDS_JAVA_HEAP
 // Returns the _resolved_reference array after removing unarchivable items from it.
 // Returns null if this class is not supported, or _resolved_reference doesn't exist.

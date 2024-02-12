@@ -139,11 +139,6 @@ class SystemDictionary : AllStatic {
                                             const ClassLoadInfo& cl_info,
                                             TRAPS);
 
-  // Defines a class being restored using its defining class loader.
-  static void define_recreated_instance_class(InstanceKlass* recreated_class, TRAPS);
-
-  static void record_initiating_loader(InstanceKlass* loaded_class, Handle class_loader, TRAPS);
-
   // Lookup an already loaded class. If not found null is returned.
   static InstanceKlass* find_instance_klass(Thread* current, Symbol* class_name,
                                             Handle class_loader, Handle protection_domain);
@@ -179,6 +174,14 @@ class SystemDictionary : AllStatic {
   static Klass* find_constrained_instance_or_array_klass(Thread* current,
                                                          Symbol* class_name,
                                                          Handle class_loader);
+
+  // Portable CRaC support: finds a class with the same name and class loader or
+  // defines the provided class. Returns the defined class, deallocating the
+  // provided one if it was not defined.
+  static InstanceKlass* find_or_define_recreated_class(InstanceKlass* k, TRAPS);
+
+  // Records the non-defining class loader as an initiating loader of the class.
+  static void record_initiating_loader(InstanceKlass* loaded_class, Handle class_loader, TRAPS);
 
   static void classes_do(MetaspaceClosure* it);
   // Iterate over all methods in all klasses
@@ -307,10 +310,10 @@ private:
   static Klass* resolve_array_class_or_null(Symbol* class_name,
                                             Handle class_loader,
                                             Handle protection_domain, TRAPS);
-  static void define_instance_class(InstanceKlass* k, Handle class_loader, TRAPS);
+  static void define_instance_class(InstanceKlass* k, Handle class_loader, bool publicize, TRAPS);
   static InstanceKlass* find_or_define_helper(Symbol* class_name,
                                               Handle class_loader,
-                                              InstanceKlass* k, TRAPS);
+                                              InstanceKlass* k, bool restoration, TRAPS);
   static InstanceKlass* load_instance_class_impl(Symbol* class_name, Handle class_loader, TRAPS);
   static InstanceKlass* load_instance_class(Symbol* class_name,
                                             Handle class_loader, TRAPS);

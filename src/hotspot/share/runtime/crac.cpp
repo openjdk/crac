@@ -208,7 +208,8 @@ static VM_Crac::Outcome checkpoint_portable() {
   os::snprintf_checked(path, sizeof(path), "%s%s%s",
                        CRaCCheckpointTo, os::file_separator(), PMODE_HEAP_DUMP_FILENAME);
   {
-    HeapDumper dumper(false /* No GC: it's already done by crac::checkpoint */);
+    HeapDumper dumper(false, // No GC: it's already been performed by crac::checkpoint()
+                      true); // Include injected fields
     if (dumper.dump(path,
                     nullptr,  // No additional output
                     -1,       // No compression, TODO: enable this when the parser supports it

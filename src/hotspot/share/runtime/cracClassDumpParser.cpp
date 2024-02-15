@@ -227,6 +227,7 @@ class CracInstanceClassDumpParser : public StackObj /* constructor allocates res
   JVMTI_ONLY(jint _redefinition_version);                 // Class redefinition version
 
   AccessFlags _class_access_flags;                        // Class access flags from class file + internal flags from Klass
+  bool _is_value_based;                                   // Whether the class is marked value-based in the dump
   InstanceKlassFlags _ik_flags;                           // Internal flags and statuses from InstanceKlass
 
   u2 _source_file_name_index;                             // SourceFile class attribute
@@ -351,15 +352,20 @@ class CracInstanceClassDumpParser : public StackObj /* constructor allocates res
   }
 
   void parse_class_flags(TRAPS) {
-    const u4 raw_access_flags = read<u4>(CHECK);
+    u4 raw_access_flags = read<u4>(CHECK);
     guarantee((raw_access_flags & JVM_ACC_WRITTEN_FLAGS & ~JVM_RECOGNIZED_CLASS_MODIFIERS) == 0,
               "illegal class file flags " UINT32_FORMAT, raw_access_flags & JVM_ACC_WRITTEN_FLAGS);
     guarantee((raw_access_flags & ~JVM_ACC_WRITTEN_FLAGS &
                ~(JVM_ACC_HAS_FINALIZER | JVM_ACC_IS_CLONEABLE_FAST | JVM_ACC_IS_HIDDEN_CLASS | JVM_ACC_IS_VALUE_BASED_CLASS)) == 0,
               "unrecognized internal class flags: " UINT32_FORMAT, raw_access_flags & ~JVM_ACC_WRITTEN_FLAGS);
-    // has_finalizer depends on VM-options, so we'll recompute it
+    // Update flags that depend on VM-options:
+    raw_access_flags &= ~JVM_ACC_HAS_FINALIZER; // Will recompute by ourselves
+    _is_value_based = (raw_access_flags & JVM_ACC_IS_VALUE_BASED_CLASS) != 0; // Remember for CDS flags
+    if (DiagnoseSyncOnValueBasedClasses == 0) {
+      raw_access_flags &= ~JVM_ACC_IS_VALUE_BASED_CLASS;
+    }
     // Don't use set_flags -- it will drop internal Klass flags
-    const AccessFlags access_flags(checked_cast<int>(raw_access_flags & ~JVM_ACC_HAS_FINALIZER));
+    const AccessFlags access_flags(checked_cast<int>(raw_access_flags));
     guarantee(!access_flags.is_cloneable_fast() || vmClasses::Cloneable_klass_loaded(), // Must implement clonable, so we should've created it as interface
               "either dump order is incorrect or internal class flags are inconsistent with the implemented interfaces");
 
@@ -1553,7 +1559,7 @@ class CracInstanceClassDumpParser : public StackObj /* constructor allocates res
     ClassFileParser::check_methods_for_intrinsics(&ik);
 
     // Update the corresponding CDS flag (which we don't save)
-    if (ik.is_value_based()) {
+    if (_is_value_based) {
       ik.set_has_value_based_class_annotation();
     }
     // Other annotations- and attributes-related flags and values have already

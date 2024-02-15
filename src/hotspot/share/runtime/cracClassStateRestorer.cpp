@@ -169,6 +169,9 @@ InstanceKlass *CracClassStateRestorer::define_created_class(InstanceKlass *creat
       ResourceMark rm;
       log_debug(crac, class)("Using pre-defined version of %s", defined_ik->external_name());
     }
+    assert(created_ik->access_flags().as_int() == defined_ik->access_flags().as_int(),
+           "pre-defined %s has different access flags: " INT32_FORMAT_X " (dumped) != " INT32_FORMAT_X " (pre-defined)",
+           created_ik->external_name(), created_ik->access_flags().as_int(), defined_ik->access_flags().as_int());
     DEBUG_ONLY(assert_constants_match(*created_ik->constants(), *defined_ik->constants()));
     DEBUG_ONLY(assert_fields_match(*created_ik, *defined_ik));
     DEBUG_ONLY(assert_methods_match(*created_ik, *defined_ik));

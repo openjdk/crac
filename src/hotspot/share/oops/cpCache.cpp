@@ -699,7 +699,7 @@ ConstantPoolCache* ConstantPoolCache::allocate_uninitialized(ClassLoaderData* lo
   // Allocate resolved entry arrays leaving them uninitialized
   Array<ResolvedFieldEntry>* resolved_field_entries = resolved_field_entries_length == 0 ? nullptr
           : MetadataFactory::new_array<ResolvedFieldEntry>(loader_data, resolved_field_entries_length, CHECK_NULL);
-  Array<ResolvedIndyEntry>* resolved_indy_entries = resolved_field_entries_length == 0 ? nullptr
+  Array<ResolvedIndyEntry>* resolved_indy_entries = resolved_indy_entries_length == 0 ? nullptr
           : MetadataFactory::new_array<ResolvedIndyEntry>(loader_data, resolved_indy_entries_length, CHECK_NULL);
 
   return new (loader_data, size, MetaspaceObj::ConstantPoolCacheType, THREAD)

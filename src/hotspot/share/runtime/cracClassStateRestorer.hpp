@@ -5,6 +5,7 @@
 #include "memory/allocation.hpp"
 #include "oops/arrayKlass.hpp"
 #include "oops/instanceKlass.hpp"
+#include "runtime/cracClassDumper.hpp"
 #include "runtime/handles.hpp"
 #include "utilities/exceptions.hpp"
 #include "utilities/globalDefinitions.hpp"
@@ -25,18 +26,23 @@ struct InterclassRefs : public ResourceObj {
     u2 index;                     // Contents depend on the context (see below)
     HeapDump::ID class_id;
   };
-  struct MethodRefs {
+  struct MethodDescription {
+    HeapDump::ID name_id;
+    HeapDump::ID sig_id;
+    CracClassDump::MethodKind kind;
+  };
+  struct MethodRef {
     int cache_index;
     bool f1_is_method;
-    HeapDump::ID f1_class_id;     // Null ID if unset
-    u2 f1_method_idnum;           // Undefined if f1_is_method == false
-    HeapDump::ID f2_class_id;     // Null ID if unset
-    u2 f2_method_idnum;           // Undefined if f2_class_id is unset
+    HeapDump::ID f1_class_id;         // Null ID if unset
+    MethodDescription f1_method_desc; // Undefined if f1_is_method == false
+    HeapDump::ID f2_class_id;         // Null ID if unset
+    MethodDescription f2_method_desc; // Undefined if f2_class_id is unset
   };
   struct IndyAdapterRef {
     int indy_index;
     HeapDump::ID holder_id;
-    u2 method_idnum;
+    MethodDescription method_desc;
   };
 
   // Constant pool class references. Index is the constant pool index.
@@ -44,7 +50,7 @@ struct InterclassRefs : public ResourceObj {
   // Holders of resolved fields. Index is the resolved fields index.
   GrowableArray<ClassRef> *field_refs = new GrowableArray<ClassRef>();
   // Class/method references from resolved methods.
-  GrowableArray<MethodRefs> *method_refs = new GrowableArray<MethodRefs>();
+  GrowableArray<MethodRef> *method_refs = new GrowableArray<MethodRef>();
   // Adapter method references from resolved invokedynamics.
   GrowableArray<IndyAdapterRef> *indy_refs = new GrowableArray<IndyAdapterRef>();
 };
@@ -56,9 +62,10 @@ struct CracClassStateRestorer : public AllStatic {
   static InstanceKlass *define_created_class(InstanceKlass *created_ik, InstanceKlass::ClassState target_state, TRAPS);
 
   static void fill_interclass_references(InstanceKlass *ik,
+                                         const ParsedHeapDump &heap_dump,
                                          const HeapDumpTable<InstanceKlass *, AnyObj::C_HEAP> &iks,
                                          const HeapDumpTable<ArrayKlass *, AnyObj::C_HEAP> &aks,
-                                         const InterclassRefs &refs);
+                                         const InterclassRefs &refs, TRAPS);
 
   static void apply_init_state(InstanceKlass *ik, InstanceKlass::ClassState state, Handle init_error);
 

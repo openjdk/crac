@@ -141,13 +141,33 @@ class ClassDumpWriter : public KlassClosure, public CLDClosure {
 
   template <class UINT_T>
   void write_uint_array(const Array<UINT_T> *arr) {
-    STATIC_ASSERT(std::numeric_limits<decltype(arr->length())>::max() < CracClassDumper::NO_ARRAY_SENTINEL);
+    STATIC_ASSERT(std::numeric_limits<decltype(arr->length())>::max() < CracClassDump::NO_ARRAY_SENTINEL);
     if (arr != nullptr) {
       WRITE(checked_cast<u4>(arr->length()));
       write_uint_array_data(arr->data(), arr->length());
     } else {
-      WRITE(CracClassDumper::NO_ARRAY_SENTINEL);
+      WRITE(CracClassDump::NO_ARRAY_SENTINEL);
     }
+  }
+
+  // Note: method idnum cannot be used to identify methods within classes
+  // because it depends on method ordering which depends on address of method's
+  // name symbol and that is not portable.
+  void write_method_identification(const Method &m) {
+    assert(!m.is_old(), "old methods require holder's redifinition version to also be written");
+    WRITE_CLASS_ID(*m.method_holder());
+    WRITE_SYMBOL_ID(m.name());
+    WRITE_SYMBOL_ID(m.signature());
+    CracClassDump::MethodKind kind;
+    if (m.is_static()) {
+      assert(!m.is_overpass(), "overpass methods are not static");
+      kind = CracClassDump::MethodKind::STATIC;
+    } else if (m.is_overpass()) {
+      kind = CracClassDump::MethodKind::OVERPASS;
+    } else {
+      kind = CracClassDump::MethodKind::INSTANCE;
+    }
+    WRITE(checked_cast<u1>(kind));
   }
 
   // ###########################################################################
@@ -185,7 +205,7 @@ class ClassDumpWriter : public KlassClosure, public CLDClosure {
     // - Not including InstanceKlass::is_finalization_enabled() even though
     //   it influences JVM_ACC_HAS_FINALIZER flag (internal in Klass) since it's
     //   easily recomputed when parsing methods
-    using offsets = CracClassDumper::VMOptionShift;
+    using offsets = CracClassDump::VMOptionShift;
     return
       // If false JVM_ACC_IS_VALUE_BASED_CLASS flags (internal in Klass'es access_flags) isn't set
       static_cast<u1>(DiagnoseSyncOnValueBasedClasses != 0) << offsets::is_sync_on_value_based_classes_diagnosed_shift |
@@ -234,8 +254,8 @@ class ClassDumpWriter : public KlassClosure, public CLDClosure {
   // General instance class data
   // ###########################################################################
 
-  static CracClassDumper::ClassLoadingKind loading_kind(const InstanceKlass &ik) {
-    using Kind = CracClassDumper::ClassLoadingKind;
+  static CracClassDump::ClassLoadingKind loading_kind(const InstanceKlass &ik) {
+    using Kind = CracClassDump::ClassLoadingKind;
     if (!ik.is_hidden()) {
       return Kind::NORMAL;
     }
@@ -591,7 +611,7 @@ class ClassDumpWriter : public KlassClosure, public CLDClosure {
         assert(info.is_method_entry(), "not used for field entries anymore");
         assert(bytecode1 != Bytecodes::_invokedynamic, "not used for indys anymore");
         // Flags go first since they, together with the bytecodes, define the contents of f1 and f2
-        using shifts = CracClassDumper::ResolvedMethodEntryFlagShift;
+        using shifts = CracClassDump::ResolvedMethodEntryFlagShift;
         WRITE(checked_cast<u1>(info.has_local_signature() << shifts::has_local_signature_shift |
                                info.has_appendix()        << shifts::has_appendix_shift        |
                                info.is_forced_virtual()   << shifts::is_forced_virtual_shift   |
@@ -607,8 +627,7 @@ class ClassDumpWriter : public KlassClosure, public CLDClosure {
             const Method *method = info.f1_as_method(); // Resolved method for non-virtual calls or adapter method for invokehandle
             assert(method != nullptr, "must be resolved");
             assert(!method->is_old(), "cache never contains old methods"); // Lets us omit holder's redefinition version
-            WRITE_CLASS_ID(*method->method_holder());
-            WRITE(method->method_idnum());
+            write_method_identification(*method);
             break;
           }
           case Bytecodes::_invokeinterface:
@@ -632,8 +651,7 @@ class ClassDumpWriter : public KlassClosure, public CLDClosure {
           const Method *method = info.is_vfinal() ? info.f2_as_vfinal_method() : info.f2_as_interface_method(); // Resolved final or interface method
           assert(method != nullptr, "must be resolved");
           assert(!method->is_old(), "cache never contains old methods"); // Lets us omit holder's redefinition version
-          WRITE_CLASS_ID(*method->method_holder());
-          WRITE(method->method_idnum());
+          write_method_identification(*method);
         } else if (bytecode1 == Bytecodes::_invokeinterface || bytecode2 == Bytecodes::_invokevirtual ||
                   (bytecode1 == Bytecodes::_invokehandle && info.has_appendix())) {
           assert(bytecode1 != Bytecodes::_invokestatic, "invokestatic cannot share an entry with invokevirtual");
@@ -659,10 +677,7 @@ class ClassDumpWriter : public KlassClosure, public CLDClosure {
         const Method *adapter = indy_info.method();
         assert(adapter != nullptr, "must be resolved");
         assert(!adapter->is_old(), "cache never contains old methods"); // Lets us omit holder's redefinition version
-        // Uniquely identify the adapter method
-        WRITE_CLASS_ID(*adapter->method_holder());
-        WRITE(adapter->method_idnum());
-        // The rest of the data
+        write_method_identification(*adapter);
         WRITE(indy_info.num_parameters());
         WRITE(indy_info.return_type());
       } else if (indy_info.resolution_failed()) {
@@ -914,9 +929,15 @@ class ClassDumpWriter : public KlassClosure, public CLDClosure {
   void write_method(const Method &method) {
     const ConstMethod &cmethod = *method.constMethod();
 
-    // Internal method ID
-    WRITE(cmethod.method_idnum());
-    WRITE(cmethod.orig_method_idnum());
+    if (cmethod.method_idnum() != cmethod.orig_method_idnum()) {
+      // TODO method ID is not dumped since it is not portable (depends on
+      // method ordering which depends on method's name symbol addresses), but
+      // what to do with the original ID? It is also non-portable but it should
+      // probably be restored somehow...
+      precond(method.is_obsolete()); // Implies is_old
+      log_error(crac, class, dump)("Dumping old versions of redefined classes is not supported yet");
+      Unimplemented();
+    }
 
     // Access flags defined in class file, fits in u2 according to JVMS
     assert(method.access_flags().as_int() == (method.access_flags().get_flags() & JVM_RECOGNIZED_METHOD_MODIFIERS), "only method-related flags should be present");
@@ -1008,8 +1029,7 @@ class ClassDumpWriter : public KlassClosure, public CLDClosure {
       for (int i = 0; i < defaults->length(); i++) {
         const Method &method = *defaults->at(i);
         assert(!method.is_old(), "default methods must not be old"); // Lets us omit holder's redefinition version
-        WRITE_CLASS_ID(*method.method_holder());
-        WRITE(method.method_idnum());
+        write_method_identification(method);
       }
     } else {
       WRITE(checked_cast<u2>(0));
@@ -1027,7 +1047,7 @@ class ClassDumpWriter : public KlassClosure, public CLDClosure {
   // JVM TI RetransformClasses support.
   void write_cached_class_file(JvmtiCachedClassFileData *cached_class_file) {
     if (cached_class_file == nullptr) {
-      WRITE(CracClassDumper::NO_CACHED_CLASS_FILE_SENTINEL);
+      WRITE(CracClassDump::NO_CACHED_CLASS_FILE_SENTINEL);
       return;
     }
 

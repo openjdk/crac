@@ -2,7 +2,70 @@
 #define SHARE_RUNTIME_CRACCLASSDUMPER_HPP
 
 #include "memory/allStatic.hpp"
+#include "oops/klass.hpp"
+#include "utilities/debug.hpp"
 #include "utilities/globalDefinitions.hpp"
+
+// Constants used in class dumps.
+struct CracClassDump : public AllStatic {
+  // Kinds of classes with regards to how they were loaded.
+  enum class ClassLoadingKind : u1 {
+    NORMAL            = 0,
+    NON_STRONG_HIDDEN = 1,
+    STRONG_HIDDEN     = 2,
+  };
+
+  static constexpr bool is_class_loading_kind(u1 val) { return val <= static_cast<u1>(ClassLoadingKind::STRONG_HIDDEN); }
+
+  // Kinds of methods. According to InstanceKlass::find_local_method(), a class
+  // can have separate methods with the same name and signature for each kind.
+  enum class MethodKind : u1 {
+    STATIC   = 0,
+    INSTANCE = 1, // Non-static, non-overpass
+    OVERPASS = 2,
+  };
+
+  static constexpr bool is_method_kind(u1 val) { return val <= static_cast<u1>(MethodKind::OVERPASS); }
+  static constexpr Klass::StaticLookupMode as_static_lookup_mode(MethodKind kind) {
+    return kind == MethodKind::STATIC ? Klass::StaticLookupMode::find : Klass::StaticLookupMode::skip;
+  }
+  static constexpr Klass::OverpassLookupMode as_overpass_lookup_mode(MethodKind kind) {
+    return kind == MethodKind::OVERPASS ? Klass::OverpassLookupMode::find : Klass::OverpassLookupMode::skip;
+  }
+  static constexpr const char *method_kind_name(MethodKind kind) {
+    switch (kind) {
+      case MethodKind::STATIC:   return "static";
+      case MethodKind::OVERPASS: return "overpass";
+      case MethodKind::INSTANCE: return "non-static non-overpass";
+      default: ShouldNotReachHere(); return nullptr;
+    }
+  }
+
+  // Bit positions in compressed VM options.
+  enum VMOptionShift : u1 {
+    is_sync_on_value_based_classes_diagnosed_shift = 0,
+    are_all_annotations_preserved_shift            = 1,
+  };
+
+  static constexpr bool is_vm_options(u1 val) { return val >> (VMOptionShift::are_all_annotations_preserved_shift + 1) == 0; }
+
+  // Bit positions of in resolved method entries' flags.
+  enum ResolvedMethodEntryFlagShift : u1 {
+    is_vfinal_shift           = 0,
+    is_final_shift            = 1,
+    is_forced_virtual_shift   = 2,
+    has_appendix_shift        = 3,
+    has_local_signature_shift = 4,
+  };
+
+  static constexpr bool is_resolved_method_entry_flags(u1 val) { return val >> (ResolvedMethodEntryFlagShift::has_local_signature_shift + 1) == 0; }
+
+  // For null class metadata arrays.
+  static constexpr u4 NO_ARRAY_SENTINEL = 0xFFFFFFFF;
+
+  // For null cached class file.
+  static constexpr jint NO_CACHED_CLASS_FILE_SENTINEL = -1;
+};
 
 // Dumps runtime class data for CRaC portable mode.
 //
@@ -24,32 +87,6 @@
 // Each primitive-array and instance class is followed by IDs of object array
 // classes sorted by ascending dimensionality.
 struct CracClassDumper : public AllStatic {
-  // Kinds of classes with regards to how they were loaded.
-  enum ClassLoadingKind : u1 {
-    NORMAL            = 0,
-    NON_STRONG_HIDDEN = 1,
-    STRONG_HIDDEN     = 2
-  };
-  // Bit positions in compressed VM options.
-  enum VMOptionShift : u1 {
-    is_sync_on_value_based_classes_diagnosed_shift = 0,
-    are_all_annotations_preserved_shift            = 1,
-    num_vm_options,
-  };
-  // Bit positions of in resolved method entries' flags.
-  enum ResolvedMethodEntryFlagShift : u1 {
-    is_vfinal_shift           = 0,
-    is_final_shift            = 1,
-    is_forced_virtual_shift   = 2,
-    has_appendix_shift        = 3,
-    has_local_signature_shift = 4,
-    num_method_entry_flags,
-  };
-  // For null class metadata arrays.
-  static constexpr u4 NO_ARRAY_SENTINEL = 0xFFFFFFFF;
-  // For null cached class file.
-  static constexpr jint NO_CACHED_CLASS_FILE_SENTINEL = -1;
-
   // Dumps the data into the specified file, possibly overwriting it if the
   // corresponding parameter is set to true, Returns nullptr on success, or a
   // pointer to a static IO error message otherwise.

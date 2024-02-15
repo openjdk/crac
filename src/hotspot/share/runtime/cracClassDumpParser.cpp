@@ -285,7 +285,7 @@ class CracInstanceClassDumpParser : public StackObj /* constructor allocates res
     precond(_loader_data != nullptr);
 
     const auto len = read<u4>(CHECK_NULL);
-    if (len == CracClassDumper::NO_ARRAY_SENTINEL) {
+    if (len == CracClassDump::NO_ARRAY_SENTINEL) {
       return if_none;
     }
     guarantee(len <= INT_MAX, "metadata array length too large: " UINT32_FORMAT " > %i", len, INT_MAX);
@@ -296,6 +296,15 @@ class CracInstanceClassDumpParser : public StackObj /* constructor allocates res
       MetadataFactory::free_array(_loader_data, arr);
     }
     return arr;
+  }
+
+  Pair<HeapDump::ID, InterclassRefs::MethodDescription> read_method_identification(TRAPS) {
+    const HeapDump::ID holder_id = read_id(false, CHECK_({}));
+    const HeapDump::ID name_id = read_id(false, CHECK_({}));
+    const HeapDump::ID sig_id = read_id(false, CHECK_({}));
+    const auto kind_raw = read<u1>(CHECK_({}));
+    guarantee(CracClassDump::is_method_kind(kind_raw), "unrecognized method kind: %i", kind_raw);
+    return {holder_id, {name_id, sig_id, static_cast<CracClassDump::MethodKind>(kind_raw)}};
   }
 
   // ###########################################################################
@@ -626,7 +635,7 @@ class CracInstanceClassDumpParser : public StackObj /* constructor allocates res
   }
 
   static int prepare_resolved_method_flags(u1 raw_flags) {
-    using crac_shifts = CracClassDumper::ResolvedMethodEntryFlagShift;
+    using crac_shifts = CracClassDump::ResolvedMethodEntryFlagShift;
     using cache_shifts = ConstantPoolCacheEntry;
     return static_cast<int>(is_set_nth_bit(raw_flags, crac_shifts::has_local_signature_shift)) << cache_shifts::has_local_signature_shift |
            static_cast<int>(is_set_nth_bit(raw_flags, crac_shifts::has_appendix_shift))        << cache_shifts::has_appendix_shift        |
@@ -644,7 +653,7 @@ class CracInstanceClassDumpParser : public StackObj /* constructor allocates res
     guarantee(method_entries_len >= 0, "amount of resolved methods cannot be negative");
     guarantee(indy_entries_len >= 0, "amount of resolved invokedynamic instructions cannot be negative");
 
-    ConstantPoolCache *cp_cache =
+    ConstantPoolCache *const cp_cache =
       ConstantPoolCache::allocate_uninitialized(_loader_data, method_entries_len, indy_entries_len, field_entries_len, CHECK);
     _cp->set_cache(cp_cache); // Make constant pool responsible for cache deallocation
 
@@ -694,8 +703,7 @@ class CracInstanceClassDumpParser : public StackObj /* constructor allocates res
 
       if (raw_bytecode1 > 0 || raw_bytecode2 > 0) { // If resolved
         const auto flags = read<u1>(CHECK);
-        guarantee(flags >> CracClassDumper::num_method_entry_flags == 0,
-                  "unrecognized resolved method entry flags: " UINT8_FORMAT_X_0, flags);
+        guarantee(CracClassDump::is_resolved_method_entry_flags(flags), "unrecognized resolved method entry flags: " UINT8_FORMAT_X_0, flags);
         const auto tos_state = read<u1>(CHECK);
         guarantee(tos_state < TosState::number_of_states, "illegal resolved method entry ToS state: %i", tos_state);
         const auto params_num = read<u1>(CHECK);
@@ -703,21 +711,23 @@ class CracInstanceClassDumpParser : public StackObj /* constructor allocates res
         postcond(cache_entry.is_method_entry());
 
         // Not readable from the entry until f1 is set
-        const bool has_appendix = is_set_nth_bit(flags, CracClassDumper::ResolvedMethodEntryFlagShift::has_appendix_shift);
+        const bool has_appendix = is_set_nth_bit(flags, CracClassDump::has_appendix_shift);
 
         // f1
         bool f1_is_method = false;
         HeapDump::ID f1_class_id = HeapDump::NULL_ID;
-        u2 f1_method_idnum;
+        InterclassRefs::MethodDescription f1_method_desc;
         const Bytecodes::Code bytecode1 = Bytecodes::cast(raw_bytecode1);
         switch (bytecode1) {
           case Bytecodes::_invokestatic:
           case Bytecodes::_invokespecial:
-          case Bytecodes::_invokehandle:
+          case Bytecodes::_invokehandle: {
             f1_is_method = true;
-            f1_class_id = read_id(false, CHECK);
-            f1_method_idnum = read<u2>(CHECK);
+            const auto method_identification = read_method_identification(CHECK);
+            f1_class_id = method_identification.first;
+            f1_method_desc = method_identification.second;
             break;
+          }
           case Bytecodes::_invokeinterface:
             if (!cache_entry.is_forced_virtual()) {
               f1_class_id = read_id(false, CHECK);
@@ -732,7 +742,7 @@ class CracInstanceClassDumpParser : public StackObj /* constructor allocates res
 
         // f2
         HeapDump::ID f2_class_id = HeapDump::NULL_ID;
-        u2 f2_method_idnum;
+        InterclassRefs::MethodDescription f2_method_desc;
         const Bytecodes::Code bytecode2 = Bytecodes::cast(raw_bytecode2);
         guarantee(bytecode2 == 0 || bytecode2 == Bytecodes::_invokevirtual, "illegal method resolution bytecode 2: %s", Bytecodes::name(bytecode2));
         if (cache_entry.is_vfinal() || (bytecode1 == Bytecodes::_invokeinterface && !cache_entry.is_forced_virtual())) {
@@ -741,8 +751,9 @@ class CracInstanceClassDumpParser : public StackObj /* constructor allocates res
                     "illegal resolved method data: b1 = %s, b2 = %s, is_vfinal = %s, is_forced_virtual = %s",
                     Bytecodes::name(bytecode1), Bytecodes::name(bytecode2),
                     BOOL_TO_STR(cache_entry.is_vfinal()), BOOL_TO_STR(cache_entry.is_forced_virtual()));
-          f2_class_id = read_id(false, CHECK);
-          f2_method_idnum = read<u2>(CHECK);
+          const auto method_identification = read_method_identification(CHECK);
+          f2_class_id = method_identification.first;
+          f2_method_desc = method_identification.second;
         } else if (bytecode1 == Bytecodes::_invokeinterface || bytecode2 == Bytecodes::_invokevirtual ||
                   (bytecode1 == Bytecodes::_invokehandle && has_appendix)) {
           guarantee(bytecode1 != Bytecodes::_invokestatic,
@@ -755,7 +766,7 @@ class CracInstanceClassDumpParser : public StackObj /* constructor allocates res
         cache_entry.set_bytecode_2(bytecode2); // The bytecode has been validated
 
         if (f1_class_id != HeapDump::NULL_ID || f2_class_id != HeapDump::NULL_ID) { // Save to resolve later
-          _interclass_refs.method_refs->append({cache_i, f1_is_method, f1_class_id, f1_method_idnum, f2_class_id, f2_method_idnum});
+          _interclass_refs.method_refs->append({cache_i, f1_is_method, f1_class_id, f1_method_desc, f2_class_id, f2_method_desc});
         }
       }
 
@@ -778,9 +789,10 @@ class CracInstanceClassDumpParser : public StackObj /* constructor allocates res
                 "illegal invokedynamic entry flag combination: " UINT8_FORMAT_X_0, extended_flags);
 
       if (is_resolved) {
-        const HeapDump::ID adapter_holder_id = read_id(false, CHECK);
-        const auto adapter_idnum = read<u2>(CHECK);
-        _interclass_refs.indy_refs->append({indy_i, adapter_holder_id, adapter_idnum}); // Save to resolve later
+        const auto adapter_identification = read_method_identification(CHECK);
+        const HeapDump::ID adapter_holder_id = adapter_identification.first;
+        const InterclassRefs::MethodDescription adapter_desc = adapter_identification.second;
+        _interclass_refs.indy_refs->append({indy_i, adapter_holder_id, adapter_desc}); // Save to resolve later
 
         const auto adapter_num_params = read<u2>(CHECK);
         const auto adapter_ret_type = read<u1>(CHECK);
@@ -790,6 +802,8 @@ class CracInstanceClassDumpParser : public StackObj /* constructor allocates res
         parse_resolution_error_symbols(indy_res_err_i, CHECK);
         indy_entry.set_resolution_failed();
       }
+
+      *cp_cache->resolved_indy_entry_at(indy_i) = indy_entry;
     }
 
     // Mapping from the first part of resolved references back to constant pool
@@ -918,7 +932,9 @@ class CracInstanceClassDumpParser : public StackObj /* constructor allocates res
 
         FieldInfo field_info(access_flags, name_index, signature_index, initializer_index, field_flags);
         field_info.set_generic_signature_index(generic_signature_index);
-        field_info.set_contended_group(contention_group);
+        if (field_flags.is_contended()) { // Must check or it will be set by set_contended_group()
+          field_info.set_contended_group(contention_group);
+        }
         _field_infos.append(field_info);
 
         if (field_flags.is_injected()) {
@@ -1099,9 +1115,6 @@ class CracInstanceClassDumpParser : public StackObj /* constructor allocates res
   void parse_method(Method **method_out, TRAPS) {
     precond(method_out != nullptr);
 
-    const auto idnum = read<u2>(CHECK);
-    const auto orig_idnum = read<u2>(CHECK);
-
     const auto raw_access_flags = read<u2>(CHECK);
     guarantee((raw_access_flags & JVM_RECOGNIZED_METHOD_MODIFIERS) == raw_access_flags,
               "unrecognized method access flags: " UINT16_FORMAT_X_0, raw_access_flags);
@@ -1195,8 +1208,6 @@ class CracInstanceClassDumpParser : public StackObj /* constructor allocates res
       postcond(method->is_compiled_lambda_form());
     }
 
-    method->set_method_idnum(idnum);
-    method->set_orig_method_idnum(orig_idnum);
     method->set_statuses(statuses);
 
     // Not a guarantee because is_vanilla_constructor() call may take some time
@@ -1271,7 +1282,9 @@ class CracInstanceClassDumpParser : public StackObj /* constructor allocates res
       // Pre-fill with nulls so that deallocation works correctly if an error occures before the array is filled
       _default_methods = MetadataFactory::new_array<Method *>(_loader_data, default_methods_num, nullptr, CHECK);
       for (u2 i = 0; i < default_methods_num; i++) {
-        const HeapDump::ID holder_id = read_id(false, CHECK);
+        const auto method_identification = read_method_identification(CHECK);
+
+        const HeapDump::ID holder_id = method_identification.first;
         InstanceKlass **const holder_ptr = _created_classes.get(holder_id);
         // Implemented interfaces have been parsed and found as loaded, so if
         // it was one of them we would have found it
@@ -1280,11 +1293,16 @@ class CracInstanceClassDumpParser : public StackObj /* constructor allocates res
         // Would be great to check that the holder is among transitive
         // interfaces, but that's a heavy check (requires iterating over them)
 
-        const auto method_idnum = read<u2>(CHECK);
-        Method *const method = holder.method_with_idnum(method_idnum);
-        guarantee(method != nullptr, "default method %i cannot be found", i);
-        guarantee(method->is_default_method(), "default method %i resolved to %s which is not declared default", i, method->external_name());
-        guarantee(holder.is_interface(), "only interfaces have default methods");
+        const InterclassRefs::MethodDescription method_desc = method_identification.second;
+        Symbol *const name = _heap_dump.get_symbol(method_desc.name_id);
+        Symbol *const sig = _heap_dump.get_symbol(method_desc.sig_id);
+        Method *const method = holder.find_local_method(name, sig,
+                                                        CracClassDump::as_overpass_lookup_mode(method_desc.kind),
+                                                        CracClassDump::as_static_lookup_mode(method_desc.kind),
+                                                        Klass::PrivateLookupMode::find);
+        guarantee(method != nullptr, "default method #%i cannot be found as %s method %s",
+                  i, CracClassDump::method_kind_name(method_desc.kind), Method::name_and_sig_as_C_string(*holder_ptr, name, sig));
+        guarantee(method->is_default_method(), "default method %i resolved to a non-default %s", i, method->external_name());
         _default_methods->at_put(i, method);
       }
     }
@@ -1293,7 +1311,7 @@ class CracInstanceClassDumpParser : public StackObj /* constructor allocates res
 
   void parse_cached_class_file(TRAPS) {
     const auto len = read<jint>(CHECK);
-    if (len == CracClassDumper::NO_CACHED_CLASS_FILE_SENTINEL) {
+    if (len == CracClassDump::NO_CACHED_CLASS_FILE_SENTINEL) {
       log_trace(crac, class, parser)("  No cached class file");
       return;
     }
@@ -1476,6 +1494,7 @@ class CracInstanceClassDumpParser : public StackObj /* constructor allocates res
     // TODO instead of re-computing the sizes from the ground up save
     //  vtable/itable lengths and quickly compute the sizes based on them
     _transitive_interfaces = ClassFileParser::compute_transitive_interfaces(_super, _local_interfaces, _loader_data, CHECK);
+    Method::sort_methods(_methods); // Sort before they'll be used in vtable-related computations
     const int vtable_size = compute_vtable_size(class_name DEBUG_ONLY(COMMA CHECK));
     const int itable_size = !_class_access_flags.is_interface() ? klassItable::compute_itable_size(_transitive_interfaces) : 0;
 
@@ -1563,6 +1582,7 @@ class CracInstanceClassDumpParser : public StackObj /* constructor allocates res
 
     if (ik.default_methods() != nullptr) {
       assert(ik.has_nonstatic_concrete_methods(), "should have been checked when parsing the default methods");
+      Method::sort_methods(ik.default_methods(), /*set_idnums=*/ false);
       ik.create_new_default_vtable_indices(ik.default_methods()->length(), CHECK);
     }
 
@@ -1623,7 +1643,7 @@ CracClassDumpParser::CracClassDumpParser(BasicTypeReader *reader, const ParsedHe
     ResourceMark rm;
     const GrowableArray<Pair<HeapDump::ID, InterclassRefs>> &interclass_refs = parse_instance_and_obj_array_classes(CHECK);
     for (const Pair<HeapDump::ID, InterclassRefs> &id_to_refs : interclass_refs) {
-      CracClassStateRestorer::fill_interclass_references(*_iks->get(id_to_refs.first), *_iks, *_aks, id_to_refs.second);
+      CracClassStateRestorer::fill_interclass_references(*_iks->get(id_to_refs.first), _heap_dump, *_iks, *_aks, id_to_refs.second, CHECK);
     }
   }
   parse_initiating_loaders(CHECK);
@@ -1643,13 +1663,10 @@ void CracClassDumpParser::parse_header(TRAPS) {
   set_id_size(id_size, CHECK);
 
   const auto compressed_vm_options = read<u1>(CHECK);
-  using shifts = CracClassDumper::VMOptionShift;
-  if (compressed_vm_options >> shifts::num_vm_options != 0) {
-    THROW_MSG(vmSymbols::java_lang_IllegalArgumentException(), "Unknown VM options specified");
-  }
+  guarantee(CracClassDump::is_vm_options(compressed_vm_options), "unrecognized VM options");
 
-  const bool was_sync_on_value_based_classes_diagnosed = is_set_nth_bit(compressed_vm_options, shifts::is_sync_on_value_based_classes_diagnosed_shift);
-  const bool were_all_annotation_preserved = is_set_nth_bit(compressed_vm_options, shifts::are_all_annotations_preserved_shift);
+  const bool was_sync_on_value_based_classes_diagnosed = is_set_nth_bit(compressed_vm_options, CracClassDump::is_sync_on_value_based_classes_diagnosed_shift);
+  const bool were_all_annotation_preserved = is_set_nth_bit(compressed_vm_options, CracClassDump::are_all_annotations_preserved_shift);
   if ((DiagnoseSyncOnValueBasedClasses != 0) && !was_sync_on_value_based_classes_diagnosed) {
     if (!were_all_annotation_preserved) {
       // TODO either save the InstanceKlass::is_value_based() flag regardless
@@ -1657,11 +1674,11 @@ void CracClassDumpParser::parse_header(TRAPS) {
       //  Klass::has_value_based_class_annotation()) or parse annotations of
       //  each class to recompute InstanceKlass::is_value_based()
       log_warning(crac, class, parser)("Checkpointed VM wasn't diagnosing syncronization on value-based classes, but this VM is requested to (by the corresponding option). "
-                                        "This will not be fulfullied for the restored classes.");
+                                       "This will not be fulfullied for the restored classes.");
     } else {
       log_warning(crac, class, parser)("Checkpointed VM wasn't diagnosing syncronization on value-based classes, but this VM is requested to (by the corresponding option). "
-                                        "This will not be fulfullied for the restored classes because the checkpointed VM also preserved RuntimeInvisibleAnnotations "
-                                        "making them indistinguishable from RuntimeVisibleAnnotations.");
+                                       "This will not be fulfullied for the restored classes because the checkpointed VM also preserved RuntimeInvisibleAnnotations "
+                                       "making them indistinguishable from RuntimeVisibleAnnotations.");
     }
   }
   if (were_all_annotation_preserved != PreserveAllAnnotations) {
@@ -1708,7 +1725,7 @@ void CracClassDumpParser::parse_primitive_array_classes(TRAPS) {
 
 struct CracClassDumpParser::ClassPreamble {
   HeapDump::ID class_id = HeapDump::NULL_ID;
-  CracClassDumper::ClassLoadingKind loading_kind;
+  CracClassDump::ClassLoadingKind loading_kind;
 };
 
 CracClassDumpParser::ClassPreamble CracClassDumpParser::parse_instance_class_preamble(TRAPS) {
@@ -1718,16 +1735,13 @@ CracClassDumpParser::ClassPreamble CracClassDumpParser::parse_instance_class_pre
   }
   assert(!_iks->contains(class_id), "class " HDID_FORMAT " is repeated", class_id);
 
-  using Kind = CracClassDumper::ClassLoadingKind;
   const auto loading_kind = read<u1>(CHECK_({}));
-  guarantee(loading_kind == Kind::NORMAL ||
-            loading_kind == Kind::NON_STRONG_HIDDEN ||
-            loading_kind == Kind::STRONG_HIDDEN,
-            "class " HDID_FORMAT " has illegal loading kind %i", class_id, loading_kind);
+  guarantee(CracClassDump::is_class_loading_kind(loading_kind), "class " HDID_FORMAT " has unrecognized loading kind %i",
+            class_id, loading_kind);
 
   log_debug(crac, class, parser)("Parsed instance class preamble: ID " HDID_FORMAT ", loading kind %i",
                                   class_id, loading_kind);
-  return {class_id, checked_cast<Kind>(loading_kind)};
+  return {class_id, checked_cast<CracClassDump::ClassLoadingKind>(loading_kind)};
 }
 
 Handle CracClassDumpParser::get_class_loader(HeapDump::ID loader_id, TRAPS) {
@@ -1799,7 +1813,7 @@ GrowableArray<Pair<HeapDump::ID, InterclassRefs>> CracClassDumpParser::parse_ins
     //  even if they exist thus duplicating them.
 
     const Handle loader = get_class_loader(class_dump->class_loader_id, CHECK_({}));
-    ClassLoaderData *const loader_data = SystemDictionary::register_loader(loader, preamble.loading_kind == CracClassDumper::ClassLoadingKind::NON_STRONG_HIDDEN);
+    ClassLoaderData *const loader_data = SystemDictionary::register_loader(loader, preamble.loading_kind == CracClassDump::ClassLoadingKind::NON_STRONG_HIDDEN);
 
     InterclassRefs refs;
     InstanceKlass *const ik = parse_and_define_instance_class(*class_dump, loader_data, &refs, CHECK_({}));

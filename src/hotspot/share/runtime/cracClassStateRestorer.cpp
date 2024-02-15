@@ -162,20 +162,8 @@ InstanceKlass *CracClassStateRestorer::define_created_class(InstanceKlass *creat
   InstanceKlass *const defined_ik = SystemDictionary::find_or_define_recreated_class(created_ik, CHECK_NULL);
   postcond(defined_ik->is_loaded());
 
-  const bool was_predefined = defined_ik != created_ik;
-  assert(!(was_predefined && defined_ik->is_being_restored()), "pre-defined classes must be unmarked");
-  if (was_predefined) {
-    if (log_is_enabled(Debug, crac, class)) {
-      ResourceMark rm;
-      log_debug(crac, class)("Using pre-defined version of %s", defined_ik->external_name());
-    }
-    assert(created_ik->access_flags().as_int() == defined_ik->access_flags().as_int(),
-           "pre-defined %s has different access flags: " INT32_FORMAT_X " (dumped) != " INT32_FORMAT_X " (pre-defined)",
-           created_ik->external_name(), created_ik->access_flags().as_int(), defined_ik->access_flags().as_int());
-    DEBUG_ONLY(assert_constants_match(*created_ik->constants(), *defined_ik->constants()));
-    DEBUG_ONLY(assert_fields_match(*created_ik, *defined_ik));
-    DEBUG_ONLY(assert_methods_match(*created_ik, *defined_ik));
-  }
+  const bool predefined = defined_ik != created_ik;
+  assert(!(predefined && defined_ik->is_being_restored()), "pre-defined class must be unmarked");
 
   // Ensure the class won't be used by other threads until it is restored. We do
   // this even if the class was only loaded at the dump time to be able to set
@@ -199,7 +187,7 @@ InstanceKlass *CracClassStateRestorer::define_created_class(InstanceKlass *creat
     }
     if (defined_ik->init_state() < InstanceKlass::fully_initialized) {
       defined_ik->set_is_being_restored(true);
-      if ((created_ik->is_rewritten() && !(was_predefined && defined_ik->is_rewritten())) ||
+      if ((created_ik->is_rewritten() && !(predefined && defined_ik->is_rewritten())) ||
           (target_state >= InstanceKlass::linked && !defined_ik->is_linked())) {
         defined_ik->set_init_state(InstanceKlass::being_linked);
         defined_ik->set_init_thread(thread);
@@ -212,7 +200,21 @@ InstanceKlass *CracClassStateRestorer::define_created_class(InstanceKlass *creat
   postcond(!defined_ik->is_init_thread(thread) || defined_ik->is_being_restored());
   postcond(!defined_ik->is_init_thread(thread) || defined_ik->init_state() < InstanceKlass::fully_initialized);
 
-  if (was_predefined) {
+  if (predefined) {
+    if (log_is_enabled(Debug, crac, class)) {
+      ResourceMark rm;
+      const char *current_state_name = (defined_ik->is_rewritten() && !defined_ik->is_linked())             ? "rewritten" : defined_ik->init_state_name();
+      const char *target_state_name =  (created_ik->is_rewritten() && target_state < InstanceKlass::linked) ? "rewritten" : InstanceKlass::state_name(target_state);
+      log_debug(crac, class)("Using pre-defined version of %s (current state = %s, target state = %s)",
+                             defined_ik->external_name(), current_state_name, target_state_name);
+    }
+    assert(created_ik->access_flags().as_int() == defined_ik->access_flags().as_int(),
+           "pre-defined %s has different access flags: " INT32_FORMAT_X " (dumped) != " INT32_FORMAT_X " (pre-defined)",
+           created_ik->external_name(), created_ik->access_flags().as_int(), defined_ik->access_flags().as_int());
+    DEBUG_ONLY(assert_constants_match(*created_ik->constants(), *defined_ik->constants()));
+    DEBUG_ONLY(assert_fields_match(*created_ik, *defined_ik));
+    DEBUG_ONLY(assert_methods_match(*created_ik, *defined_ik));
+
     if (created_ik->is_rewritten() && !defined_ik->is_rewritten()) {
       precond(defined_ik->is_init_thread(thread));
       // Apply the rewritten state:
@@ -226,6 +228,7 @@ InstanceKlass *CracClassStateRestorer::define_created_class(InstanceKlass *creat
         log_debug(crac, class)("Moved dumped rewritten state into pre-defined %s", defined_ik->external_name());
       }
     }
+
     created_ik->class_loader_data()->add_to_deallocate_list(created_ik);
   }
 
@@ -427,62 +430,92 @@ void CracClassStateRestorer::apply_init_state(InstanceKlass *ik, InstanceKlass::
 
 #ifdef ASSERT
 
-static void assert_has_consistent_state(const InstanceKlass &base, const InstanceKlass &derived) {
-  switch (derived.init_state()) {
-    case InstanceKlass::allocated:
-      ShouldNotReachHere(); // Too young
-      return;
-    case InstanceKlass::loaded:
-      if (!derived.is_rewritten()) {
-        assert(base.is_loaded(), "supers/interfaces of loaded class/interface must be loaded, but %s is not",
-               base.external_name());
-        return;
-      } else { // Intermediate state between loaded and linked
-        assert(base.is_linked(), "supers/interfaces of rewritten class/interface must be loaded, but %s is not",
-               base.external_name());
-        return;
-      }
-    case InstanceKlass::being_linked:
-      assert(const_cast<InstanceKlass &>(derived).is_init_thread(JavaThread::current()), "restoring thread must hold init states of classes being restored");
-    case InstanceKlass::linked:
-      assert(base.is_linked(), "supers/interfaces of linked class/interface must be linked, but %s is not",
-             base.external_name());
-      return;
-    case InstanceKlass::being_initialized:
-      assert(const_cast<InstanceKlass &>(derived).is_init_thread(JavaThread::current()), "restoring thread must hold init states of classes being restored");
-    case InstanceKlass::fully_initialized:
-      if (!derived.is_interface() && (!base.is_interface() || derived.has_nonstatic_concrete_methods())) {
-        assert(base.is_initialized(), "supers and interfaces with default methods of initialized class must be initialized, but %s is not",
-               base.external_name());
-        return;
-      } else {
-        assert(base.is_linked(), "supers/interfaces of initialized class/interface must be linked, but %s is not",
-               base.external_name());
-        return;
-      }
-    case InstanceKlass::initialization_error:
-      if (!derived.is_interface() && (!base.is_interface() || derived.has_nonstatic_concrete_methods())) {
-        assert(base.is_initialized() || base.is_in_error_state(),
-               "supers and interfaces with default methods of class that attempted initialization must also have attempted initialization, but %s has not",
-               base.external_name());
-        return;
-      } else {
-        assert(base.is_linked(), "supers/interfaces of class/interface that attempted initialization must be linked, but %s is not",
-               base.external_name());
-        return;
-      }
-    default:
-      ShouldNotReachHere();
+static void assert_interfaces_attempted_initialization(const InstanceKlass &initial, const InstanceKlass &current) {
+  precond(initial.is_initialized() || initial.is_in_error_state());
+  precond(current.has_nonstatic_concrete_methods());
+  for (int i = 0; i < current.local_interfaces()->length(); i++) {
+    const InstanceKlass &interface = *current.local_interfaces()->at(i);
+    if (interface.declares_nonstatic_concrete_methods()) {
+      assert(interface.is_initialized() || (current.is_in_error_state() && interface.is_in_error_state()),
+             "%s %s %s but its implemented interface with non-static non-abstract methods %s %s",
+             initial.is_interface() ? "interface" : "class", initial.external_name(),
+             initial.is_initialized() ? "is initialized" : "has failed to initialize",
+             interface.external_name(), initial.is_initialized() ? "is not" : "has not attempted to initialize");
+    }
+    if (interface.has_nonstatic_concrete_methods()) {
+      assert_interfaces_attempted_initialization(initial, interface);
+    }
   }
 }
 
 void CracClassStateRestorer::assert_hierarchy_init_states_are_consistent(const InstanceKlass &ik) {
-  if (ik.java_super() != nullptr) {
-    assert_has_consistent_state(*ik.java_super(), ik);
-  }
-  for (int i = 0; i < ik.local_interfaces()->length(); i++) {
-    const InstanceKlass &interface = *ik.local_interfaces()->at(i);
-    assert_has_consistent_state(interface, ik);
+  precond(!ik.is_being_restored());
+  switch (ik.init_state()) {
+    case InstanceKlass::allocated:
+      ShouldNotReachHere(); // Too young
+    case InstanceKlass::being_linked:
+      // In case some other thread picked up the class after it has been restored
+      precond(!const_cast<InstanceKlass &>(ik).is_init_thread(JavaThread::current()));
+    case InstanceKlass::loaded:
+      // If the class/interface is rewritten but not linked then either:
+      // 1) it has failed its linkage in which case its super classes and
+      //    interfaces must be linked, or
+      // 2) it was loaded by CDS as rewritten right away in which case no
+      //    linking has been attempted yet and its super classes and interfaces
+      //    must also be rewritten (they should also be loaded by CDS).
+      // We don't fully check (1) because it is a stricter check and for classes
+      // restored from dump these two cases are indifferentiable (they are not
+      // marked as CDS-loaded even if they were in the original VM).
+      if (ik.is_rewritten()) {
+        if (ik.java_super() != nullptr) {
+          assert(ik.java_super()->is_rewritten(), "%s is rewritten but its super class %s is not",
+                 ik.external_name(), ik.java_super()->external_name());
+        }
+        for (int i = 0; i < ik.local_interfaces()->length(); i++) {
+          const InstanceKlass &interface = *ik.local_interfaces()->at(i);
+          assert(ik.java_super()->is_rewritten(), "%s is rewritten but its implemented interface %s is not",
+                 ik.external_name(), interface.external_name());
+        }
+      }
+      return;
+    case InstanceKlass::being_initialized:
+      // In case some other thread picked up the class after it has been restored
+      precond(!const_cast<InstanceKlass &>(ik).is_init_thread(JavaThread::current()));
+    case InstanceKlass::linked:
+      // Supers and interfaces of linked class/interface must be linked
+      if (ik.java_super() != nullptr) {
+        assert(ik.java_super()->is_linked(), "%s is linked but its super class %s is not",
+                ik.external_name(), ik.java_super()->external_name());
+      }
+      for (int i = 0; i < ik.local_interfaces()->length(); i++) {
+        const InstanceKlass &interface = *ik.local_interfaces()->at(i);
+        assert(ik.java_super()->is_linked(), "%s is linked but its implemented interface %s is not",
+                ik.external_name(), interface.external_name());
+      }
+      return;
+    case InstanceKlass::fully_initialized:
+    case InstanceKlass::initialization_error:
+      // If this is a class (not interface) that has attempted initialization
+      // then supers and interfaces with non-static non-abstract (aka default)
+      // methods must have also attempted it (and succeeded, if the class has)
+      if (!ik.is_interface()) {
+        if (ik.java_super() != nullptr) {
+          assert(ik.java_super()->is_initialized() || (ik.is_in_error_state() && ik.java_super()->is_in_error_state()),
+                 "class %s %s but its super class %s %s",
+                 ik.external_name(), ik.is_initialized() ? "is initialized" : "has failed to initialize",
+                 ik.java_super()->external_name(), ik.is_initialized() ? "is not" : "has not attempted to initialize");
+        }
+        if (ik.has_nonstatic_concrete_methods()) {
+          // Need to recursively check all interfaces because of situations like
+          // "this class implements interface I1 w/o default methods which
+          // implements interface I2 w/ default methods" -- I1 can will be
+          // uninitialized but we should check I2 is initialized
+          assert_interfaces_attempted_initialization(ik, ik);
+        }
+      }
+      return;
+    default:
+      ShouldNotReachHere();
   }
 }
 

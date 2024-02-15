@@ -50,8 +50,9 @@ struct HeapDumpClasses : public AllStatic {
   macro(java_lang_Class, name, vmSymbols::name_name(), T_OBJECT, HeapDump::ID, object_id)                   \
   macro(java_lang_Class, module, "module", T_OBJECT, HeapDump::ID, object_id)                               \
   macro(java_lang_Class, componentType, vmSymbols::componentType_name(), T_OBJECT, HeapDump::ID, object_id)
-#define CLASSMIRROR_DUMP_PTR_FIELDS_DO(macro) \
-  macro(java_lang_Class, klass, vmSymbols::klass_name())
+#define CLASSMIRROR_DUMP_PTR_FIELDS_DO(macro)                        \
+  macro(java_lang_Class, klass, vmSymbols::klass_name())             \
+  macro(java_lang_Class, array_klass, vmSymbols::array_klass_name())
 
   class java_lang_Class {
    private:
@@ -72,6 +73,11 @@ struct HeapDumpClasses : public AllStatic {
     bool is_instance_kind(const HeapDump::InstanceDump &dump) const  { return kind(dump) == Kind::INSTANCE; }
     bool is_array_kind(const HeapDump::InstanceDump &dump) const     { return kind(dump) == Kind::ARRAY; }
     bool is_primitive_kind(const HeapDump::InstanceDump &dump) const { return kind(dump) == Kind::PRIMITIVE; }
+
+    bool mirrors_void(const HeapDump::InstanceDump &dump) const {
+      // Void is the only "primitive type" without an array class
+      return is_primitive_kind(dump) && array_klass(dump) == 0;
+    }
 
    private:
     bool is_initialized() const { return _id_size > 0; }

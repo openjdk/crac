@@ -168,6 +168,7 @@ class InstanceKlass: public Klass {
     fully_initialized,                  // initialized (successful final state)
     initialization_error                // error happened during initialization
   };
+  static const char* state_name(ClassState state);
 
   static InstanceKlass* allocate_instance_klass(ClassLoaderData* loader_data,
                                                 const Symbol* class_name,

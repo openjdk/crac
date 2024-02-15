@@ -1283,7 +1283,7 @@ class CracInstanceClassDumpParser : public StackObj /* constructor allocates res
     const u2 default_methods_num = read<u2>(CHECK);
     if (default_methods_num > 0) {
       guarantee(_ik_flags.has_nonstatic_concrete_methods(),
-                "class without non-static non-abstract methods in its hierarchy should not have default methods");
+                "class without default methods in its hierarchy should not have default methods");
 
       // Pre-fill with nulls so that deallocation works correctly if an error occures before the array is filled
       _default_methods = MetadataFactory::new_array<Method *>(_loader_data, default_methods_num, nullptr, CHECK);
@@ -1587,7 +1587,7 @@ class CracInstanceClassDumpParser : public StackObj /* constructor allocates res
                                    CHECK);
 
     if (ik.default_methods() != nullptr) {
-      assert(ik.has_nonstatic_concrete_methods(), "should have been checked when parsing the default methods");
+      precond(ik.has_nonstatic_concrete_methods());
       Method::sort_methods(ik.default_methods(), /*set_idnums=*/ false);
       ik.create_new_default_vtable_indices(ik.default_methods()->length(), CHECK);
     }

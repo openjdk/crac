@@ -200,7 +200,7 @@ void HeapDumpClasses::java_lang_Class::ensure_initialized(const ParsedHeapDump &
   precond(java_lang_Class_id != HeapDump::NULL_ID);
   if (!is_initialized()) {
     const HeapDump::ClassDump &java_lang_Class_dump = heap_dump.get_class_dump(java_lang_Class_id);
-    precond(is_class_loader_class_dump(heap_dump, java_lang_Class_dump));
+    precond(is_class_mirror_class_dump(heap_dump, java_lang_Class_dump));
     INITIALIZE_OFFSETS(java_lang_Class, CLASSMIRROR_DUMP_FIELDS_DO, CLASSMIRROR_DUMP_PTR_FIELDS_DO)
     DEBUG_ONLY(_java_lang_Class_id = java_lang_Class_id);
     _id_size = heap_dump.id_size;

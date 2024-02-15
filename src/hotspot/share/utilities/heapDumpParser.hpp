@@ -114,8 +114,7 @@ struct HeapDump : AllStatic {
       case HPROF_INT:           return T_INT;
       case HPROF_LONG:          return T_LONG;
       case HPROF_NORMAL_OBJECT: return T_OBJECT;
-      case HPROF_ARRAY_OBJECT:  return T_ARRAY;
-      default:                  return T_ILLEGAL;
+      default:                  return T_ILLEGAL; // Includes HPROF_ARRAY_OBJECT which is not used
     }
   }
 };

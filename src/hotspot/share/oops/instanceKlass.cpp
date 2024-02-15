@@ -3590,8 +3590,12 @@ static void print_vtable(vtableEntry* start, int len, outputStream* st) {
   return print_vtable(reinterpret_cast<intptr_t*>(start), len, st);
 }
 
+const char* InstanceKlass::state_name(ClassState state) {
+  return state_names[state];
+}
+
 const char* InstanceKlass::init_state_name() const {
-  return state_names[init_state()];
+  return state_name(init_state());
 }
 
 void InstanceKlass::print_on(outputStream* st) const {

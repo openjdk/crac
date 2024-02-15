@@ -6,6 +6,7 @@
 #include "logging/log.hpp"
 #include "memory/oopFactory.hpp"
 #include "memory/resourceArea.hpp"
+#include "memory/universe.hpp"
 #include "oops/arrayKlass.hpp"
 #include "oops/instanceKlass.hpp"
 #include "oops/instanceKlass.inline.hpp"
@@ -560,7 +561,7 @@ void CracHeapRestorer::find_and_record_java_class(const HeapDump::ClassDump &cla
 
       // Primitive mirrors are also recorded here because they don't have a
       // Klass to be dumped with directly but always have a TypeArrayKlass
-      if (ak.is_typeArray_klass()) {
+      if (ak.is_typeArray_klass() && &ak != Universe::fillerArrayKlassObj() /* same as int[] */) {
         const oop prim_mirror_obj = java_lang_Class::component_mirror(mirror());
         assert(prim_mirror_obj != nullptr, "type array's mirror must have a component mirror");
         const instanceHandle prim_mirror(current, static_cast<instanceOop>(prim_mirror_obj));

@@ -229,6 +229,12 @@ class ClassDumpWriter : public KlassClosure, public CLDClosure {
       WRITE_CLASS_ID(*tak);
       DO_CHECKED(write_obj_array_class_ids(tak));
     }
+    {
+      log_trace(crac, class, dump)("Writing filler array class ID");
+      Klass *const tak = Universe::fillerArrayKlassObj();
+      WRITE_CLASS_ID(*tak);
+      DO_CHECKED(write_obj_array_class_ids(tak));
+    }
     log_debug(crac, class, dump)("Wrote primitive array IDs");
   }
 

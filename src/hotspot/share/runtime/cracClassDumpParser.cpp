@@ -1726,6 +1726,13 @@ void CracClassDumpParser::parse_primitive_array_classes(TRAPS) {
     _aks->put_when_absent(prim_array_class_id, TypeArrayKlass::cast(tak));
     parse_obj_array_classes(tak, CHECK);
   }
+  {
+    const HeapDump::ID filler_array_class_id = read_id(false, CHECK);
+    Klass *const tak = Universe::fillerArrayKlassObj();
+    precond(!_aks->contains(filler_array_class_id));
+    _aks->put_when_absent(filler_array_class_id, TypeArrayKlass::cast(tak));
+    parse_obj_array_classes(tak, CHECK);
+  }
   log_debug(crac, class, parser)("Parsed primitive array classes");
 }
 

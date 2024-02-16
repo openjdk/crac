@@ -68,7 +68,7 @@ public class ProcessPipelineTest implements CracTest {
                 fail("Should have failed");
             } catch (CheckpointException e) {
                 // One for pipe to the first process, another for pipe from the last
-                assertEquals(2, e.getSuppressed().length);
+                assertEquals(2, e.getNestedExceptions().length);
             }
         }
         // This time it should succeed

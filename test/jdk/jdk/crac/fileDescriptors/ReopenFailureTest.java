@@ -91,9 +91,9 @@ public class ReopenFailureTest extends FDPolicyTestBase implements CracTest {
             } catch (RestoreException ex) {
                 // When running this as root we get only one exception for the missing file
                 if (Files.isWritable(Path.of(log2))) {
-                    assertEquals(1, ex.getSuppressed().length);
+                    assertEquals(1, ex.getNestedExceptions().length);
                 } else {
-                    assertEquals(2, ex.getSuppressed().length);
+                    assertEquals(2, ex.getNestedExceptions().length);
                 }
             }
         }

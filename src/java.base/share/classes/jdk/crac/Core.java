@@ -32,7 +32,6 @@ import jdk.internal.crac.ClaimedFDs;
 import jdk.internal.crac.JDKResource;
 import jdk.internal.crac.LoggerContainer;
 import sun.security.action.GetBooleanAction;
-import sun.security.action.GetPropertyAction;
 
 import java.io.PrintWriter;
 import java.io.StringWriter;
@@ -222,7 +221,7 @@ public class Core {
             globalContext.afterRestore(null);
         } catch (RestoreException re) {
             if (checkpointException.hasException()) {
-                checkpointException.resuppress(re);
+                checkpointException.addNestedExceptions(re);
             } else {
                 restoreException.handle(re);
             }
@@ -290,7 +289,7 @@ public class Core {
             // beforeCheckpoint/afterRestore methods
             if (checkpointInProgress) {
                 CheckpointException ex = new CheckpointException();
-                ex.addSuppressed(new IllegalStateException("Recursive checkpoint is not allowed"));
+                ex.addNestedException(new IllegalStateException("Recursive checkpoint is not allowed"));
                 throw ex;
             }
 

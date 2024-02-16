@@ -28,17 +28,24 @@ package javax.crac;
 
 /**
  * This exception works as an aggregate for all errors found during checkpoint;
- * these are recorded as {@linkplain #getSuppressed() suppressed exceptions}.
+ * these are recorded as {@linkplain #getNestedExceptions() nested exceptions}.
  * The exception does not have any own message, cause nor collects stack trace.
  */
-public final class RestoreException extends Exception {
+public final class RestoreException extends ExceptionBase {
     private static final long serialVersionUID = -4091592505524280559L;
 
     /**
-     * Creates a {@code RestoreException}.
+     * Create exception with no nested exceptions.
      */
     public RestoreException() {
-        super(null, null, true, false);
+    }
+
+    /**
+     * Create exception with provided nested exceptions.
+     * @param nested Nested exceptions.
+     */
+    public RestoreException(Throwable[] nested) {
+        super(nested);
     }
 }
 

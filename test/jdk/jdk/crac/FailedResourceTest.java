@@ -66,8 +66,8 @@ public class FailedResourceTest implements CracTest {
             Core.checkpointRestore();
             fail("Was supposed to throw");
         } catch (CheckpointException e) {
-            assertEquals(1, e.getSuppressed().length, Arrays.toString(e.getSuppressed()));
-            assertEquals(EXCEPTION_MESSAGE, e.getSuppressed()[0].getMessage());
+            assertEquals(1, e.getNestedExceptions().length, Arrays.toString(e.getSuppressed()));
+            assertEquals(EXCEPTION_MESSAGE, e.getNestedExceptions()[0].getMessage());
         } catch (RestoreException e) {
             fail("Shouldn't error in restore", e);
         }

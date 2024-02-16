@@ -26,33 +26,25 @@
 
 package javax.crac;
 
-import jdk.crac.impl.ExceptionPrinter;
-
-import java.io.PrintStream;
-import java.io.PrintWriter;
-
 /**
  * This exception works as an aggregate for all errors found during checkpoint;
- * these are recorded as {@linkplain #getSuppressed() suppressed exceptions}.
+ * these are recorded as {@linkplain #getNestedExceptions() nested exceptions}.
  * The exception does not have any own message, cause nor collects stack trace.
  */
-public final class CheckpointException extends Exception {
+public final class CheckpointException extends ExceptionBase {
     private static final long serialVersionUID = 6859967688386143096L;
 
     /**
-     * Creates a {@code CheckpointException}.
+     * Create exception with no nested exceptions.
      */
     public CheckpointException() {
-        super(null, null, true, false);
     }
 
-    @Override
-    public void printStackTrace(PrintStream s) {
-        ExceptionPrinter.print(this, s);
-    }
-
-    @Override
-    public void printStackTrace(PrintWriter w) {
-        ExceptionPrinter.print(this, w);
+    /**
+     * Create exception with provided nested exceptions.
+     * @param nested Nested exceptions.
+     */
+    public CheckpointException(Throwable[] nested) {
+        super(nested);
     }
 }

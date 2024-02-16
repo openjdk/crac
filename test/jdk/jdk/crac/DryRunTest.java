@@ -57,7 +57,7 @@ public class DryRunTest implements CracTest {
         OutputAnalyzer output = new CracBuilder().engine(CracEngine.SIMULATE).printResources(true).captureOutput(true)
                 .startCheckpoint().outputAnalyzer().shouldHaveExitValue(0);
         String err = output.getStderr();
-        assertTrue(err.contains("CheckpointException: Failed with 2 inner exceptions"), err);
+        assertTrue(err.contains("CheckpointException: Failed with 2 nested exceptions"), err);
         int firstCause = err.indexOf("Cause 1/2: java.lang.RuntimeException: should not pass");
         int secondCause = err.indexOf("Cause 2/2: jdk.crac.impl.CheckpointOpenFileException");
         assertGreaterThan(firstCause, 0, err);
@@ -84,7 +84,7 @@ public class DryRunTest implements CracTest {
 
             ce.printStackTrace();
 
-            for (Throwable e : ce.getSuppressed()) {
+            for (Throwable e : ce.getNestedExceptions()) {
                 String name = e.getClass().getName();
                 switch (name) {
                     case "java.lang.RuntimeException":                exceptions |= 0x1; break;

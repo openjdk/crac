@@ -61,7 +61,7 @@ public abstract class JDKFileResource extends JDKFdResource {
         Path p = Path.of(path);
         for (Path entry : CLASSPATH_ENTRIES) {
             try {
-                if (Files.isSameFile(p, entry)) {
+                if (entry != null && Files.isSameFile(p, entry)) {
                     return true;
                 }
             } catch (IOException e) {

@@ -992,15 +992,15 @@ class ClassDumpWriter : public KlassClosure, public CLDClosure {
       DO_CHECKED(write_uint_array_data(cmethod.method_annotations()->data(), cmethod.method_annotations_length()));
     }
     if (cmethod.has_parameter_annotations()) { // Runtime(In)VisibleParameterAnnotations
-      assert(!cmethod.method_annotations()->is_empty(), "existing method annotations cannot be empty");
-      DO_CHECKED(write_uint_array_data(cmethod.parameter_annotations()->data(), cmethod.method_annotations_length()));
+      assert(!cmethod.parameter_annotations()->is_empty(), "existing parameter annotations cannot be empty");
+      DO_CHECKED(write_uint_array_data(cmethod.parameter_annotations()->data(), cmethod.parameter_annotations_length()));
     }
     if (cmethod.has_type_annotations()) { // Runtime(In)VisibleTypeAnnotations
-      assert(!cmethod.method_annotations()->is_empty(), "existing method annotations cannot be empty");
+      assert(!cmethod.type_annotations()->is_empty(), "existing type annotations cannot be empty");
       DO_CHECKED(write_uint_array_data(cmethod.type_annotations()->data(), cmethod.type_annotations_length()));
     }
     if (cmethod.has_default_annotations()) { // AnnotationDefault
-      assert(!cmethod.method_annotations()->is_empty(), "existing method annotations cannot be empty");
+      assert(!cmethod.default_annotations()->is_empty(), "existing default annotations cannot be empty");
       DO_CHECKED(write_uint_array_data(cmethod.default_annotations()->data(), cmethod.default_annotations_length()));
     }
     // Synthetic attribute is stored in access flags, others are not available

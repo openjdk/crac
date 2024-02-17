@@ -662,6 +662,7 @@ class CracInstanceClassDumpParser : public StackObj /* constructor allocates res
     ConstantPoolCache *const cp_cache =
       ConstantPoolCache::allocate_uninitialized(_loader_data, method_entries_len, indy_entries_len, field_entries_len, CHECK);
     _cp->set_cache(cp_cache); // Make constant pool responsible for cache deallocation
+    cp_cache->set_constant_pool(_cp);
 
     for (u2 field_i = 0; field_i < field_entries_len; field_i++) {
       const auto cp_index = read<u2>(CHECK);
@@ -690,7 +691,7 @@ class CracInstanceClassDumpParser : public StackObj /* constructor allocates res
         const auto tos_state = read<u1>(CHECK);
         guarantee(tos_state < TosState::number_of_states, "illegal resolved field entry ToS state: %i", tos_state);
         const auto flags = read<u1>(CHECK);
-        field_entry.fill_in_partial(field_index, tos_state, flags, get_code, put_code);
+        field_entry.fill_in_portable(field_index, tos_state, flags, get_code, put_code);
       }
 
       *cp_cache->resolved_field_entry_at(field_i) = field_entry;
@@ -715,6 +716,8 @@ class CracInstanceClassDumpParser : public StackObj /* constructor allocates res
         const auto params_num = read<u1>(CHECK);
         cache_entry.set_method_flags(checked_cast<TosState>(tos_state), prepare_resolved_method_flags(flags), params_num);
         postcond(cache_entry.is_method_entry());
+        postcond(cache_entry.flag_state() == tos_state);
+        postcond(cache_entry.parameter_size() == params_num);
 
         // Not readable from the entry until f1 is set
         const bool has_appendix = is_set_nth_bit(flags, CracClassDump::has_appendix_shift);
@@ -744,7 +747,10 @@ class CracInstanceClassDumpParser : public StackObj /* constructor allocates res
           default:
             guarantee(false, "illegal method resolution bytecode 1: %s", Bytecodes::name(bytecode1));
         }
-        cache_entry.set_bytecode_1(bytecode1); // The bytecode has been validated
+        if (bytecode1 != 0) {
+          cache_entry.set_bytecode_1(bytecode1);
+          postcond(cache_entry.is_resolved(bytecode1));
+        }
 
         // f2
         HeapDump::ID f2_class_id = HeapDump::NULL_ID;
@@ -769,7 +775,10 @@ class CracInstanceClassDumpParser : public StackObj /* constructor allocates res
           const auto f2_index = read<jint>(CHECK);
           cache_entry.set_f2(f2_index);
         }
-        cache_entry.set_bytecode_2(bytecode2); // The bytecode has been validated
+        if (bytecode2 != 0) {
+          cache_entry.set_bytecode_2(bytecode2);
+          postcond(cache_entry.is_resolved(bytecode2));
+        }
 
         if (f1_class_id != HeapDump::NULL_ID || f2_class_id != HeapDump::NULL_ID) { // Save to resolve later
           _interclass_refs.method_refs->append({cache_i, f1_is_method, f1_class_id, f1_method_desc, f2_class_id, f2_method_desc});
@@ -1061,7 +1070,7 @@ class CracInstanceClassDumpParser : public StackObj /* constructor allocates res
       const auto max_stack = read<u2>(CHECK);
       const auto max_locals = read<u2>(CHECK);
       method->set_max_stack(max_stack);
-      method->set_max_stack(max_locals);
+      method->set_max_locals(max_locals);
     }
 
     read_raw(method->code_base(), method->code_size(), CHECK);

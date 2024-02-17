@@ -132,10 +132,11 @@ public:
   }
 
   // CRaC
-  void fill_in_partial(u2 index, u1 tos_state, u1 flags, u1 b1, u1 b2) {
+  void fill_in_portable(u2 index, u1 tos_state, u1 flags, u1 b1, u1 b2) {
     assert(_cpool_index > 0, "uninitialized");
     assert(tos_state < TosState::number_of_states, "not a ToS state");
 
+    _field_index = index;
     _tos_state = tos_state;
     _flags = flags;
     _get_code = b1;
@@ -145,12 +146,13 @@ public:
     postcond(b1 == 0 || is_resolved(Bytecodes::cast(b1)));
     postcond(b2 == 0 || is_resolved(Bytecodes::cast(b2)));
   }
-  void fill_in_holder(InstanceKlass* klass) {
+  void fill_in_unportable(InstanceKlass* klass) {
     precond(klass != nullptr);
     assert(_cpool_index > 0, "uninitialized");
     assert(_get_code > 0 || _put_code > 0, "unresolved");
-    assert(_field_holder == nullptr, "holder already set");
+    assert(_field_holder == nullptr, "already filled in");
     _field_holder = klass;
+    _field_offset = klass->field_offset(_field_index);
   }
 
   // CDS

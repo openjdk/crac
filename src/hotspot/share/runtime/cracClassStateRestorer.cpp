@@ -316,6 +316,7 @@ void CracClassStateRestorer::fill_interclass_references(InstanceKlass *ik,
       }
     }
   }
+  DEBUG_ONLY(ik->constants()->verify_on(nullptr));
 
   // Restore constant pool cache only if it was created by us because unresolved
   // entries are expected to be partially filled
@@ -337,47 +338,90 @@ void CracClassStateRestorer::fill_interclass_references(InstanceKlass *ik,
 
   ConstantPoolCache &cp_cache = *cp->cache();
   for (const InterclassRefs::ClassRef &field_ref : *refs.field_refs) {
+    ResolvedFieldEntry &field_entry = *cp_cache.resolved_field_entry_at(field_ref.index);
     InstanceKlass **const holder = iks.get(field_ref.class_id);
     guarantee(holder != nullptr, "unknown class " HDID_FORMAT " referenced by resolved field entry #%i of %s",
               field_ref.class_id, field_ref.index, ik->external_name());
-    ResolvedFieldEntry &field_entry = *cp_cache.resolved_field_entry_at(field_ref.index);
-    field_entry.fill_in_holder(*holder);
+    assert(field_entry.field_index() < (*holder)->total_fields_count(),
+           "class %s, field entry #%i: field holder %s, field index %i >= amount of fields in holder %i",
+           ik->external_name(), field_ref.index, (*holder)->external_name(), field_entry.field_index(), (*holder)->total_fields_count());
+    field_entry.fill_in_unportable(*holder);
+    postcond(field_entry.field_holder() == *holder);
+    postcond((*holder)->field(field_entry.field_index()).offset() == checked_cast<u4>(field_entry.field_offset()));
   }
   for (const InterclassRefs::MethodRef &method_ref : *refs.method_refs) {
     ConstantPoolCacheEntry &cache_entry = *cp_cache.entry_at(method_ref.cache_index);
     if (method_ref.f1_class_id != HeapDump::NULL_ID) {
-      InstanceKlass **const holder = iks.get(method_ref.f1_class_id);
-      guarantee(holder != nullptr, "unknown class " HDID_FORMAT " referenced by f1 in resolved method entry #%i of %s",
+      InstanceKlass **const klass = iks.get(method_ref.f1_class_id);
+      guarantee(klass != nullptr, "unknown class " HDID_FORMAT " referenced by f1 in resolved method entry #%i of %s",
                 method_ref.f1_class_id, method_ref.cache_index, ik->external_name());
       if (method_ref.f1_is_method) {
         Symbol *const name = heap_dump.get_symbol(method_ref.f1_method_desc.name_id);
         Symbol *const sig = heap_dump.get_symbol(method_ref.f1_method_desc.sig_id);
-        Method *const method = find_possibly_sig_poly_method(*holder, name, sig, method_ref.f1_method_desc.kind, CHECK);
+        Method *const method = find_possibly_sig_poly_method(*klass, name, sig, method_ref.f1_method_desc.kind, CHECK);
         guarantee(method != nullptr, "class %s has a resolved method entry #%i with f1 referencing %s method %s that cannot be found",
                   ik->external_name(), method_ref.cache_index, CracClassDump::method_kind_name(method_ref.f1_method_desc.kind),
-                  Method::name_and_sig_as_C_string(*holder, name, sig));
+                  Method::name_and_sig_as_C_string(*klass, name, sig));
+
+        assert(cache_entry.flag_state() == as_TosState(method->result_type()),
+               "class %s, cache entry #%i, f1 as method: method %s, entry's ToS state %i != method's result type's %i",
+               ik->external_name(), method_ref.cache_index, method->external_name(), cache_entry.flag_state(), as_TosState(method->result_type()));
+        assert(cache_entry.parameter_size() == method->size_of_parameters(),
+               "class %s, cache entry #%i, f1 as method: method %s, entry's size of parameters %i != method's size of parameters %i",
+               ik->external_name(), method_ref.cache_index, method->external_name(), cache_entry.parameter_size(), method->size_of_parameters());
         cache_entry.set_f1(method);
+        postcond(cache_entry.f1_as_method() == method);
       } else {
-        cache_entry.set_f1(*holder);
+        cache_entry.set_f1(*klass);
+        postcond(cache_entry.f1_as_klass() == *klass);
       }
     }
     if (method_ref.f2_class_id != HeapDump::NULL_ID) {
       InstanceKlass **const holder = iks.get(method_ref.f2_class_id);
       guarantee(holder != nullptr, "unknown class " HDID_FORMAT " referenced by f2 in resolved method entry #%i of %s",
                 method_ref.f2_class_id, method_ref.cache_index, ik->external_name());
+
       Symbol *const name = heap_dump.get_symbol(method_ref.f2_method_desc.name_id);
       Symbol *const sig = heap_dump.get_symbol(method_ref.f2_method_desc.sig_id);
-      Method *const method = find_possibly_sig_poly_method(*holder, name, sig, method_ref.f2_method_desc.kind, CHECK);
+      Method *const method = (*holder)->find_local_method(name, sig,
+                                                          CracClassDump::as_overpass_lookup_mode(method_ref.f2_method_desc.kind),
+                                                          CracClassDump::as_static_lookup_mode(method_ref.f2_method_desc.kind),
+                                                          Klass::PrivateLookupMode::find);
       guarantee(method != nullptr, "class %s has a resolved method entry #%i with f2 referencing %s method %s that cannot be found",
                 ik->external_name(), method_ref.cache_index, CracClassDump::method_kind_name(method_ref.f2_method_desc.kind),
                 Method::name_and_sig_as_C_string(*holder, name, sig));
+
+#ifdef ASSERT
+      assert(cache_entry.flag_state() == as_TosState(method->result_type()),
+             "class %s, cache entry #%i, f2 as method: method %s, entry's ToS state %i != method's result type's %i",
+             ik->external_name(), method_ref.cache_index, method->external_name(), cache_entry.flag_state(), as_TosState(method->result_type()));
+      assert(cache_entry.parameter_size() == method->size_of_parameters(),
+             "class %s, cache entry #%i, f2 as method: method %s, entry's size of parameters %i != method's size of parameters %i",
+             ik->external_name(), method_ref.cache_index, method->external_name(), cache_entry.parameter_size(), method->size_of_parameters());
+      if (!cache_entry.is_vfinal()) {
+        assert((*holder)->is_interface(), "class %s, cache entry #%i, f2 as interface method: holder %s is not an interface",
+               ik->external_name(), method_ref.cache_index, (*holder)->external_name());
+        assert(!cache_entry.is_f1_null() && cache_entry.f1_as_klass()->is_klass() && cache_entry.f1_as_klass()->is_subtype_of(*holder),
+               "class %s, cache entry #%i, f2 as interface method: f1 contains class %s which does not implement f2's method's holder %s",
+               ik->external_name(), method_ref.cache_index,
+               cache_entry.is_f1_null() ? "<null>" : (cache_entry.f1_as_klass()->is_klass() ? cache_entry.f1_as_klass()->external_name() : "<not a class>"),
+               (*holder)->external_name());
+        assert(!method->is_final_method(), "class %s, cache entry #%i, f2 as interface method: method %s final",
+               ik->external_name(), method_ref.cache_index, (*holder)->external_name());
+      }
+#endif // ASSERT
       cache_entry.set_f2(reinterpret_cast<intx>(method));
+      postcond((cache_entry.is_vfinal() ? cache_entry.f2_as_vfinal_method() : cache_entry.f2_as_interface_method()) == method);
     }
   }
   for (const InterclassRefs::IndyAdapterRef &indy_ref : *refs.indy_refs) {
+    ResolvedIndyEntry &indy_entry = *cp_cache.resolved_indy_entry_at(indy_ref.indy_index);
+    precond(!indy_entry.resolution_failed());
+
     InstanceKlass **const holder = iks.get(indy_ref.holder_id);
     guarantee(holder != nullptr, "unknown class " HDID_FORMAT " referenced by resolved invokedynamic entry #%i of %s",
               indy_ref.holder_id, indy_ref.indy_index, ik->external_name());
+
     Symbol *const name = heap_dump.get_symbol(indy_ref.method_desc.name_id);
     Symbol *const sig = heap_dump.get_symbol(indy_ref.method_desc.sig_id);
     Method *const method = (*holder)->find_local_method(name, sig,
@@ -387,8 +431,15 @@ void CracClassStateRestorer::fill_interclass_references(InstanceKlass *ik,
     guarantee(method != nullptr, "class %s has a resolved invokedynamic entry #%i referencing %s method %s that cannot be found",
               ik->external_name(), indy_ref.indy_index, CracClassDump::method_kind_name(indy_ref.method_desc.kind),
               Method::name_and_sig_as_C_string(*holder, name, sig));
-    ResolvedIndyEntry &indy_entry = *cp_cache.resolved_indy_entry_at(indy_ref.indy_index);
+
+    assert(indy_entry.return_type() == as_TosState(method->result_type()),
+           "class %s, indy entry #%i: method %s, entry's ToS state %i != method's result type's %i",
+           ik->external_name(), indy_ref.indy_index, method->external_name(), indy_entry.return_type(), as_TosState(method->result_type()));
+    assert(indy_entry.num_parameters() == method->size_of_parameters(),
+           "class %s, indy entry #%i: method %s, entry's size of parameters %i != method's size of parameters %i",
+           ik->external_name(), indy_ref.indy_index, method->external_name(), indy_entry.num_parameters(), method->size_of_parameters());
     indy_entry.adjust_method_entry(method);
+    postcond(indy_entry.is_resolved() && indy_entry.method() == method);
   }
 }
 

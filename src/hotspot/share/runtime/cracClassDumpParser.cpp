@@ -1848,9 +1848,12 @@ GrowableArray<Pair<HeapDump::ID, InterclassRefs>> CracClassDumpParser::parse_ins
 
 void CracClassDumpParser::parse_initiating_loaders(TRAPS) {
   for (HeapDump::ID loader_id = read_id(true, THREAD);
-        !HAS_PENDING_EXCEPTION && loader_id != HeapDump::NULL_ID;
-        loader_id = read_id(true, THREAD)) {
+       !HAS_PENDING_EXCEPTION && loader_id != HeapDump::NULL_ID;
+       loader_id = read_id(true, THREAD)) {
+    guarantee(loader_id != HeapDump::NULL_ID, "bootstrap loader cannot be a non-defining initiating loader");
     const Handle loader = get_class_loader(loader_id, CHECK);
+    assert(loader->klass()->is_class_loader_instance_klass(), HDID_FORMAT " cannot be an initiating loader: "
+           "its class is %s which is not a class loader class", loader_id, loader->klass()->external_name());
     const auto initiated_classes_num = read<jint>(CHECK);
     guarantee(initiated_classes_num >= 0, "amount of initiated classes cannot be negative");
     for (jint i = 0; i < initiated_classes_num; i++) {
@@ -1858,7 +1861,10 @@ void CracClassDumpParser::parse_initiating_loaders(TRAPS) {
       InstanceKlass **const ik = _iks->get(class_id);
       guarantee(ik != nullptr, "unknown class " HDID_FORMAT " dumped as initiated by class loader " HDID_FORMAT, class_id, loader_id);
       SystemDictionary::record_initiating_loader(*ik, loader, CHECK);
+      log_trace(crac, class)("Recorded %s as initiating loader of %s defined by %s",
+                             java_lang_ClassLoader::loader_data(loader())->loader_name_and_id(),
+                             (*ik)->external_name(), (*ik)->class_loader_data()->loader_name_and_id());
     }
   }
-  log_trace(crac, class, parser)("Parsed initiating loaders");
+  log_debug(crac, class, parser)("Parsed initiating loaders");
 }

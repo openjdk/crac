@@ -205,8 +205,8 @@ InstanceKlass *CracClassStateRestorer::define_created_class(InstanceKlass *creat
       ResourceMark rm;
       const char *current_state_name = (defined_ik->is_rewritten() && !defined_ik->is_linked())             ? "rewritten" : defined_ik->init_state_name();
       const char *target_state_name =  (created_ik->is_rewritten() && target_state < InstanceKlass::linked) ? "rewritten" : InstanceKlass::state_name(target_state);
-      log_debug(crac, class)("Using pre-defined version of %s (current state = %s, target state = %s)",
-                             defined_ik->external_name(), current_state_name, target_state_name);
+      log_debug(crac, class)("Using pre-defined %s (current state = %s, target state = %s) - defined by %s",
+                             defined_ik->external_name(), current_state_name, target_state_name, defined_ik->class_loader_data()->loader_name_and_id());
     }
     assert(created_ik->access_flags().as_int() == defined_ik->access_flags().as_int(),
            "pre-defined %s has different access flags: " INT32_FORMAT_X " (dumped) != " INT32_FORMAT_X " (pre-defined)",
@@ -230,6 +230,12 @@ InstanceKlass *CracClassStateRestorer::define_created_class(InstanceKlass *creat
     }
 
     created_ik->class_loader_data()->add_to_deallocate_list(created_ik);
+  } else if (log_is_enabled(Debug, crac, class)) {
+    ResourceMark rm;
+    const char *current_state_name = (defined_ik->is_rewritten() && !defined_ik->is_linked())             ? "rewritten" : defined_ik->init_state_name();
+    const char *target_state_name =  (created_ik->is_rewritten() && target_state < InstanceKlass::linked) ? "rewritten" : InstanceKlass::state_name(target_state);
+    log_debug(crac, class)("Using newly defined %s (current state = %s, target state = %s) - defined by %s",
+                           defined_ik->external_name(), current_state_name, target_state_name, defined_ik->class_loader_data()->loader_name_and_id());
   }
 
   if (target_state < InstanceKlass::linked) {

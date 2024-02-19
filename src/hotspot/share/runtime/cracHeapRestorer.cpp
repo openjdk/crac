@@ -673,9 +673,15 @@ void CracHeapRestorer::set_field(instanceHandle obj, const FieldStream &fs, cons
 #ifdef ASSERT
       if (restored.not_null()) {
         Klass *const field_type = get_ref_field_type(field_holder, fs.signature());
-        assert(field_type != nullptr, "field's type must be loaded since the field is assigned");
-        assert(restored->klass()->is_subtype_of(field_type), "field of type %s cannot be assigned a value of class %s",
-               fs.signature()->as_klass_external_name(), restored->klass()->external_name());
+        // TODO until restoration of loader constraints is implemented we may get null here
+        // assert(field_type != nullptr, "field's type must be loaded since the field is assigned");
+        if (field_type != nullptr) {
+          assert(restored->klass()->is_subtype_of(field_type), "field of type %s cannot be assigned a value of class %s",
+                 fs.signature()->as_C_string(), restored->klass()->external_name());
+        } else {
+          log_warning(crac, class)("Loader constraint absent: %s should be constrained on loading %s",
+                                   field_holder.class_loader_data()->loader_name_and_id(), fs.signature()->as_C_string());
+        }
       }
 #endif // ASSERT
       obj->obj_field_put(fs.offset(), restored());

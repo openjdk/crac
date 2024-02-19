@@ -96,6 +96,7 @@ class ClassDumpWriter : public KlassClosure, public CLDClosure {
     if (io_error_msg() == nullptr)      ClassLoaderDataGraph::cld_do(this);
     if (io_error_msg() == nullptr)      write_end_sentinel();
     log_debug(crac, class, dump)("Wrote initiating class loaders info");
+    // TODO write class loading constraints
   }
 
  private:

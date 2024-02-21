@@ -28,6 +28,7 @@ package jdk.internal.ref;
 import java.lang.ref.Cleaner;
 import java.lang.ref.Cleaner.Cleanable;
 import java.lang.ref.ReferenceQueue;
+import java.util.ArrayList;
 import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Function;
@@ -143,11 +144,20 @@ public final class CleanerImpl implements Runnable, JDKResource {
                 mlThread.eraseThreadLocals();
             }
             if (forceCleanup) {
+                ArrayList<PhantomCleanable<?>> refArr = new ArrayList<>();
                 synchronized (phantomCleanableList) {
-                    PhantomCleanable<?> next = phantomCleanableList;
-                    do {
-                        next = next.cleanIfNull();
-                    } while (next != phantomCleanableList);
+                    for (var ref = phantomCleanableList.next; ref != phantomCleanableList; ref = ref.next) {
+                        if (ref.refersTo(null)) {
+                            refArr.add(ref);
+                        }
+                    }
+                    for (var ref : refArr) {
+                        try {
+                            ref.clean();
+                        } catch (Throwable e) {
+                            // ignore exceptions from the cleanup action
+                        }
+                    }
                 }
                 synchronized (this) {
                     forceCleanup = false;

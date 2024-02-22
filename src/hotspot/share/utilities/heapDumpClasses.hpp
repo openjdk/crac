@@ -20,9 +20,7 @@
 // Classes and fields are to be added on-demand.
 struct HeapDumpClasses : public AllStatic {
 
-  DEBUG_ONLY(static bool is_class_loader_dump(const ParsedHeapDump &heap_dump, const HeapDump::InstanceDump &dump));
-
-#define CLASSLOADER_DUMP_FIELDS_DO(macro)                                      \
+#define CLASSLOADER_DUMP_FIELDS_DO(macro)                                                             \
   macro(java_lang_ClassLoader, parent, vmSymbols::parent_name(), T_OBJECT, HeapDump::ID, object_id)   \
   macro(java_lang_ClassLoader, name, vmSymbols::name_name(), T_OBJECT, HeapDump::ID, object_id)       \
   macro(java_lang_ClassLoader, nameAndId, "nameAndId", T_OBJECT, HeapDump::ID, object_id)             \
@@ -44,8 +42,6 @@ struct HeapDumpClasses : public AllStatic {
   };
 
 
-  DEBUG_ONLY(static bool is_class_mirror_dump(const ParsedHeapDump &heap_dump, const HeapDump::InstanceDump &dump));
-
 #define CLASSMIRROR_DUMP_FIELDS_DO(macro)                                                                   \
   macro(java_lang_Class, name, vmSymbols::name_name(), T_OBJECT, HeapDump::ID, object_id)                   \
   macro(java_lang_Class, module, "module", T_OBJECT, HeapDump::ID, object_id)                               \
@@ -54,6 +50,7 @@ struct HeapDumpClasses : public AllStatic {
   macro(java_lang_Class, klass, vmSymbols::klass_name())             \
   macro(java_lang_Class, array_klass, vmSymbols::array_klass_name())
 
+  // Requires the heap dump to include injected fields.
   class java_lang_Class {
    private:
     u4 _id_size = 0;
@@ -78,6 +75,68 @@ struct HeapDumpClasses : public AllStatic {
       // Void is the only "primitive type" without an array class
       return is_primitive_kind(dump) && array_klass(dump) == 0;
     }
+
+   private:
+    bool is_initialized() const { return _id_size > 0; }
+  };
+
+
+#define RESOLVEDMETHODNAME_DUMP_FIELDS_DO(macro)                                                                      \
+  macro(java_lang_invoke_ResolvedMethodName, vmholder, vmSymbols::vmholder_name(), T_OBJECT, HeapDump::ID, object_id) \
+  macro(java_lang_invoke_ResolvedMethodName, method_kind, vmSymbols::internal_kind_name(), T_BYTE, jbyte, byte)
+#define RESOLVEDMETHODNAME_DUMP_PTR_FIELDS_DO(macro)                                                    \
+  macro(java_lang_invoke_ResolvedMethodName, method_name_id, vmSymbols::internal_name_name())           \
+  macro(java_lang_invoke_ResolvedMethodName, method_signature_id, vmSymbols::internal_signature_name())
+
+  // Requires the heap dump to include injected fields and 3 additional
+  // identification fake-fields for 'vmtarget' field of ResolvedMethodName.
+  class java_lang_invoke_ResolvedMethodName {
+   private:
+    u4 _id_size = 0;
+    BasicType _ptr_type = T_ILLEGAL;
+    RESOLVEDMETHODNAME_DUMP_FIELDS_DO(DEFINE_OFFSET_FIELD)
+    RESOLVEDMETHODNAME_DUMP_PTR_FIELDS_DO(DEFINE_OFFSET_FIELD)
+    DEBUG_ONLY(HeapDump::ID _java_lang_invoke_ResolvedMethodName_id = HeapDump::NULL_ID);
+
+   public:
+    void ensure_initialized(const ParsedHeapDump &heap_dump, HeapDump::ID java_lang_invoke_ResolvedMethodName_id);
+
+    RESOLVEDMETHODNAME_DUMP_FIELDS_DO(DECLARE_GET_FIELD_METHOD)
+    HeapDump::ID method_name_id(const HeapDump::InstanceDump &dump) const;
+    HeapDump::ID method_signature_id(const HeapDump::InstanceDump &dump) const;
+
+   private:
+    bool is_initialized() const { return _id_size > 0; }
+  };
+
+
+#define MEMBERNAME_DUMP_FIELDS_DO(macro)                                                                          \
+  macro(java_lang_invoke_MemberName, clazz, vmSymbols::clazz_name(), T_OBJECT, HeapDump::ID, object_id)           \
+  macro(java_lang_invoke_MemberName, name, vmSymbols::name_name(), T_OBJECT, HeapDump::ID, object_id)             \
+  macro(java_lang_invoke_MemberName, type, vmSymbols::type_name(), T_OBJECT, HeapDump::ID, object_id)             \
+  macro(java_lang_invoke_MemberName, flags, vmSymbols::flags_name(), T_INT, jint, int)                            \
+  macro(java_lang_invoke_MemberName, method, vmSymbols::method_name(), T_OBJECT, HeapDump::ID, object_id)         \
+  macro(java_lang_invoke_MemberName, resolution, "resolution", T_OBJECT, HeapDump::ID, object_id)
+#define MEMBERNAME_DUMP_PTR_FIELDS_DO(macro)                             \
+  macro(java_lang_invoke_MemberName, vmindex, vmSymbols::vmindex_name())
+
+  // Requires the heap dump to include injected fields.
+  class java_lang_invoke_MemberName {
+   private:
+    u4 _id_size = 0;
+    BasicType _ptr_type = T_ILLEGAL;
+    MEMBERNAME_DUMP_FIELDS_DO(DEFINE_OFFSET_FIELD)
+    MEMBERNAME_DUMP_PTR_FIELDS_DO(DEFINE_OFFSET_FIELD)
+    DEBUG_ONLY(HeapDump::ID _java_lang_invoke_MemberName_id = HeapDump::NULL_ID);
+
+   public:
+    void ensure_initialized(const ParsedHeapDump &heap_dump, HeapDump::ID java_lang_invoke_MemberName_id);
+
+    MEMBERNAME_DUMP_FIELDS_DO(DECLARE_GET_FIELD_METHOD)
+    MEMBERNAME_DUMP_PTR_FIELDS_DO(DECLARE_GET_PTR_FIELD_METHOD)
+
+    bool is_field(const HeapDump::InstanceDump &dump) const;
+    bool is_resolved(const HeapDump::InstanceDump &dump) const { return resolution(dump) == HeapDump::NULL_ID; }
 
    private:
     bool is_initialized() const { return _id_size > 0; }

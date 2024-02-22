@@ -812,6 +812,7 @@ const char *HeapDumpParser::parse(const char *path, ParsedHeapDump *out) {
   return err_msg;
 }
 
+
 // Reads from the specified address.
 class AddressBasicTypeReader : public BasicTypeReader {
  public:
@@ -853,4 +854,45 @@ HeapDump::BasicValue HeapDump::InstanceDump::read_field(u4 offset, BasicType typ
     default:        ShouldNotReachHere();
   }
   return val;
+}
+
+
+void DumpedInstanceFieldStream::next() {
+  precond(!eos());
+  _field_offset += HeapDump::value_size(type(), _heap_dump.id_size);
+  _field_index++;
+}
+
+bool DumpedInstanceFieldStream::eos() {
+  if (_field_index < _current_class_dump->instance_field_infos.size()) {
+    return false;
+  }
+  if (_current_class_dump->super_id == HeapDump::NULL_ID) {
+    return true;
+  }
+  _field_index = 0;
+  _current_class_dump = &_heap_dump.get_class_dump(_current_class_dump->super_id);
+  return eos(); // Check again to skip the class if it has no non-static fields
+}
+
+Symbol *DumpedInstanceFieldStream::name() const {
+  precond(_field_index < _current_class_dump->instance_field_infos.size());
+  const HeapDump::ID name_id = _current_class_dump->instance_field_infos[_field_index].name_id;
+  return _heap_dump.get_symbol(name_id);
+}
+
+BasicType DumpedInstanceFieldStream::type() const {
+  precond(_field_index < _current_class_dump->instance_field_infos.size());
+  const u1 t = _current_class_dump->instance_field_infos[_field_index].type;
+  return HeapDump::htype2btype(t);
+}
+
+HeapDump::BasicValue DumpedInstanceFieldStream::value() const {
+  const BasicType t = type();
+  guarantee(_field_offset + HeapDump::value_size(t, _heap_dump.id_size) <= _instance_dump.fields_data.size(),
+            "object " HDID_FORMAT " has less non-static fields' data dumped than specified by its direct class and super-classes: "
+            "read " UINT32_FORMAT " bytes and expect at least " UINT32_FORMAT " more to read %s value, but only " UINT32_FORMAT " bytes left",
+            _instance_dump.id, _field_offset, HeapDump::value_size(t, _heap_dump.id_size), type2name(type()),
+            _instance_dump.fields_data.size() - _field_offset);
+  return _instance_dump.read_field(_field_offset, t, _heap_dump.id_size);
 }

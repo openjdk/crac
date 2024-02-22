@@ -1,5 +1,6 @@
 #include "precompiled.hpp"
 #include "classfile/javaClasses.hpp"
+#include "classfile/symbolTable.hpp"
 #include "classfile/systemDictionary.hpp"
 #include "classfile/vmClasses.hpp"
 #include "classfile/vmSymbols.hpp"
@@ -12,11 +13,16 @@
 #include "oops/instanceKlass.inline.hpp"
 #include "oops/oopsHierarchy.hpp"
 #include "oops/symbol.hpp"
+#include "oops/symbolHandle.hpp"
 #include "runtime/cracClassDumpParser.hpp"
+#include "runtime/cracClassDumper.hpp"
 #include "runtime/cracClassStateRestorer.hpp"
 #include "runtime/cracHeapRestorer.hpp"
 #include "runtime/cracStackDumpParser.hpp"
+#include "runtime/fieldDescriptor.hpp"
+#include "runtime/fieldDescriptor.inline.hpp"
 #include "runtime/handles.hpp"
+#include "runtime/javaCalls.hpp"
 #include "runtime/jniHandles.hpp"
 #include "runtime/jniHandles.inline.hpp"
 #include "runtime/reflectionUtils.hpp"
@@ -32,7 +38,6 @@
 #include "utilities/hprofTag.hpp"
 #include "utilities/macros.hpp"
 #ifdef ASSERT
-#include "runtime/fieldDescriptor.inline.hpp"
 #include "utilities/autoRestore.hpp"
 #endif // ASSERT
 
@@ -431,6 +436,8 @@ instanceHandle CracHeapRestorer::prepare_class_loader(HeapDump::ID id, TRAPS) {
     const instanceHandle parallel_lock_map = get_class_loader_parallel_lock_map(dump, CHECK_({}));
     java_lang_ClassLoader::set_parallelLockMap(loader(), parallel_lock_map());
   }
+  // TODO "classes" field: ArrayList into which mirrors of defined classes are
+  //  put -- must be added here for the whole thing to work
 
   if (java_lang_ClassLoader::parallelCapable(loader())) { // Works because we set parallelLockMap above
     // TODO should add it into ClassLoader$ParallelLoaders::loaderTypes array
@@ -480,7 +487,7 @@ void CracHeapRestorer::restore_heap(const HeapDumpTable<UnfilledClassInfo, AnyOb
   //  existing objects so that we don't re-create them, but this should be
   //  fairly complex since the dumped and the current state may not match.
   _heap_dump.class_dumps.iterate([&](HeapDump::ID _, const HeapDump::ClassDump &dump) -> bool {
-    find_and_record_java_class(dump, CHECK_false);
+    find_and_record_class_mirror(dump, CHECK_false);
     return true;
   });
   if (HAS_PENDING_EXCEPTION) {
@@ -546,7 +553,7 @@ void CracHeapRestorer::restore_heap(const HeapDumpTable<UnfilledClassInfo, AnyOb
 // Recording of existing objects
 
 // Finds j.l.Class object corresponding to the class dump and records it.
-void CracHeapRestorer::find_and_record_java_class(const HeapDump::ClassDump &class_dump, TRAPS) {
+void CracHeapRestorer::find_and_record_class_mirror(const HeapDump::ClassDump &class_dump, TRAPS) {
   Thread *const current = Thread::current();
 
   const HeapDump::InstanceDump &mirror_dump = _heap_dump.get_instance_dump(class_dump.id);
@@ -556,13 +563,13 @@ void CracHeapRestorer::find_and_record_java_class(const HeapDump::ClassDump &cla
     case MirrorType::INSTANCE: {
       const InstanceKlass &ik = get_instance_class(class_dump.id);
       const instanceHandle mirror(current, static_cast<instanceOop>(ik.java_mirror()));
-      record_java_class(mirror, mirror_dump, CHECK);
+      record_class_mirror(mirror, mirror_dump, CHECK);
       break;
     }
     case MirrorType::ARRAY: {
       const ArrayKlass &ak = get_array_class(class_dump.id);
       const instanceHandle mirror(current, static_cast<instanceOop>(ak.java_mirror()));
-      record_java_class(mirror, mirror_dump, CHECK);
+      record_class_mirror(mirror, mirror_dump, CHECK);
 
       // Primitive mirrors are also recorded here because they don't have a
       // Klass to be dumped with directly but always have a TypeArrayKlass
@@ -576,7 +583,7 @@ void CracHeapRestorer::find_and_record_java_class(const HeapDump::ClassDump &cla
                   prim_mirror_dump_id);
         const HeapDump::InstanceDump &prim_mirror_dump = _heap_dump.get_instance_dump(prim_mirror_dump_id);
 
-        record_java_class(prim_mirror, prim_mirror_dump, CHECK);
+        record_class_mirror(prim_mirror, prim_mirror_dump, CHECK);
       }
       break;
     }
@@ -586,7 +593,7 @@ void CracHeapRestorer::find_and_record_java_class(const HeapDump::ClassDump &cla
   }
 }
 
-void CracHeapRestorer::record_java_class(instanceHandle mirror, const HeapDump::InstanceDump &mirror_dump, TRAPS) {
+void CracHeapRestorer::record_class_mirror(instanceHandle mirror, const HeapDump::InstanceDump &mirror_dump, TRAPS) {
   if (log_is_enabled(Trace, crac)) {
     Klass *mirrored_class;
     const BasicType bt = java_lang_Class::as_BasicType(mirror(), &mirrored_class);
@@ -643,9 +650,41 @@ void CracHeapRestorer::record_java_class(instanceHandle mirror, const HeapDump::
   //    they will be restored and thus duplicated
 }
 
-// Actual restoration
+// Field restoration
+// TODO use other means to iterate over fields: FieldStream performs a linear
+//  search for each field
+
+methodHandle CracHeapRestorer::get_resolved_method(const HeapDump::InstanceDump &resolved_method_name_dump, TRAPS) {
+  _resolved_method_name_dump_reader.ensure_initialized(_heap_dump, resolved_method_name_dump.class_id);
+
+  const HeapDump::ID holder_id = _resolved_method_name_dump_reader.vmholder(resolved_method_name_dump);
+  InstanceKlass *const holder = &get_instance_class(holder_id);
+
+  const HeapDump::ID name_id = _resolved_method_name_dump_reader.method_name_id(resolved_method_name_dump);
+  Symbol *const name = _heap_dump.get_symbol(name_id);
+
+  const HeapDump::ID sig_id = _resolved_method_name_dump_reader.method_signature_id(resolved_method_name_dump);
+  Symbol *const sig = _heap_dump.get_symbol(sig_id);
+
+  const jbyte kind_raw = _resolved_method_name_dump_reader.method_kind(resolved_method_name_dump);
+  guarantee(CracClassDump::is_method_kind(kind_raw), "illegal resolved method kind: %i", kind_raw);
+  const auto kind = static_cast<CracClassDump::MethodKind>(kind_raw);
+
+  Method *const m = CracClassDumpParser::find_method(holder, name, sig, kind, true, CHECK_({}));
+  return {Thread::current(), m};
+}
 
 #ifdef ASSERT
+
+static bool is_same_basic_type(const Symbol *signature, BasicType dump_t, bool allow_intptr_t = false) {
+  const BasicType sig_t = Signature::basic_type(signature);
+  return sig_t == dump_t ||
+         // Heap dump uses T_OBJECT for arrays
+         (sig_t == T_ARRAY && dump_t == T_OBJECT) ||
+         // Java equivalent of intptr_t is platform-dependent
+         (allow_intptr_t && signature == vmSymbols::intptr_signature() && (dump_t == T_INT || dump_t == T_LONG));
+}
+
 static Klass *get_ref_field_type(const InstanceKlass &holder, Symbol *signature) {
   Thread *const thread = Thread::current();
   const Handle holder_loader = Handle(thread, holder.class_loader());
@@ -655,6 +694,7 @@ static Klass *get_ref_field_type(const InstanceKlass &holder, Symbol *signature)
   }
   return SystemDictionary::find_constrained_instance_or_array_klass(thread, signature, holder_loader);
 }
+
 #endif // ASSERT
 
 void CracHeapRestorer::set_field(instanceHandle obj, const FieldStream &fs, const HeapDump::BasicValue &val, TRAPS) {
@@ -699,170 +739,366 @@ void CracHeapRestorer::set_field(instanceHandle obj, const FieldStream &fs, cons
   }
 }
 
-// Returns true iff the field has been set.
-bool CracHeapRestorer::set_instance_field_if_special(instanceHandle obj, const FieldStream &fs, const HeapDump::BasicValue &val, TRAPS) {
-  precond(obj.not_null());
-  precond(!fs.access_flags().is_static());
-
-  if (obj->klass()->is_class_loader_instance_klass() && fs.field_descriptor().field_holder() == vmClasses::ClassLoader_klass()) {
-    // Skip the CLD pointer which is set when registering the loader
-    if (fs.name() == vmSymbols::loader_data_name()) {
-      return true;
-    }
-
-    // Restoration is only called for prepared or just allocated class loaders
-    // Note: don't check _prepared_loaders here because we pop the loader from
-    // there before restoring it, and also this should be more efficient
-    const bool is_prepared = java_lang_ClassLoader::unnamedModule(obj()) != nullptr;
-    if (!is_prepared) {
-      // The loader has just been allocated by us and has not been prepared, so
-      // can restore it as a general object
-      return false;
-    }
-
-    // Skip the fields already restored during the preparation
-    if (fs.name() == vmSymbols::parent_name() || fs.name() == vmSymbols::name_name() ||
-        fs.name()->equals("nameAndId") || fs.name()->equals("unnamedModule")) {
-      const HeapDump::ID obj_id = val.as_object_id;
-      assert(obj_id == HeapDump::NULL_ID && obj->obj_field(fs.offset()) == nullptr ||
-             get_object_when_present(obj_id) == obj->obj_field(fs.offset()),
-             "either null or recorded with same value");
-      return true;
-    }
-
-    // When preparing, parallelLockMap is only allocated and left unrestored, so
-    // restore it now
-    if (fs.name()->equals("parallelLockMap")) {
-      const HeapDump::ID parallel_lock_map_id = val.as_object_id;
-      const oop parallel_lock_map = obj->obj_field(fs.offset());
-      if (parallel_lock_map != nullptr) {
-        assert(parallel_lock_map->klass() == vmClasses::ConcurrentHashMap_klass(), "must be");
-        assert(get_object_when_present(parallel_lock_map_id) == parallel_lock_map, "must be recorded when preparing");
-        const HeapDump::InstanceDump &parallel_lock_map_dump = _heap_dump.get_instance_dump(parallel_lock_map_id);
-        restore_instance_fields(obj, parallel_lock_map_dump, CHECK_false);
-      } else {
-        assert(parallel_lock_map_id == HeapDump::NULL_ID, "must be");
-      }
-      return true;
-    }
-
-    // TODO "classes" field: ArrayList into which mirrors of defined classes are put
-
-    // The rest of the fields are untouched by the preparation and should be
-    // restored as usual
+bool CracHeapRestorer::set_class_loader_instance_field_if_special(instanceHandle obj, const HeapDump::InstanceDump &dump,
+                                                                  const FieldStream &obj_fs, const DumpedInstanceFieldStream &dump_fs, TRAPS) {
+  precond(obj->klass()->is_subclass_of(vmClasses::ClassLoader_klass()));
+  precond(!obj_fs.access_flags().is_static());
+  if (obj_fs.field_descriptor().field_holder() != vmClasses::ClassLoader_klass()) {
     return false;
   }
 
-  if (obj->klass()->is_mirror_instance_klass()) {
-    assert(fs.field_descriptor().field_holder() == vmClasses::Class_klass(),  "the only super is j.l.Object which has no fields");
+  const Symbol *field_name = obj_fs.name();
 
-    // Skip primitive fields set when creating the mirror
-    if (fs.name() == vmSymbols::klass_name() || fs.name() == vmSymbols::array_klass_name() ||
-        fs.name() == vmSymbols::oop_size_name() || fs.name() == vmSymbols::static_oop_field_count_name()) {
-      return true;
-    }
-    // Component class mirror (aka component type) is also set when creating the
-    // mirror iff it corresponds to an array class, and it must be already
-    // recorded because we pre-record all mirors
-    if (fs.name() == vmSymbols::componentType_name()) {
-#ifdef ASSERT
-      const HeapDump::ID component_mirror_id = val.as_object_id;
-      if (component_mirror_id != HeapDump::NULL_ID) {
-        assert(java_lang_Class::as_Klass(obj())->is_array_klass(),
-               "a %s<%s> object has 'componentType' dumped referencing " HDID_FORMAT " when it represents a non-array class",
-               vmSymbols::java_lang_Class()->as_klass_external_name(), java_lang_Class::as_Klass(obj())->external_name(), component_mirror_id);
-        const oop component_mirror = obj->obj_field(fs.offset());
-        assert(component_mirror != nullptr, "array class mirror must have its component mirror set");
-        assert(get_object_when_present(component_mirror_id) == component_mirror, "component class mirror must be pre-recorded");
-      } else {
-        assert(java_lang_Class::as_Klass(obj())->is_instance_klass(),
-               "a %s<%s> object has 'componentType' dumped as null when it represents an array class",
-               vmSymbols::java_lang_Class()->as_klass_external_name(), java_lang_Class::as_Klass(obj())->external_name());
-        assert(obj->obj_field(fs.offset()) == nullptr, "instance class mirror cannot have its component mirror set");
-      }
-#endif // ASSERT
-      return true;
-    }
-    // Module is also set when creating the mirror and is pre-recorded
-    if (fs.name()->equals("module")) {
-#ifdef ASSERT
-      const HeapDump::ID module_id = val.as_object_id;
-      const oop module = obj->obj_field(fs.offset());
-      assert(module_id != HeapDump::NULL_ID && module != nullptr, "mirror's module is always not null");
-      assert(get_object_when_present(module_id) == module, "mirror's module must be pre-recorded");
-#endif // ASSERT
-      return true;
-    }
-
-    // Name can be set concurrently and thus is pre-recorded if it existed at dump time
-    if (fs.name() == vmSymbols::name_name()) {
-#ifdef ASSERT
-      const HeapDump::ID name_id = val.as_object_id;
-      if (name_id != HeapDump::NULL_ID) {
-        const oop name = obj->obj_field(fs.offset());
-        assert(name != nullptr, "non-null-dumped mirror's name must be pre-initialized");
-        assert(get_object_when_present(name_id) == name, "non-null-dumped mirror's name must be pre-recorded");
-      }
-#endif // ASSERT
-      return true;
-    }
-
-    // If the defining loader is a prepared one we should restore the fields
-    // unfilled by its preparation, and unmark the loader as prepared so that
-    // this won't be repeated when restoring other classes defined by the loader
-    if (fs.name() == vmSymbols::classLoader_name()) {
-      const HeapDump::ID loader_id = val.as_object_id;
-      assert(loader_id == HeapDump::NULL_ID || _objects.contains(loader_id), "used loaders must already be recorded");
-      if (loader_id != HeapDump::NULL_ID && _prepared_loaders.remove(loader_id)) { // If the loader is prepared
-        const oop loader = obj->obj_field(fs.offset());
-        precond(java_lang_ClassLoader::is_instance(loader));
-        const instanceHandle loader_h(Thread::current(), static_cast<instanceOop>(loader));
-        // We use this fact to distinguish prepared loaders from the unprepared
-        // ones when restoring them
-        assert(java_lang_ClassLoader::unnamedModule(loader) != nullptr, "preparation must set the unnamed module");
-        restore_instance_fields(loader_h, _heap_dump.get_instance_dump(loader_id), CHECK_false);
-      }
-      return true;
-    }
-
-    return false;
-  }
-
-  if (obj->klass() == vmClasses::String_klass()) {
-    assert(fs.field_descriptor().field_holder() == vmClasses::String_klass(), "the only super is j.l.Object which has no fields");
-    // TODO ensure interned strings are indeed interned when restoring them
-    //  (e.g. constant pool strings and j.l.Class::name are always interned)
-
-    // Flags are internal and depend on VM options. They will be set as needed,
-    // so just ignore them.
-    if (fs.name() == vmSymbols::flags_name()) {
-      return true;
-    }
-  }
-
-  // TODO other special cases (need to check all classes from javaClasses)
-  return false;
-}
-
-// Returns true iff the field has been set.
-bool CracHeapRestorer::set_static_field_if_special(instanceHandle mirror, const FieldStream &fs, const HeapDump::BasicValue &val) {
-  precond(mirror.not_null());
-  precond(fs.access_flags().is_static());
-
-  // j.l.r.SoftReference::clock is set by the GC (notably, it is done even
-  // before the class is initialized)
-  if (java_lang_Class::as_Klass(mirror()) == vmClasses::SoftReference_klass() && fs.name()->equals("clock")) {
+  // Skip the CLD pointer which is set when registering the loader
+  if (field_name == vmSymbols::loader_data_name()) {
     return true;
   }
 
-  // TODO other special cases (need to check all classes from javaClasses)
+  // Restoration is only called for prepared or just allocated class loaders
+  // Note: don't check _prepared_loaders here because we pop the loader from
+  // there before restoring it, and also this should be more efficient
+  const bool is_prepared = java_lang_ClassLoader::unnamedModule(obj()) != nullptr;
+  if (!is_prepared) {
+    // The loader has just been allocated by us and has not been prepared, so
+    // can restore it as a general object
+    return false;
+  }
+
+  // Skip the fields already restored during the preparation
+  if (field_name == vmSymbols::parent_name() || field_name == vmSymbols::name_name() ||
+      field_name->equals("nameAndId") || field_name->equals("unnamedModule")) {
+    precond(dump_fs.type() == T_OBJECT);
+    const HeapDump::ID obj_id = dump_fs.value().as_object_id;
+    assert(obj_id == HeapDump::NULL_ID && obj->obj_field(obj_fs.offset()) == nullptr ||
+           get_object_when_present(obj_id) == obj->obj_field(obj_fs.offset()),
+           "either null or recorded with same value");
+    return true;
+  }
+
+  // When preparing, parallelLockMap is only allocated and left unrestored, so
+  // restore it now
+  if (field_name->equals("parallelLockMap")) {
+    precond(dump_fs.type() == T_OBJECT);
+    const HeapDump::ID parallel_lock_map_id = dump_fs.value().as_object_id;
+    const oop parallel_lock_map = obj->obj_field(obj_fs.offset());
+    if (parallel_lock_map != nullptr) {
+      assert(parallel_lock_map->klass() == vmClasses::ConcurrentHashMap_klass(), "must be");
+      assert(get_object_when_present(parallel_lock_map_id) == parallel_lock_map, "must be recorded when preparing");
+      const HeapDump::InstanceDump &parallel_lock_map_dump = _heap_dump.get_instance_dump(parallel_lock_map_id);
+      restore_instance_fields(obj, parallel_lock_map_dump, CHECK_false);
+    } else {
+      assert(parallel_lock_map_id == HeapDump::NULL_ID, "must be");
+    }
+    return true;
+  }
+
+  // TODO "classes" field: ArrayList into which mirrors of defined classes are put
+
+  // The rest of the fields are untouched by the preparation and should be
+  // restored as usual
   return false;
 }
 
-// TODO use other means to iterate over fields: FieldStream performs a linear
-//  search for each field
+bool CracHeapRestorer::set_class_mirror_instance_field_if_special(instanceHandle obj, const HeapDump::InstanceDump &dump,
+                                                                  const FieldStream &obj_fs, const DumpedInstanceFieldStream &dump_fs, TRAPS) {
+  assert(obj_fs.field_descriptor().field_holder() == vmClasses::Class_klass(), "must be");
+  precond(!obj_fs.access_flags().is_static());
+  const Symbol *field_name = obj_fs.name();
 
-void CracHeapRestorer::restore_instance_fields(instanceHandle obj, const HeapDump::InstanceDump &dump, TRAPS) {
+  // Skip primitive fields set when creating the mirror
+  if (field_name == vmSymbols::klass_name() || field_name == vmSymbols::array_klass_name() ||
+      field_name == vmSymbols::oop_size_name() || field_name == vmSymbols::static_oop_field_count_name()) {
+    return true;
+  }
+  // Component class mirror (aka component type) is also set when creating the
+  // mirror iff it corresponds to an array class, and it must be already
+  // recorded because we pre-record all mirors
+  if (field_name == vmSymbols::componentType_name()) {
+#ifdef ASSERT
+    precond(dump_fs.type() == T_OBJECT);
+    const HeapDump::ID component_mirror_id = dump_fs.value().as_object_id;
+    if (component_mirror_id != HeapDump::NULL_ID) {
+      assert(java_lang_Class::as_Klass(obj())->is_array_klass(),
+              "a %s<%s> object has 'componentType' dumped referencing " HDID_FORMAT " when it represents a non-array class",
+              vmSymbols::java_lang_Class()->as_klass_external_name(), java_lang_Class::as_Klass(obj())->external_name(), component_mirror_id);
+      const oop component_mirror = obj->obj_field(obj_fs.offset());
+      assert(component_mirror != nullptr, "array class mirror must have its component mirror set");
+      assert(get_object_when_present(component_mirror_id) == component_mirror, "component class mirror must be pre-recorded");
+    } else {
+      assert(java_lang_Class::as_Klass(obj())->is_instance_klass(),
+              "a %s<%s> object has 'componentType' dumped as null when it represents an array class",
+              vmSymbols::java_lang_Class()->as_klass_external_name(), java_lang_Class::as_Klass(obj())->external_name());
+      assert(obj->obj_field(obj_fs.offset()) == nullptr, "instance class mirror cannot have its component mirror set");
+    }
+#endif // ASSERT
+    return true;
+  }
+  // Module is also set when creating the mirror and is pre-recorded
+  if (field_name->equals("module")) {
+#ifdef ASSERT
+    precond(dump_fs.type() == T_OBJECT);
+    const HeapDump::ID module_id = dump_fs.value().as_object_id;
+    const oop module = obj->obj_field(obj_fs.offset());
+    assert(module_id != HeapDump::NULL_ID && module != nullptr, "mirror's module is always not null");
+    assert(get_object_when_present(module_id) == module, "mirror's module must be pre-recorded");
+#endif // ASSERT
+    return true;
+  }
+
+  // Name can be set concurrently and thus is pre-recorded if it existed at dump time
+  if (field_name == vmSymbols::name_name()) {
+#ifdef ASSERT
+    precond(dump_fs.type() == T_OBJECT);
+    const HeapDump::ID name_id = dump_fs.value().as_object_id;
+    if (name_id != HeapDump::NULL_ID) {
+      const oop name = obj->obj_field(obj_fs.offset());
+      assert(name != nullptr, "non-null-dumped mirror's name must be pre-initialized");
+      assert(get_object_when_present(name_id) == name, "non-null-dumped mirror's name must be pre-recorded");
+    }
+#endif // ASSERT
+    return true;
+  }
+
+  // If the defining loader is a prepared one we should restore the fields
+  // unfilled by its preparation, and unmark the loader as prepared so that
+  // this won't be repeated when restoring other classes defined by the loader
+  if (field_name == vmSymbols::classLoader_name()) {
+    precond(dump_fs.type() == T_OBJECT);
+    const HeapDump::ID loader_id = dump_fs.value().as_object_id;
+    assert(loader_id == HeapDump::NULL_ID || _objects.contains(loader_id), "used loaders must already be recorded");
+    if (loader_id != HeapDump::NULL_ID && _prepared_loaders.remove(loader_id)) { // If the loader is prepared
+      const oop loader = obj->obj_field(obj_fs.offset());
+      precond(java_lang_ClassLoader::is_instance(loader));
+      const instanceHandle loader_h(Thread::current(), static_cast<instanceOop>(loader));
+      // We use this fact to distinguish prepared loaders from the unprepared
+      // ones when restoring them
+      assert(java_lang_ClassLoader::unnamedModule(loader) != nullptr, "preparation must set the unnamed module");
+      restore_instance_fields(loader_h, _heap_dump.get_instance_dump(loader_id), CHECK_false);
+    }
+    return true;
+  }
+
+  return false;
+}
+
+bool CracHeapRestorer::set_string_instance_field_if_special(instanceHandle obj, const HeapDump::InstanceDump &dump,
+                                                            const FieldStream &obj_fs, const DumpedInstanceFieldStream &dump_fs, TRAPS) {
+  assert(obj_fs.field_descriptor().field_holder() == vmClasses::String_klass(), "must be");
+  precond(!obj_fs.access_flags().is_static());
+  // TODO ensure interned strings are indeed interned when restoring them (e.g.
+  //  constant pool strings and j.l.Class::name are always interned)
+
+  // Flags are internal and depend on VM options. They will be set as needed,
+  // so just ignore them.
+  if (obj_fs.name() == vmSymbols::flags_name()) {
+    return true;
+  }
+
+  return false;
+}
+
+bool CracHeapRestorer::set_member_name_instance_field_if_special(instanceHandle obj, const HeapDump::InstanceDump &dump,
+                                                                 const FieldStream &obj_fs, const DumpedInstanceFieldStream &dump_fs, TRAPS) {
+  assert(obj_fs.field_descriptor().field_holder() == vmClasses::MemberName_klass(), "must be");
+  precond(!obj_fs.access_flags().is_static());
+
+  // VM-internal intptr_t field
+  if (obj_fs.name() == vmSymbols::vmindex_name()) {
+    const BasicType basic_type = dump_fs.type();
+    guarantee(basic_type == T_INT || basic_type == T_LONG, "must be a Java equivalent of intptr_t");
+
+    const HeapDump::BasicValue val = dump_fs.value();
+    const auto vmindex = checked_cast<intptr_t>(basic_type == T_INT ? val.as_int : val.as_long);
+
+    _member_name_dump_reader.ensure_initialized(_heap_dump, dump.class_id);
+    if (_member_name_dump_reader.method(dump) != HeapDump::NULL_ID) {
+      // vmindex is set to a vtable/itable index which is portable
+      java_lang_invoke_MemberName::set_vmindex(obj(), vmindex);
+    } else if (_member_name_dump_reader.is_field(dump) && _member_name_dump_reader.is_resolved(dump)) {
+      // vmindex is set to a field offset which is not portable
+      // TODOs:
+      //  1. Checking is_resolved is not enough: checkpoint may be created after
+      //     the resolution happens but before the indicator is set, so we may
+      //     lose some of the resolved objects.
+      //  2. Implement restoration when 'name' and/or 'type' fields are not set.
+
+      const HeapDump::ID holder_id = _member_name_dump_reader.clazz(dump);
+      guarantee(holder_id != HeapDump::NULL_ID, "holder of resolved field must be set");
+      const InstanceKlass &holder = get_instance_class(holder_id);
+
+      const HeapDump::ID name_id = _member_name_dump_reader.name(dump);
+      if (name_id == HeapDump::NULL_ID) {
+        log_error(crac)("Restoration of resolved field-referensing %s with 'name' not set is not implemented",
+                        vmSymbols::java_lang_invoke_MemberName()->as_klass_external_name());
+        Unimplemented();
+      }
+      const Handle name_str = restore_object(name_id, CHECK_false);
+      const TempNewSymbol name = java_lang_String::as_symbol(name_str());
+
+      const HeapDump::ID type_id = _member_name_dump_reader.type(dump);
+      if (type_id == HeapDump::NULL_ID) {
+        log_error(crac)("Restoration of resolved field-referensing %s with 'type' not set is not implemented",
+                        vmSymbols::java_lang_invoke_MemberName()->as_klass_external_name());
+        Unimplemented();
+      }
+      const oop type_mirror = get_object_when_present(type_id); // Must be a non-void mirror, so should be pre-recorded
+      TempNewSymbol signature;
+      {
+        Klass *k;
+        const BasicType bt = java_lang_Class::as_BasicType(type_mirror, &k);
+        if (is_java_primitive(bt)) {
+          signature = vmSymbols::type_signature(bt);
+          signature->increment_refcount(); // TempNewSymbol will decrement this
+        } else {
+          ResourceMark rm;
+          signature = SymbolTable::new_symbol(k->signature_name());
+        }
+      }
+
+      fieldDescriptor fd;
+      const bool found = holder.find_local_field(name, signature, &fd);
+      guarantee(found, "cannot find field %s %s::%s resolved by %s " HDID_FORMAT,
+                signature->as_C_string(), holder.external_name(), name->as_C_string(),
+                vmSymbols::java_lang_invoke_MemberName()->as_klass_external_name(), dump.id);
+
+      java_lang_invoke_MemberName::set_vmindex(obj(), fd.offset());
+    } else {
+      guarantee(vmindex == 0, "only set for resolved methods and fields");
+    }
+
+    return true;
+  }
+
+  // Need to consult ResolvedMethodTable when restoring this
+  if (obj_fs.name() == vmSymbols::method_name()) {
+    precond(dump_fs.type() == T_OBJECT);
+    const HeapDump::ID method_name_id = dump_fs.value().as_object_id;
+
+    if (method_name_id != HeapDump::NULL_ID) {
+      oop method_name = get_object_if_present(method_name_id);
+      if (method_name == nullptr) {
+        const HeapDump::InstanceDump &method_name_dump = _heap_dump.get_instance_dump(method_name_id);
+
+#ifdef ASSERT
+        InstanceKlass &method_name_class = get_instance_class(method_name_dump.class_id);
+        assert(&method_name_class == vmClasses::ResolvedMethodName_klass(), "expected boot-loaded %s, got %s loaded by %s",
+              vmSymbols::java_lang_invoke_ResolvedMethodName()->as_klass_external_name(),
+              method_name_class.external_name(), method_name_class.class_loader_data()->loader_name_and_id());
+#endif // ASSERT
+        // If this'll be failing, restore ResolvedMethodName before the rest of the classes
+        guarantee(vmClasses::ResolvedMethodName_klass()->is_initialized(), "need to pre-initialize %s",
+                  vmSymbols::java_lang_invoke_ResolvedMethodName()->as_klass_external_name());
+
+        const methodHandle resolved_method = get_resolved_method(method_name_dump, CHECK_({}));
+        method_name = java_lang_invoke_ResolvedMethodName::find_resolved_method(resolved_method, CHECK_({}));
+        put_object_when_absent(method_name_id, method_name); // Should still be absent
+      }
+      obj->obj_field_put(obj_fs.offset(), method_name);
+    }
+
+    return true;
+  }
+
+  return false;
+}
+
+bool CracHeapRestorer::set_call_site_instance_field_if_special(instanceHandle obj, const HeapDump::InstanceDump &dump,
+                                                               const FieldStream &obj_fs, const DumpedInstanceFieldStream &dump_fs, TRAPS) {
+  precond(obj.not_null() && java_lang_invoke_CallSite::is_instance(obj()));
+  precond(!obj_fs.access_flags().is_static());
+
+  // CallSiteContext contains compilation-related data that should be cleared;
+  // the context itself has a special deallocation policy and must be registered
+  if (obj_fs.name() == vmSymbols::context_name()) {
+    assert(obj_fs.field_descriptor().field_holder() == vmClasses::CallSite_klass(), "permitted subclasses don't have such field");
+
+    precond(dump_fs.type() == T_OBJECT);
+    const HeapDump::ID context_id = dump_fs.value().as_object_id;
+    guarantee(context_id != HeapDump::NULL_ID, "class site must have a context");
+    assert(!_objects.contains(context_id), "call site must be the only instance referencing its context");
+
+    const HeapDump::InstanceDump &context_dump = _heap_dump.get_instance_dump(context_id);
+
+    InstanceKlass &context_class = get_instance_class(context_dump.class_id);
+    assert(context_class.name() == vmSymbols::java_lang_invoke_MethodHandleNatives_CallSiteContext() &&
+           context_class.class_loader_data()->is_the_null_class_loader_data(), "expected boot-loaded %s, got %s loaded by %s",
+           vmSymbols::java_lang_invoke_MethodHandleNatives_CallSiteContext()->as_klass_external_name(),
+           context_class.external_name(), context_class.class_loader_data()->loader_name_and_id());
+
+    oop context;
+    { // Allocate a new context and register it with this call site
+      // If this'll be failing, restore CallSiteContext before the rest of the classes
+      guarantee(context_class.is_initialized(), "need to pre-initialize %s", context_class.external_name());
+      const TempNewSymbol make_name = SymbolTable::new_symbol("make");
+      const TempNewSymbol make_sig = SymbolTable::new_symbol("(Ljava/lang/invoke/CallSite;)Ljava/lang/invoke/MethodHandleNatives$CallSiteContext;");
+      JavaValue result;
+      JavaCalls::call_static(&result, &context_class, make_name, make_sig, obj, CHECK_false);
+      context = result.get_oop();
+    }
+    put_object_when_absent(context_id, context); // Should still be absent
+
+    obj->obj_field_put(obj_fs.offset(), context);
+    return true;
+  }
+
+  return false;
+}
+
+void CracHeapRestorer::restore_special_instance_fields(instanceHandle obj, const HeapDump::InstanceDump &dump,
+                                                       set_instance_field_if_special_ptr_t set_field_if_special, TRAPS) {
+  precond(obj.not_null());
+  FieldStream obj_fs(InstanceKlass::cast(obj->klass()), false,  // Include supers
+                                                        true,   // Exclude interfaces: they only have static fields
+                                                        false); // Include injected fields
+  DumpedInstanceFieldStream dump_fs(_heap_dump, dump);
+  while (!obj_fs.eos() && !dump_fs.eos()) {
+    if (obj_fs.access_flags().is_static()) {
+      obj_fs.next();
+      continue;
+    }
+
+    assert(obj_fs.name() == dump_fs.name(),
+           "conflict at field #%i of object " HDID_FORMAT " : dumped '%s' is '%s' in the runtime",
+           obj_fs.index(), dump.id, dump_fs.name()->as_C_string(), obj_fs.name()->as_C_string());
+    assert(is_same_basic_type(obj_fs.signature(), dump_fs.type(), true),
+           "conflict at field #%i of object " HDID_FORMAT ": cannot assign dumped '%s' value to a '%s' field",
+           obj_fs.index(), dump.id, type2name(dump_fs.type()), obj_fs.signature()->as_C_string());
+    if (log_is_enabled(Trace, crac)) {
+      ResourceMark rm;
+      log_trace(crac)("Restoring " HDID_FORMAT ": potentially-special instance field %s", dump.id, obj_fs.name()->as_C_string());
+    }
+
+    const HeapDump::BasicValue val = dump_fs.value();
+    const bool is_special = (this->*set_field_if_special)(obj, dump, obj_fs, dump_fs, CHECK);
+    if (!is_special) {
+      set_field(obj, obj_fs, val, CHECK);
+    }
+
+    obj_fs.next();
+    dump_fs.next();
+  }
+
+#ifdef ASSERT
+  u4 unfilled_bytes = 0;
+  for (; !obj_fs.eos(); obj_fs.next()) {
+    if (!obj_fs.access_flags().is_static()) {
+      const BasicType type = Signature::basic_type(obj_fs.signature());
+      unfilled_bytes += HeapDump::value_size(type, _heap_dump.id_size);
+    }
+  }
+  assert(unfilled_bytes == 0,
+         "object " HDID_FORMAT " has less non-static fields' data dumped than needed by its class %s and its super classes: "
+         "only " UINT32_FORMAT " bytes dumped, but additional " UINT32_FORMAT " bytes are expected",
+         dump.id, obj->klass()->external_name(), dump.fields_data.size(), unfilled_bytes);
+  assert(dump_fs.eos(),
+         "object " HDID_FORMAT " has more non-static fields' data dumped than needed by its class %s and its super classes",
+         dump.id, obj->klass()->external_name());
+#endif // ASSERT
+}
+
+// This is faster than the special case above as it does not require querying
+// dumps of all classes (direct and super) of the instance.
+void CracHeapRestorer::restore_ordinary_instance_fields(instanceHandle obj, const HeapDump::InstanceDump &dump, TRAPS) {
   precond(obj.not_null());
   FieldStream fs(InstanceKlass::cast(obj->klass()), false,  // Include supers
                                                     true,   // Exclude interfaces: they only have static fields
@@ -874,21 +1110,17 @@ void CracHeapRestorer::restore_instance_fields(instanceHandle obj, const HeapDum
     }
     if (log_is_enabled(Trace, crac)) {
       ResourceMark rm;
-      log_trace(crac)("Restoring " HDID_FORMAT ": instance field %s", dump.id, fs.name()->as_C_string());
+      log_trace(crac)("Restoring " HDID_FORMAT ": ordinary instance field %s", dump.id, fs.name()->as_C_string());
     }
 
     const BasicType type = Signature::basic_type(fs.signature());
-    const u4 type_size = (is_java_primitive(type) ? type2aelembytes(type) : _heap_dump.id_size);
+    const u4 type_size = HeapDump::value_size(type, _heap_dump.id_size);
     guarantee(dump_offset + type_size <= dump.fields_data.size(),
               "object " HDID_FORMAT " has less non-static fields' data dumped than needed by its class %s and its super classes: "
-              "read " UINT32_FORMAT " bytes and expect at least " UINT32_FORMAT " more for %s value, but only " UINT32_FORMAT " bytes left",
+              "read " UINT32_FORMAT " bytes and expect at least " UINT32_FORMAT " more to read %s value, but only " UINT32_FORMAT " bytes left",
               dump.id, obj->klass()->external_name(), dump_offset, type_size, type2name(type), dump.fields_data.size() - dump_offset);
     const HeapDump::BasicValue val = dump.read_field(dump_offset, type, _heap_dump.id_size);
-
-    const bool is_special = set_instance_field_if_special(obj, fs, val, CHECK);
-    if (!is_special) {
-      set_field(obj, fs, val, CHECK);
-    }
+    set_field(obj, fs, val, CHECK);
 
     dump_offset += type_size;
   }
@@ -898,7 +1130,7 @@ void CracHeapRestorer::restore_instance_fields(instanceHandle obj, const HeapDum
   for (; !fs.eos(); fs.next()) {
     if (!fs.access_flags().is_static()) {
       const BasicType type = Signature::basic_type(fs.signature());
-      unfilled_bytes += (is_java_primitive(type) ? type2aelembytes(type) : _heap_dump.id_size);
+      unfilled_bytes += HeapDump::value_size(type, _heap_dump.id_size);
     }
   }
   assert(unfilled_bytes == 0,
@@ -912,10 +1144,39 @@ void CracHeapRestorer::restore_instance_fields(instanceHandle obj, const HeapDum
 #endif // ASSERT
 }
 
-static bool is_same_basic_type(const Symbol *signature, u1 dump_type) {
-  const BasicType sig_btype = Signature::basic_type(signature);  // Array -> T_ARRAY
-  const BasicType dump_btype = HeapDump::htype2btype(dump_type); // Array -> T_OBJECT
-  return (sig_btype == T_ARRAY && dump_btype == T_OBJECT) || sig_btype == dump_btype;
+void CracHeapRestorer::restore_instance_fields(instanceHandle obj, const HeapDump::InstanceDump &dump, TRAPS) {
+  // ResolvedMethodName is restored in a special manner as a whole
+  assert(!java_lang_invoke_ResolvedMethodName::is_instance(obj()), "should not be manually restoring fields of this instance");
+  // CallSiteContext is only referenced by a CallSite and is restored as part of it
+  assert(!java_lang_invoke_MethodHandleNatives_CallSiteContext::is_instance(obj()), "should not be manually restoring fields of this instance");
+
+  if (obj->klass()->is_class_loader_instance_klass()) {
+    restore_special_instance_fields(obj, dump, &CracHeapRestorer::set_class_loader_instance_field_if_special, CHECK);
+  } else if (obj->klass()->is_mirror_instance_klass()) {
+    restore_special_instance_fields(obj, dump, &CracHeapRestorer::set_class_mirror_instance_field_if_special, CHECK);
+  } else if (obj->klass() == vmClasses::String_klass()) {
+    restore_special_instance_fields(obj, dump, &CracHeapRestorer::set_string_instance_field_if_special, CHECK);
+  } else if (obj->klass() == vmClasses::MemberName_klass()) {
+    restore_special_instance_fields(obj, dump, &CracHeapRestorer::set_member_name_instance_field_if_special, CHECK);
+  } else if (obj->klass() == vmClasses::CallSite_klass() || obj->klass()->super() == vmClasses::CallSite_klass()) {
+    restore_special_instance_fields(obj, dump, &CracHeapRestorer::set_call_site_instance_field_if_special, CHECK);
+  } else { // TODO other special cases (need to check all classes from javaClasses)
+    precond(!java_lang_invoke_CallSite::is_instance(obj()));
+    restore_ordinary_instance_fields(obj, dump, CHECK);
+  }
+}
+
+bool CracHeapRestorer::set_static_field_if_special(instanceHandle mirror, const FieldStream &fs, const HeapDump::BasicValue &val) {
+  precond(fs.access_flags().is_static());
+
+  // j.l.r.SoftReference::clock is set by the GC (notably, it is done even
+  // before the class is initialized)
+  if (java_lang_Class::as_Klass(mirror()) == vmClasses::SoftReference_klass() && fs.name()->equals("clock")) {
+    return true;
+  }
+
+  // TODO other special cases (need to check all classes from javaClasses)
+  return false;
 }
 
 static void set_resolved_references(InstanceKlass *ik, Handle resolved_refs) {
@@ -971,11 +1232,11 @@ void CracHeapRestorer::restore_static_fields(InstanceKlass *ik, const HeapDump::
               "class %s (ID " HDID_FORMAT ") has resolved references dumped before some of the actual static fields",
               ik->external_name(), dump.id);
 
-    guarantee(fs.name() == field_name && is_same_basic_type(fs.signature(), field.info.type),
-              "expected static field #%i of class %s (ID " HDID_FORMAT ") to be %s %s but it is %s %s in the dump",
-              static_i, ik->external_name(), dump.id,
-              type2name(Signature::basic_type(fs.signature())), fs.name()->as_C_string(),
-              type2name(HeapDump::htype2btype(field.info.type)), field_name->as_C_string());
+    assert(fs.name() == field_name && is_same_basic_type(fs.signature(), HeapDump::htype2btype(field.info.type)),
+           "expected static field #%i of class %s (ID " HDID_FORMAT ") to be %s %s but it is %s %s in the dump",
+           static_i, ik->external_name(), dump.id,
+           type2name(Signature::basic_type(fs.signature())), fs.name()->as_C_string(),
+           type2name(HeapDump::htype2btype(field.info.type)), field_name->as_C_string());
     const bool is_special = set_static_field_if_special(mirror, fs, field.value);
     if (!is_special) {
       set_field(mirror, fs, field.value, CHECK);
@@ -1019,6 +1280,8 @@ void CracHeapRestorer::restore_static_fields(InstanceKlass *ik, const HeapDump::
     set_resolved_references(ik, restored);
   }
 }
+
+// Object restoration
 
 void CracHeapRestorer::restore_class_mirror(HeapDump::ID id, TRAPS) {
   if (log_is_enabled(Trace, crac)) {
@@ -1108,7 +1371,7 @@ instanceHandle CracHeapRestorer::restore_instance(const HeapDump::InstanceDump &
     _mirror_dump_reader.ensure_initialized(_heap_dump, dump.class_id); // Also checks this is a mirror dump
     guarantee(_mirror_dump_reader.mirrors_void(dump), "unrecorded non-void class mirror " HDID_FORMAT, dump.id);
     obj = instanceHandle(Thread::current(), static_cast<instanceOop>(Universe::void_mirror()));
-    record_java_class(obj, dump, CHECK_({}));
+    record_class_mirror(obj, dump, CHECK_({}));
   } else {
     ik.check_valid_for_instantiation(true, CHECK_({}));
     obj = ik.allocate_instance_handle(CHECK_({}));

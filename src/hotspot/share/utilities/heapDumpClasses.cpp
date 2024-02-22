@@ -1,15 +1,13 @@
 #include "precompiled.hpp"
+#include "classfile/javaClasses.hpp"
 #include "classfile/vmSymbols.hpp"
 #include "oops/symbol.hpp"
+#include "utilities/bitCast.hpp"
 #include "utilities/debug.hpp"
 #include "utilities/globalDefinitions.hpp"
 #include "utilities/heapDumpClasses.hpp"
 #include "utilities/heapDumpParser.hpp"
 #include "utilities/macros.hpp"
-#ifdef ASSERT
-#include "memory/resourceArea.hpp"
-#include "utilities/resourceHash.hpp"
-#endif // ASSERT
 
 static bool symbol_equals(const Symbol *actual, const Symbol *expected) {
   return actual == expected;
@@ -20,29 +18,10 @@ static bool symbol_equals(const Symbol *actual, const char *expected) {
 
 #define NO_DUMP_FIELDS_DO(...)
 
-#define DEFINE_INSTANCE_DUMP_CHECK(class_name)                                                                        \
-  bool HeapDumpClasses::is_##class_name##_dump(const ParsedHeapDump &heap_dump, const HeapDump::InstanceDump &dump) { \
-    ResourceMark rm;                                                                                                  \
-    ResourceHashtable<HeapDump::ID, bool> visited_classes;                                                            \
-                                                                                                                      \
-    for (const HeapDump::ClassDump *class_dump = &heap_dump.get_class_dump(dump.class_id);                            \
-         class_dump->super_id != HeapDump::NULL_ID; class_dump = &heap_dump.get_class_dump(class_dump->super_id)) {   \
-      bool is_first_visit;                                                                                            \
-      visited_classes.put_if_absent(class_dump->id, &is_first_visit);                                                 \
-      assert(is_first_visit, "circularity detected in class hierarchy of " HDID_FORMAT, dump.class_id);               \
-                                                                                                                      \
-      if (is_##class_name##_class_dump(heap_dump, *class_dump)) {                                                     \
-        return true;                                                                                                  \
-      }                                                                                                               \
-    }                                                                                                                 \
-                                                                                                                      \
-    return false;                                                                                                     \
-  }
-
 STATIC_ASSERT((std::is_same<u4, juint>()));
 #define DEFINE_OFFSET_FROM_START_LOCAL(klass, name, ...) u4 name##_offset_from_start = max_juint;
 
-#define CREATE_FIELD_OFFSET_CASE(klass, name, name_sym, basic_type, ...)                                              \
+#define CREATE_FIELD_OFFSET_CASE(klass, name, name_sym, basic_type, ...)                                                       \
   if (symbol_equals(field_name, name_sym)) {                                                                                   \
     guarantee(name##_offset_from_start == max_juint, "non-static field %s::%s dumped multiple times in " HDID_FORMAT,          \
               vmSymbols::klass()->as_klass_external_name(), field_name->as_C_string(), klass##_dump.id);                       \
@@ -104,26 +83,25 @@ STATIC_ASSERT((std::is_same<u4, juint>()));
   c_type HeapDumpClasses::klass::name(const HeapDump::InstanceDump &dump) const {                                              \
     precond(is_initialized() && _##name##_offset >= (is_java_primitive(basic_type) ? type2aelembytes(basic_type) : _id_size)); \
     guarantee(dump.fields_data.size() >= _##name##_offset,                                                                     \
-              "%s object " HDID_FORMAT " has not enough non-static field data to store its '" #name "' field",              \
+              "%s object " HDID_FORMAT " has not enough non-static field data to store its '" #name "' field",                 \
               vmSymbols::klass()->as_klass_external_name(), dump.id);                                                          \
     return dump.read_field(dump.fields_data.size() - _##name##_offset, basic_type, _id_size).as_##type_name;                   \
   }
 
 #define DEFINE_GET_PTR_FIELD_METHOD(klass, name, name_sym)                                                             \
-  jlong HeapDumpClasses::java_lang_Class::name(const HeapDump::InstanceDump &dump) const {                             \
+  jlong HeapDumpClasses::klass::name(const HeapDump::InstanceDump &dump) const {                                       \
     precond(is_initialized() && _##name##_offset >= checked_cast<u4>(type2aelembytes(_ptr_type)));                     \
     guarantee(dump.fields_data.size() >= _##name##_offset,                                                             \
               "%s object " HDID_FORMAT " has not enough non-static field data to store its '" #name "' field",         \
               vmSymbols::klass()->as_klass_external_name(), dump.id);                                                  \
     const HeapDump::BasicValue val = dump.read_field(dump.fields_data.size() - _##name##_offset, _ptr_type, _id_size); \
-    switch (_ptr_type) {                                                                                               \
-      case T_INT:  return val.as_int;                                                                                  \
-      case T_LONG: return val.as_long;                                                                                 \
-      default:                                                                                                         \
-        ShouldNotReachHere();                                                                                          \
-        return 0;                                                                                                      \
+    if (_ptr_type == T_INT) {                                                                                          \
+      return val.as_int;                                                                                               \
     }                                                                                                                  \
+    assert(_ptr_type == T_LONG, "must be");                                                                            \
+    return val.as_long;                                                                                                \
   }
+
 
 // java.lang.ClassLoader
 
@@ -148,8 +126,6 @@ static bool is_class_loader_class_dump(const ParsedHeapDump &heap_dump, const He
 
   return true;
 }
-
-DEFINE_INSTANCE_DUMP_CHECK(class_loader)
 #endif // ASSERT
 
 void HeapDumpClasses::java_lang_ClassLoader::ensure_initialized(const ParsedHeapDump &heap_dump, HeapDump::ID java_lang_ClassLoader_id) {
@@ -192,8 +168,6 @@ static bool is_class_mirror_class_dump(const ParsedHeapDump &heap_dump, const He
 
   return true;
 }
-
-DEFINE_INSTANCE_DUMP_CHECK(class_mirror)
 #endif // ASSERT
 
 void HeapDumpClasses::java_lang_Class::ensure_initialized(const ParsedHeapDump &heap_dump, HeapDump::ID java_lang_Class_id) {
@@ -222,6 +196,116 @@ HeapDumpClasses::java_lang_Class::Kind HeapDumpClasses::java_lang_Class::kind(co
   guarantee(!has_component, "%s object " HDID_FORMAT " representing a primitive type cannot have a component type",
             vmSymbols::java_lang_Class()->as_klass_external_name(), dump.id);
   return Kind::PRIMITIVE;
+}
+
+
+// java.lang.invoke.ResolvedMethodName
+
+#ifdef ASSERT
+static bool is_resolved_method_name_class_dump(const ParsedHeapDump &heap_dump, const HeapDump::ClassDump &dump) {
+  const bool has_right_name_and_loader = heap_dump.get_class_name(dump.id) == vmSymbols::java_lang_invoke_ResolvedMethodName() &&
+                                         dump.class_loader_id == HeapDump::NULL_ID;
+  if (!has_right_name_and_loader) {
+    return false;
+  }
+
+  assert(dump.super_id != HeapDump::NULL_ID, "illegal super in %s dump " HDID_FORMAT ": expected %s, got none",
+         vmSymbols::java_lang_invoke_ResolvedMethodName()->as_klass_external_name(), dump.id,
+         vmSymbols::java_lang_Object()->as_klass_external_name());
+
+  const HeapDump::ClassDump &super_dump = heap_dump.get_class_dump(dump.super_id);
+  assert(heap_dump.get_class_name(super_dump.id) == vmSymbols::java_lang_Object() &&
+         super_dump.class_loader_id == HeapDump::NULL_ID, "illegal super in %s dump " HDID_FORMAT ": expected %s, got %s",
+         vmSymbols::java_lang_invoke_ResolvedMethodName()->as_klass_external_name(), dump.id,
+         heap_dump.get_class_name(super_dump.id)->as_klass_external_name(),
+         vmSymbols::java_lang_Object()->as_klass_external_name());
+
+  return true;
+}
+#endif // ASSERT
+
+void HeapDumpClasses::java_lang_invoke_ResolvedMethodName::ensure_initialized(const ParsedHeapDump &heap_dump, HeapDump::ID java_lang_invoke_ResolvedMethodName_id) {
+  precond(java_lang_invoke_ResolvedMethodName_id != HeapDump::NULL_ID);
+  if (!is_initialized()) {
+    const HeapDump::ClassDump &java_lang_invoke_ResolvedMethodName_dump = heap_dump.get_class_dump(java_lang_invoke_ResolvedMethodName_id);
+    precond(is_resolved_method_name_class_dump(heap_dump, java_lang_invoke_ResolvedMethodName_dump));
+    INITIALIZE_OFFSETS(java_lang_invoke_ResolvedMethodName, RESOLVEDMETHODNAME_DUMP_FIELDS_DO, RESOLVEDMETHODNAME_DUMP_PTR_FIELDS_DO)
+    DEBUG_ONLY(_java_lang_invoke_ResolvedMethodName_id = java_lang_invoke_ResolvedMethodName_id);
+    _id_size = heap_dump.id_size;
+  } else {
+    ASSERT_INITIALIZED_WITH_SAME_ID(java_lang_invoke_ResolvedMethodName)
+  }
+  postcond(is_initialized());
+}
+
+RESOLVEDMETHODNAME_DUMP_FIELDS_DO(DEFINE_GET_FIELD_METHOD)
+
+HeapDump::ID HeapDumpClasses::java_lang_invoke_ResolvedMethodName::method_name_id(const HeapDump::InstanceDump &dump) const {
+  precond(is_initialized() && _method_name_id_offset >= checked_cast<u4>(type2aelembytes(_ptr_type)));
+  guarantee(dump.fields_data.size() >= _method_name_id_offset,
+            "%s object " HDID_FORMAT " has not enough non-static field data to store its '%s' field",
+            vmSymbols::java_lang_invoke_ResolvedMethodName()->as_klass_external_name(), dump.id, vmSymbols::internal_name_name()->as_C_string());
+  const HeapDump::BasicValue val = dump.read_field(dump.fields_data.size() - _method_name_id_offset, _ptr_type, _id_size);
+  precond(_ptr_type == T_INT || _ptr_type == T_LONG);
+  return _ptr_type == T_INT ? bit_cast<u4>(val.as_int) : bit_cast<HeapDump::ID>(val.as_long);
+}
+
+HeapDump::ID HeapDumpClasses::java_lang_invoke_ResolvedMethodName::method_signature_id(const HeapDump::InstanceDump &dump) const {
+  precond(is_initialized() && _method_signature_id_offset >= checked_cast<u4>(type2aelembytes(_ptr_type)));
+  guarantee(dump.fields_data.size() >= _method_signature_id_offset,
+            "%s object " HDID_FORMAT " has not enough non-static field data to store its '%s' field",
+            vmSymbols::java_lang_invoke_ResolvedMethodName()->as_klass_external_name(), dump.id, vmSymbols::internal_signature_name()->as_C_string());
+  const HeapDump::BasicValue val = dump.read_field(dump.fields_data.size() - _method_signature_id_offset, _ptr_type, _id_size);
+  precond(_ptr_type == T_INT || _ptr_type == T_LONG);
+  return _ptr_type == T_INT ? bit_cast<u4>(val.as_int) : bit_cast<HeapDump::ID>(val.as_long);
+}
+
+
+// java.lang.invoke.MemberName
+
+#ifdef ASSERT
+static bool is_member_name_class_dump(const ParsedHeapDump &heap_dump, const HeapDump::ClassDump &dump) {
+  const bool has_right_name_and_loader = heap_dump.get_class_name(dump.id) == vmSymbols::java_lang_invoke_MemberName() &&
+                                         dump.class_loader_id == HeapDump::NULL_ID;
+  if (!has_right_name_and_loader) {
+    return false;
+  }
+
+  assert(dump.super_id != HeapDump::NULL_ID, "illegal super in %s dump " HDID_FORMAT ": expected %s, got none",
+         vmSymbols::java_lang_invoke_MemberName()->as_klass_external_name(), dump.id,
+         vmSymbols::java_lang_Object()->as_klass_external_name());
+
+  const HeapDump::ClassDump &super_dump = heap_dump.get_class_dump(dump.super_id);
+  assert(heap_dump.get_class_name(super_dump.id) == vmSymbols::java_lang_Object() &&
+         super_dump.class_loader_id == HeapDump::NULL_ID, "illegal super in %s dump " HDID_FORMAT ": expected %s, got %s",
+         vmSymbols::java_lang_invoke_MemberName()->as_klass_external_name(), dump.id,
+         heap_dump.get_class_name(super_dump.id)->as_klass_external_name(),
+         vmSymbols::java_lang_Object()->as_klass_external_name());
+
+  return true;
+}
+#endif // ASSERT
+
+void HeapDumpClasses::java_lang_invoke_MemberName::ensure_initialized(const ParsedHeapDump &heap_dump, HeapDump::ID java_lang_invoke_MemberName_id) {
+  precond(java_lang_invoke_MemberName_id != HeapDump::NULL_ID);
+  if (!is_initialized()) {
+    const HeapDump::ClassDump &java_lang_invoke_MemberName_dump = heap_dump.get_class_dump(java_lang_invoke_MemberName_id);
+    precond(is_member_name_class_dump(heap_dump, java_lang_invoke_MemberName_dump));
+    INITIALIZE_OFFSETS(java_lang_invoke_MemberName, MEMBERNAME_DUMP_FIELDS_DO, MEMBERNAME_DUMP_PTR_FIELDS_DO)
+    DEBUG_ONLY(_java_lang_invoke_MemberName_id = java_lang_invoke_MemberName_id);
+    _id_size = heap_dump.id_size;
+  } else {
+    ASSERT_INITIALIZED_WITH_SAME_ID(java_lang_invoke_MemberName)
+  }
+  postcond(is_initialized());
+}
+
+MEMBERNAME_DUMP_FIELDS_DO(DEFINE_GET_FIELD_METHOD)
+MEMBERNAME_DUMP_PTR_FIELDS_DO(DEFINE_GET_PTR_FIELD_METHOD)
+
+bool HeapDumpClasses::java_lang_invoke_MemberName::is_field(const HeapDump::InstanceDump &dump) const {
+  const jint fs = flags(dump);
+  return (fs & ::java_lang_invoke_MemberName::MN_IS_FIELD) != 0;
 }
 
 

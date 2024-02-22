@@ -13,6 +13,7 @@
 #include "classfile_constants.h"
 #include "interpreter/bytecodeStream.hpp"
 #include "interpreter/bytecodes.hpp"
+#include "interpreter/linkResolver.hpp"
 #include "jni.h"
 #include "jvm_constants.h"
 #include "logging/log.hpp"
@@ -43,6 +44,7 @@
 #include "oops/resolvedIndyEntry.hpp"
 #include "prims/jvmtiExport.hpp"
 #include "prims/jvmtiRedefineClasses.hpp"
+#include "prims/methodHandles.hpp"
 #include "runtime/arguments.hpp"
 #include "runtime/cracClassDumpParser.hpp"
 #include "runtime/cracClassDumper.hpp"
@@ -1304,17 +1306,14 @@ class CracInstanceClassDumpParser : public StackObj /* constructor allocates res
         // Implemented interfaces have been parsed and found as loaded, so if
         // it was one of them we would have found it
         guarantee(holder_ptr != nullptr, "default method %i belongs to a class not implemented by this class", i);
-        /*const*/ InstanceKlass &holder = **holder_ptr; // FIXME make InstanceKlass::method_with_idnum() const as it should be
+        InstanceKlass &holder = **holder_ptr;
         // Would be great to check that the holder is among transitive
-        // interfaces, but that's a heavy check (requires iterating over them)
+        // interfaces, but it requires iterating over them
 
         const InterclassRefs::MethodDescription method_desc = method_identification.second;
         Symbol *const name = _heap_dump.get_symbol(method_desc.name_id);
         Symbol *const sig = _heap_dump.get_symbol(method_desc.sig_id);
-        Method *const method = holder.find_local_method(name, sig,
-                                                        CracClassDump::as_overpass_lookup_mode(method_desc.kind),
-                                                        CracClassDump::as_static_lookup_mode(method_desc.kind),
-                                                        Klass::PrivateLookupMode::find);
+        Method *const method = CracClassDumpParser::find_method(&holder, name, sig, method_desc.kind, false, CHECK);
         guarantee(method != nullptr, "default method #%i cannot be found as %s method %s",
                   i, CracClassDump::method_kind_name(method_desc.kind), Method::name_and_sig_as_C_string(*holder_ptr, name, sig));
         guarantee(method->is_default_method(), "default method %i resolved to a non-default %s", i, method->external_name());
@@ -1642,6 +1641,23 @@ void CracClassDumpParser::parse(const char *path, const ParsedHeapDump &heap_dum
   } else {
     log_info(crac, class, parser)("Successfully parsed class dump %s", path);
   }
+}
+
+Method *CracClassDumpParser::find_method(InstanceKlass *holder,
+                                         Symbol *name, Symbol *signature, CracClassDump::MethodKind kind,
+                                         bool lookup_signature_polymorphic, TRAPS) {
+  precond(holder != nullptr);
+  if (lookup_signature_polymorphic && MethodHandles::is_signature_polymorphic_intrinsic_name(holder, name)) {
+    // Signature polymorphic methods' specializations are dynamically generated,
+    // but we only need to treat the basic (non-generic, intrinsic) ones
+    // specially because the rest are generated as classes that should be in the
+    // dump
+    return LinkResolver::resolve_intrinsic_polymorphic_method(holder, name, signature, THREAD);
+  }
+  return holder->find_local_method(name, signature,
+                                   CracClassDump::as_overpass_lookup_mode(kind),
+                                   CracClassDump::as_static_lookup_mode(kind),
+                                   Klass::PrivateLookupMode::find);
 }
 
 CracClassDumpParser::CracClassDumpParser(BasicTypeReader *reader, const ParsedHeapDump &heap_dump, ClassLoaderProvider *loader_provider,

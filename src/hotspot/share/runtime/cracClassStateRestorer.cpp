@@ -2,7 +2,6 @@
 #include "classfile/classLoaderData.hpp"
 #include "classfile/dictionary.hpp"
 #include "classfile/systemDictionary.hpp"
-#include "interpreter/linkResolver.hpp"
 #include "logging/log.hpp"
 #include "memory/resourceArea.hpp"
 #include "oops/array.hpp"
@@ -16,7 +15,7 @@
 #include "oops/oopsHierarchy.hpp"
 #include "oops/resolvedFieldEntry.hpp"
 #include "oops/resolvedIndyEntry.hpp"
-#include "prims/methodHandles.hpp"
+#include "runtime/cracClassDumpParser.hpp"
 #include "runtime/cracClassDumper.hpp"
 #include "runtime/cracClassStateRestorer.hpp"
 #include "runtime/javaThread.hpp"
@@ -264,21 +263,6 @@ InstanceKlass *CracClassStateRestorer::define_created_class(InstanceKlass *creat
   return defined_ik;
 }
 
-static Method *find_possibly_sig_poly_method(InstanceKlass *holder, Symbol *name, Symbol *signature, CracClassDump::MethodKind kind, TRAPS) {
-  precond(holder != nullptr);
-  if (MethodHandles::is_signature_polymorphic_intrinsic_name(holder, name)) {
-    // Signature polymorphic methods' specializations are dynamically generated,
-    // but we only need to treat the basic (non-generic, intrinsic) ones
-    // specially because the rest are generated as classes that should be in the
-    // dump
-    return LinkResolver::resolve_intrinsic_polymorphic_method(holder, name, signature, THREAD);
-  }
-  return holder->find_local_method(name, signature,
-                                   CracClassDump::as_overpass_lookup_mode(kind),
-                                   CracClassDump::as_static_lookup_mode(kind),
-                                   Klass::PrivateLookupMode::find);
-}
-
 void CracClassStateRestorer::fill_interclass_references(InstanceKlass *ik,
                                                         const ParsedHeapDump &heap_dump,
                                                         const HeapDumpTable<InstanceKlass *, AnyObj::C_HEAP> &iks,
@@ -364,7 +348,7 @@ void CracClassStateRestorer::fill_interclass_references(InstanceKlass *ik,
       if (method_ref.f1_is_method) {
         Symbol *const name = heap_dump.get_symbol(method_ref.f1_method_desc.name_id);
         Symbol *const sig = heap_dump.get_symbol(method_ref.f1_method_desc.sig_id);
-        Method *const method = find_possibly_sig_poly_method(*klass, name, sig, method_ref.f1_method_desc.kind, CHECK);
+        Method *const method = CracClassDumpParser::find_method(*klass, name, sig, method_ref.f1_method_desc.kind, true, CHECK);
         guarantee(method != nullptr, "class %s has a resolved method entry #%i with f1 referencing %s method %s that cannot be found",
                   ik->external_name(), method_ref.cache_index, CracClassDump::method_kind_name(method_ref.f1_method_desc.kind),
                   Method::name_and_sig_as_C_string(*klass, name, sig));
@@ -389,10 +373,7 @@ void CracClassStateRestorer::fill_interclass_references(InstanceKlass *ik,
 
       Symbol *const name = heap_dump.get_symbol(method_ref.f2_method_desc.name_id);
       Symbol *const sig = heap_dump.get_symbol(method_ref.f2_method_desc.sig_id);
-      Method *const method = (*holder)->find_local_method(name, sig,
-                                                          CracClassDump::as_overpass_lookup_mode(method_ref.f2_method_desc.kind),
-                                                          CracClassDump::as_static_lookup_mode(method_ref.f2_method_desc.kind),
-                                                          Klass::PrivateLookupMode::find);
+      Method *const method = CracClassDumpParser::find_method(*holder, name, sig, method_ref.f2_method_desc.kind, false, CHECK);
       guarantee(method != nullptr, "class %s has a resolved method entry #%i with f2 referencing %s method %s that cannot be found",
                 ik->external_name(), method_ref.cache_index, CracClassDump::method_kind_name(method_ref.f2_method_desc.kind),
                 Method::name_and_sig_as_C_string(*holder, name, sig));
@@ -430,10 +411,7 @@ void CracClassStateRestorer::fill_interclass_references(InstanceKlass *ik,
 
     Symbol *const name = heap_dump.get_symbol(indy_ref.method_desc.name_id);
     Symbol *const sig = heap_dump.get_symbol(indy_ref.method_desc.sig_id);
-    Method *const method = (*holder)->find_local_method(name, sig,
-                                                        CracClassDump::as_overpass_lookup_mode(indy_ref.method_desc.kind),
-                                                        CracClassDump::as_static_lookup_mode(indy_ref.method_desc.kind),
-                                                        Klass::PrivateLookupMode::find);
+    Method *const method = CracClassDumpParser::find_method(*holder, name, sig, indy_ref.method_desc.kind, false, CHECK);
     guarantee(method != nullptr, "class %s has a resolved invokedynamic entry #%i referencing %s method %s that cannot be found",
               ik->external_name(), indy_ref.indy_index, CracClassDump::method_kind_name(indy_ref.method_desc.kind),
               Method::name_and_sig_as_C_string(*holder, name, sig));

@@ -879,6 +879,12 @@ u4 DumperSupport::instance_size(Klass* k, bool with_injected_fields) {
       size += sig2size(fld.signature());
     }
   }
+
+  if (with_injected_fields && k == vmClasses::ResolvedMethodName_klass()) {
+    // Identification data for injected Method*
+    size += 2 * sig2size(vmSymbols::intptr_signature()) /*name and signature*/ + 1 /*kind*/;
+  }
+
   return size;
 }
 
@@ -960,6 +966,15 @@ void DumperSupport::dump_instance_fields(AbstractDumpWriter* writer, oop o, bool
       dump_field_value(writer, sig->char_at(0), o, fld.offset());
     }
   }
+
+  if (with_injected && ik == vmClasses::ResolvedMethodName_klass()) {
+    // Identification data for injected Method*: name, signature, kind
+    const Method* m = java_lang_invoke_ResolvedMethodName::vmtarget(o);
+    writer->write_symbolID(m->name());
+    writer->write_symbolID(m->signature());
+    // TODO unite the values with CracClassDump::MethodKind -- CRaC relies on this
+    writer->write_u1(m->is_static() ? 0 : (m->is_overpass() ? 1 : 2));
+  }
 }
 
 // dumps the definition of the instance fields for a given class
@@ -968,6 +983,11 @@ u2 DumperSupport::get_instance_fields_count(InstanceKlass* ik, bool with_injecte
 
   for (FieldStream fldc(ik, true, true, !with_injected); !fldc.eos(); fldc.next()) {
     if (!fldc.access_flags().is_static()) field_count++;
+  }
+
+  if (with_injected && ik == vmClasses::ResolvedMethodName_klass()) {
+    // Identification data for injected Method*: name, signature, kind
+    field_count += 3;
   }
 
   return field_count;
@@ -985,6 +1005,19 @@ void DumperSupport::dump_instance_field_descriptors(AbstractDumpWriter* writer, 
       writer->write_symbolID(fld.name());   // name
       writer->write_u1(sig2tag(sig));       // type
     }
+  }
+
+  if (with_injected && ik == vmClasses::ResolvedMethodName_klass()) {
+    // Identification data for injected Method*: name, signature, kind
+    // Method name
+    writer->write_symbolID(vmSymbols::internal_name_name());      // name
+    writer->write_u1(sig2tag(vmSymbols::intptr_signature()));     // type
+    // Method signature
+    writer->write_symbolID(vmSymbols::internal_signature_name()); // name
+    writer->write_u1(sig2tag(vmSymbols::intptr_signature()));     // type
+    // Method kind
+    writer->write_symbolID(vmSymbols::internal_kind_name());      // name
+    writer->write_u1(type2tag(T_BYTE));                           // type
   }
 }
 

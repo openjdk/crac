@@ -117,6 +117,11 @@ struct HeapDump : AllStatic {
       default:                  return T_ILLEGAL; // Includes HPROF_ARRAY_OBJECT which is not used
     }
   }
+
+  static u4 value_size(BasicType btype, u4 id_size) {
+    precond(is_java_type(btype));
+    return is_java_primitive(btype) ? type2aelembytes(btype) : id_size;
+  }
 };
 
 template <class V, AnyObj::allocation_type ALLOC_TYPE = AnyObj::RESOURCE_AREA>
@@ -166,6 +171,35 @@ struct ParsedHeapDump : public CHeapObj<mtInternal> {
   // Odd primes picked from ResizeableResourceHashtable.cpp
   static const int INITIAL_TABLE_SIZE = 1009;
   static const int MAX_TABLE_SIZE = 1228891;
+};
+
+// Reads field values from an instance dump.
+//
+// Usage:
+//
+//    for (DumpedInstanceFieldStream st(heap_dump, inst_dump); !st.eos(); st.next()) {
+//      Symbol* field_name = st.name();
+//      ...
+//    }
+class DumpedInstanceFieldStream {
+ private:
+  const ParsedHeapDump &_heap_dump;
+  const HeapDump::InstanceDump &_instance_dump;
+
+  const HeapDump::ClassDump *_current_class_dump;
+  u2 _field_index = 0;  // Index in the current class
+  u4 _field_offset = 0; // Offset into the instance field data
+
+ public:
+  DumpedInstanceFieldStream(const ParsedHeapDump &heap_dump, const HeapDump::InstanceDump &dump) :
+    _heap_dump(heap_dump), _instance_dump(dump), _current_class_dump(&heap_dump.get_class_dump(dump.class_id)) {}
+
+  void next();
+  bool eos();
+
+  Symbol *name() const;
+  BasicType type() const;
+  HeapDump::BasicValue value() const;
 };
 
 // Parses HPROF heap dump.

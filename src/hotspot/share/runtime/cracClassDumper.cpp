@@ -556,23 +556,21 @@ class ClassDumpWriter : public KlassClosure, public CLDClosure {
   // Writes data from the constant pool cache.check won't crash with NPE when there is no
   //  fields/indys.
   void write_constant_pool_cache(const ConstantPoolCache &cp_cache) {
-    // TODO simplify lengths calculations below by making
-    // resolved_*_entries_length() return 0 when resolved_*_entries == nullptr
     // Write lengths of the main arrays first to be able to outright allocate
     // the cache when parsing:
     // 1. Field entries:  u2 -- same amount as of Fieldrefs.
-    const bool has_fields = const_cast<ConstantPoolCache &>(cp_cache).resolved_field_entries() != nullptr;
-    assert(!has_fields || cp_cache.resolved_field_entries_length() > 0, "allocated resolved fields array is always non-empty");
-    const u2 field_entries_len = has_fields ? cp_cache.resolved_field_entries_length() : 0;
+    const u2 field_entries_len = cp_cache.resolved_field_entries_length();
+    assert(field_entries_len > 0 || const_cast<ConstantPoolCache &>(cp_cache).resolved_field_entries() == nullptr,
+           "allocated resolved fields array is always non-empty");
     WRITE(field_entries_len);
     // 2. Method entries: jint -- can be twice as much as methods (one per
     //    Methodref, one or two per InterfaceMethodref) for which we need u2.
     WRITE(checked_cast<jint>(cp_cache.length()));
     // 3. Indy entries: jint -- one per indy, and there may be a lot of those in
     //    the class, but the array is int-indexed.
-    const bool has_indys = const_cast<ConstantPoolCache &>(cp_cache).resolved_indy_entries() != nullptr;
-    assert(!has_indys || cp_cache.resolved_indy_entries_length() > 0, "allocated resolved indys array is always non-empty");
-    const jint indy_entries_len = has_indys ? cp_cache.resolved_indy_entries_length() : 0;
+    const jint indy_entries_len = cp_cache.resolved_indy_entries_length();
+    assert(indy_entries_len > 0 || const_cast<ConstantPoolCache &>(cp_cache).resolved_indy_entries() == nullptr,
+           "allocated resolved indys array is always non-empty");
     WRITE(indy_entries_len);
     // 4. Resolved references: doesn't influence cache allocation, so don't need
     //    its length here.
@@ -646,25 +644,45 @@ class ClassDumpWriter : public KlassClosure, public CLDClosure {
             }
             // Fallthrough
           case 0: // bytecode1 is not set
-            assert(info.f1_ord() == 0, "f1 must be unused");
+            assert(info.is_f1_null(), "f1 must be unused");
             break;
           default:
             ShouldNotReachHere();
         }
         // f2
         if (info.is_vfinal() || (bytecode1 == Bytecodes::_invokeinterface && !info.is_forced_virtual())) {
-          assert(bytecode1 == Bytecodes::_invokeinterface || bytecode2 == Bytecodes::_invokevirtual, "must be");
-          assert(bytecode1 != Bytecodes::_invokestatic && bytecode1 != Bytecodes::_invokehandle, "these cannot share an entry with invokevirtual");
+          assert((bytecode1 == Bytecodes::_invokeinterface) != /*XOR*/ (bytecode2 == Bytecodes::_invokevirtual), "must be");
+          assert(bytecode1 != Bytecodes::_invokestatic && bytecode1 != Bytecodes::_invokehandle, "cannot accompany invokevirtual");
           const Method *method = info.is_vfinal() ? info.f2_as_vfinal_method() : info.f2_as_interface_method(); // Resolved final or interface method
           assert(method != nullptr, "must be resolved");
           assert(!method->is_old(), "cache never contains old methods"); // Lets us omit holder's redefinition version
           write_method_identification(*method);
-        } else if (bytecode1 == Bytecodes::_invokeinterface || bytecode2 == Bytecodes::_invokevirtual ||
-                  (bytecode1 == Bytecodes::_invokehandle && info.has_appendix())) {
-          assert(bytecode1 != Bytecodes::_invokestatic, "invokestatic cannot share an entry with invokevirtual");
-          WRITE(checked_cast<jint>(info.f2_as_index())); // vtable/itable index for virtual/interface calls or appendix index (if any) for invokehandle
+        } else if (bytecode1 == Bytecodes::_invokehandle /* no need to check has_appendix() -- the index is set anyway */) {
+          assert(bytecode1 != Bytecodes::_invokestatic && bytecode1 != Bytecodes::_invokevirtual && bytecode1 != Bytecodes::_invokeinterface,
+                 "cannot accompany invokehandle");
+          const int appendix_i = info.f2_as_index(); // Index of appendix in resolved references
+          assert(appendix_i >= 0 && appendix_i < cp_cache.constant_pool()->resolved_references()->length(), "invalid appendix index");
+          WRITE(checked_cast<jint>(appendix_i));
+        } else if (bytecode2 == Bytecodes::_invokevirtual) {
+          precond(!info.is_vfinal());
+          assert(bytecode1 != Bytecodes::_invokestatic && bytecode1 != Bytecodes::_invokehandle && bytecode1 != Bytecodes::_invokeinterface,
+                 "cannot accompany invokevirtual");
+          // f2 is a vtable index which is not portable because vtable depends
+          // on method ordering and that depends on Symbol table's memory layout
+          assert(info.f2_as_index() >= 0, "invalid vtable index");
+          // TODO write something that will help deduce the new vtable index faster
         } else {
-          // f2 is unused
+          assert(info.f2_ord() == 0, "f2 must be unused");
+        }
+      } else {
+        // invokehandle entries have f2 set even when unresolved
+        const bool is_f2_set = info.f2_ord() != 0;
+        WRITE(static_cast<u1>(is_f2_set));
+        if (is_f2_set) {
+          // Unresolved invokehandle entry
+          const int appendix_i = info.f2_as_index(); // Index of appendix in resolved references
+          assert(appendix_i >= 0 && appendix_i < cp_cache.constant_pool()->resolved_references()->length(), "invalid appendix index");
+          WRITE(checked_cast<jint>(appendix_i));
         }
       }
     }
@@ -936,6 +954,10 @@ class ClassDumpWriter : public KlassClosure, public CLDClosure {
   void write_method(const Method &method) {
     const ConstMethod &cmethod = *method.constMethod();
 
+    // Note: not writing vtable/itable index because it is not portable (layout
+    // of the tables depends on method ordering which depends on order of
+    // method names' symbols in memory)
+
     if (cmethod.method_idnum() != cmethod.orig_method_idnum()) {
       // TODO method ID is not dumped since it is not portable (depends on
       // method ordering which depends on method's name symbol addresses), but
@@ -1041,10 +1063,6 @@ class ClassDumpWriter : public KlassClosure, public CLDClosure {
     } else {
       WRITE(checked_cast<u2>(0));
     }
-
-    // TODO If the class has been linked, write its vtable/itable and the
-    //  corresponding method indices. These indices are actually already saved
-    //  as part of resolved method entries of constant pool cache.
   }
 
   // ###########################################################################

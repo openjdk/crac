@@ -325,6 +325,7 @@ class ConstantPoolCacheEntry {
   // of _f1 must be ordered with the loads performed by
   // cache->main_entry_index().
   bool      is_f1_null() const;  // classifies a CPC entry as unbound
+  intx      f2_ord() const                       { return _f2; }
   int       f2_as_index() const                  { assert(!is_vfinal(), ""); return (int) _f2; }
   Method*   f2_as_vfinal_method() const          { assert(is_vfinal(), ""); return (Method*)_f2; }
   Method*   f2_as_interface_method() const;

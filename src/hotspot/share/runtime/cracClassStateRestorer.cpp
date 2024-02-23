@@ -18,6 +18,7 @@
 #include "runtime/cracClassDumpParser.hpp"
 #include "runtime/cracClassDumper.hpp"
 #include "runtime/cracClassStateRestorer.hpp"
+#include "runtime/handles.hpp"
 #include "runtime/javaThread.hpp"
 #include "runtime/javaThread.inline.hpp"
 #include "runtime/mutexLocker.hpp"
@@ -27,12 +28,23 @@
 #include "utilities/exceptions.hpp"
 #include "utilities/heapDumpParser.hpp"
 #include "utilities/macros.hpp"
+#ifdef ASSERT
+#include "classfile/vmClasses.hpp"
+#include "classfile/vmSymbols.hpp"
+#include "interpreter/bytecodes.hpp"
+#include "oops/fieldInfo.hpp"
+#include "oops/fieldStreams.hpp"
+#include "oops/fieldStreams.inline.hpp"
+#include "prims/methodHandles.hpp"
+#include "utilities/globalDefinitions.hpp"
+#endif // ASSERT
 
 #ifdef ASSERT
 
-#include "oops/fieldStreams.hpp"
-#include "oops/fieldStreams.inline.hpp"
-#include "utilities/globalDefinitions.hpp"
+// Asserts to compare the newly re-created and a pre-defined versions of the
+// same class. Note that they are run before the newly re-created class is
+// linked and before its CP cache is restored, so the related data is not
+// compared.
 
 static int count_overpasses(const Array<Method *> &methods) {
   int num_overpasses = 0;
@@ -101,6 +113,8 @@ static void assert_fields_match(const InstanceKlass &ik1, const InstanceKlass &i
            fs1.index(), fs1.access_flags().get_flags(), fs2.access_flags().get_flags());
     assert(fs1.field_flags().as_uint() == fs2.field_flags().as_uint(), "different internal flags of field %i (%s %s): " UINT32_FORMAT_X " != " UINT32_FORMAT_X,
            fs1.index(), fs1.signature()->as_C_string(), fs1.name()->as_C_string(), fs1.field_flags().as_uint(), fs2.field_flags().as_uint());
+    assert(fs1.offset() == fs2.offset(), "different offset of field %i (%s %s): %i != %i",
+           fs1.index(), fs1.signature()->as_C_string(), fs1.name()->as_C_string(), fs1.offset(), fs2.offset());
   }
   postcond(fs1.done() && fs2.done());
 }
@@ -118,8 +132,27 @@ static void assert_methods_match(const InstanceKlass &ik1, const InstanceKlass &
                                                   method1.is_static() ? Klass::StaticLookupMode::find : Klass::StaticLookupMode::skip,
                                                   Klass::PrivateLookupMode::find);
     assert(method2 != nullptr, "%s not found in the second class", method1.name_and_sig_as_C_string());
+
+    assert(method1.result_type() == method2->result_type(), "different result type of method %s: %s != %s",
+           method1.name_and_sig_as_C_string(), type2name(method1.result_type()), type2name(method2->result_type()));
+    assert(method1.size_of_parameters() == method2->size_of_parameters(), "different word-size of parameters of method %s: %i != %i",
+           method1.name_and_sig_as_C_string(), method1.size_of_parameters(), method2->size_of_parameters());
+    assert(method1.num_stack_arg_slots() == method2->num_stack_arg_slots(), "different number of stack slots for arguments of method %s: %i != %i",
+           method1.name_and_sig_as_C_string(), method1.num_stack_arg_slots(), method2->num_stack_arg_slots());
+    assert(method1.constMethod()->fingerprint() == method2->constMethod()->fingerprint(),
+           "different fingerprint of method %s: " UINT64_FORMAT_X " != " UINT64_FORMAT_X,
+           method1.name_and_sig_as_C_string(), method1.constMethod()->fingerprint(), method2->constMethod()->fingerprint());
+
     assert(method1.access_flags().get_flags() == method2->access_flags().get_flags(), "different flags of method %s: " INT32_FORMAT_X " != " INT32_FORMAT_X,
            method1.name_and_sig_as_C_string(), method1.access_flags().get_flags(), method2->access_flags().get_flags());
+    assert(method1.constMethod()->flags() == method2->constMethod()->flags(), "different cmethod flags of method %s: " INT32_FORMAT_X " != " INT32_FORMAT_X,
+           method1.name_and_sig_as_C_string(), method1.constMethod()->flags(), method2->constMethod()->flags());
+
+    assert(method1.max_stack() == method2->max_stack() && method1.max_locals() == method2->max_locals(),
+           "different max stack values of method %s: max stack %i and %i, max locals %i and %i",
+           method1.name_and_sig_as_C_string(), method1.max_stack(), method2->max_stack(), method1.max_locals(), method2->max_locals());
+    assert(ik1.is_rewritten() != ik2.is_rewritten() /* code may change upon rewriting */ || method1.code_size() == method2->code_size(),
+           "different code size of method %s: %i != %i", method1.name_and_sig_as_C_string(), method1.code_size(), method2->code_size());
   }
 }
 
@@ -263,6 +296,172 @@ InstanceKlass *CracClassStateRestorer::define_created_class(InstanceKlass *creat
   return defined_ik;
 }
 
+#ifdef ASSERT
+
+static FieldInfo get_field_info(const InstanceKlass &holder, int index) {
+  for (AllFieldStream fs(&holder); !fs.done(); fs.next()) {
+    if (fs.index() == index) {
+      return fs.to_FieldInfo();
+    }
+  }
+  assert(false, "no field with index %i in %s", index, holder.external_name());
+  return {};
+}
+
+static void assert_correctly_resolved_field(const InstanceKlass &cache_holder, int resolved_info_i) {
+  const ResolvedFieldEntry &resolved_info = *cache_holder.constants()->cache()->resolved_field_entry_at(resolved_info_i);
+  assert(resolved_info.get_code() != 0, "unresolved");
+
+  const InstanceKlass &field_holder = *resolved_info.field_holder();
+  const FieldInfo field_info = get_field_info(field_holder, resolved_info.field_index());
+
+  // Referenced as:
+  const u2 ref_holder_i = cache_holder.constants()->uncached_klass_ref_index_at(resolved_info.constant_pool_index());
+  const Klass &ref_holder = *cache_holder.constants()->resolved_klass_at(ref_holder_i);
+  const Symbol *ref_name = cache_holder.constants()->uncached_name_ref_at(resolved_info.constant_pool_index());
+  const Symbol *ref_sig = cache_holder.constants()->uncached_signature_ref_at(resolved_info.constant_pool_index());
+  // Resolved as:
+  const Symbol *name = field_info.name(field_holder.constants());
+  const Symbol *sig = field_info.signature(field_holder.constants());
+  // Must match
+  assert(ref_name == name && ref_sig == sig, "class %s, field entry #%i: referenced %s %s != resolved %s %s",
+         cache_holder.external_name(), resolved_info_i, ref_sig->as_C_string(), ref_name->as_C_string(), sig->as_C_string(), name->as_C_string());
+  assert(ref_holder.is_subtype_of(const_cast<InstanceKlass *>(&field_holder)),
+         "class %s, field entry #%i (%s %s): referenced holder %s must subtype resolved holder %s",
+         cache_holder.external_name(), resolved_info_i, sig->as_C_string(), name->as_C_string(),
+         ref_holder.external_name(), field_holder.external_name());
+
+  // Cached data
+  assert(checked_cast<u4>(resolved_info.field_offset()) == field_info.offset(), "class %s, field entry #%i (%s %s::%s): %i != " UINT32_FORMAT,
+         cache_holder.external_name(), resolved_info_i, sig->as_C_string(), field_holder.external_name(), name->as_C_string(),
+         resolved_info.field_offset(), field_info.offset());
+  assert(resolved_info.tos_state() == as_TosState(Signature::basic_type(sig)), "class %s, field entry #%i (%s %s::%s): %i != %i",
+         cache_holder.external_name(), resolved_info_i, sig->as_C_string(), field_holder.external_name(), name->as_C_string(),
+         resolved_info.tos_state(), as_TosState(Signature::basic_type(sig)));
+  assert(resolved_info.is_volatile() == field_info.access_flags().is_volatile(), "class %s, field entry #%i (%s %s::%s): %s != %s",
+         cache_holder.external_name(), resolved_info_i, sig->as_C_string(), field_holder.external_name(), name->as_C_string(),
+         BOOL_TO_STR(resolved_info.is_volatile()), BOOL_TO_STR(field_info.access_flags().is_volatile()));
+  assert(resolved_info.is_final() == field_info.access_flags().is_final(), "class %s, field entry #%i (%s %s::%s): %s != %s",
+         cache_holder.external_name(), resolved_info_i, sig->as_C_string(), field_holder.external_name(), name->as_C_string(),
+         BOOL_TO_STR(resolved_info.is_final()), BOOL_TO_STR(field_info.access_flags().is_final()));
+}
+
+static void assert_correctly_resolved_method(const InstanceKlass &cache_holder, int resolved_info_i) {
+  const ConstantPoolCacheEntry &resolved_info = *cache_holder.constants()->cache()->entry_at(resolved_info_i);
+  assert(resolved_info.bytecode_1() != 0 || resolved_info.bytecode_2() != 0, "unresolved");
+  assert(resolved_info.is_method_entry(), "must be");
+
+  Method *const method = resolved_info.method_if_resolved(constantPoolHandle(Thread::current(), cache_holder.constants()));
+  assert(method != nullptr, "class %s, cache entry #%i: cannot obtain the resolved method",
+         cache_holder.external_name(), resolved_info_i);
+
+  // Referenced as:
+  const u2 ref_holder_i = cache_holder.constants()->uncached_klass_ref_index_at(resolved_info.constant_pool_index());
+  Klass *const ref_holder = cache_holder.constants()->resolved_klass_at(ref_holder_i);
+  Symbol *const ref_name = cache_holder.constants()->uncached_name_ref_at(resolved_info.constant_pool_index());
+  Symbol *const ref_sig = cache_holder.constants()->uncached_signature_ref_at(resolved_info.constant_pool_index());
+  if (resolved_info.bytecode_1() != Bytecodes::_invokehandle) {
+    // Resolved as:
+    InstanceKlass *const holder = method->method_holder();
+    const Symbol *name = method->name();
+    const Symbol *sig = method->signature();
+    // Must match
+    assert(ref_name == name, "class %s, cache entry #%i: referenced %s != resolved %s",
+           cache_holder.external_name(), resolved_info_i,
+           Method::external_name(ref_holder, ref_name, ref_sig), method->external_name());
+    if (!MethodHandles::is_signature_polymorphic_name(ref_holder, ref_name)) {
+      assert(ref_sig == sig, "class %s, cache entry #%i: referenced %s != resolved %s",
+             cache_holder.external_name(), resolved_info_i,
+             Method::external_name(ref_holder, ref_name, ref_sig), method->external_name());
+      assert(ref_holder->is_subtype_of(holder), "class %s, cache entry #%i (%s%s): referenced holder %s must subtype resolved holder %s",
+             cache_holder.external_name(), resolved_info_i, name->as_C_string(), sig->as_C_string(),
+             ref_holder->external_name(), holder->external_name());
+    } else {
+      assert(ref_holder == holder, "class %s, cache entry #%i (%s%s): holders %s and %s must match for a signature polymorhic method",
+             cache_holder.external_name(), resolved_info_i, name->as_C_string(), sig->as_C_string(),
+             ref_holder->external_name(), holder->external_name());
+    }
+  } else {
+    assert(MethodHandles::is_signature_polymorphic_name(ref_holder, ref_name),
+           "class %s, cache entry #%i: %s.%s(...) resolved as signature polymorphic",
+           cache_holder.external_name(), resolved_info_i, ref_holder->external_name(), ref_name->as_C_string());
+    if (MethodHandles::is_signature_polymorphic_intrinsic_name(ref_holder, ref_name)) {
+      assert(MethodHandles::is_signature_polymorphic_method(method) &&
+             MethodHandles::is_signature_polymorphic_intrinsic(method->intrinsic_id()),
+             "class %s, cache entry #%i: %s.%s(...) resolved to %s",
+             cache_holder.external_name(), resolved_info_i, ref_holder->external_name(), ref_name->as_C_string(),
+             method->external_name());
+    } else {
+      // Generic case, resolves to a generated adapter
+    }
+  }
+
+  assert(resolved_info.flag_state() == as_TosState(method->result_type()), "class %s, cache entry #%i (%s): %i != %i",
+         cache_holder.external_name(), resolved_info_i, method->external_name(),
+         resolved_info.flag_state(), as_TosState(method->result_type()));
+  assert(resolved_info.parameter_size() == method->size_of_parameters(), "class %s, cache entry #%i (%s): %i != %i",
+         cache_holder.external_name(), resolved_info_i, method->external_name(),
+         resolved_info.parameter_size(), method->size_of_parameters());
+  assert(!resolved_info.is_final() || method->is_final_method(), "class %s, cache entry #%i (%s): non-final cached as final",
+         cache_holder.external_name(), resolved_info_i, method->external_name());
+}
+
+static void assert_correct_unresolved_method(const InstanceKlass &cache_holder, int unresolved_info_i) {
+  const ConstantPoolCacheEntry &unresolved_info = *cache_holder.constants()->cache()->entry_at(unresolved_info_i);
+  assert(unresolved_info.bytecode_1() == 0 && unresolved_info.bytecode_2() == 0, "resolved");
+
+  assert(unresolved_info.flags_ord() == 0, "class %s, cache entry #%i: unresolved entry has flags = " INTX_FORMAT_X,
+         cache_holder.external_name(), unresolved_info_i, unresolved_info.flags_ord());
+  assert(unresolved_info.is_f1_null(), "class %s, cache entry #%i: unresolved entry has f1 = " PTR_FORMAT,
+         cache_holder.external_name(), unresolved_info_i, p2i(unresolved_info.f1_ord()));
+
+  // invokehandle entries have f2 set to appendix index even when unresolved
+  const intx f2 = unresolved_info.f2_ord();
+  if (f2 == 0) {
+    return; // Note: this can still be an invokehandle entry
+  }
+
+  // Must be an invokehandle entry, i.e. reference a signature polymorpic method
+  Symbol *const ref_holder_name = cache_holder.constants()->uncached_klass_ref_at_noresolve(unresolved_info.constant_pool_index());
+  Symbol *const ref_name = cache_holder.constants()->uncached_name_ref_at(unresolved_info.constant_pool_index());
+  InstanceKlass *ref_holder = nullptr;
+  if (ref_holder_name == vmSymbols::java_lang_invoke_MethodHandle()) {
+    if (!vmClasses::MethodHandle_klass_is_loaded()) {
+      return;
+    }
+    ref_holder = vmClasses::MethodHandle_klass();
+  } else if (ref_holder_name == vmSymbols::java_lang_invoke_VarHandle()) {
+    if (!vmClasses::VarHandle_klass_is_loaded()) {
+      return;
+    }
+    ref_holder = vmClasses::VarHandle_klass();
+  }
+  assert(ref_holder != nullptr, "class %s, cache entry #%i: %s.%s(...) resolved as signature polymorphic",
+         cache_holder.external_name(), unresolved_info_i, ref_holder->external_name(), ref_name->as_C_string());
+  assert(MethodHandles::is_signature_polymorphic_name(ref_holder, ref_name),
+         "class %s, cache entry #%i: %s.%s(...) resolved as signature polymorphic",
+         cache_holder.external_name(), unresolved_info_i, ref_holder->external_name(), ref_name->as_C_string());
+
+  // Must be an index into resolved references array
+  assert(f2 >= 0, "class %s, cache entry #%i: unresolved invokehandle entry has f2 = " PTR_FORMAT,
+         cache_holder.external_name(), unresolved_info_i, p2i(unresolved_info.f1_ord()));
+}
+
+static void assert_correctly_resolved_indy(const InstanceKlass &cache_holder, int resolved_info_i) {
+  const ResolvedIndyEntry &resolved_info = *cache_holder.constants()->cache()->resolved_indy_entry_at(resolved_info_i);
+
+  const Method *adapter = resolved_info.method();
+
+  assert(resolved_info.return_type() == as_TosState(adapter->result_type()), "class %s, indy entry #%i (adapter %s): %i != %i",
+         cache_holder.external_name(), resolved_info_i, adapter->external_name(),
+         resolved_info.return_type(), as_TosState(adapter->result_type()));
+  assert(resolved_info.num_parameters() == adapter->size_of_parameters(), "class %s, indy entry #%i (adapter %s): %i != %i",
+         cache_holder.external_name(), resolved_info_i, adapter->external_name(),
+         resolved_info.num_parameters(), adapter->size_of_parameters());
+}
+
+#endif // ASSERT
+
 void CracClassStateRestorer::fill_interclass_references(InstanceKlass *ik,
                                                         const ParsedHeapDump &heap_dump,
                                                         const HeapDumpTable<InstanceKlass *, AnyObj::C_HEAP> &iks,
@@ -337,7 +536,6 @@ void CracClassStateRestorer::fill_interclass_references(InstanceKlass *ik,
            ik->external_name(), field_ref.index, (*holder)->external_name(), field_entry.field_index(), (*holder)->total_fields_count());
     field_entry.fill_in_unportable(*holder);
     postcond(field_entry.field_holder() == *holder);
-    postcond((*holder)->field(field_entry.field_index()).offset() == checked_cast<u4>(field_entry.field_offset()));
   }
   for (const InterclassRefs::MethodRef &method_ref : *refs.method_refs) {
     ConstantPoolCacheEntry &cache_entry = *cp_cache.entry_at(method_ref.cache_index);
@@ -352,13 +550,6 @@ void CracClassStateRestorer::fill_interclass_references(InstanceKlass *ik,
         guarantee(method != nullptr, "class %s has a resolved method entry #%i with f1 referencing %s method %s that cannot be found",
                   ik->external_name(), method_ref.cache_index, CracClassDump::method_kind_name(method_ref.f1_method_desc.kind),
                   Method::name_and_sig_as_C_string(*klass, name, sig));
-
-        assert(cache_entry.flag_state() == as_TosState(method->result_type()),
-               "class %s, cache entry #%i, f1 as method: method %s, entry's ToS state %i != method's result type's %i",
-               ik->external_name(), method_ref.cache_index, method->external_name(), cache_entry.flag_state(), as_TosState(method->result_type()));
-        assert(cache_entry.parameter_size() == method->size_of_parameters(),
-               "class %s, cache entry #%i, f1 as method: method %s, entry's size of parameters %i != method's size of parameters %i",
-               ik->external_name(), method_ref.cache_index, method->external_name(), cache_entry.parameter_size(), method->size_of_parameters());
         cache_entry.set_f1(method);
         postcond(cache_entry.f1_as_method() == method);
       } else {
@@ -379,12 +570,6 @@ void CracClassStateRestorer::fill_interclass_references(InstanceKlass *ik,
                 Method::name_and_sig_as_C_string(*holder, name, sig));
 
 #ifdef ASSERT
-      assert(cache_entry.flag_state() == as_TosState(method->result_type()),
-             "class %s, cache entry #%i, f2 as method: method %s, entry's ToS state %i != method's result type's %i",
-             ik->external_name(), method_ref.cache_index, method->external_name(), cache_entry.flag_state(), as_TosState(method->result_type()));
-      assert(cache_entry.parameter_size() == method->size_of_parameters(),
-             "class %s, cache entry #%i, f2 as method: method %s, entry's size of parameters %i != method's size of parameters %i",
-             ik->external_name(), method_ref.cache_index, method->external_name(), cache_entry.parameter_size(), method->size_of_parameters());
       if (!cache_entry.is_vfinal()) {
         assert((*holder)->is_interface(), "class %s, cache entry #%i, f2 as interface method: holder %s is not an interface",
                ik->external_name(), method_ref.cache_index, (*holder)->external_name());
@@ -393,10 +578,9 @@ void CracClassStateRestorer::fill_interclass_references(InstanceKlass *ik,
                ik->external_name(), method_ref.cache_index,
                cache_entry.is_f1_null() ? "<null>" : (cache_entry.f1_as_klass()->is_klass() ? cache_entry.f1_as_klass()->external_name() : "<not a class>"),
                (*holder)->external_name());
-        assert(!method->is_final_method(), "class %s, cache entry #%i, f2 as interface method: method %s final",
-               ik->external_name(), method_ref.cache_index, (*holder)->external_name());
       }
 #endif // ASSERT
+
       cache_entry.set_f2(reinterpret_cast<intx>(method));
       postcond((cache_entry.is_vfinal() ? cache_entry.f2_as_vfinal_method() : cache_entry.f2_as_interface_method()) == method);
     }
@@ -416,15 +600,32 @@ void CracClassStateRestorer::fill_interclass_references(InstanceKlass *ik,
               ik->external_name(), indy_ref.indy_index, CracClassDump::method_kind_name(indy_ref.method_desc.kind),
               Method::name_and_sig_as_C_string(*holder, name, sig));
 
-    assert(indy_entry.return_type() == as_TosState(method->result_type()),
-           "class %s, indy entry #%i: method %s, entry's ToS state %i != method's result type's %i",
-           ik->external_name(), indy_ref.indy_index, method->external_name(), indy_entry.return_type(), as_TosState(method->result_type()));
-    assert(indy_entry.num_parameters() == method->size_of_parameters(),
-           "class %s, indy entry #%i: method %s, entry's size of parameters %i != method's size of parameters %i",
-           ik->external_name(), indy_ref.indy_index, method->external_name(), indy_entry.num_parameters(), method->size_of_parameters());
     indy_entry.adjust_method_entry(method);
     postcond(indy_entry.is_resolved() && indy_entry.method() == method);
   }
+
+#ifdef ASSERT
+  for (int i = 0; i < cp_cache.resolved_field_entries_length(); i++) {
+    const ResolvedFieldEntry &field_entry = *cp_cache.resolved_field_entry_at(i);
+    if (field_entry.get_code() != 0) {
+      assert_correctly_resolved_field(*ik, i);
+    }
+  }
+  for (int i = 0; i < cp_cache.length(); i++) {
+    const ConstantPoolCacheEntry &cache_entry = *cp_cache.entry_at(i);
+    if (cache_entry.bytecode_1() != 0 || cache_entry.bytecode_2() != 0) {
+      assert_correctly_resolved_method(*ik, i);
+    } else {
+      assert_correct_unresolved_method(*ik, i);
+    }
+  }
+  for (int i = 0; i < cp_cache.resolved_indy_entries_length(); i++) {
+    const ResolvedIndyEntry &indy_entry = *cp_cache.resolved_indy_entry_at(i);
+    if (indy_entry.is_resolved()) {
+      assert_correctly_resolved_indy(*ik, i);
+    }
+  }
+#endif // ASSERT
 }
 
 void CracClassStateRestorer::apply_init_state(InstanceKlass *ik, InstanceKlass::ClassState state, Handle init_error) {

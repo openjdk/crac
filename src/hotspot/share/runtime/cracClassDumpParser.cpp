@@ -757,27 +757,50 @@ class CracInstanceClassDumpParser : public StackObj /* constructor allocates res
         // f2
         HeapDump::ID f2_class_id = HeapDump::NULL_ID;
         InterclassRefs::MethodDescription f2_method_desc;
+        bool cleared_virtual_call = false;
         const Bytecodes::Code bytecode2 = Bytecodes::cast(raw_bytecode2);
         guarantee(bytecode2 == 0 || bytecode2 == Bytecodes::_invokevirtual, "illegal method resolution bytecode 2: %s", Bytecodes::name(bytecode2));
         if (cache_entry.is_vfinal() || (bytecode1 == Bytecodes::_invokeinterface && !cache_entry.is_forced_virtual())) {
-          guarantee(bytecode1 != Bytecodes::_invokestatic && bytecode1 != Bytecodes::_invokehandle &&
-                    (bytecode1 == Bytecodes::_invokeinterface || bytecode2 == Bytecodes::_invokevirtual),
+          guarantee((bytecode1 == Bytecodes::_invokeinterface) != /*XOR*/ (bytecode2 == Bytecodes::_invokevirtual) &&
+                    bytecode1 != Bytecodes::_invokestatic && bytecode1 != Bytecodes::_invokehandle,
                     "illegal resolved method data: b1 = %s, b2 = %s, is_vfinal = %s, is_forced_virtual = %s",
                     Bytecodes::name(bytecode1), Bytecodes::name(bytecode2),
                     BOOL_TO_STR(cache_entry.is_vfinal()), BOOL_TO_STR(cache_entry.is_forced_virtual()));
           const auto method_identification = read_method_identification(CHECK);
           f2_class_id = method_identification.first;
           f2_method_desc = method_identification.second;
-        } else if (bytecode1 == Bytecodes::_invokeinterface || bytecode2 == Bytecodes::_invokevirtual ||
-                  (bytecode1 == Bytecodes::_invokehandle && has_appendix)) {
-          guarantee(bytecode1 != Bytecodes::_invokestatic,
-                    "illegal resolved method data: b1 = %s, b2 = %s, is_vfinal = %s, is_forced_virtual = %s, has_appendix = %s",
+        } else if (bytecode1 == Bytecodes::_invokehandle) {
+          guarantee(bytecode1 != Bytecodes::_invokestatic && bytecode1 != Bytecodes::_invokevirtual && bytecode1 != Bytecodes::_invokeinterface,
+                    "illegal resolved method data: b1 = %s, b2 = %s, is_vfinal = %s, is_forced_virtual = %s",
                     Bytecodes::name(bytecode1), Bytecodes::name(bytecode2),
-                    BOOL_TO_STR(cache_entry.is_vfinal()), BOOL_TO_STR(cache_entry.is_forced_virtual()), BOOL_TO_STR(cache_entry.has_appendix()));
-          const auto f2_index = read<jint>(CHECK);
-          cache_entry.set_f2(f2_index);
+                    BOOL_TO_STR(cache_entry.is_vfinal()), BOOL_TO_STR(cache_entry.is_forced_virtual()));
+          const auto appendix_i = read<jint>(CHECK);
+          guarantee(appendix_i >= 0, "index into resolved references array cannot be negative");
+          cache_entry.set_f2(appendix_i);
+        } else if (bytecode2 == Bytecodes::_invokevirtual) {
+          precond(!cache_entry.is_vfinal());
+          guarantee(bytecode1 != Bytecodes::_invokestatic && bytecode1 != Bytecodes::_invokehandle && bytecode1 != Bytecodes::_invokeinterface,
+                    "illegal resolved method data: b1 = %s, b2 = %s, is_vfinal = %s, is_forced_virtual = %s",
+                    Bytecodes::name(bytecode1), Bytecodes::name(bytecode2),
+                    BOOL_TO_STR(cache_entry.is_vfinal()), BOOL_TO_STR(cache_entry.is_forced_virtual()));
+          // f2 was a vtable index which is not portable because vtable depends
+          // on method ordering and that depends on Symbol table's memory layout,
+          // so clear the entry so it is re-resolved with the new vtable index
+          // TODO instead of clearing, find a way to update the vtable index
+          if (bytecode1 == 0) {
+            // Should clear the whole thing
+            cache_entry.initialize_entry(cp_index);
+          } else {
+            // Clear the only flag that might have been set when resolving the virtual call
+            intx flags = cache_entry.flags_ord();
+            clear_nth_bit(flags, ConstantPoolCacheEntry::is_forced_virtual_shift);
+            cache_entry.set_flags(flags);
+            postcond(!cache_entry.is_forced_virtual());
+            postcond(cache_entry.is_method_entry() && cache_entry.flag_state() == tos_state && cache_entry.parameter_size() == params_num);
+          }
+          cleared_virtual_call = true;
         }
-        if (bytecode2 != 0) {
+        if (bytecode2 != 0 && !cleared_virtual_call) {
           cache_entry.set_bytecode_2(bytecode2);
           postcond(cache_entry.is_resolved(bytecode2));
         }
@@ -785,7 +808,16 @@ class CracInstanceClassDumpParser : public StackObj /* constructor allocates res
         if (f1_class_id != HeapDump::NULL_ID || f2_class_id != HeapDump::NULL_ID) { // Save to resolve later
           _interclass_refs.method_refs->append({cache_i, f1_is_method, f1_class_id, f1_method_desc, f2_class_id, f2_method_desc});
         }
+      } else {
+        const bool is_f2_set = read_bool(CHECK);
+        if (is_f2_set) {
+          const auto appendix_i = read<jint>(CHECK);
+          guarantee(appendix_i >= 0, "index into resolved references array cannot be negative");
+          cache_entry.set_f2(appendix_i);
+        }
       }
+      postcond(cache_entry.bytecode_1() != 0 || cache_entry.bytecode_2() != 0 || // Either resolved...
+               (cache_entry.is_f1_null() && cache_entry.flags_ord() == 0));      // ...or clean (except maybe f2)
 
       *cp_cache->entry_at(cache_i) = cache_entry;
     }

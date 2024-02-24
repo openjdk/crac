@@ -1453,13 +1453,13 @@ class VM_HeapDumper;
 class HeapObjectDumper : public ObjectClosure {
  private:
   AbstractDumpWriter* _writer;
-  bool _with_injected_fields;
+  bool _extended;
   AbstractDumpWriter* writer()                  { return _writer; }
 
  public:
-  HeapObjectDumper(AbstractDumpWriter* writer, bool with_injected_fields) {
+  HeapObjectDumper(AbstractDumpWriter* writer, bool extended) {
     _writer = writer;
-    _with_injected_fields = with_injected_fields;
+    _extended = extended;
   }
 
   // called for each object in the heap
@@ -1467,6 +1467,11 @@ class HeapObjectDumper : public ObjectClosure {
 };
 
 void HeapObjectDumper::do_object(oop o) {
+  // skip classes as these emitted as HPROF_GC_CLASS_DUMP records
+  if (!_extended && o->klass() == vmClasses::Class_klass() && !java_lang_Class::is_primitive(o)) {
+    return;
+  }
+
   if (DumperSupport::mask_dormant_archived_object(o) == nullptr) {
     log_debug(cds, heap)("skipped dormant archived object " INTPTR_FORMAT " (%s)", p2i(o), o->klass()->external_name());
     return;
@@ -1474,7 +1479,7 @@ void HeapObjectDumper::do_object(oop o) {
 
   if (o->is_instance()) {
     // create a HPROF_GC_INSTANCE record for each object
-    DumperSupport::dump_instance(writer(), o, _with_injected_fields);
+    DumperSupport::dump_instance(writer(), o, /*with_injected_fields=*/_extended);
   } else if (o->is_objArray()) {
     // create a HPROF_GC_OBJ_ARRAY_DUMP record for each object array
     DumperSupport::dump_object_array(writer(), objArrayOop(o));
@@ -1629,7 +1634,7 @@ class VM_HeapDumper : public VM_GC_Operation, public WorkerTask {
   JavaThread*             _oome_thread;
   Method*                 _oome_constructor;
   bool                    _gc_before_heap_dump;
-  bool                    _with_injected_fields;
+  bool                    _extended;
   GrowableArray<Klass*>*  _klass_map;
   ThreadStackTrace**      _stack_traces;
   int                     _num_threads;
@@ -1678,7 +1683,7 @@ class VM_HeapDumper : public VM_GC_Operation, public WorkerTask {
   void dump_stack_traces();
 
  public:
-  VM_HeapDumper(DumpWriter* writer, bool gc_before_heap_dump, bool with_injected_fields, bool oome, uint num_dump_threads) :
+  VM_HeapDumper(DumpWriter* writer, bool gc_before_heap_dump, bool extended, bool oome, uint num_dump_threads) :
     VM_GC_Operation(0 /* total collections,      dummy, ignored */,
                     GCCause::_heap_dump /* GC Cause */,
                     0 /* total full collections, dummy, ignored */,
@@ -1686,7 +1691,7 @@ class VM_HeapDumper : public VM_GC_Operation, public WorkerTask {
     WorkerTask("dump heap") {
     _local_writer = writer;
     _gc_before_heap_dump = gc_before_heap_dump;
-    _with_injected_fields = with_injected_fields;
+    _extended = extended;
     _klass_map = new (mtServiceability) GrowableArray<Klass*>(INITIAL_CLASS_COUNT, mtServiceability);
     _stack_traces = nullptr;
     _num_threads = 0;
@@ -2038,7 +2043,7 @@ void VM_HeapDumper::work(uint worker_id) {
 
     // Writes HPROF_GC_CLASS_DUMP records
     {
-      ClassDumper class_dumper(writer(), _with_injected_fields);
+      ClassDumper class_dumper(writer(), _extended);
       ClassLoaderDataGraph::classes_do(&class_dumper);
     }
 
@@ -2069,7 +2074,7 @@ void VM_HeapDumper::work(uint worker_id) {
     assert(is_vm_dumper(worker_id), "must be");
     // == Serial dump
     TraceTime timer("Dump heap objects", TRACETIME_LOG(Info, heapdump));
-    HeapObjectDumper obj_dumper(writer(), _with_injected_fields);
+    HeapObjectDumper obj_dumper(writer(), _extended);
     Universe::heap()->object_iterate(&obj_dumper);
     writer()->finish_dump_segment();
     // Writes the HPROF_HEAP_DUMP_END record because merge does not happen in serial dump
@@ -2081,7 +2086,7 @@ void VM_HeapDumper::work(uint worker_id) {
     TraceTime timer("Dump heap objects in parallel", TRACETIME_LOG(Info, heapdump));
     DumpWriter* local_writer = is_vm_dumper(worker_id) ? writer() : create_local_writer();
     if (!local_writer->has_error()) {
-      HeapObjectDumper obj_dumper(local_writer, _with_injected_fields);
+      HeapObjectDumper obj_dumper(local_writer, _extended);
       _poi->object_iterate(&obj_dumper, worker_id);
       local_writer->finish_dump_segment();
       local_writer->flush();
@@ -2190,7 +2195,7 @@ int HeapDumper::dump(const char* path, outputStream* out, int compression, bool 
   }
 
   // generate the segmented heap dump into separate files
-  VM_HeapDumper dumper(&writer, _gc_before_heap_dump, _with_injected_fields, _oome, num_dump_threads);
+  VM_HeapDumper dumper(&writer, _gc_before_heap_dump, _extended, _oome, num_dump_threads);
   VMThread::execute(&dumper);
 
   // record any error that the writer may have encountered

@@ -3,8 +3,9 @@ import jdk.crac.Core;
 import jdk.crac.Resource;
 
 /**
- * NOTE: currently this example DOES NOT WORK because restoration of lambdas is
- * not yet implemented.
+ * NOTE: currently this example DOES NOT WORK because restoration of the thread
+ * initiating the checkpoint is not implemented (the thread runs native code at
+ * the moment of checkpoint).
  *
  * Demonstrates resource callbacks.
  * <p>

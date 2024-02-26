@@ -865,30 +865,28 @@ class vframeRestoreArrayElement : public vframeArrayElement {
    }
 
  private:
-  // TODO when the stack dump format is simplified to include method idnum,
-  //  remove the symbols dependency and make heap dump resource-allocated
   static Method *get_method(const StackTrace::Frame &snapshot,
                             const ResizeableResourceHashtable<HeapDump::ID, InstanceKlass *, AnyObj::C_HEAP> &classes,
                             const ParsedHeapDump::RecordTable<HeapDump::UTF8> &symbols) {
     InstanceKlass *method_class;
     {
       InstanceKlass **const c = classes.get(snapshot.class_id);
-      guarantee(c != nullptr, "unknown class ID " HDID_FORMAT, snapshot.class_id);
+      guarantee(c != nullptr, "unknown class ID " SDID_FORMAT, snapshot.class_id);
       method_class = InstanceKlass::cast(*c);
     }
-    assert(method_class->is_linked(), "Must be rewritten before executing its methods");
+    assert(method_class->is_linked(), "must be rewritten before executing its methods");
 
     Symbol *method_name;
     {
       HeapDump::UTF8 *const r = symbols.get(snapshot.method_name_id);
-      guarantee(r != nullptr, "unknown method name ID " HDID_FORMAT, snapshot.method_sig_id);
+      guarantee(r != nullptr, "unknown method name ID " SDID_FORMAT, snapshot.method_sig_id);
       method_name = r->sym;
     }
 
     Symbol *method_sig;
     {
       HeapDump::UTF8 *r = symbols.get(snapshot.method_sig_id);
-      guarantee(r != nullptr, "unknown method signature ID " HDID_FORMAT, snapshot.method_sig_id);
+      guarantee(r != nullptr, "unknown method signature ID " SDID_FORMAT, snapshot.method_sig_id);
       method_sig = r->sym;
     }
 
@@ -917,7 +915,7 @@ class vframeRestoreArrayElement : public vframeArrayElement {
           jobject handle = nullptr;
           if (src_value.obj_id != 0) { // 0 ID means null
             jobject *handle_ptr = objects.get(src_value.obj_id);
-            guarantee(handle_ptr != nullptr, "unknown object ID " HDID_FORMAT " in stack value %i", src_value.obj_id, i);
+            guarantee(handle_ptr != nullptr, "unknown object ID " SDID_FORMAT " in stack value %i", src_value.obj_id, i);
             handle = *handle_ptr;
           }
           // Unpacking code of vframeArrayElement expects a raw oop
@@ -938,7 +936,7 @@ class vframeRestoreArray : public vframeArray {
                                       const ResizeableResourceHashtable<HeapDump::ID, InstanceKlass *, AnyObj::C_HEAP> &classes,
                                       const ResizeableResourceHashtable<HeapDump::ID, jobject, AnyObj::C_HEAP> &objects,
                                       const ParsedHeapDump::RecordTable<HeapDump::UTF8> &symbols) {
-    guarantee(stack.frames_num() <= INT_MAX, "stack trace of thread " HDID_FORMAT " is too long: " UINT32_FORMAT " > %i",
+    guarantee(stack.frames_num() <= INT_MAX, "stack trace of thread " SDID_FORMAT " is too long: " UINT32_FORMAT " > %i",
               stack.thread_id(), stack.frames_num(), INT_MAX);
     auto *result = reinterpret_cast<vframeRestoreArray *>(AllocateHeap(sizeof(vframeArray) + // fixed part
                                                                        sizeof(vframeArrayElement) * (stack.frames_num() - 1), // variable part
@@ -963,8 +961,8 @@ class vframeRestoreArray : public vframeArray {
     _frame_size = 0; // Unused (no frame is being deoptimized)
 
     // The first frame is the youngest, the last is the oldest
-    log_trace(crac)("Filling stack trace for thread " HDID_FORMAT, stack.thread_id());
-    precond(frames() == static_cast<int>(stack.frames_num()));
+    log_trace(crac)("Filling stack trace for thread " SDID_FORMAT, stack.thread_id());
+    precond(frames() == checked_cast<int>(stack.frames_num()));
     for (int i = 0; i < frames(); i++) {
       log_trace(crac)("Filling frame %i", i);
       auto *const elem = static_cast<vframeRestoreArrayElement *>(element(i));
@@ -977,7 +975,7 @@ class vframeRestoreArray : public vframeArray {
 // fill them.
 JRT_LEAF(void, crac::fill_in_frames())
   JavaThread *current = JavaThread::current();
-  log_debug(crac)("Thread %p: filling skeletal frames", current);
+  log_debug(crac)("Thread " UINTX_FORMAT ": filling skeletal frames", cast_from_oop<uintptr_t>(current->threadObj()));
 
   // The code below is analogous to Deoptimization::unpack_frames()
 
@@ -991,11 +989,11 @@ JRT_LEAF(void, crac::fill_in_frames())
 
   // TODO save, clear, restore last Java sp like the deopt code does?
 
-  assert(current->deopt_compiled_method() == nullptr, "No method is being deoptimized");
+  assert(current->deopt_compiled_method() == nullptr, "no method is being deoptimized");
   guarantee(current->frames_to_pop_failed_realloc() == 0,
-            "We don't deoptimize, so no reallocations of scalar replaced objects can happen and fail");
+            "we don't deoptimize, so no reallocations of scalar replaced objects can happen and fail");
   array->unpack_to_stack(unpack_frame, Deoptimization::Unpack_deopt /* TODO this or reexecute? */, initial_caller_parameters);
-  log_debug(crac)("Thread %p: skeletal frames filled", current);
+  log_debug(crac)("Thread " UINTX_FORMAT": skeletal frames filled", cast_from_oop<uintptr_t>(current->threadObj()));
 
   // Cleanup, analogous to Deoptimization::cleanup_deopt_info()
   current->set_vframe_array_head(nullptr);
@@ -1064,7 +1062,8 @@ JavaValue crac::restore_current_thread(TRAPS) {
   JavaThread *current = JavaThread::current();
   if (log_is_enabled(Info, crac)) {
     ResourceMark rm;
-    log_info(crac)("Thread %p (%s): starting the restoration", current, current->name());
+    log_info(crac)("Thread " UINTX_FORMAT " (%s): starting the restoration",
+                   cast_from_oop<uintptr_t>(current->threadObj()), current->name());
   }
   HandleMark hm(current);
 
@@ -1085,7 +1084,8 @@ JavaValue crac::restore_current_thread(TRAPS) {
   {
     const StackTrace *stack = _stack_dump->stack_traces().pop();
     if (stack->frames_num() == 0) { // TODO should this be considered an error?
-      log_info(crac)("Thread %p: no frames in stack snapshot (ID " HDID_FORMAT ")", current, stack->thread_id());
+      log_info(crac)("Thread " UINTX_FORMAT ": no frames in stack snapshot (ID " SDID_FORMAT ")",
+                     cast_from_oop<uintptr_t>(current->threadObj()), stack->thread_id());
       if (_stack_dump->stack_traces().is_empty()) {
         clear_restoration_data();
       }
@@ -1103,7 +1103,8 @@ JavaValue crac::restore_current_thread(TRAPS) {
     postcond(array->frames() == static_cast<int>(stack->frames_num()));
     delete stack;
   }
-  log_debug(crac)("Thread %p: filled frame array (%i frames)", current, array->frames());
+  log_debug(crac)("Thread " UINTX_FORMAT ": filled frame array (%i frames)",
+                  cast_from_oop<uintptr_t>(current->threadObj()), array->frames());
 
   // Determine sizes and return pcs of the constructed frames.
   //
@@ -1157,7 +1158,7 @@ JavaValue crac::restore_current_thread(TRAPS) {
   );
   array->set_unroll_block(info);
 
-  guarantee(current->vframe_array_head() == nullptr, "No deopt should be pending");
+  guarantee(current->vframe_array_head() == nullptr, "no deopt should be pending");
   current->set_vframe_array_head(array);
 
   // Do a Java call to the oldest frame's method with RestoreStub as entry point
@@ -1176,35 +1177,36 @@ JavaValue crac::restore_current_thread(TRAPS) {
 
   if (log_is_enabled(Info, crac)) {
     ResourceMark rm;
-    log_debug(crac)("Thread %p: calling %s to enter restore stub", current, method->name_and_sig_as_C_string());
+    log_debug(crac)("Thread " UINTX_FORMAT ": calling %s to enter restore stub",
+                    cast_from_oop<uintptr_t>(current->threadObj()), method->name_and_sig_as_C_string());
   }
   JavaValue result(method->result_type());
   JavaCalls::call(&result, method, &args, CHECK_({}));
   // Note: any resources allocated in this scope have been freed by the
   // deopt_mark by now
 
-  log_info(crac)("Thread %p: restored execution completed", current);
+  log_info(crac)("Thread " UINTX_FORMAT ": restored execution completed", cast_from_oop<uintptr_t>(current->threadObj()));
   return result;
 }
 
 void crac::restore_threads(TRAPS) {
-  assert(is_portable_mode(), "Use crac::restore() instead");
+  assert(is_portable_mode(), "use crac::restore() instead");
   precond(CRaCRestoreFrom != nullptr);
   assert(_heap_dump != nullptr && _stack_dump != nullptr &&
          _portable_restored_classes != nullptr && _portable_restored_objects != nullptr,
-         "Call crac::restore_heap() first");
+         "call crac::restore_heap() first");
 
   // TODO for now we only restore the main thread
-  assert(_stack_dump->stack_traces().length() == 1, "Expected only a single (main) thread to be dumped");
+  assert(_stack_dump->stack_traces().length() == 1, "expected only a single (main) thread to be dumped");
 #ifdef ASSERT
   {
     ResourceMark rm; // Thread name
     assert(java_lang_Thread::threadGroup(JavaThread::current()->threadObj()) == Universe::main_thread_group() &&
-         strcmp(JavaThread::current()->name(), "main") == 0, "Must be called on the main thread");
+           strcmp(JavaThread::current()->name(), "main") == 0, "must be called on the main thread");
   }
 #endif // ASSERT
   JavaValue result = restore_current_thread(CHECK);
-  log_info(crac)("Main thread execution resulted in type: %s", type2name(result.get_type()));
+  log_info(crac)("main thread execution resulted in type: %s", type2name(result.get_type()));
 }
 
 void crac::clear_restoration_data() {

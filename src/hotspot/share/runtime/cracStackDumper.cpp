@@ -19,6 +19,12 @@
 #include "utilities/globalDefinitions.hpp"
 #include "utilities/growableArray.hpp"
 
+static uintptr_t oop2uint(oop o) {
+  STATIC_ASSERT(sizeof(uintptr_t) == sizeof(intptr_t)); // Primitive stack slots
+  STATIC_ASSERT(sizeof(uintptr_t) == oopSize);          // IDs
+  return cast_from_oop<uintptr_t>(o);
+}
+
 // Retrieves Java vframes from all non-internal Java threads in the VM.
 class ThreadStackStream : public StackObj {
  public:
@@ -36,22 +42,22 @@ class ThreadStackStream : public StackObj {
       if (!should_include(thread)) {
         if (log_is_enabled(Debug, crac, stacktrace, dump)) {
           ResourceMark rm;
-          log_debug(crac, stacktrace, dump)("Skipping thread %p (%s)", thread, thread->name());
+          log_debug(crac, stacktrace, dump)("Skipping thread " UINTX_FORMAT " (%s)", oop2uint(thread->threadObj()), thread->name());
         }
         continue;
       }
       if (thread->thread_state() < _thread_in_Java) {
         if (log_is_enabled(Debug, crac, stacktrace, dump)) {
           ResourceMark rm;
-          log_debug(crac, stacktrace, dump)("Thread %p (%s) not in Java: state = %i",
-                               thread, thread->name(), thread->thread_state());
+          log_debug(crac, stacktrace, dump)("Thread " UINTX_FORMAT " (%s) not in Java: state = %s",
+                                            oop2uint(thread->threadObj()), thread->name(), thread->thread_state_name());
         }
         return Status::NON_JAVA_ON_TOP;
       }
       if (log_is_enabled(Debug, crac, stacktrace, dump)) {
         ResourceMark rm;
-        log_debug(crac, stacktrace, dump)("Will try to dump thread %p (%s): state = %i",
-                             thread, thread->name(), thread->thread_state());
+        log_debug(crac, stacktrace, dump)("Dumping thread " UINTX_FORMAT " (%s): state = %s",
+                                          oop2uint(thread->threadObj()), thread->name(), thread->thread_state_name());
       }
 
       _frames.clear();
@@ -69,8 +75,8 @@ class ThreadStackStream : public StackObj {
           guarantee(_frames.is_empty(), "Native frame must be the youngest in the series of Java frames");
           if (log_is_enabled(Debug, crac, stacktrace, dump)) {
             ResourceMark rm;
-            log_debug(crac, stacktrace, dump)("Thread %p (%s) not in Java: its current method %s is native",
-                                 thread, thread->name(), vfs.method()->external_name());
+            log_debug(crac, stacktrace, dump)("Thread " UINTX_FORMAT " (%s) not in Java: its current method %s is native",
+                                              oop2uint(thread->threadObj()), thread->name(), vfs.method()->external_name());
           }
           return Status::NON_JAVA_ON_TOP;
         }
@@ -82,8 +88,8 @@ class ThreadStackStream : public StackObj {
 
       if (log_is_enabled(Debug, crac, stacktrace, dump)) {
         ResourceMark rm;
-        log_debug(crac, stacktrace, dump)("Thread %p (%s) has intermediate non-Java frame after %i Java frames",
-                             thread, thread->name(), _frames.length());
+        log_debug(crac, stacktrace, dump)("Thread " UINTX_FORMAT " (%s) has intermediate non-Java frame after %i Java frames",
+                                          oop2uint(thread->threadObj()), thread->name(), _frames.length());
       }
       return Status::NON_JAVA_IN_MID;
     }
@@ -142,8 +148,7 @@ class StackDumpWriter : public StackObj {
   }
 
   bool write_stack(const JavaThread *thread, const GrowableArrayView<javaVFrame *> &frames) {
-    log_trace(crac, stacktrace, dump)("Stack for thread " UINTX_FORMAT " - %s",
-                                      cast_from_oop<uintptr_t>(thread->threadObj()), thread->name());
+    log_trace(crac, stacktrace, dump)("Stack for thread " UINTX_FORMAT " (%s)", oop2uint(thread->threadObj()), thread->name());
     WRITE(oop2uint(thread->threadObj())); // Thread ID
 
     // Whether the current bytecode in the youngest frame is to be re-executed
@@ -181,7 +186,7 @@ class StackDumpWriter : public StackObj {
         return false;
       }
 
-      guarantee(frame->bci() <= UINT16_MAX, "Guaranteed by JVMS §4.7.3 (code_length max value)");
+      assert(frame->bci() <= UINT16_MAX, "guaranteed by JVMS §4.7.3 (code_length max value)");
       log_trace(crac, stacktrace, dump)("BCI: %i", frame->bci());
       WRITE_CASTED(u2, frame->bci());
 
@@ -205,19 +210,13 @@ class StackDumpWriter : public StackObj {
   }
 
  private:
-  static uintptr_t oop2uint(oop o) {
-    STATIC_ASSERT(sizeof(uintptr_t) == sizeof(intptr_t)); // Primitive stack slots
-    STATIC_ASSERT(sizeof(uintptr_t) == oopSize);          // IDs
-    return cast_from_oop<uintptr_t>(o);
-  }
-
   bool write_method(const javaVFrame &frame) {
     Method *method = frame.method();
 
     Symbol *name = method->name();
     if (log_is_enabled(Trace, crac, stacktrace, dump)) {
       ResourceMark rm;
-      log_trace(crac, stacktrace, dump)("Method name: " UINTX_FORMAT " - %s",  reinterpret_cast<uintptr_t>(name), name->as_C_string());
+      log_trace(crac, stacktrace, dump)("Method name: " UINTX_FORMAT " - %s", reinterpret_cast<uintptr_t>(name), name->as_C_string());
     }
     WRITE(reinterpret_cast<uintptr_t>(name));
 
@@ -231,7 +230,7 @@ class StackDumpWriter : public StackObj {
     InstanceKlass *holder = method->method_holder();
     if (log_is_enabled(Trace, crac, stacktrace, dump)) {
       ResourceMark rm;
-      log_trace(crac, stacktrace, dump)("Class: " UINTX_FORMAT " - %s", cast_from_oop<uintptr_t>(holder->java_mirror()), holder->external_name());
+      log_trace(crac, stacktrace, dump)("Class: " UINTX_FORMAT " - %s", oop2uint(holder->java_mirror()), holder->external_name());
     }
     WRITE(oop2uint(holder->java_mirror()));
 
@@ -239,7 +238,7 @@ class StackDumpWriter : public StackObj {
   }
 
   bool write_stack_values(const StackValueCollection &values) {
-    guarantee(values.size() <= UINT16_MAX, "Guaranteed by JVMS §4.11");
+    assert(values.size() <= UINT16_MAX, "guaranteed by JVMS §4.11");
     log_trace(crac, stacktrace, dump)("%i values", values.size());
     WRITE_CASTED(u2, values.size());
 
@@ -248,13 +247,13 @@ class StackDumpWriter : public StackObj {
       switch (value.type()) {
         case T_INT:
           log_trace(crac, stacktrace, dump)("  %i - primitive: " INTX_FORMAT " (intptr), " INT32_FORMAT " (jint), " UINTX_FORMAT_X " (hex)",
-                               i, value.get_intptr(), value.get_jint(), value.get_intptr());
+                                            i, value.get_intptr(), value.get_jint(), value.get_intptr());
           WRITE_CASTED(u1, DumpedStackValueType::PRIMITIVE);
           WRITE_CASTED(uintptr_t, value.get_intptr()); // Write the whole slot, i.e. 4 or 8 bytes
           break;
         case T_OBJECT:
           log_trace(crac, stacktrace, dump)("  %i - oop: " UINTX_FORMAT "%s",
-                               i, cast_from_oop<uintptr_t>(value.get_obj()()), value.obj_is_scalar_replaced() ? " (scalar-replaced)" : "");
+                                            i, oop2uint(value.get_obj()()), value.obj_is_scalar_replaced() ? " (scalar-replaced)" : "");
           guarantee(!value.obj_is_scalar_replaced(), "Scalar-replaced objects should have been rematerialized");
           WRITE_CASTED(u1, DumpedStackValueType::REFERENCE);
           WRITE(oop2uint(value.get_obj()()));
@@ -280,8 +279,8 @@ class StackDumpWriter : public StackObj {
 };
 
 CracStackDumper::Result CracStackDumper::dump(const char *path, bool overwrite) {
-  guarantee(SafepointSynchronize::is_at_safepoint(),
-            "Need safepoint so threads won't change their states after we check them");
+  assert(SafepointSynchronize::is_at_safepoint(),
+         "need safepoint so threads won't change their states after we check them");
   log_info(crac, stacktrace, dump)("Dumping thread stacks into %s", path);
 
   FileBasicTypeWriter file_writer;

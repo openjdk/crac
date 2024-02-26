@@ -1454,25 +1454,9 @@ void JavaThread::metadata_do(MetadataClosure* f) {
 }
 
 // Printing
-const char* _get_thread_state_name(JavaThreadState _thread_state) {
-  switch (_thread_state) {
-  case _thread_uninitialized:     return "_thread_uninitialized";
-  case _thread_new:               return "_thread_new";
-  case _thread_new_trans:         return "_thread_new_trans";
-  case _thread_in_native:         return "_thread_in_native";
-  case _thread_in_native_trans:   return "_thread_in_native_trans";
-  case _thread_in_vm:             return "_thread_in_vm";
-  case _thread_in_vm_trans:       return "_thread_in_vm_trans";
-  case _thread_in_Java:           return "_thread_in_Java";
-  case _thread_in_Java_trans:     return "_thread_in_Java_trans";
-  case _thread_blocked:           return "_thread_blocked";
-  case _thread_blocked_trans:     return "_thread_blocked_trans";
-  default:                        return "unknown thread state";
-  }
-}
 
 void JavaThread::print_thread_state_on(outputStream *st) const {
-  st->print_cr("   JavaThread state: %s", _get_thread_state_name(_thread_state));
+  st->print_cr("   JavaThread state: %s", thread_state_name());
 }
 
 // Called by Threads::print() for VM_PrintThreads operation
@@ -1535,7 +1519,7 @@ void JavaThread::print_on_error(outputStream* st, char *buf, int buflen) const {
     }
   }
   st->print(" [");
-  st->print("%s", _get_thread_state_name(_thread_state));
+  st->print("%s", thread_state_name());
   if (osthread()) {
     st->print(", id=%d", osthread()->thread_id());
   }

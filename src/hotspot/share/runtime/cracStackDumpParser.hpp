@@ -7,6 +7,9 @@
 #include "utilities/growableArray.hpp"
 #include "runtime/cracStackDumper.hpp"
 
+// Format for stack dump IDs.
+#define SDID_FORMAT UINT64_FORMAT
+
 // Parsed stack trace.
 class StackTrace : public CHeapObj<mtInternal> {
  public:

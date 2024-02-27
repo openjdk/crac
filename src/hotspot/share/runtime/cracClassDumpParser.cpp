@@ -517,7 +517,8 @@ class CracInstanceClassDumpParser : public StackObj /* constructor allocates res
       switch (tag) {
         case JVM_CONSTANT_Utf8: {
           const HeapDump::ID sym_id = read_id(false, CHECK);
-          Symbol *sym = _heap_dump.get_symbol(sym_id);
+          Symbol *const sym = _heap_dump.get_symbol(sym_id);
+          sym->increment_refcount(); // Ensures it won't be destroyed together with the heap dump
           _cp->symbol_at_put(pool_i, sym);
           break;
         }

@@ -878,6 +878,28 @@ bool CracHeapRestorer::set_class_mirror_instance_field_if_special(instanceHandle
     return true;
   }
 
+  // Incremented by the VM when the mirrored class is redefined, and it might
+  // have been, so keep the new value
+  if (field_name == vmSymbols::classRedefinedCount_name()) {
+    assert(dump_fs.type() == T_INT, "must be");
+    // TODO JVM TI's RedefineClasses support will require this to be revised
+    guarantee(dump_fs.value().as_int == 0, "redefined classes are not dumped");
+    return true;
+  }
+
+  // Mirrors of pre-defined classes may have some fields already set
+  // TODO ...and also the mirrors may be accessed concurrently -- this may break
+  //  something. We can get rid of this if we figure out how to pre-record
+  //  all pre-existing objects and block other threads from creating new ones
+  //  until the restoration completes.
+  assert(is_reference_type(Signature::basic_type(obj_fs.signature())), "all primitives are handled above");
+  const oop preexisting_val = obj->obj_field(obj_fs.offset());
+  if (preexisting_val != nullptr) {
+    precond(dump_fs.type() == T_OBJECT);
+    put_object_if_absent(dump_fs.value().as_object_id, preexisting_val); // Also ensures there is no overwriting
+    return true;
+  }
+
   return false;
 }
 

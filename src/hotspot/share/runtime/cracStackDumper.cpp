@@ -37,69 +37,67 @@ class ThreadStackStream : public StackObj {
       _thread_i++;
     }
 
+    JavaThread *thread;
     for (; _thread_i < _tlh.length(); _thread_i++) {
-      JavaThread *thread = _tlh.thread_at(_thread_i);
-      if (!should_include(thread)) {
-        if (log_is_enabled(Debug, crac, stacktrace, dump)) {
-          ResourceMark rm;
-          log_debug(crac, stacktrace, dump)("Skipping thread " UINTX_FORMAT " (%s)", oop2uint(thread->threadObj()), thread->name());
-        }
-        continue;
-      }
-      if (thread->thread_state() < _thread_in_Java) {
-        if (log_is_enabled(Debug, crac, stacktrace, dump)) {
-          ResourceMark rm;
-          log_debug(crac, stacktrace, dump)("Thread " UINTX_FORMAT " (%s) not in Java: state = %s",
-                                            oop2uint(thread->threadObj()), thread->name(), thread->thread_state_name());
-        }
-        return Status::NON_JAVA_ON_TOP;
+      thread = _tlh.thread_at(_thread_i);
+      assert(thread->thread_state() == _thread_in_native || thread->thread_state() == _thread_blocked,
+             "must be on safepoint: either blocked or in native code");
+      if (should_include(*thread)) {
+        break;
       }
       if (log_is_enabled(Debug, crac, stacktrace, dump)) {
         ResourceMark rm;
-        log_debug(crac, stacktrace, dump)("Dumping thread " UINTX_FORMAT " (%s): state = %s",
-                                          oop2uint(thread->threadObj()), thread->name(), thread->thread_state_name());
+        log_debug(crac, stacktrace, dump)("Skipping thread " UINTX_FORMAT " (%s)", oop2uint(thread->threadObj()), thread->name());
       }
+    }
+    if (_thread_i == _tlh.length()) {
+      return Status::END;
+    }
+    postcond(thread != nullptr);
 
-      _frames.clear();
-      vframeStream vfs(thread, /* stop_at_java_call_stub = */ true);
-      for (; !vfs.at_end(); vfs.next()) {
-        if (!vfs.method()->is_native()) {
-          if (vfs.method()->is_old()) {
-            ResourceMark rm;
-            log_warning(crac, stacktrace, dump)("JVM TI support will be required on restore: thread %s executes an old version of %s",
-                                                thread->name(), vfs.method()->external_name());
-            Unimplemented(); // TODO extend dump format with method holder's redefinition version
-          }
-          _frames.push(vfs.asJavaVFrame());
-        } else {
-          guarantee(_frames.is_empty(), "Native frame must be the youngest in the series of Java frames");
-          if (log_is_enabled(Debug, crac, stacktrace, dump)) {
-            ResourceMark rm;
-            log_debug(crac, stacktrace, dump)("Thread " UINTX_FORMAT " (%s) not in Java: its current method %s is native",
-                                              oop2uint(thread->threadObj()), thread->name(), vfs.method()->external_name());
-          }
-          return Status::NON_JAVA_ON_TOP;
-        }
-      }
-
-      if (_frames.is_empty() || vfs.reached_first_entry_frame()) {
-        return Status::OK;
-      }
-
-      if (log_is_enabled(Debug, crac, stacktrace, dump)) {
-        ResourceMark rm;
-        log_debug(crac, stacktrace, dump)("Thread " UINTX_FORMAT " (%s) has intermediate non-Java frame after %i Java frames",
-                                          oop2uint(thread->threadObj()), thread->name(), _frames.length());
-      }
-      return Status::NON_JAVA_IN_MID;
+    if (log_is_enabled(Debug, crac, stacktrace, dump)) {
+      ResourceMark rm;
+      log_debug(crac, stacktrace, dump)("Dumping thread " UINTX_FORMAT " (%s): state = %s",
+                                        oop2uint(thread->threadObj()), thread->name(), thread->thread_state_name());
     }
 
-    postcond(_thread_i == _tlh.length());
-    return Status::END;
-  }
+    _frames.clear();
+    vframeStream vfs(thread, /*stop_at_java_call_stub=*/ true);
 
-  JavaThread *thread()                            const { assert(_started, "Call next() first"); return _tlh.thread_at(_thread_i); }
-  const GrowableArrayView<javaVFrame *> &frames() const { assert(_started, "Call next() first"); return _frames; };
+    if (!vfs.at_end() && vfs.method()->is_native()) {
+      if (log_is_enabled(Debug, crac, stacktrace, dump)) {
+        ResourceMark rm;
+        log_debug(crac, stacktrace, dump)("Thread " UINTX_FORMAT " (%s) is executing native method %s",
+                                          oop2uint(thread->threadObj()), thread->name(), vfs.method()->external_name());
+      }
+      return Status::NON_JAVA_ON_TOP;
+    }
+
+    for (; !vfs.at_end(); vfs.next()) {
+      assert(!vfs.method()->is_native(), "only the youngest frame can be native");
+      if (vfs.method()->is_old()) {
+        ResourceMark rm;
+        log_warning(crac, stacktrace, dump)("JVM TI support will be required on restore: thread %s executes an old version of %s",
+                                            thread->name(), vfs.method()->external_name());
+        Unimplemented(); // TODO extend dump format with method holder's redefinition version
+      }
+      _frames.push(vfs.asJavaVFrame());
+    }
+
+    if (_frames.is_empty() || vfs.reached_first_entry_frame()) {
+      return Status::OK;
+    }
+
+    if (log_is_enabled(Debug, crac, stacktrace, dump)) {
+      ResourceMark rm;
+      log_debug(crac, stacktrace, dump)("Thread " UINTX_FORMAT " (%s) has intermediate non-Java frame after %i Java frames",
+                                        oop2uint(thread->threadObj()), thread->name(), _frames.length());
+    }
+    return Status::NON_JAVA_IN_MID;
+}
+
+  JavaThread *thread()                            const { assert(_started, "call next() first"); return _tlh.thread_at(_thread_i); }
+  const GrowableArrayView<javaVFrame *> &frames() const { assert(_started, "call next() first"); return _frames; };
 
  private:
   bool _started = false;
@@ -107,7 +105,8 @@ class ThreadStackStream : public StackObj {
   uint _thread_i = 0;
   GrowableArray<javaVFrame *> _frames;
 
-  static bool should_include(JavaThread *thread) {
+  // Whether this thread should be included in the dump.
+  static bool should_include(const JavaThread &thread) {
     ResourceMark rm; // Thread name
     // TODO for now we only include the main thread, but there seems to be no
     //  way to reliably determine that a thread is the main thread.
@@ -121,8 +120,8 @@ class ThreadStackStream : public StackObj {
     //     (strcmp(thread->name(), "Notification Thread") == 0 && java_lang_Thread::threadGroup(thread->threadObj()) == Universe::system_thread_group())) {
     //   continue;
     // }
-    return !thread->is_exiting() &&
-           java_lang_Thread::threadGroup(thread->threadObj()) == Universe::main_thread_group() && strcmp(thread->name(), "main") == 0;
+    return !thread.is_exiting() &&
+           java_lang_Thread::threadGroup(thread.threadObj()) == Universe::main_thread_group() && strcmp(thread.name(), "main") == 0;
   }
 };
 

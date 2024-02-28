@@ -868,31 +868,30 @@ class vframeRestoreArrayElement : public vframeArrayElement {
   static Method *get_method(const StackTrace::Frame &snapshot,
                             const ResizeableResourceHashtable<HeapDump::ID, InstanceKlass *, AnyObj::C_HEAP> &classes,
                             const ParsedHeapDump::RecordTable<HeapDump::UTF8> &symbols) {
-    InstanceKlass *method_class;
+    InstanceKlass *holder;
     {
       InstanceKlass **const c = classes.get(snapshot.class_id);
       guarantee(c != nullptr, "unknown class ID " SDID_FORMAT, snapshot.class_id);
-      method_class = InstanceKlass::cast(*c);
+      holder = InstanceKlass::cast(*c);
     }
-    assert(method_class->is_linked(), "must be rewritten before executing its methods");
+    assert(holder->is_linked(), "trying to execute method of unlinked class");
 
-    Symbol *method_name;
+    Symbol *name;
     {
-      HeapDump::UTF8 *const r = symbols.get(snapshot.method_name_id);
+      const HeapDump::UTF8 *r = symbols.get(snapshot.method_name_id);
       guarantee(r != nullptr, "unknown method name ID " SDID_FORMAT, snapshot.method_sig_id);
-      method_name = r->sym;
+      name = r->sym;
     }
 
-    Symbol *method_sig;
+    Symbol *sig;
     {
-      HeapDump::UTF8 *r = symbols.get(snapshot.method_sig_id);
+      const HeapDump::UTF8 *r = symbols.get(snapshot.method_sig_id);
       guarantee(r != nullptr, "unknown method signature ID " SDID_FORMAT, snapshot.method_sig_id);
-      method_sig = r->sym;
+      sig = r->sym;
     }
 
-    Method *method = method_class->find_method(method_name, method_sig);
-    guarantee(method != nullptr, "method %s %s not found in class %s",
-              method_sig->as_C_string(), method_name->as_C_string(), method_class->external_name());
+    Method *const method = holder->find_method(name, sig);
+    guarantee(method != nullptr, "method %s not found", Method::external_name(holder, name, sig));
 
     return method;
   }
@@ -938,9 +937,9 @@ class vframeRestoreArray : public vframeArray {
                                       const ParsedHeapDump::RecordTable<HeapDump::UTF8> &symbols) {
     guarantee(stack.frames_num() <= INT_MAX, "stack trace of thread " SDID_FORMAT " is too long: " UINT32_FORMAT " > %i",
               stack.thread_id(), stack.frames_num(), INT_MAX);
-    auto *result = reinterpret_cast<vframeRestoreArray *>(AllocateHeap(sizeof(vframeArray) + // fixed part
-                                                                       sizeof(vframeArrayElement) * (stack.frames_num() - 1), // variable part
-                                                                       mtInternal));
+    auto *const result = reinterpret_cast<vframeRestoreArray *>(AllocateHeap(sizeof(vframeRestoreArray) + // fixed part
+                                                                             sizeof(vframeRestoreArrayElement) * (stack.frames_num() - 1), // variable part
+                                                                             mtInternal));
     result->_frames = static_cast<int>(stack.frames_num());
     result->set_unroll_block(nullptr); // The actual value should be set by the caller later
 
@@ -954,6 +953,7 @@ class vframeRestoreArray : public vframeArray {
     return result;
   }
 
+ private:
   void fill_in(const StackTrace &stack,
                const ResizeableResourceHashtable<HeapDump::ID, InstanceKlass *, AnyObj::C_HEAP> &classes,
                const ResizeableResourceHashtable<HeapDump::ID, jobject, AnyObj::C_HEAP> &objects,
@@ -967,6 +967,7 @@ class vframeRestoreArray : public vframeArray {
       log_trace(crac)("Filling frame %i", i);
       auto *const elem = static_cast<vframeRestoreArrayElement *>(element(i));
       elem->fill_in(stack.frames(i), i == 0 && stack.should_reexecute_youngest(), classes, objects, symbols);
+      assert(!elem->method()->is_native(), "native methods are not restored");
     }
   }
 };
@@ -978,6 +979,12 @@ JRT_LEAF(void, crac::fill_in_frames())
   log_debug(crac)("Thread " UINTX_FORMAT ": filling skeletal frames", cast_from_oop<uintptr_t>(current->threadObj()));
 
   // The code below is analogous to Deoptimization::unpack_frames()
+
+  // Reset NoHandleMark created by JRT_LEAF (see related comments in
+  // Deoptimization::unpack_frames() on why this is ok). Handles are used e.g.
+  // in trace printing.
+  ResetNoHandleMark rnhm;
+  HandleMark hm(current);
 
   // Array created by crac::restore_thread_state()
   vframeArray* array = current->vframe_array_head();
@@ -1097,12 +1104,14 @@ JavaValue crac::restore_current_thread(TRAPS) {
                                          *crac::_portable_restored_classes,
                                          *crac::_portable_restored_objects,
                                          crac::_heap_dump->utf8s);
+    postcond(array->frames() == static_cast<int>(stack->frames_num()));
+
     if (_stack_dump->stack_traces().is_empty()) {
       clear_restoration_data();
     }
-    postcond(array->frames() == static_cast<int>(stack->frames_num()));
     delete stack;
   }
+  postcond(array->frames() > 0);
   log_debug(crac)("Thread " UINTX_FORMAT ": filled frame array (%i frames)",
                   cast_from_oop<uintptr_t>(current->threadObj()), array->frames());
 

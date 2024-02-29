@@ -19,6 +19,7 @@
 #include "utilities/debug.hpp"
 #include "utilities/globalDefinitions.hpp"
 #include "utilities/growableArray.hpp"
+#include "utilities/methodKind.hpp"
 
 static uintptr_t oop2uint(oop o) {
   STATIC_ASSERT(sizeof(uintptr_t) == sizeof(intptr_t)); // Primitive stack slots
@@ -224,6 +225,10 @@ class StackDumpWriter : public StackObj {
       log_trace(crac, stacktrace, dump)("Method signature: " UINTX_FORMAT " - %s", reinterpret_cast<uintptr_t>(signature), signature->as_C_string());
     }
     WRITE(reinterpret_cast<uintptr_t>(signature));
+
+    const MethodKind::Enum kind = MethodKind::of_method(*method);
+    log_trace(crac, stacktrace, dump)("Method kind: %s", MethodKind::name(kind));
+    WRITE(checked_cast<u1>(kind));
 
     InstanceKlass *holder = method->method_holder();
     if (log_is_enabled(Trace, crac, stacktrace, dump)) {

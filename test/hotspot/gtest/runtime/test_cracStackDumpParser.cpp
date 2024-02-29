@@ -2,6 +2,7 @@
 #include "unittest.hpp"
 #include "runtime/cracStackDumpParser.hpp"
 #include "runtime/cracStackDumper.hpp"
+#include "utilities/methodKind.hpp"
 
 constexpr char TEST_FILENAME[] = "stackDumpParser_test.hprof";
 
@@ -33,17 +34,18 @@ static void check_stack_frames(const StackTrace &expected_trace,
   ASSERT_EQ(expected_trace.frames_num(), expected_trace.frames_num());
 
   for (u4 i = 0; i < expected_trace.frames_num(); i++) {
-    const StackTrace::Frame &expected_frame = expected_trace.frames(i);
-    const StackTrace::Frame &actual_frame = actual_trace.frames(i);
+    const StackTrace::Frame &expected_frame = expected_trace.frame(i);
+    const StackTrace::Frame &actual_frame = actual_trace.frame(i);
 
-    EXPECT_EQ(expected_frame.method_name_id, actual_frame.method_name_id);
-    EXPECT_EQ(expected_frame.method_sig_id,  actual_frame.method_sig_id);
-    EXPECT_EQ(expected_frame.class_id,       actual_frame.class_id);
-    EXPECT_EQ(expected_frame.bci,            actual_frame.bci);
+    EXPECT_EQ(expected_frame.method_name_id(),   actual_frame.method_name_id());
+    EXPECT_EQ(expected_frame.method_sig_id(),    actual_frame.method_sig_id());
+    EXPECT_EQ(expected_frame.method_kind(),      actual_frame.method_kind());
+    EXPECT_EQ(expected_frame.method_holder_id(), actual_frame.method_holder_id());
+    EXPECT_EQ(expected_frame.bci(),              actual_frame.bci());
 
-    check_stack_values(expected_frame.locals,   actual_frame.locals);
+    check_stack_values(expected_frame.locals(),   actual_frame.locals());
     EXPECT_FALSE(testing::Test::HasFatalFailure() || testing::Test::HasNonfatalFailure()) << "Wrong locals parsing in frame " << i;
-    check_stack_values(expected_frame.operands, actual_frame.operands);
+    check_stack_values(expected_frame.operands(), actual_frame.operands());
     EXPECT_FALSE(testing::Test::HasFatalFailure() || testing::Test::HasNonfatalFailure()) << "Wrong operands parsing in frame " << i;
     // TODO check monitors after they are added
   }
@@ -99,6 +101,7 @@ static constexpr char CONTENTS_NO_STACK_VALUES[] =
     "\x00\x00\x00\x01"      // Number of frames
       "\x12\x34\x56\x78"      // Method name ID
       "\x87\x65\x43\x21"      // Method signature ID
+      "\x00"                  // Method kind - static
       "\x87\x65\x43\x22"      // Class ID
       "\x12\x34"              // BCI
       "\x00\x00"              // Locals num
@@ -119,11 +122,12 @@ TEST(CracStackDumpParser, stack_frame_with_no_stack_values) {
 
   StackTrace expected_trace(/* thread ID */ 0xabcdef95, /* frames num */ 1);
 
-  auto &expected_frame = expected_trace.frames(0);
-  expected_frame.method_name_id = 0x12345678;
-  expected_frame.method_sig_id = 0x87654321;
-  expected_frame.class_id = 0x87654322;
-  expected_frame.bci = 0x1234;
+  auto &expected_frame = expected_trace.frame(0);
+  expected_frame.set_method_name_id(0x12345678);
+  expected_frame.set_method_sig_id(0x87654321);
+  expected_frame.set_method_kind(MethodKind::Enum::STATIC);
+  expected_frame.set_method_holder_id(0x87654322);
+  expected_frame.set_bci(0x1234);
 
   check_stack_frames(expected_trace, *stack_dump.stack_traces().at(0));
   ASSERT_FALSE(testing::Test::HasFatalFailure() || testing::Test::HasNonfatalFailure());
@@ -137,6 +141,7 @@ static constexpr char CONTENTS_CORRECT_STACK_VALUES[] =
     "\x00\x00\x00\x01"                   // Number of frames
       "\x12\x34\x56\x78\x01\x23\x45\x67"   // Method name ID
       "\x87\x65\x12\x34\x56\x78\x43\x21"   // Method signature ID
+      "\x01"                               // Method kind = instance
       "\x87\x65\x43\x12\x34\x56\x78\x22"   // Class ID
       "\x12\x34"                           // BCI
       "\x00\x03"                           // Locals num
@@ -167,19 +172,20 @@ TEST(CracStackDumpParser, stack_frame_with_correct_stack_values) {
 
   StackTrace expected_trace(/* thread ID */ 0xabcdef95badcfe96, /* frames num */ 1);
 
-  auto &expected_frame = expected_trace.frames(0);
-  expected_frame.method_name_id = 0x1234567801234567;
-  expected_frame.method_sig_id = 0x8765123456784321;
-  expected_frame.class_id = 0x8765431234567822;
-  expected_frame.bci = 0x1234;
-  expected_frame.locals.extend(3);
-  expected_frame.locals[0] = {DumpedStackValueType::PRIMITIVE, {0x00000000abcdefab}};
-  expected_frame.locals[1] = {DumpedStackValueType::PRIMITIVE, {0xdeaddeaf00000000}};
-  expected_frame.locals[2] = {DumpedStackValueType::PRIMITIVE, {0x0123456789abcdef}};
-  expected_frame.operands.extend(2);
-  expected_frame.operands[0].type = DumpedStackValueType::REFERENCE;
-  expected_frame.operands[0].obj_id = 0x00007ffa40056550; // Cannot set via braced init
-  expected_frame.operands[1] = {DumpedStackValueType::PRIMITIVE, {0x00000000567890ab}};
+  auto &expected_frame = expected_trace.frame(0);
+  expected_frame.set_method_name_id(0x1234567801234567);
+  expected_frame.set_method_sig_id(0x8765123456784321);
+  expected_frame.set_method_kind(MethodKind::Enum::INSTANCE);
+  expected_frame.set_method_holder_id(0x8765431234567822);
+  expected_frame.set_bci(0x1234);
+  expected_frame.locals().extend(3);
+  expected_frame.locals()[0] = {DumpedStackValueType::PRIMITIVE, {0x00000000abcdefab}};
+  expected_frame.locals()[1] = {DumpedStackValueType::PRIMITIVE, {0xdeaddeaf00000000}};
+  expected_frame.locals()[2] = {DumpedStackValueType::PRIMITIVE, {0x0123456789abcdef}};
+  expected_frame.operands().extend(2);
+  expected_frame.operands()[0].type = DumpedStackValueType::REFERENCE;
+  expected_frame.operands()[0].obj_id = 0x00007ffa40056550; // Cannot set via braced init
+  expected_frame.operands()[1] = {DumpedStackValueType::PRIMITIVE, {0x00000000567890ab}};
 
   check_stack_frames(expected_trace, *stack_dump.stack_traces().at(0));
   ASSERT_FALSE(testing::Test::HasFatalFailure() || testing::Test::HasNonfatalFailure());
@@ -193,6 +199,7 @@ static constexpr char CONTENTS_MULTIPLE_STACKS[] =
     "\x00\x00\x00\x02"      // Number of frames
       "\xab\xac\xab\xaa"      // Method name ID
       "\xba\xba\xfe\xda"      // Method signature ID
+      "\x00"                  // Method kind = static
       "\x87\x65\x43\x21"      // Class ID
       "\x00\x05"              // BCI
       "\x00\x01"              // Locals num
@@ -203,6 +210,7 @@ static constexpr char CONTENTS_MULTIPLE_STACKS[] =
 
       "\xba\xca\xba\xca"      // Method name ID
       "\xcc\xdd\xbb\xaf"      // Method signature ID
+      "\x01"                  // Method kind = instance
       "\x01\x23\x78\x32"      // Class ID
       "\x00\x10"              // BCI
       "\x00\x00"              // Locals num
@@ -213,6 +221,7 @@ static constexpr char CONTENTS_MULTIPLE_STACKS[] =
     "\x00\x00\x00\x01"      // Number of frames
       "\xfe\xfe\xca\xca"      // Method name ID
       "\x34\x43\x78\x22"      // Method signature ID
+      "\x02"                  // Method kind = overpass
       "\x21\x21\x74\x55"      // Class ID
       "\x00\xfa"              // BCI
       "\x00\x00"              // Locals num
@@ -237,30 +246,33 @@ TEST(CracStackDumpParser, multiple_stacks_dumped) {
 
   StackTrace expected_trace_1(/* thread ID */ 0xabcdef95, /* frames num */ 2);
 
-  expected_trace_1.frames(0).method_name_id = 0xabacabaa;
-  expected_trace_1.frames(0).method_sig_id = 0xbabafeda;
-  expected_trace_1.frames(0).class_id = 0x87654321;
-  expected_trace_1.frames(0).bci = 5;
-  expected_trace_1.frames(0).locals.extend(1);
-  expected_trace_1.frames(0).locals[0] = {DumpedStackValueType::PRIMITIVE, {0xabcdefab}};
+  expected_trace_1.frame(0).set_method_name_id(0xabacabaa);
+  expected_trace_1.frame(0).set_method_sig_id(0xbabafeda);
+  expected_trace_1.frame(0).set_method_kind(MethodKind::Enum::STATIC);
+  expected_trace_1.frame(0).set_method_holder_id(0x87654321);
+  expected_trace_1.frame(0).set_bci(5);
+  expected_trace_1.frame(0).locals().extend(1);
+  expected_trace_1.frame(0).locals()[0] = {DumpedStackValueType::PRIMITIVE, {0xabcdefab}};
 
-  expected_trace_1.frames(1).method_name_id = 0xbacabaca;
-  expected_trace_1.frames(1).method_sig_id = 0xccddbbaf;
-  expected_trace_1.frames(1).class_id = 0x01237832;
-  expected_trace_1.frames(1).bci = 0x10;
+  expected_trace_1.frame(1).set_method_name_id(0xbacabaca);
+  expected_trace_1.frame(1).set_method_sig_id(0xccddbbaf);
+  expected_trace_1.frame(1).set_method_kind(MethodKind::Enum::INSTANCE);
+  expected_trace_1.frame(1).set_method_holder_id(0x01237832);
+  expected_trace_1.frame(1).set_bci(0x10);
 
   check_stack_frames(expected_trace_1, *stack_dump.stack_traces().at(0));
   ASSERT_FALSE(testing::Test::HasFatalFailure() || testing::Test::HasNonfatalFailure()) << "Wrong parsing of trace #1";
 
   StackTrace expected_trace_2(/* thread ID */ 0x00113209, /* frames num */ 1);
 
-  expected_trace_2.frames(0).method_name_id = 0xfefecaca;
-  expected_trace_2.frames(0).method_sig_id = 0x34437822;
-  expected_trace_2.frames(0).class_id = 0x21217455;
-  expected_trace_2.frames(0).bci = 0xfa;
-  expected_trace_2.frames(0).operands.extend(2);
-  expected_trace_2.frames(0).operands[0] = {DumpedStackValueType::PRIMITIVE, {0x01234567}};
-  expected_trace_2.frames(0).operands[1] = {DumpedStackValueType::PRIMITIVE, {0x89abcdef}};
+  expected_trace_2.frame(0).set_method_name_id(0xfefecaca);
+  expected_trace_2.frame(0).set_method_sig_id(0x34437822);
+  expected_trace_2.frame(0).set_method_kind(MethodKind::Enum::OVERPASS);
+  expected_trace_2.frame(0).set_method_holder_id(0x21217455);
+  expected_trace_2.frame(0).set_bci(0xfa);
+  expected_trace_2.frame(0).operands().extend(2);
+  expected_trace_2.frame(0).operands()[0] = {DumpedStackValueType::PRIMITIVE, {0x01234567}};
+  expected_trace_2.frame(0).operands()[1] = {DumpedStackValueType::PRIMITIVE, {0x89abcdef}};
 
   check_stack_frames(expected_trace_1, *stack_dump.stack_traces().at(0));
   ASSERT_FALSE(testing::Test::HasFatalFailure() || testing::Test::HasNonfatalFailure()) << "Wrong parsing of trace #2";

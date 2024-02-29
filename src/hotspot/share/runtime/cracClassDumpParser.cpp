@@ -68,6 +68,7 @@
 #include "utilities/growableArray.hpp"
 #include "utilities/heapDumpParser.hpp"
 #include "utilities/macros.hpp"
+#include "utilities/methodKind.hpp"
 #include "utilities/pair.hpp"
 #include "utilities/tribool.hpp"
 #include <type_traits>
@@ -306,8 +307,8 @@ class CracInstanceClassDumpParser : public StackObj /* constructor allocates res
     const HeapDump::ID name_id = read_id(false, CHECK_({}));
     const HeapDump::ID sig_id = read_id(false, CHECK_({}));
     const auto kind_raw = read<u1>(CHECK_({}));
-    guarantee(CracClassDump::is_method_kind(kind_raw), "unrecognized method kind: %i", kind_raw);
-    return {holder_id, {name_id, sig_id, static_cast<CracClassDump::MethodKind>(kind_raw)}};
+    guarantee(MethodKind::is_method_kind(kind_raw), "unrecognized method kind: %i", kind_raw);
+    return {holder_id, {name_id, sig_id, static_cast<MethodKind::Enum>(kind_raw)}};
   }
 
   // ###########################################################################
@@ -1348,7 +1349,7 @@ class CracInstanceClassDumpParser : public StackObj /* constructor allocates res
         Symbol *const sig = _heap_dump.get_symbol(method_desc.sig_id);
         Method *const method = CracClassDumpParser::find_method(&holder, name, sig, method_desc.kind, false, CHECK);
         guarantee(method != nullptr, "default method #%i cannot be found as %s method %s",
-                  i, CracClassDump::method_kind_name(method_desc.kind), Method::name_and_sig_as_C_string(*holder_ptr, name, sig));
+                  i, MethodKind::name(method_desc.kind), Method::external_name(*holder_ptr, name, sig));
         guarantee(method->is_default_method(), "default method %i resolved to a non-default %s", i, method->external_name());
         _default_methods->at_put(i, method);
       }
@@ -1677,7 +1678,7 @@ void CracClassDumpParser::parse(const char *path, const ParsedHeapDump &heap_dum
 }
 
 Method *CracClassDumpParser::find_method(InstanceKlass *holder,
-                                         Symbol *name, Symbol *signature, CracClassDump::MethodKind kind,
+                                         Symbol *name, Symbol *signature, MethodKind::Enum kind,
                                          bool lookup_signature_polymorphic, TRAPS) {
   precond(holder != nullptr);
   if (lookup_signature_polymorphic && MethodHandles::is_signature_polymorphic_intrinsic_name(holder, name)) {
@@ -1688,8 +1689,8 @@ Method *CracClassDumpParser::find_method(InstanceKlass *holder,
     return LinkResolver::resolve_intrinsic_polymorphic_method(holder, name, signature, THREAD);
   }
   return holder->find_local_method(name, signature,
-                                   CracClassDump::as_overpass_lookup_mode(kind),
-                                   CracClassDump::as_static_lookup_mode(kind),
+                                   MethodKind::as_overpass_lookup_mode(kind),
+                                   MethodKind::as_static_lookup_mode(kind),
                                    Klass::PrivateLookupMode::find);
 }
 

@@ -50,6 +50,7 @@
 #include "utilities/growableArray.hpp"
 #include "utilities/heapDumpParser.hpp"
 #include "utilities/macros.hpp"
+#include "utilities/methodKind.hpp"
 #include "utilities/resizeableResourceHash.hpp"
 #include <cstdint>
 #include <limits>
@@ -159,16 +160,7 @@ class ClassDumpWriter : public KlassClosure, public CLDClosure {
     WRITE_CLASS_ID(*m.method_holder());
     WRITE_SYMBOL_ID(m.name());
     WRITE_SYMBOL_ID(m.signature());
-    CracClassDump::MethodKind kind;
-    if (m.is_static()) {
-      assert(!m.is_overpass(), "overpass methods are not static");
-      kind = CracClassDump::MethodKind::STATIC;
-    } else if (m.is_overpass()) {
-      kind = CracClassDump::MethodKind::OVERPASS;
-    } else {
-      kind = CracClassDump::MethodKind::INSTANCE;
-    }
-    WRITE(checked_cast<u1>(kind));
+    WRITE(checked_cast<u1>(MethodKind::of_method(m)));
   }
 
   // ###########################################################################

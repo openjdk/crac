@@ -842,37 +842,6 @@ void crac::restore_heap(TRAPS) {
   }
 }
 
-static Method *method_from_frame(const StackTrace::Frame &snapshot,
-                                 const ResizeableResourceHashtable<HeapDump::ID, InstanceKlass *, AnyObj::C_HEAP> &classes,
-                                 const ParsedHeapDump::RecordTable<HeapDump::UTF8> &symbols) {
-  InstanceKlass *holder;
-  {
-    InstanceKlass **const c = classes.get(snapshot.class_id);
-    guarantee(c != nullptr, "unknown class ID " SDID_FORMAT, snapshot.class_id);
-    holder = InstanceKlass::cast(*c);
-  }
-  assert(holder->is_linked(), "trying to execute method of unlinked class");
-
-  Symbol *name;
-  {
-    const HeapDump::UTF8 *r = symbols.get(snapshot.method_name_id);
-    guarantee(r != nullptr, "unknown method name ID " SDID_FORMAT, snapshot.method_sig_id);
-    name = r->sym;
-  }
-
-  Symbol *sig;
-  {
-    const HeapDump::UTF8 *r = symbols.get(snapshot.method_sig_id);
-    guarantee(r != nullptr, "unknown method signature ID " SDID_FORMAT, snapshot.method_sig_id);
-    sig = r->sym;
-  }
-
-  Method *const method = holder->find_method(name, sig);
-  guarantee(method != nullptr, "method %s not found", Method::external_name(holder, name, sig));
-
-  return method;
-}
-
 class vframeRestoreArrayElement : public vframeArrayElement {
  public:
    void fill_in(const StackTrace::Frame &snapshot,
@@ -880,15 +849,15 @@ class vframeRestoreArrayElement : public vframeArrayElement {
                 const ResizeableResourceHashtable<HeapDump::ID, InstanceKlass *, AnyObj::C_HEAP> &classes,
                 const ResizeableResourceHashtable<HeapDump::ID, jobject, AnyObj::C_HEAP> &objects,
                 const ParsedHeapDump::RecordTable<HeapDump::UTF8> &symbols) {
-    _method = method_from_frame(snapshot, classes, symbols);
+    _method = snapshot.method();
 
-    _bci = snapshot.bci;
+    _bci = snapshot.bci();
     guarantee(_method->validate_bci(_bci) == _bci, "invalid bytecode index %i", _bci);
 
     _reexecute = reexecute;
 
-    _locals = stack_values_from_frame(snapshot.locals, objects);
-    _expressions = stack_values_from_frame(snapshot.operands, objects);
+    _locals = stack_values_from_frame(snapshot.locals(), objects);
+    _expressions = stack_values_from_frame(snapshot.operands(), objects);
 
     // TODO add monitor info into the snapshot; for now assuming no monitors
     _monitors = nullptr;
@@ -969,7 +938,7 @@ class vframeRestoreArray : public vframeArray {
       // Note: youngest frame's BCI is always re-executed -- this is important
       // because otherwise deopt's unpacking code will try to use ToS caching
       // which we don't account for
-      elem->fill_in(stack.frames(i), i == 0, classes, objects, symbols);
+      elem->fill_in(stack.frame(i), i == 0, classes, objects, symbols);
       assert(!elem->method()->is_native(), "native methods are not restored");
     }
   }
@@ -1171,7 +1140,7 @@ JavaValue crac::restore_current_thread(TRAPS) {
 
   // If the stack is empty there is nothing to restore
   // TODO should this be considered an error?
-  const StackTrace *stack = _stack_dump->stack_traces().last();
+  StackTrace *const stack = _stack_dump->stack_traces().last();
   if (stack->frames_num() == 0) {
     log_info(crac)("Thread " UINTX_FORMAT ": no frames in stack snapshot (ID " SDID_FORMAT ")",
                     cast_from_oop<uintptr_t>(current->threadObj()), stack->thread_id());
@@ -1182,8 +1151,15 @@ JavaValue crac::restore_current_thread(TRAPS) {
     return {};
   }
 
-  const StackTrace::Frame &oldest_frame = stack->frames(stack->frames_num() - 1);
-  Method *const method = method_from_frame(oldest_frame, *_portable_restored_classes, _heap_dump->utf8s);
+  // Resolve all methods in the stack now because signature polymorphic ones
+  // may require additional allocations and it's easier to handle the possible
+  // safepoints and exceptions now than later
+  for (u4 i = 0; i < stack->frames_num(); i++) {
+    stack->frame(i).resolve_method(*_portable_restored_classes, _heap_dump->utf8s, CHECK_({}));
+  }
+
+  const StackTrace::Frame &oldest_frame = stack->frame(stack->frames_num() - 1);
+  Method *const method = oldest_frame.method();
 
   JavaCallArguments args;
   // The actual values will be filled by the RestoreStub, we just need the Java

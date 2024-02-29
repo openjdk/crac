@@ -2,8 +2,6 @@
 #define SHARE_RUNTIME_CRACCLASSDUMPER_HPP
 
 #include "memory/allStatic.hpp"
-#include "oops/klass.hpp"
-#include "utilities/debug.hpp"
 #include "utilities/globalDefinitions.hpp"
 
 // Constants used in class dumps.
@@ -16,30 +14,6 @@ struct CracClassDump : public AllStatic {
   };
 
   static constexpr bool is_class_loading_kind(u1 val) { return val <= static_cast<u1>(ClassLoadingKind::STRONG_HIDDEN); }
-
-  // Kinds of methods. According to InstanceKlass::find_local_method(), a class
-  // can have separate methods with the same name and signature for each kind.
-  enum class MethodKind : u1 {
-    STATIC   = 0,
-    INSTANCE = 1, // Non-static, non-overpass
-    OVERPASS = 2,
-  };
-
-  static constexpr bool is_method_kind(u1 val) { return val <= static_cast<u1>(MethodKind::OVERPASS); }
-  static constexpr Klass::StaticLookupMode as_static_lookup_mode(MethodKind kind) {
-    return kind == MethodKind::STATIC ? Klass::StaticLookupMode::find : Klass::StaticLookupMode::skip;
-  }
-  static constexpr Klass::OverpassLookupMode as_overpass_lookup_mode(MethodKind kind) {
-    return kind == MethodKind::OVERPASS ? Klass::OverpassLookupMode::find : Klass::OverpassLookupMode::skip;
-  }
-  static constexpr const char *method_kind_name(MethodKind kind) {
-    switch (kind) {
-      case MethodKind::STATIC:   return "static";
-      case MethodKind::OVERPASS: return "overpass";
-      case MethodKind::INSTANCE: return "non-static non-overpass";
-      default: ShouldNotReachHere(); return nullptr;
-    }
-  }
 
   // Bit positions in compressed VM options.
   enum VMOptionShift : u1 {

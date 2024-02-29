@@ -1,6 +1,9 @@
 #include "precompiled.hpp"
 #include "logging/log.hpp"
 #include "memory/allocation.hpp"
+#include "oops/instanceKlass.hpp"
+#include "oops/method.hpp"
+#include "runtime/cracClassDumpParser.hpp"
 #include "runtime/cracStackDumpParser.hpp"
 #include "runtime/cracStackDumper.hpp"
 #include "runtime/os.hpp"
@@ -8,6 +11,44 @@
 #include "utilities/debug.hpp"
 #include "utilities/globalDefinitions.hpp"
 #include "utilities/growableArray.hpp"
+#include "utilities/heapDumpParser.hpp"
+#include "utilities/methodKind.hpp"
+
+Method *StackTrace::Frame::resolve_method(const HeapDumpTable<InstanceKlass *, AnyObj::C_HEAP> &classes,
+                                          const ParsedHeapDump::RecordTable<HeapDump::UTF8> &symbols, TRAPS) {
+  if (method() != nullptr) {
+    return method();
+  }
+
+  InstanceKlass *holder;
+  {
+    InstanceKlass **const c = classes.get(method_holder_id());
+    guarantee(c != nullptr, "unknown class ID " SDID_FORMAT, method_holder_id());
+    holder = InstanceKlass::cast(*c);
+  }
+  assert(holder->is_linked(), "trying to execute method of unlinked class");
+
+  Symbol *name;
+  {
+    const HeapDump::UTF8 *r = symbols.get(method_name_id());
+    guarantee(r != nullptr, "unknown method name ID " SDID_FORMAT, method_name_id());
+    name = r->sym;
+  }
+
+  Symbol *sig;
+  {
+    const HeapDump::UTF8 *r = symbols.get(method_sig_id());
+    guarantee(r != nullptr, "unknown method signature ID " SDID_FORMAT, method_sig_id());
+    sig = r->sym;
+  }
+
+
+  Method *const method = CracClassDumpParser::find_method(holder, name, sig, method_kind(), true, CHECK_NULL);
+  guarantee(method != nullptr, "method %s not found", Method::external_name(holder, name, sig));
+  _resolved_method = method;
+
+  return method;
+}
 
 // Header parsing errors
 constexpr char ERR_INVAL_HEADER_STR[] = "invalid header string";
@@ -45,7 +86,7 @@ class StackTracesParser : public StackObj {
       auto *trace = new StackTrace(preamble.thread_id, preamble.frames_num);
       for (u4 i = 0; i < trace->frames_num(); i++) {
         log_trace(crac, stacktrace, parser)("Parsing frame " UINT32_FORMAT, i);
-        if (!parse_frame(&trace->frames(i))) {
+        if (!parse_frame(&trace->frame(i))) {
           delete trace;
           return ERR_INVAL_FRAME;
         }
@@ -104,35 +145,70 @@ class StackTracesParser : public StackObj {
     return true;
   }
 
-  bool parse_frame(StackTrace::Frame *frame) {
-    if (!_reader->read_uint(&frame->method_name_id, _word_size)) {
-      log_error(crac, stacktrace, parser)("Failed to read method name ID");
-      return false;
-    }
-    if (!_reader->read_uint(&frame->method_sig_id, _word_size)) {
+  bool parse_method_kind(MethodKind::Enum *kind) {
+    u1 raw_kind;
+    if (!_reader->read(&raw_kind)) {
       log_error(crac, stacktrace, parser)("Failed to read method signature ID");
       return false;
     }
-    if (!_reader->read_uint(&frame->class_id, _word_size)) {
+    if (!MethodKind::is_method_kind(raw_kind)) {
+      log_error(crac, stacktrace, parser)("Unknown method kind: %i", raw_kind);
+      return false;
+    }
+    *kind = static_cast<MethodKind::Enum>(raw_kind);
+    return true;
+  }
+
+  bool parse_frame(StackTrace::Frame *frame) {
+    HeapDump::ID method_name_id;
+    if (!_reader->read_uint(&method_name_id, _word_size)) {
+      log_error(crac, stacktrace, parser)("Failed to read method name ID");
+      return false;
+    }
+    frame->set_method_name_id(method_name_id);
+
+    HeapDump::ID method_sig_id;
+    if (!_reader->read_uint(&method_sig_id, _word_size)) {
+      log_error(crac, stacktrace, parser)("Failed to read method signature ID");
+      return false;
+    }
+    frame->set_method_sig_id(method_sig_id);
+
+    MethodKind::Enum method_kind;
+    if (!parse_method_kind(&method_kind)) {
+      return false;
+    }
+    frame->set_method_kind(method_kind);
+
+    HeapDump::ID method_holder_id;
+    if (!_reader->read_uint(&method_holder_id, _word_size)) {
       log_error(crac, stacktrace, parser)("Failed to read class ID");
       return false;
     }
-    if (!_reader->read(&frame->bci)) {
+    frame->set_method_holder_id(method_holder_id);
+
+    u2 bci;
+    if (!_reader->read(&bci)) {
       log_error(crac, stacktrace, parser)("Failed to read BCI");
       return false;
     }
+    frame->set_bci(bci);
+
     log_trace(crac, stacktrace, parser)("Parsing locals");
-    if (!parse_stack_values(&frame->locals)) {
+    if (!parse_stack_values(&frame->locals())) {
       return false;
     }
+
     log_trace(crac, stacktrace, parser)("Parsing operands");
-    if (!parse_stack_values(&frame->operands)) {
+    if (!parse_stack_values(&frame->operands())) {
       return false;
     }
+
     log_trace(crac, stacktrace, parser)("Parsing monitors");
     if (!parse_monitors()) {
       return false;
     }
+
     return true;
   }
 

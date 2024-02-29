@@ -4,12 +4,12 @@
 #include "memory/allocation.hpp"
 #include "oops/instanceKlass.hpp"
 #include "oops/oopsHierarchy.hpp"
-#include "runtime/cracClassDumper.hpp"
 #include "runtime/handles.hpp"
 #include "utilities/basicTypeReader.hpp"
 #include "utilities/exceptions.hpp"
 #include "utilities/growableArray.hpp"
 #include "utilities/heapDumpParser.hpp"
+#include "utilities/methodKind.hpp"
 #include "utilities/pair.hpp"
 
 // Parsed class info that cannot be applied when parsing the dump.
@@ -61,8 +61,9 @@ class CracClassDumpParser: public ClassDumpReader {
                     HeapDumpTable<UnfilledClassInfo, AnyObj::C_HEAP> *unfilled_infos, TRAPS);
 
   // Finds a normal or a non-generic signature polymorphic method.
+  // TODO find a better place for this
   static Method *find_method(InstanceKlass *holder,
-                             Symbol *name, Symbol *signature, CracClassDump::MethodKind kind,
+                             Symbol *name, Symbol *signature, MethodKind::Enum kind,
                              bool lookup_signature_polymorphic, TRAPS);
 
  private:

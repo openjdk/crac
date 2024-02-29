@@ -2,10 +2,14 @@
 #define SHARE_RUNTIME_CRACSTACKDUMPPARSER_HPP
 
 #include "memory/allocation.hpp"
+#include "oops/instanceKlass.hpp"
+#include "utilities/exceptions.hpp"
 #include "utilities/extendableArray.hpp"
 #include "utilities/globalDefinitions.hpp"
 #include "utilities/growableArray.hpp"
 #include "runtime/cracStackDumper.hpp"
+#include "utilities/heapDumpParser.hpp"
+#include "utilities/methodKind.hpp"
 
 // Format for stack dump IDs.
 #define SDID_FORMAT UINT64_FORMAT
@@ -15,7 +19,8 @@ class StackTrace : public CHeapObj<mtInternal> {
  public:
   using ID = u8; // ID type always fits into 8 bytes
 
-  struct Frame : public CHeapObj<mtInternal> {
+  class Frame : public CHeapObj<mtInternal> {
+   public:
     struct Value {
       DumpedStackValueType type;
       union {
@@ -24,13 +29,46 @@ class StackTrace : public CHeapObj<mtInternal> {
       };
     };
 
-    ID method_name_id;                        // ID of method name string
-    ID method_sig_id;                         // ID of method signature string
-    ID class_id;                              // ID of class containing the method
-    u2 bci;                                   // Index of the current bytecode
-    ExtendableArray<Value, u2> locals = {};   // Local variables
-    ExtendableArray<Value, u2> operands = {}; // Operand/expression stack
-    // TODO monitors
+    Method *resolve_method(const HeapDumpTable<InstanceKlass *, AnyObj::C_HEAP> &classes,
+                           const ParsedHeapDump::RecordTable<HeapDump::UTF8> &symbols, TRAPS);
+    Method *method() const { assert(_resolved_method != nullptr, "unresolved"); return _resolved_method; }
+
+    // ID of method name string.
+    ID method_name_id() const { return _method_name_id; };
+    void set_method_name_id(ID id) { _method_name_id = id; }
+    // ID of method signature string.
+    ID method_sig_id() const { return _method_sig_id; };
+    void set_method_sig_id(ID id) { _method_sig_id = id; }
+    // Kind of the method.
+    MethodKind::Enum method_kind() const { return _method_kind; };
+    void set_method_kind(MethodKind::Enum kind) { _method_kind = kind; }
+    // ID of the class containing the method.
+    ID method_holder_id() const { return _method_holder_id; };
+    void set_method_holder_id(ID id) { _method_holder_id = id; }
+
+    // Index of the current bytecode
+    u2 bci() const { return _bci; }
+    void set_bci(u2 bci) { _bci = bci;  }
+
+    // Local variables
+    const ExtendableArray<Value, u2> &locals() const { return _locals; }
+    ExtendableArray<Value, u2> &locals() { return _locals; }
+
+    // Operand/expression stack
+    const ExtendableArray<Value, u2> &operands() const { return _operands; }
+    ExtendableArray<Value, u2> &operands() { return _operands; }
+
+   private:
+    ID _method_name_id;
+    ID _method_sig_id;
+    MethodKind::Enum _method_kind;
+    ID _method_holder_id;
+    Method *_resolved_method = nullptr;
+
+    u2 _bci;
+
+    ExtendableArray<Value, u2> _locals;
+    ExtendableArray<Value, u2> _operands;
   };
 
   StackTrace(ID thread_id, u4 frames_num)
@@ -38,15 +76,13 @@ class StackTrace : public CHeapObj<mtInternal> {
 
   ~StackTrace() { delete[] _frames; }
 
-  NONCOPYABLE(StackTrace);
-
   // ID of the thread whose stack this is.
-  ID thread_id() const                   { return _thread_id; }
+  ID thread_id() const           { return _thread_id; }
   // Number of frames in the stack.
-  u4 frames_num() const                  { return _frames_num; }
+  u4 frames_num() const          { return _frames_num; }
   // Stack frames from youngest to oldest.
-  const Frame &frames(u4 i) const        { precond(i < frames_num()); return _frames[i]; }
-  Frame &frames(u4 i)                    { precond(i < frames_num()); return _frames[i]; }
+  const Frame &frame(u4 i) const { precond(i < frames_num()); return _frames[i]; }
+  Frame &frame(u4 i)             { precond(i < frames_num()); return _frames[i]; }
 
  private:
   const ID _thread_id;

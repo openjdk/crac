@@ -548,7 +548,7 @@ void CracClassStateRestorer::fill_interclass_references(InstanceKlass *ik,
         Symbol *const sig = heap_dump.get_symbol(method_ref.f1_method_desc.sig_id);
         Method *const method = CracClassDumpParser::find_method(*klass, name, sig, method_ref.f1_method_desc.kind, true, CHECK);
         guarantee(method != nullptr, "class %s has a resolved method entry #%i with f1 referencing %s method %s that cannot be found",
-                  ik->external_name(), method_ref.cache_index, CracClassDump::method_kind_name(method_ref.f1_method_desc.kind),
+                  ik->external_name(), method_ref.cache_index, MethodKind::name(method_ref.f1_method_desc.kind),
                   Method::name_and_sig_as_C_string(*klass, name, sig));
         cache_entry.set_f1(method);
         postcond(cache_entry.f1_as_method() == method);
@@ -566,7 +566,7 @@ void CracClassStateRestorer::fill_interclass_references(InstanceKlass *ik,
       Symbol *const sig = heap_dump.get_symbol(method_ref.f2_method_desc.sig_id);
       Method *const method = CracClassDumpParser::find_method(*holder, name, sig, method_ref.f2_method_desc.kind, false, CHECK);
       guarantee(method != nullptr, "class %s has a resolved method entry #%i with f2 referencing %s method %s that cannot be found",
-                ik->external_name(), method_ref.cache_index, CracClassDump::method_kind_name(method_ref.f2_method_desc.kind),
+                ik->external_name(), method_ref.cache_index, MethodKind::name(method_ref.f2_method_desc.kind),
                 Method::name_and_sig_as_C_string(*holder, name, sig));
 
 #ifdef ASSERT
@@ -597,7 +597,7 @@ void CracClassStateRestorer::fill_interclass_references(InstanceKlass *ik,
     Symbol *const sig = heap_dump.get_symbol(indy_ref.method_desc.sig_id);
     Method *const method = CracClassDumpParser::find_method(*holder, name, sig, indy_ref.method_desc.kind, false, CHECK);
     guarantee(method != nullptr, "class %s has a resolved invokedynamic entry #%i referencing %s method %s that cannot be found",
-              ik->external_name(), indy_ref.indy_index, CracClassDump::method_kind_name(indy_ref.method_desc.kind),
+              ik->external_name(), indy_ref.indy_index, MethodKind::name(indy_ref.method_desc.kind),
               Method::name_and_sig_as_C_string(*holder, name, sig));
 
     indy_entry.adjust_method_entry(method);

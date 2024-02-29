@@ -27,6 +27,10 @@
 //   Frames, from youngest to oldest:
 //     ID -- ID of the method name String object
 //     ID -- ID of the method signature String object
+//     u1 -- method kind:
+//           0 -- static method
+//           1 -- non-static, non-overpass method
+//           2 -- overpass method
 //     ID -- ID of the Class object of the method's class
 //           TODO JVM TI Redefine/RetransformClass support: add method holder's
 //                redefinition version to select the right one on restore.

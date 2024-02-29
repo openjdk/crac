@@ -15,7 +15,6 @@
 #include "oops/symbol.hpp"
 #include "oops/symbolHandle.hpp"
 #include "runtime/cracClassDumpParser.hpp"
-#include "runtime/cracClassDumper.hpp"
 #include "runtime/cracClassStateRestorer.hpp"
 #include "runtime/cracHeapRestorer.hpp"
 #include "runtime/cracStackDumpParser.hpp"
@@ -37,6 +36,7 @@
 #include "utilities/heapDumpParser.hpp"
 #include "utilities/hprofTag.hpp"
 #include "utilities/macros.hpp"
+#include "utilities/methodKind.hpp"
 #ifdef ASSERT
 #include "utilities/autoRestore.hpp"
 #endif // ASSERT
@@ -530,15 +530,15 @@ void CracHeapRestorer::restore_heap(const HeapDumpTable<UnfilledClassInfo, AnyOb
   // Restore objects reachable from thread stacks to be restored.
   for (const auto *trace : stack_traces) {
     for (u4 i = 0; i < trace->frames_num(); i++) {
-      const StackTrace::Frame &frame = trace->frames(i);
-      for (u2 j = 0; j < frame.locals.size(); j++) {
-        const StackTrace::Frame::Value &value = frame.locals[j];
+      const StackTrace::Frame &frame = trace->frame(i);
+      for (u2 j = 0; j < frame.locals().size(); j++) {
+        const StackTrace::Frame::Value &value = frame.locals()[j];
         if (value.type == DumpedStackValueType::REFERENCE) {
           restore_object(value.obj_id, CHECK);
         }
       }
-      for (u2 j = 0; j < frame.operands.size(); j++) {
-        const StackTrace::Frame::Value &value = frame.operands[j];
+      for (u2 j = 0; j < frame.operands().size(); j++) {
+        const StackTrace::Frame::Value &value = frame.operands()[j];
         if (value.type == DumpedStackValueType::REFERENCE) {
           restore_object(value.obj_id, CHECK);
         }
@@ -667,8 +667,8 @@ methodHandle CracHeapRestorer::get_resolved_method(const HeapDump::InstanceDump 
   Symbol *const sig = _heap_dump.get_symbol(sig_id);
 
   const jbyte kind_raw = _resolved_method_name_dump_reader.method_kind(resolved_method_name_dump);
-  guarantee(CracClassDump::is_method_kind(kind_raw), "illegal resolved method kind: %i", kind_raw);
-  const auto kind = static_cast<CracClassDump::MethodKind>(kind_raw);
+  guarantee(MethodKind::is_method_kind(kind_raw), "illegal resolved method kind: %i", kind_raw);
+  const auto kind = static_cast<MethodKind::Enum>(kind_raw);
 
   Method *const m = CracClassDumpParser::find_method(holder, name, sig, kind, true, CHECK_({}));
   return {Thread::current(), m};

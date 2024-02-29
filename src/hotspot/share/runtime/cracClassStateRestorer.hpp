@@ -5,12 +5,12 @@
 #include "memory/allocation.hpp"
 #include "oops/arrayKlass.hpp"
 #include "oops/instanceKlass.hpp"
-#include "runtime/cracClassDumper.hpp"
 #include "runtime/handles.hpp"
 #include "utilities/exceptions.hpp"
 #include "utilities/globalDefinitions.hpp"
 #include "utilities/growableArray.hpp"
 #include "utilities/heapDumpParser.hpp"
+#include "utilities/methodKind.hpp"
 
 // Class may reference other classes and while the class dump format guarantees
 // that some of such references (class loader class, super class, etc.) will be
@@ -29,7 +29,7 @@ struct InterclassRefs : public ResourceObj {
   struct MethodDescription {
     HeapDump::ID name_id;
     HeapDump::ID sig_id;
-    CracClassDump::MethodKind kind;
+    MethodKind::Enum kind;
   };
   struct MethodRef {
     int cache_index;

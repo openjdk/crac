@@ -1,5 +1,6 @@
 #include "precompiled.hpp"
 #include "classfile/javaClasses.hpp"
+#include "interpreter/bytecodes.hpp"
 #include "logging/log.hpp"
 #include "memory/allocation.hpp"
 #include "memory/resourceArea.hpp"
@@ -150,52 +151,50 @@ class StackDumpWriter : public StackObj {
     log_trace(crac, stacktrace, dump)("Stack for thread " UINTX_FORMAT " (%s)", oop2uint(thread->threadObj()), thread->name());
     WRITE(oop2uint(thread->threadObj())); // Thread ID
 
-    // Whether the current bytecode in the youngest frame is to be re-executed
-    if (frames.length() == 0) {
-      log_trace(crac, stacktrace, dump)("Re-exec youngest: false (empty trace)");
-      WRITE_CASTED(u1, false);
-    } else if (frames.first()->is_interpreted_frame()) {
-      // TODO is it true that we always want to re-execute?
-      log_trace(crac, stacktrace, dump)("Re-exec youngest: true (interpreted frame)");
-      WRITE_CASTED(u1, true);
-    } else {
-      // TODO investigate whether the exec_mode used by deoptimization to decide
-      //  on re-execution is also required for us here
-      bool should_reexecute = compiledVFrame::cast(frames.first())->should_reexecute();
-      log_trace(crac, stacktrace, dump)("Re-exec youngest: %s (should_reexecute of compiled frame)", BOOL_TO_STR(should_reexecute));
-      WRITE_CASTED(u1, should_reexecute);
-    }
-
     log_trace(crac, stacktrace, dump)("%i frames", frames.length());
     WRITE_CASTED(u4, frames.length()); // Number of frames in the stack
 
-    for (const javaVFrame *frame : frames) {
+    for (int i = 0; i < frames.length(); i++) {
+      const javaVFrame &frame = *frames.at(i);
       if (log_is_enabled(Trace, crac, stacktrace, dump)) {
-        if (frame->is_interpreted_frame()) {
+        if (frame.is_interpreted_frame()) {
           log_trace(crac, stacktrace, dump)("== Interpreted frame ==");
         } else {
-          precond(frame->is_compiled_frame());
+          precond(frame.is_compiled_frame());
           log_trace(crac, stacktrace, dump)("==  Compiled frame   ==");
           // TODO use Deoptimization::realloc_objects(...) to rematerialize
           //  scalar-replaced objects
         }
       }
 
-      if (!write_method(*frame)) {
+      if (!write_method(frame)) {
         return false;
       }
 
-      assert(frame->bci() <= UINT16_MAX, "guaranteed by JVMS §4.7.3 (code_length max value)");
-      log_trace(crac, stacktrace, dump)("BCI: %i", frame->bci());
-      WRITE_CASTED(u2, frame->bci());
+      u2 bci = checked_cast<u2>(frame.bci()); // u2 is enough -- guaranteed by JVMS §4.7.3 (code_length max value)
+      // If this is the youngest frame and the current bytecode has already been
+      // executed move to the next one
+      // TODO investigate whether:
+      //  1. For interpreted frame, is it always right to re-execute?
+      //  2. For compiled frame, is exec_mode used by deoptimization to decide
+      //     on re-execution also important for us here?
+      if (i == 0 && frame.is_compiled_frame() && !static_cast<const compiledVFrame &>(frame).should_reexecute()) {
+        const int code_len = Bytecodes::length_at(frame.method(), frame.method()->bcp_from(frame.bci()));
+        log_trace(crac, stacktrace, dump)("moving BCI: %i -> %i", bci, bci + code_len);
+        assert(bci + code_len <= UINT16_MAX, "overflow");
+        bci += code_len;
+      }
+      guarantee(frame.method()->validate_bci(bci) >= 0, "invalid BCI %i for %s", bci, frame.method()->external_name());
+      log_trace(crac, stacktrace, dump)("BCI: %i (%s)", bci, Bytecodes::name(frame.method()->java_code_at(bci)));
+      WRITE(bci);
 
       log_trace(crac, stacktrace, dump)("Locals:");
-      if (!write_stack_values(*frame->locals())) {
+      if (!write_stack_values(*frame.locals())) {
         return false;
       }
 
       log_trace(crac, stacktrace, dump)("Operands:");
-      if (!write_stack_values(*frame->expressions())) {
+      if (!write_stack_values(*frame.expressions())) {
         return false;
       }
 

@@ -23,11 +23,6 @@
 //    StackValues for compiled frames), but not for interpreted ones.
 // Stack traces:
 //   ID -- ID of the Thread object
-//   u1 -- meaning of the bytecode index (BCI) for the youngest frame:
-//         0 -- either the BCI of the youngest frame specifies a bytecode which
-//              has been executed or there are no frames in the trace
-//         1 -- the BCI of the youngest frame specifies a bytecode to be
-//              executed next
 //   u4 -- number of frames that follow
 //   Frames, from youngest to oldest:
 //     ID -- ID of the method name String object
@@ -36,7 +31,7 @@
 //           TODO JVM TI Redefine/RetransformClass support: add method holder's
 //                redefinition version to select the right one on restore.
 //     u2 -- bytecode index (BCI) of the current bytecode: for the youngest
-//           frame see the BCI meaning in the trace preamble, and for the rest
+//           frame this specifies the bytecode to be executed, and for the rest
 //           of the frames this specifies the invoke bytecode being executed
 //     u2 -- number of locals that follow
 //     Locals array:

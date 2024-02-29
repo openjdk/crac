@@ -33,11 +33,8 @@ class StackTrace : public CHeapObj<mtInternal> {
     // TODO monitors
   };
 
-  StackTrace(ID thread_id, bool should_reexecute_youngest, u4 frames_num)
-      : _thread_id(thread_id), _should_reexecute_youngest(should_reexecute_youngest),
-        _frames_num(frames_num), _frames(new Frame[_frames_num]) {
-    assert(_frames_num > 0 || !_should_reexecute_youngest, "should_reexecute_youngest must be false for empty trace");
-  }
+  StackTrace(ID thread_id, u4 frames_num)
+      : _thread_id(thread_id),  _frames_num(frames_num), _frames(new Frame[_frames_num]) {}
 
   ~StackTrace() { delete[] _frames; }
 
@@ -50,14 +47,9 @@ class StackTrace : public CHeapObj<mtInternal> {
   // Stack frames from youngest to oldest.
   const Frame &frames(u4 i) const        { precond(i < frames_num()); return _frames[i]; }
   Frame &frames(u4 i)                    { precond(i < frames_num()); return _frames[i]; }
-  // For the youngest frame, whether BCI specifies the bytecode to be executed
-  // or already executed. For the other frames such info is not needed because
-  // their BCIs should always specify the invoke bytecode being executed.
-  bool should_reexecute_youngest() const { return _should_reexecute_youngest; };
 
  private:
   const ID _thread_id;
-  const bool _should_reexecute_youngest;
   const u4 _frames_num;
   Frame *const _frames;
 };

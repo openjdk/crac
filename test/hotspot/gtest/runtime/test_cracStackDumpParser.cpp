@@ -30,7 +30,6 @@ static void check_stack_values(const ExtendableArray<StackTrace::Frame::Value, u
 static void check_stack_frames(const StackTrace &expected_trace,
                                const StackTrace &actual_trace) {
   EXPECT_EQ(expected_trace.thread_id(), actual_trace.thread_id());
-  EXPECT_EQ(expected_trace.should_reexecute_youngest(), actual_trace.should_reexecute_youngest());
   ASSERT_EQ(expected_trace.frames_num(), expected_trace.frames_num());
 
   for (u4 i = 0; i < expected_trace.frames_num(); i++) {
@@ -72,7 +71,6 @@ static constexpr char CONTENTS_EMPTY_TRACE[] =
     "\x00\x04"              // Word size
 
     "\xab\xcd\xef\x95"      // Thread ID
-    "\x00"                  // Re-exec youngest
     "\x00\x00\x00\x00"      // Number of frames
     ;
 
@@ -87,7 +85,7 @@ TEST(CracStackDumpParser, empty_stack_trace) {
   EXPECT_EQ(4U, stack_dump.word_size());
   ASSERT_EQ(1, stack_dump.stack_traces().length());
 
-  StackTrace expected_trace(/* thread ID */ 0xabcdef95, /* reexec youngest */ false, /* frames num */ 0);
+  StackTrace expected_trace(/* thread ID */ 0xabcdef95, /* frames num */ 0);
 
   check_stack_frames(expected_trace, *stack_dump.stack_traces().at(0));
   ASSERT_FALSE(testing::Test::HasFatalFailure() || testing::Test::HasNonfatalFailure());
@@ -98,7 +96,6 @@ static constexpr char CONTENTS_NO_STACK_VALUES[] =
     "\x00\x04"              // Word size
 
     "\xab\xcd\xef\x95"      // Thread ID
-    "\x01"                  // Re-exec youngest
     "\x00\x00\x00\x01"      // Number of frames
       "\x12\x34\x56\x78"      // Method name ID
       "\x87\x65\x43\x21"      // Method signature ID
@@ -120,7 +117,7 @@ TEST(CracStackDumpParser, stack_frame_with_no_stack_values) {
   EXPECT_EQ(4U, stack_dump.word_size());
   ASSERT_EQ(1, stack_dump.stack_traces().length());
 
-  StackTrace expected_trace(/* thread ID */ 0xabcdef95, /* reexec youngest */ true, /* frames num */ 1);
+  StackTrace expected_trace(/* thread ID */ 0xabcdef95, /* frames num */ 1);
 
   auto &expected_frame = expected_trace.frames(0);
   expected_frame.method_name_id = 0x12345678;
@@ -137,7 +134,6 @@ static constexpr char CONTENTS_CORRECT_STACK_VALUES[] =
     "\x00\x08"                           // Word size
 
     "\xab\xcd\xef\x95\xba\xdc\xfe\x96"   // Thread ID
-    "\x01"                               // Re-exec youngest
     "\x00\x00\x00\x01"                   // Number of frames
       "\x12\x34\x56\x78\x01\x23\x45\x67"   // Method name ID
       "\x87\x65\x12\x34\x56\x78\x43\x21"   // Method signature ID
@@ -169,7 +165,7 @@ TEST(CracStackDumpParser, stack_frame_with_correct_stack_values) {
   EXPECT_EQ(8U, stack_dump.word_size());
   ASSERT_EQ(1, stack_dump.stack_traces().length());
 
-  StackTrace expected_trace(/* thread ID */ 0xabcdef95badcfe96, /* reexec youngest */ true, /* frames num */ 1);
+  StackTrace expected_trace(/* thread ID */ 0xabcdef95badcfe96, /* frames num */ 1);
 
   auto &expected_frame = expected_trace.frames(0);
   expected_frame.method_name_id = 0x1234567801234567;
@@ -194,7 +190,6 @@ static constexpr char CONTENTS_MULTIPLE_STACKS[] =
     "\x00\x04"              // Word size
 
     "\xab\xcd\xef\x95"      // Thread ID
-    "\x00"                  // Re-exec youngest
     "\x00\x00\x00\x02"      // Number of frames
       "\xab\xac\xab\xaa"      // Method name ID
       "\xba\xba\xfe\xda"      // Method signature ID
@@ -215,7 +210,6 @@ static constexpr char CONTENTS_MULTIPLE_STACKS[] =
       "\x00\x00"              // Monitors num
 
     "\x00\x11\x32\x09"      // Thread ID
-    "\x01"                  // Re-exec youngest
     "\x00\x00\x00\x01"      // Number of frames
       "\xfe\xfe\xca\xca"      // Method name ID
       "\x34\x43\x78\x22"      // Method signature ID
@@ -241,7 +235,7 @@ TEST(CracStackDumpParser, multiple_stacks_dumped) {
   EXPECT_EQ(4U, stack_dump.word_size());
   ASSERT_EQ(2, stack_dump.stack_traces().length());
 
-  StackTrace expected_trace_1(/* thread ID */ 0xabcdef95, /* reexec youngest */ false, /* frames num */ 2);
+  StackTrace expected_trace_1(/* thread ID */ 0xabcdef95, /* frames num */ 2);
 
   expected_trace_1.frames(0).method_name_id = 0xabacabaa;
   expected_trace_1.frames(0).method_sig_id = 0xbabafeda;
@@ -258,7 +252,7 @@ TEST(CracStackDumpParser, multiple_stacks_dumped) {
   check_stack_frames(expected_trace_1, *stack_dump.stack_traces().at(0));
   ASSERT_FALSE(testing::Test::HasFatalFailure() || testing::Test::HasNonfatalFailure()) << "Wrong parsing of trace #1";
 
-  StackTrace expected_trace_2(/* thread ID */ 0x00113209, /* reexec youngest */ true, /* frames num */ 1);
+  StackTrace expected_trace_2(/* thread ID */ 0x00113209, /* frames num */ 1);
 
   expected_trace_2.frames(0).method_name_id = 0xfefecaca;
   expected_trace_2.frames(0).method_sig_id = 0x34437822;

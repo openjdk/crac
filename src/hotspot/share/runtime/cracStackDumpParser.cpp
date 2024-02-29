@@ -42,7 +42,7 @@ class StackTracesParser : public StackObj {
       log_debug(crac, stacktrace, parser)("Parsing " UINT32_FORMAT " frame(s) of thread " SDID_FORMAT,
                                           preamble.frames_num, preamble.thread_id);
 
-      auto *trace = new StackTrace(preamble.thread_id, preamble.should_reexecute_youngest, preamble.frames_num);
+      auto *trace = new StackTrace(preamble.thread_id, preamble.frames_num);
       for (u4 i = 0; i < trace->frames_num(); i++) {
         log_trace(crac, stacktrace, parser)("Parsing frame " UINT32_FORMAT, i);
         if (!parse_frame(&trace->frames(i))) {
@@ -66,7 +66,6 @@ class StackTracesParser : public StackObj {
   struct TracePreamble {
     bool finish;
     StackTrace::ID thread_id;
-    bool should_reexecute_youngest;
     u4 frames_num;
   };
 
@@ -94,29 +93,9 @@ class StackTracesParser : public StackObj {
       default: ShouldNotReachHere();
     }
 
-    // Should re-execute youngest
-    u1 should_reexecute_youngest;
-    if (!_reader->read(&should_reexecute_youngest)) {
-      log_error(crac, stacktrace, parser)("Failed to read the meaning of the youngest BCI of thread " SDID_FORMAT,
-                                          preamble->thread_id);
-      return false;
-    }
-    if (should_reexecute_youngest >= 2U) {
-      log_error(crac, stacktrace, parser)("Illegal meaning of the youngest BCI of thread " SDID_FORMAT ": %i",
-                                          preamble->thread_id, should_reexecute_youngest);
-      return false;
-    }
-    preamble->should_reexecute_youngest = (should_reexecute_youngest == 1U);
-
     // Number of frames dumped
     if (!_reader->read(&preamble->frames_num)) {
       log_error(crac, stacktrace, parser)("Failed to read number of frames in stack of thread " SDID_FORMAT,
-                                          preamble->thread_id);
-      return false;
-    }
-    if (preamble->frames_num == 0U && preamble->should_reexecute_youngest) {
-      log_error(crac, stacktrace, parser)("Thread " SDID_FORMAT " is specified as having no frames "
-                                          "but with the current bytecode of its youngest frame to be re-executed",
                                           preamble->thread_id);
       return false;
     }

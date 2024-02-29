@@ -966,7 +966,10 @@ class vframeRestoreArray : public vframeArray {
     for (int i = 0; i < frames(); i++) {
       log_trace(crac)("Filling frame %i", i);
       auto *const elem = static_cast<vframeRestoreArrayElement *>(element(i));
-      elem->fill_in(stack.frames(i), i == 0 && stack.should_reexecute_youngest(), classes, objects, symbols);
+      // Note: youngest frame's BCI is always re-executed -- this is important
+      // because otherwise deopt's unpacking code will try to use ToS caching
+      // which we don't account for
+      elem->fill_in(stack.frames(i), i == 0, classes, objects, symbols);
       assert(!elem->method()->is_native(), "native methods are not restored");
     }
   }

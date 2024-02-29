@@ -842,6 +842,37 @@ void crac::restore_heap(TRAPS) {
   }
 }
 
+static Method *method_from_frame(const StackTrace::Frame &snapshot,
+                                 const ResizeableResourceHashtable<HeapDump::ID, InstanceKlass *, AnyObj::C_HEAP> &classes,
+                                 const ParsedHeapDump::RecordTable<HeapDump::UTF8> &symbols) {
+  InstanceKlass *holder;
+  {
+    InstanceKlass **const c = classes.get(snapshot.class_id);
+    guarantee(c != nullptr, "unknown class ID " SDID_FORMAT, snapshot.class_id);
+    holder = InstanceKlass::cast(*c);
+  }
+  assert(holder->is_linked(), "trying to execute method of unlinked class");
+
+  Symbol *name;
+  {
+    const HeapDump::UTF8 *r = symbols.get(snapshot.method_name_id);
+    guarantee(r != nullptr, "unknown method name ID " SDID_FORMAT, snapshot.method_sig_id);
+    name = r->sym;
+  }
+
+  Symbol *sig;
+  {
+    const HeapDump::UTF8 *r = symbols.get(snapshot.method_sig_id);
+    guarantee(r != nullptr, "unknown method signature ID " SDID_FORMAT, snapshot.method_sig_id);
+    sig = r->sym;
+  }
+
+  Method *const method = holder->find_method(name, sig);
+  guarantee(method != nullptr, "method %s not found", Method::external_name(holder, name, sig));
+
+  return method;
+}
+
 class vframeRestoreArrayElement : public vframeArrayElement {
  public:
    void fill_in(const StackTrace::Frame &snapshot,
@@ -849,15 +880,15 @@ class vframeRestoreArrayElement : public vframeArrayElement {
                 const ResizeableResourceHashtable<HeapDump::ID, InstanceKlass *, AnyObj::C_HEAP> &classes,
                 const ResizeableResourceHashtable<HeapDump::ID, jobject, AnyObj::C_HEAP> &objects,
                 const ParsedHeapDump::RecordTable<HeapDump::UTF8> &symbols) {
-    _method = get_method(snapshot, classes, symbols);
+    _method = method_from_frame(snapshot, classes, symbols);
 
     _bci = snapshot.bci;
     guarantee(_method->validate_bci(_bci) == _bci, "invalid bytecode index %i", _bci);
 
     _reexecute = reexecute;
 
-    _locals = get_stack_values(snapshot.locals, objects);
-    _expressions = get_stack_values(snapshot.operands, objects);
+    _locals = stack_values_from_frame(snapshot.locals, objects);
+    _expressions = stack_values_from_frame(snapshot.operands, objects);
 
     // TODO add monitor info into the snapshot; for now assuming no monitors
     _monitors = nullptr;
@@ -865,39 +896,8 @@ class vframeRestoreArrayElement : public vframeArrayElement {
    }
 
  private:
-  static Method *get_method(const StackTrace::Frame &snapshot,
-                            const ResizeableResourceHashtable<HeapDump::ID, InstanceKlass *, AnyObj::C_HEAP> &classes,
-                            const ParsedHeapDump::RecordTable<HeapDump::UTF8> &symbols) {
-    InstanceKlass *holder;
-    {
-      InstanceKlass **const c = classes.get(snapshot.class_id);
-      guarantee(c != nullptr, "unknown class ID " SDID_FORMAT, snapshot.class_id);
-      holder = InstanceKlass::cast(*c);
-    }
-    assert(holder->is_linked(), "trying to execute method of unlinked class");
-
-    Symbol *name;
-    {
-      const HeapDump::UTF8 *r = symbols.get(snapshot.method_name_id);
-      guarantee(r != nullptr, "unknown method name ID " SDID_FORMAT, snapshot.method_sig_id);
-      name = r->sym;
-    }
-
-    Symbol *sig;
-    {
-      const HeapDump::UTF8 *r = symbols.get(snapshot.method_sig_id);
-      guarantee(r != nullptr, "unknown method signature ID " SDID_FORMAT, snapshot.method_sig_id);
-      sig = r->sym;
-    }
-
-    Method *const method = holder->find_method(name, sig);
-    guarantee(method != nullptr, "method %s not found", Method::external_name(holder, name, sig));
-
-    return method;
-  }
-
-  static StackValueCollection *get_stack_values(const ExtendableArray<StackTrace::Frame::Value, u2> &src,
-                                                const ResizeableResourceHashtable<HeapDump::ID, jobject, AnyObj::C_HEAP> &objects) {
+  static StackValueCollection *stack_values_from_frame(const ExtendableArray<StackTrace::Frame::Value, u2> &src,
+                                                       const ResizeableResourceHashtable<HeapDump::ID, jobject, AnyObj::C_HEAP> &objects) {
     auto *stack_values = new StackValueCollection(src.size()); // stack_values->size() == 0 until we add the actual values
     for (int i = 0; i < src.size(); i++) {
       const StackTrace::Frame::Value &src_value = src[i];
@@ -975,13 +975,105 @@ class vframeRestoreArray : public vframeArray {
   }
 };
 
-// Called by restore_stub after skeleton frames have been pushed on stack to
-// fill them.
-JRT_LEAF(void, crac::fill_in_frames())
-  JavaThread *current = JavaThread::current();
-  log_debug(crac)("Thread " UINTX_FORMAT ": filling skeletal frames", cast_from_oop<uintptr_t>(current->threadObj()));
+// Called by RestoreBlob to get the info about the frames to restore. This is
+// analogous to Deoptimization::fetch_unroll_info() except that we fetch the
+// info from the stack snapshot instead of a deoptee frame. This is also a leaf
+// (in contrast with fetch_unroll_info) since no reallocation is needed (see the
+// comment before fetch_unroll_info).
+JRT_LEAF(Deoptimization::UnrollBlock *, crac::fetch_frame_info(JavaThread *current))
+  precond(current == JavaThread::current());
+  log_debug(crac)("Thread " UINTX_FORMAT ": fetching frame info", cast_from_oop<uintptr_t>(current->threadObj()));
 
-  // The code below is analogous to Deoptimization::unpack_frames()
+  // Heap-allocated resource mark to use resource-allocated StackValues
+  // and free them before starting executing the restored code
+  guarantee(current->deopt_mark() == nullptr, "No deopt should be pending");
+  current->set_deopt_mark(new DeoptResourceMark(current));
+
+  // Create vframe descriptions based on the stack snapshot -- no safepoint
+  // should happen after this array is filled until we're done with it
+  vframeRestoreArray *array;
+  {
+    const StackTrace *stack = _stack_dump->stack_traces().pop();
+    assert(stack->frames_num() > 0, "should be checked when just starting");
+
+    array = vframeRestoreArray::allocate(*stack,
+                                         *crac::_portable_restored_classes,
+                                         *crac::_portable_restored_objects,
+                                         crac::_heap_dump->utf8s);
+    postcond(array->frames() == static_cast<int>(stack->frames_num()));
+
+    delete stack;
+    if (_stack_dump->stack_traces().is_empty()) {
+      clear_restoration_data(); // Clear only after the array is filled since this frees heap dump
+    }
+  }
+  postcond(array->frames() > 0);
+  log_debug(crac)("Thread " UINTX_FORMAT ": filled frame array (%i frames)",
+                  cast_from_oop<uintptr_t>(current->threadObj()), array->frames());
+
+  // Determine sizes and return pcs of the constructed frames.
+  //
+  // The order of frames is the reverse of the array above:
+  // frame_sizes and frame_pcs: 0th -- the oldest frame,   nth -- the youngest.
+  // vframeRestoreArray *array: 0th -- the youngest frame, nth -- the oldest.
+  auto *const frame_sizes = NEW_C_HEAP_ARRAY(intptr_t, array->frames(), mtInternal);
+  // +1 because the last element is an address to jump into the interpreter
+  auto *const frame_pcs = NEW_C_HEAP_ARRAY(address, array->frames() + 1, mtInternal);
+  // Create an interpreter return address for the assembly code to use as its
+  // return address so the skeletal frames are perfectly walkable
+  frame_pcs[array->frames()] = Interpreter::deopt_entry(vtos, 0);
+
+  // We start from the youngest frame, which has no callee
+  int callee_params = 0;
+  int callee_locals = 0;
+  for (int i = 0; i < array->frames(); i++) {
+    // Deopt code uses this to account for possible JVMTI's PopFrame function
+    // usage which is irrelevant in our case
+    static constexpr int popframe_extra_args = 0;
+
+    // i == 0 is the youngest frame, i == array->frames() - 1 is the oldest
+    frame_sizes[array->frames() - i - 1] =
+        BytesPerWord * array->element(i)->on_stack_size(callee_params, callee_locals, i == 0, popframe_extra_args);
+
+    frame_pcs[array->frames() - i - 1] = i < array->frames() - 1 ?
+    // Setting the pcs the same way as the deopt code does. It is needed to
+    // identify the skeleton frames as interpreted and make them walkable. The
+    // correct pcs will be patched later when filling the frames.
+                                         Interpreter::deopt_entry(vtos, 0) - frame::pc_return_offset :
+    // The oldest frame always returns to CallStub
+                                         StubRoutines::call_stub_return_address();
+
+    callee_params = array->element(i)->method()->size_of_parameters();
+    callee_locals = array->element(i)->method()->max_locals();
+  }
+
+  // Adjustment of the CallStub to accomodate the locals of the oldest restored
+  // frame, if any
+  const int caller_adjustment = Deoptimization::last_frame_adjust(callee_params, callee_locals);
+
+  auto *const info = new Deoptimization::UnrollBlock(
+    0,                           // Deoptimized frame size, unused (no frame is being deoptimized)
+    caller_adjustment * BytesPerWord,
+    0,                           // Amount of params in the CallStub frame, unused (known via the oldest frame's method)
+    array->frames(),
+    frame_sizes,
+    frame_pcs,
+    BasicType::T_ILLEGAL,        // Return type, unused (we are not in the process of returning a value)
+    Deoptimization::Unpack_deopt // fill_in_frames() always specifies Unpack_deopt, regardless of what's set here
+  );
+  array->set_unroll_block(info);
+
+  guarantee(current->vframe_array_head() == nullptr, "no deopt should be pending");
+  current->set_vframe_array_head(array);
+
+  return info;
+JRT_END
+
+// Called by RestoreBlob after skeleton frames have been pushed on stack to fill
+// them. This is analogous to Deoptimization::unpack_frames().
+JRT_LEAF(void, crac::fill_in_frames(JavaThread *current))
+  precond(current == JavaThread::current());
+  log_debug(crac)("Thread " UINTX_FORMAT ": filling skeletal frames", cast_from_oop<uintptr_t>(current->threadObj()));
 
   // Reset NoHandleMark created by JRT_LEAF (see related comments in
   // Deoptimization::unpack_frames() on why this is ok). Handles are used e.g.
@@ -1048,135 +1140,50 @@ class NullArgumentsFiller : public SignatureIterator {
 };
 
 
-// Initiates thread restoration. This won't return until the restored execution
+// Initiates thread restoration and won't return until the restored execution
 // completes. Returns the result of the execution. If the stack was empty, the
 // result will have type T_ILLEGAL.
 //
 // The process of thread restoration is as follows:
-// 1. This method is called. It prepares restoration info based on the provided
-// stack snapshot and makes a Java call to the initial method (the oldest one in
-// the stack) with the snapshotted arguments, replacing its entry point with an
-// entry into assembly restoration code (RestoreStub).
-// 2. Java call places a CallStub frame for the initial method and calls
-// RestoreStub.
-// 3. RestoreStub reads the restoration info prepared in (1) from the current
-// JavaThread and creates so-called skeletal frames which are walkable
-// interpreter frames of proper sizes but with monitors, locals, expression
-// stacks, etc. unfilled. Then it calls crac::fill_in_frames().
-// 4. crac::fill_in_frames() also reads the restoration info prepared in (1)
-// from the current JavaThread and fills the skeletal frames.
-// 5. The control flow returns to RestoreStub which jumps to the interpreter to
-// start executing the youngest restored stack frame.
+// 1. This method is called to make a Java-call to the initial method (the
+// oldest one in the stack) with the snapshotted arguments, replacing its entry
+// point with an entry into assembly restoration code (RestoreBlob).
+// 2. Java-call places a CallStub frame for the initial method and calls
+// RestoreBlob.
+// 3. RestoreBlob calls crac::fetch_frame_info() which prepares restoration info
+// based on the stack snapshot. This cannot be perfomed directly in step 1:
+// a safepoint can occur on step 2 which the prepared data won't survive.
+// 4. RestoreBlob reads the prepared restoration info and creates so-called
+// skeletal frames which are walkable interpreter frames of proper sizes but
+// with monitors, locals, expression stacks, etc. unfilled.
+// 5. RestoreBlob calls crac::fill_in_frames() which also reads the prepared
+// restoration info and fills the skeletal frames.
+// 6. RestoreBlob jumps into the interpreter to start executing the youngest
+// restored stack frame.
 JavaValue crac::restore_current_thread(TRAPS) {
   precond(!_stack_dump->stack_traces().is_empty());
-  JavaThread *current = JavaThread::current();
+  JavaThread *const current = JavaThread::current();
   if (log_is_enabled(Info, crac)) {
     ResourceMark rm;
     log_info(crac)("Thread " UINTX_FORMAT " (%s): starting the restoration",
                    cast_from_oop<uintptr_t>(current->threadObj()), current->name());
   }
-  HandleMark hm(current);
 
-  // Kinda replicate what Deoptimization::fetch_unroll_info() does except that
-  // we do this before calling the ASM code (no Java frames exist yet) and we
-  // fetch the frame info from the stack snapshot instead of a deoptee frame
-
-  // Heap-allocated resource mark to use resource-allocated structures (e.g.
-  // StackValues and free them before starting executing the restored code
-  {
-    auto *deopt_mark = new DeoptResourceMark(current);
-    guarantee(current->deopt_mark() == nullptr, "No deopt should be pending");
-    current->set_deopt_mark(deopt_mark);
-  }
-
-  // Create vframe descriptions based on the stack snapshot
-  vframeRestoreArray *array;
-  {
-    const StackTrace *stack = _stack_dump->stack_traces().pop();
-    if (stack->frames_num() == 0) { // TODO should this be considered an error?
-      log_info(crac)("Thread " UINTX_FORMAT ": no frames in stack snapshot (ID " SDID_FORMAT ")",
-                     cast_from_oop<uintptr_t>(current->threadObj()), stack->thread_id());
-      if (_stack_dump->stack_traces().is_empty()) {
-        clear_restoration_data();
-      }
-      delete stack;
-      return {};
-    }
-
-    array = vframeRestoreArray::allocate(*stack,
-                                         *crac::_portable_restored_classes,
-                                         *crac::_portable_restored_objects,
-                                         crac::_heap_dump->utf8s);
-    postcond(array->frames() == static_cast<int>(stack->frames_num()));
-
+  // If the stack is empty there is nothing to restore
+  // TODO should this be considered an error?
+  const StackTrace *stack = _stack_dump->stack_traces().last();
+  if (stack->frames_num() == 0) {
+    log_info(crac)("Thread " UINTX_FORMAT ": no frames in stack snapshot (ID " SDID_FORMAT ")",
+                    cast_from_oop<uintptr_t>(current->threadObj()), stack->thread_id());
     if (_stack_dump->stack_traces().is_empty()) {
       clear_restoration_data();
     }
     delete stack;
-  }
-  postcond(array->frames() > 0);
-  log_debug(crac)("Thread " UINTX_FORMAT ": filled frame array (%i frames)",
-                  cast_from_oop<uintptr_t>(current->threadObj()), array->frames());
-
-  // Determine sizes and return pcs of the constructed frames.
-  //
-  // The order of frames is the reverse of the array above:
-  // frame_sizes and frame_pcs: 0th -- the oldest frame,   nth -- the youngest.
-  // vframeRestoreArray *array: 0th -- the youngest frame, nth -- the oldest.
-  auto *frame_sizes = NEW_C_HEAP_ARRAY(intptr_t, array->frames(), mtInternal);
-  // +1 because the last element is an address to jump into the interpreter
-  auto *frame_pcs = NEW_C_HEAP_ARRAY(address, array->frames() + 1, mtInternal);
-  // Create an interpreter return address for the assembly code to use as its
-  // return address so the skeletal frames are perfectly walkable
-  frame_pcs[array->frames()] = Interpreter::deopt_entry(vtos, 0);
-
-  // We start from the youngest frame, which has no callee
-  int callee_params = 0;
-  int callee_locals = 0;
-  for (int i = 0; i < array->frames(); i++) {
-    // Deopt code uses this to account for possible JVMTI's PopFrame function
-    // usage which is irrelevant in our case
-    constexpr int popframe_extra_args = 0;
-
-    // i == 0 is the youngest frame, i == array->frames() - 1 is the oldest
-    frame_sizes[array->frames() - i - 1] =
-        BytesPerWord * array->element(i)->on_stack_size(callee_params, callee_locals, i == 0, popframe_extra_args);
-
-    frame_pcs[array->frames() - i - 1] = i < array->frames() - 1 ?
-    // Setting the pcs the same way as the deopt code does. It is needed to
-    // identify the skeleton frames as interpreted and make them walkable. The
-    // correct pcs will be patched later when filling the frames.
-                                         Interpreter::deopt_entry(vtos, 0) - frame::pc_return_offset :
-    // The oldest frame always returns to CallStub
-                                         StubRoutines::call_stub_return_address();
-
-    callee_params = array->element(i)->method()->size_of_parameters();
-    callee_locals = array->element(i)->method()->max_locals();
+    return {};
   }
 
-  // Adjustment of the CallStub to accomodate the locals of the oldest restored
-  // frame, if any
-  int caller_adjustment = Deoptimization::last_frame_adjust(callee_params, callee_locals);
-
-  auto *info = new Deoptimization::UnrollBlock(
-    0,                           // Deoptimized frame size, unused (no frame is being deoptimized)
-    caller_adjustment * BytesPerWord,
-    0,                           // Amount of params in the CallStub frame, unused (known via the oldest frame's method)
-    array->frames(),
-    frame_sizes,
-    frame_pcs,
-    BasicType::T_ILLEGAL,        // Return type, unused (we are not in the process of returning a value)
-    Deoptimization::Unpack_deopt // fill_in_frames() always specifies Unpack_deopt, regardless of what's set here
-  );
-  array->set_unroll_block(info);
-
-  guarantee(current->vframe_array_head() == nullptr, "no deopt should be pending");
-  current->set_vframe_array_head(array);
-
-  // Do a Java call to the oldest frame's method with RestoreStub as entry point
-
-  vframeArrayElement *oldest_frame_data = array->element(array->frames() - 1);
-  methodHandle method(current, oldest_frame_data->method());
+  const StackTrace::Frame &oldest_frame = stack->frames(stack->frames_num() - 1);
+  Method *const method = method_from_frame(oldest_frame, *_portable_restored_classes, _heap_dump->utf8s);
 
   JavaCallArguments args;
   // The actual values will be filled by the RestoreStub, we just need the Java
@@ -1189,13 +1196,11 @@ JavaValue crac::restore_current_thread(TRAPS) {
 
   if (log_is_enabled(Info, crac)) {
     ResourceMark rm;
-    log_debug(crac)("Thread " UINTX_FORMAT ": calling %s to enter restore stub",
-                    cast_from_oop<uintptr_t>(current->threadObj()), method->name_and_sig_as_C_string());
+    log_debug(crac)("Thread " UINTX_FORMAT ": restoration starts from %s",
+                    cast_from_oop<uintptr_t>(current->threadObj()), method->external_name());
   }
   JavaValue result(method->result_type());
-  JavaCalls::call(&result, method, &args, CHECK_({}));
-  // Note: any resources allocated in this scope have been freed by the
-  // deopt_mark by now
+  JavaCalls::call(&result, methodHandle(current, method), &args, CHECK_({}));
 
   log_info(crac)("Thread " UINTX_FORMAT ": restored execution completed", cast_from_oop<uintptr_t>(current->threadObj()));
   return result;

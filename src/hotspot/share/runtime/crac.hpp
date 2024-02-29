@@ -26,7 +26,9 @@
 
 #include "memory/allStatic.hpp"
 #include "runtime/cracStackDumpParser.hpp"
+#include "runtime/deoptimization.hpp"
 #include "runtime/handles.hpp"
+#include "runtime/javaThread.hpp"
 #include "utilities/exceptions.hpp"
 #include "utilities/heapDumpParser.hpp"
 
@@ -63,8 +65,10 @@ public:
   // Restores thread states and launches their execution. Should only be called
   // once, after restore_heap() has been called.
   static void restore_threads(TRAPS);
+  // Called by RestoreStub to prepare information about frames to restore.
+  static Deoptimization::UnrollBlock *fetch_frame_info(JavaThread *current);
   // Called by RestoreStub to fill in the skeletal frames just created.
-  static void fill_in_frames();
+  static void fill_in_frames(JavaThread *current);
 
 private:
   static bool read_bootid(char *dest);

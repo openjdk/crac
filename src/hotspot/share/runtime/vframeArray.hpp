@@ -189,8 +189,6 @@ class vframeArray: public CHeapObj<mtCompiler> {
   // Accessors for unroll block
   Deoptimization::UnrollBlock* unroll_block() const         { return _unroll_block; }
   void set_unroll_block(Deoptimization::UnrollBlock* block) { _unroll_block = block; }
-  // For assembly stub generation
-  static ByteSize unroll_block_offset()                     { return byte_offset_of(vframeArray, _unroll_block); }
 
   // Returns the size of the frame that got deoptimized
   int frame_size() const { return _frame_size; }

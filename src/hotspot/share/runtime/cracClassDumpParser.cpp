@@ -1868,7 +1868,6 @@ InstanceKlass *CracClassDumpParser::parse_and_define_instance_class(const HeapDu
 }
 
 GrowableArray<Pair<HeapDump::ID, InterclassRefs>> CracClassDumpParser::parse_instance_and_obj_array_classes(TRAPS) {
-  HandleMark hm(Thread::current()); // Class loader handles
   GrowableArray<Pair<HeapDump::ID, InterclassRefs>> interclass_refs;
   for (ClassPreamble preamble = parse_instance_class_preamble(THREAD);
        !HAS_PENDING_EXCEPTION && preamble.class_id != HeapDump::NULL_ID;

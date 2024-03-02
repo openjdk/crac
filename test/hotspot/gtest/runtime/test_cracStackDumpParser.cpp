@@ -1,7 +1,7 @@
 #include "precompiled.hpp"
 #include "unittest.hpp"
 #include "runtime/cracStackDumpParser.hpp"
-#include "runtime/cracStackDumper.hpp"
+#include "utilities/growableArray.hpp"
 #include "utilities/methodKind.hpp"
 
 constexpr char TEST_FILENAME[] = "stackDumpParser_test.hprof";
@@ -13,29 +13,31 @@ static void fill_test_file(const char *contents, size_t size) {
   ASSERT_EQ(0, fclose(file)) << "Cannot close the test file: " << os::strerror(errno);
 }
 
-static void check_stack_values(const ExtendableArray<StackTrace::Frame::Value, u2> &expected_values,
-                               const ExtendableArray<StackTrace::Frame::Value, u2> &actual_values) {
-  ASSERT_EQ(expected_values.size(), actual_values.size());
-  for (u2 i = 0; i < expected_values.size(); i++) {
-    const StackTrace::Frame::Value &expected = expected_values[i];
-    const StackTrace::Frame::Value &actual = actual_values[i];
-    EXPECT_EQ(expected.type, actual.type) << "Wrong type of value #" << i;
-    if (expected.type == DumpedStackValueType::REFERENCE) {
-      EXPECT_EQ(expected.obj_id, actual.obj_id) << "Wrong obj ref #" << i;
+static void check_stack_values(const GrowableArrayView<CracStackTrace::Frame::Value> &expected_values,
+                               const GrowableArrayView<CracStackTrace::Frame::Value> &actual_values) {
+  ASSERT_EQ(expected_values.length(), actual_values.length());
+  for (int i = 0; i < expected_values.length(); i++) {
+    const CracStackTrace::Frame::Value &expected = expected_values.at(i);
+    const CracStackTrace::Frame::Value &actual = actual_values.at(i);
+    ASSERT_NE(expected.type(), CracStackTrace::Frame::Value::Type::EMPTY); // Sanity check
+    ASSERT_NE(expected.type(), CracStackTrace::Frame::Value::Type::OBJ);   // Sanity check
+    EXPECT_EQ(expected.type(), actual.type()) << "Wrong type of value #" << i;
+    if (expected.type() == CracStackTrace::Frame::Value::Type::REF) {
+      EXPECT_EQ(expected.as_obj_id(), actual.as_obj_id()) << "Wrong obj ref #" << i;
     } else {
-      EXPECT_EQ(expected.prim, actual.prim) << "Wrong primitive #" << i;
+      EXPECT_EQ(expected.as_primitive(), actual.as_primitive()) << "Wrong primitive #" << i;
     }
   }
 }
 
-static void check_stack_frames(const StackTrace &expected_trace,
-                               const StackTrace &actual_trace) {
+static void check_stack_frames(const CracStackTrace &expected_trace,
+                               const CracStackTrace &actual_trace) {
   EXPECT_EQ(expected_trace.thread_id(), actual_trace.thread_id());
   ASSERT_EQ(expected_trace.frames_num(), expected_trace.frames_num());
 
   for (u4 i = 0; i < expected_trace.frames_num(); i++) {
-    const StackTrace::Frame &expected_frame = expected_trace.frame(i);
-    const StackTrace::Frame &actual_frame = actual_trace.frame(i);
+    const CracStackTrace::Frame &expected_frame = expected_trace.frame(i);
+    const CracStackTrace::Frame &actual_frame = actual_trace.frame(i);
 
     EXPECT_EQ(expected_frame.method_name_id(),   actual_frame.method_name_id());
     EXPECT_EQ(expected_frame.method_sig_id(),    actual_frame.method_sig_id());
@@ -60,7 +62,7 @@ TEST(CracStackDumpParser, no_stack_traces) {
   fill_test_file(CONTENTS_NO_TRACES, sizeof(CONTENTS_NO_TRACES) - 1);
   ASSERT_FALSE(testing::Test::HasFatalFailure() || testing::Test::HasNonfatalFailure());
 
-  ParsedStackDump stack_dump;
+  ParsedCracStackDump stack_dump;
   const char *err_msg = CracStackDumpParser::parse(TEST_FILENAME, &stack_dump);
   ASSERT_EQ(nullptr, err_msg) << "Parsing error: " << err_msg;
 
@@ -80,14 +82,14 @@ TEST(CracStackDumpParser, empty_stack_trace) {
   fill_test_file(CONTENTS_EMPTY_TRACE, sizeof(CONTENTS_EMPTY_TRACE) - 1);
   ASSERT_FALSE(testing::Test::HasFatalFailure() || testing::Test::HasNonfatalFailure());
 
-  ParsedStackDump stack_dump;
+  ParsedCracStackDump stack_dump;
   const char *err_msg = CracStackDumpParser::parse(TEST_FILENAME, &stack_dump);
   ASSERT_EQ(nullptr, err_msg) << "Parsing error: " << err_msg;
 
   EXPECT_EQ(4U, stack_dump.word_size());
   ASSERT_EQ(1, stack_dump.stack_traces().length());
 
-  StackTrace expected_trace(/* thread ID */ 0xabcdef95, /* frames num */ 0);
+  CracStackTrace expected_trace(/* thread ID */ 0xabcdef95, /* frames num */ 0);
 
   check_stack_frames(expected_trace, *stack_dump.stack_traces().at(0));
   ASSERT_FALSE(testing::Test::HasFatalFailure() || testing::Test::HasNonfatalFailure());
@@ -113,14 +115,14 @@ TEST(CracStackDumpParser, stack_frame_with_no_stack_values) {
   fill_test_file(CONTENTS_NO_STACK_VALUES, sizeof(CONTENTS_NO_STACK_VALUES) - 1);
   ASSERT_FALSE(testing::Test::HasFatalFailure() || testing::Test::HasNonfatalFailure());
 
-  ParsedStackDump stack_dump;
+  ParsedCracStackDump stack_dump;
   const char *err_msg = CracStackDumpParser::parse(TEST_FILENAME, &stack_dump);
   ASSERT_EQ(nullptr, err_msg) << "Parsing error: " << err_msg;
 
   EXPECT_EQ(4U, stack_dump.word_size());
   ASSERT_EQ(1, stack_dump.stack_traces().length());
 
-  StackTrace expected_trace(/* thread ID */ 0xabcdef95, /* frames num */ 1);
+  CracStackTrace expected_trace(/* thread ID */ 0xabcdef95, /* frames num */ 1);
 
   auto &expected_frame = expected_trace.frame(0);
   expected_frame.set_method_name_id(0x12345678);
@@ -163,14 +165,14 @@ TEST(CracStackDumpParser, stack_frame_with_correct_stack_values) {
   fill_test_file(CONTENTS_CORRECT_STACK_VALUES, sizeof(CONTENTS_CORRECT_STACK_VALUES) - 1);
   ASSERT_FALSE(testing::Test::HasFatalFailure() || testing::Test::HasNonfatalFailure());
 
-  ParsedStackDump stack_dump;
+  ParsedCracStackDump stack_dump;
   const char *err_msg = CracStackDumpParser::parse(TEST_FILENAME, &stack_dump);
   ASSERT_EQ(nullptr, err_msg) << "Parsing error: " << err_msg;
 
   EXPECT_EQ(8U, stack_dump.word_size());
   ASSERT_EQ(1, stack_dump.stack_traces().length());
 
-  StackTrace expected_trace(/* thread ID */ 0xabcdef95badcfe96, /* frames num */ 1);
+  CracStackTrace expected_trace(/* thread ID */ 0xabcdef95badcfe96, /* frames num */ 1);
 
   auto &expected_frame = expected_trace.frame(0);
   expected_frame.set_method_name_id(0x1234567801234567);
@@ -178,14 +180,11 @@ TEST(CracStackDumpParser, stack_frame_with_correct_stack_values) {
   expected_frame.set_method_kind(MethodKind::Enum::INSTANCE);
   expected_frame.set_method_holder_id(0x8765431234567822);
   expected_frame.set_bci(0x1234);
-  expected_frame.locals().extend(3);
-  expected_frame.locals()[0] = {DumpedStackValueType::PRIMITIVE, {0x00000000abcdefab}};
-  expected_frame.locals()[1] = {DumpedStackValueType::PRIMITIVE, {0xdeaddeaf00000000}};
-  expected_frame.locals()[2] = {DumpedStackValueType::PRIMITIVE, {0x0123456789abcdef}};
-  expected_frame.operands().extend(2);
-  expected_frame.operands()[0].type = DumpedStackValueType::REFERENCE;
-  expected_frame.operands()[0].obj_id = 0x00007ffa40056550; // Cannot set via braced init
-  expected_frame.operands()[1] = {DumpedStackValueType::PRIMITIVE, {0x00000000567890ab}};
+  expected_frame.locals().append(CracStackTrace::Frame::Value::of_primitive(0x00000000abcdefab));
+  expected_frame.locals().append(CracStackTrace::Frame::Value::of_primitive(0xdeaddeaf00000000));
+  expected_frame.locals().append(CracStackTrace::Frame::Value::of_primitive(0x0123456789abcdef));
+  expected_frame.operands().append(CracStackTrace::Frame::Value::of_obj_id(0x00007ffa40056550));
+  expected_frame.operands().append(CracStackTrace::Frame::Value::of_primitive(0x00000000567890ab));
 
   check_stack_frames(expected_trace, *stack_dump.stack_traces().at(0));
   ASSERT_FALSE(testing::Test::HasFatalFailure() || testing::Test::HasNonfatalFailure());
@@ -237,22 +236,21 @@ TEST(CracStackDumpParser, multiple_stacks_dumped) {
   fill_test_file(CONTENTS_MULTIPLE_STACKS, sizeof(CONTENTS_MULTIPLE_STACKS) - 1);
   ASSERT_FALSE(testing::Test::HasFatalFailure() || testing::Test::HasNonfatalFailure());
 
-  ParsedStackDump stack_dump;
+  ParsedCracStackDump stack_dump;
   const char *err_msg = CracStackDumpParser::parse(TEST_FILENAME, &stack_dump);
   ASSERT_EQ(nullptr, err_msg) << "Parsing error: " << err_msg;
 
   EXPECT_EQ(4U, stack_dump.word_size());
   ASSERT_EQ(2, stack_dump.stack_traces().length());
 
-  StackTrace expected_trace_1(/* thread ID */ 0xabcdef95, /* frames num */ 2);
+  CracStackTrace expected_trace_1(/* thread ID */ 0xabcdef95, /* frames num */ 2);
 
   expected_trace_1.frame(0).set_method_name_id(0xabacabaa);
   expected_trace_1.frame(0).set_method_sig_id(0xbabafeda);
   expected_trace_1.frame(0).set_method_kind(MethodKind::Enum::STATIC);
   expected_trace_1.frame(0).set_method_holder_id(0x87654321);
   expected_trace_1.frame(0).set_bci(5);
-  expected_trace_1.frame(0).locals().extend(1);
-  expected_trace_1.frame(0).locals()[0] = {DumpedStackValueType::PRIMITIVE, {0xabcdefab}};
+  expected_trace_1.frame(0).locals().append(CracStackTrace::Frame::Value::of_primitive(0xabcdefab));
 
   expected_trace_1.frame(1).set_method_name_id(0xbacabaca);
   expected_trace_1.frame(1).set_method_sig_id(0xccddbbaf);
@@ -263,16 +261,15 @@ TEST(CracStackDumpParser, multiple_stacks_dumped) {
   check_stack_frames(expected_trace_1, *stack_dump.stack_traces().at(0));
   ASSERT_FALSE(testing::Test::HasFatalFailure() || testing::Test::HasNonfatalFailure()) << "Wrong parsing of trace #1";
 
-  StackTrace expected_trace_2(/* thread ID */ 0x00113209, /* frames num */ 1);
+  CracStackTrace expected_trace_2(/* thread ID */ 0x00113209, /* frames num */ 1);
 
   expected_trace_2.frame(0).set_method_name_id(0xfefecaca);
   expected_trace_2.frame(0).set_method_sig_id(0x34437822);
   expected_trace_2.frame(0).set_method_kind(MethodKind::Enum::OVERPASS);
   expected_trace_2.frame(0).set_method_holder_id(0x21217455);
   expected_trace_2.frame(0).set_bci(0xfa);
-  expected_trace_2.frame(0).operands().extend(2);
-  expected_trace_2.frame(0).operands()[0] = {DumpedStackValueType::PRIMITIVE, {0x01234567}};
-  expected_trace_2.frame(0).operands()[1] = {DumpedStackValueType::PRIMITIVE, {0x89abcdef}};
+  expected_trace_2.frame(0).operands().append(CracStackTrace::Frame::Value::of_primitive(0x01234567));
+  expected_trace_2.frame(0).operands().append(CracStackTrace::Frame::Value::of_primitive(0x89abcdef));
 
   check_stack_frames(expected_trace_1, *stack_dump.stack_traces().at(0));
   ASSERT_FALSE(testing::Test::HasFatalFailure() || testing::Test::HasNonfatalFailure()) << "Wrong parsing of trace #2";

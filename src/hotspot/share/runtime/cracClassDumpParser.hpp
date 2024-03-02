@@ -70,6 +70,7 @@ class CracClassDumpParser: public ClassDumpReader {
   const ParsedHeapDump &_heap_dump;
   ClassLoaderProvider *const _loader_provider;
 
+  // Not resource-allocated because that would limit parser's usage of resource area
   HeapDumpTable<InstanceKlass *,   AnyObj::C_HEAP> *const _iks;
   HeapDumpTable<ArrayKlass *,      AnyObj::C_HEAP> *const _aks;
   HeapDumpTable<UnfilledClassInfo, AnyObj::C_HEAP> *const _unfilled_infos;

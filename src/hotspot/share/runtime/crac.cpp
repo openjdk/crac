@@ -68,10 +68,12 @@
 #include "runtime/vmThread.hpp"
 #include "services/heapDumper.hpp"
 #include "services/writeableFlags.hpp"
+#include "utilities/bitCast.hpp"
 #include "utilities/debug.hpp"
 #include "utilities/decoder.hpp"
 #include "utilities/exceptions.hpp"
 #include "utilities/globalDefinitions.hpp"
+#include "utilities/growableArray.hpp"
 #include "utilities/heapDumpParser.hpp"
 #include "utilities/macros.hpp"
 
@@ -88,10 +90,7 @@ static jlong _restore_start_time;
 static jlong _restore_start_nanos;
 
 // Used by portable restore
-ParsedHeapDump  *crac::_heap_dump = nullptr;
-ParsedStackDump *crac::_stack_dump = nullptr;
-HeapDumpTable<InstanceKlass *, AnyObj::C_HEAP> *crac::_portable_restored_classes = nullptr;
-HeapDumpTable<jobject, AnyObj::C_HEAP> *crac::_portable_restored_objects = nullptr;
+ParsedCracStackDump *crac::_stack_dump = nullptr;
 
 // Timestamps recorded before checkpoint
 jlong crac::checkpoint_millis;
@@ -777,78 +776,87 @@ void crac::update_javaTimeNanos_offset() {
 void crac::restore_heap(TRAPS) {
   assert(is_portable_mode(), "Use crac::restore() instead");
   precond(CRaCRestoreFrom != nullptr);
-  precond(_heap_dump == nullptr && _stack_dump == nullptr &&
-          _portable_restored_classes == nullptr && _portable_restored_objects == nullptr);
+
+  // Create a top-level resource mark to be able to get resource-allocated
+  // strings (e.g. external class names) for assert/guarantee fails with no fuss
+  assert(Thread::current()->current_resource_mark() == nullptr, "no need for this mark?");
+  ResourceMark rm;
 
   char path[JVM_MAXPATHLEN];
 
+  ParsedHeapDump heap_dump;
   os::snprintf_checked(path, sizeof(path), "%s%s%s", CRaCRestoreFrom, os::file_separator(), PMODE_HEAP_DUMP_FILENAME);
-  _heap_dump = new ParsedHeapDump();
-  const char* err_str = HeapDumpParser::parse(path, _heap_dump);
+  const char *err_str = HeapDumpParser::parse(path, &heap_dump);
   if (err_str != nullptr) {
-    clear_restoration_data();
     THROW_MSG(vmSymbols::java_lang_IllegalArgumentException(),
-              err_msg("Restore failed: cannot parse heap dump %s (%s)", path, err_str));
+              err_msg("Cannot parse heap dump %s (%s)", path, err_str));
   }
-  assert(!_heap_dump->utf8s.contains(HeapDump::NULL_ID) &&
-         !_heap_dump->class_dumps.contains(HeapDump::NULL_ID) &&
-         !_heap_dump->instance_dumps.contains(HeapDump::NULL_ID) &&
-         !_heap_dump->obj_array_dumps.contains(HeapDump::NULL_ID) &&
-         !_heap_dump->prim_array_dumps.contains(HeapDump::NULL_ID), "records cannot have null ID");
+  assert(!heap_dump.utf8s.contains(HeapDump::NULL_ID) &&
+         !heap_dump.class_dumps.contains(HeapDump::NULL_ID) &&
+         !heap_dump.instance_dumps.contains(HeapDump::NULL_ID) &&
+         !heap_dump.obj_array_dumps.contains(HeapDump::NULL_ID) &&
+         !heap_dump.prim_array_dumps.contains(HeapDump::NULL_ID),
+         "records cannot have null ID");
 
+  auto *const stack_dump = new ParsedCracStackDump();
   os::snprintf_checked(path, sizeof(path), "%s%s%s", CRaCRestoreFrom, os::file_separator(), PMODE_STACK_DUMP_FILENAME);
-  _stack_dump = new ParsedStackDump();
-  err_str = CracStackDumpParser::parse(path, _stack_dump);
+  err_str = CracStackDumpParser::parse(path, stack_dump);
   if (err_str != nullptr) {
-    clear_restoration_data();
+    delete stack_dump;
     THROW_MSG(vmSymbols::java_lang_IllegalArgumentException(),
-              err_msg("Restore failed: cannot parse stack dump %s (%s)", path, err_str));
+              err_msg("Cannot parse stack dump %s (%s)", path, err_str));
   }
-  if (_stack_dump->word_size() != oopSize) {
-    const u2 dumped_word_size = _stack_dump->word_size();
-    clear_restoration_data();
+  if (stack_dump->word_size() != oopSize) {
+    const u2 dumped_word_size = stack_dump->word_size();
+    delete stack_dump;
     THROW_MSG(vmSymbols::java_lang_UnsupportedOperationException(),
-              err_msg("Restore failed: stack dump comes from an incompatible platform "
-                      "(dumped word size %i != current word size %i)", dumped_word_size, oopSize));
+              err_msg("Cannot restore because stack dump comes from an incompatible platform: "
+                      "dumped word size %i != current word size %i", dumped_word_size, oopSize));
   }
+  STATIC_ASSERT(oopSize == sizeof(intptr_t)); // Need this to safely cast primititve stack values
 
-  HeapDumpTable<ArrayKlass *,AnyObj::C_HEAP> array_classes(107, 10000);
-  _portable_restored_classes = new(mtInternal) HeapDumpTable<InstanceKlass *, AnyObj::C_HEAP>(107, 10000);
-  _portable_restored_objects = new(mtInternal) HeapDumpTable<jobject,         AnyObj::C_HEAP>(107, 100000);
+  // Use heap allocation to allow the class parser to use resource area for internal purposes
+  HeapDumpTable<InstanceKlass *, AnyObj::C_HEAP> instance_classes(107, 10000);
+  HeapDumpTable<ArrayKlass *, AnyObj::C_HEAP> array_classes(107, 10000);
 
-  ResourceMark rm; // For HeapRestorer's fields
-  CracHeapRestorer heap_restorer(*_heap_dump, *_portable_restored_classes, array_classes, _portable_restored_objects, THREAD);
+  CracHeapRestorer heap_restorer(heap_dump, instance_classes, array_classes, THREAD);
   if (HAS_PENDING_EXCEPTION) {
-    clear_restoration_data();
+    delete stack_dump;
     return;
   }
 
   os::snprintf_checked(path, sizeof(path), "%s%s%s", CRaCRestoreFrom, os::file_separator(), PMODE_CLASS_DUMP_FILENAME);
   HeapDumpTable<UnfilledClassInfo, AnyObj::C_HEAP> class_infos(107, 10000);
-  CracClassDumpParser::parse(path, *_heap_dump, &heap_restorer, _portable_restored_classes, &array_classes, &class_infos, THREAD);
+  CracClassDumpParser::parse(path, heap_dump, &heap_restorer, &instance_classes, &array_classes, &class_infos, THREAD);
   if (HAS_PENDING_EXCEPTION) {
-    clear_restoration_data();
-    const Handle e(Thread::current(), PENDING_EXCEPTION);
-    CLEAR_PENDING_EXCEPTION;
-    THROW_MSG_CAUSE(vmSymbols::java_lang_IllegalArgumentException(), "Restore failed: cannot create classes", e);
+    delete stack_dump;
+    return;
   }
 
-  heap_restorer.restore_heap(class_infos, _stack_dump->stack_traces(), THREAD);
+  heap_restorer.restore_heap(class_infos, stack_dump->stack_traces(), THREAD); // Also resolves stack values
   if (HAS_PENDING_EXCEPTION) {
-    clear_restoration_data();
-    const Handle e(Thread::current(), PENDING_EXCEPTION);
-    CLEAR_PENDING_EXCEPTION;
-    THROW_MSG_CAUSE(vmSymbols::java_lang_IllegalArgumentException(), "Restore failed: cannot restore heap", e);
+    delete stack_dump;
+    return;
   }
+
+  // Resolve all methods on the stacks while we have the ID-to-class and ID-to-symbol mappings
+  for (const auto &stack : stack_dump->stack_traces()) {
+    for (u4 i = 0; i < stack->frames_num(); i++) {
+      stack->frame(i).resolve_method(instance_classes, heap_dump.utf8s, THREAD);
+      if (HAS_PENDING_EXCEPTION) {
+        delete stack_dump;
+        return;
+      }
+    }
+  }
+
+  precond(_stack_dump == nullptr);
+  _stack_dump = stack_dump;
 }
 
 class vframeRestoreArrayElement : public vframeArrayElement {
  public:
-   void fill_in(const StackTrace::Frame &snapshot,
-                bool reexecute,
-                const ResizeableResourceHashtable<HeapDump::ID, InstanceKlass *, AnyObj::C_HEAP> &classes,
-                const ResizeableResourceHashtable<HeapDump::ID, jobject, AnyObj::C_HEAP> &objects,
-                const ParsedHeapDump::RecordTable<HeapDump::UTF8> &symbols) {
+  void fill_in(const CracStackTrace::Frame &snapshot, bool reexecute) {
     _method = snapshot.method();
 
     _bci = snapshot.bci();
@@ -856,42 +864,42 @@ class vframeRestoreArrayElement : public vframeArrayElement {
 
     _reexecute = reexecute;
 
-    _locals = stack_values_from_frame(snapshot.locals(), objects);
-    _expressions = stack_values_from_frame(snapshot.operands(), objects);
+    _locals = stack_values_from_frame(snapshot.locals());
+    _expressions = stack_values_from_frame(snapshot.operands());
 
     // TODO add monitor info into the snapshot; for now assuming no monitors
     _monitors = nullptr;
     DEBUG_ONLY(_removed_monitors = false;)
-   }
+  }
 
  private:
-  static StackValueCollection *stack_values_from_frame(const ExtendableArray<StackTrace::Frame::Value, u2> &src,
-                                                       const ResizeableResourceHashtable<HeapDump::ID, jobject, AnyObj::C_HEAP> &objects) {
-    auto *stack_values = new StackValueCollection(src.size()); // stack_values->size() == 0 until we add the actual values
-    for (int i = 0; i < src.size(); i++) {
-      const StackTrace::Frame::Value &src_value = src[i];
-      switch (src_value.type) {
-        case DumpedStackValueType::PRIMITIVE: {
-          // At checkpoint this was either a T_INT or a T_CONFLICT StackValue,
-          // in the later case it should have been dumped as 0 for us
-          auto integer_value = *reinterpret_cast<const intptr_t *>(&src_value.prim); // The value is at offset 0
-          stack_values->add(new StackValue(integer_value));
+  static StackValueCollection *stack_values_from_frame(const GrowableArrayCHeap<CracStackTrace::Frame::Value, mtInternal> &src) {
+    auto *const stack_values = new StackValueCollection(src.length()); // size == 0 until we actually add the values
+    // Cannot use the array iterator as it creates copies and we cannot copy
+    // resolved reference values in this scope (it requires a Handle allocation)
+    for (int i = 0; i < src.length(); i++) {
+      const auto &src_value = *src.adr_at(i);
+      switch (src_value.type()) {
+        // At checkpoint this was either a T_INT or a T_CONFLICT StackValue,
+        // in the later case it should have been dumped as 0 for us
+        case CracStackTrace::Frame::Value::Type::PRIM: {
+          // We've checked that stack slot size of the dump equals ours (right
+          // after parsing), so the cast is safe
+          LP64_ONLY(const u8 val = src_value.as_primitive());  // Take the whole u8
+          NOT_LP64(const u4 val = src_value.as_primitive());   // Take the low half
+          const auto int_stack_slot = bit_cast<intptr_t>(val); // 4 or 8 byte slot depending on the platform
+          stack_values->add(new StackValue(int_stack_slot));
           break;
         }
-        case DumpedStackValueType::REFERENCE: {
-          // At checkpoint this was a T_OBJECT StackValue,
-          jobject handle = nullptr;
-          if (src_value.obj_id != 0) { // 0 ID means null
-            jobject *handle_ptr = objects.get(src_value.obj_id);
-            guarantee(handle_ptr != nullptr, "unknown object ID " SDID_FORMAT " in stack value %i", src_value.obj_id, i);
-            handle = *handle_ptr;
-          }
+        // At checkpoint this was a T_OBJECT StackValue
+        case CracStackTrace::Frame::Value::Type::OBJ: {
+          const oop o = JNIHandles::resolve(src_value.as_obj());
           // Unpacking code of vframeArrayElement expects a raw oop
-          stack_values->add(new StackValue(cast_from_oop<intptr_t>(JNIHandles::resolve(handle)), T_OBJECT));
+          stack_values->add(new StackValue(cast_from_oop<intptr_t>(o), T_OBJECT));
           break;
         }
         default:
-         ShouldNotReachHere();
+          ShouldNotReachHere();
       }
     }
     return stack_values;
@@ -900,10 +908,7 @@ class vframeRestoreArrayElement : public vframeArrayElement {
 
 class vframeRestoreArray : public vframeArray {
  public:
-  static vframeRestoreArray *allocate(const StackTrace &stack,
-                                      const ResizeableResourceHashtable<HeapDump::ID, InstanceKlass *, AnyObj::C_HEAP> &classes,
-                                      const ResizeableResourceHashtable<HeapDump::ID, jobject, AnyObj::C_HEAP> &objects,
-                                      const ParsedHeapDump::RecordTable<HeapDump::UTF8> &symbols) {
+  static vframeRestoreArray *allocate(const CracStackTrace &stack) {
     guarantee(stack.frames_num() <= INT_MAX, "stack trace of thread " SDID_FORMAT " is too long: " UINT32_FORMAT " > %i",
               stack.thread_id(), stack.frames_num(), INT_MAX);
     auto *const result = reinterpret_cast<vframeRestoreArray *>(AllocateHeap(sizeof(vframeRestoreArray) + // fixed part
@@ -918,15 +923,12 @@ class vframeRestoreArray : public vframeArray {
     result->_caller = frame();       // Seems to be the same as _sender
     result->_original = frame();     // Deoptimized frame which we don't have
 
-    result->fill_in(stack, classes, objects, symbols);
+    result->fill_in(stack);
     return result;
   }
 
  private:
-  void fill_in(const StackTrace &stack,
-               const ResizeableResourceHashtable<HeapDump::ID, InstanceKlass *, AnyObj::C_HEAP> &classes,
-               const ResizeableResourceHashtable<HeapDump::ID, jobject, AnyObj::C_HEAP> &objects,
-               const ParsedHeapDump::RecordTable<HeapDump::UTF8> &symbols) {
+  void fill_in(const CracStackTrace &stack) {
     _frame_size = 0; // Unused (no frame is being deoptimized)
 
     // The first frame is the youngest, the last is the oldest
@@ -938,7 +940,7 @@ class vframeRestoreArray : public vframeArray {
       // Note: youngest frame's BCI is always re-executed -- this is important
       // because otherwise deopt's unpacking code will try to use ToS caching
       // which we don't account for
-      elem->fill_in(stack.frame(i), i == 0, classes, objects, symbols);
+      elem->fill_in(stack.frame(i), i == 0);
       assert(!elem->method()->is_native(), "native methods are not restored");
     }
   }
@@ -962,19 +964,17 @@ JRT_LEAF(Deoptimization::UnrollBlock *, crac::fetch_frame_info(JavaThread *curre
   // should happen after this array is filled until we're done with it
   vframeRestoreArray *array;
   {
-    const StackTrace *stack = _stack_dump->stack_traces().pop();
+    const CracStackTrace *stack = _stack_dump->stack_traces().pop();
     assert(stack->frames_num() > 0, "should be checked when just starting");
+    if (_stack_dump->stack_traces().is_empty()) {
+      delete _stack_dump;
+      _stack_dump = nullptr;
+    }
 
-    array = vframeRestoreArray::allocate(*stack,
-                                         *crac::_portable_restored_classes,
-                                         *crac::_portable_restored_objects,
-                                         crac::_heap_dump->utf8s);
+    array = vframeRestoreArray::allocate(*stack);
     postcond(array->frames() == static_cast<int>(stack->frames_num()));
 
     delete stack;
-    if (_stack_dump->stack_traces().is_empty()) {
-      clear_restoration_data(); // Clear only after the array is filled since this frees heap dump
-    }
   }
   postcond(array->frames() > 0);
   log_debug(crac)("Thread " UINTX_FORMAT ": filled frame array (%i frames)",
@@ -1140,25 +1140,20 @@ JavaValue crac::restore_current_thread(TRAPS) {
 
   // If the stack is empty there is nothing to restore
   // TODO should this be considered an error?
-  StackTrace *const stack = _stack_dump->stack_traces().last();
+  CracStackTrace *const stack = _stack_dump->stack_traces().last();
   if (stack->frames_num() == 0) {
     log_info(crac)("Thread " UINTX_FORMAT ": no frames in stack snapshot (ID " SDID_FORMAT ")",
                     cast_from_oop<uintptr_t>(current->threadObj()), stack->thread_id());
+    _stack_dump->stack_traces().pop();
     if (_stack_dump->stack_traces().is_empty()) {
-      clear_restoration_data();
+      delete _stack_dump;
+      _stack_dump = nullptr;
     }
     delete stack;
     return {};
   }
 
-  // Resolve all methods in the stack now because signature polymorphic ones
-  // may require additional allocations and it's easier to handle the possible
-  // safepoints and exceptions now than later
-  for (u4 i = 0; i < stack->frames_num(); i++) {
-    stack->frame(i).resolve_method(*_portable_restored_classes, _heap_dump->utf8s, CHECK_({}));
-  }
-
-  const StackTrace::Frame &oldest_frame = stack->frame(stack->frames_num() - 1);
+  const CracStackTrace::Frame &oldest_frame = stack->frame(stack->frames_num() - 1);
   Method *const method = oldest_frame.method();
 
   JavaCallArguments args;
@@ -1185,9 +1180,7 @@ JavaValue crac::restore_current_thread(TRAPS) {
 void crac::restore_threads(TRAPS) {
   assert(is_portable_mode(), "use crac::restore() instead");
   precond(CRaCRestoreFrom != nullptr);
-  assert(_heap_dump != nullptr && _stack_dump != nullptr &&
-         _portable_restored_classes != nullptr && _portable_restored_objects != nullptr,
-         "call crac::restore_heap() first");
+  assert(_stack_dump != nullptr, "call crac::restore_heap() first");
 
   // TODO for now we only restore the main thread
   assert(_stack_dump->stack_traces().length() == 1, "expected only a single (main) thread to be dumped");
@@ -1200,15 +1193,4 @@ void crac::restore_threads(TRAPS) {
 #endif // ASSERT
   JavaValue result = restore_current_thread(CHECK);
   log_info(crac)("main thread execution resulted in type: %s", type2name(result.get_type()));
-}
-
-void crac::clear_restoration_data() {
-  delete _heap_dump;
-  delete _stack_dump;
-  delete _portable_restored_classes;
-  if (_portable_restored_objects != nullptr) {
-    // TODO we iterate the whole restored heap here, is there a faster way?
-  _portable_restored_objects->iterate_all([](HeapDump::ID _, jobject h) { JNIHandles::destroy_global(h); });
-  }
-  delete _portable_restored_objects;
 }

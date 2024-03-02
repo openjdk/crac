@@ -22,8 +22,6 @@
 #include "runtime/fieldDescriptor.inline.hpp"
 #include "runtime/handles.hpp"
 #include "runtime/javaCalls.hpp"
-#include "runtime/jniHandles.hpp"
-#include "runtime/jniHandles.inline.hpp"
 #include "runtime/reflectionUtils.hpp"
 #include "runtime/signature.hpp"
 #include "runtime/thread.hpp"
@@ -152,7 +150,7 @@ void WellKnownObjects::lookup_actual_system_class_loader(const ParsedHeapDump &h
   }
 }
 
-static oop get_builtin_system_loader() {
+static instanceOop get_builtin_system_loader() {
   // SystemDictionary::java_system_loader() gives the actual system loader which
   // is not necessarily the built-in one
   const oop loader = SystemDictionary::java_system_loader();
@@ -163,45 +161,41 @@ static oop get_builtin_system_loader() {
     log_error(crac)("User-provided system class loader is not supported yet");
     Unimplemented();
   }
-  return loader;
+  return static_cast<instanceOop>(loader);
 }
 
-void WellKnownObjects::put_into(HeapDumpTable<jobject, AnyObj::C_HEAP> *objects) const {
+void WellKnownObjects::put_into(HeapDumpTable<Handle, AnyObj::C_HEAP> *objects) const {
   precond(objects->number_of_entries() == 0);
   Thread *const thread = JavaThread::current();
   if (_platform_loader_id != HeapDump::NULL_ID) {
-    const oop loader = SystemDictionary::java_platform_loader();
+    const auto loader = static_cast<instanceOop>(SystemDictionary::java_platform_loader());
     if (loader != nullptr) {
       guarantee(loader->klass() == vmClasses::jdk_internal_loader_ClassLoaders_PlatformClassLoader_klass(), "sanity check");
-      const jobject loader_h = JNIHandles::make_global(Handle(thread, loader));
-      objects->put_when_absent(_platform_loader_id, loader_h);
+      objects->put_when_absent(_platform_loader_id, instanceHandle(thread, loader));
     }
   }
   if (_builtin_system_loader_id != HeapDump::NULL_ID) {
-    const oop loader = get_builtin_system_loader();
+    const auto loader = get_builtin_system_loader();
     if (loader != nullptr) {
-      const jobject loader_h = JNIHandles::make_global(Handle(thread, loader));
-      objects->put_when_absent(_builtin_system_loader_id, loader_h);
+      objects->put_when_absent(_builtin_system_loader_id, instanceHandle(thread, loader));
     }
   }
   if (_actual_system_loader_id != HeapDump::NULL_ID && _actual_system_loader_id != _builtin_system_loader_id) {
-    const oop loader = SystemDictionary::java_system_loader();
+    const auto loader = static_cast<instanceOop>(SystemDictionary::java_system_loader());
     if (loader != nullptr) {
-      const jobject loader_h = JNIHandles::make_global(Handle(thread, loader));
-      objects->put_when_absent(_builtin_system_loader_id, loader_h);
+      objects->put_when_absent(_builtin_system_loader_id, instanceHandle(thread, loader));
     }
   }
   objects->maybe_grow();
 }
 
-void WellKnownObjects::get_from(const HeapDumpTable<jobject, AnyObj::C_HEAP> &objects) const {
+void WellKnownObjects::get_from(const HeapDumpTable<Handle, AnyObj::C_HEAP> &objects) const {
   if (_platform_loader_id != HeapDump::NULL_ID) {
-    const jobject *restored = objects.get(_platform_loader_id);
+    const Handle *restored = objects.get(_platform_loader_id);
     if (restored != nullptr) {
       const oop existing = SystemDictionary::java_platform_loader();
       if (existing != nullptr) {
-        guarantee(JNIHandles::resolve_non_null(*restored) == existing,
-                  "restored platform loader must be the existing one");
+        guarantee(*restored == existing, "restored platform loader must be the existing one");
       } else {
         log_error(crac)("Restoration of base class loaders is not implemented");
         Unimplemented();
@@ -209,12 +203,11 @@ void WellKnownObjects::get_from(const HeapDumpTable<jobject, AnyObj::C_HEAP> &ob
     }
   }
   if (_builtin_system_loader_id != HeapDump::NULL_ID) {
-    const jobject *restored = objects.get(_builtin_system_loader_id);
+    const Handle *restored = objects.get(_builtin_system_loader_id);
     if (restored != nullptr) {
       const oop existing = get_builtin_system_loader();
       if (existing != nullptr) {
-        guarantee(JNIHandles::resolve_non_null(*restored) == existing,
-                  "restored builtin system loader must be the existing one");
+        guarantee(*restored == existing, "restored builtin system loader must be the existing one");
       } else {
         log_error(crac)("Restoration of base class loaders is not implemented");
         Unimplemented();
@@ -222,12 +215,11 @@ void WellKnownObjects::get_from(const HeapDumpTable<jobject, AnyObj::C_HEAP> &ob
     }
   }
   if (_actual_system_loader_id != HeapDump::NULL_ID) {
-    const jobject *restored = objects.get(_actual_system_loader_id);
+    const Handle *restored = objects.get(_actual_system_loader_id);
     if (restored != nullptr) {
       const oop existing = SystemDictionary::java_system_loader();
       if (existing != nullptr) {
-        guarantee(JNIHandles::resolve_non_null(*restored) == existing,
-                  "restored actual system loader must be the existing one");
+        guarantee(*restored == existing, "restored actual system loader must be the existing one");
       } else {
         log_error(crac)("Restoration of base class loaders is not implemented");
         Unimplemented();
@@ -256,58 +248,34 @@ ArrayKlass &CracHeapRestorer::get_array_class(HeapDump::ID id) const {
   return **ak_ptr;
 }
 
-oop CracHeapRestorer::get_object_when_present(HeapDump::ID id) const {
+Handle CracHeapRestorer::get_object_when_present(HeapDump::ID id) const {
   assert(id != HeapDump::NULL_ID, "nulls are not recorded");
   assert(_objects.contains(id), "object " HDID_FORMAT " was expected to be recorded", id);
-  return JNIHandles::resolve_non_null(*_objects.get(id));
+  return *_objects.get(id);
 }
 
-oop CracHeapRestorer::get_object_if_present(HeapDump::ID id) const {
+Handle CracHeapRestorer::get_object_if_present(HeapDump::ID id) const {
   assert(id != HeapDump::NULL_ID, "nulls are not recorded");
-  const jobject *obj_h = _objects.get(id);
-  return obj_h != nullptr ? JNIHandles::resolve_non_null(*obj_h) : nullptr;
+  const Handle *obj_h = _objects.get(id);
+  return obj_h != nullptr ? *obj_h : Handle();
 }
 
-jobject CracHeapRestorer::put_object_when_absent(HeapDump::ID id, Handle obj) {
+void CracHeapRestorer::put_object_when_absent(HeapDump::ID id, Handle obj) {
   assert(id != HeapDump::NULL_ID && obj.not_null(), "nulls should not be recorded");
   assert(!_objects.contains(id), "object " HDID_FORMAT " was expected to be absent", id);
-  const jobject h = JNIHandles::make_global(obj);
-  _objects.put_when_absent(id, h);
+  _objects.put_when_absent(id, obj);
   _objects.maybe_grow();
-  return h;
 }
 
-jobject CracHeapRestorer::put_object_when_absent(HeapDump::ID id, oop obj) {
-  return put_object_when_absent(id, Handle(Thread::current(), obj));
-}
-
-jobject CracHeapRestorer::put_object_if_absent(HeapDump::ID id, Handle obj) {
+void CracHeapRestorer::put_object_if_absent(HeapDump::ID id, Handle obj) {
   assert(id != HeapDump::NULL_ID && obj.not_null(), "nulls should not be recorded");
   bool is_absent;
-  jobject *const node = _objects.put_if_absent(id, &is_absent);
+  const Handle &res = *_objects.put_if_absent(id, obj, &is_absent);
+  guarantee(res == obj, "two different objects restored for ID " HDID_FORMAT ": " PTR_FORMAT " (%s) != " PTR_FORMAT " (%s)",
+            id, p2i(res()), res->klass()->external_name(), p2i(obj()), obj->klass()->external_name());
   if (is_absent) {
-    // Only allocate JNI handle if will record: it must be freed
-    *node = JNIHandles::make_global(obj);
     _objects.maybe_grow();
-  } else {
-    assert(JNIHandles::resolve(*node) == obj(), "two different objects restored for ID " HDID_FORMAT, id);
   }
-  return *node;
-}
-
-jobject CracHeapRestorer::put_object_if_absent(HeapDump::ID id, oop obj) {
-  assert(id != HeapDump::NULL_ID && obj != nullptr, "nulls should not be recorded");
-  bool is_absent;
-  jobject *const node = _objects.put_if_absent(id, &is_absent);
-  if (is_absent) {
-    // Only allocate JNI handle if will record: it must be freed, also don't
-    // create a usual handle if it won't be used
-    *node = JNIHandles::make_global(Handle(Thread::current(), obj));
-    _objects.maybe_grow();
-  } else {
-    guarantee(JNIHandles::resolve(*node) == obj, "two different objects restored for ID " HDID_FORMAT, id);
-  }
-  return *node;
 }
 
 #ifdef ASSERT
@@ -362,8 +330,8 @@ instanceHandle CracHeapRestorer::get_class_loader_unnamed_module(const HeapDump:
   { // Would be better to check all fields but loader are null and do it before restoring the object, but it's harder
     assert(java_lang_Module::name(unnamed_module()) == nullptr,
            "unnamed module of class loader " HDID_FORMAT " is not unnamed", loader_dump.id);
-    const oop loader = get_object_when_present(loader_dump.id);
-    assert(java_lang_Module::loader(unnamed_module()) == loader,
+    const Handle loader = get_object_when_present(loader_dump.id);
+    assert(loader == java_lang_Module::loader(unnamed_module()),
            "unnamed module of class loader " HDID_FORMAT " belongs to a different class loader", loader_dump.id);
   }
 #endif // ASSERT
@@ -378,7 +346,7 @@ instanceHandle CracHeapRestorer::get_class_loader_parallel_lock_map(const HeapDu
   DEBUG_ONLY(assert_builtin_class_instance(_heap_dump, map_id, vmSymbols::java_util_concurrent_ConcurrentHashMap()));
 
   // Check for null above, so it's either already created or we need to create one
-  const oop existing_map = get_object_if_present(map_id);
+  const Handle existing_map = get_object_if_present(map_id);
   if (existing_map == nullptr) {
     const instanceHandle map = vmClasses::ConcurrentHashMap_klass()->allocate_instance_handle(CHECK_({}));
     put_object_when_absent(map_id, map);
@@ -387,7 +355,8 @@ instanceHandle CracHeapRestorer::get_class_loader_parallel_lock_map(const HeapDu
   guarantee(existing_map->klass() == vmClasses::ConcurrentHashMap_klass(),
             "class loader " HDID_FORMAT " has its 'parallelLockMap' field referencing a %s but it must reference a %s",
             loader_dump.id, existing_map->klass()->external_name(), vmClasses::ConcurrentHashMap_klass()->external_name());
-  return {Thread::current(), static_cast<instanceOop>(existing_map)};
+  precond(existing_map->is_instance());
+  return *static_cast<const instanceHandle *>(&existing_map);
 }
 
 // Allocates class loader and restores fields the VM may use for class loading:
@@ -457,12 +426,13 @@ instanceHandle CracHeapRestorer::get_class_loader(HeapDump::ID id, TRAPS) {
     return {}; // Bootstrap loader
   }
 
-  const oop existing_loader = get_object_if_present(id);
-  if (existing_loader != nullptr) {
+  const Handle existing_loader = get_object_if_present(id);
+  if (existing_loader.not_null()) {
     guarantee(existing_loader->klass()->is_class_loader_instance_klass(),
               "object " HDID_FORMAT " is not a class loader: its class %s does not subclass %s",
               id, existing_loader->klass()->external_name(), vmSymbols::java_lang_ClassLoader()->as_klass_external_name());
-    return {Thread::current(), static_cast<instanceOop>(existing_loader)};
+    precond(existing_loader->is_instance());
+    return *static_cast<const instanceHandle *>(&existing_loader);
   }
 
   precond(!_prepared_loaders.contains(id));
@@ -476,7 +446,7 @@ instanceHandle CracHeapRestorer::get_class_loader(HeapDump::ID id, TRAPS) {
 // Heap restoration driver
 
 void CracHeapRestorer::restore_heap(const HeapDumpTable<UnfilledClassInfo, AnyObj::C_HEAP> &class_infos,
-                                    const GrowableArrayView<StackTrace *> &stack_traces, TRAPS) {
+                                    const GrowableArrayView<CracStackTrace *> &stack_traces, TRAPS) {
   log_info(crac)("Started heap restoration");
   HandleMark hm(Thread::current());
 
@@ -527,20 +497,24 @@ void CracHeapRestorer::restore_heap(const HeapDumpTable<UnfilledClassInfo, AnyOb
 #endif // ASSERT
   guarantee(_prepared_loaders.number_of_entries() == 0, "some prepared class loaders have not defined any classes");
 
-  // Restore objects reachable from thread stacks to be restored.
+  // Restore objects reachable from the thread stacks
   for (const auto *trace : stack_traces) {
-    for (u4 i = 0; i < trace->frames_num(); i++) {
-      const StackTrace::Frame &frame = trace->frame(i);
-      for (u2 j = 0; j < frame.locals().size(); j++) {
-        const StackTrace::Frame::Value &value = frame.locals()[j];
-        if (value.type == DumpedStackValueType::REFERENCE) {
-          restore_object(value.obj_id, CHECK);
+    for (u4 frame_i = 0; frame_i < trace->frames_num(); frame_i++) {
+      const CracStackTrace::Frame &frame = trace->frame(frame_i);
+      const u2 num_locals = frame.locals().length();
+      for (u2 loc_i = 0; loc_i < num_locals; loc_i++) {
+        CracStackTrace::Frame::Value &value = *frame.locals().adr_at(loc_i);
+        if (value.type() == CracStackTrace::Frame::Value::Type::REF) {
+          const Handle obj = restore_object(value.as_obj_id(), CHECK);
+          value = CracStackTrace::Frame::Value::of_obj(obj);
         }
       }
-      for (u2 j = 0; j < frame.operands().size(); j++) {
-        const StackTrace::Frame::Value &value = frame.operands()[j];
-        if (value.type == DumpedStackValueType::REFERENCE) {
-          restore_object(value.obj_id, CHECK);
+      const u2 num_operands = frame.operands().length();
+      for (u2 op_i = 0; op_i < num_operands; op_i++) {
+        CracStackTrace::Frame::Value &value = *frame.operands().adr_at(op_i);
+        if (value.type() == CracStackTrace::Frame::Value::Type::REF) {
+          const Handle obj = restore_object(value.as_obj_id(), CHECK);
+          value = CracStackTrace::Frame::Value::of_obj(obj);
         }
       }
     }
@@ -601,21 +575,22 @@ void CracHeapRestorer::record_class_mirror(instanceHandle mirror, const HeapDump
     log_trace(crac)("Recording class mirror " HDID_FORMAT " of %s", mirror_dump.id, type_name);
   }
   precond(!_objects.contains(mirror_dump.id) && mirror.not_null());
-  const jobject recorded_mirror = put_object_when_absent(mirror_dump.id, mirror);
+  put_object_when_absent(mirror_dump.id, mirror);
 
   _mirror_dump_reader.ensure_initialized(_heap_dump, mirror_dump.class_id);
 
   const HeapDump::ID module_id = _mirror_dump_reader.module(mirror_dump);
-  const oop module_obj = java_lang_Class::module(mirror());
+  const auto module_obj = static_cast<instanceOop>(java_lang_Class::module(mirror()));
   assert(module_obj != nullptr, "module must be set");
-  put_object_if_absent(module_id, module_obj); // Can be pre-recorded via another class from this module
+  put_object_if_absent(module_id, instanceHandle(Thread::current(), module_obj)); // Can be pre-recorded via another class from this module
 
   // Name can be initialized concurrently, so if it was dumped, initialize and
   // record it eagerly
   const HeapDump::ID name_id = _mirror_dump_reader.name(mirror_dump);
   if (name_id != HeapDump::NULL_ID) {
-    const oop name = java_lang_Class::name(mirror, CHECK);
-    put_object_if_absent(name_id, name); // Checks it's either absent or set to the same oop
+    const oop name_oop = java_lang_Class::name(mirror, CHECK);
+    const auto name_obj = static_cast<instanceOop>(name_oop);
+    put_object_if_absent(name_id, instanceHandle(Thread::current(), name_obj)); // Checks it's either absent or set to the same oop
   }
 
 #ifdef ASSERT
@@ -632,8 +607,8 @@ void CracHeapRestorer::record_class_mirror(instanceHandle mirror, const HeapDump
          "component mirror must be dumped iff it exists in the runtime");
   if (component_mirror_id != HeapDump::NULL_ID) {
     assert(_heap_dump.instance_dumps.contains(component_mirror_id), "unknown component mirror " HDID_FORMAT, component_mirror_id);
-    const oop component_mirror = get_object_if_present(component_mirror_id); // May not be recorded yet
-    if (component_mirror != nullptr) {
+    const Handle component_mirror = get_object_if_present(component_mirror_id); // May not be recorded yet
+    if (component_mirror.not_null()) {
       assert(component_mirror == expected_component_mirror, "unexpected component mirror recorded as " HDID_FORMAT, component_mirror_id);
     } else {
       assert(java_lang_Class::is_primitive(expected_component_mirror) || _heap_dump.class_dumps.contains(component_mirror_id),
@@ -893,10 +868,14 @@ bool CracHeapRestorer::set_class_mirror_instance_field_if_special(instanceHandle
   //  all pre-existing objects and block other threads from creating new ones
   //  until the restoration completes.
   assert(is_reference_type(Signature::basic_type(obj_fs.signature())), "all primitives are handled above");
-  const oop preexisting_val = obj->obj_field(obj_fs.offset());
-  if (preexisting_val != nullptr) {
+  const oop preexisting = obj->obj_field(obj_fs.offset());
+  if (preexisting != nullptr) {
     precond(dump_fs.type() == T_OBJECT);
-    put_object_if_absent(dump_fs.value().as_object_id, preexisting_val); // Also ensures there is no overwriting
+    Handle preexisting_h;
+    if (preexisting->is_instance()) {            preexisting_h = instanceHandle(Thread::current(),  static_cast<instanceOop>(preexisting)); }
+    else if (preexisting->is_objArray()) {       preexisting_h = objArrayHandle(Thread::current(),  static_cast<objArrayOop>(preexisting)); }
+    else { precond(preexisting->is_typeArray()); preexisting_h = typeArrayHandle(Thread::current(), static_cast<typeArrayOop>(preexisting)); }
+    put_object_if_absent(dump_fs.value().as_object_id, preexisting_h); // Also ensures there is no overwriting
     return true;
   }
 
@@ -963,11 +942,11 @@ bool CracHeapRestorer::set_member_name_instance_field_if_special(instanceHandle 
                         vmSymbols::java_lang_invoke_MemberName()->as_klass_external_name());
         Unimplemented();
       }
-      const oop type_mirror = get_object_when_present(type_id); // Must be a non-void mirror, so should be pre-recorded
+      const Handle type_mirror = get_object_when_present(type_id); // Must be a non-void mirror, so should be pre-recorded
       TempNewSymbol signature;
       {
         Klass *k;
-        const BasicType bt = java_lang_Class::as_BasicType(type_mirror, &k);
+        const BasicType bt = java_lang_Class::as_BasicType(type_mirror(), &k);
         if (is_java_primitive(bt)) {
           signature = vmSymbols::type_signature(bt);
           signature->increment_refcount(); // TempNewSymbol will decrement this
@@ -997,8 +976,8 @@ bool CracHeapRestorer::set_member_name_instance_field_if_special(instanceHandle 
     const HeapDump::ID method_name_id = dump_fs.value().as_object_id;
 
     if (method_name_id != HeapDump::NULL_ID) {
-      oop method_name = get_object_if_present(method_name_id);
-      if (method_name == nullptr) {
+      Handle method_name = get_object_if_present(method_name_id);
+      if (method_name.is_null()) {
         const HeapDump::InstanceDump &method_name_dump = _heap_dump.get_instance_dump(method_name_id);
 
 #ifdef ASSERT
@@ -1012,10 +991,11 @@ bool CracHeapRestorer::set_member_name_instance_field_if_special(instanceHandle 
                   vmSymbols::java_lang_invoke_ResolvedMethodName()->as_klass_external_name());
 
         const methodHandle resolved_method = get_resolved_method(method_name_dump, CHECK_({}));
-        method_name = java_lang_invoke_ResolvedMethodName::find_resolved_method(resolved_method, CHECK_({}));
+        const oop method_name_o = java_lang_invoke_ResolvedMethodName::find_resolved_method(resolved_method, CHECK_({}));
+        method_name = instanceHandle(Thread::current(), static_cast<instanceOop>(method_name_o));
         put_object_when_absent(method_name_id, method_name); // Should still be absent
       }
-      obj->obj_field_put(obj_fs.offset(), method_name);
+      obj->obj_field_put(obj_fs.offset(), method_name());
     }
 
     return true;
@@ -1047,7 +1027,7 @@ bool CracHeapRestorer::set_call_site_instance_field_if_special(instanceHandle ob
            vmSymbols::java_lang_invoke_MethodHandleNatives_CallSiteContext()->as_klass_external_name(),
            context_class.external_name(), context_class.class_loader_data()->loader_name_and_id());
 
-    oop context;
+    instanceOop context;
     { // Allocate a new context and register it with this call site
       // If this'll be failing, restore CallSiteContext before the rest of the classes
       guarantee(context_class.is_initialized(), "need to pre-initialize %s", context_class.external_name());
@@ -1055,9 +1035,9 @@ bool CracHeapRestorer::set_call_site_instance_field_if_special(instanceHandle ob
       const TempNewSymbol make_sig = SymbolTable::new_symbol("(Ljava/lang/invoke/CallSite;)Ljava/lang/invoke/MethodHandleNatives$CallSiteContext;");
       JavaValue result;
       JavaCalls::call_static(&result, &context_class, make_name, make_sig, obj, CHECK_false);
-      context = result.get_oop();
+      context = static_cast<instanceOop>(result.get_oop());
     }
-    put_object_when_absent(context_id, context); // Should still be absent
+    put_object_when_absent(context_id, instanceHandle(Thread::current(), context)); // Should still be absent
 
     obj->obj_field_put(obj_fs.offset(), context);
     return true;
@@ -1321,9 +1301,9 @@ void CracHeapRestorer::restore_class_mirror(HeapDump::ID id, TRAPS) {
   // Instance mirrors must be pre-recorded
   instanceHandle mirror;
   {
-    const oop mirror_obj = get_object_when_present(id);
-    assert(mirror_obj->is_instance(), "mirrors are instances");
-    mirror = instanceHandle(Thread::current(), static_cast<instanceOop>(mirror_obj));
+    Handle mirror_h = get_object_when_present(id);
+    assert(mirror_h->is_instance(), "mirrors are instances");
+    mirror = *static_cast<instanceHandle *>(&mirror_h);
   }
 
   // Side-effect: finishes restoration of the class loader if only prepared
@@ -1353,9 +1333,9 @@ Handle CracHeapRestorer::restore_object(HeapDump::ID id, TRAPS) {
   if (id == HeapDump::NULL_ID) {
     return {};
   }
-  const jobject *ready = _objects.get(id);
+  const Handle *ready = _objects.get(id);
   if (ready != nullptr) {
-    return {Thread::current(), JNIHandles::resolve(*ready)};
+    return *ready;
   }
 
   const HeapDump::InstanceDump *instance_dump = _heap_dump.instance_dumps.get(id);

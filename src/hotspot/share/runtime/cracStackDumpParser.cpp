@@ -6,6 +6,9 @@
 #include "runtime/cracClassDumpParser.hpp"
 #include "runtime/cracStackDumpParser.hpp"
 #include "runtime/cracStackDumper.hpp"
+#include "runtime/handles.hpp"
+#include "runtime/jniHandles.hpp"
+#include "runtime/jniHandles.inline.hpp"
 #include "runtime/os.hpp"
 #include "utilities/basicTypeReader.hpp"
 #include "utilities/debug.hpp"
@@ -14,9 +17,38 @@
 #include "utilities/heapDumpParser.hpp"
 #include "utilities/methodKind.hpp"
 
-Method *StackTrace::Frame::resolve_method(const HeapDumpTable<InstanceKlass *, AnyObj::C_HEAP> &classes,
-                                          const ParsedHeapDump::RecordTable<HeapDump::UTF8> &symbols, TRAPS) {
-  if (method() != nullptr) {
+CracStackTrace::Frame::Value::Value(const CracStackTrace::Frame::Value &other) : _type(other.type()) {
+  switch (type()) {
+    case Type::EMPTY: break;
+    case Type::PRIM:  _prim = other.as_primitive(); break;
+    case Type::REF:   _obj_id = other.as_obj_id();  break;
+    case Type::OBJ: {
+      // The value owns the handle, so must make a new one
+      log_debug(crac, stacktrace)("Copying a resolved stack value");
+      const Handle h = Handle(Thread::current(), JNIHandles::resolve(other.as_obj()));
+      _obj = JNIHandles::make_global(h);
+      break;
+    }
+    default:          ShouldNotReachHere();
+  }
+}
+
+// Note: 'other' is a local copy, so we rely on the copy-constructor above
+CracStackTrace::Frame::Value &CracStackTrace::Frame::Value::operator=(CracStackTrace::Frame::Value other) {
+  swap(_type, other._type);
+  switch (type()) {
+    case Type::EMPTY: break;
+    case Type::PRIM:  swap(_prim, other._prim); break;
+    case Type::REF:   swap(_obj_id, other._obj_id); break;
+    case Type::OBJ:   swap(_obj, other._obj); break;
+    default:          ShouldNotReachHere();
+  }
+  return *this; // 'other' gets destroyed
+}
+
+Method *CracStackTrace::Frame::resolve_method(const HeapDumpTable<InstanceKlass *, AnyObj::C_HEAP> &classes,
+                                              const ParsedHeapDump::RecordTable<HeapDump::UTF8> &symbols, TRAPS) {
+  if (_resolved_method != nullptr) {
     return method();
   }
 
@@ -64,7 +96,7 @@ static constexpr bool is_supported_word_size(u2 size) {
 
 class StackTracesParser : public StackObj {
  public:
-  StackTracesParser(FileBasicTypeReader *reader, GrowableArrayCHeap<StackTrace *, mtInternal> *out, u2 word_size)
+  StackTracesParser(FileBasicTypeReader *reader, GrowableArrayCHeap<CracStackTrace *, mtInternal> *out, u2 word_size)
       : _reader(reader), _out(out), _word_size(word_size) {
     precond(_reader != nullptr && _out != nullptr && is_supported_word_size(_word_size));
   }
@@ -83,7 +115,7 @@ class StackTracesParser : public StackObj {
       log_debug(crac, stacktrace, parser)("Parsing " UINT32_FORMAT " frame(s) of thread " SDID_FORMAT,
                                           preamble.frames_num, preamble.thread_id);
 
-      auto *trace = new StackTrace(preamble.thread_id, preamble.frames_num);
+      auto *const trace = new CracStackTrace(preamble.thread_id, preamble.frames_num);
       for (u4 i = 0; i < trace->frames_num(); i++) {
         log_trace(crac, stacktrace, parser)("Parsing frame " UINT32_FORMAT, i);
         if (!parse_frame(&trace->frame(i))) {
@@ -100,19 +132,20 @@ class StackTracesParser : public StackObj {
   }
 
  private:
-  FileBasicTypeReader *_reader;
-  GrowableArrayCHeap<StackTrace *, mtInternal> *_out;
-  u2 _word_size;
+  FileBasicTypeReader *const _reader;
+  GrowableArrayCHeap<CracStackTrace *, mtInternal> *const _out;
+  const u2 _word_size;
 
   struct TracePreamble {
     bool finish;
-    StackTrace::ID thread_id;
+    CracStackTrace::ID thread_id;
     u4 frames_num;
   };
 
   bool parse_stack_preamble(TracePreamble *preamble) {
     // Thread ID
-    u1 buf[sizeof(StackTrace::ID)]; // Using _word_size as a size would cause error C2131 on MSVC
+    precond(_word_size <= sizeof(CracStackTrace::ID));
+    u1 buf[sizeof(CracStackTrace::ID)]; // Using _word_size as a size would cause error C2131 on MSVC
     // Read the first byte separately to detect a possible correct EOF
     if (!_reader->read_raw(buf, 1)) {
       if (_reader->eos()) {
@@ -159,7 +192,7 @@ class StackTracesParser : public StackObj {
     return true;
   }
 
-  bool parse_frame(StackTrace::Frame *frame) {
+  bool parse_frame(CracStackTrace::Frame *frame) {
     HeapDump::ID method_name_id;
     if (!_reader->read_uint(&method_name_id, _word_size)) {
       log_error(crac, stacktrace, parser)("Failed to read method name ID");
@@ -212,13 +245,13 @@ class StackTracesParser : public StackObj {
     return true;
   }
 
-  bool parse_stack_values(ExtendableArray<StackTrace::Frame::Value, u2> *values) {
+  bool parse_stack_values(GrowableArrayCHeap<CracStackTrace::Frame::Value, mtInternal> *values) {
     u2 values_num;
     if (!_reader->read(&values_num)) {
       log_error(crac, stacktrace, parser)("Failed to read the number of values");
       return false;
     }
-    values->extend(values_num);
+    values->reserve(values_num);
     log_trace(crac, stacktrace, parser)("Parsing %i value(s)", values_num);
 
     for (u2 i = 0; i < values_num; i++) {
@@ -229,17 +262,19 @@ class StackTracesParser : public StackObj {
       }
 
       if (type == DumpedStackValueType::PRIMITIVE) {
-        (*values)[i].type = static_cast<DumpedStackValueType>(type);
-        if (!_reader->read_uint(&(*values)[i].prim, _word_size)) {
+        u8 prim;
+        if (!_reader->read_uint(&prim, _word_size)) {
           log_error(crac, stacktrace, parser)("Failed to read value #%i as a primitive", i);
           return false;
         }
+        values->append(CracStackTrace::Frame::Value::of_primitive(prim));
       } else if (type == DumpedStackValueType::REFERENCE) {
-        (*values)[i].type = DumpedStackValueType::REFERENCE;
-        if (!_reader->read_uint(&(*values)[i].obj_id, _word_size)) {
+        CracStackTrace::ID id;
+        if (!_reader->read_uint(&id, _word_size)) {
           log_error(crac, stacktrace, parser)("Failed to read value #%i as a reference", i);
           return false;
         }
+        values->append(CracStackTrace::Frame::Value::of_obj_id(id));
       } else {
         log_error(crac, stacktrace, parser)("Unknown type of value #%i: " UINT8_FORMAT_X_0, i, type);
         return false;
@@ -290,7 +325,7 @@ static const char *parse_header(BasicTypeReader *reader, u2 *word_size) {
   return nullptr;
 }
 
-const char *CracStackDumpParser::parse(const char *path, ParsedStackDump *out) {
+const char *CracStackDumpParser::parse(const char *path, ParsedCracStackDump *out) {
   precond(path != nullptr);
   precond(out != nullptr);
 

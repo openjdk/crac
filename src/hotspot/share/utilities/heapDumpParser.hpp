@@ -129,7 +129,7 @@ using HeapDumpTable = ResizeableResourceHashtable<HeapDump::ID, V, ALLOC_TYPE>;
 
 struct ParsedHeapDump : public CHeapObj<mtInternal> {
   template <class V>
-  using RecordTable = HeapDumpTable<V, AnyObj::C_HEAP>; // TODO use resource area
+  using RecordTable = HeapDumpTable<V, AnyObj::C_HEAP /*for destructors to be called*/>;
 
   // Actual size of IDs in the dump.
   u4 id_size;

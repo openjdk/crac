@@ -1,7 +1,6 @@
 #ifndef SHARE_RUNTIME_CRACHEAPRESTORER_HPP
 #define SHARE_RUNTIME_CRACHEAPRESTORER_HPP
 
-#include "jni.h"
 #include "memory/allocation.hpp"
 #include "oops/oopsHierarchy.hpp"
 #include "runtime/handles.hpp"
@@ -22,11 +21,11 @@ class WellKnownObjects {
   // Adds the collected well-known objects into the table. Should be called
   // before restoring any objects to avoid re-creating the existing well-known
   // objects.
-  void put_into(HeapDumpTable<jobject, AnyObj::C_HEAP> *objects) const;
+  void put_into(HeapDumpTable<Handle, AnyObj::C_HEAP> *objects) const;
 
   // Sets the well-known objects that are not yet set in this VM and checks
   // that the ones that are set have the specified values.
-  void get_from(const HeapDumpTable<jobject, AnyObj::C_HEAP> &objects) const;
+  void get_from(const HeapDumpTable<Handle, AnyObj::C_HEAP> &objects) const;
 
  private:
   HeapDump::ID _platform_loader_id = HeapDump::NULL_ID;       // Built-in platform loader
@@ -53,7 +52,7 @@ class ClassLoaderProvider : public StackObj {
 };
 
 struct UnfilledClassInfo;
-class StackTrace;
+class CracStackTrace;
 
 // Restores heap based on an HPROF dump created by HeapDumper (there are some
 // assumptions that are not guaranteed by the general HPROF standard).
@@ -63,9 +62,9 @@ class CracHeapRestorer : public ClassLoaderProvider {
   CracHeapRestorer(const ParsedHeapDump &heap_dump,
                    const HeapDumpTable<InstanceKlass *, AnyObj::C_HEAP> &instance_classes,
                    const HeapDumpTable<ArrayKlass *, AnyObj::C_HEAP> &array_classes,
-                   HeapDumpTable<jobject, AnyObj::C_HEAP> *objects, TRAPS) :
+                   TRAPS) :
       _heap_dump(heap_dump), _instance_classes(instance_classes), _array_classes(array_classes),
-      _well_known_objects(heap_dump, THREAD), _objects(*objects) {
+      _well_known_objects(heap_dump, THREAD) {
     if (HAS_PENDING_EXCEPTION) {
       return;
     }
@@ -75,7 +74,7 @@ class CracHeapRestorer : public ClassLoaderProvider {
   instanceHandle get_class_loader(HeapDump::ID id, TRAPS) override;
 
   void restore_heap(const HeapDumpTable<UnfilledClassInfo, AnyObj::C_HEAP> &class_infos,
-                    const GrowableArrayView<StackTrace *> &stack_traces, TRAPS);
+                    const GrowableArrayView<CracStackTrace *> &stack_traces, TRAPS);
 
  private:
   const ParsedHeapDump &_heap_dump;
@@ -83,8 +82,11 @@ class CracHeapRestorer : public ClassLoaderProvider {
   const HeapDumpTable<ArrayKlass *, AnyObj::C_HEAP> &_array_classes;
 
   const WellKnownObjects _well_known_objects;
-  HeapDumpTable<jobject, AnyObj::C_HEAP> &_objects;
-  HeapDumpTable<bool> _prepared_loaders{3, 127};
+
+  // Not resource-allocated because that would limit resource usage between
+  // getting class loaders and restoring the heap
+  HeapDumpTable<Handle, AnyObj::C_HEAP> _objects{1009, 100000};
+  HeapDumpTable<bool, AnyObj::C_HEAP> _prepared_loaders{3, 127};
 
   HeapDumpClasses::java_lang_ClassLoader _loader_dump_reader;
   HeapDumpClasses::java_lang_Class _mirror_dump_reader;
@@ -94,12 +96,10 @@ class CracHeapRestorer : public ClassLoaderProvider {
   InstanceKlass &get_instance_class(HeapDump::ID id) const;
   ArrayKlass &get_array_class(HeapDump::ID id) const;
 
-  oop get_object_when_present(HeapDump::ID id) const; // Always not null (nulls aren't recorded)
-  oop get_object_if_present(HeapDump::ID id) const;   // Null iff the object has not been recorded yet
-  jobject put_object_when_absent(HeapDump::ID id, Handle obj);
-  jobject put_object_when_absent(HeapDump::ID id, oop obj);
-  jobject put_object_if_absent(HeapDump::ID id, Handle obj);
-  jobject put_object_if_absent(HeapDump::ID id, oop obj);
+  Handle get_object_when_present(HeapDump::ID id) const; // Always not null (nulls aren't recorded)
+  Handle get_object_if_present(HeapDump::ID id) const;   // Null iff the object has not been recorded yet
+  void put_object_when_absent(HeapDump::ID id, Handle obj);
+  void put_object_if_absent(HeapDump::ID id, Handle obj);
 
   // Partially restores the class loader so it can be used for class definition.
   instanceHandle prepare_class_loader(HeapDump::ID id, TRAPS);

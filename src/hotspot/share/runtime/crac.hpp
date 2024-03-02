@@ -30,7 +30,6 @@
 #include "runtime/handles.hpp"
 #include "runtime/javaThread.hpp"
 #include "utilities/exceptions.hpp"
-#include "utilities/heapDumpParser.hpp"
 
 // xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
 #define UUID_LENGTH 36
@@ -79,12 +78,8 @@ private:
   static jlong javaTimeNanos_offset;
 
   static JavaValue restore_current_thread(TRAPS);
-  static void clear_restoration_data();
 
-  static ParsedHeapDump  *_heap_dump;
-  static ParsedStackDump *_stack_dump;
-  static HeapDumpTable<InstanceKlass *, AnyObj::C_HEAP> *_portable_restored_classes;
-  static HeapDumpTable<jobject, AnyObj::C_HEAP> *_portable_restored_objects;
+  static ParsedCracStackDump *_stack_dump;
 };
 
 #endif //SHARE_RUNTIME_CRAC_HPP

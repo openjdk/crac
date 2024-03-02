@@ -1,5 +1,6 @@
 #include "precompiled.hpp"
 #include "classfile/javaClasses.hpp"
+#include "classfile/vmSymbols.hpp"
 #include "interpreter/bytecodes.hpp"
 #include "logging/log.hpp"
 #include "memory/allocation.hpp"
@@ -66,7 +67,7 @@ class ThreadStackStream : public StackObj {
     _frames.clear();
     vframeStream vfs(thread, /*stop_at_java_call_stub=*/ true);
 
-    if (!vfs.at_end() && vfs.method()->is_native()) {
+    if (!vfs.at_end() && vfs.method()->is_native() && !is_special_native_method(*vfs.method())) {
       if (log_is_enabled(Debug, crac, stacktrace, dump)) {
         ResourceMark rm;
         log_debug(crac, stacktrace, dump)("Thread " UINTX_FORMAT " (%s) is executing native method %s",
@@ -75,8 +76,10 @@ class ThreadStackStream : public StackObj {
       return Status::NON_JAVA_ON_TOP;
     }
 
+    DEBUG_ONLY(bool is_youngest_frame = true);
     for (; !vfs.at_end(); vfs.next()) {
-      assert(!vfs.method()->is_native(), "only the youngest frame can be native");
+      assert(is_youngest_frame || !vfs.method()->is_native(), "only the youngest frame can be native");
+      DEBUG_ONLY(is_youngest_frame = false);
       if (vfs.method()->is_old()) {
         ResourceMark rm;
         log_warning(crac, stacktrace, dump)("JVM TI support will be required on restore: thread %s executes an old version of %s",
@@ -124,6 +127,15 @@ class ThreadStackStream : public StackObj {
     // }
     return !thread.is_exiting() &&
            java_lang_Thread::threadGroup(thread.threadObj()) == Universe::main_thread_group() && strcmp(thread.name(), "main") == 0;
+  }
+
+  // Whether this is a native method known how to restore.
+  static bool is_special_native_method(const Method &m) {
+    precond(m.is_native());
+    const InstanceKlass &holder = *m.method_holder();
+    return holder.name() == vmSymbols::jdk_crac_Core() &&
+           holder.class_loader_data()->is_the_null_class_loader_data() &&
+           m.name() == vmSymbols::checkpointRestore0_name();
   }
 };
 
@@ -180,13 +192,23 @@ class StackDumpWriter : public StackObj {
       //  2. For compiled frame, is exec_mode used by deoptimization to decide
       //     on re-execution also important for us here?
       if (i == 0 && frame.is_compiled_frame() && !static_cast<const compiledVFrame &>(frame).should_reexecute()) {
+        assert(!frame.method()->is_native(), "native methods are not compiled");
         const int code_len = Bytecodes::length_at(frame.method(), frame.method()->bcp_from(frame.bci()));
         log_trace(crac, stacktrace, dump)("moving BCI: %i -> %i", bci, bci + code_len);
         assert(bci + code_len <= UINT16_MAX, "overflow");
         bci += code_len;
       }
       guarantee(frame.method()->validate_bci(bci) >= 0, "invalid BCI %i for %s", bci, frame.method()->external_name());
-      log_trace(crac, stacktrace, dump)("BCI: %i (%s)", bci, Bytecodes::name(frame.method()->java_code_at(bci)));
+      if (log_is_enabled(Trace, crac, stacktrace, dump)) {
+        const char *code_name;
+        if (!frame.method()->is_native()) {
+          code_name = Bytecodes::name(frame.method()->java_code_at(bci));
+        } else {
+          assert(bci == 0, "no bytecodes in a native method");
+          code_name = "native entrance";
+        }
+        log_trace(crac, stacktrace, dump)("BCI: %i (%s)", bci, code_name);
+      }
       WRITE(bci);
 
       log_trace(crac, stacktrace, dump)("Locals:");

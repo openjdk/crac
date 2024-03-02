@@ -798,6 +798,7 @@ class SerializeClosure;
   template(jdk_crac_Core,                          "jdk/crac/Core")                                               \
   template(checkpointRestoreInternal_name,         "checkpointRestoreInternal")                                   \
   template(checkpointRestoreInternal_signature,    "(J)Ljava/lang/String;")                                       \
+  template(checkpointRestore0_name,                "checkpointRestore0")                                          \
                                                                                                                   \
   /* Thread.dump_to_file jcmd */                                                                                  \
   template(jdk_internal_vm_ThreadDumper,           "jdk/internal/vm/ThreadDumper")                                \

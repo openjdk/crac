@@ -931,7 +931,8 @@ class vframeRestoreArray : public vframeArray {
   void fill_in(const CracStackTrace &stack) {
     _frame_size = 0; // Unused (no frame is being deoptimized)
 
-    // The first frame is the youngest, the last is the oldest
+    // vframeRestoreArray: the first frame is the youngest, the last is the oldest
+    // CracStackTrace:     the first frame is the oldest, the last is the youngest
     log_trace(crac)("Filling stack trace for thread " SDID_FORMAT, stack.thread_id());
     precond(frames() == checked_cast<int>(stack.frames_num()));
     for (int i = 0; i < frames(); i++) {
@@ -940,7 +941,7 @@ class vframeRestoreArray : public vframeArray {
       // Note: youngest frame's BCI is always re-executed -- this is important
       // because otherwise deopt's unpacking code will try to use ToS caching
       // which we don't account for
-      elem->fill_in(stack.frame(i), i == 0);
+      elem->fill_in(stack.frame(frames() - 1 - i), /*reexecute when youngest*/ i == 0);
       assert(!elem->method()->is_native(), "native methods are not restored");
     }
   }
@@ -1077,6 +1078,68 @@ JRT_LEAF(void, crac::fill_in_frames(JavaThread *current))
   DEBUG_ONLY(current->validate_frame_layout();)
 JRT_END
 
+// Make this second-youngest frame the youngest faking the result of the
+// callee (i.e. the current youngest) frame.
+static void transform_to_youngest(CracStackTrace::Frame *frame, Handle callee_result) {
+  const Bytecodes::Code code = frame->method()->code_at(frame->bci());
+  assert(Bytecodes::is_invoke(code), "non-youngest frames stay must be invoking, got %s", Bytecodes::name(code));
+
+  // Push the result onto the operand stack
+  if (callee_result.not_null()) {
+    const auto operands_num = frame->operands().length();
+    assert(operands_num < frame->method()->max_stack(), "cannot push return value: all %i slots taken",
+           frame->method()->max_stack());
+    frame->operands().reserve(operands_num + 1); // Not bare append because it may allocate more than one slot
+    // FIXME append() creates a copy but accepts a reference so no copy elision can occur
+    frame->operands().append({}); // Cheap empty->empty copy, empty->empty swap
+    *frame->operands().adr_at(operands_num) = CracStackTrace::Frame::Value::of_obj(callee_result); // Cheap resolved->empty swap
+  }
+
+  // Increment the BCI past the invoke bytecode
+  const int code_len = Bytecodes::length_for(code);
+  assert(code_len > 0, "invoke codes don't need special length calculation");
+  frame->set_bci(frame->bci() + code_len);
+  assert(frame->method()->validate_bci(frame->bci()) >= 0, "transformed to invalid BCI %i", frame->bci());
+}
+
+// If the youngest frame represents special method requiring a fixup, applies
+// the fixup. If all frames get popped, the return value is returned.
+static JavaValue fixup_youngest_frame_if_special(CracStackTrace *stack, TRAPS) {
+  precond(stack->frames_num() > 0);
+
+  const Method &youngest_m = *stack->frame(stack->frames_num() - 1).method();
+  if (!youngest_m.is_native()) { // Only native methods are special
+    return {};
+  }
+  const InstanceKlass &holder = *youngest_m.method_holder();
+
+  if (holder.name() == vmSymbols::jdk_crac_Core() && holder.class_loader_data()->is_the_null_class_loader_data() &&
+      youngest_m.name() == vmSymbols::checkpointRestore0_name()) { // Checkpoint initiation method
+    // Pop the native frame
+    stack->pop();
+
+    // Create the return value indicating the successful restoration
+    HandleMark hm(Thread::current()); // The handle will either become an oop or a JNI handle
+    const Handle bundle_h = ret_cr(JVM_CHECKPOINT_OK, Handle(), Handle(), Handle(), Handle(), CHECK_({}));
+
+    if (stack->frames_num() == 0) {
+      // No Java caller (e.g. called from JNI), return the value directly
+      precond(bundle_h->is_array());
+      JavaValue bundle_jv(T_ARRAY);
+      bundle_jv.set_oop(bundle_h());
+      return bundle_jv;
+    }
+
+    // Push the return value onto the caller's operand stack
+    CracStackTrace::Frame &caller = stack->frame(stack->frames_num() - 1);
+    transform_to_youngest(&caller, bundle_h);
+  } else {
+    assert(!youngest_m.is_native(), "only special native methods can be restored");
+  }
+
+  return {};
+}
+
 // Fills the provided arguments with null-values according to the provided
 // signature.
 class NullArgumentsFiller : public SignatureIterator {
@@ -1153,7 +1216,18 @@ JavaValue crac::restore_current_thread(TRAPS) {
     return {};
   }
 
-  const CracStackTrace::Frame &oldest_frame = stack->frame(stack->frames_num() - 1);
+  { // Check if there are special frames requiring fixup, this may pop some frames
+    const JavaValue result = fixup_youngest_frame_if_special(stack, CHECK_({}));
+    if (stack->frames_num() == 0) {
+      assert(result.get_type() != T_ILLEGAL, "return value must be initialized");
+      log_info(crac)("Thread " UINTX_FORMAT ": all frames have been popped as special",
+                     cast_from_oop<uintptr_t>(current->threadObj()));
+      delete stack;
+      return result;
+    }
+  }
+
+  const CracStackTrace::Frame &oldest_frame = stack->frame(0);
   Method *const method = oldest_frame.method();
 
   JavaCallArguments args;
@@ -1172,8 +1246,10 @@ JavaValue crac::restore_current_thread(TRAPS) {
   }
   JavaValue result(method->result_type());
   JavaCalls::call(&result, methodHandle(current, method), &args, CHECK_({}));
+  // The stack snapshot has been freed already by now
 
-  log_info(crac)("Thread " UINTX_FORMAT ": restored execution completed", cast_from_oop<uintptr_t>(current->threadObj()));
+  log_info(crac)("Thread " UINTX_FORMAT ": restored execution completed",
+                 cast_from_oop<uintptr_t>(current->threadObj()));
   return result;
 }
 

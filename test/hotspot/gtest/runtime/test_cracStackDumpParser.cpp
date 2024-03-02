@@ -243,20 +243,22 @@ TEST(CracStackDumpParser, multiple_stacks_dumped) {
   EXPECT_EQ(4U, stack_dump.word_size());
   ASSERT_EQ(2, stack_dump.stack_traces().length());
 
+  // Frames are dumped from youngest to oldest but stored in reverse (so that
+  // the youngest is on top), so the frame indices are reversed here
   CracStackTrace expected_trace_1(/* thread ID */ 0xabcdef95, /* frames num */ 2);
-
-  expected_trace_1.frame(0).set_method_name_id(0xabacabaa);
-  expected_trace_1.frame(0).set_method_sig_id(0xbabafeda);
-  expected_trace_1.frame(0).set_method_kind(MethodKind::Enum::STATIC);
-  expected_trace_1.frame(0).set_method_holder_id(0x87654321);
-  expected_trace_1.frame(0).set_bci(5);
-  expected_trace_1.frame(0).locals().append(CracStackTrace::Frame::Value::of_primitive(0xabcdefab));
-
-  expected_trace_1.frame(1).set_method_name_id(0xbacabaca);
-  expected_trace_1.frame(1).set_method_sig_id(0xccddbbaf);
-  expected_trace_1.frame(1).set_method_kind(MethodKind::Enum::INSTANCE);
-  expected_trace_1.frame(1).set_method_holder_id(0x01237832);
-  expected_trace_1.frame(1).set_bci(0x10);
+  // First in the dump, last in the parsed array
+  expected_trace_1.frame(1).set_method_name_id(0xabacabaa);
+  expected_trace_1.frame(1).set_method_sig_id(0xbabafeda);
+  expected_trace_1.frame(1).set_method_kind(MethodKind::Enum::STATIC);
+  expected_trace_1.frame(1).set_method_holder_id(0x87654321);
+  expected_trace_1.frame(1).set_bci(5);
+  expected_trace_1.frame(1).locals().append(CracStackTrace::Frame::Value::of_primitive(0xabcdefab));
+  // Last in the dump, first in the parsed array
+  expected_trace_1.frame(0).set_method_name_id(0xbacabaca);
+  expected_trace_1.frame(0).set_method_sig_id(0xccddbbaf);
+  expected_trace_1.frame(0).set_method_kind(MethodKind::Enum::INSTANCE);
+  expected_trace_1.frame(0).set_method_holder_id(0x01237832);
+  expected_trace_1.frame(0).set_bci(0x10);
 
   check_stack_frames(expected_trace_1, *stack_dump.stack_traces().at(0));
   ASSERT_FALSE(testing::Test::HasFatalFailure() || testing::Test::HasNonfatalFailure()) << "Wrong parsing of trace #1";

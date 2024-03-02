@@ -123,13 +123,15 @@ class CracStackTrace : public CHeapObj<mtInternal> {
 
   // Number of frames in the stack.
   u4 frames_num() const          { return _frames_num; }
-  // Frames from youngest to oldest.
+  // Frames from oldest to youngest.
   const Frame &frame(u4 i) const { precond(i < frames_num()); return _frames[i]; }
   Frame &frame(u4 i)             { precond(i < frames_num()); return _frames[i]; }
+  // Remove the youngest frame.
+  void pop()                     { precond(frames_num() > 0); _frames_num--; }
 
  private:
   const ID _thread_id;
-  const u4 _frames_num;
+  u4 _frames_num;
   Frame *const _frames;
 };
 

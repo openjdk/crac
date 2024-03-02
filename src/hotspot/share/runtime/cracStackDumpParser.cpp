@@ -117,8 +117,10 @@ class StackTracesParser : public StackObj {
 
       auto *const trace = new CracStackTrace(preamble.thread_id, preamble.frames_num);
       for (u4 i = 0; i < trace->frames_num(); i++) {
-        log_trace(crac, stacktrace, parser)("Parsing frame " UINT32_FORMAT, i);
-        if (!parse_frame(&trace->frame(i))) {
+        log_trace(crac, stacktrace, parser)("Parsing frame " UINT32_FORMAT " (youngest first)", i);
+        // Frames are dumped from youngest to oldest but we store them in
+        // reverse so that the youngest frame is last (i.e. is actually on top)
+        if (!parse_frame(&trace->frame(trace->frames_num() - 1 - i))) {
           delete trace;
           return ERR_INVAL_FRAME;
         }

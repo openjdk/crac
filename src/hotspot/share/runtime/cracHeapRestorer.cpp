@@ -448,6 +448,14 @@ instanceHandle CracHeapRestorer::get_class_loader(HeapDump::ID id, TRAPS) {
 
 // Heap restoration driver
 
+static bool is_jdk_crac_Core(const InstanceKlass &ik) {
+  if (ik.name() == vmSymbols::jdk_crac_Core() && ik.class_loader_data()->is_the_null_class_loader_data()) {
+    assert(ik.is_initialized(), "%s is not pre-initialized", ik.external_name());
+    return true;
+  }
+  return false;
+}
+
 void CracHeapRestorer::restore_heap(const HeapDumpTable<UnfilledClassInfo, AnyObj::C_HEAP> &class_infos,
                                     const GrowableArrayView<CracStackTrace *> &stack_traces, TRAPS) {
   log_info(crac)("Started heap restoration");
@@ -471,6 +479,15 @@ void CracHeapRestorer::restore_heap(const HeapDumpTable<UnfilledClassInfo, AnyOb
   // TODO should also restore array and primitive mirrors?
   _instance_classes.iterate([&](HeapDump::ID class_id, InstanceKlass *ik) -> bool {
     if (!ik->is_being_restored()) {
+      // TODO jdk.crac.Core is pre-initialized but we need to restore its fields
+      //  since the global resource context is among them. This discards the new
+      //  global context but we assume it is a subset of the restored one. Such
+      //  special treatment should be removed when we implement restoration of
+      //  all classes (it should stop being pre-initialized then).
+      if (is_jdk_crac_Core(*ik)) {
+        const HeapDump::ClassDump &dump = _heap_dump.get_class_dump(class_id);
+        restore_static_fields(ik, dump, CHECK_false);
+      }
       return true; // Skip pre-initialized since they may already have a new state
     }
 
@@ -1187,12 +1204,44 @@ void CracHeapRestorer::restore_instance_fields(instanceHandle obj, const HeapDum
   }
 }
 
-bool CracHeapRestorer::set_static_field_if_special(instanceHandle mirror, const FieldStream &fs, const HeapDump::BasicValue &val) {
+bool CracHeapRestorer::set_static_field_if_special(instanceHandle mirror, const FieldStream &fs, const HeapDump::BasicValue &val, TRAPS) {
   precond(fs.access_flags().is_static());
+
+  // Array classes don't have static fields
+  const InstanceKlass *ik = InstanceKlass::cast(java_lang_Class::as_Klass(mirror()));
 
   // j.l.r.SoftReference::clock is set by the GC (notably, it is done even
   // before the class is initialized)
-  if (java_lang_Class::as_Klass(mirror()) == vmClasses::SoftReference_klass() && fs.name()->equals("clock")) {
+  if (ik == vmClasses::SoftReference_klass() && fs.name()->equals("clock")) {
+    return true;
+  }
+
+  // jdk.crac.Core is the only pre-initialized class we restore and thus
+  // overwrite its pre-filled fields which is not expected in the general path
+  if (is_jdk_crac_Core(*ik)) {
+    precond(ik->is_initialized());
+    const Symbol *field_name = fs.name();
+    const BasicType field_type = Signature::basic_type(fs.signature());
+    if (field_type == T_OBJECT) {
+      assert(field_name->equals("globalContext") || field_name->equals("checkpointRestoreLock"), "must be");
+      guarantee(val.as_object_id != HeapDump::NULL_ID, "global context and C/R lock must exist");
+      const Handle restored = restore_object(val.as_object_id, CHECK_false);
+      mirror->obj_field_put(fs.offset(), restored());
+    } else if (field_name->equals("checkpointInProgress")) {
+      assert(field_type == T_BOOLEAN, "must be");
+      guarantee(val.as_boolean, "no checkpoint was in progress?!");
+      mirror->bool_field_put(fs.offset(), checked_cast<jboolean>(true));
+    } else {
+      // Should be a static final primitive already set to the same value
+#ifdef ASSERT
+      switch (field_type) {
+        case T_BOOLEAN: assert(mirror->bool_field(fs.offset()) == val.as_boolean, "must be"); break;
+        case T_INT:     assert(mirror->int_field(fs.offset()) == val.as_int, "must be");      break;
+        case T_LONG:    assert(mirror->long_field(fs.offset()) == val.as_long, "must be");    break;
+        default: ShouldNotReachHere();
+      }
+#endif // ASSERT
+    }
     return true;
   }
 
@@ -1258,7 +1307,7 @@ void CracHeapRestorer::restore_static_fields(InstanceKlass *ik, const HeapDump::
            static_i, ik->external_name(), dump.id,
            type2name(Signature::basic_type(fs.signature())), fs.name()->as_C_string(),
            type2name(HeapDump::htype2btype(field.info.type)), field_name->as_C_string());
-    const bool is_special = set_static_field_if_special(mirror, fs, field.value);
+    const bool is_special = set_static_field_if_special(mirror, fs, field.value, CHECK);
     if (!is_special) {
       set_field(mirror, fs, field.value, CHECK);
     }

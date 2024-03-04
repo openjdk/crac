@@ -1,5 +1,6 @@
 #include "precompiled.hpp"
 #include "classfile/javaClasses.hpp"
+#include "classfile/stringTable.hpp"
 #include "classfile/symbolTable.hpp"
 #include "classfile/systemDictionary.hpp"
 #include "classfile/vmClasses.hpp"
@@ -629,6 +630,15 @@ void CracHeapRestorer::record_class_mirror(instanceHandle mirror, const HeapDump
 // TODO use other means to iterate over fields: FieldStream performs a linear
 //  search for each field
 
+instanceHandle CracHeapRestorer::intern_if_needed(instanceHandle string, const HeapDump::InstanceDump &dump, TRAPS) {
+  _string_dump_reader.ensure_initialized(_heap_dump, dump.class_id);
+  if (_string_dump_reader.is_interned(dump)) {
+    const oop interned = StringTable::intern(string(), CHECK_({}));
+    return {Thread::current(), static_cast<instanceOop>(interned)};
+  }
+  return string;
+}
+
 methodHandle CracHeapRestorer::get_resolved_method(const HeapDump::InstanceDump &resolved_method_name_dump, TRAPS) {
   _resolved_method_name_dump_reader.ensure_initialized(_heap_dump, resolved_method_name_dump.class_id);
 
@@ -676,7 +686,7 @@ void CracHeapRestorer::set_field(instanceHandle obj, const FieldStream &fs, cons
   precond(obj.not_null());
   DEBUG_ONLY(const InstanceKlass &field_holder = *fs.field_descriptor().field_holder());
   assert(!fs.access_flags().is_static() || field_holder.init_state() < InstanceKlass::fully_initialized,
-         "trying to modify static field %s of pre-initialized class %s", field_holder.external_name(), fs.name()->as_C_string());
+         "trying to modify static field %s of pre-initialized class %s", fs.name()->as_C_string(), field_holder.external_name());
   // Static fields of pre-defined classes already have their initial values set
   // but we can overwrite them until the class is marked initialized
   DEBUG_ONLY(const bool prefilled = fs.access_flags().is_static() && fs.field_descriptor().has_initial_value());
@@ -886,14 +896,15 @@ bool CracHeapRestorer::set_string_instance_field_if_special(instanceHandle obj, 
                                                             const FieldStream &obj_fs, const DumpedInstanceFieldStream &dump_fs, TRAPS) {
   assert(obj_fs.field_descriptor().field_holder() == vmClasses::String_klass(), "must be");
   precond(!obj_fs.access_flags().is_static());
-  // TODO ensure interned strings are indeed interned when restoring them (e.g.
-  //  constant pool strings and j.l.Class::name are always interned)
 
   // Flags are internal and depend on VM options. They will be set as needed,
   // so just ignore them.
   if (obj_fs.name() == vmSymbols::flags_name()) {
     return true;
   }
+
+  // Interning is handled separately
+  assert(obj_fs.name() != vmSymbols::is_interned_name(), "not a real field");
 
   return false;
 }
@@ -1092,6 +1103,14 @@ void CracHeapRestorer::restore_special_instance_fields(instanceHandle obj, const
          "object " HDID_FORMAT " has less non-static fields' data dumped than needed by its class %s and its super classes: "
          "only " UINT32_FORMAT " bytes dumped, but additional " UINT32_FORMAT " bytes are expected",
          dump.id, obj->klass()->external_name(), dump.fields_data.size(), unfilled_bytes);
+  if (java_lang_String::is_instance(obj())) {
+    // There is a fake is_interned field in j.l.String instance dumps
+    assert(!dump_fs.eos(), "%s field missing from %s instance dump " HDID_FORMAT,
+           vmSymbols::is_interned_name()->as_C_string(), vmSymbols::java_lang_String()->as_klass_external_name(), dump.id);
+    assert(dump_fs.name() == vmSymbols::is_interned_name(), "unexpected field %s in %s instance dump " HDID_FORMAT,
+           dump_fs.name()->as_C_string(), vmSymbols::java_lang_String()->as_klass_external_name(), dump.id);
+    dump_fs.next();
+  }
   assert(dump_fs.eos(),
          "object " HDID_FORMAT " has more non-static fields' data dumped than needed by its class %s and its super classes",
          dump.id, obj->klass()->external_name());
@@ -1377,8 +1396,16 @@ instanceHandle CracHeapRestorer::restore_instance(const HeapDump::InstanceDump &
   } else {
     ik.check_valid_for_instantiation(true, CHECK_({}));
     obj = ik.allocate_instance_handle(CHECK_({}));
-    put_object_when_absent(dump.id, obj); // Record first to be able to find in case of circular references
-    restore_instance_fields(obj, dump, CHECK_({}));
+    if (&ik == vmClasses::String_klass()) {
+      // String's fields don't reference it back so it's safe to restore them before recording the string first
+      restore_instance_fields(obj, dump, CHECK_({}));
+      obj = intern_if_needed(obj, dump, CHECK_({}));
+      put_object_when_absent(dump.id, obj);
+    } else {
+      // Record first to be able to find in case of circular references
+      put_object_when_absent(dump.id, obj);
+      restore_instance_fields(obj, dump, CHECK_({}));
+    }
   }
 
   if (log_is_enabled(Trace, crac)) {

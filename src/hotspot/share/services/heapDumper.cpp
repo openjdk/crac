@@ -27,6 +27,7 @@
 #include "classfile/classLoaderData.inline.hpp"
 #include "classfile/classLoaderDataGraph.hpp"
 #include "classfile/javaClasses.inline.hpp"
+#include "classfile/stringTable.hpp"
 #include "classfile/symbolTable.hpp"
 #include "classfile/vmClasses.hpp"
 #include "classfile/vmSymbols.hpp"
@@ -62,6 +63,7 @@
 #include "utilities/bitCast.hpp"
 #include "utilities/hprofTag.hpp"
 #include "utilities/macros.hpp"
+#include "utilities/methodKind.hpp"
 #include "utilities/ostream.hpp"
 
 /*
@@ -880,9 +882,14 @@ u4 DumperSupport::instance_size(Klass* k, bool with_injected_fields) {
     }
   }
 
-  if (with_injected_fields && k == vmClasses::ResolvedMethodName_klass()) {
-    // Identification data for injected Method*
-    size += 2 * sig2size(vmSymbols::intptr_signature()) /*name and signature*/ + 1 /*kind*/;
+  if (with_injected_fields) {
+    if (k == vmClasses::String_klass()) {
+      // is_interned flag
+      size++;
+    } else if (k == vmClasses::ResolvedMethodName_klass()) {
+      // Injected Method* identification
+      size += 2 * sig2size(vmSymbols::intptr_signature()) /*name and signature*/ + 1 /*kind*/;
+    }
   }
 
   return size;
@@ -967,13 +974,24 @@ void DumperSupport::dump_instance_fields(AbstractDumpWriter* writer, oop o, bool
     }
   }
 
-  if (with_injected && ik == vmClasses::ResolvedMethodName_klass()) {
-    // Identification data for injected Method*: name, signature, kind
-    const Method* m = java_lang_invoke_ResolvedMethodName::vmtarget(o);
-    writer->write_symbolID(m->name());
-    writer->write_symbolID(m->signature());
-    // TODO unite the values with CracClassDump::MethodKind -- CRaC relies on this
-    writer->write_u1(m->is_static() ? 0 : (m->is_overpass() ? 1 : 2));
+  if (with_injected) {
+    if (ik == vmClasses::String_klass()) {
+      bool is_interned;
+      {
+        ResourceMark rm;
+        int len;
+        // FIXME returns null if resource alloc fails: report error in such case
+        const jchar* str = java_lang_String::as_unicode_string_or_null(o, len);
+        is_interned = str != nullptr && StringTable::lookup(str, len) != nullptr;
+      }
+      writer->write_u1(static_cast<u1>(is_interned));
+    } else if (ik == vmClasses::ResolvedMethodName_klass()) {
+      // Injected Method* identification: name, signature, kind
+      const Method* m = java_lang_invoke_ResolvedMethodName::vmtarget(o);
+      writer->write_symbolID(m->name());
+      writer->write_symbolID(m->signature());
+      writer->write_u1(checked_cast<u1>(MethodKind::of_method(*m)));
+    }
   }
 }
 
@@ -985,9 +1003,14 @@ u2 DumperSupport::get_instance_fields_count(InstanceKlass* ik, bool with_injecte
     if (!fldc.access_flags().is_static()) field_count++;
   }
 
-  if (with_injected && ik == vmClasses::ResolvedMethodName_klass()) {
-    // Identification data for injected Method*: name, signature, kind
-    field_count += 3;
+  if (with_injected) {
+    if (ik == vmClasses::String_klass()) {
+      // is_interned flag
+      field_count++;
+    } else if (ik == vmClasses::ResolvedMethodName_klass()) {
+      // Injected Method* identification: name, signature, kind
+      field_count += 3;
+    }
   }
 
   return field_count;
@@ -1007,17 +1030,23 @@ void DumperSupport::dump_instance_field_descriptors(AbstractDumpWriter* writer, 
     }
   }
 
-  if (with_injected && ik == vmClasses::ResolvedMethodName_klass()) {
-    // Identification data for injected Method*: name, signature, kind
-    // Method name
-    writer->write_symbolID(vmSymbols::internal_name_name());      // name
-    writer->write_u1(sig2tag(vmSymbols::intptr_signature()));     // type
-    // Method signature
-    writer->write_symbolID(vmSymbols::internal_signature_name()); // name
-    writer->write_u1(sig2tag(vmSymbols::intptr_signature()));     // type
-    // Method kind
-    writer->write_symbolID(vmSymbols::internal_kind_name());      // name
-    writer->write_u1(type2tag(T_BYTE));                           // type
+  if (with_injected) {
+    if (ik == vmClasses::String_klass()) {
+      // is_interned flag
+      writer->write_symbolID(vmSymbols::is_interned_name());
+      writer->write_u1(type2tag(T_BOOLEAN));
+    } else if (ik == vmClasses::ResolvedMethodName_klass()) {
+      // Injected Method* identification: name, signature, kind
+      // Method name
+      writer->write_symbolID(vmSymbols::internal_name_name());      // name
+      writer->write_u1(sig2tag(vmSymbols::intptr_signature()));     // type
+      // Method signature
+      writer->write_symbolID(vmSymbols::internal_signature_name()); // name
+      writer->write_u1(sig2tag(vmSymbols::intptr_signature()));     // type
+      // Method kind
+      writer->write_symbolID(vmSymbols::internal_kind_name());      // name
+      writer->write_u1(type2tag(T_BYTE));                           // type
+    }
   }
 }
 

@@ -90,6 +90,7 @@ class CracHeapRestorer : public ClassLoaderProvider {
 
   HeapDumpClasses::java_lang_ClassLoader _loader_dump_reader;
   HeapDumpClasses::java_lang_Class _mirror_dump_reader;
+  HeapDumpClasses::java_lang_String _string_dump_reader;
   HeapDumpClasses::java_lang_invoke_ResolvedMethodName _resolved_method_name_dump_reader;
   HeapDumpClasses::java_lang_invoke_MemberName _member_name_dump_reader;
 
@@ -111,6 +112,7 @@ class CracHeapRestorer : public ClassLoaderProvider {
   void find_and_record_class_mirror(const HeapDump::ClassDump &class_dump, TRAPS);
   void record_class_mirror(instanceHandle mirror, const HeapDump::InstanceDump &mirror_dump, TRAPS);
 
+  instanceHandle intern_if_needed(instanceHandle string, const HeapDump::InstanceDump &dump, TRAPS);
   methodHandle get_resolved_method(const HeapDump::InstanceDump &resolved_method_name_dump, TRAPS);
 
   void set_field(instanceHandle obj, const FieldStream &fs, const HeapDump::BasicValue &val, TRAPS);

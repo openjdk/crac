@@ -1565,6 +1565,8 @@ InstanceKlass *SystemDictionary::find_or_define_recreated_class(InstanceKlass *k
       loader_data->add_to_deallocate_list(k);
       return nullptr;
     }
+    postcond(defined != nullptr);
+    return defined;
   }
 
   ObjectLocker ol(loader, thread);

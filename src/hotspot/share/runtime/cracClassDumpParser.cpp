@@ -872,7 +872,10 @@ class CracInstanceClassDumpParser : public StackObj /* constructor allocates res
     // classes (ClassFileParser performs the resolution in such cases), but we
     // postpone restoring the class references for later
     _this_class_index = this_class_index;
-    log_trace(crac, class, parser)("  Parsed this class index");
+    if (log_is_enabled(Trace, crac, class, parser)) {
+      log_trace(crac, class, parser)("  Parsed this class index: %s",
+                                     _cp->klass_name_at(this_class_index)->as_klass_external_name());
+    }
   }
 
   void find_super(TRAPS) {
@@ -896,7 +899,7 @@ class CracInstanceClassDumpParser : public StackObj /* constructor allocates res
     _super = super;
     if (log_is_enabled(Trace, crac, class, parser)) {
       ResourceMark rm;
-      log_trace(crac, class, parser)("  Found super: %s", super->external_name());
+      log_trace(crac, class, parser)("  Found super: %s (%p)", super->external_name(), super);
     }
   }
 
@@ -907,6 +910,7 @@ class CracInstanceClassDumpParser : public StackObj /* constructor allocates res
       log_trace(crac, class, parser)("  No local interfaces");
       return;
     }
+    log_trace(crac, class, parser)("  Parsing %i local interfaces:", interfaces_num);
 
     _local_interfaces = MetadataFactory::new_array<InstanceKlass *>(_loader_data, interfaces_num, CHECK);
     for (u2 i = 0; i < interfaces_num; i++) {
@@ -925,9 +929,13 @@ class CracInstanceClassDumpParser : public StackObj /* constructor allocates res
                 "internal class flags are not consistent with those of implemented interfaces");
 
       _local_interfaces->at_put(i, interface);
+      if (log_is_enabled(Trace, crac, class, parser)) {
+        ResourceMark rm;
+        log_trace(crac, class, parser)("    Interface: %s (%p)", interface->external_name(), interface);
+      }
     }
 
-    log_trace(crac, class, parser)("  Parsed %i local interfaces", interfaces_num);
+    log_trace(crac, class, parser)("  Parsed local interfaces");
   }
 
   void parse_field_annotations(int field_index, int java_fields_num, Array<AnnotationArray *> **const annotations_collection, TRAPS) {
@@ -1341,8 +1349,17 @@ class CracInstanceClassDumpParser : public StackObj /* constructor allocates res
         // it was one of them we would have found it
         guarantee(holder_ptr != nullptr, "default method %i belongs to a class not implemented by this class", i);
         InstanceKlass &holder = **holder_ptr;
-        // Would be great to check that the holder is among transitive
-        // interfaces, but it requires iterating over them
+        precond(holder.is_loaded());
+        assert(holder.is_interface(), "holder %s of default method #%i is not an interface", holder.external_name(), i);
+#ifdef ASSERT
+        bool is_holder_implemented = _super != nullptr && _super->implements_interface(&holder);
+        for (int local_interf_i = 0; !is_holder_implemented && local_interf_i < _local_interfaces->length(); local_interf_i++) {
+          const InstanceKlass *local_interface = _local_interfaces->at(local_interf_i);
+          is_holder_implemented = local_interface->implements_interface(&holder);
+        }
+        assert(is_holder_implemented, "holder %s of default method #%i is not implemented by this class",
+               holder.external_name(), i);
+#endif // ASSERT
 
         const InterclassRefs::MethodDescription method_desc = method_identification.second;
         Symbol *const name = _heap_dump.get_symbol(method_desc.name_id);

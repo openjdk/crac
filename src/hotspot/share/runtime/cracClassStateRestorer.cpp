@@ -181,7 +181,39 @@ static void swap_methods(InstanceKlass *ik1, InstanceKlass *ik2) {
            i, ik1->external_name(), method1->name()->as_C_string(), method2->name()->as_C_string());
     method1->set_constants(ik2->constants());
     method2->set_constants(ik1->constants());
+    postcond(method1->method_holder() == ik2);
+    postcond(method2->method_holder() == ik1);
   }
+
+  // Note: if this is an interface, pre-defined implementors may refer to
+  // swapped-out methods via their default methods arrays so those also need to
+  // be updated.
+  //
+  // We assume that we'll visit all implementors later and fix their default
+  // methods arrays then (also by swapping because newly created classes always
+  // have the updated methods since we handle interfaces prior to implementors).
+  //
+  // TODO rewriter has to also handle this somehow, maybe there is a better way?
+}
+
+static void swap_default_methods(InstanceKlass *ik1, InstanceKlass *ik2) {
+  auto *const dmethods1 = ik1->default_methods();
+  auto *const dmethods2 = ik2->default_methods();
+  precond(dmethods1 != nullptr && dmethods2 != nullptr);
+  guarantee(dmethods1->length() == dmethods2->length(), "not the same class");
+
+  ik1->set_default_methods(dmethods2);
+  ik2->set_default_methods(dmethods1);
+
+#ifdef ASSERT
+  for (int i = 0; i < dmethods1->length(); i++) {
+    const Method *dmethod1 = dmethods1->at(i);
+    const Method *dmethod2 = dmethods2->at(i);
+    // Can only compare names because methods with equal names can be reordered
+    assert(dmethod1->name() == dmethod2->name(), "method #%i of %s has different names: %s and %s",
+           i, ik1->external_name(), dmethod1->name()->as_C_string(), dmethod2->name()->as_C_string());
+  }
+#endif // ASSERT
 }
 
 InstanceKlass *CracClassStateRestorer::define_created_class(InstanceKlass *created_ik, InstanceKlass::ClassState target_state, TRAPS) {
@@ -237,8 +269,8 @@ InstanceKlass *CracClassStateRestorer::define_created_class(InstanceKlass *creat
       ResourceMark rm;
       const char *current_state_name = (defined_ik->is_rewritten() && !defined_ik->is_linked())             ? "rewritten" : defined_ik->init_state_name();
       const char *target_state_name =  (created_ik->is_rewritten() && target_state < InstanceKlass::linked) ? "rewritten" : InstanceKlass::state_name(target_state);
-      log_debug(crac, class)("Using pre-defined %s (current state = %s, target state = %s) - defined by %s",
-                             defined_ik->external_name(), current_state_name, target_state_name, defined_ik->class_loader_data()->loader_name_and_id());
+      log_debug(crac, class)("Using pre-defined %s (%p instead of %p): current state = %s, target state = %s - defined by %s",
+                             defined_ik->external_name(), defined_ik, created_ik, current_state_name, target_state_name, defined_ik->class_loader_data()->loader_name_and_id());
     }
     assert(created_ik->access_flags().as_int() == defined_ik->access_flags().as_int(),
            "pre-defined %s has different access flags: " INT32_FORMAT_X " (dumped) != " INT32_FORMAT_X " (pre-defined)",
@@ -261,14 +293,30 @@ InstanceKlass *CracClassStateRestorer::define_created_class(InstanceKlass *creat
       }
     }
 
+    // There may be a super-interface we rewrote so have to update the default
+    // methods to ensure there are no references to methods swapped-out of that
+    // super-interface
+    guarantee((created_ik->default_methods() != nullptr) == (defined_ik->default_methods() != nullptr), "not the same class");
+    if (created_ik->default_methods() != nullptr) {
+      swap_default_methods(created_ik, defined_ik);
+    }
+
     created_ik->class_loader_data()->add_to_deallocate_list(created_ik);
   } else if (log_is_enabled(Debug, crac, class)) {
     ResourceMark rm;
     const char *current_state_name = (defined_ik->is_rewritten() && !defined_ik->is_linked())             ? "rewritten" : defined_ik->init_state_name();
     const char *target_state_name =  (created_ik->is_rewritten() && target_state < InstanceKlass::linked) ? "rewritten" : InstanceKlass::state_name(target_state);
-    log_debug(crac, class)("Using newly defined %s (current state = %s, target state = %s) - defined by %s",
-                           defined_ik->external_name(), current_state_name, target_state_name, defined_ik->class_loader_data()->loader_name_and_id());
+    log_debug(crac, class)("Using newly defined %s (%p): current state = %s, target state = %s - defined by %s",
+                           defined_ik->external_name(), defined_ik, current_state_name, target_state_name, defined_ik->class_loader_data()->loader_name_and_id());
   }
+#ifdef ASSERT
+  if (defined_ik->default_methods() != nullptr) {
+    for (int i = 0; i < defined_ik->default_methods()->length(); i++) {
+      const InstanceKlass *holder = defined_ik->default_methods()->at(i)->method_holder();
+      assert(holder->is_loaded(), "default method %s has unloaded holder %p", holder->external_name(), holder);
+    }
+  }
+#endif // ASSERT
 
   if (target_state < InstanceKlass::linked) {
     assert(target_state != InstanceKlass::being_linked, "not supported, shouldn't be dumped");

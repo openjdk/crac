@@ -406,8 +406,6 @@ instanceHandle CracHeapRestorer::prepare_class_loader(HeapDump::ID id, TRAPS) {
     const instanceHandle parallel_lock_map = get_class_loader_parallel_lock_map(dump, CHECK_({}));
     java_lang_ClassLoader::set_parallelLockMap(loader(), parallel_lock_map());
   }
-  // TODO "classes" field: ArrayList into which mirrors of defined classes are
-  //  put -- must be added here for the whole thing to work
 
   if (java_lang_ClassLoader::parallelCapable(loader())) { // Works because we set parallelLockMap above
     // TODO should add it into ClassLoader$ParallelLoaders::loaderTypes array
@@ -776,8 +774,6 @@ bool CracHeapRestorer::set_class_loader_instance_field_if_special(instanceHandle
     }
     return true;
   }
-
-  // TODO "classes" field: ArrayList into which mirrors of defined classes are put
 
   // The rest of the fields are untouched by the preparation and should be
   // restored as usual

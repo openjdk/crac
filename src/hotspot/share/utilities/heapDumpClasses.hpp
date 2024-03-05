@@ -34,7 +34,7 @@ struct HeapDumpClasses : public AllStatic {
     DEBUG_ONLY(HeapDump::ID _java_lang_ClassLoader_id = HeapDump::NULL_ID);
 
    public:
-    void ensure_initialized(const ParsedHeapDump &heap_dump, HeapDump::ID java_lang_ClassLoader_id);
+    void ensure_initialized(const ParsedHeapDump &heap_dump, HeapDump::ID loader_class_id);
     CLASSLOADER_DUMP_FIELDS_DO(DECLARE_GET_FIELD_METHOD)
 
    private:

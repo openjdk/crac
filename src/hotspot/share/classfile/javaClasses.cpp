@@ -4515,6 +4515,7 @@ int  java_lang_ClassLoader::_name_offset;
 int  java_lang_ClassLoader::_nameAndId_offset;
 int  java_lang_ClassLoader::_unnamedModule_offset;
 int  java_lang_ClassLoader::_parent_offset;
+int  java_lang_ClassLoader::_classes_offset;
 
 ClassLoaderData* java_lang_ClassLoader::loader_data_acquire(oop loader) {
   assert(loader != nullptr, "loader must not be null");
@@ -4539,7 +4540,8 @@ void java_lang_ClassLoader::release_set_loader_data(oop loader, ClassLoaderData*
   macro(_name_offset,            k1, vmSymbols::name_name(), string_signature, false); \
   macro(_nameAndId_offset,       k1, "nameAndId",            string_signature, false); \
   macro(_unnamedModule_offset,   k1, "unnamedModule",        module_signature, false); \
-  macro(_parent_offset,          k1, "parent",               classloader_signature, false)
+  macro(_parent_offset,          k1, "parent",               classloader_signature, false); \
+  macro(_classes_offset,         k1, "classes",              arraylist_signature, false)
 
 void java_lang_ClassLoader::compute_offsets() {
   InstanceKlass* k1 = vmClasses::ClassLoader_klass();
@@ -4581,6 +4583,11 @@ oop java_lang_ClassLoader::name(oop loader) {
 oop java_lang_ClassLoader::nameAndId(oop loader) {
   assert(is_instance(loader), "loader must be oop");
   return loader->obj_field(_nameAndId_offset);
+}
+
+oop java_lang_ClassLoader::classes(oop loader) {
+  assert(is_instance(loader), "loader must be oop");
+  return loader->obj_field(_classes_offset);
 }
 
 bool java_lang_ClassLoader::isAncestor(oop loader, oop cl) {

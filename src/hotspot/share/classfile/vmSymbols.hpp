@@ -663,6 +663,7 @@ class SerializeClosure;
   template(executable_signature,                      "Ljava/lang/reflect/Executable;")                           \
   template(module_signature,                          "Ljava/lang/Module;")                                       \
   template(concurrenthashmap_signature,               "Ljava/util/concurrent/ConcurrentHashMap;")                 \
+  template(arraylist_signature,                       "Ljava/util/ArrayList;")                                    \
   template(String_StringBuilder_signature,            "(Ljava/lang/String;)Ljava/lang/StringBuilder;")            \
   template(int_StringBuilder_signature,               "(I)Ljava/lang/StringBuilder;")                             \
   template(char_StringBuilder_signature,              "(C)Ljava/lang/StringBuilder;")                             \

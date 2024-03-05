@@ -1414,7 +1414,9 @@ void SystemDictionary::define_instance_class(InstanceKlass* k, Handle class_load
   // fail with an OutOfMemoryError (if it does, we will *not* put this
   // class in the dictionary and will not update the class hierarchy).
   // JVMTI FollowReferences needs to find the classes this way.
-  if (k->class_loader() != nullptr) {
+  if (k->class_loader() != nullptr &&
+      // ArrayList is null during CRaC's portable restoration, it is restored later
+      java_lang_ClassLoader::classes(class_loader()) != nullptr) {
     methodHandle m(THREAD, Universe::loader_addClass_method());
     JavaValue result(T_VOID);
     JavaCallArguments args(class_loader);

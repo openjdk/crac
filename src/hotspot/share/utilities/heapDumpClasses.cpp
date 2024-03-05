@@ -128,16 +128,39 @@ static bool is_class_loader_class_dump(const ParsedHeapDump &heap_dump, const He
 }
 #endif // ASSERT
 
-void HeapDumpClasses::java_lang_ClassLoader::ensure_initialized(const ParsedHeapDump &heap_dump, HeapDump::ID java_lang_ClassLoader_id) {
-  precond(java_lang_ClassLoader_id != HeapDump::NULL_ID);
+static const HeapDump::ClassDump *find_java_lang_ClassLoader_dump(const ParsedHeapDump &heap_dump, HeapDump::ID subclass_id) {
+  const HeapDump::ClassDump *class_dump = &heap_dump.get_class_dump(subclass_id);
+  // Assuming there is no inheritance circularity or this will be an endless loop
+  while (class_dump->class_loader_id != HeapDump::NULL_ID ||
+         heap_dump.get_class_name(class_dump->id) != vmSymbols::java_lang_ClassLoader()) {
+    if (class_dump->super_id != HeapDump::NULL_ID) {
+      class_dump = &heap_dump.get_class_dump(class_dump->super_id);
+    } else {
+      return nullptr;
+    }
+  }
+  return class_dump;
+}
+
+void HeapDumpClasses::java_lang_ClassLoader::ensure_initialized(const ParsedHeapDump &heap_dump, HeapDump::ID loader_class_id) {
+  precond(loader_class_id != HeapDump::NULL_ID);
   if (!is_initialized()) {
-    const HeapDump::ClassDump &java_lang_ClassLoader_dump = heap_dump.get_class_dump(java_lang_ClassLoader_id);
+    const HeapDump::ClassDump *java_lang_ClassLoader_dump_ptr = find_java_lang_ClassLoader_dump(heap_dump, loader_class_id);
+    guarantee(java_lang_ClassLoader_dump_ptr != nullptr, "cannot find %s as a super-class of " HDID_FORMAT,
+              vmSymbols::java_lang_ClassLoader()->as_klass_external_name(), loader_class_id);
+    const HeapDump::ClassDump &java_lang_ClassLoader_dump = *java_lang_ClassLoader_dump_ptr;
     precond(is_class_loader_class_dump(heap_dump, java_lang_ClassLoader_dump));
     INITIALIZE_OFFSETS(java_lang_ClassLoader, CLASSLOADER_DUMP_FIELDS_DO, NO_DUMP_FIELDS_DO)
-    DEBUG_ONLY(_java_lang_ClassLoader_id = java_lang_ClassLoader_id);
+    DEBUG_ONLY(_java_lang_ClassLoader_id = java_lang_ClassLoader_dump.id);
     _id_size = heap_dump.id_size;
   } else {
+#ifdef ASSERT
+    const HeapDump::ClassDump *java_lang_ClassLoader_dump_ptr = find_java_lang_ClassLoader_dump(heap_dump, loader_class_id);
+    assert(java_lang_ClassLoader_dump_ptr != nullptr, "cannot find %s as a super-class of " HDID_FORMAT,
+           vmSymbols::java_lang_ClassLoader()->as_klass_external_name(), loader_class_id);
+    const HeapDump::ID java_lang_ClassLoader_id = java_lang_ClassLoader_dump_ptr->id;
     ASSERT_INITIALIZED_WITH_SAME_ID(java_lang_ClassLoader)
+#endif // ASSERT
   }
   postcond(is_initialized());
 }

@@ -91,6 +91,7 @@ class ClassDumpWriter : public KlassClosure, public CLDClosure {
     if (io_error_msg() == nullptr)      write_primitive_array_class_ids();
     // Instance and object array classes. Not using loaded_classes_do() because
     // our filter should be quicker.
+    if (io_error_msg() == nullptr)      write_class_loader_preparation_fields_classes();
     if (io_error_msg() == nullptr)      ClassLoaderDataGraph::classes_do(this);
     if (io_error_msg() == nullptr)      write_end_sentinel();
     log_debug(crac, class, dump)("Wrote instance and object array classes");
@@ -229,6 +230,13 @@ class ClassDumpWriter : public KlassClosure, public CLDClosure {
       DO_CHECKED(write_obj_array_class_ids(tak));
     }
     log_debug(crac, class, dump)("Wrote primitive array IDs");
+  }
+
+  void write_class_loader_preparation_fields_classes() {
+    // Classes of fields required to prepare a class loader
+    DO_CHECKED(dump_class_hierarchy(vmClasses::String_klass()));
+    DO_CHECKED(dump_class_hierarchy(vmClasses::Module_klass()));
+    DO_CHECKED(dump_class_hierarchy(vmClasses::ConcurrentHashMap_klass()));
   }
 
   void do_klass(Klass *k) override {
@@ -1147,10 +1155,6 @@ class ClassDumpWriter : public KlassClosure, public CLDClosure {
     bool not_dumped_yet;
     _dumped_classes.put_if_absent(ik, &not_dumped_yet);
     if (!not_dumped_yet) {
-      assert(ik->is_class_loader_instance_klass() ||
-             ik->is_subtype_of(vmClasses::ProtectionDomain_klass()) ||
-             ik->subklass() != nullptr || ik->is_interface(),
-             "shouldn't have been dumped yet");
       return;
     }
     _dumped_classes.maybe_grow();

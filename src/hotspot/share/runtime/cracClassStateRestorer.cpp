@@ -16,7 +16,6 @@
 #include "oops/resolvedFieldEntry.hpp"
 #include "oops/resolvedIndyEntry.hpp"
 #include "runtime/cracClassDumpParser.hpp"
-#include "runtime/cracClassDumper.hpp"
 #include "runtime/cracClassStateRestorer.hpp"
 #include "runtime/handles.hpp"
 #include "runtime/javaThread.hpp"
@@ -26,6 +25,7 @@
 #include "utilities/constantTag.hpp"
 #include "utilities/debug.hpp"
 #include "utilities/exceptions.hpp"
+#include "utilities/formatBuffer.hpp"
 #include "utilities/heapDumpParser.hpp"
 #include "utilities/macros.hpp"
 #ifdef ASSERT
@@ -239,23 +239,22 @@ InstanceKlass *CracClassStateRestorer::define_created_class(InstanceKlass *creat
   JavaThread *const thread = JavaThread::current();
   {
     MonitorLocker ml(defined_ik->init_monitor());
-    const bool want_to_initialize = target_state >= InstanceKlass::fully_initialized;
-    while (defined_ik->is_being_linked() || defined_ik->is_being_initialized()) {
-      if (want_to_initialize) {
-        thread->set_class_to_be_initialized(defined_ik);
-      }
-      ml.wait();
-      if (want_to_initialize) {
-        thread->set_class_to_be_initialized(nullptr);
-      }
+    precond(!defined_ik->is_init_thread(thread));
+    if (defined_ik->is_being_linked() || defined_ik->is_being_initialized()) {
+      // Waiting here may lead to a deadlock: we restore and lock from base to
+      // derived which is the opposite to what the usual initialization process
+      // does. E.g. A subclasses B, we lock B and want A, initialization locks A
+      // and wants B -- deadlock.
+      THROW_MSG_NULL(vmSymbols::java_lang_IllegalStateException(),
+                     err_msg("Class %s is being initialized and restored concurrently", defined_ik->external_name()));
     }
     if (defined_ik->init_state() < InstanceKlass::fully_initialized) {
-      defined_ik->set_is_being_restored(true);
+        defined_ik->set_is_being_restored(true);
       if ((created_ik->is_rewritten() && !(predefined && defined_ik->is_rewritten())) ||
           (target_state >= InstanceKlass::linked && !defined_ik->is_linked())) {
         defined_ik->set_init_state(InstanceKlass::being_linked);
         defined_ik->set_init_thread(thread);
-      } else if (want_to_initialize && defined_ik->init_state() < InstanceKlass::fully_initialized) {
+      } else if (target_state >= InstanceKlass::fully_initialized && defined_ik->init_state() < InstanceKlass::fully_initialized) {
         defined_ik->set_init_state(InstanceKlass::being_initialized);
         defined_ik->set_init_thread(thread);
       }

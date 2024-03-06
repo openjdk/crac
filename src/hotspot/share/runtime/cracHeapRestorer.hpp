@@ -93,6 +93,7 @@ class CracHeapRestorer : public ClassLoaderProvider {
   HeapDumpClasses::java_lang_String _string_dump_reader;
   HeapDumpClasses::java_lang_invoke_ResolvedMethodName _resolved_method_name_dump_reader;
   HeapDumpClasses::java_lang_invoke_MemberName _member_name_dump_reader;
+  HeapDumpClasses::java_lang_invoke_MethodType _method_type_dump_reader;
 
   InstanceKlass &get_instance_class(HeapDump::ID id) const;
   ArrayKlass &get_array_class(HeapDump::ID id) const;
@@ -112,9 +113,6 @@ class CracHeapRestorer : public ClassLoaderProvider {
   void find_and_record_class_mirror(const HeapDump::ClassDump &class_dump, TRAPS);
   void record_class_mirror(instanceHandle mirror, const HeapDump::InstanceDump &mirror_dump, TRAPS);
 
-  instanceHandle intern_if_needed(instanceHandle string, const HeapDump::InstanceDump &dump, TRAPS);
-  methodHandle get_resolved_method(const HeapDump::InstanceDump &resolved_method_name_dump, TRAPS);
-
   void set_field(instanceHandle obj, const FieldStream &fs, const HeapDump::BasicValue &val, TRAPS);
 #define set_instance_field_if_special_signature(name) \
   bool name(instanceHandle, const HeapDump::InstanceDump &, const FieldStream &, const DumpedInstanceFieldStream &, TRAPS);
@@ -132,6 +130,11 @@ class CracHeapRestorer : public ClassLoaderProvider {
   void restore_instance_fields(instanceHandle obj, const HeapDump::InstanceDump &dump, TRAPS);
   static bool set_static_field_if_special(instanceHandle mirror, const FieldStream &fs, const HeapDump::BasicValue &val);
   void restore_static_fields(InstanceKlass *ik, const HeapDump::ClassDump &dump, TRAPS);
+
+  instanceHandle get_void_mirror(const HeapDump::InstanceDump &dump);
+  instanceHandle get_string(const HeapDump::InstanceDump &dump, TRAPS);
+  instanceHandle get_resolved_method_name(const HeapDump::InstanceDump &dump, TRAPS);
+  instanceHandle get_method_type(const HeapDump::InstanceDump &dump, TRAPS);
 
   void restore_class_mirror(HeapDump::ID id, TRAPS);
   Handle restore_object(HeapDump::ID id, TRAPS);

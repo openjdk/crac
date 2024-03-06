@@ -161,6 +161,26 @@ struct HeapDumpClasses : public AllStatic {
    private:
     bool is_initialized() const { return _id_size > 0; }
   };
+
+
+#define METHODTYPE_DUMP_FIELDS_DO(macro)                                                  \
+  macro(java_lang_invoke_MethodType, rtype, "rtype", T_OBJECT, HeapDump::ID, object_id)   \
+  macro(java_lang_invoke_MethodType, ptypes, "ptypes", T_OBJECT, HeapDump::ID, object_id)
+
+  class java_lang_invoke_MethodType {
+   private:
+    u4 _id_size = 0;
+    METHODTYPE_DUMP_FIELDS_DO(DEFINE_OFFSET_FIELD)
+    DEBUG_ONLY(HeapDump::ID _java_lang_invoke_MethodType_id = HeapDump::NULL_ID);
+
+   public:
+    void ensure_initialized(const ParsedHeapDump &heap_dump, HeapDump::ID java_lang_invoke_MethodType_id);
+
+    METHODTYPE_DUMP_FIELDS_DO(DECLARE_GET_FIELD_METHOD)
+
+   private:
+    bool is_initialized() const { return _id_size > 0; }
+  };
 };
 
 #undef DECLARE_GET_FIELD_METHOD

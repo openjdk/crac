@@ -374,6 +374,48 @@ bool HeapDumpClasses::java_lang_invoke_MemberName::is_field(const HeapDump::Inst
 }
 
 
+// java.lang.invoke.MethodType
+
+#ifdef ASSERT
+static bool is_method_type_class_dump(const ParsedHeapDump &heap_dump, const HeapDump::ClassDump &dump) {
+  const bool has_right_name_and_loader = heap_dump.get_class_name(dump.id) == vmSymbols::java_lang_invoke_MethodType() &&
+                                         dump.class_loader_id == HeapDump::NULL_ID;
+  if (!has_right_name_and_loader) {
+    return false;
+  }
+
+  assert(dump.super_id != HeapDump::NULL_ID, "illegal super in %s dump " HDID_FORMAT ": expected %s, got none",
+         vmSymbols::java_lang_invoke_MethodType()->as_klass_external_name(), dump.id,
+         vmSymbols::java_lang_Object()->as_klass_external_name());
+
+  const HeapDump::ClassDump &super_dump = heap_dump.get_class_dump(dump.super_id);
+  assert(heap_dump.get_class_name(super_dump.id) == vmSymbols::java_lang_Object() &&
+         super_dump.class_loader_id == HeapDump::NULL_ID, "illegal super in %s dump " HDID_FORMAT ": expected %s, got %s",
+         vmSymbols::java_lang_invoke_MethodType()->as_klass_external_name(), dump.id,
+         heap_dump.get_class_name(super_dump.id)->as_klass_external_name(),
+         vmSymbols::java_lang_Object()->as_klass_external_name());
+
+  return true;
+}
+#endif // ASSERT
+
+void HeapDumpClasses::java_lang_invoke_MethodType::ensure_initialized(const ParsedHeapDump &heap_dump, HeapDump::ID java_lang_invoke_MethodType_id) {
+  precond(java_lang_invoke_MethodType_id != HeapDump::NULL_ID);
+  if (!is_initialized()) {
+    const HeapDump::ClassDump &java_lang_invoke_MethodType_dump = heap_dump.get_class_dump(java_lang_invoke_MethodType_id);
+    precond(is_method_type_class_dump(heap_dump, java_lang_invoke_MethodType_dump));
+    INITIALIZE_OFFSETS(java_lang_invoke_MethodType, METHODTYPE_DUMP_FIELDS_DO, NO_DUMP_FIELDS_DO)
+    DEBUG_ONLY(_java_lang_invoke_MethodType_id = java_lang_invoke_MethodType_id);
+    _id_size = heap_dump.id_size;
+  } else {
+    ASSERT_INITIALIZED_WITH_SAME_ID(java_lang_invoke_MethodType)
+  }
+  postcond(is_initialized());
+}
+
+METHODTYPE_DUMP_FIELDS_DO(DEFINE_GET_FIELD_METHOD)
+
+
 #undef DEFINE_GET_PTR_FIELD_METHOD
 #undef DEFINE_GET_FIELD_METHOD
 #undef ASSERT_INITIALIZED_WITH_SAME_ID

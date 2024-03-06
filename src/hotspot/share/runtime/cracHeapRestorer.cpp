@@ -629,35 +629,6 @@ void CracHeapRestorer::record_class_mirror(instanceHandle mirror, const HeapDump
 // TODO use other means to iterate over fields: FieldStream performs a linear
 //  search for each field
 
-instanceHandle CracHeapRestorer::intern_if_needed(instanceHandle string, const HeapDump::InstanceDump &dump, TRAPS) {
-  _string_dump_reader.ensure_initialized(_heap_dump, dump.class_id);
-  if (_string_dump_reader.is_interned(dump)) {
-    const oop interned = StringTable::intern(string(), CHECK_({}));
-    return {Thread::current(), static_cast<instanceOop>(interned)};
-  }
-  return string;
-}
-
-methodHandle CracHeapRestorer::get_resolved_method(const HeapDump::InstanceDump &resolved_method_name_dump, TRAPS) {
-  _resolved_method_name_dump_reader.ensure_initialized(_heap_dump, resolved_method_name_dump.class_id);
-
-  const HeapDump::ID holder_id = _resolved_method_name_dump_reader.vmholder(resolved_method_name_dump);
-  InstanceKlass *const holder = &get_instance_class(holder_id);
-
-  const HeapDump::ID name_id = _resolved_method_name_dump_reader.method_name_id(resolved_method_name_dump);
-  Symbol *const name = _heap_dump.get_symbol(name_id);
-
-  const HeapDump::ID sig_id = _resolved_method_name_dump_reader.method_signature_id(resolved_method_name_dump);
-  Symbol *const sig = _heap_dump.get_symbol(sig_id);
-
-  const jbyte kind_raw = _resolved_method_name_dump_reader.method_kind(resolved_method_name_dump);
-  guarantee(MethodKind::is_method_kind(kind_raw), "illegal resolved method kind: %i", kind_raw);
-  const auto kind = static_cast<MethodKind::Enum>(kind_raw);
-
-  Method *const m = CracClassDumpParser::find_method(holder, name, sig, kind, true, CHECK_({}));
-  return {Thread::current(), m};
-}
-
 #ifdef ASSERT
 
 static bool is_same_basic_type(const Symbol *signature, BasicType dump_t, bool allow_intptr_t = false) {
@@ -973,37 +944,6 @@ bool CracHeapRestorer::set_member_name_instance_field_if_special(instanceHandle 
       java_lang_invoke_MemberName::set_vmindex(obj(), fd.offset());
     } else {
       guarantee(vmindex == 0, "only set for resolved methods and fields");
-    }
-
-    return true;
-  }
-
-  // Need to consult ResolvedMethodTable when restoring this
-  if (obj_fs.name() == vmSymbols::method_name()) {
-    precond(dump_fs.type() == T_OBJECT);
-    const HeapDump::ID method_name_id = dump_fs.value().as_object_id;
-
-    if (method_name_id != HeapDump::NULL_ID) {
-      Handle method_name = get_object_if_present(method_name_id);
-      if (method_name.is_null()) {
-        const HeapDump::InstanceDump &method_name_dump = _heap_dump.get_instance_dump(method_name_id);
-
-#ifdef ASSERT
-        InstanceKlass &method_name_class = get_instance_class(method_name_dump.class_id);
-        assert(&method_name_class == vmClasses::ResolvedMethodName_klass(), "expected boot-loaded %s, got %s loaded by %s",
-              vmSymbols::java_lang_invoke_ResolvedMethodName()->as_klass_external_name(),
-              method_name_class.external_name(), method_name_class.class_loader_data()->loader_name_and_id());
-#endif // ASSERT
-        // If this'll be failing, restore ResolvedMethodName before the rest of the classes
-        guarantee(vmClasses::ResolvedMethodName_klass()->is_initialized(), "need to pre-initialize %s",
-                  vmSymbols::java_lang_invoke_ResolvedMethodName()->as_klass_external_name());
-
-        const methodHandle resolved_method = get_resolved_method(method_name_dump, CHECK_({}));
-        const oop method_name_o = java_lang_invoke_ResolvedMethodName::find_resolved_method(resolved_method, CHECK_({}));
-        method_name = instanceHandle(Thread::current(), static_cast<instanceOop>(method_name_o));
-        put_object_when_absent(method_name_id, method_name); // Should still be absent
-      }
-      obj->obj_field_put(obj_fs.offset(), method_name());
     }
 
     return true;
@@ -1400,6 +1340,95 @@ Handle CracHeapRestorer::restore_object(HeapDump::ID id, TRAPS) {
   return restore_prim_array(*prim_array_dump, CHECK_NH);
 }
 
+// Void mirror is the only class mirror that we don't pre-record.
+instanceHandle CracHeapRestorer::get_void_mirror(const HeapDump::InstanceDump &dump) {
+  _mirror_dump_reader.ensure_initialized(_heap_dump, dump.class_id); // Also checks this is a mirror dump
+  guarantee(_mirror_dump_reader.mirrors_void(dump), "unrecorded non-void class mirror " HDID_FORMAT, dump.id);
+  const instanceHandle mirror(Thread::current(), static_cast<instanceOop>(Universe::void_mirror()));
+  return mirror;
+}
+
+// Strings may be interned.
+instanceHandle CracHeapRestorer::get_string(const HeapDump::InstanceDump &dump, TRAPS) {
+  const instanceHandle str = vmClasses::String_klass()->allocate_instance_handle(CHECK_({}));
+  // String's fields don't reference it back so it's safe to restore them before recording the string
+  restore_instance_fields(str, dump, CHECK_({}));
+
+  _string_dump_reader.ensure_initialized(_heap_dump, dump.class_id);
+  if (_string_dump_reader.is_interned(dump)) {
+    const oop interned = StringTable::intern(str(), CHECK_({}));
+    return {Thread::current(), static_cast<instanceOop>(interned)};
+  }
+
+  return str;
+}
+
+// ResolvedMethodNames are interned by the VM.
+instanceHandle CracHeapRestorer::get_resolved_method_name(const HeapDump::InstanceDump &dump, TRAPS) {
+  _resolved_method_name_dump_reader.ensure_initialized(_heap_dump, dump.class_id);
+
+  const HeapDump::ID holder_id = _resolved_method_name_dump_reader.vmholder(dump);
+  InstanceKlass *const holder = &get_instance_class(holder_id);
+
+  const HeapDump::ID name_id = _resolved_method_name_dump_reader.method_name_id(dump);
+  Symbol *const name = _heap_dump.get_symbol(name_id);
+
+  const HeapDump::ID sig_id = _resolved_method_name_dump_reader.method_signature_id(dump);
+  Symbol *const sig = _heap_dump.get_symbol(sig_id);
+
+  const jbyte kind_raw = _resolved_method_name_dump_reader.method_kind(dump);
+  guarantee(MethodKind::is_method_kind(kind_raw), "illegal resolved method kind: %i", kind_raw);
+  const auto kind = static_cast<MethodKind::Enum>(kind_raw);
+
+  Method *const m = CracClassDumpParser::find_method(holder, name, sig, kind, true, CHECK_({}));
+  const methodHandle resolved_method(Thread::current(), m);
+
+  // If this'll be failing, restore ResolvedMethodName before the rest of the classes
+  guarantee(vmClasses::ResolvedMethodName_klass()->is_initialized(), "need to pre-initialize %s",
+            vmSymbols::java_lang_invoke_ResolvedMethodName()->as_klass_external_name());
+  const oop method_name_o = java_lang_invoke_ResolvedMethodName::find_resolved_method(resolved_method, CHECK_({}));
+
+  return {Thread::current(), static_cast<instanceOop>(method_name_o)};
+}
+
+// MethodTypes are interned on the Java side.
+instanceHandle CracHeapRestorer::get_method_type(const HeapDump::InstanceDump &dump, TRAPS) {
+  // TODO this check is actually not enough and we can get a deadlock when
+  //  calling into Java below if that method has not been called before the
+  //  restoration began (this really can happen, I've been a witness...)
+  assert(vmClasses::MethodType_klass()->is_initialized(), "no need for this if no cache is pre-initialized");
+
+  _method_type_dump_reader.ensure_initialized(_heap_dump, dump.class_id);
+  const HeapDump::ID rtype_id = _method_type_dump_reader.rtype(dump);
+  const HeapDump::ID ptypes_id = _method_type_dump_reader.ptypes(dump);
+
+  // These are class mirrors so it's safe to restore them before recording the MethodType
+  const Handle rtype = restore_object(rtype_id, CHECK_({})); // Can be a void mirror so must restore
+  const Handle ptypes = restore_object(ptypes_id, CHECK_({}));
+
+  JavaValue res(T_OBJECT);
+  const TempNewSymbol name = SymbolTable::new_symbol("methodType");
+  const TempNewSymbol sig = SymbolTable::new_symbol("(Ljava/lang/Class;[Ljava/lang/Class;Z)Ljava/lang/invoke/MethodType;");
+  JavaCallArguments args;
+  args.push_oop(rtype);
+  args.push_oop(ptypes);
+  args.push_int(static_cast<jboolean>(true)); // trusted
+  JavaCalls::call_static(&res, vmClasses::MethodType_klass(), name, sig, &args, CHECK_({}));
+
+  const instanceHandle mt(Thread::current(), static_cast<instanceOop>(res.get_oop()));
+  guarantee(mt.not_null() && mt->is_instance(), "must be");
+
+  // The interned MethodType can have some fields already set, need to synchronize
+  assert(rtype == java_lang_invoke_MethodType::rtype(mt()), "there can only be one mirror of a class");
+  if (ptypes != java_lang_invoke_MethodType::ptypes(mt())) {
+    const Handle actual_ptypes(Thread::current(), java_lang_invoke_MethodType::ptypes(mt()));
+    _objects.put(ptypes_id, actual_ptypes);
+  }
+  // TODO restore/record the rest of the fields
+
+  return mt;
+}
+
 instanceHandle CracHeapRestorer::restore_instance(const HeapDump::InstanceDump &dump, TRAPS) {
   assert(!_objects.contains(dump.id), "use restore_object() instead");
   log_trace(crac)("Restoring instance " HDID_FORMAT, dump.id);
@@ -1412,21 +1441,23 @@ instanceHandle CracHeapRestorer::restore_instance(const HeapDump::InstanceDump &
   instanceHandle obj;
   if (ik.is_mirror_instance_klass()) {
     // This must be the void mirror because every other one is pre-recorded
-    _mirror_dump_reader.ensure_initialized(_heap_dump, dump.class_id); // Also checks this is a mirror dump
-    guarantee(_mirror_dump_reader.mirrors_void(dump), "unrecorded non-void class mirror " HDID_FORMAT, dump.id);
-    obj = instanceHandle(Thread::current(), static_cast<instanceOop>(Universe::void_mirror()));
+    obj = get_void_mirror(dump);
     record_class_mirror(obj, dump, CHECK_({}));
   } else {
-    ik.check_valid_for_instantiation(true, CHECK_({}));
-    obj = ik.allocate_instance_handle(CHECK_({}));
+    NOT_PRODUCT(ik.check_valid_for_instantiation(true, CHECK_({})));
+    bool generic_class = false;
     if (&ik == vmClasses::String_klass()) {
-      // String's fields don't reference it back so it's safe to restore them before recording the string first
-      restore_instance_fields(obj, dump, CHECK_({}));
-      obj = intern_if_needed(obj, dump, CHECK_({}));
-      put_object_when_absent(dump.id, obj);
+      obj = get_string(dump, CHECK_({}));
+    } else if (&ik == vmClasses::ResolvedMethodName_klass()) {
+      obj = get_resolved_method_name(dump, CHECK_({}));
+    } else if (&ik == vmClasses::MethodType_klass() && ik.is_initialized()) {
+      obj = get_method_type(dump, CHECK_({}));
     } else {
-      // Record first to be able to find in case of circular references
-      put_object_when_absent(dump.id, obj);
+      obj = ik.allocate_instance_handle(CHECK_({}));
+      generic_class = true;
+    }
+    put_object_when_absent(dump.id, obj);
+    if (generic_class) {
       restore_instance_fields(obj, dump, CHECK_({}));
     }
   }

@@ -37,6 +37,7 @@
 #include "utilities/macros.hpp"
 #include "utilities/methodKind.hpp"
 #ifdef ASSERT
+#include "code/dependencyContext.hpp"
 #include "utilities/autoRestore.hpp"
 #endif // ASSERT
 
@@ -1024,33 +1025,58 @@ bool CracHeapRestorer::set_call_site_instance_field_if_special(instanceHandle ob
     precond(dump_fs.type() == T_OBJECT);
     const HeapDump::ID context_id = dump_fs.value().as_object_id;
     guarantee(context_id != HeapDump::NULL_ID, "class site must have a context");
-    assert(!_objects.contains(context_id), "call site must be the only instance referencing its context");
 
-    const HeapDump::InstanceDump &context_dump = _heap_dump.get_instance_dump(context_id);
+    Handle context = get_object_if_present(context_id);
+    if (context.is_null()) { // ID is not null so this means the context has not yet been restored
+      const HeapDump::InstanceDump &context_dump = _heap_dump.get_instance_dump(context_id);
 
-    InstanceKlass &context_class = get_instance_class(context_dump.class_id);
-    assert(context_class.name() == vmSymbols::java_lang_invoke_MethodHandleNatives_CallSiteContext() &&
-           context_class.class_loader_data()->is_the_null_class_loader_data(), "expected boot-loaded %s, got %s loaded by %s",
-           vmSymbols::java_lang_invoke_MethodHandleNatives_CallSiteContext()->as_klass_external_name(),
-           context_class.external_name(), context_class.class_loader_data()->loader_name_and_id());
+      InstanceKlass &context_class = get_instance_class(context_dump.class_id);
+      assert(context_class.name() == vmSymbols::java_lang_invoke_MethodHandleNatives_CallSiteContext() &&
+            context_class.class_loader_data()->is_the_null_class_loader_data(), "expected boot-loaded %s, got %s loaded by %s",
+            vmSymbols::java_lang_invoke_MethodHandleNatives_CallSiteContext()->as_klass_external_name(),
+            context_class.external_name(), context_class.class_loader_data()->loader_name_and_id());
 
-    instanceOop context;
-    { // Allocate a new context and register it with this call site
+      // Allocate a new context and register it with this call site
       // If this'll be failing, restore CallSiteContext before the rest of the classes
-      guarantee(context_class.is_initialized(), "need to pre-initialize %s", context_class.external_name());
+      guarantee(context_class.is_initialized(), "no need to pre-initialize %s", context_class.external_name());
+      JavaValue result(T_OBJECT);
       const TempNewSymbol make_name = SymbolTable::new_symbol("make");
       const TempNewSymbol make_sig = SymbolTable::new_symbol("(Ljava/lang/invoke/CallSite;)Ljava/lang/invoke/MethodHandleNatives$CallSiteContext;");
-      JavaValue result;
       JavaCalls::call_static(&result, &context_class, make_name, make_sig, obj, CHECK_false);
-      context = static_cast<instanceOop>(result.get_oop());
-    }
-    put_object_when_absent(context_id, instanceHandle(Thread::current(), context)); // Should still be absent
 
-    obj->obj_field_put(obj_fs.offset(), context);
+      context = instanceHandle(Thread::current(), static_cast<instanceOop>(result.get_oop()));
+      put_object_when_absent(context_id, context); // Should still be absent
+    } else {
+      DEBUG_ONLY(const DependencyContext vmcontext = java_lang_invoke_MethodHandleNatives_CallSiteContext::vmdependencies(context()));
+      assert(vmcontext.is_unused(), "must be");
+      // TODO register the context with this call site (CallSiteContext::make()
+      //  does this for us in the above case)
+    }
+
+    obj->obj_field_put(obj_fs.offset(), context());
     return true;
   }
 
   return false;
+}
+
+bool CracHeapRestorer::set_call_site_context_instance_field_if_special(instanceHandle obj, const HeapDump::InstanceDump &dump,
+                                                                       const FieldStream &obj_fs, const DumpedInstanceFieldStream &dump_fs, TRAPS) {
+  precond(obj.not_null() && java_lang_invoke_MethodHandleNatives_CallSiteContext::is_instance(obj()));
+  precond(!obj_fs.access_flags().is_static());
+
+  // CallSiteContext contains compilation-related data that should be cleared
+  assert(obj_fs.field_descriptor().field_flags().is_injected(), "all %s fields are injected",
+         vmSymbols::java_lang_invoke_MethodHandleNatives_CallSiteContext()->as_klass_external_name());
+#ifdef ASSERT
+  switch (Signature::basic_type(obj_fs.signature())) {
+    case T_INT:  assert(obj->int_field(obj_fs.offset()) == 0, "must be cleared when allocated");  break;
+    case T_LONG: assert(obj->long_field(obj_fs.offset()) == 0, "must be cleared when allocated"); break;
+    default: ShouldNotReachHere();
+  }
+#endif // ASSERT
+
+  return true;
 }
 
 void CracHeapRestorer::restore_special_instance_fields(instanceHandle obj, const HeapDump::InstanceDump &dump,
@@ -1164,8 +1190,6 @@ void CracHeapRestorer::restore_ordinary_instance_fields(instanceHandle obj, cons
 void CracHeapRestorer::restore_instance_fields(instanceHandle obj, const HeapDump::InstanceDump &dump, TRAPS) {
   // ResolvedMethodName is restored in a special manner as a whole
   assert(!java_lang_invoke_ResolvedMethodName::is_instance(obj()), "should not be manually restoring fields of this instance");
-  // CallSiteContext is only referenced by a CallSite and is restored as part of it
-  assert(!java_lang_invoke_MethodHandleNatives_CallSiteContext::is_instance(obj()), "should not be manually restoring fields of this instance");
 
   if (obj->klass()->is_class_loader_instance_klass()) {
     restore_special_instance_fields(obj, dump, &CracHeapRestorer::set_class_loader_instance_field_if_special, CHECK);
@@ -1177,6 +1201,9 @@ void CracHeapRestorer::restore_instance_fields(instanceHandle obj, const HeapDum
     restore_special_instance_fields(obj, dump, &CracHeapRestorer::set_member_name_instance_field_if_special, CHECK);
   } else if (obj->klass() == vmClasses::CallSite_klass() || obj->klass()->super() == vmClasses::CallSite_klass()) {
     restore_special_instance_fields(obj, dump, &CracHeapRestorer::set_call_site_instance_field_if_special, CHECK);
+  } else if (obj->klass()->class_loader_data()->is_the_null_class_loader_data() &&
+             obj->klass()->name() == vmSymbols::java_lang_invoke_MethodHandleNatives_CallSiteContext()) {
+    restore_special_instance_fields(obj, dump, &CracHeapRestorer::set_call_site_context_instance_field_if_special, CHECK);
   } else { // TODO other special cases (need to check all classes from javaClasses)
     precond(!java_lang_invoke_CallSite::is_instance(obj()));
     restore_ordinary_instance_fields(obj, dump, CHECK);

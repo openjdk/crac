@@ -124,6 +124,7 @@ class CracHeapRestorer : public ClassLoaderProvider {
   set_instance_field_if_special_signature(set_string_instance_field_if_special);
   set_instance_field_if_special_signature(set_member_name_instance_field_if_special);
   set_instance_field_if_special_signature(set_call_site_instance_field_if_special);
+  set_instance_field_if_special_signature(set_call_site_context_instance_field_if_special);
 #undef set_instance_field_if_special_signature
   void restore_special_instance_fields(instanceHandle obj, const HeapDump::InstanceDump &dump,
                                        set_instance_field_if_special_ptr_t set_field_if_special, TRAPS);

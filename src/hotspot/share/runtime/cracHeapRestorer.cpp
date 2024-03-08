@@ -12,6 +12,8 @@
 #include "oops/arrayKlass.hpp"
 #include "oops/instanceKlass.hpp"
 #include "oops/instanceKlass.inline.hpp"
+#include "oops/markWord.hpp"
+#include "oops/objArrayKlass.hpp"
 #include "oops/oopsHierarchy.hpp"
 #include "oops/symbol.hpp"
 #include "oops/symbolHandle.hpp"
@@ -26,6 +28,7 @@
 #include "runtime/reflectionUtils.hpp"
 #include "runtime/signature.hpp"
 #include "runtime/thread.hpp"
+#include "utilities/bitCast.hpp"
 #include "utilities/debug.hpp"
 #include "utilities/exceptions.hpp"
 #include "utilities/formatBuffer.hpp"
@@ -694,6 +697,37 @@ void CracHeapRestorer::set_field(instanceHandle obj, const FieldStream &fs, cons
   }
 }
 
+template<class OBJ_DUMP_T>
+static void restore_identity_hash(oop obj, const OBJ_DUMP_T &dump) {
+  const auto hash = bit_cast<jint>(dump.stack_trace_serial); // We use HPROF's stack_trace_serial to store identity hash
+  guarantee((hash & markWord::hash_mask) == checked_cast<decltype(markWord::hash_mask)>(hash), "identity hash too big: %i", hash);
+  if (hash == markWord::no_hash) {
+    return; // No hash computed at dump time, nothing to restore
+  }
+
+  log_trace(crac)("Restoring " HDID_FORMAT ": identity hash", dump.id);
+  const intptr_t installed_hash = obj->identity_hash(hash);
+  if (installed_hash != hash) {
+#ifdef ASSERT
+    if (obj->klass()->is_instance_klass()) {
+      const InstanceKlass *ik = InstanceKlass::cast(obj->klass());
+      assert(!ik->is_being_restored() && ik->is_initialized(), "can only happen to pre-initialized classes");
+    } else if (obj->klass()->is_objArray_klass()) {
+      const Klass *bk = ObjArrayKlass::cast(obj->klass())->bottom_klass();
+      const InstanceKlass *ik = InstanceKlass::cast(bk);
+      assert(!ik->is_being_restored() && ik->is_initialized(), "can only happen to pre-initialized classes");
+    } else {
+      assert(obj->klass()->is_typeArray_klass(), "must be"); // No InstanceKlass to check
+    }
+#endif // ASSERT
+    if (log_is_enabled(Info, crac)) {
+      ResourceMark rm;
+      log_info(crac)("Pre-created object " INTPTR_FORMAT " (%s) differs in identity hash: saved with %i, now got " INTX_FORMAT,
+                     cast_from_oop<intptr_t>(obj), obj->klass()->external_name(), hash, installed_hash);
+    }
+  }
+}
+
 bool CracHeapRestorer::set_class_loader_instance_field_if_special(instanceHandle obj, const HeapDump::InstanceDump &dump,
                                                                   const FieldStream &obj_fs, const DumpedInstanceFieldStream &dump_fs, TRAPS) {
   precond(obj->klass()->is_subclass_of(vmClasses::ClassLoader_klass()));
@@ -740,6 +774,7 @@ bool CracHeapRestorer::set_class_loader_instance_field_if_special(instanceHandle
       assert(parallel_lock_map->klass() == vmClasses::ConcurrentHashMap_klass(), "must be");
       assert(get_object_when_present(parallel_lock_map_id) == parallel_lock_map, "must be recorded when preparing");
       const HeapDump::InstanceDump &parallel_lock_map_dump = _heap_dump.get_instance_dump(parallel_lock_map_id);
+      restore_identity_hash(parallel_lock_map, parallel_lock_map_dump);
       restore_instance_fields(obj, parallel_lock_map_dump, CHECK_false);
     } else {
       assert(parallel_lock_map_id == HeapDump::NULL_ID, "must be");
@@ -826,7 +861,9 @@ bool CracHeapRestorer::set_class_mirror_instance_field_if_special(instanceHandle
       // We use this fact to distinguish prepared loaders from the unprepared
       // ones when restoring them
       assert(java_lang_ClassLoader::unnamedModule(loader) != nullptr, "preparation must set the unnamed module");
-      restore_instance_fields(loader_h, _heap_dump.get_instance_dump(loader_id), CHECK_false);
+      const HeapDump::InstanceDump &loader_dump = _heap_dump.get_instance_dump(loader_id);
+      restore_identity_hash(loader_h(), loader_dump);
+      restore_instance_fields(loader_h, loader_dump, CHECK_false);
     }
     return true;
   }
@@ -1290,6 +1327,7 @@ void CracHeapRestorer::restore_class_mirror(HeapDump::ID id, TRAPS) {
 
   // Side-effect: finishes restoration of the class loader if only prepared
   const HeapDump::InstanceDump &mirror_dump = _heap_dump.get_instance_dump(id);
+  restore_identity_hash(mirror(), mirror_dump);
   restore_instance_fields(mirror, mirror_dump, CHECK);
 
   Klass *const mirrored_k = java_lang_Class::as_Klass(mirror());
@@ -1360,6 +1398,7 @@ instanceHandle CracHeapRestorer::get_string(const HeapDump::InstanceDump &dump, 
     return {Thread::current(), static_cast<instanceOop>(interned)};
   }
 
+  // Identity hash is to be restored by the caller
   return str;
 }
 
@@ -1457,7 +1496,8 @@ instanceHandle CracHeapRestorer::restore_instance(const HeapDump::InstanceDump &
       generic_class = true;
     }
     put_object_when_absent(dump.id, obj);
-    if (generic_class) {
+    restore_identity_hash(obj(), dump);
+    if (generic_class) { // Special cases get their fields restored above
       restore_instance_fields(obj, dump, CHECK_({}));
     }
   }
@@ -1491,6 +1531,8 @@ objArrayHandle CracHeapRestorer::restore_obj_array(const HeapDump::ObjArrayDump 
   }
   put_object_when_absent(dump.id, array); // Record first to be able to find in case of circular references
 
+  restore_identity_hash(array(), dump);
+
   for (int i = 0; i < length; i++) {
     const Handle elem = restore_object(dump.elem_ids[i], CHECK_({}));
     assert(elem == nullptr || elem->klass()->is_subtype_of(oak->element_klass()),
@@ -1516,7 +1558,8 @@ typeArrayHandle CracHeapRestorer::restore_prim_array(const HeapDump::PrimArrayDu
   const int length = checked_cast<int>(dump.elems_num);
   const BasicType elem_type = HeapDump::htype2btype(dump.elem_type);
 
-  typeArrayOop array = oopFactory::new_typeArray_nozero(elem_type, length, CHECK_({}));
+  const typeArrayOop array = oopFactory::new_typeArray_nozero(elem_type, length, CHECK_({}));
+  restore_identity_hash(array, dump);
   precond(static_cast<size_t>(length) * type2aelembytes(elem_type) == dump.elems_data.size());
   if (length > 0) {
     memcpy(array->base(elem_type), dump.elems_data.mem(), dump.elems_data.size());

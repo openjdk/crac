@@ -705,16 +705,16 @@ class DumperSupport : AllStatic {
   // dumps the definition of the instance fields for a given class
   static void dump_instance_field_descriptors(AbstractDumpWriter* writer, Klass* k, bool with_injected);
   // creates HPROF_GC_INSTANCE_DUMP record for the given object
-  static void dump_instance(AbstractDumpWriter* writer, oop o, bool with_injected_fields);
+  static void dump_instance(AbstractDumpWriter* writer, oop o, bool extended);
   // creates HPROF_GC_CLASS_DUMP record for the given instance class
   static void dump_instance_class(AbstractDumpWriter* writer, Klass* k, bool with_injected_fields);
   // creates HPROF_GC_CLASS_DUMP record for a given array class
   static void dump_array_class(AbstractDumpWriter* writer, Klass* k);
 
   // creates HPROF_GC_OBJ_ARRAY_DUMP record for the given object array
-  static void dump_object_array(AbstractDumpWriter* writer, objArrayOop array);
+  static void dump_object_array(AbstractDumpWriter* writer, objArrayOop array, bool extended);
   // creates HPROF_GC_PRIM_ARRAY_DUMP record for the given type array
-  static void dump_prim_array(AbstractDumpWriter* writer, typeArrayOop array);
+  static void dump_prim_array(AbstractDumpWriter* writer, typeArrayOop array, bool extended);
   // create HPROF_FRAME record for the given method and bci
   static void dump_stack_frame(AbstractDumpWriter* writer, int frame_serial_num, int class_serial_num, Method* m, int bci);
 
@@ -1051,14 +1051,20 @@ void DumperSupport::dump_instance_field_descriptors(AbstractDumpWriter* writer, 
 }
 
 // creates HPROF_GC_INSTANCE_DUMP record for the given object
-void DumperSupport::dump_instance(AbstractDumpWriter* writer, oop o, bool with_injected_fields) {
+void DumperSupport::dump_instance(AbstractDumpWriter* writer, oop o, bool extended) {
   InstanceKlass* ik = InstanceKlass::cast(o->klass());
-  u4 is = instance_size(ik, with_injected_fields);
+  u4 is = instance_size(ik, extended);
   u4 size = 1 + sizeof(address) + 4 + sizeof(address) + 4 + is;
 
   writer->start_sub_record(HPROF_GC_INSTANCE_DUMP, size);
   writer->write_objectID(o);
-  writer->write_u4(STACK_TRACE_ID);
+
+  if (!extended) {
+    writer->write_u4(STACK_TRACE_ID);
+  } else {
+    // Note: this does not adhere to HPROF spec
+    writer->write_u4(checked_cast<jint>(o->read_identity_hash()));
+  }
 
   // class ID
   writer->write_classID(ik);
@@ -1067,7 +1073,7 @@ void DumperSupport::dump_instance(AbstractDumpWriter* writer, oop o, bool with_i
   writer->write_u4(is);
 
   // field values
-  dump_instance_fields(writer, o, with_injected_fields);
+  dump_instance_fields(writer, o, extended);
 
   writer->end_sub_record();
 }
@@ -1193,7 +1199,7 @@ int DumperSupport::calculate_array_max_length(AbstractDumpWriter* writer, arrayO
 }
 
 // creates HPROF_GC_OBJ_ARRAY_DUMP record for the given object array
-void DumperSupport::dump_object_array(AbstractDumpWriter* writer, objArrayOop array) {
+void DumperSupport::dump_object_array(AbstractDumpWriter* writer, objArrayOop array, bool extended) {
   // sizeof(u1) + 2 * sizeof(u4) + sizeof(objectID) + sizeof(classID)
   short header_size = 1 + 2 * 4 + 2 * sizeof(address);
   int length = calculate_array_max_length(writer, array, header_size);
@@ -1201,7 +1207,14 @@ void DumperSupport::dump_object_array(AbstractDumpWriter* writer, objArrayOop ar
 
   writer->start_sub_record(HPROF_GC_OBJ_ARRAY_DUMP, size);
   writer->write_objectID(array);
-  writer->write_u4(STACK_TRACE_ID);
+
+  if (!extended) {
+    writer->write_u4(STACK_TRACE_ID);
+  } else {
+    // Note: this does not adhere to HPROF spec
+    writer->write_u4(checked_cast<jint>(array->read_identity_hash()));
+  }
+
   writer->write_u4(length);
 
   // array class ID
@@ -1227,7 +1240,7 @@ void DumperSupport::dump_object_array(AbstractDumpWriter* writer, objArrayOop ar
   for (int i = 0; i < Length; i++) { writer->write_##Size((Size)Array->Type##_at(i)); }
 
 // creates HPROF_GC_PRIM_ARRAY_DUMP record for the given type array
-void DumperSupport::dump_prim_array(AbstractDumpWriter* writer, typeArrayOop array) {
+void DumperSupport::dump_prim_array(AbstractDumpWriter* writer, typeArrayOop array, bool extended) {
   BasicType type = TypeArrayKlass::cast(array->klass())->element_type();
   // 2 * sizeof(u1) + 2 * sizeof(u4) + sizeof(objectID)
   short header_size = 2 * 1 + 2 * 4 + sizeof(address);
@@ -1239,7 +1252,14 @@ void DumperSupport::dump_prim_array(AbstractDumpWriter* writer, typeArrayOop arr
 
   writer->start_sub_record(HPROF_GC_PRIM_ARRAY_DUMP, size);
   writer->write_objectID(array);
-  writer->write_u4(STACK_TRACE_ID);
+
+  if (!extended) {
+    writer->write_u4(STACK_TRACE_ID);
+  } else {
+    // Note: this does not adhere to HPROF spec
+    writer->write_u4(checked_cast<jint>(array->read_identity_hash()));
+  }
+
   writer->write_u4(length);
   writer->write_u1(type2tag(type));
 
@@ -1508,13 +1528,13 @@ void HeapObjectDumper::do_object(oop o) {
 
   if (o->is_instance()) {
     // create a HPROF_GC_INSTANCE record for each object
-    DumperSupport::dump_instance(writer(), o, /*with_injected_fields=*/_extended);
+    DumperSupport::dump_instance(writer(), o, _extended);
   } else if (o->is_objArray()) {
     // create a HPROF_GC_OBJ_ARRAY_DUMP record for each object array
-    DumperSupport::dump_object_array(writer(), objArrayOop(o));
+    DumperSupport::dump_object_array(writer(), objArrayOop(o), _extended);
   } else if (o->is_typeArray()) {
     // create a HPROF_GC_PRIM_ARRAY_DUMP record for each type array
-    DumperSupport::dump_prim_array(writer(), typeArrayOop(o));
+    DumperSupport::dump_prim_array(writer(), typeArrayOop(o), _extended);
   }
 }
 

@@ -42,6 +42,9 @@
 #include "utilities/debug.hpp"
 #include "utilities/macros.hpp"
 #include "utilities/globalDefinitions.hpp"
+#ifdef ASSERT
+#include "runtime/safepoint.hpp"
+#endif // ASSERT
 
 // Implementation of all inlined member functions defined in oop.hpp
 // We need a separate file to avoid circular references
@@ -356,7 +359,7 @@ bool oopDesc::is_instanceof_or_null(oop obj, Klass* klass) {
   return obj == nullptr || obj->klass()->is_subtype_of(klass);
 }
 
-intptr_t oopDesc::identity_hash() {
+intptr_t oopDesc::identity_hash(intptr_t hash) {
   // Fast case; if the object is unlocked and the hash value is set, no locking is needed
   // Note: The mark must be read into local variable to avoid concurrent updates.
   markWord mrk = mark();
@@ -365,8 +368,24 @@ intptr_t oopDesc::identity_hash() {
   } else if (mrk.is_marked()) {
     return mrk.hash();
   } else {
-    return slow_identity_hash();
+    return slow_identity_hash(hash);
   }
+}
+
+// Read the hash without any header modifications.
+intptr_t oopDesc::read_identity_hash() const {
+  markWord mrk = mark();
+  if (mrk.is_neutral()) {
+    return mrk.hash();
+  }
+  assert(SafepointSynchronize::is_at_safepoint(), "need synchronization");
+  assert(!is_forwarded(), "not used during GC");
+  if (mrk.has_displaced_mark_helper()) {
+    mrk = mrk.displaced_mark_helper();
+    assert(mrk.is_neutral(), "must be");
+    return mrk.hash();
+  }
+  return mrk.hash();
 }
 
 // This checks fast simple case of whether the oop has_no_hash,

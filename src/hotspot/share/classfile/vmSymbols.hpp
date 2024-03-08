@@ -530,6 +530,7 @@ class SerializeClosure;
   template(jvmti_is_in_VTMS_transition_name,          "jvmti_is_in_VTMS_transition")              \
   template(module_entry_name,                         "module_entry")                             \
   template(resolved_references_name,                  "<resolved_references>")                    \
+  template(hash_name,                                 "<hash>")                                   \
   template(is_interned_name,                          "<is_interned>")                            \
   template(internal_name_name,                        "<name>")                                   \
   template(internal_signature_name,                   "<signature>")                              \

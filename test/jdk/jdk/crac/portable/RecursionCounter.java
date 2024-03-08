@@ -5,40 +5,34 @@
  * <pre>
  * {@code
  * // Shell 1
- * // You must compile the class separately or restore will fail because CDS won't create
- * // the built-in class loaders
- * javac RecursionCounter.java
- * java -XX:CREngine= -XX:CRaCCheckpointTo=cr RecursionCounter
- * // Output:
- * // -
- * // --
- * // ---
- * // --- 0
- * // ---
- * // --
- * // -
- * // -
- * // --
- * // ---
- * // --- 1
- * // ---
- * // ...
+ * $ java -XX:CREngine= -XX:CRaCCheckpointTo=cr RecursionCounter.java
+ * > -
+ * > --
+ * > ---
+ * > --- 0
+ * > ---
+ * > --
+ * > -
+ * > -
+ * > --
+ * > ---
+ * > --- 1
+ * > ---
+ * > --
+ * > ...
  *
- * // Shell 2
- * jcmd RecursionCounter JDK.checkpoint
+ * // Shell 2 (specify "RecursionCounter" instead of the launcher in case of a
+ * // pre-compiled version)
+ * $ jcmd jdk.compiler/com.sun.tools.javac.launcher.Main JDK.checkpoint
  *
- * // Shell 1
- * // <Press Ctrl-C to stop the previous Java process>
- * // You have to specify the main class again for VM to find it and run it
- * java -XX:CREngine= -XX:CRaCRestoreFrom=cr RecursionCounter
- * // Output:
- * // --
- * // -
- * // -
- * // --
- * // ---
- * // --- 2
- * // ...
+ * // Shell 1 (stop the previous Java process with Ctrl-C)
+ * $ java -XX:CREngine= -XX:CRaCRestoreFrom=cr
+ * > -
+ * > -
+ * > --
+ * > ---
+ * > --- 2
+ * > ...
  * }
  * </pre>
  */

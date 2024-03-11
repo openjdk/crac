@@ -4010,7 +4010,7 @@ jint Arguments::parse(const JavaVMInitArgs* initial_cmd_args) {
 #endif
 
 #ifndef PRODUCT
-  if (TraceBytecodesAt != 0) {
+  if (TraceBytecodesAt != 0 || TraceOperands) {
     TraceBytecodes = true;
   }
   if (CountCompiledCalls) {

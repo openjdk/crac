@@ -857,6 +857,9 @@ const int ObjectAlignmentInBytes = 8;
   develop(bool, TraceBytecodes, false,                                      \
           "Trace bytecode execution")                                       \
                                                                             \
+  develop(bool, TraceOperands, false,                                       \
+          "Extend bytecode trace with operand stack dumps")                 \
+                                                                            \
   develop(bool, TraceICs, false,                                            \
           "Trace inline cache changes")                                     \
                                                                             \

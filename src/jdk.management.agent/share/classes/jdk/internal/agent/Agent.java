@@ -463,7 +463,7 @@ public class Agent {
              * instrumentation buffer.
              */
             if (jmxremote != null || jmxremotePort != null) {
-                if (jmxremotePort != null) {
+                if (jmxremotePort != null && jmxServer == null) {
                     jmxServer = ConnectorBootstrap.
                             startRemoteConnectorServer(jmxremotePort, props);
                     startDiscoveryService(props);
@@ -476,6 +476,8 @@ public class Agent {
                     public void beforeCheckpoint(Context<? extends Resource> context) throws Exception {
                         stopRemoteManagementAgent();
                         stopLocalManagementAgent();
+                        // reload properties after restore
+                        mgmtProps = null;
                     }
 
                     @Override

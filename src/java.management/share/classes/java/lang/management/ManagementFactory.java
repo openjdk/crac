@@ -56,6 +56,9 @@ import java.util.Set;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 import javax.management.JMX;
+import jdk.crac.Context;
+import jdk.crac.Core;
+import jdk.crac.Resource;
 import sun.management.Util;
 import sun.management.spi.PlatformMBeanProvider;
 import sun.management.spi.PlatformMBeanProvider.PlatformComponent;
@@ -1016,8 +1019,20 @@ public class ManagementFactory {
         }
     }
 
+    private static final Resource nativeInitResource = new Resource() {
+        @Override
+        public void beforeCheckpoint(Context<? extends Resource> context) {
+        }
+
+        @Override
+        public void afterRestore(Context<? extends Resource> context) {
+            loadNativeLib();
+        }
+    };
+
     static {
         loadNativeLib();
+        Core.getGlobalContext().register(nativeInitResource);
     }
 
     @SuppressWarnings("removal")

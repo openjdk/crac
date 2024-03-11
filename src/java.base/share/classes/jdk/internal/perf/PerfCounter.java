@@ -30,6 +30,10 @@ import java.nio.ByteOrder;
 import java.nio.LongBuffer;
 import java.security.AccessController;
 
+import jdk.crac.Context;
+import jdk.crac.Core;
+import jdk.crac.Resource;
+
 /**
  * Performance counter support for internal JRE classes.
  * This class defines a fixed list of counters for the platform
@@ -59,13 +63,47 @@ public class PerfCounter {
     private static final int U_None      = 1;
 
     private final String name;
-    private final LongBuffer lb;
+    private LongBuffer lb;
+
+    // Portable CRaC cannot restore perf buffers
+    private final class BufferResource implements Resource {
+        private final int type; // TODO retrieve from native Perf?
+        private long savedValue;
+
+        BufferResource(int type) {
+            this.type = type;
+        }
+
+        @Override
+        public void beforeCheckpoint(Context<? extends Resource> context) {
+            savedValue = get();
+        }
+
+        @Override
+        public void afterRestore(Context<? extends Resource> context) {
+            ByteBuffer bb;
+            try {
+                bb = perf.createLong(name, type, U_None, 0L);
+            } catch (IllegalArgumentException ignored) {
+                // This C/R implementation can restore perf state
+                assert get() == savedValue;
+                return;
+            }
+            bb.order(ByteOrder.nativeOrder());
+            lb = bb.asLongBuffer();
+            set(savedValue);
+        }
+    }
+
+    private final BufferResource bufferResource;
 
     private PerfCounter(String name, int type) {
         this.name = name;
         ByteBuffer bb = perf.createLong(name, type, U_None, 0L);
         bb.order(ByteOrder.nativeOrder());
         this.lb = bb.asLongBuffer();
+        bufferResource = new BufferResource(type);
+        Core.getGlobalContext().register(bufferResource);
     }
 
     public static PerfCounter newPerfCounter(String name) {

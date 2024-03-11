@@ -30,6 +30,9 @@ import java.nio.ByteBuffer;
 import java.nio.ReadOnlyBufferException;
 import java.util.Objects;
 
+import jdk.crac.Core;
+import jdk.crac.Context;
+import jdk.crac.Resource;
 import jdk.internal.ref.CleanerFactory;
 import jdk.internal.util.Preconditions;
 import sun.nio.ch.DirectBuffer;
@@ -114,9 +117,25 @@ public class Inflater {
     private int inputConsumed;
     private int outputConsumed;
 
-    static {
+    private static void initNatives() {
         ZipUtils.loadLibrary();
         initIDs();
+    }
+
+    private static final Resource nativeInitResource = new Resource() {
+        @Override
+        public void beforeCheckpoint(Context<? extends Resource> context) {
+        }
+
+        @Override
+        public void afterRestore(Context<? extends Resource> context) {
+            initNatives();
+        }
+    };
+
+    static {
+        initNatives();
+        Core.getGlobalContext().register(nativeInitResource);
     }
 
     /**

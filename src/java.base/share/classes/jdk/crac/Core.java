@@ -284,7 +284,8 @@ public class Core {
             RestoreException {
         // checkpointRestoreLock protects against the simultaneous
         // call of checkpointRestore from different threads.
-        synchronized (checkpointRestoreLock) {
+        // TODO uncomment when portable CRaC becomes able to restore monitors
+        // synchronized (checkpointRestoreLock) {
             // checkpointInProgress protects against recursive
             // checkpointRestore from resource's
             // beforeCheckpoint/afterRestore methods
@@ -303,7 +304,7 @@ public class Core {
                 }
                 checkpointInProgress = false;
             }
-        }
+        // }
     }
 
     /* called by VM */

@@ -2,6 +2,7 @@
 #include "classfile/classLoaderData.hpp"
 #include "classfile/dictionary.hpp"
 #include "classfile/systemDictionary.hpp"
+#include "classfile/vmSymbols.hpp"
 #include "logging/log.hpp"
 #include "memory/resourceArea.hpp"
 #include "oops/array.hpp"
@@ -30,7 +31,6 @@
 #include "utilities/macros.hpp"
 #ifdef ASSERT
 #include "classfile/vmClasses.hpp"
-#include "classfile/vmSymbols.hpp"
 #include "interpreter/bytecodes.hpp"
 #include "oops/fieldInfo.hpp"
 #include "oops/fieldStreams.hpp"

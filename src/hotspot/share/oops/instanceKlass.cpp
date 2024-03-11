@@ -771,6 +771,12 @@ void InstanceKlass::check_link_state_and_wait(JavaThread* current) {
   MonitorLocker ml(current, _init_monitor);
 
   // Another thread is linking or restoring this class, wait.
+  if (is_being_restored() && log_is_enabled(Warning, crac, class)) {
+    // TODO remove this log when deadlock-prone MethodType interning is fixed
+    ResourceMark rm;
+    log_warning(crac, class)("Linking thread '%s' is waiting for %s to be restored",
+                             current->name(), external_name());
+  }
   while ((is_being_linked() || is_being_restored()) && !is_init_thread(current)) {
     assert(!(is_being_restored() && is_init_thread(current)), "restoring thread should not call this");
     ml.wait();
@@ -1091,6 +1097,12 @@ void InstanceKlass::initialize_impl(TRAPS) {
     MonitorLocker ml(THREAD, _init_monitor);
 
     // Step 2 (ammended with portable CRaC support)
+    if (is_being_restored() && log_is_enabled(Warning, crac, class)) {
+      // TODO remove this log when deadlock-prone MethodType interning is fixed
+      ResourceMark rm;
+      log_warning(crac, class)("Initializing thread '%s' is waiting for %s to be restored",
+                               jt->name(), external_name());
+    }
     while ((is_being_initialized() || is_being_restored()) && !is_init_thread(jt)) {
       assert(!(is_being_restored() && is_init_thread(jt)), "restoring thread should not call this");
       wait = true;

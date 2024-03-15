@@ -48,7 +48,7 @@
 #include "prims/methodHandles.hpp"
 #include "runtime/continuation.hpp"
 #include "runtime/continuationEntry.inline.hpp"
-#include "runtime/crac.hpp"
+#include "runtime/cracThreadRestorer.hpp"
 #include "runtime/globals.hpp"
 #include "runtime/jniHandles.hpp"
 #include "runtime/safepointMechanism.hpp"
@@ -2917,10 +2917,10 @@ void SharedRuntime::generate_restore_blob() {
   // Call C code that will prepare for us the info about the frames to restore.
   // No blocking or GC can happen, frames are not accessed.
   //
-  // void crac::fetch_frame_info(JavaThread* current)
+  // void CracThreadRestorer::fetch_frame_info(JavaThread* current)
 
   __ mov(c_rarg0, r15_thread);
-  __ call(RuntimeAddress(CAST_FROM_FN_PTR(address, crac::fetch_frame_info)));
+  __ call(RuntimeAddress(CAST_FROM_FN_PTR(address, CracThreadRestorer::fetch_frame_info)));
 
   // TODO oop map?
 
@@ -3027,7 +3027,7 @@ void SharedRuntime::generate_restore_blob() {
 
   // Call C code. It should fill the skeletom frames we've pushed.
   //
-  // void crac::fill_in_frames(JavaThread* current)
+  // void CracThreadRestorer::fill_in_frames(JavaThread* current)
 
   // Use rbp because the frames look interpreted now.
   // Don't need the precise return PC here, just precise enough to point into this code blob.
@@ -3035,7 +3035,7 @@ void SharedRuntime::generate_restore_blob() {
 
   __ andptr(rsp, -(StackAlignmentInBytes));  // Fix stack alignment as required by ABI
   __ mov(c_rarg0, r15_thread);
-  __ call(RuntimeAddress(CAST_FROM_FN_PTR(address, crac::fill_in_frames)));
+  __ call(RuntimeAddress(CAST_FROM_FN_PTR(address, CracThreadRestorer::fill_in_frames)));
 
   // TODO oop map?
 

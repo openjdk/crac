@@ -73,6 +73,8 @@ class vframeArray;
 class vframe;
 class javaVFrame;
 
+class CracStackTrace;
+
 class JavaThread;
 typedef void (*ThreadFunction)(JavaThread*, TRAPS);
 
@@ -142,6 +144,9 @@ class JavaThread: public Thread {
   // Used to pass back results to the interpreter or generated code running Java code.
   oop           _vm_result;    // oop result is GC-preserved
   Metadata*     _vm_result_2;  // non-oop result
+
+  // Portable CRaC support
+  CracStackTrace *_crac_stack; // Stack trace to be restored on this thread
 
   // See ReduceInitialCardMarks: this holds the precise space interval of
   // the most recent slow path allocation for which compiled code has
@@ -699,6 +704,9 @@ private:
   void set_vm_result  (oop x)                    { _vm_result   = x; }
 
   void set_vm_result_2  (Metadata* x)            { _vm_result_2   = x; }
+
+  CracStackTrace *crac_stack()                   { return _crac_stack; }
+  void set_crac_stack(CracStackTrace *stack)     { precond(_crac_stack == nullptr || stack == nullptr); _crac_stack = stack; }
 
   MemRegion deferred_card_mark() const           { return _deferred_card_mark; }
   void set_deferred_card_mark(MemRegion mr)      { _deferred_card_mark = mr;   }

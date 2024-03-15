@@ -99,7 +99,7 @@ class ThreadStackStream : public StackObj {
                                         oop2uint(thread->threadObj()), thread->name(), _frames.length());
     }
     return Status::NON_JAVA_IN_MID;
-}
+  }
 
   JavaThread *thread()                            const { assert(_started, "call next() first"); return _tlh.thread_at(_thread_i); }
   const GrowableArrayView<javaVFrame *> &frames() const { assert(_started, "call next() first"); return _frames; };
@@ -112,21 +112,37 @@ class ThreadStackStream : public StackObj {
 
   // Whether this thread should be included in the dump.
   static bool should_include(const JavaThread &thread) {
-    ResourceMark rm; // Thread name
-    // TODO for now we only include the main thread, but there seems to be no
-    //  way to reliably determine that a thread is the main thread.
-    //
-    // No need to explicitly exclude JVM TI agent threads since they start with
-    // a native frame and thus will abort the dumping process if exist.
-    // if (thread->is_exiting() ||
-    //     thread->is_hidden_from_external_view() ||
-    //     thread->is_Compiler_thread() ||
-    //     thread->is_AttachListener_thread() ||
-    //     (strcmp(thread->name(), "Notification Thread") == 0 && java_lang_Thread::threadGroup(thread->threadObj()) == Universe::system_thread_group())) {
-    //   continue;
-    // }
-    return !thread.is_exiting() &&
-           java_lang_Thread::threadGroup(thread.threadObj()) == Universe::main_thread_group() && strcmp(thread.name(), "main") == 0;
+    if (thread.is_exiting() ||
+        thread.is_hidden_from_external_view() ||
+        thread.is_Compiler_thread() ||
+        thread.is_Notification_thread() ||
+        thread.is_AttachListener_thread() || // TODO jcmd support will probably require this to be treated specially
+        thread.is_jvmti_agent_thread()) {    // TODO JVM TI support: these are user-provided, need to think it through
+      return false;
+    }
+    // TODO
+    // 1. This way of identification is not fully accurate: the user can also
+    //    create threads that would match.
+    // 2. All threads identified below, except Signal Dispatcher, are created
+    //    from Java, so we'll include them too when restoration of system
+    //    classes is supported.
+    const oop tg = java_lang_Thread::threadGroup(thread.threadObj());
+    if (tg == Universe::system_thread_group()) {
+      ResourceMark rm;
+      const char *thread_name = thread.name();
+      if (strcmp(thread_name, "Signal Dispatcher") == 0 ||
+          strcmp(thread_name, "Finalizer") == 0 ||
+          strcmp(thread_name, "Reference Handler") == 0) {
+        return false;
+      }
+    } else {
+      ResourceMark rm;
+      if (strcmp(thread.name(), "Common-Cleaner") == 0 &&
+          strcmp(java_lang_ThreadGroup::name(tg), "InnocuousThreadGroup") == 0) {
+        return false;
+      }
+    }
+    return true;
   }
 
   // Whether this is a native method known how to restore.

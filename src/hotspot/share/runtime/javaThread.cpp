@@ -413,6 +413,7 @@ JavaThread::JavaThread() :
   _callee_target(nullptr),
   _vm_result(nullptr),
   _vm_result_2(nullptr),
+  _crac_stack(nullptr),
 
   _current_pending_monitor(nullptr),
   _current_pending_monitor_is_from_java(true),

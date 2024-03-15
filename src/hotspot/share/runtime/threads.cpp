@@ -838,16 +838,11 @@ jint Threads::create_vm(JavaVMInitArgs* args, bool* canTryAgain) {
   }
 
   // Perform portable CRaC restore if requested
-  // TODO do this somewhere earlier?
-  // - Cannot do before initPhase2 because can only load java.base classes until
-  //   then (but a dump can occure until then because AttachListener::init() can
-  //   be called and listen for jcmd commands)
-  // - Integrate into initPhase3 to restore system class loader and
-  //   security manager (currently we rely on them to be created for us)
+  // TODO do this before any Java code is executed
   if (CRaCRestoreFrom != nullptr && crac::is_portable_mode()) {
     // TODO honor CRaCIgnoreRestoreIfUnavailable (will have to differentiate
     // between errors and exceptions)
-    crac::restore_heap(CHECK_JNI_ERR);
+    crac::restore_data(CHECK_JNI_ERR);
   }
 
   return JNI_OK;

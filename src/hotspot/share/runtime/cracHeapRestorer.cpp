@@ -25,9 +25,11 @@
 #include "runtime/fieldDescriptor.inline.hpp"
 #include "runtime/handles.hpp"
 #include "runtime/javaCalls.hpp"
+#include "runtime/javaThread.hpp"
 #include "runtime/reflectionUtils.hpp"
 #include "runtime/signature.hpp"
 #include "runtime/thread.hpp"
+#include "runtime/threadIdentifier.hpp"
 #include "utilities/bitCast.hpp"
 #include "utilities/debug.hpp"
 #include "utilities/exceptions.hpp"
@@ -463,10 +465,12 @@ void CracHeapRestorer::restore_heap(const HeapDumpTable<UnfilledClassInfo, AnyOb
 
   // Before actually restoring anything, record existing objects so that they
   // are not re-created
-  // TODO Currently only the mirrors themselves + contents of a few of their
-  //  fields are recorded. Ideally, we should walk recursively and record all
-  //  existing objects so that we don't re-create them, but this should be
-  //  fairly complex since the dumped and the current state may not match.
+  // TODO Only a few pre-existing objects are recorded. Recording them all would
+  //  require non-trivial matching since there already exists a new state.
+  //  Instead in future we'll move this into a more early VM init state before
+  //  any of Java codes have been executed so that we'll only need to record
+  //  a statically known amount of objects (mainly primitive class mirrors).
+  record_main_thread(stack_traces);
   _heap_dump.class_dumps.iterate([&](HeapDump::ID _, const HeapDump::ClassDump &dump) -> bool {
     find_and_record_class_mirror(dump, CHECK_false);
     return true;
@@ -518,7 +522,10 @@ void CracHeapRestorer::restore_heap(const HeapDumpTable<UnfilledClassInfo, AnyOb
   guarantee(_prepared_loaders.number_of_entries() == 0, "some prepared class loaders have not defined any classes");
 
   // Restore objects reachable from the thread stacks
-  for (const auto *trace : stack_traces) {
+  for (auto *const trace : stack_traces) {
+    const Handle thread = restore_object(trace->thread_id(), CHECK);
+    trace->put_thread(thread);
+
     for (u4 frame_i = 0; frame_i < trace->frames_num(); frame_i++) {
       const CracStackTrace::Frame &frame = trace->frame(frame_i);
       const u2 num_locals = frame.locals().length();
@@ -643,6 +650,51 @@ void CracHeapRestorer::record_class_mirror(instanceHandle mirror, const HeapDump
   //    different values of different classes than they were when dumped
   //  - If we don't and these values were references somewhere in the dump,
   //    they will be restored and thus duplicated
+}
+
+// Assuming the current thread is the main (aka primordial) thread, records its
+// j.l.Thread object and some of its fields.
+//
+// TODO
+//  1. If the main thread had finished its execution upon checkpoint we won't
+//     find and pre-record it and thus things like the main thread group will be
+//     duplicated. This won't be an issue if we'll be able to start the
+//     restoration before all these get re-created.
+//  2. It is possible that the main thread had finished its execution but was
+//     retained as an object -- this case is currently not fully supported and
+//     will result in an "unimplemented" error when restoring that object.
+void CracHeapRestorer::record_main_thread(const GrowableArrayView<CracStackTrace *> &stack_traces) {
+  if (stack_traces.is_empty()) {
+    return; // No threads dumped
+  }
+
+  JavaThread *const main_thread = JavaThread::current();
+  const instanceHandle main_thread_obj(main_thread, static_cast<instanceOop>(main_thread->threadObj()));
+  guarantee(java_lang_Thread::thread_id(JavaThread::current()->threadObj()) == 1,
+            "heap restoration must be called from the main thread");
+
+  // Threads are dumped from oldest to newest, so if the main thread was alive
+  // at the dump creation time, it is the first one
+  const HeapDump::ID thread_id = stack_traces.first()->thread_id();
+  const HeapDump::InstanceDump &thread_dump = _heap_dump.get_instance_dump(thread_id);
+
+  HeapDumpClasses::java_lang_Thread thread_reader;
+  thread_reader.ensure_initialized(_heap_dump, thread_dump.class_id);
+  if (thread_reader.tid(thread_dump) != 1) {
+    return; // Main thread was not dumped
+  }
+
+  put_object_when_absent(thread_id, main_thread_obj);
+
+  // TODO only some fields are recorded here, may need to add more
+#define FLD_HANDLE(f) const instanceHandle f(main_thread, static_cast<instanceOop>(java_lang_Thread::f(main_thread_obj())))
+  FLD_HANDLE(name);
+  FLD_HANDLE(holder);
+  FLD_HANDLE(inherited_access_control_context);
+#undef FLD_HANDLE
+  put_object_if_absent(thread_reader.name(thread_dump), name); // May be present, e.g. as a name of a prepared class loader
+  put_object_when_absent(thread_reader.holder(thread_dump), holder);
+  put_object_when_absent(thread_reader.inheritedAccessControlContext(thread_dump), inherited_access_control_context);
 }
 
 // Field restoration
@@ -914,6 +966,55 @@ bool CracHeapRestorer::set_class_mirror_instance_field_if_special(instanceHandle
   return false;
 }
 
+bool CracHeapRestorer::set_thread_instance_field_if_special(instanceHandle obj, const HeapDump::InstanceDump &dump,
+                                                            const FieldStream &obj_fs, const DumpedInstanceFieldStream &dump_fs, TRAPS) {
+  precond(obj->klass()->is_subclass_of(vmClasses::Thread_klass()));
+  precond(!obj_fs.access_flags().is_static());
+  if (obj_fs.field_descriptor().field_holder() != vmClasses::Thread_klass()) {
+    return false;
+  }
+
+  // Raw pointer to a JvmtiThreadState
+  if (obj_fs.name() == vmSymbols::jvmti_thread_state_name()) {
+    guarantee(dump_fs.type() == T_INT || dump_fs.type() == T_LONG, "must be a Java equivalent of intptr_t");
+    const bool had_jvmti_state = (dump_fs.type() == T_INT ? dump_fs.value().as_int : dump_fs.value().as_long) != 0;
+    if (had_jvmti_state) {
+      log_error(crac)("Cannot restore thread object " HDID_FORMAT ": it had a JVM TI state", dump.id);
+      Unimplemented(); // TODO JVM TI support
+    }
+    assert(obj->address_field(obj_fs.offset()) == nullptr, "must be cleared when allocated");
+    return true;
+  }
+
+  // Raw pointer to a JavaThread, it will be filled later when restoring the
+  // thread's execution
+  // TODO would be nice to assert it will actually be restored (i.e. the thread
+  //  is in the stack dump)
+  if (obj_fs.name()->equals("eetop")) {
+    assert(obj->long_field(obj_fs.offset()) == 0, "must be cleared when allocated");
+    return true;
+  }
+
+  // Thread ID which must be unique across the VM
+  if (obj_fs.name()->equals("tid")) {
+    assert(dump_fs.type() == T_LONG, "must be");
+    const jlong tid = dump_fs.value().as_long;
+    if (tid == 1) {
+      // This is the main thread which hasn't been pre-recorded meaning it
+      // wasn't alive at dump time
+      log_error(crac)("Restoration of non-alive main thread is unsupported");
+      Unimplemented();
+    }
+    // TODO this only ensures the ID won't be claimed later, need to also check
+    //  it hasn't already been claimed; also, these increments are inefficient
+    while (ThreadIdentifier::next() < tid) {}
+    obj->long_field_put(obj_fs.offset(), tid);
+    return true;
+  }
+
+  return false;
+}
+
 bool CracHeapRestorer::set_string_instance_field_if_special(instanceHandle obj, const HeapDump::InstanceDump &dump,
                                                             const FieldStream &obj_fs, const DumpedInstanceFieldStream &dump_fs, TRAPS) {
   assert(obj_fs.field_descriptor().field_holder() == vmClasses::String_klass(), "must be");
@@ -1062,13 +1163,7 @@ bool CracHeapRestorer::set_call_site_context_instance_field_if_special(instanceH
   // CallSiteContext contains compilation-related data that should be cleared
   assert(obj_fs.field_descriptor().field_flags().is_injected(), "all %s fields are injected",
          vmSymbols::java_lang_invoke_MethodHandleNatives_CallSiteContext()->as_klass_external_name());
-#ifdef ASSERT
-  switch (Signature::basic_type(obj_fs.signature())) {
-    case T_INT:  assert(obj->int_field(obj_fs.offset()) == 0, "must be cleared when allocated");  break;
-    case T_LONG: assert(obj->long_field(obj_fs.offset()) == 0, "must be cleared when allocated"); break;
-    default: ShouldNotReachHere();
-  }
-#endif // ASSERT
+  assert(obj->address_field(obj_fs.offset()) == nullptr, "must be cleared when allocated");
 
   return true;
 }
@@ -1198,6 +1293,8 @@ void CracHeapRestorer::restore_instance_fields(instanceHandle obj, const HeapDum
   } else if (obj->klass()->class_loader_data()->is_the_null_class_loader_data() &&
              obj->klass()->name() == vmSymbols::java_lang_invoke_MethodHandleNatives_CallSiteContext()) {
     restore_special_instance_fields(obj, dump, &CracHeapRestorer::set_call_site_context_instance_field_if_special, CHECK);
+  } else if (obj->klass()->is_subclass_of(vmClasses::Thread_klass())) {
+    restore_special_instance_fields(obj, dump, &CracHeapRestorer::set_thread_instance_field_if_special, CHECK);
   } else { // TODO other special cases (need to check all classes from javaClasses)
     precond(!java_lang_invoke_CallSite::is_instance(obj()));
     restore_ordinary_instance_fields(obj, dump, CHECK);

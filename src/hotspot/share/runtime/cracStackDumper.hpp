@@ -53,7 +53,8 @@
 enum DumpedStackValueType : u1 { PRIMITIVE, REFERENCE };
 
 // Dumps Java frames (until the first CallStub) of non-internal Java threads.
-// Dumped IDs are oops to be compatible with HeapDumper's object IDs.
+// Threads are dumped in the order they were created (oldest first), dumped IDs
+// are oops to be compatible with HeapDumper's object IDs.
 struct CracStackDumper : public AllStatic {
   class Result {
    public:

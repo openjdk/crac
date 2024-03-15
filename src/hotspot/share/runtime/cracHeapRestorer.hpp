@@ -112,6 +112,7 @@ class CracHeapRestorer : public ClassLoaderProvider {
 
   void find_and_record_class_mirror(const HeapDump::ClassDump &class_dump, TRAPS);
   void record_class_mirror(instanceHandle mirror, const HeapDump::InstanceDump &mirror_dump, TRAPS);
+  void record_main_thread(const GrowableArrayView<CracStackTrace *> &stack_traces);
 
   void set_field(instanceHandle obj, const FieldStream &fs, const HeapDump::BasicValue &val, TRAPS);
 #define set_instance_field_if_special_signature(name) \
@@ -119,6 +120,7 @@ class CracHeapRestorer : public ClassLoaderProvider {
   using set_instance_field_if_special_ptr_t = set_instance_field_if_special_signature((CracHeapRestorer::*));
   set_instance_field_if_special_signature(set_class_loader_instance_field_if_special);
   set_instance_field_if_special_signature(set_class_mirror_instance_field_if_special);
+  set_instance_field_if_special_signature(set_thread_instance_field_if_special);
   set_instance_field_if_special_signature(set_string_instance_field_if_special);
   set_instance_field_if_special_signature(set_member_name_instance_field_if_special);
   set_instance_field_if_special_signature(set_call_site_instance_field_if_special);

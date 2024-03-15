@@ -16,6 +16,20 @@ static bool symbol_equals(const Symbol *actual, const char *expected) {
   return actual->equals(expected);
 }
 
+#define DEFINE_FIND_CLASS_DUMP_FROM_SUBCLASS_DUMP(klass)                                                             \
+  static const HeapDump::ClassDump *find_##klass##_dump(const ParsedHeapDump &heap_dump, HeapDump::ID subclass_id) { \
+    const HeapDump::ClassDump *class_dump = &heap_dump.get_class_dump(subclass_id);                                  \
+    /* Assuming there is no inheritance circularity or this will be an endless loop */                               \
+    while (class_dump->class_loader_id != HeapDump::NULL_ID ||                                                       \
+           heap_dump.get_class_name(class_dump->id) != vmSymbols::klass()) {                                         \
+      if (class_dump->super_id == HeapDump::NULL_ID) {                                                               \
+        return nullptr;                                                                                              \
+      }                                                                                                              \
+      class_dump = &heap_dump.get_class_dump(class_dump->super_id);                                                  \
+    }                                                                                                                \
+    return class_dump;                                                                                               \
+  }
+
 #define NO_DUMP_FIELDS_DO(...)
 
 STATIC_ASSERT((std::is_same<u4, juint>()));
@@ -128,19 +142,7 @@ static bool is_class_loader_class_dump(const ParsedHeapDump &heap_dump, const He
 }
 #endif // ASSERT
 
-static const HeapDump::ClassDump *find_java_lang_ClassLoader_dump(const ParsedHeapDump &heap_dump, HeapDump::ID subclass_id) {
-  const HeapDump::ClassDump *class_dump = &heap_dump.get_class_dump(subclass_id);
-  // Assuming there is no inheritance circularity or this will be an endless loop
-  while (class_dump->class_loader_id != HeapDump::NULL_ID ||
-         heap_dump.get_class_name(class_dump->id) != vmSymbols::java_lang_ClassLoader()) {
-    if (class_dump->super_id != HeapDump::NULL_ID) {
-      class_dump = &heap_dump.get_class_dump(class_dump->super_id);
-    } else {
-      return nullptr;
-    }
-  }
-  return class_dump;
-}
+DEFINE_FIND_CLASS_DUMP_FROM_SUBCLASS_DUMP(java_lang_ClassLoader)
 
 void HeapDumpClasses::java_lang_ClassLoader::ensure_initialized(const ParsedHeapDump &heap_dump, HeapDump::ID loader_class_id) {
   precond(loader_class_id != HeapDump::NULL_ID);
@@ -220,6 +222,59 @@ HeapDumpClasses::java_lang_Class::Kind HeapDumpClasses::java_lang_Class::kind(co
             vmSymbols::java_lang_Class()->as_klass_external_name(), dump.id);
   return Kind::PRIMITIVE;
 }
+
+
+// java.lang.Thread
+
+#ifdef ASSERT
+static bool is_thread_class_dump(const ParsedHeapDump &heap_dump, const HeapDump::ClassDump &dump) {
+  const bool has_right_name_and_loader = heap_dump.get_class_name(dump.id) == vmSymbols::java_lang_Thread() &&
+                                         dump.class_loader_id == HeapDump::NULL_ID;
+  if (!has_right_name_and_loader) {
+    return false;
+  }
+
+  assert(dump.super_id != HeapDump::NULL_ID, "illegal super in %s dump " HDID_FORMAT ": expected %s, got none",
+         vmSymbols::java_lang_Thread()->as_klass_external_name(), dump.id,
+         vmSymbols::java_lang_Object()->as_klass_external_name());
+
+  const HeapDump::ClassDump &super_dump = heap_dump.get_class_dump(dump.super_id);
+  assert(heap_dump.get_class_name(super_dump.id) == vmSymbols::java_lang_Object() &&
+         super_dump.class_loader_id == HeapDump::NULL_ID, "illegal super in %s dump " HDID_FORMAT ": expected %s, got %s",
+         vmSymbols::java_lang_Thread()->as_klass_external_name(), dump.id,
+         heap_dump.get_class_name(super_dump.id)->as_klass_external_name(),
+         vmSymbols::java_lang_Object()->as_klass_external_name());
+
+  return true;
+}
+#endif // ASSERT
+
+DEFINE_FIND_CLASS_DUMP_FROM_SUBCLASS_DUMP(java_lang_Thread)
+
+void HeapDumpClasses::java_lang_Thread::ensure_initialized(const ParsedHeapDump &heap_dump, HeapDump::ID thread_class_id) {
+  precond(thread_class_id != HeapDump::NULL_ID);
+  if (!is_initialized()) {
+    const HeapDump::ClassDump *java_lang_Thread_dump_ptr = find_java_lang_Thread_dump(heap_dump, thread_class_id);
+    guarantee(java_lang_Thread_dump_ptr != nullptr, "cannot find %s as a super-class of " HDID_FORMAT,
+              vmSymbols::java_lang_Thread()->as_klass_external_name(), thread_class_id);
+    const HeapDump::ClassDump &java_lang_Thread_dump = *java_lang_Thread_dump_ptr;
+    precond(is_thread_class_dump(heap_dump, java_lang_Thread_dump));
+    INITIALIZE_OFFSETS(java_lang_Thread, THREAD_DUMP_FIELDS_DO, NO_DUMP_FIELDS_DO)
+    DEBUG_ONLY(_java_lang_Thread_id = java_lang_Thread_dump.id);
+    _id_size = heap_dump.id_size;
+  } else {
+#ifdef ASSERT
+    const HeapDump::ClassDump *java_lang_Thread_dump_ptr = find_java_lang_Thread_dump(heap_dump, thread_class_id);
+    assert(java_lang_Thread_dump_ptr != nullptr, "cannot find %s as a super-class of " HDID_FORMAT,
+           vmSymbols::java_lang_Thread()->as_klass_external_name(), thread_class_id);
+    const HeapDump::ID java_lang_Thread_id = java_lang_Thread_dump_ptr->id;
+    ASSERT_INITIALIZED_WITH_SAME_ID(java_lang_Thread)
+#endif // ASSERT
+  }
+  postcond(is_initialized());
+}
+
+THREAD_DUMP_FIELDS_DO(DEFINE_GET_FIELD_METHOD)
 
 
 // java.lang.String

@@ -26,9 +26,7 @@
 
 #include "memory/allStatic.hpp"
 #include "runtime/cracStackDumpParser.hpp"
-#include "runtime/deoptimization.hpp"
 #include "runtime/handles.hpp"
-#include "runtime/javaThread.hpp"
 #include "utilities/exceptions.hpp"
 
 // xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
@@ -45,6 +43,9 @@ public:
   // Restore in the classic mode.
   static void restore();
 
+  static Handle cr_return(int ret, Handle new_args, Handle new_props,
+                          Handle err_codes, Handle err_msgs, TRAPS);
+
   static jlong restore_start_time();
   static jlong uptime_since_restore();
 
@@ -60,14 +61,10 @@ public:
   // Portable mode
 
   // Restores classes and objects.
-  static void restore_heap(TRAPS);
-  // Restores thread states and launches their execution. Should only be called
-  // once, after restore_heap() has been called.
+  static void restore_data(TRAPS);
+  // Launches execution of all threads, returns when the current thread finishes
+  // its restored execution (if any).
   static void restore_threads(TRAPS);
-  // Called by RestoreStub to prepare information about frames to restore.
-  static Deoptimization::UnrollBlock *fetch_frame_info(JavaThread *current);
-  // Called by RestoreStub to fill in the skeletal frames just created.
-  static void fill_in_frames(JavaThread *current);
 
 private:
   static bool read_bootid(char *dest);
@@ -76,8 +73,6 @@ private:
   static jlong checkpoint_nanos;
   static char checkpoint_bootid[UUID_LENGTH];
   static jlong javaTimeNanos_offset;
-
-  static JavaValue restore_current_thread(TRAPS);
 
   static ParsedCracStackDump *_stack_dump;
 };

@@ -81,6 +81,28 @@ struct HeapDumpClasses : public AllStatic {
   };
 
 
+#define THREAD_DUMP_FIELDS_DO(macro)                                                                                                         \
+  macro(java_lang_Thread, tid, "tid", T_LONG, jlong, long)                                                                                   \
+  macro(java_lang_Thread, name, vmSymbols::name_name(), T_OBJECT, HeapDump::ID, object_id)                                                   \
+  macro(java_lang_Thread, holder, "holder", T_OBJECT, HeapDump::ID, object_id)                                                               \
+  macro(java_lang_Thread, inheritedAccessControlContext, vmSymbols::inheritedAccessControlContext_name(), T_OBJECT, HeapDump::ID, object_id)
+
+  class java_lang_Thread {
+   private:
+    u4 _id_size = 0;
+    THREAD_DUMP_FIELDS_DO(DEFINE_OFFSET_FIELD)
+    DEBUG_ONLY(HeapDump::ID _java_lang_Thread_id = HeapDump::NULL_ID);
+
+   public:
+    void ensure_initialized(const ParsedHeapDump &heap_dump, HeapDump::ID thread_class_id);
+
+    THREAD_DUMP_FIELDS_DO(DECLARE_GET_FIELD_METHOD)
+
+   private:
+    bool is_initialized() const { return _id_size > 0; }
+  };
+
+
 #define STRING_DUMP_FIELDS_DO(macro)                                                            \
   macro(java_lang_String, is_interned, vmSymbols::is_interned_name(), T_BOOLEAN, bool, boolean)
 

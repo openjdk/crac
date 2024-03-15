@@ -116,10 +116,18 @@ class CracStackTrace : public CHeapObj<mtInternal> {
 
   NONCOPYABLE(CracStackTrace);
 
-  ~CracStackTrace() { delete[] _frames; }
+  ~CracStackTrace() {
+    delete[] _frames;
+    JNIHandles::destroy_global(_thread);
+  }
 
   // ID of the thread whose stack this is.
+  // Note: this is a dump-internal ID, not the ID stored in the thread object.
   ID thread_id() const           { return _thread_id; }
+
+  // Resolved thread object. Must be set first.
+  jobject thread() const         { precond(_thread != nullptr); return _thread; }
+  void put_thread(Handle t)      { precond(_thread == nullptr && t.not_null()); _thread = JNIHandles::make_global(t); }
 
   // Number of frames in the stack.
   u4 frames_num() const          { return _frames_num; }
@@ -131,6 +139,7 @@ class CracStackTrace : public CHeapObj<mtInternal> {
 
  private:
   const ID _thread_id;
+  jobject _thread = nullptr; // JNI handle to the resolved thread object
   u4 _frames_num;
   Frame *const _frames;
 };

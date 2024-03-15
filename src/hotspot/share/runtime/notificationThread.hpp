@@ -41,7 +41,7 @@ class NotificationThread : public JavaThread {
 
  public:
   static void initialize();
-
+  bool is_Notification_thread() const override { return true; }
 };
 
 #endif // SHARE_RUNTIME_NOTIFICATIONTHREAD_HPP

@@ -65,9 +65,6 @@ class IOVecWrapper {
     // Shadow buffers for cases when original buffer is substituted
     private final ByteBuffer[] shadow;
 
-    // Base address of this array
-    final long address;
-
     // Address size in bytes
     static int addressSize;
 
@@ -91,7 +88,6 @@ class IOVecWrapper {
         this.remaining = new int[size];
         this.shadow    = new ByteBuffer[size];
         this.vecArray  = new AllocatedNativeObject(size * SIZE_IOVEC, false);
-        this.address   = vecArray.address();
     }
 
     static IOVecWrapper get(int size) {
@@ -107,6 +103,13 @@ class IOVecWrapper {
             cached.set(wrapper);
         }
         return wrapper;
+    }
+
+    /**
+     * Base address of this array.
+     */
+    long address() {
+        return vecArray.address(); // Can change because of checkpoint-restore
     }
 
     void setBuffer(int i, ByteBuffer buf, int pos, int rem) {

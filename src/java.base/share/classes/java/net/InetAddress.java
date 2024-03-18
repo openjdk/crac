@@ -414,6 +414,8 @@ public sealed class InetAddress implements Serializable permits Inet4Address, In
 
             @Override
             public void afterRestore(Context<? extends Resource> context) throws Exception {
+                jdk.internal.loader.BootLoader.loadLibrary("net");
+                init();
             }
         };
         Core.Priority.NORMAL.getContext().register(checkpointListener);

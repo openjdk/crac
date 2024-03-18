@@ -28,12 +28,30 @@
 
 package sun.nio.ch;                                     // Formerly in sun.misc
 
+import jdk.crac.Core;
+import jdk.crac.Context;
+import jdk.crac.Resource;
+import jdk.internal.crac.JDKResource;
+import jdk.internal.misc.Unsafe;
 
 // ## In the fullness of time, this class will be eliminated
 
 class AllocatedNativeObject                             // package-private
     extends NativeObject
 {
+    private final JDKResource resource;
+
+    private void allocate(int size, boolean pageAligned) {
+        if (!pageAligned) {
+            this.allocationAddress = unsafe.allocateMemory(size);
+            this.address = this.allocationAddress;
+        } else {
+            int ps = pageSize();
+            long a = unsafe.allocateMemory(size + ps);
+            this.allocationAddress = a;
+            this.address = a + ps - (a & (ps - 1));
+        }
+    }
 
     /**
      * Allocates a memory area of at least {@code size} bytes outside of the
@@ -50,7 +68,29 @@ class AllocatedNativeObject                             // package-private
      *         If the request cannot be satisfied
      */
     AllocatedNativeObject(int size, boolean pageAligned) {
-        super(size, pageAligned);
+        allocate(size, pageAligned);
+        resource = new JDKResource() {
+            private byte[] data;
+
+            @Override
+            public void beforeCheckpoint(Context<? extends Resource> context) {
+                if (allocationAddress != 0) {
+                    data = new byte[size];
+                    unsafe.copyMemory(null, address, data, Unsafe.ARRAY_BYTE_BASE_OFFSET, size);
+                    free();
+                }
+            };
+
+            @Override
+            public void afterRestore(Context<? extends Resource> context) {
+                if (data != null) {
+                    allocate(size, pageAligned);
+                    unsafe.copyMemory(data, Unsafe.ARRAY_BYTE_BASE_OFFSET, null, address, size);
+                    data = null;
+                }
+            };
+        };
+        Core.getGlobalContext().register(resource);
     }
 
     /**

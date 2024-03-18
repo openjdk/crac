@@ -50,6 +50,10 @@ import java.security.PrivilegedAction;
 import java.util.Enumeration;
 import java.util.Objects;
 
+import jdk.crac.Core;
+import jdk.crac.Context;
+import jdk.crac.Resource;
+import jdk.internal.crac.JDKResource;
 import sun.net.ext.ExtendedSocketOptions;
 import sun.net.util.IPAddressUtil;
 import sun.security.action.GetPropertyAction;
@@ -794,6 +798,8 @@ public class Net {
 
     private static native void initIDs();
 
+    private static final JDKResource nativeInitResource;
+
     /**
      * Event masks for the various poll system calls.
      * They will be set platform dependent in the static initializer below.
@@ -815,6 +821,17 @@ public class Net {
     static {
         IOUtil.load();
         initIDs();
+        nativeInitResource = new JDKResource() {
+            @Override
+            public void beforeCheckpoint(Context<? extends Resource> context) {
+            };
+
+            @Override
+            public void afterRestore(Context<? extends Resource> context) {
+                initIDs();
+            };
+        };
+        Core.getGlobalContext().register(nativeInitResource);
 
         POLLIN     = pollinValue();
         POLLOUT    = polloutValue();

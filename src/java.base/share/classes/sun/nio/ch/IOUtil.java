@@ -29,6 +29,10 @@ import java.io.FileDescriptor;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.Objects;
+import jdk.crac.Context;
+import jdk.crac.Resource;
+import jdk.internal.crac.Core;
+import jdk.internal.crac.JDKResource;
 import jdk.internal.access.JavaNioAccess;
 import jdk.internal.access.SharedSecrets;
 import jdk.internal.foreign.MemorySessionImpl;
@@ -224,7 +228,7 @@ public final class IOUtil {
             if (iov_len == 0)
                 return 0L;
 
-            long bytesWritten = nd.writev(fd, vec.address, iov_len);
+            long bytesWritten = nd.writev(fd, vec.address(), iov_len);
 
             // Notify the buffers how many bytes were taken
             long left = bytesWritten;
@@ -431,7 +435,7 @@ public final class IOUtil {
             if (iov_len == 0)
                 return 0L;
 
-            long bytesRead = nd.readv(fd, vec.address, iov_len);
+            long bytesRead = nd.readv(fd, vec.address(), iov_len);
 
             // Notify the buffers how many bytes were read
             long left = bytesRead;
@@ -601,6 +605,8 @@ public final class IOUtil {
 
     static native void initIDs();
 
+    private static final JDKResource nativeInitResource;
+
     /**
      * Used to trigger loading of native libraries
      */
@@ -610,6 +616,21 @@ public final class IOUtil {
         jdk.internal.loader.BootLoader.loadLibrary("net");
         jdk.internal.loader.BootLoader.loadLibrary("nio");
         initIDs();
+        nativeInitResource = new JDKResource() {
+            @Override
+            public void beforeCheckpoint(Context<? extends Resource> context) {
+            };
+
+            @Override
+            public void afterRestore(Context<? extends Resource> context) {
+                jdk.internal.loader.BootLoader.loadLibrary("net");
+                jdk.internal.loader.BootLoader.loadLibrary("nio");
+                initIDs();
+            };
+        };
+        // Must have a priority higher than that of file descriptors because
+        // used when reading file descriptor policies
+        Core.Priority.POST_FILE_DESCRIPTORS.getContext().register(nativeInitResource);
 
         IOV_MAX = iovMax();
         WRITEV_MAX = writevMax();

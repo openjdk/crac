@@ -31,6 +31,10 @@ import java.io.FileDescriptor;
 import java.lang.foreign.MemorySegment;
 import java.lang.ref.Reference;
 import java.util.Objects;
+import jdk.crac.Context;
+import jdk.crac.Resource;
+import jdk.internal.crac.Core;
+import jdk.internal.crac.JDKResource;
 import jdk.internal.foreign.MemorySessionImpl;
 import jdk.internal.misc.ScopedMemoryAccess.ScopedAccessError;
 import jdk.internal.misc.VM;
@@ -102,7 +106,7 @@ class Direct$Type$Buffer$RW$$BO$
 
     }
 
-    private final Cleaner cleaner;
+    private Cleaner cleaner;
 
     public Cleaner cleaner() { return cleaner; }
 
@@ -116,11 +120,12 @@ class Direct$Type$Buffer$RW$$BO$
 
 #if[byte]
 
-    // Primary constructor
-    //
-    Direct$Type$Buffer$RW$(int cap) {                   // package-private
 #if[rw]
-        super(-1, 0, cap, cap, null);
+
+    private final JDKResource resource;
+
+    private void allocate() {
+        int cap = capacity();
         boolean pa = VM.isDirectMemoryPageAligned();
         int ps = Bits.pageSize();
         long size = Math.max(1L, (long)cap + (pa ? ps : 0));
@@ -148,7 +153,40 @@ class Direct$Type$Buffer$RW$$BO$
             Bits.unreserveMemory(size, cap);
             throw t;
         }
+    }
+
+#end[rw]
+
+    // Primary constructor
+    //
+    Direct$Type$Buffer$RW$(int cap) {                   // package-private
+#if[rw]
+        super(-1, 0, cap, cap, null);
+        allocate();
         att = null;
+
+        resource = new JDKResource() {
+            private byte[] buf;
+
+            @Override
+            public void beforeCheckpoint(Context<? extends Resource> context) {
+                buf = new byte[cap];
+                getArray(0, buf, 0, cap);
+                cleaner.clean();
+                cleaner = null;
+                address = 0; // Simplifies debugging
+            };
+
+            @Override
+            public void afterRestore(Context<? extends Resource> context) {
+                allocate();
+                putArray(0, buf, 0, cap);
+                buf = null;
+            };
+        };
+        // Must have a priority higher than that of file descriptors because
+        // file descriptor policies are read from such buffer
+        Core.Priority.POST_FILE_DESCRIPTORS.getContext().register(resource);
 #else[rw]
         super(cap);
         this.isReadOnly = true;
@@ -164,6 +202,7 @@ class Direct$Type$Buffer$RW$$BO$
         super(-1, 0, cap, cap, segment);
         address = addr;
         cleaner = null;
+        resource = null;
         att = ob;
     }
 
@@ -174,6 +213,7 @@ class Direct$Type$Buffer$RW$$BO$
         super(-1, 0, cap, cap, fd, isSync, segment);
         address = addr;
         cleaner = null;
+        resource = null;
         att = ob;
     }
 
@@ -184,6 +224,7 @@ class Direct$Type$Buffer$RW$$BO$
         super(-1, 0, checkCapacity(cap), (int)cap, null);
         address = addr;
         cleaner = null;
+        resource = null;
         att = null;
     }
 
@@ -216,6 +257,7 @@ class Direct$Type$Buffer$RW$$BO$
         super(-1, 0, cap, cap, fd, isSync, segment);
         address = addr;
         cleaner = Cleaner.create(this, unmapper);
+        resource = null; // TODO probably also need to do something
         att = null;
 #else[rw]
         super(cap, addr, fd, unmapper, isSync, segment);
@@ -243,6 +285,7 @@ class Direct$Type$Buffer$RW$$BO$
         address = ((Buffer)db).address + off;
 #if[byte]
         cleaner = null;
+        resource = null;
 #end[byte]
         Object attachment = db.attachment();
         att = (attachment == null ? db : attachment);

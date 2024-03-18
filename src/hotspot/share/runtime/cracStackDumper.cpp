@@ -1,5 +1,6 @@
 #include "precompiled.hpp"
 #include "classfile/javaClasses.hpp"
+#include "classfile/vmIntrinsics.hpp"
 #include "classfile/vmSymbols.hpp"
 #include "interpreter/bytecodes.hpp"
 #include "logging/log.hpp"
@@ -149,9 +150,12 @@ class ThreadStackStream : public StackObj {
   static bool is_special_native_method(const Method &m) {
     precond(m.is_native());
     const InstanceKlass &holder = *m.method_holder();
-    return holder.name() == vmSymbols::jdk_crac_Core() &&
-           holder.class_loader_data()->is_the_null_class_loader_data() &&
-           m.name() == vmSymbols::checkpointRestore0_name();
+    return // CRaC's C/R method
+           (holder.name() == vmSymbols::jdk_crac_Core() &&
+            holder.class_loader_data()->is_the_null_class_loader_data() &&
+            m.name() == vmSymbols::checkpointRestore0_name()) ||
+           // Unsafe.park(...)
+           m.intrinsic_id() == vmIntrinsics::_park;
   }
 };
 

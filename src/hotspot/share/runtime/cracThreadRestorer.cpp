@@ -1,5 +1,6 @@
 #include "precompiled.hpp"
 #include "classfile/javaClasses.hpp"
+#include "classfile/vmIntrinsics.hpp"
 #include "classfile/vmSymbols.hpp"
 #include "interpreter/interpreter.hpp"
 #include "jvm.h"
@@ -113,7 +114,7 @@ void CracThreadRestorer::restore_current_thread(CracStackTrace *stack, TRAPS) {
 // callee (i.e. the current youngest) frame.
 static void transform_to_youngest(CracStackTrace::Frame *frame, Handle callee_result) {
   const Bytecodes::Code code = frame->method()->code_at(frame->bci());
-  assert(Bytecodes::is_invoke(code), "non-youngest frames stay must be invoking, got %s", Bytecodes::name(code));
+  assert(Bytecodes::is_invoke(code), "non-youngest frames must be invoking, got %s", Bytecodes::name(code));
 
   // Push the result onto the operand stack
   if (callee_result.not_null()) {
@@ -147,7 +148,9 @@ static void fixup_youngest_frame_if_special(CracStackTrace *stack, TRAPS) {
   const InstanceKlass &holder = *youngest_m.method_holder();
 
   if (holder.name() == vmSymbols::jdk_crac_Core() && holder.class_loader_data()->is_the_null_class_loader_data() &&
-      youngest_m.name() == vmSymbols::checkpointRestore0_name()) { // Checkpoint initiation method
+      youngest_m.name() == vmSymbols::checkpointRestore0_name()) {
+    // Checkpoint initiation method: handled by imitating a successful return
+
     // Pop the native frame
     stack->pop();
 
@@ -159,11 +162,24 @@ static void fixup_youngest_frame_if_special(CracStackTrace *stack, TRAPS) {
     HandleMark hm(Thread::current()); // The handle will either become an oop or a JNI handle
     const Handle bundle_h = crac::cr_return(JVM_CHECKPOINT_OK, {}, {}, {}, {}, CHECK);
 
-    // Push the return value onto the caller's operand stack
+    // Push the return value onto the caller's operand stack and move to the next bytecode
     CracStackTrace::Frame &caller = stack->frame(stack->frames_num() - 1);
     transform_to_youngest(&caller, bundle_h);
+  } else if (youngest_m.intrinsic_id() == vmIntrinsics::_park) {
+    assert(holder.name() == vmSymbols::jdk_internal_misc_Unsafe() &&
+           holder.class_loader_data()->is_the_null_class_loader_data() &&
+           youngest_m.name() == vmSymbols::park_name(), "must be");
+    // Unsafe.park(...): we use the fact that the method's specification allows
+    // it to return spuriously, i.e. for no particular reason
+
+    // Pop the native frame
+    stack->pop();
+    // Move to the next bytecode in the caller's frame
+    CracStackTrace::Frame &caller = stack->frame(stack->frames_num() - 1);
+    transform_to_youngest(&caller, Handle() /*don't place any return value*/);
   } else {
-    assert(!youngest_m.is_native(), "only special native methods can be restored");
+    log_error(crac)("Unknown native method encountered: %s", youngest_m.external_name());
+    ShouldNotReachHere();
   }
 }
 

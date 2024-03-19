@@ -25,6 +25,8 @@ import jdk.crac.*;
 import jdk.test.lib.crac.CracBuilder;
 import jdk.test.lib.crac.CracProcess;
 import jdk.test.lib.crac.CracTest;
+import jdk.test.lib.crac.CracTestArg;
+import jdk.test.lib.process.OutputAnalyzer;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -38,13 +40,24 @@ import static jdk.test.lib.Asserts.*;
  * @requires os.family == "linux"
  * @library /test/lib
  * @build PerfMemoryRestoreTest
- * @run driver/timeout=30 jdk.test.lib.crac.CracTest
+ * @run driver/timeout=30 jdk.test.lib.crac.CracTest false
+ * @run driver/timeout=30 jdk.test.lib.crac.CracTest true
  */
 
 public class PerfMemoryRestoreTest implements CracTest {
+
+    @CracTestArg(0)
+    boolean perfDisableSharedMem;
+
     @Override
     public void test() throws Exception {
         CracBuilder builder = new CracBuilder();
+        builder.captureOutput(true);
+        if (perfDisableSharedMem) {
+            builder.vmOption("-XX:+PerfDisableSharedMem");
+        } else {
+            builder.vmOption("-XX:-PerfDisableSharedMem");
+        }
         CracProcess checkpoint = builder.startCheckpoint();
         String pid = String.valueOf(checkpoint.pid());
         // This test is run only on Linux where the path is hardcoded
@@ -53,23 +66,38 @@ public class PerfMemoryRestoreTest implements CracTest {
         long start = System.nanoTime();
         while (!perfdata.toFile().exists()) {
             if (System.nanoTime() - start > TimeUnit.SECONDS.toNanos(10)) {
-                throw new IllegalStateException("Perf data file did not appear within time limit in the checkpointed process: " + perfdata);
+                if (perfDisableSharedMem) {
+                    break;
+                } else {
+                    throw new IllegalStateException("Perf data file did not appear within time limit in the checkpointed process: " + perfdata);
+                }
             }
             //noinspection BusyWait
             Thread.sleep(10);
         }
-        checkMapped(pid, perfdata.toString());
+        if (perfDisableSharedMem) {
+            if (perfdata.toFile().exists()) {
+                throw new IllegalStateException("Perf data file exists altough we run with -XX:+PerfDisableSharedMem");
+            }
+        } else {
+            checkMapped(pid, perfdata.toString());
+        }
 
         checkpoint.input().write('\n');
         checkpoint.input().flush();
         checkpoint.waitForCheckpointed();
         assertFalse(perfdata.toFile().exists());
 
+        builder.clearVmOptions();
         CracProcess restored = builder.startRestore();
         start = System.nanoTime();
         while (!perfdata.toFile().exists()) {
             if (System.nanoTime() - start > TimeUnit.SECONDS.toNanos(10)) {
-                throw new IllegalStateException("Perf data file did not appear within time limit in the restored process: " + perfdata);
+                if (perfDisableSharedMem) {
+                    break;
+                } else {
+                    throw new IllegalStateException("Perf data file did not appear within time limit in the restored process: " + perfdata);
+                }
             }
             //noinspection BusyWait
             Thread.sleep(10);
@@ -77,13 +105,22 @@ public class PerfMemoryRestoreTest implements CracTest {
         // Note: we need to check the checkpoint.pid(), which should be restored (when using CRIU),
         // as restored.pid() would be the criuengine restorewait process
         String pidString = String.valueOf(checkpoint.pid());
-        checkMapped(pidString, perfdata.toString());
-        builder.runJcmd(pidString, "PerfCounter.print")
-                .shouldHaveExitValue(0)
-                .shouldContain("sun.perfdata.size=");
+        if (perfDisableSharedMem) {
+            if (perfdata.toFile().exists()) {
+                throw new IllegalStateException("Perf data file exists altough we run with -XX:+PerfDisableSharedMem");
+            }
+        } else {
+            checkMapped(pidString, perfdata.toString());
+            builder.runJcmd(pidString, "PerfCounter.print")
+                    .shouldHaveExitValue(0)
+                    .shouldContain("sun.perfdata.size=");
+        }
         restored.input().write('\n');
         restored.input().flush();
         restored.waitForSuccess();
+        OutputAnalyzer out = restored.outputAnalyzer();
+        out.stderrShouldBeEmpty();
+        out.stdoutShouldBeEmpty();
     }
 
     private static void checkMapped(String pid, String perfdata) throws IOException {

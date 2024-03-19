@@ -31,6 +31,7 @@ import jdk.test.lib.process.OutputAnalyzer;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.Duration;
 import java.util.concurrent.TimeUnit;
 
 import static jdk.test.lib.Asserts.*;
@@ -73,7 +74,7 @@ public class PerfMemoryRestoreTest implements CracTest {
                 }
             }
             //noinspection BusyWait
-            Thread.sleep(10);
+            Thread.sleep(perfDisableSharedMem == true ? Duration.ofSeconds(10) : Duration.ofMillis(10));
         }
         if (perfDisableSharedMem) {
             if (perfdata.toFile().exists()) {
@@ -100,7 +101,7 @@ public class PerfMemoryRestoreTest implements CracTest {
                 }
             }
             //noinspection BusyWait
-            Thread.sleep(10);
+            Thread.sleep(perfDisableSharedMem == true ? Duration.ofSeconds(10) : Duration.ofMillis(10));
         }
         // Note: we need to check the checkpoint.pid(), which should be restored (when using CRIU),
         // as restored.pid() would be the criuengine restorewait process

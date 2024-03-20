@@ -211,8 +211,8 @@ class StackDumpWriter : public StackObj {
       //  1. For interpreted frame, is it always right to re-execute?
       //  2. For compiled frame, is exec_mode used by deoptimization to decide
       //     on re-execution also important for us here?
-      if (i == 0 && frame.is_compiled_frame() && !static_cast<const compiledVFrame &>(frame).should_reexecute()) {
-        assert(!frame.method()->is_native(), "native methods are not compiled");
+      if (i == 0 && !frame.method()->is_native() &&
+          frame.is_compiled_frame() && !static_cast<const compiledVFrame &>(frame).should_reexecute()) {
         const int code_len = Bytecodes::length_at(frame.method(), frame.method()->bcp_from(frame.bci()));
         log_trace(crac, stacktrace, dump)("moving BCI: %i -> %i", bci, bci + code_len);
         assert(bci + code_len <= UINT16_MAX, "overflow");

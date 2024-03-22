@@ -42,6 +42,7 @@
 #include "services/writeableFlags.hpp"
 #include "utilities/decoder.hpp"
 #include "os.inline.hpp"
+#include "utilities/defaultStream.hpp"
 
 static const char* _crengine = NULL;
 static char* _crengine_arg_str = NULL;
@@ -351,7 +352,7 @@ void VM_Crac::doit() {
 
   // It needs to check CPU features before any other code (such as VM_Crac::read_shm) depends on them.
   VM_Version::crac_restore();
-
+  Arguments::reset_for_crac_restore();
   if (shmid <= 0 || !VM_Crac::read_shm(shmid)) {
     _restore_start_time = os::javaTimeMillis();
     _restore_start_nanos = os::javaTimeNanos();
@@ -372,6 +373,7 @@ void VM_Crac::doit() {
 
   _ok = true;
 }
+
 
 bool crac::prepare_checkpoint() {
   struct stat st;
@@ -451,6 +453,7 @@ Handle crac::checkpoint(jarray fd_arr, jobjectArray obj_arr, bool dry_run, jlong
     aio_writer->stop();
   }
   LogConfiguration::close();
+  defaultStream::instance->before_checkpoint();
 
   VM_Crac cr(fd_arr, obj_arr, dry_run, (bufferedStream*)jcmd_stream);
   {
@@ -458,6 +461,7 @@ Handle crac::checkpoint(jarray fd_arr, jobjectArray obj_arr, bool dry_run, jlong
     VMThread::execute(&cr);
   }
 
+  defaultStream::instance->after_restore();
   LogConfiguration::reopen();
   if (aio_writer) {
     aio_writer->resume();

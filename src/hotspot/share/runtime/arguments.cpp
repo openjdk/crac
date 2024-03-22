@@ -4017,3 +4017,10 @@ bool Arguments::copy_expand_pid(const char* src, size_t srclen,
   *b = '\0';
   return (p == src_end); // return false if not all of the source was copied
 }
+
+void Arguments::reset_for_crac_restore() {
+  if (!FLAG_IS_DEFAULT(LogVMOutput)){
+    FLAG_SET_DEFAULT(LogVMOutput, false);
+    FLAG_SET_DEFAULT(LogFile, nullptr);
+  }
+}

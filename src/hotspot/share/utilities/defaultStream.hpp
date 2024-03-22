@@ -83,6 +83,25 @@ class defaultStream : public xmlTextStream {
     if (has_log_file()) _log_file->flush();
   }
 
+  bool is_fd_used(int fd) {
+    return has_log_file() ? fd == _log_file->get_fd() : false;
+  }
+  void before_checkpoint() {
+    if (has_log_file()){
+      if (xtty != nullptr) {
+        ttyLocker ttyl;
+        xtty->begin_elem("crac_checkpoint_vm");
+        xtty->stamp();
+        xtty->end_elem();
+        xtty = nullptr;
+      }
+      finish_log();
+    }
+  }
+  void after_restore() {
+    init();
+  }
+
   // advisory lock/unlock of _writer field:
  private:
   intx _writer;    // thread_id with current rights to output

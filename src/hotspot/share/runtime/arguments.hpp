@@ -451,6 +451,8 @@ class Arguments : AllStatic {
     _vm_info->set_value(vm_info);
   }
 
+  // Reset LogVMoutput to default values
+  static void reset_for_crac_restore();
   // Property List manipulation
   static void PropertyList_add(SystemProperty *element);
   static void PropertyList_add(SystemProperty** plist, SystemProperty *element);

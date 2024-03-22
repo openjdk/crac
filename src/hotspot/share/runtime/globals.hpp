@@ -1015,10 +1015,10 @@ const int ObjectAlignmentInBytes = 8;
   product(bool, DisplayVMOutput, true, DIAGNOSTIC,                          \
           "Display all VM output on the tty, independently of LogVMOutput") \
                                                                             \
-  product(bool, LogVMOutput, false, DIAGNOSTIC,                             \
+  product(bool, LogVMOutput, false, DIAGNOSTIC | RESTORE_SETTABLE,          \
           "Save VM output to LogFile")                                      \
                                                                             \
-  product(ccstr, LogFile, nullptr, DIAGNOSTIC,                              \
+  product(ccstr, LogFile, nullptr, DIAGNOSTIC | RESTORE_SETTABLE,           \
           "If LogVMOutput or LogCompilation is on, save VM output to "      \
           "this file [default: ./hotspot_pid%p.log] (%p replaced with pid)")\
                                                                             \

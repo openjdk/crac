@@ -64,23 +64,11 @@ public class PerfMemoryRestoreTest implements CracTest {
         // This test is run only on Linux where the path is hardcoded
         // in os::get_temp_directory() to /tmp rather than using System.getProperty("java.io.tmpdir")
         Path perfdata = Path.of("/tmp", "hsperfdata_" + System.getProperty("user.name"), pid);
-        long start = System.nanoTime();
-        while (!perfdata.toFile().exists()) {
-            if (System.nanoTime() - start > TimeUnit.SECONDS.toNanos(10)) {
-                if (perfDisableSharedMem) {
-                    break;
-                } else {
-                    throw new IllegalStateException("Perf data file did not appear within time limit in the checkpointed process: " + perfdata);
-                }
-            }
-            //noinspection BusyWait
-            Thread.sleep(perfDisableSharedMem == true ? Duration.ofSeconds(10) : Duration.ofMillis(10));
-        }
         if (perfDisableSharedMem) {
-            if (perfdata.toFile().exists()) {
-                throw new IllegalStateException("Perf data file exists altough we run with -XX:+PerfDisableSharedMem");
-            }
+            Thread.sleep(100);
+            assertFalse(perfdata.toFile().exists(), "Perf data file exists although we run with -XX:+PerfDisableSharedMem");
         } else {
+            waitForFile(perfdata);
             checkMapped(pid, perfdata.toString());
         }
 
@@ -91,26 +79,14 @@ public class PerfMemoryRestoreTest implements CracTest {
 
         builder.clearVmOptions();
         CracProcess restored = builder.startRestore();
-        start = System.nanoTime();
-        while (!perfdata.toFile().exists()) {
-            if (System.nanoTime() - start > TimeUnit.SECONDS.toNanos(10)) {
-                if (perfDisableSharedMem) {
-                    break;
-                } else {
-                    throw new IllegalStateException("Perf data file did not appear within time limit in the restored process: " + perfdata);
-                }
-            }
-            //noinspection BusyWait
-            Thread.sleep(perfDisableSharedMem == true ? Duration.ofSeconds(10) : Duration.ofMillis(10));
-        }
         // Note: we need to check the checkpoint.pid(), which should be restored (when using CRIU),
         // as restored.pid() would be the criuengine restorewait process
         String pidString = String.valueOf(checkpoint.pid());
         if (perfDisableSharedMem) {
-            if (perfdata.toFile().exists()) {
-                throw new IllegalStateException("Perf data file exists altough we run with -XX:+PerfDisableSharedMem");
-            }
+            Thread.sleep(100);
+            assertFalse(perfdata.toFile().exists(), "Perf data file exists although we run with -XX:+PerfDisableSharedMem");
         } else {
+            waitForFile(perfdata);
             checkMapped(pidString, perfdata.toString());
             builder.runJcmd(pidString, "PerfCounter.print")
                     .shouldHaveExitValue(0)
@@ -122,6 +98,17 @@ public class PerfMemoryRestoreTest implements CracTest {
         OutputAnalyzer out = restored.outputAnalyzer();
         out.stderrShouldBeEmpty();
         out.stdoutShouldBeEmpty();
+    }
+
+    private static void waitForFile(Path perfdata) throws InterruptedException {
+        long start = System.nanoTime();
+        while (!perfdata.toFile().exists()) {
+            if (System.nanoTime() - start > TimeUnit.SECONDS.toNanos(10)) {
+                throw new IllegalStateException("Perf data file did not appear within time limit in the checkpointed process: " + perfdata);
+            }
+            //noinspection BusyWait
+            Thread.sleep(10);
+        }
     }
 
     private static void checkMapped(String pid, String perfdata) throws IOException {

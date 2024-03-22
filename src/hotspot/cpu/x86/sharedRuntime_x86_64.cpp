@@ -2919,10 +2919,16 @@ void SharedRuntime::generate_restore_blob() {
   //
   // void CracThreadRestorer::fetch_frame_info(JavaThread* current)
 
+  __ movptr(rbx, rsp);                      // Save SP
+  __ andptr(rsp, -(StackAlignmentInBytes)); // Fix stack alignment as required by ABI
+  // Allocate argument register save area
+  if (frame::arg_reg_save_area_bytes != 0) {
+    __ subptr(rsp, frame::arg_reg_save_area_bytes);
+  }
   __ mov(c_rarg0, r15_thread);
   __ call(RuntimeAddress(CAST_FROM_FN_PTR(address, CracThreadRestorer::fetch_frame_info)));
-
   // TODO oop map?
+  __ movptr(rsp, rbx);                      // Restore SP
 
   // Load UnrollBlock* into rdi
   constexpr Register unroll_block = rdi;
@@ -3012,8 +3018,12 @@ void SharedRuntime::generate_restore_blob() {
   __ pushptr(Address(frame_pcs, 0));       // Save return address
   __ enter();                              // Save old & set new ebp
   __ subptr(rsp, rbx);                     // Prolog
+#ifndef PRODUCT
+  __ zero_memory(rsp, rbx, 0, rscratch1);  // Zero unfilled memory to simplify debugging
+#else // PRODUCT
   // This value is corrected by layout_activation_impl
   __ movptr(Address(rbp, frame::interpreter_frame_last_sp_offset * wordSize), NULL_WORD);
+#endif // PRODUCT
   __ movptr(Address(rbp, frame::interpreter_frame_sender_sp_offset * wordSize), sender_sp); // Make it walkable
   __ mov(sender_sp, rsp);                  // Pass sender_sp to next frame
   __ addptr(frame_sizes, wordSize);        // Bump array pointer (sizes)
@@ -3034,9 +3044,12 @@ void SharedRuntime::generate_restore_blob() {
   __ set_last_Java_frame(noreg, rbp, __ pc(), rscratch1);
 
   __ andptr(rsp, -(StackAlignmentInBytes));  // Fix stack alignment as required by ABI
+  // Allocate argument register save area
+  if (frame::arg_reg_save_area_bytes != 0) {
+    __ subptr(rsp, frame::arg_reg_save_area_bytes);
+  }
   __ mov(c_rarg0, r15_thread);
   __ call(RuntimeAddress(CAST_FROM_FN_PTR(address, CracThreadRestorer::fill_in_frames)));
-
   // TODO oop map?
 
   // Clear fp AND pc

@@ -260,7 +260,7 @@ void CracThreadRestorer::restore_current_thread_impl(JavaThread *current, TRAPS)
   // Need to set the receiver (if any): it will be read during the Java call
   if (!method->is_static()) {
     guarantee(oldest_frame.locals().is_nonempty(), "must have 'this' as the first local");
-    const CracStackTrace::Frame::Value &receiver = oldest_frame.locals().first();
+    const CracStackTrace::Frame::Value &receiver = oldest_frame.locals().at(0); // at(0) returns a ref in contrast to first()
     args.set_receiver(Handle(current, JNIHandles::resolve_non_null(receiver.as_obj())));
   }
   // The actual values will be filled by the RestoreStub, we just need the Java

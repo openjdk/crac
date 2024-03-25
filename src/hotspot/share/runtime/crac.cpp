@@ -26,6 +26,7 @@
 #include "classfile/classLoader.hpp"
 #include "classfile/javaClasses.hpp"
 #include "classfile/symbolTable.hpp"
+#include "classfile/systemDictionary.hpp"
 #include "classfile/vmClasses.hpp"
 #include "classfile/vmSymbols.hpp"
 #include "jni.h"
@@ -38,6 +39,7 @@
 #include "memory/resourceArea.hpp"
 #include "oops/instanceKlass.hpp"
 #include "oops/oopsHierarchy.hpp"
+#include "oops/symbolHandle.hpp"
 #include "os.inline.hpp"
 #include "runtime/crac.hpp"
 #include "runtime/cracClassDumpParser.hpp"
@@ -765,6 +767,15 @@ void crac::update_javaTimeNanos_offset() {
 void crac::restore_data(TRAPS) {
   assert(is_portable_mode(), "Use crac::restore() instead");
   precond(CRaCRestoreFrom != nullptr);
+
+  // This is a temporary hack to fix some inconsistencies between the state of
+  // pre-initialized classes and restored ones
+  // TODO remove this when we get rid of pre-initialized classes
+  {
+    const TempNewSymbol name = SymbolTable::new_symbol("java/lang/invoke/BoundMethodHandle");
+    Klass *const klass = SystemDictionary::resolve_or_fail(name, true, CHECK);
+    InstanceKlass::cast(klass)->initialize(CHECK);
+  }
 
   // Create a top-level resource mark to be able to get resource-allocated
   // strings (e.g. external class names) for assert/guarantee fails with no fuss

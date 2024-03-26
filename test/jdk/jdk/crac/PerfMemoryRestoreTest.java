@@ -31,7 +31,6 @@ import jdk.test.lib.process.OutputAnalyzer;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.time.Duration;
 import java.util.concurrent.TimeUnit;
 
 import static jdk.test.lib.Asserts.*;
@@ -46,6 +45,7 @@ import static jdk.test.lib.Asserts.*;
  */
 
 public class PerfMemoryRestoreTest implements CracTest {
+    private static final int PERFDATA_CREATE_DELAY_MS = 100;
 
     @CracTestArg(0)
     boolean perfDisableSharedMem;
@@ -65,7 +65,7 @@ public class PerfMemoryRestoreTest implements CracTest {
         // in os::get_temp_directory() to /tmp rather than using System.getProperty("java.io.tmpdir")
         Path perfdata = Path.of("/tmp", "hsperfdata_" + System.getProperty("user.name"), pid);
         if (perfDisableSharedMem) {
-            Thread.sleep(100);
+            Thread.sleep(PERFDATA_CREATE_DELAY_MS);
             assertFalse(perfdata.toFile().exists(), "Perf data file exists although we run with -XX:+PerfDisableSharedMem");
         } else {
             waitForFile(perfdata);
@@ -83,7 +83,7 @@ public class PerfMemoryRestoreTest implements CracTest {
         // as restored.pid() would be the criuengine restorewait process
         String pidString = String.valueOf(checkpoint.pid());
         if (perfDisableSharedMem) {
-            Thread.sleep(100);
+            Thread.sleep(PERFDATA_CREATE_DELAY_MS);
             assertFalse(perfdata.toFile().exists(), "Perf data file exists although we run with -XX:+PerfDisableSharedMem");
         } else {
             waitForFile(perfdata);

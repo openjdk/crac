@@ -25,7 +25,9 @@ public abstract class JDKFileResource extends JDKFdResource {
                 .split(File.pathSeparator);
         CLASSPATH_ENTRIES = new Path[items.length];
         for (int i = 0; i < items.length; i++) {
-            CLASSPATH_ENTRIES[i] = Path.of(items[i]);
+            // On Windows, path with forward slashes starting with '/' is an accepted classpath
+            // element, even though it might seem as invalid and parsing in Path.of(...) would fail.
+            CLASSPATH_ENTRIES[i] = new File(items[i]).toPath();
         }
     }
 

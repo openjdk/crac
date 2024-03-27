@@ -1546,7 +1546,10 @@ static void signal_sets_init() {
   }
 
   sigemptyset(&blocked_sigs);
+// RESTORE_SIGNAL is used only on Linux, other platform don't send this
+#ifdef LINUX
   sigaddset(&blocked_sigs, RESTORE_SIGNAL);
+#endif
 
   debug_only(signal_sets_initialized = true);
 }

@@ -89,7 +89,12 @@ public class ReopenFailureTest extends FDPolicyTestBase implements CracTest {
                 Core.checkpointRestore();
                 fail("Should throw");
             } catch (RestoreException ex) {
-                assertEquals(2, ex.getSuppressed().length);
+                // When running this as root we get only one exception for the missing file
+                if (Files.isWritable(Path.of(log2))) {
+                    assertEquals(1, ex.getSuppressed().length);
+                } else {
+                    assertEquals(2, ex.getSuppressed().length);
+                }
             }
         }
     }

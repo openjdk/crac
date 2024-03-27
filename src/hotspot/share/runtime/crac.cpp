@@ -40,9 +40,7 @@
 #include "services/heapDumper.hpp"
 #include "services/writeableFlags.hpp"
 #include "utilities/decoder.hpp"
-#ifdef LINUX
-#include "os_linux.hpp"
-#endif
+#include "os.inline.hpp"
 
 static const char* _crengine = NULL;
 static char* _crengine_arg_str = NULL;
@@ -429,6 +427,18 @@ Handle crac::checkpoint(jarray fd_arr, jobjectArray obj_arr, bool dry_run, jlong
   Universe::heap()->collect(GCCause::_full_gc_alot);
   Universe::heap()->set_cleanup_unused(false);
   Universe::heap()->finish_collection();
+
+  if (os::can_trim_native_heap()) {
+    os::size_change_t sc;
+    if (os::trim_native_heap(&sc)) {
+      if (sc.after != SIZE_MAX) {
+        const size_t delta = sc.after < sc.before ? (sc.before - sc.after) : (sc.after - sc.before);
+        const char sign = sc.after < sc.before ? '-' : '+';
+        log_info(crac)("Trim native heap before checkpoint: " PROPERFMT "->" PROPERFMT " (%c" PROPERFMT ")",
+                        PROPERFMTARGS(sc.before), PROPERFMTARGS(sc.after), sign, PROPERFMTARGS(delta));
+      }
+    }
+  }
 
   AsyncLogWriter* aio_writer = AsyncLogWriter::instance();
   if (aio_writer) {

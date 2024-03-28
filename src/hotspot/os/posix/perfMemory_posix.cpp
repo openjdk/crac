@@ -1375,6 +1375,10 @@ bool PerfMemoryLinux::checkpoint() {
 }
 
 bool PerfMemoryLinux::restore() {
+  if (!backing_store_file_name) {
+    return true;
+  }
+
   int vmid = os::current_process_id();
   char* user_name = get_user_name(geteuid());
   if (!user_name) {

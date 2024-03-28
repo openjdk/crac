@@ -60,6 +60,7 @@ class CracRestoreParameters : public CHeapObj<mtInternal> {
     int _nflags;
     int _nprops;
     int _env_memory_size;
+    char _ignore_cpu_features; // IgnoreCPUFeatures: 0 to keep the checkpointed value, '+' for true, '-' for false
   };
 
   static bool write_check_error(int fd, const void *buf, int count) {
@@ -120,8 +121,15 @@ class CracRestoreParameters : public CHeapObj<mtInternal> {
       restore_nanos,
       num_flags,
       system_props_length(props),
-      env_vars_size(os::get_environ())
+      env_vars_size(os::get_environ()),
+      0 // _ignore_cpu_features
     };
+
+    for (int i = 0; i < num_flags; ++i) {
+      if ((flags[i][0] == '+' || flags[i][0] == '-') && strcmp(flags[i] + 1, "IgnoreCPUFeatures") == 0) {
+        hdr._ignore_cpu_features = flags[i][0];
+      }
+    }
 
     if (!write_check_error(fd, (void *)&hdr, sizeof(header))) {
       return false;
@@ -208,12 +216,23 @@ private:
 
 class CracSHM {
   char _path[128];
+  static void write_dec(char *&d, int id) {
+    if (!id)
+      return;
+    write_dec(d, id / 10);
+    *d++ = '0' + id % 10;
+  }
+  static const char _prefix[];
 public:
   CracSHM(int id) {
-    int shmpathlen = snprintf(_path, sizeof(_path), "/crac_%d", id);
-    if (shmpathlen < 0 || sizeof(_path) <= (size_t)shmpathlen) {
-      fprintf(stderr, "shmpath is too long: %d\n", shmpathlen);
+    assert(id > 0, "id is expected to be a PID and therefore > 0");
+    char *d = _path;
+    const char *cs = _prefix;
+    while (*cs) {
+      *d++ = *cs++;
     }
+    write_dec(d, id);
+    *d = 0;
   }
 
   int open(int mode);

@@ -43,6 +43,8 @@ bool VM_Crac::memory_checkpoint() {
 void VM_Crac::memory_restore() {
 }
 
+const char CracSHM::_prefix[] = "";
+
 int CracSHM::open(int mode) {
   return -1;
 }

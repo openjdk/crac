@@ -42,7 +42,7 @@ class VM_Version: public Abstract_VM_Version {
   static void initialize();
   static bool is_initialized()      { return _is_initialized; }
   static void crac_restore() {}
-  static void crac_restore_finalize() {}
+  static void crac_restore_finalize(char ignore_cpu_features) {}
 
 
  protected:

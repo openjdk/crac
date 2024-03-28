@@ -88,7 +88,7 @@ public:
   static void initialize();
   static void check_virtualizations();
   static void crac_restore() {}
-  static void crac_restore_finalize() {}
+  static void crac_restore_finalize(char ignore_cpu_features) {}
 
   // Override Abstract_VM_Version implementation
   static void print_platform_virtualization_info(outputStream*);

@@ -407,7 +407,7 @@ class VM_Version: public Abstract_VM_Version {
   static void print_features();
   static bool is_determine_features_test_running() { return _is_determine_features_test_running; }
   static void crac_restore() {}
-  static void crac_restore_finalize() {}
+  static void crac_restore_finalize(char ignore_cpu_features) {}
 
   // Override Abstract_VM_Version implementation
   static void print_platform_virtualization_info(outputStream*);

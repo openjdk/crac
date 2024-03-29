@@ -2902,7 +2902,7 @@ void SharedRuntime::generate_restore_blob() {
   // a series of interpreter frames and pass the execution flow to its youngest
   // frame.
   //
-  // The generated code is almost identical to the last part of deopt_blob.
+  // The generated code is almost identical to deopt_blob.
 
 #ifdef ASSERT
   { // The return pc must be the CallStub return address
@@ -2917,7 +2917,7 @@ void SharedRuntime::generate_restore_blob() {
   // Call C code that will prepare for us the info about the frames to restore.
   // No blocking or GC can happen, frames are not accessed.
   //
-  // void CracThreadRestorer::fetch_frame_info(JavaThread* current)
+  // UnrollBlock* CracThreadRestorer::fetch_frame_info(JavaThread* current)
 
   __ movptr(rbx, rsp);                      // Save SP
   __ andptr(rsp, -(StackAlignmentInBytes)); // Fix stack alignment as required by ABI
@@ -3064,11 +3064,11 @@ void SharedRuntime::generate_restore_blob() {
   // Make sure all code is generated
   masm->flush();
 
-  // Our own frame just before the crac::fill_in_frames() call:
+  // Our own frame just before the CracThreadRestorer::fill_in_frames() call:
   // [ old fp pushed by enter()                   ] <- fp, sp
   // [ stub return pc for the last skeletal frame ]
   //
-  // Used in crac::fill_in_frames() for stack walking
+  // Used in CracThreadRestorer::fill_in_frames() for stack walking
   int frame_size_in_words = 2;
 
   _restore_blob = RestoreBlob::create(&buffer, frame_size_in_words);

@@ -45,6 +45,7 @@
 #include "prims/methodHandles.hpp"
 #include "runtime/continuation.hpp"
 #include "runtime/continuationEntry.inline.hpp"
+#include "runtime/cracThreadRestorer.hpp"
 #include "runtime/globals.hpp"
 #include "runtime/jniHandles.hpp"
 #include "runtime/safepointMechanism.hpp"
@@ -2555,12 +2556,171 @@ void SharedRuntime::generate_deopt_blob() {
 //------------------------------generate_restore_blob---------------------------
 void SharedRuntime::generate_restore_blob() {
   ResourceMark rm;
-  CodeBuffer buffer("restore_blob", 128, 128); // TODO the numbers are random
+  CodeBuffer buffer("restore_blob", 2048, 1024); // TODO the numbers are random
   auto *masm = new MacroAssembler(&buffer);
 
-  __ should_not_reach_here(); // TODO Unimplemented
+  // This is called by the CallStub instead of the entry of the actual method
+  // that should have been called. We should recreate the checkpointed stack as
+  // a series of interpreter frames and pass the execution flow to its youngest
+  // frame.
+  //
+  // The generated code is almost identical to deopt_blob.
 
-  _restore_blob = RestoreBlob::create(&buffer, 0);
+#ifdef ASSERT
+  { // The return pc must be the CallStub return address
+    Label L;
+    __ movptr(rscratch1, (uintptr_t) StubRoutines::call_stub_return_address());
+    __ cmp(lr, rscratch1);
+    __ br(Assembler::EQ, L);
+    __ stop("SharedRuntime::generate_restore_blob: caller is not CallStub");
+    __ bind(L);
+  }
+#endif // ASSERT
+
+  // Call C code that will prepare for us the info about the frames to restore.
+  // No blocking or GC can happen, frames are not accessed.
+  //
+  // UnrollBlock* CracThreadRestorer::fetch_frame_info(JavaThread* current)
+
+  __ mov(c_rarg0, rthread);
+  __ lea(rscratch1, RuntimeAddress(CAST_FROM_FN_PTR(address, CracThreadRestorer::fetch_frame_info)));
+  __ blr(rscratch1);
+  // TODO oop map?
+
+  // Load UnrollBlock* into r5
+  constexpr Register unroll_block = r5;
+  __ mov(unroll_block, r0);
+
+  // Check for possible stack overflow
+  __ ldrw(r1, Address(unroll_block, Deoptimization::UnrollBlock::total_frame_sizes_offset()));
+  __ bang_stack_size(r1, r2);
+
+  // Load address of array of frame pcs into r2
+  constexpr Register frame_pcs = r2;
+  __ ldr(frame_pcs, Address(unroll_block, Deoptimization::UnrollBlock::frame_pcs_offset()));
+#ifdef ASSERT
+  { // The first return pc must be the CallStub return address
+    Label L;
+    __ movptr(rscratch1, (uintptr_t) StubRoutines::call_stub_return_address());
+    __ ldr(rscratch2, frame_pcs);
+    __ cmp(rscratch1, rscratch2);
+    __ br(Assembler::EQ, L);
+    __ stop("SharedRuntime::generate_restore_blob: oldest frame does not return to CallStub");
+    __ bind(L);
+  }
+#endif // ASSERT
+
+  // Load address of array of frame sizes into r4
+  constexpr Register frame_sizes = r4;
+  __ ldr(frame_sizes, Address(unroll_block, Deoptimization::UnrollBlock::frame_sizes_offset()));
+
+  // Load counter into r3
+  constexpr Register frame_cnt = r3;
+  __ ldrw(frame_cnt, Address(unroll_block, Deoptimization::UnrollBlock::number_of_frames_offset()));
+#ifdef ASSERT
+  { // There must be some frames to push
+    Label L;
+    __ cbnz(frame_cnt, L);
+    __ stop("SharedRuntime::generate_restore_blob: no frames provided");
+    __ bind(L);
+  }
+#endif // ASSERT
+
+  // Adjust caller's frame to make space for locals
+  constexpr Register sender_sp = r19_sender_sp;
+#ifdef ASSERT
+  { // Current sp should have been saved into r19 by CallStub
+    Label L;
+    __ cmp(sp, sender_sp);
+    __ br(Assembler::EQ, L);
+    __ stop("SharedRuntime::generate_restore_blob: caller did not save sp into r19");
+    __ bind(L);
+  }
+#endif // ASSERT
+  __ ldrw(r6, Address(unroll_block, Deoptimization::UnrollBlock::caller_adjustment_offset()));
+  __ sub(sp, sp, r6);
+
+  // QQ what is the purpose of this?
+  __ mov(rscratch1, (uint64_t)0xDEADDEAD); // Make a recognizable pattern
+  __ mov(rscratch2, rscratch1);
+
+  // Push interpreter frames in a loop (stack grows upwards):
+  //
+  // after the loop        { [ stub return pc for n   ]
+  // loop iteration n      { [ ...                    ]
+  // ...
+  //                       / [ <unfilled>             ] <- sp i
+  //                      |  [ 0                      ]
+  // loop iteration i     |  [ sp i-1                 ]
+  //                      |  [ fp i-1                 ] <- fp i
+  //                       \ [ stub return pc for i-1 ]
+  // ...
+  //                       / [ <unfilled>             ] <- sp 2
+  //                      |  [ 0                      ]
+  // loop iteration 2     |  [ sp 1                   ]
+  //                      |  [ fp 1                   ] <- fp 2
+  //                       \ [ stub return pc for 1   ]
+  //                       / [ <unfilled>             ] <- sp 1
+  //                      |  [ 0                      ]
+  // loop iteration 1     |  [ sp 0                   ]
+  //                      |  [ fp 0                   ] <- fp 1
+  //                       \ [ return pc for CallStub ]
+  // pushed above          { [ <unfilled locals of 1> ]
+  //                       / [ parameters             ] <- sp 0
+  // pushed by CallStub   |             ...
+  //                       \ [ ...                    ] <- fp 0
+  //
+  Label loop;
+  __ bind(loop);
+  __ ldr(r6, Address(__ post(frame_sizes, wordSize))); // Load frame size
+  __ sub(r6, r6, 2 * wordSize);                        // We'll push pc and fp by hand
+  __ ldr(lr, Address(__ post(frame_pcs, wordSize)));   // Load return address
+  __ enter();                                          // Save return address and old fp, set new fp
+  __ sub(sp, sp, r6);                                  // Prolog
+  // This value is corrected by layout_activation_impl
+  __ str(zr, Address(rfp, frame::interpreter_frame_last_sp_offset * wordSize));
+  __ str(sender_sp, Address(rfp, frame::interpreter_frame_sender_sp_offset * wordSize)); // Make it walkable
+  __ mov(sender_sp, sp);                               // Pass sender_sp to next frame
+  __ decrement(frame_cnt);                             // Decrement counter
+  __ cbnz(frame_cnt, loop);
+
+  // Re-push self-frame
+  __ ldr(lr, Address(frame_pcs)); // Load final return address
+  __ enter();                     // Save return address and old fp, set new fp
+
+  // Call C code. It should fill the skeletom frames we've pushed.
+  //
+  // void CracThreadRestorer::fill_in_frames(JavaThread* current)
+
+  // Use rfp because the frames look interpreted now.
+  // Don't need the precise return PC here, just precise enough to point into this code blob.
+  __ set_last_Java_frame(sp, rfp, __ pc(), rscratch1);
+
+  __ mov(c_rarg0, rthread);
+  __ lea(rscratch1, RuntimeAddress(CAST_FROM_FN_PTR(address, CracThreadRestorer::fill_in_frames)));
+  __ blr(rscratch1);
+  // TODO oop map?
+
+  // Clear fp AND pc
+  __ reset_last_Java_frame(true);
+
+  // Pop self-frame
+  __ leave();                     // Epilog
+
+  // Jump to interpreter
+  __ ret(lr);
+
+  // Make sure all code is generated
+  masm->flush();
+
+  // Our own frame just before the CracThreadRestorer::fill_in_frames() call:
+  // [ old fp pushed by enter()                   ] <- fp, sp
+  // [ stub return pc for the last skeletal frame ]
+  //
+  // Used in CracThreadRestorer::fill_in_frames() for stack walking
+  int frame_size_in_words = 2;
+
+  _restore_blob = RestoreBlob::create(&buffer, frame_size_in_words);
 }
 
 // Number of stack slots between incoming argument block and the start of

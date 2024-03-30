@@ -73,14 +73,14 @@ public class BasicImageReader implements AutoCloseable {
     private final Path imagePath;
     private final ByteOrder byteOrder;
     private final String name;
-    private final ByteBuffer memoryMap;
+    private ByteBuffer memoryMap;
     private FileChannel channel;
     private final ImageHeader header;
     private final long indexSize;
-    private final IntBuffer redirect;
-    private final IntBuffer offsets;
-    private final ByteBuffer locations;
-    private final ByteBuffer strings;
+    private IntBuffer redirect;
+    private IntBuffer offsets;
+    private ByteBuffer locations;
+    private ByteBuffer strings;
     private final ImageStringsReader stringsReader;
     private final Decompressor decompressor;
     private Object cracResource;
@@ -107,7 +107,6 @@ public class BasicImageReader implements AutoCloseable {
             channel = null;
         } else {
             channel = openFileChannel();
-            registerIfCRaCPresent();
         }
 
         // If no memory map yet and 64 bit jvm then memory map entire file
@@ -143,6 +142,48 @@ public class BasicImageReader implements AutoCloseable {
 
         memoryMap = map.asReadOnlyBuffer();
 
+        createBuffers();
+
+        stringsReader = new ImageStringsReader(this);
+        decompressor = new Decompressor();
+
+        // Register a resource to handle the file channel and the buffers
+        registerIfCRaCPresent();
+    }
+
+    private void createMemoryMap() throws IOException {
+        ByteBuffer map;
+
+        if (USE_JVM_MAP && BasicImageReader.class.getClassLoader() == null) {
+            // Check to see if the jvm has opened the file using libjimage
+            // native entry when loading the image for this runtime
+            map = NativeImageBuffer.getNativeMap(name);
+         } else {
+            map = null;
+        }
+
+        // Open the file only if no memory map yet or is 32 bit jvm
+        if (map != null && MAP_ALL) {
+            channel = null;
+        } else {
+            channel = openFileChannel();
+        }
+
+        // If no memory map yet and 64 bit jvm then memory map entire file
+        if (MAP_ALL && map == null) {
+            map = channel.map(FileChannel.MapMode.READ_ONLY, 0, channel.size());
+        }
+
+        // If no memory map yet then must be 32 bit jvm not previously mapped
+        if (map == null) {
+            // Just map the image index
+            map = channel.map(FileChannel.MapMode.READ_ONLY, 0, indexSize);
+        }
+
+        memoryMap = map.asReadOnlyBuffer();
+    }
+
+    private void createBuffers() throws IOException {
         // Interpret the image index
         if (memoryMap.capacity() < indexSize) {
             throw new IOException("The image file \"" + name + "\" is corrupted");
@@ -151,9 +192,6 @@ public class BasicImageReader implements AutoCloseable {
         offsets = intBuffer(memoryMap, header.getOffsetsOffset(), header.getOffsetsSize());
         locations = slice(memoryMap, header.getLocationsOffset(), header.getLocationsSize());
         strings = slice(memoryMap, header.getStringsOffset(), header.getStringsSize());
-
-        stringsReader = new ImageStringsReader(this);
-        decompressor = new Decompressor();
     }
 
     // Since this class must be compatible with JDK 8 and any non-CRaC JDK due to being part of jrtfs.jar
@@ -184,11 +222,12 @@ public class BasicImageReader implements AutoCloseable {
                     @Override
                     public Object invoke(Object proxy, Method method, Object[] args) throws Throwable {
                         if ("beforeCheckpoint".equals(method.getName())) {
-                            channel.close();
-                        } else if ("afterRestore".equals(method.getName())) {
                             if (channel != null) {
-                                channel = openFileChannel();
+                                channel.close();
                             }
+                        } else if ("afterRestore".equals(method.getName())) {
+                            createMemoryMap();
+                            createBuffers();
                         } else if ("toString".equals(method.getName())) {
                             return BasicImageReader.this.toString();
                         } else if ("hashCode".equals(method.getName())) {

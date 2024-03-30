@@ -122,6 +122,9 @@ class Direct$Type$Buffer$RW$$BO$
 
 #if[rw]
 
+    // TODO currently this is only used when the buffer itself is responsible
+    //  for the allocation, but ideally this should be used in all cases to
+    //  update the address after restore
     private final JDKResource resource;
 
     private void allocate() {
@@ -257,7 +260,7 @@ class Direct$Type$Buffer$RW$$BO$
         super(-1, 0, cap, cap, fd, isSync, segment);
         address = addr;
         cleaner = Cleaner.create(this, unmapper);
-        resource = null; // TODO probably also need to do something
+        resource = null;
         att = null;
 #else[rw]
         super(cap, addr, fd, unmapper, isSync, segment);

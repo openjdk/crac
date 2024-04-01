@@ -62,9 +62,9 @@ static void assert_constants_match(const ConstantPool &cp1, const ConstantPool &
   // Constant pool consists of two parts: the first one comes from the class
   // file while the second one is appended when generating overpass methods. We
   // can only compare the first one because the second is not portable: the
-  // order in which overpasses are generated, and thus in which the their
-  // constants are appended, depends on methods in supers and interfaces which
-  // depends on the layout of method name symbols in memory).
+  // order in which overpasses are generated, and thus in which their constants
+  // are appended, depends on methods in supers and interfaces which depends on
+  // the layout of method name symbols in memory).
   const int num_overpasses = count_overpasses(*cp1.pool_holder()->methods());
   assert(num_overpasses == count_overpasses(*cp2.pool_holder()->methods()), "number of overpass methods differ");
   // An overpass method may need up to this many new constants:
@@ -97,6 +97,13 @@ static void assert_constants_match(const ConstantPool &cp1, const ConstantPool &
     assert(cp1.tag_at(i).external_value() == cp2.tag_at(i).external_value(),
            "incompatible constant pool tags at slot #%i: %s and %s",
            i, cp1.tag_at(i).internal_name(), cp2.tag_at(i).internal_name());
+    if (cp1.tag_at(i).is_utf8()) {
+      const Symbol *s1 = cp1.symbol_at(i);
+      const Symbol *s2 = cp2.symbol_at(i);
+      assert(s1 == s2, "different UTF-8 at constant pool slot #%i: '%s' != '%s'",
+             i, s1->as_C_string(), s2->as_C_string());
+    }
+    // TODO compare other tags by value too
   }
 }
 
@@ -158,32 +165,44 @@ static void assert_methods_match(const InstanceKlass &ik1, const InstanceKlass &
 
 #endif // ASSERT
 
-static void move_constant_pool_cache(ConstantPool *from, ConstantPool *to) {
-  guarantee(to->cache() == nullptr, "destination class already has a constant pool cache");
-  guarantee(from->length() == to->length(), "not the same class");
-  ConstantPoolCache *const cache = from->cache();
-  to->set_cache(cache);
-  cache->set_constant_pool(to);
-  from->set_cache(nullptr);
+static void swap_constants(InstanceKlass *ik1, InstanceKlass *ik2) {
+  guarantee(ik1->constants()->length() == ik2->constants()->length(), "not the same class");
+
+  auto *const tmp = ik1->constants();
+  ik1->set_constants(ik2->constants());
+  ik2->set_constants(tmp);
+
+  ik1->constants()->set_pool_holder(ik1);
+  ik2->constants()->set_pool_holder(ik2);
 }
 
 static void swap_methods(InstanceKlass *ik1, InstanceKlass *ik2) {
   guarantee(ik1->methods()->length() == ik2->methods()->length(), "not the same class");
-  auto *const methods1 = ik1->methods();
-  auto *const methods2 = ik2->methods();
-  ik1->set_methods(methods2);
-  ik2->set_methods(methods1);
-  for (int i = 0; i < methods1->length(); i++) {
-    Method *const method1 = methods1->at(i); // Moving from ik1 into ik2
-    Method *const method2 = methods2->at(i); // Moving from ik2 into ik1
+  assert(ik1->methods()->is_empty() ||
+         (ik1->methods()->at(0)->constants() == ik2->constants() &&
+          ik2->methods()->at(0)->constants() == ik1->constants()),
+         "constant pools must be swapped beforehand");
+
+  auto *const tmp = ik1->methods();
+  ik1->set_methods(ik2->methods());
+  ik2->set_methods(tmp);
+
+#ifdef ASSERT
+  for (int i = 0; i < ik1->methods()->length(); i++) {
+    const Method &method1 = *ik1->methods()->at(i);
+    const Method &method2 = *ik2->methods()->at(i);
+
+    // The constant pools should have been swapped beforehand
+    precond(method1.constants() == ik1->constants());
+    precond(method2.constants() == ik2->constants());
+    precond(method1.method_holder() == ik1);
+    precond(method2.method_holder() == ik2);
+
     // Can only compare names because methods with equal names can be reordered
-    assert(method1->name() == method2->name(), "method #%i of %s has different names: %s and %s",
-           i, ik1->external_name(), method1->name()->as_C_string(), method2->name()->as_C_string());
-    method1->set_constants(ik2->constants());
-    method2->set_constants(ik1->constants());
-    postcond(method1->method_holder() == ik2);
-    postcond(method2->method_holder() == ik1);
+    assert(method1.name() == method2.name(), "method #%i of %s has different names: %s and %s",
+           i, ik1->external_name(), method1.name()->as_C_string(), method2.name()->as_C_string());
   }
+#endif // ASSERT
 
   // Note: if this is an interface, pre-defined implementors may refer to
   // swapped-out methods via their default methods arrays so those also need to
@@ -281,9 +300,11 @@ InstanceKlass *CracClassStateRestorer::define_created_class(InstanceKlass *creat
     if (created_ik->is_rewritten() && !defined_ik->is_rewritten()) {
       precond(defined_ik->is_init_thread(thread));
       // Apply the rewritten state:
-      // 1. Save the constant pool cache created by us to restore it later.
-      move_constant_pool_cache(created_ik->constants(), defined_ik->constants());
-      // 2. Save the rewritten methods, deallocate the non-rewritten ones.
+      // 1. Swap constant pools: firstly, to save the cache created by us and
+      // restore it later, secondly, because the pools may differ in the part
+      // created during the overpass methods' generation.
+      swap_constants(created_ik, defined_ik);
+      // 2. Swap methods to save the rewritten ones.
       swap_methods(created_ik, defined_ik);
       defined_ik->set_rewritten();
       if (log_is_enabled(Debug, crac, class)) {

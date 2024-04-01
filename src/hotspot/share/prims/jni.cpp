@@ -3625,10 +3625,12 @@ static jint JNI_CreateJavaVM_inner(JavaVM **vm, void **penv, void *args) {
       crac::restore_threads(THREAD);
       if (HAS_PENDING_EXCEPTION) {
         HandleMark hm(THREAD);
-        Handle e(THREAD, PENDING_EXCEPTION);
+        const Handle e(THREAD, PENDING_EXCEPTION);
         CLEAR_PENDING_EXCEPTION;
-        java_lang_Throwable::print_stack_trace(e, tty);
-        vm_exit(1);
+        jio_fprintf(defaultStream::error_stream(), "Exception in restoring thread ");
+        // If another exception occurs while printing it gets thrown away
+        java_lang_Throwable::java_printStackTrace(e, THREAD);
+        vm_exit(1); // To ensure the VM-creating code won't proceed with execution
       }
       vm_exit(0); // To ensure the VM-creating code won't proceed with execution
     }

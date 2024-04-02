@@ -416,24 +416,24 @@ class ConstantPool : public Metadata {
     unresolved_klass_at_put(cp_index, name_index, CPKlassSlot::_temp_resolved_klass_index);
   }
 
-  jint int_at(int cp_index) {
+  jint int_at(int cp_index) const {
     assert(tag_at(cp_index).is_int(), "Corrupted constant pool");
     return *int_at_addr(cp_index);
   }
 
-  jlong long_at(int cp_index) {
+  jlong long_at(int cp_index) const {
     assert(tag_at(cp_index).is_long(), "Corrupted constant pool");
     // return *long_at_addr(cp_index);
     u8 tmp = Bytes::get_native_u8((address)&base()[cp_index]);
     return *((jlong*)&tmp);
   }
 
-  jfloat float_at(int cp_index) {
+  jfloat float_at(int cp_index) const {
     assert(tag_at(cp_index).is_float(), "Corrupted constant pool");
     return *float_at_addr(cp_index);
   }
 
-  jdouble double_at(int cp_index) {
+  jdouble double_at(int cp_index) const {
     assert(tag_at(cp_index).is_double(), "Corrupted constant pool");
     u8 tmp = Bytes::get_native_u8((address)&base()[cp_index]);
     return *((jdouble*)&tmp);

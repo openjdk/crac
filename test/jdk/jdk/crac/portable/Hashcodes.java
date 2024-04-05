@@ -2,60 +2,70 @@ import java.util.HashMap;
 import jdk.crac.Core;
 
 /**
- * Demonstrates restoration of identity hash codes.
- * <p>
- * How to run:
- * <pre>
- * {@code
+ * Restoration of VM-provided identity hash codes.
+ *
+ * <p> Creates objects with non-overriden hash code generation method and checks
+ * that the hash codes stay the same across the C/R boundary.
+ *
+ * <p> How to run:
+ * <pre> {@code
  * $ java -XX:CREngine= -XX:CRaCCheckpointTo=cr Hashcodes.java
- * > Right x hash: 1204088028
- * > Right key1 value
- * > Right key2 value
+ * > Right test hash: 1204088028
+ * > Right key 1 value
+ * > Right key 2 value
  *
  * $ java -XX:CREngine= -XX:CRaCRestoreFrom=cr
- * > Right x hash: 1204088028
- * > Right key1 value
- * > Right key2 value
- * }
- * </pre>
+ * > Right test hash: 1204088028
+ * > Right key 1 value
+ * > Right key 2 value
+ * } </pre>
  */
 public class Hashcodes {
     private static class Key {}
 
     public static void main(String[] args) throws Exception {
-        var hashtable = new HashMap<Key, String>();
+        final var hashtable = new HashMap<Key, String>();
 
-        Key key1 = new Key();
-        String val1 = "value 1";
-        hashtable.put(key1, val1);
+        final Key key1 = new Key();
+        final String expectedVal1 = "value 1";
+        hashtable.put(key1, expectedVal1);
 
-        Key key2 = new Key();
-        String val2 = "value 2";
-        hashtable.put(key2, val2);
+        final Key key2 = new Key();
+        final String expectedVal2 = "value 2";
+        hashtable.put(key2, expectedVal2);
 
-        var x = new Key();
-        int xHash = x.hashCode();
+        final var testKey = new Key();
+        final int expectedTestKeyHash = testKey.hashCode();
 
         Core.checkpointRestore();
 
-        if (x.hashCode() != xHash) {
-            System.out.println("WRONG x hash: expected " + xHash + ", got " + x.hashCode());
+        boolean success = true;
+
+        if (testKey.hashCode() == expectedTestKeyHash) {
+            System.out.println("Right test hash: " + expectedTestKeyHash);
         } else {
-            System.out.println("Right x hash: " + xHash);
+            System.out.println("Wrong test hash: expected " + expectedTestKeyHash + ", got " + testKey.hashCode());
+            success = false;
         }
 
-        String valFromKey1 = hashtable.get(key1);
-        if (valFromKey1 != val1) {
-            System.out.println("WRONG key1 value");
+        final String actualVal1 = hashtable.get(key1);
+        if (actualVal1 == expectedVal1) {
+            System.out.println("Right key 1 value");
         } else {
-            System.out.println("Right key1 value");
+            System.out.println("Wrong key 1 value: expected " + expectedVal1 + ", got " + actualVal1);
+            success = false;
         }
 
-        String valFromKey2 = hashtable.get(key2);
-        if (valFromKey2 != val2) {
-            System.out.println("WRONG key2 value");
+        final String actualVal2 = hashtable.get(key2);
+        if (actualVal2 == expectedVal2) {
+            System.out.println("Right key 2 value");
         } else {
-            System.out.println("Right key2 value");
+            System.out.println("Wrong key 2 value: expected " + expectedVal2 + ", got " + actualVal2);
+            success = false;
+        }
+
+        if (!success) {
+            throw new IllegalStateException("Test failed");
         }
     }
 }

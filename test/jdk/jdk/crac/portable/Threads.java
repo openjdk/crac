@@ -3,11 +3,14 @@ import jdk.crac.Core;
 import java.util.Random;
 
 /**
- * Demonstrates threads restoration.
- * <p>
- * How to run:
- * <pre>
- * {@code
+ * Restoration of multiple threads.
+ *
+ * <p> The main threads starts concurrent threads, performs checkpoint-restore
+ * and then interacts with the threads to ensure they are still properly
+ * functioning.
+ *
+ * <p> How to run:
+ * <pre> {@code
  * $ java -XX:CREngine= -XX:CRaCCheckpointTo=cr Threads.java
  * > My thread #2: in initial state
  * > ...
@@ -33,7 +36,7 @@ import java.util.Random;
 public class Threads {
     static final Random random = new Random();
 
-    // TODO replace with wait() when it's supported
+    // TODO replace with Thread.sleep() when C/R inside it is supported
     static String work(double period) {
         double x = random.nextDouble();
         for (double y = -period / 2; y < period / 2; y++) {

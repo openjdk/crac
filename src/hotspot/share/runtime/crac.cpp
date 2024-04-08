@@ -25,6 +25,8 @@
 
 #include "classfile/classLoader.hpp"
 #include "jvm.h"
+#include "logging/logAsyncWriter.hpp"
+#include "logging/logConfiguration.hpp"
 #include "memory/oopFactory.hpp"
 #include "oops/typeArrayOop.inline.hpp"
 #include "runtime/crac_structs.hpp"
@@ -37,9 +39,8 @@
 #include "runtime/vmThread.hpp"
 #include "services/heapDumper.hpp"
 #include "services/writeableFlags.hpp"
-#ifdef LINUX
-#include "os_linux.hpp"
-#endif
+#include "utilities/decoder.hpp"
+#include "os.inline.hpp"
 
 static const char* _crengine = NULL;
 static char* _crengine_arg_str = NULL;
@@ -309,6 +310,7 @@ void VM_Crac::doit() {
   // dry-run fails checkpoint
   bool ok = true;
 
+  Decoder::before_checkpoint();
   if (!check_fds()) {
     ok = false;
   }
@@ -353,6 +355,10 @@ void VM_Crac::doit() {
     _restore_start_nanos = os::javaTimeNanos();
   } else {
     _restore_start_nanos += crac::monotonic_time_offset();
+  }
+
+  if (CRaCResetStartTime) {
+    crac::initialize_time_counters();
   }
 
   // VM_Crac::read_shm needs to be already called to read RESTORE_SETTABLE parameters.
@@ -422,11 +428,35 @@ Handle crac::checkpoint(jarray fd_arr, jobjectArray obj_arr, bool dry_run, jlong
   Universe::heap()->set_cleanup_unused(false);
   Universe::heap()->finish_collection();
 
+  if (os::can_trim_native_heap()) {
+    os::size_change_t sc;
+    if (os::trim_native_heap(&sc)) {
+      if (sc.after != SIZE_MAX) {
+        const size_t delta = sc.after < sc.before ? (sc.before - sc.after) : (sc.after - sc.before);
+        const char sign = sc.after < sc.before ? '-' : '+';
+        log_info(crac)("Trim native heap before checkpoint: " PROPERFMT "->" PROPERFMT " (%c" PROPERFMT ")",
+                        PROPERFMTARGS(sc.before), PROPERFMTARGS(sc.after), sign, PROPERFMTARGS(delta));
+      }
+    }
+  }
+
+  AsyncLogWriter* aio_writer = AsyncLogWriter::instance();
+  if (aio_writer) {
+    aio_writer->stop();
+  }
+  LogConfiguration::close();
+
   VM_Crac cr(fd_arr, obj_arr, dry_run, (bufferedStream*)jcmd_stream);
   {
     MutexLocker ml(Heap_lock);
     VMThread::execute(&cr);
   }
+
+  LogConfiguration::reopen();
+  if (aio_writer) {
+    aio_writer->resume();
+  }
+
   if (cr.ok()) {
     oop new_args = NULL;
     if (cr.new_args()) {

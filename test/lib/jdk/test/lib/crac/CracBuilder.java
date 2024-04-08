@@ -4,6 +4,7 @@ import jdk.test.lib.Container;
 import jdk.test.lib.Utils;
 import jdk.test.lib.containers.docker.DockerTestUtils;
 import jdk.test.lib.containers.docker.DockerfileConfig;
+import jdk.test.lib.process.OutputAnalyzer;
 import jdk.test.lib.util.FileUtils;
 
 import javax.imageio.IIOException;
@@ -18,7 +19,9 @@ import static jdk.test.lib.Asserts.*;
 
 public class CracBuilder {
     private static final String DEFAULT_IMAGE_DIR = "cr";
-    public static final String CONTAINER_NAME = "crac-test";
+    // Make it unique so that tests running in parallel do not conflict with:
+    // docker: Error response from daemon: Conflict. The container name "/crac-test" is already in use by container "<hash>". You have to remove (or rename) that container to be able to reuse that name.
+    public static final String CONTAINER_NAME = "crac-test" + ProcessHandle.current().pid();
     public static final String JAVA = Utils.TEST_JDK + "/bin/java";
     public static final String DOCKER_JAVA = "/jdk/bin/java";
     private static final List<String> CRIU_CANDIDATES = Arrays.asList(Utils.TEST_JDK + "/lib/criu", "/usr/sbin/criu", "/sbin/criu");
@@ -479,14 +482,19 @@ public class CracBuilder {
     }
 
     public void checkpointViaJcmd() throws Exception {
+        runJcmd(main().getName(), "JDK.checkpoint").shouldHaveExitValue(0);
+    }
+
+    public OutputAnalyzer runJcmd(String id, String... command) throws Exception {
         List<String> cmd = new ArrayList<>();
         if (dockerImageName != null) {
             cmd.addAll(Arrays.asList(Container.ENGINE_COMMAND, "exec", CONTAINER_NAME, "/jdk/bin/jcmd"));
         } else {
             cmd.add(Utils.TEST_JDK + "/bin/jcmd");
         }
-        cmd.addAll(Arrays.asList(main().getName(), "JDK.checkpoint"));
+        cmd.add(id);
+        cmd.addAll(Arrays.asList(command));
         // This works for non-docker commands, too
-        DockerTestUtils.execute(cmd).shouldHaveExitValue(0);
+        return DockerTestUtils.execute(cmd);
     }
 }

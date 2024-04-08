@@ -21,39 +21,31 @@
  * questions.
  */
 
-#include "precompiled.hpp"
+import jdk.test.lib.Utils;
 
-#include "jvm.h"
-#include "runtime/crac_structs.hpp"
+import java.io.IOException;
 
-void crac::vm_create_start() {
-}
+import static jdk.test.lib.Asserts.assertEquals;
 
-void VM_Crac::report_ok_to_jcmd_if_any() {
-}
+/**
+ * @test
+ * @library /test/lib
+ * @run driver ClasspathParseTest
+ */
+public class ClasspathParseTest {
+    public static final String JAVA = Utils.TEST_JDK + "/bin/java";
 
-bool VM_Crac::check_fds() {
-  return true;
-}
-
-bool VM_Crac::memory_checkpoint() {
-  return true;
-}
-
-void VM_Crac::memory_restore() {
-}
-
-int CracSHM::open(int mode) {
-  return -1;
-}
-
-void CracSHM::unlink() {
-}
-
-bool crac::read_bootid(char *dest) {
-  return true;
-}
-
-void crac::initialize_time_counters() {
-  os::win32::initialize_performance_counter();
+    public static void main(String[] args) throws IOException, InterruptedException {
+        if (args.length == 0) {
+            String classpath = ClasspathParseTest.class.getProtectionDomain().getCodeSource().getLocation().getPath();
+            int exit = new ProcessBuilder().command(JAVA, "-cp", classpath, ClasspathParseTest.class.getName(), "ignored")
+                    .inheritIO().start().waitFor();
+            assertEquals(0, exit);
+        } else {
+            // assert that code source path started with "/" as we expect (even on Windows)
+            if (!System.getProperty("java.class.path").startsWith("/")) {
+                System.exit(2);
+            }
+        }
+    }
 }

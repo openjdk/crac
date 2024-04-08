@@ -5,6 +5,7 @@ import jdk.test.lib.process.StreamPumper;
 
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.OutputStream;
 import java.nio.file.*;
 import java.util.concurrent.TimeUnit;
 import java.util.List;
@@ -20,7 +21,7 @@ public class CracProcess {
 
     public CracProcess(CracBuilder builder, List<String> cmd) throws IOException {
         this.builder = builder;
-        ProcessBuilder pb = new ProcessBuilder().inheritIO();
+        ProcessBuilder pb = new ProcessBuilder().inheritIO().redirectInput(ProcessBuilder.Redirect.PIPE);
         if (builder.captureOutput) {
             pb.redirectOutput(ProcessBuilder.Redirect.PIPE);
             pb.redirectError(ProcessBuilder.Redirect.PIPE);
@@ -127,5 +128,13 @@ public class CracProcess {
                 consumer.accept(line);
             }
         }).process();
+    }
+
+    public long pid() {
+        return process.pid();
+    }
+
+    public OutputStream input() {
+        return process.getOutputStream();
     }
 }

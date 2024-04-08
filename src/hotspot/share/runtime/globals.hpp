@@ -177,7 +177,8 @@ const int ObjectAlignmentInBytes = 8;
   product(bool, AlwaysSafeConstructors, false, EXPERIMENTAL,                \
           "Force safe construction, as if all fields are final.")           \
                                                                             \
-  product(bool, UnlockDiagnosticVMOptions, trueInDebug, DIAGNOSTIC,         \
+  product(bool, UnlockDiagnosticVMOptions, trueInDebug,                     \
+          DIAGNOSTIC | RESTORE_SETTABLE,                                    \
           "Enable normal processing of flags relating to field diagnostics")\
                                                                             \
   product(bool, UnlockExperimentalVMOptions, false,                         \
@@ -1996,6 +1997,9 @@ const int ObjectAlignmentInBytes = 8;
       "Mininal PID value for checkpoint'ed process")                        \
       range(1, UINT_MAX)                                                    \
                                                                             \
+  product(bool, CRaCResetStartTime, true, DIAGNOSTIC | RESTORE_SETTABLE,    \
+      "Reset JVM's start time and uptime on restore")                       \
+                                                                            \
   product(ccstr, CREngine, "criuengine", RESTORE_SETTABLE,                  \
       "Path or name of a program implementing checkpoint/restore and "      \
       "optional extra parameters as a comma-separated list: "               \
@@ -2012,6 +2016,12 @@ const int ObjectAlignmentInBytes = 8;
       "All file descriptors greater than 2 (stdin, stdout and stderr are "  \
       "excluded automatically) not in this list are closed when the VM "    \
       "is started.")                                                        \
+                                                                            \
+  product_pd(ccstrlist, CRAllowedOpenFilePrefixes, "List of path prefixes " \
+      "for files that can be open during checkpoint; CRaC won't error "     \
+      "upon detecting these and will leave the handling up to C/R engine. " \
+      "This option applies only to files opened by native code; for files " \
+      "opened by Java code use -Djdk.crac.resource-policies=...")           \
                                                                             \
   product(bool, CRAllowToSkipCheckpoint, false, DIAGNOSTIC,                 \
           "Allow implementation to not call Checkpoint if helper not found")\

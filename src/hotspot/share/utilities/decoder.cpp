@@ -122,5 +122,14 @@ bool Decoder::get_source_info(address pc, char* filename, size_t filename_len, i
   }
 }
 
+void Decoder::before_checkpoint() {
+  MutexLocker locker(shared_decoder_lock(), Mutex::_no_safepoint_check_flag);
+  if (_shared_decoder != nullptr) {
+    delete _shared_decoder;
+    _shared_decoder = nullptr;
+  }
+  guarantee(_error_handler_decoder == nullptr, "Error handler decoder should not be present");
+}
+
 #endif // !_WINDOWS
 

@@ -33,10 +33,13 @@ import java.security.SecureRandom;
  * @library /test/lib
  * @build InterlockTest
  * @run driver/timeout=60 jdk.test.lib.crac.CracTest SHA1PRNG 100
- * @run driver/timeout=60 jdk.test.lib.crac.CracTest NativePRNGBlocking 100
  * @run driver/timeout=60 jdk.test.lib.crac.CracTest NativePRNGNonBlocking 100
  * @run driver/timeout=60 jdk.test.lib.crac.CracTest NativePRNG 100
  */
+
+/* NativePRNGBlocking is exluded as on some machines /dev/random is exhausted
+ * too soon, making the test running too long. */
+
 public class InterlockTest implements Resource, CracTest {
     private static final long MIN_TIMEOUT = 100;
     private static final long MAX_TIMEOUT = 1000;

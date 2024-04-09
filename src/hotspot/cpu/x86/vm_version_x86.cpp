@@ -1082,7 +1082,7 @@ void VM_Version::glibc_not_using(uint64_t shouldnotuse_CPU, uint64_t shouldnotus
     }
   };
 #define EXCESSIVE3(kind, hotspot, glibc) \
-  shouldnotuse(PASTE_TOKENS(KIND_, kind), PASTE_TOKENS3(kind, _, hotspot), STR(hotspot), FEATURE_ACTIVE(glibc))
+  shouldnotuse(PASTE_TOKENS(KIND_, kind), PASTE_TOKENS3(kind, _, hotspot), STR(glibc), FEATURE_ACTIVE(glibc))
 #define EXCESSIVE(kind, hotspotglibc) EXCESSIVE3(kind, hotspotglibc, hotspotglibc)
 
   EXCESSIVE(CPU  , AVX     );

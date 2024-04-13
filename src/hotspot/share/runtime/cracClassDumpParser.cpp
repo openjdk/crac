@@ -1610,9 +1610,10 @@ class CracInstanceClassDumpParser : public StackObj /* constructor allocates res
     ik.set_minor_version(_minor_version);
     ik.set_major_version(_major_version);
 
-    ClassLoaderData *non_reflection_loader_data =
-      ClassLoaderData::class_loader_data_or_null(java_lang_ClassLoader::non_reflection_class_loader(ik.class_loader()));
-    ik.set_package(non_reflection_loader_data, nullptr, CHECK);
+    // Note: the loader data used here is different from the one used to
+    // allocate the class if this is a non-strong hidden class
+    precond(!java_lang_ClassLoader::is_reflection_class_loader(ik.class_loader())); // There is a guarantee when obtaining the loader
+    ik.set_package(ClassLoaderData::class_loader_data_or_null(ik.class_loader()), nullptr, CHECK);
 
     ClassFileParser::check_methods_for_intrinsics(&ik);
 
@@ -1900,6 +1901,9 @@ GrowableArray<Pair<HeapDump::ID, InterclassRefs>> CracClassDumpParser::parse_ins
     //  even if they exist thus duplicating them.
 
     const Handle loader = get_class_loader(class_dump->class_loader_id, CHECK_({}));
+    // First register the class loader to ensure its CLD is created
+    SystemDictionary::register_loader(loader, false);
+    // Then get a CLD for this particular class (differs from the above for non-strong hidden classes)
     ClassLoaderData *const loader_data = SystemDictionary::register_loader(loader, preamble.loading_kind == CracClassDump::ClassLoadingKind::NON_STRONG_HIDDEN);
 
     InterclassRefs refs;

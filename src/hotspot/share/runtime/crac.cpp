@@ -763,19 +763,30 @@ void crac::update_javaTimeNanos_offset() {
   }
 }
 
+static void init_class(Symbol *name, TRAPS) {
+  Klass *const klass = SystemDictionary::resolve_or_fail(name, true, CHECK);
+  InstanceKlass::cast(klass)->initialize(CHECK);
+}
+
+// This is a temporary hack to fix some inconsistencies between the state of
+// pre-initialized classes and restored ones.
+static void init_problematic_system_classes(TRAPS) {
+  // Fix Java-side invokedynamic-related errors
+  init_class(TempNewSymbol(SymbolTable::new_symbol("java/lang/invoke/BoundMethodHandle")), CHECK);
+
+  // Make sure MethodType creation (requires a Java call) won't trigger class initialization
+  if (vmClasses::MethodType_klass_is_loaded() && vmClasses::MethodType_klass()->is_initialized()) {
+    init_class(TempNewSymbol(SymbolTable::new_symbol("java/util/concurrent/ConcurrentHashMap$ForwardingNode")), CHECK);
+  }
+}
+
 // Restore classes and objects in portable mode.
 void crac::restore_data(TRAPS) {
   assert(is_portable_mode(), "Use crac::restore() instead");
   precond(CRaCRestoreFrom != nullptr);
 
-  // This is a temporary hack to fix some inconsistencies between the state of
-  // pre-initialized classes and restored ones
   // TODO remove this when we get rid of pre-initialized classes
-  {
-    const TempNewSymbol name = SymbolTable::new_symbol("java/lang/invoke/BoundMethodHandle");
-    Klass *const klass = SystemDictionary::resolve_or_fail(name, true, CHECK);
-    InstanceKlass::cast(klass)->initialize(CHECK);
-  }
+  init_problematic_system_classes(CHECK);
 
   // Create a top-level resource mark to be able to get resource-allocated
   // strings (e.g. external class names) for assert/guarantee fails with no fuss

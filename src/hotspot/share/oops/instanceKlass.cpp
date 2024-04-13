@@ -777,8 +777,8 @@ void InstanceKlass::check_link_state_and_wait(JavaThread* current) {
     log_warning(crac, class)("Linking thread '%s' is waiting for %s to be restored",
                              current->name(), external_name());
   }
-  while ((is_being_linked() || is_being_restored()) && !is_init_thread(current)) {
-    assert(!(is_being_restored() && is_init_thread(current)), "restoring thread should not call this");
+  assert(!(is_being_restored() && is_init_thread(current)), "restoring thread should not call this");
+  while (is_being_restored() || (is_being_linked() && !is_init_thread(current))) {
     ml.wait();
   }
 
@@ -1102,9 +1102,9 @@ void InstanceKlass::initialize_impl(TRAPS) {
       ResourceMark rm;
       log_warning(crac, class)("Initializing thread '%s' is waiting for %s to be restored",
                                jt->name(), external_name());
-    }
-    while ((is_being_initialized() || is_being_restored()) && !is_init_thread(jt)) {
       assert(!(is_being_restored() && is_init_thread(jt)), "restoring thread should not call this");
+    }
+    while (is_being_restored() || (is_being_initialized() && !is_init_thread(jt))) {
       wait = true;
       jt->set_class_to_be_initialized(this);
       ml.wait();

@@ -978,7 +978,9 @@ void DumperSupport::dump_instance_fields(AbstractDumpWriter* writer, oop o, bool
     if (ik == vmClasses::String_klass()) {
       bool is_interned;
       {
-        ResourceMark rm;
+        Thread* current_thread = Thread::current();
+        ResourceMark rm(current_thread);
+        HandleMark hm(current_thread);
         int len;
         // FIXME returns null if resource alloc fails: report error in such case
         const jchar* str = java_lang_String::as_unicode_string_or_null(o, len);

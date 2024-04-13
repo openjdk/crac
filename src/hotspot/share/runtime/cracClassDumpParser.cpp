@@ -763,8 +763,7 @@ class CracInstanceClassDumpParser : public StackObj /* constructor allocates res
         const Bytecodes::Code bytecode2 = Bytecodes::cast(raw_bytecode2);
         guarantee(bytecode2 == 0 || bytecode2 == Bytecodes::_invokevirtual, "illegal method resolution bytecode 2: %s", Bytecodes::name(bytecode2));
         if (cache_entry.is_vfinal() || (bytecode1 == Bytecodes::_invokeinterface && !cache_entry.is_forced_virtual())) {
-          guarantee((bytecode1 == Bytecodes::_invokeinterface) != /*XOR*/ (bytecode2 == Bytecodes::_invokevirtual) &&
-                    bytecode1 != Bytecodes::_invokestatic && bytecode1 != Bytecodes::_invokehandle,
+          guarantee(bytecode1 != Bytecodes::_invokestatic && bytecode1 != Bytecodes::_invokehandle,
                     "illegal resolved method data: b1 = %s, b2 = %s, is_vfinal = %s, is_forced_virtual = %s",
                     Bytecodes::name(bytecode1), Bytecodes::name(bytecode2),
                     BOOL_TO_STR(cache_entry.is_vfinal()), BOOL_TO_STR(cache_entry.is_forced_virtual()));

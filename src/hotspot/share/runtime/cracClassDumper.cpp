@@ -651,7 +651,7 @@ class ClassDumpWriter : public KlassClosure, public CLDClosure {
         }
         // f2
         if (info.is_vfinal() || (bytecode1 == Bytecodes::_invokeinterface && !info.is_forced_virtual())) {
-          assert((bytecode1 == Bytecodes::_invokeinterface) != /*XOR*/ (bytecode2 == Bytecodes::_invokevirtual), "must be");
+          // (b1 == invokeinterface && b2 == invokevirtual) is possible here
           assert(bytecode1 != Bytecodes::_invokestatic && bytecode1 != Bytecodes::_invokehandle, "cannot accompany invokevirtual");
           const Method *method = info.is_vfinal() ? info.f2_as_vfinal_method() : info.f2_as_interface_method(); // Resolved final or interface method
           assert(method != nullptr, "must be resolved");

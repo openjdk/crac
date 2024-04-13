@@ -50,9 +50,9 @@ import java.security.PrivilegedAction;
 import java.util.Enumeration;
 import java.util.Objects;
 
-import jdk.crac.Core;
 import jdk.crac.Context;
 import jdk.crac.Resource;
+import jdk.internal.crac.Core;
 import jdk.internal.crac.JDKResource;
 import sun.net.ext.ExtendedSocketOptions;
 import sun.net.util.IPAddressUtil;
@@ -831,7 +831,7 @@ public class Net {
                 initIDs();
             };
         };
-        Core.getGlobalContext().register(nativeInitResource);
+        Core.Priority.NORMAL.getContext().register(nativeInitResource);
 
         POLLIN     = pollinValue();
         POLLOUT    = polloutValue();

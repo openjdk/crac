@@ -26,10 +26,11 @@
 package java.util.jar;
 
 import jdk.crac.Context;
-import jdk.crac.Core;
 import jdk.crac.Resource;
 import jdk.internal.access.SharedSecrets;
 import jdk.internal.access.JavaUtilZipFileAccess;
+import jdk.internal.crac.Core;
+import jdk.internal.crac.JDKResource;
 import jdk.internal.misc.ThreadTracker;
 import sun.security.action.GetPropertyAction;
 import sun.security.util.ManifestEntryVerifier;
@@ -201,7 +202,7 @@ public class JarFile extends ZipFile {
     }
 
     // TODO remove this when portable CRaC becomes able to restore SharedSecrets
-    private static final Resource secretsReinitResource = new Resource() {
+    private static final JDKResource secretsReinitResource = new JDKResource() {
         @Override
         public void beforeCheckpoint(Context<? extends Resource> context) {
         }
@@ -215,7 +216,7 @@ public class JarFile extends ZipFile {
     };
 
     static {
-        Core.getGlobalContext().register(secretsReinitResource);
+        Core.Priority.NORMAL.getContext().register(secretsReinitResource);
     }
 
     private static final String META_INF = "META-INF/";

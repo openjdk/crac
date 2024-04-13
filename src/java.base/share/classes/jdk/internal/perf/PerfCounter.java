@@ -31,8 +31,9 @@ import java.nio.LongBuffer;
 import java.security.AccessController;
 
 import jdk.crac.Context;
-import jdk.crac.Core;
 import jdk.crac.Resource;
+import jdk.internal.crac.Core;
+import jdk.internal.crac.JDKResource;
 
 /**
  * Performance counter support for internal JRE classes.
@@ -66,7 +67,7 @@ public class PerfCounter {
     private LongBuffer lb;
 
     // Portable CRaC cannot restore perf buffers
-    private final class BufferResource implements Resource {
+    private final class BufferResource implements JDKResource {
         private final int type; // TODO retrieve from native Perf?
         private long savedValue;
 
@@ -103,7 +104,7 @@ public class PerfCounter {
         bb.order(ByteOrder.nativeOrder());
         this.lb = bb.asLongBuffer();
         bufferResource = new BufferResource(type);
-        Core.getGlobalContext().register(bufferResource);
+        Core.Priority.NORMAL.getContext().register(bufferResource);
     }
 
     public static PerfCounter newPerfCounter(String name) {

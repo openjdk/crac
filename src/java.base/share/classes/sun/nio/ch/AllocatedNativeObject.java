@@ -28,9 +28,9 @@
 
 package sun.nio.ch;                                     // Formerly in sun.misc
 
-import jdk.crac.Core;
 import jdk.crac.Context;
 import jdk.crac.Resource;
+import jdk.internal.crac.Core;
 import jdk.internal.crac.JDKResource;
 import jdk.internal.misc.Unsafe;
 
@@ -90,7 +90,7 @@ class AllocatedNativeObject                             // package-private
                 }
             };
         };
-        Core.getGlobalContext().register(resource);
+        Core.Priority.NORMAL.getContext().register(resource);
     }
 
     /**

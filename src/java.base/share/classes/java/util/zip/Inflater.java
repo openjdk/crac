@@ -30,9 +30,10 @@ import java.nio.ByteBuffer;
 import java.nio.ReadOnlyBufferException;
 import java.util.Objects;
 
-import jdk.crac.Core;
 import jdk.crac.Context;
 import jdk.crac.Resource;
+import jdk.internal.crac.Core;
+import jdk.internal.crac.JDKResource;
 import jdk.internal.ref.CleanerFactory;
 import jdk.internal.util.Preconditions;
 import sun.nio.ch.DirectBuffer;
@@ -122,7 +123,7 @@ public class Inflater {
         initIDs();
     }
 
-    private static final Resource nativeInitResource = new Resource() {
+    private static final JDKResource nativeInitResource = new JDKResource() {
         @Override
         public void beforeCheckpoint(Context<? extends Resource> context) {
         }
@@ -135,7 +136,7 @@ public class Inflater {
 
     static {
         initNatives();
-        Core.getGlobalContext().register(nativeInitResource);
+        Core.Priority.NORMAL.getContext().register(nativeInitResource);
     }
 
     /**

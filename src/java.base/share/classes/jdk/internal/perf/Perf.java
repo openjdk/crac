@@ -31,8 +31,9 @@ import java.io.IOException;
 
 import sun.nio.cs.UTF_8;
 import jdk.crac.Context;
-import jdk.crac.Core;
 import jdk.crac.Resource;
+import jdk.internal.crac.Core;
+import jdk.internal.crac.JDKResource;
 import jdk.internal.ref.CleanerFactory;
 
 /**
@@ -433,7 +434,7 @@ public final class Perf {
 
     private static native void registerNatives();
 
-    private static final Resource nativeInitResource = new Resource() {
+    private static final JDKResource nativeInitResource = new JDKResource() {
         @Override
         public void beforeCheckpoint(Context<? extends Resource> context) {
         }
@@ -446,7 +447,7 @@ public final class Perf {
 
     static {
         registerNatives();
-        Core.getGlobalContext().register(nativeInitResource);
+        Core.Priority.NORMAL.getContext().register(nativeInitResource);
         instance = new Perf();
     }
 }

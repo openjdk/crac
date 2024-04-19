@@ -118,7 +118,9 @@ public class NativeThread {
                 init();
             };
         };
-        Core.Priority.NORMAL.getContext().register(nativeInitResource);
+        // TODO figure out why lower priority makes some crac/fileDescriptors
+        //  tests never complete
+        Core.Priority.NATIVE_THREAD.getContext().register(nativeInitResource);
     }
 
 }

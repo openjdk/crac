@@ -54,8 +54,8 @@ import java.util.Arrays;
  * @run driver/timeout=120 jdk.test.lib.crac.CracTest  false  true   -10     true   -1
  * @run driver/timeout=120 jdk.test.lib.crac.CracTest  false  true   blabla  true   -1
  * @run driver/timeout=120 jdk.test.lib.crac.CracTest  false  true   5000000 true   -1
- * @run driver/timeout=120 jdk.test.lib.crac.CracTest  false  true   5000000 true   -1     4194200
- * @run driver/timeout=120 jdk.test.lib.crac.CracTest  false  true   4194303 true   -1
+ * @run driver/timeout=120 jdk.test.lib.crac.CracTest  false  true   5000000 true   -1     MAX-100
+ * @run driver/timeout=120 jdk.test.lib.crac.CracTest  false  true   MAX-1   true   -1
 
  */
 public class ContainerPidAdjustmentTest implements CracTest {
@@ -78,6 +78,7 @@ public class ContainerPidAdjustmentTest implements CracTest {
     String lastPidSetup;
 
     final private String CURRENT_PID_MESSAGE = "Current PID = ";
+    final private String MAX_PID_PREFIX = "MAX";
 
     @Override
     public void test() throws Exception {
@@ -91,7 +92,7 @@ public class ContainerPidAdjustmentTest implements CracTest {
             .containerUsePrivileged(usePrivilegedContainer);
         try {
             if (needSetMinPid) {
-                builder.vmOption("-XX:CRaCMinPid=" + lastPid);
+                builder.vmOption("-XX:CRaCMinPid=" + createLastPidValue(lastPid));
             }
             if (0 > expectedLastPid) {
                 builder.captureOutput(true);
@@ -100,8 +101,10 @@ public class ContainerPidAdjustmentTest implements CracTest {
                 // Set up the initial last pid,
                 // create a non-privileged user,
                 // and force spinning the last pid running checkpoint under the user.
+                String setupLastPidCmd = "export LAST_PID=" + createLastPidValue(lastPidSetup)
+                        + " && echo ${LAST_PID} >/proc/sys/kernel/ns_last_pid";
                 builder
-                    .containerSetup(Arrays.asList("bash", "-c", "useradd the_user && echo " + lastPidSetup + " >/proc/sys/kernel/ns_last_pid"))
+                    .containerSetup(Arrays.asList("bash", "-x", "-c", "useradd the_user && cat /proc/sys/kernel/pid_max && " + setupLastPidCmd))
                     .dockerCheckpointOptions(Arrays.asList("-u", "the_user"));
             }
 
@@ -121,6 +124,14 @@ public class ContainerPidAdjustmentTest implements CracTest {
         } finally {
             builder.ensureContainerKilled();
         }
+    }
+
+    private String createLastPidValue(String expr) {
+        if (expr.startsWith(MAX_PID_PREFIX)){
+            expr = expr.substring(MAX_PID_PREFIX.length());
+            expr = "$(($(cat /proc/sys/kernel/pid_max)" + expr + "))";
+        }
+        return expr;
     }
 
     @Override

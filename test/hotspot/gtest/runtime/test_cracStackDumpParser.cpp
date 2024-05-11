@@ -49,7 +49,8 @@ static void check_stack_frames(const CracStackTrace &expected_trace,
     EXPECT_FALSE(testing::Test::HasFatalFailure() || testing::Test::HasNonfatalFailure()) << "Wrong locals parsing in frame " << i;
     check_stack_values(expected_frame.operands(), actual_frame.operands());
     EXPECT_FALSE(testing::Test::HasFatalFailure() || testing::Test::HasNonfatalFailure()) << "Wrong operands parsing in frame " << i;
-    // TODO check monitors after they are added
+    check_stack_values(expected_frame.monitor_owners(), actual_frame.monitor_owners());
+    EXPECT_FALSE(testing::Test::HasFatalFailure() || testing::Test::HasNonfatalFailure()) << "Wrong monitors parsing in frame " << i;
   }
 }
 
@@ -108,7 +109,7 @@ static constexpr char CONTENTS_NO_STACK_VALUES[] =
       "\x12\x34"              // BCI
       "\x00\x00"              // Locals num
       "\x00\x00"              // Operands num
-      "\x00\x00"              // Monitors num
+      "\x00\x00\x00\x00"      // Monitors num
     ;
 
 TEST(CracStackDumpParser, stack_frame_with_no_stack_values) {
@@ -158,7 +159,8 @@ static constexpr char CONTENTS_CORRECT_STACK_VALUES[] =
         "\x00\x00\x7f\xfa\x40\x05\x65\x50"   // Value
         "\x00"                               // Type = primitive
         "\x00\x00\x00\x00\x56\x78\x90\xab"   // Value
-      "\x00\x00"                           // Monitors num
+      "\x00\x00\x00\x01"                   // Monitors num
+        "\x00\x00\x7f\xfa\x40\x05\x65\x50"   // Monitor owner ID
     ;
 
 TEST(CracStackDumpParser, stack_frame_with_correct_stack_values) {
@@ -185,6 +187,7 @@ TEST(CracStackDumpParser, stack_frame_with_correct_stack_values) {
   expected_frame.locals().append(CracStackTrace::Frame::Value::of_primitive(0x0123456789abcdef));
   expected_frame.operands().append(CracStackTrace::Frame::Value::of_obj_id(0x00007ffa40056550));
   expected_frame.operands().append(CracStackTrace::Frame::Value::of_primitive(0x00000000567890ab));
+  expected_frame.monitor_owners().append(CracStackTrace::Frame::Value::of_obj_id(0x00007ffa40056550));
 
   check_stack_frames(expected_trace, *stack_dump.stack_traces().at(0));
   ASSERT_FALSE(testing::Test::HasFatalFailure() || testing::Test::HasNonfatalFailure());
@@ -205,7 +208,10 @@ static constexpr char CONTENTS_MULTIPLE_STACKS[] =
         "\x00"                  // Type = 4-byte primitive
         "\xab\xcd\xef\xab"      // Value
       "\x00\x00"              // Operands num
-      "\x00\x00"              // Monitors num
+      "\x00\x00\x00\x03"      // Monitors num
+        "\x7f\xab\xcd\x35"      // Monitor owner ID
+        "\x7f\xcd\x01\x23"      // Monitor owner ID
+        "\x7f\xef\x45\x67"      // Monitor owner ID
 
       "\xba\xca\xba\xca"      // Method name ID
       "\xcc\xdd\xbb\xaf"      // Method signature ID
@@ -214,7 +220,7 @@ static constexpr char CONTENTS_MULTIPLE_STACKS[] =
       "\x00\x10"              // BCI
       "\x00\x00"              // Locals num
       "\x00\x00"              // Operands num
-      "\x00\x00"              // Monitors num
+      "\x00\x00\x00\x00"      // Monitors num
 
     "\x00\x11\x32\x09"      // Thread ID
     "\x00\x00\x00\x01"      // Number of frames
@@ -229,7 +235,7 @@ static constexpr char CONTENTS_MULTIPLE_STACKS[] =
         "\x01\x23\x45\x67"      // Value
         "\x01"                  // Type = primitive
         "\x89\xab\xcd\xef"      // Value
-      "\x00\x00"              // Monitors num
+      "\x00\x00\x00\x00"      // Monitors num
     ;
 
 TEST(CracStackDumpParser, multiple_stacks_dumped) {
@@ -253,6 +259,9 @@ TEST(CracStackDumpParser, multiple_stacks_dumped) {
   expected_trace_1.frame(1).set_method_holder_id(0x87654321);
   expected_trace_1.frame(1).set_bci(5);
   expected_trace_1.frame(1).locals().append(CracStackTrace::Frame::Value::of_primitive(0xabcdefab));
+  expected_trace_1.frame(1).monitor_owners().append(CracStackTrace::Frame::Value::of_obj_id(0x7fabcd35));
+  expected_trace_1.frame(1).monitor_owners().append(CracStackTrace::Frame::Value::of_obj_id(0x7fcd0123));
+  expected_trace_1.frame(1).monitor_owners().append(CracStackTrace::Frame::Value::of_obj_id(0x7fef4567));
   // Last in the dump, first in the parsed array
   expected_trace_1.frame(0).set_method_name_id(0xbacabaca);
   expected_trace_1.frame(0).set_method_sig_id(0xccddbbaf);

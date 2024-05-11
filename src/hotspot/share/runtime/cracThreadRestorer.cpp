@@ -1,7 +1,9 @@
 #include "precompiled.hpp"
 #include "classfile/javaClasses.hpp"
+#include "classfile/vmClasses.hpp"
 #include "classfile/vmIntrinsics.hpp"
 #include "classfile/vmSymbols.hpp"
+#include "code/debugInfoRec.hpp"
 #include "interpreter/interpreter.hpp"
 #include "jvm.h"
 #include "logging/log.hpp"
@@ -10,6 +12,7 @@
 #include "oops/instanceKlass.hpp"
 #include "oops/method.hpp"
 #include "oops/symbol.hpp"
+#include "runtime/basicLock.hpp"
 #include "runtime/crac.hpp"
 #include "runtime/cracStackDumpParser.hpp"
 #include "runtime/cracThreadRestorer.hpp"
@@ -20,33 +23,31 @@
 #include "runtime/javaCalls.hpp"
 #include "runtime/jniHandles.hpp"
 #include "runtime/jniHandles.inline.hpp"
+#include "runtime/monitorChunk.hpp"
 #include "runtime/mutexLocker.hpp"
 #include "runtime/semaphore.hpp"
 #include "runtime/signature.hpp"
 #include "runtime/stackValue.hpp"
 #include "runtime/stackValueCollection.hpp"
 #include "runtime/stubRoutines.hpp"
+#include "runtime/synchronizer.hpp"
 #include "runtime/vframeArray.hpp"
+#include "utilities/barrier.hpp"
 #include "utilities/bitCast.hpp"
 #include "utilities/debug.hpp"
 #include "utilities/globalDefinitions.hpp"
 #include "utilities/growableArray.hpp"
 #include "utilities/macros.hpp"
 
-uint CracThreadRestorer::_prepared_threads_num = 0;
-Semaphore *CracThreadRestorer::_start_semaphore = nullptr;
+Barrier *CracThreadRestorer::_start_barrier = nullptr;
+
+void CracThreadRestorer::prepare(uint num_threads) {
+  precond(_start_barrier == nullptr);
+  _start_barrier = new Barrier(num_threads);
+}
 
 static jlong log_tid(const JavaThread *thread) {
   return java_lang_Thread::thread_id(thread->threadObj());
-}
-
-void CracThreadRestorer::start_prepared_threads() {
-  if (_prepared_threads_num == 0) {
-    return; // No threads to start
-  }
-  assert(_start_semaphore != nullptr, "must be");
-  _start_semaphore->signal(_prepared_threads_num);
-  _prepared_threads_num = 0;
 }
 
 // Same jlong -> size_t conversion as JVM_StartThread performs.
@@ -63,12 +64,7 @@ static size_t get_stack_size(oop thread_obj) {
   return checked_cast<size_t>(raw_stack_size);
 }
 
-void CracThreadRestorer::prepare_thread(CracStackTrace *stack, TRAPS) {
-  if (_start_semaphore == nullptr) {
-    assert(_prepared_threads_num == 0, "must be");
-    _start_semaphore = new Semaphore(0);
-  }
-
+void CracThreadRestorer::restore_on_new_thread(CracStackTrace *stack, TRAPS) {
   const jobject thread_obj = stack->thread();
 
   // Prepare a JavaThread in the same fashion as JVM_StartThread does
@@ -76,7 +72,7 @@ void CracThreadRestorer::prepare_thread(CracStackTrace *stack, TRAPS) {
   {
     MutexLocker ml(Threads_lock);
     const size_t stack_size = get_stack_size(JNIHandles::resolve_non_null(thread_obj));
-    thread = new JavaThread(&prepared_thread_entry, stack_size);
+    thread = new JavaThread(&restore_current_thread_impl, stack_size);
     if (thread->osthread() != nullptr) {
       HandleMark hm(JavaThread::current());
       thread->prepare(thread_obj);
@@ -87,8 +83,6 @@ void CracThreadRestorer::prepare_thread(CracStackTrace *stack, TRAPS) {
     THROW_MSG(vmSymbols::java_lang_OutOfMemoryError(), os::native_thread_creation_failed_msg());
   }
 
-  _prepared_threads_num++;
-
   // Make the stack available to the restoration code (the thread now owns it)
   thread->set_crac_stack(stack);
 
@@ -96,17 +90,10 @@ void CracThreadRestorer::prepare_thread(CracStackTrace *stack, TRAPS) {
   Thread::start(thread);
 }
 
-// Wait for the start signal from the creator thread before starting.
-void CracThreadRestorer::prepared_thread_entry(JavaThread *current, TRAPS) {
-  log_debug(crac)("Thread " JLONG_FORMAT ": waiting for start signal", log_tid(current));
-  _start_semaphore->wait();
-  restore_current_thread_impl(current, CHECK);
-}
-
-void CracThreadRestorer::restore_current_thread(CracStackTrace *stack, TRAPS) {
+void CracThreadRestorer::restore_on_current_thread(CracStackTrace *stack, TRAPS) {
   JavaThread *const current = JavaThread::current();
   assert(JNIHandles::resolve_non_null(stack->thread()) == current->threadObj(), "wrong stack trace");
-  current->set_crac_stack(stack); // Restoration code expects it there
+  current->set_crac_stack(stack); // Restoration code expects the stack here
   restore_current_thread_impl(current, CHECK);
 }
 
@@ -177,6 +164,14 @@ static void fixup_youngest_frame_if_special(CracStackTrace *stack, TRAPS) {
     // Move to the next bytecode in the caller's frame
     CracStackTrace::Frame &caller = stack->frame(stack->frames_num() - 1);
     transform_to_youngest(&caller, Handle() /*don't place any return value*/);
+  } else if (&holder == vmClasses::Object_klass() && youngest_m.name() == vmSymbols::wait_name()) {
+    // TODO simulate spurious wakeup: if the thread was not waiting (haven't
+    //  started or has already finished) then just pop the frame, otherwise pop
+    //  the frame and set some flag so that the thread enters the monitor before
+    //  resuming its execution. Need to add more info to the stack dump to
+    //  support this.
+    log_error(crac)("Restoring %s is not implemented", youngest_m.external_name());
+    Unimplemented();
   } else {
     log_error(crac)("Unknown native method encountered: %s", youngest_m.external_name());
     ShouldNotReachHere();
@@ -285,7 +280,18 @@ class vframeRestoreArrayElement : public vframeArrayElement {
   void fill_in(const CracStackTrace::Frame &snapshot, bool reexecute) {
     _method = snapshot.method();
 
-    _bci = snapshot.bci();
+    if (_method->is_synchronized() && snapshot.monitor_owners().is_empty()) {
+      // The thread was blocked trying to enter the synchronized method
+      guarantee(snapshot.bci() == 0, "executing a synchronized method without holding its monitor");
+      _bci = SynchronizationEntryBCI;
+      // TODO set_pending_monitorenter() is inside #if INCLUDE_JVMCI, the
+      //  related deopt entry code is too and it also checks EnableJVMCI
+      // JavaThread::current()->set_pending_monitorenter(true);
+      log_error(crac)("Restoring unentered synchronized methods is not implemented");
+      Unimplemented();
+    } else {
+      _bci = snapshot.bci();
+    }
     guarantee(_method->validate_bci(_bci) == _bci, "invalid bytecode index %i", _bci);
 
     _reexecute = reexecute;
@@ -293,8 +299,7 @@ class vframeRestoreArrayElement : public vframeArrayElement {
     _locals = stack_values_from_frame(snapshot.locals());
     _expressions = stack_values_from_frame(snapshot.operands());
 
-    // TODO add monitor info into the snapshot; for now assuming no monitors
-    _monitors = nullptr;
+    _monitors = enter_monitors(snapshot.monitor_owners());
     DEBUG_ONLY(_removed_monitors = false;)
   }
 
@@ -330,6 +335,47 @@ class vframeRestoreArrayElement : public vframeArrayElement {
     }
     return stack_values;
   }
+
+  // TODO defer entering the monitors until we are unpacking -- this will allow
+  //  to omit monitor inflation
+  static MonitorChunk *enter_monitors(const GrowableArrayCHeap<CracStackTrace::Frame::Value, mtInternal> &monitor_owners) {
+    if (monitor_owners.is_empty()) {
+      return nullptr;
+    }
+
+    JavaThread *const current = JavaThread::current();
+    HandleMark hm(current);
+
+    auto *const monitor_chunk = new MonitorChunk(monitor_owners.length());
+    current->add_monitor_chunk(monitor_chunk);
+
+    for (int i = 0; i < monitor_chunk->number_of_monitors(); i++) {
+      const oop owner = JNIHandles::resolve_non_null(monitor_owners.adr_at(i)->as_obj());
+      log_trace(crac)("Thread " JLONG_FORMAT ":   entering monitor of " PTR_FORMAT, log_tid(current), p2i(owner));
+
+      // Temporary lock -- it will later be replaced with the real on-stack lock
+      // and deleted
+      BasicObjectLock *const bol = monitor_chunk->at(i);
+      bol->set_obj(owner);
+
+      // Inflation notes:
+      // 1. Need to inflate because otherwise when using the legacy lightweight
+      // locking owner's header will point to the temporary lock (and this link
+      // won't be updated).
+      // 2. Inflation must be performed before entering because otherwise a link
+      // to the temporary lock will be stored into the monitor which will lead
+      // to failed ownership checks (the lock is expected to be on the thread's
+      // stack which is false for the temporary lock).
+      ObjectSynchronizer::inflate_helper(owner);
+      // Stack values we've created are not safepoint-safe, but we should only
+      // enter monitors this thread owned so no safepoint should occur here
+      // (JRT_LEAF also creates a NoSafepointVerifier to check for this)
+      ObjectSynchronizer::enter(Handle(current, owner), bol->lock(), current);
+      postcond(owner->is_locked());
+    }
+
+    return monitor_chunk;
+  }
 };
 
 class vframeRestoreArray : public vframeArray {
@@ -356,14 +402,20 @@ class vframeRestoreArray : public vframeArray {
  private:
   void fill_in(const CracStackTrace &stack) {
     _frame_size = 0; // Unused (no frame is being deoptimized)
-    const JavaThread *current = log_is_enabled(Trace, crac) ? JavaThread::current() : nullptr;
+    const JavaThread *current = DEBUG_ONLY(true ||) log_is_enabled(Trace, crac) ? JavaThread::current() : nullptr;
+    assert(current->monitor_chunks() == nullptr, "deoptimization in progress?");
 
     // vframeRestoreArray: the first frame is the youngest, the last is the oldest
     // CracStackTrace:     the first frame is the oldest, the last is the youngest
     log_trace(crac)("Thread " JLONG_FORMAT ": filling stack trace " SDID_FORMAT, log_tid(current), stack.thread_id());
     precond(frames() == checked_cast<int>(stack.frames_num()));
     for (int i = 0; i < frames(); i++) {
-      log_trace(crac)("Thread " JLONG_FORMAT ": filling frame %i", log_tid(current), i);
+      if (log_is_enabled(Trace, crac)) {
+        ResourceMark rm;
+        log_trace(crac)("Thread " JLONG_FORMAT ": filling frame %i (%s)",
+                        log_tid(current), i, stack.frame(frames() - 1 - i).method()->external_name());
+      }
+
       auto *const elem = static_cast<vframeRestoreArrayElement *>(element(i));
       // Note: youngest frame's BCI is always re-executed -- this is important
       // because otherwise deopt's unpacking code will try to use ToS caching
@@ -392,6 +444,11 @@ JRT_LEAF(Deoptimization::UnrollBlock *, CracThreadRestorer::fetch_frame_info(Jav
   // should happen after this array is filled until we're done with it
   vframeRestoreArray *array;
   {
+    // Reset NoHandleMark created by JRT_LEAF (see related comments in
+    // Deoptimization::unpack_frames() on why this is ok). Handles are used
+    // when entering monitors.
+    ResetNoHandleMark rnhm;
+
     const CracStackTrace *stack = current->crac_stack();
     assert(stack->frames_num() > 0, "should be checked when starting");
 
@@ -500,4 +557,10 @@ JRT_LEAF(void, CracThreadRestorer::fill_in_frames(JavaThread *current))
 
   // TODO more verifications, like the ones Deoptimization::unpack_frames() does
   DEBUG_ONLY(current->validate_frame_layout();)
+
+  // Wait for all threads to complete their restoration so that we won't enter
+  // someone else's monitors while executing Java code. This barrier can be
+  // placed anywhere after restored monitors have been entered.
+  log_debug(crac)("Thread " JLONG_FORMAT ": arrived at start barrier", log_tid(current));
+  _start_barrier->arrive();
 JRT_END

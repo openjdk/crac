@@ -45,9 +45,9 @@
 //     Operand stack, from oldest to youngest:
 //       u1    -- type (same as for locals)
 //       u1... -- value (same as for locals)
-//     u2 -- number of monitors that follow
-//     Monitor infos:
-//       TODO describe the monitor info format
+//     u4 -- number of monitors that follow
+//     Monitors:
+//       ID    -- ID of the object owning the monitor
 
 // Types of dumped locals and operands.
 enum DumpedStackValueType : u1 { PRIMITIVE, REFERENCE };

@@ -240,7 +240,7 @@ class StackTracesParser : public StackObj {
     }
 
     log_trace(crac, stacktrace, parser)("Parsing monitors");
-    if (!parse_monitors()) {
+    if (!parse_monitors(&frame->monitor_owners())) {
       return false;
     }
 
@@ -286,17 +286,28 @@ class StackTracesParser : public StackObj {
     return true;
   }
 
-  bool parse_monitors() {
-    u2 monitors_num;
+  bool parse_monitors(GrowableArrayCHeap<CracStackTrace::Frame::Value, mtInternal> *monitor_owners) {
+    u4 monitors_num;
     if (!_reader->read(&monitors_num)) {
       log_error(crac, stacktrace, parser)("Failed to read the number of monitors");
       return false;
     }
-    // TODO implement monitors parsing after the format is determined
-    if (monitors_num > 0) {
-      log_error(crac, stacktrace, parser)("Monitors parsing is not yet implemented");
+    if (monitors_num > INT_MAX) {
+      log_error(crac, stacktrace, parser)("Too many monitors: " UINT32_FORMAT " > %i", monitors_num, INT_MAX);
       return false;
     }
+    monitor_owners->reserve(checked_cast<int>(monitors_num));
+    log_trace(crac, stacktrace, parser)("Parsing %i monitor(s)", checked_cast<int>(monitors_num));
+
+    for (int i = 0; i < checked_cast<int>(monitors_num); i++) {
+      CracStackTrace::ID id;
+      if (!_reader->read_uint(&id, _word_size)) {
+        log_error(crac, stacktrace, parser)("Failed to read owner ID of monitor #%i", i);
+        return false;
+      }
+      monitor_owners->append(CracStackTrace::Frame::Value::of_obj_id(id));
+    }
+
     return true;
   }
 };

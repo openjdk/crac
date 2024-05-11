@@ -531,6 +531,8 @@ void CracHeapRestorer::restore_heap(const HeapDumpTable<UnfilledClassInfo, AnyOb
       const u2 num_locals = frame.locals().length();
       for (u2 loc_i = 0; loc_i < num_locals; loc_i++) {
         CracStackTrace::Frame::Value &value = *frame.locals().adr_at(loc_i);
+        assert(value.type() == CracStackTrace::Frame::Value::Type::PRIM ||
+               value.type() == CracStackTrace::Frame::Value::Type::REF, "must be");
         if (value.type() == CracStackTrace::Frame::Value::Type::REF) {
           const Handle obj = restore_object(value.as_obj_id(), CHECK);
           value = CracStackTrace::Frame::Value::of_obj(obj);
@@ -539,10 +541,19 @@ void CracHeapRestorer::restore_heap(const HeapDumpTable<UnfilledClassInfo, AnyOb
       const u2 num_operands = frame.operands().length();
       for (u2 op_i = 0; op_i < num_operands; op_i++) {
         CracStackTrace::Frame::Value &value = *frame.operands().adr_at(op_i);
+        assert(value.type() == CracStackTrace::Frame::Value::Type::PRIM ||
+               value.type() == CracStackTrace::Frame::Value::Type::REF, "must be");
         if (value.type() == CracStackTrace::Frame::Value::Type::REF) {
           const Handle obj = restore_object(value.as_obj_id(), CHECK);
           value = CracStackTrace::Frame::Value::of_obj(obj);
         }
+      }
+      const int num_monitors = frame.monitor_owners().length();
+      for (int mon_i = 0; mon_i < num_monitors; mon_i++) {
+        CracStackTrace::Frame::Value &monitor_owner = *frame.monitor_owners().adr_at(mon_i);
+        assert(monitor_owner.type() == CracStackTrace::Frame::Value::Type::REF, "must be");
+        const Handle obj = restore_object(monitor_owner.as_obj_id(), CHECK);
+        monitor_owner = CracStackTrace::Frame::Value::of_obj(obj);
       }
     }
   }

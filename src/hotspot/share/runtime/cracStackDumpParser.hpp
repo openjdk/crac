@@ -92,11 +92,14 @@ class CracStackTrace : public CHeapObj<mtInternal> {
     u2 bci() const                              { return _bci; }
     void set_bci(u2 bci)                        { _bci = bci;  }
 
-    const GrowableArrayCHeap<Value, mtInternal> &locals() const   { return _locals; }
-    GrowableArrayCHeap<Value, mtInternal> &locals()               { return _locals; }
+    const GrowableArrayCHeap<Value, mtInternal> &locals() const         { return _locals; }
+    GrowableArrayCHeap<Value, mtInternal> &locals()                     { return _locals; }
 
-    const GrowableArrayCHeap<Value, mtInternal> &operands() const { return _operands; }
-    GrowableArrayCHeap<Value, mtInternal> &operands()             { return _operands; }
+    const GrowableArrayCHeap<Value, mtInternal> &operands() const       { return _operands; }
+    GrowableArrayCHeap<Value, mtInternal> &operands()                   { return _operands; }
+
+    const GrowableArrayCHeap<Value, mtInternal> &monitor_owners() const { return _monitor_owners; }
+    GrowableArrayCHeap<Value, mtInternal> &monitor_owners()             { return _monitor_owners; }
 
    private:
     ID _method_name_id;
@@ -109,6 +112,7 @@ class CracStackTrace : public CHeapObj<mtInternal> {
 
     GrowableArrayCHeap<Value, mtInternal> _locals;
     GrowableArrayCHeap<Value, mtInternal> _operands;
+    GrowableArrayCHeap<Value, mtInternal> _monitor_owners;
   };
 
   CracStackTrace(ID thread_id, u4 frames_num)

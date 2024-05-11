@@ -5,8 +5,9 @@
 #include "runtime/cracStackDumpParser.hpp"
 #include "runtime/deoptimization.hpp"
 #include "runtime/javaThread.hpp"
-#include "runtime/semaphore.hpp"
 #include "utilities/exceptions.hpp"
+
+class Barrier;
 
 // Thread restoration for CRaC's portable mode.
 //
@@ -14,15 +15,17 @@
 // 1. A pre-existing Java thread (typically the main thread) initiates
 //    restoration of other threads.
 // 2. The pre-existing thread restores its own execution.
+//
+// After that the restorer cannot be reused.
 class CracThreadRestorer : public AllStatic {
  public:
-  // Creates a new JavaThread and prepares it to restore its saved execution.
-  static void prepare_thread(CracStackTrace *stack, TRAPS);
-  // Starts execution of all threads that have been prepared.
-  static void start_prepared_threads();
-
-  // Restores the provided execution on the current thread.
-  static void restore_current_thread(CracStackTrace *stack, TRAPS);
+  // Prepares this class to restore the specified amount of threads. The threads
+  // will wait for all of them to get restored before starting executing Java.
+  static void prepare(uint num_threads);
+  // Creates a new JavaThread and asynchronously restores the provided stack.
+  static void restore_on_new_thread(CracStackTrace *stack, TRAPS);
+  // Synchronously restores the provided stack on the current thread.
+  static void restore_on_current_thread(CracStackTrace *stack, TRAPS);
 
   // Called by RestoreStub to prepare information about frames to restore.
   static Deoptimization::UnrollBlock *fetch_frame_info(JavaThread *current);
@@ -30,10 +33,9 @@ class CracThreadRestorer : public AllStatic {
   static void fill_in_frames(JavaThread *current);
 
  private:
-  static uint _prepared_threads_num;
-  static Semaphore *_start_semaphore;
+  // TODO delete the barrier after the threads have been restored.
+  static Barrier *_start_barrier;
 
-  static void prepared_thread_entry(JavaThread *current, TRAPS);
   static void restore_current_thread_impl(JavaThread *current, TRAPS);
 };
 

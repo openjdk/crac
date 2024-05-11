@@ -135,7 +135,7 @@ class javaVFrame: public vframe {
   }
 
   // Return an array of monitors locked by this frame in the youngest to oldest order
-  GrowableArray<MonitorInfo*>* locked_monitors();
+  GrowableArray<MonitorInfo*>* locked_monitors() const;
 
   // printing used during stack dumps and diagnostics
   static void print_locked_object_class_name(outputStream* st, Handle obj, const char* lock_state);

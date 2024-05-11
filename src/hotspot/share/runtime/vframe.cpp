@@ -120,7 +120,7 @@ javaVFrame* vframe::java_sender() const {
 
 // ------------- javaVFrame --------------
 
-GrowableArray<MonitorInfo*>* javaVFrame::locked_monitors() {
+GrowableArray<MonitorInfo*>* javaVFrame::locked_monitors() const {
   assert(SafepointSynchronize::is_at_safepoint() || JavaThread::current() == thread(),
          "must be at safepoint or it's a java frame of the current thread");
 

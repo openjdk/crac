@@ -9,6 +9,8 @@
 #include "memory/universe.hpp"
 #include "oops/oopsHierarchy.hpp"
 #include "runtime/cracStackDumper.hpp"
+#include "runtime/javaThread.hpp"
+#include "runtime/objectMonitor.hpp"
 #include "runtime/os.hpp"
 #include "runtime/safepoint.hpp"
 #include "runtime/stackValue.hpp"
@@ -21,6 +23,7 @@
 #include "utilities/debug.hpp"
 #include "utilities/globalDefinitions.hpp"
 #include "utilities/growableArray.hpp"
+#include "utilities/macros.hpp"
 #include "utilities/methodKind.hpp"
 
 static uintptr_t oop2uint(oop o) {
@@ -195,8 +198,8 @@ class StackDumpWriter : public StackObj {
         } else {
           precond(frame.is_compiled_frame());
           log_trace(crac, stacktrace, dump)("==  Compiled frame   ==");
-          // TODO use Deoptimization::realloc_objects(...) to rematerialize
-          //  scalar-replaced objects
+          // TODO do something like Deoptimization::rematerialize_objects(...)
+          //  and maybe also Deoptimization::restore_eliminated_locks(...)
         }
       }
 
@@ -204,21 +207,7 @@ class StackDumpWriter : public StackObj {
         return false;
       }
 
-      u2 bci = checked_cast<u2>(frame.bci()); // u2 is enough -- guaranteed by JVMS §4.7.3 (code_length max value)
-      // If this is the youngest frame and the current bytecode has already been
-      // executed move to the next one
-      // TODO investigate whether:
-      //  1. For interpreted frame, is it always right to re-execute?
-      //  2. For compiled frame, is exec_mode used by deoptimization to decide
-      //     on re-execution also important for us here?
-      if (i == 0 && !frame.method()->is_native() &&
-          frame.is_compiled_frame() && !static_cast<const compiledVFrame &>(frame).should_reexecute()) {
-        const int code_len = Bytecodes::length_at(frame.method(), frame.method()->bcp_from(frame.bci()));
-        log_trace(crac, stacktrace, dump)("moving BCI: %i -> %i", bci, bci + code_len);
-        assert(bci + code_len <= UINT16_MAX, "overflow");
-        bci += code_len;
-      }
-      guarantee(frame.method()->validate_bci(bci) >= 0, "invalid BCI %i for %s", bci, frame.method()->external_name());
+      const u2 bci = get_bci(frame, i == 0);
       if (log_is_enabled(Trace, crac, stacktrace, dump)) {
         const char *code_name;
         if (!frame.method()->is_native()) {
@@ -232,17 +221,28 @@ class StackDumpWriter : public StackObj {
       WRITE(bci);
 
       log_trace(crac, stacktrace, dump)("Locals:");
-      if (!write_stack_values(*frame.locals())) {
-        return false;
+      {
+        ResourceMark rm;
+        if (!write_stack_values(*frame.locals())) {
+          return false;
+        }
       }
 
       log_trace(crac, stacktrace, dump)("Operands:");
-      if (!write_stack_values(*frame.expressions())) {
-        return false;
+      {
+        ResourceMark rm;
+        if (!write_stack_values(get_operands(frame, i == 0))) {
+          return false;
+        }
       }
 
-      log_trace(crac, stacktrace, dump)("Monitors: not implemented");
-      WRITE_CASTED(u2, 0);
+      log_trace(crac, stacktrace, dump)("Monitors:");
+      {
+        ResourceMark rm;
+        if (!write_monitors(*frame.locked_monitors() /* skips waiting and pending monitors */)) {
+          return false;
+        }
+      }
 
       log_trace(crac, stacktrace, dump)("=======================");
     }
@@ -251,6 +251,69 @@ class StackDumpWriter : public StackObj {
   }
 
  private:
+  static u2 get_bci(const javaVFrame &frame, bool is_youngest) {
+    u2 bci = checked_cast<u2>(frame.bci()); // u2 is enough -- guaranteed by JVMS §4.7.3 (code_length max value)
+
+    if (!is_youngest) {
+      assert(Bytecodes::is_invoke(frame.method()->java_code_at(bci)), "non-youngest frames must be invoking");
+      return bci;
+    }
+
+    // In the youngest frame we need to determine whether the BCI points to the
+    // bytecode to be executed next or to the one that has already been executed
+    if (frame.is_interpreted_frame()) {
+      // Template interpreters increment BCI before blocking in monitorenter, undo that
+      if (ZERO_ONLY(false &&) frame.thread()->current_pending_monitor() != nullptr) {
+        if (bci > 0) { // Blocked on monitorenter
+          static const int monitorenter_code_len = Bytecodes::length_for(Bytecodes::_monitorenter);
+          log_trace(crac, stacktrace, dump)("moving BCI: %i -> %i", bci, bci - monitorenter_code_len);
+          guarantee(bci >= monitorenter_code_len, "BCI %i is too small to point to one past monitorenter", bci);
+          bci -= monitorenter_code_len;
+          assert(frame.method()->code_at(bci) == Bytecodes::_monitorenter, "trying to enter a monitor in %s",
+                 Bytecodes::name(frame.method()->code_at(bci)));
+        } else { // Blocked while entering a synchronized method
+          assert(frame.method()->is_synchronized(), "blocked while entering a non-synchronized method?");
+        }
+      }
+      // In any other case we assume that in interpreted frames BCI points to
+      // the next code to be executed
+      // TODO is the assumption actually always true?
+    } else { // Compiled
+      assert(frame.is_compiled_frame(), "must be");
+      // In compiled frames we rely on should_reexecute()
+      // TODO is exec_mode used by deoptimization to decide on re-execution also
+      //  important for us here?
+      if (!frame.method()->is_native() && !static_cast<const compiledVFrame &>(frame).should_reexecute()) {
+        const int code_len = Bytecodes::length_at(frame.method(), frame.method()->bcp_from(frame.bci()));
+        log_trace(crac, stacktrace, dump)("moving BCI: %i -> %i", bci, bci + code_len);
+        guarantee(bci + code_len <= UINT16_MAX, "overflow");
+        bci += code_len;
+      }
+    }
+
+    guarantee(frame.method()->validate_bci(bci) >= 0, "invalid BCI %i for %s", bci, frame.method()->external_name());
+    return bci;
+  }
+
+  // Fix-up top of the operand stack if needed.
+  static StackValueCollection &get_operands(const javaVFrame &frame, bool is_youngest) {
+    StackValueCollection &operands = *frame.expressions();
+
+    // Template interpreters pop ToS before blocking in monitorenter, undo that
+    if (is_youngest &&
+        ZERO_ONLY(false &&) frame.is_interpreted_frame() &&
+        frame.thread()->current_pending_monitor() != nullptr &&
+        frame.bci() > 0) { // Blocked with BCI == 0 means blocked trying to enter a synchronized method
+      assert(!frame.method()->is_native(), "BCI cannot be > 0 in a native frame");
+      const oop monitor_obj = frame.thread()->current_pending_monitor()->object();
+      log_trace(crac, stacktrace, dump)("pushing " UINTX_FORMAT " as missing monitor object", oop2uint(monitor_obj));
+      const Handle h(Thread::current(), monitor_obj);
+      operands.add(new StackValue(h));
+    }
+
+    return operands;
+  }
+
   bool write_method(const javaVFrame &frame) {
     Method *method = frame.method();
 
@@ -299,7 +362,7 @@ class StackDumpWriter : public StackObj {
         case T_OBJECT:
           log_trace(crac, stacktrace, dump)("  %i - oop: " UINTX_FORMAT "%s",
                                             i, oop2uint(value.get_obj()()), value.obj_is_scalar_replaced() ? " (scalar-replaced)" : "");
-          guarantee(!value.obj_is_scalar_replaced(), "Scalar-replaced objects should have been rematerialized");
+          guarantee(!value.obj_is_scalar_replaced(), "scalar-replaced objects should have been rematerialized");
           WRITE_CASTED(u1, DumpedStackValueType::REFERENCE);
           WRITE(oop2uint(value.get_obj()()));
           break;
@@ -313,6 +376,22 @@ class StackDumpWriter : public StackObj {
         default:
           ShouldNotReachHere();
       }
+    }
+
+    return true;
+  }
+
+  bool write_monitors(const GrowableArray<MonitorInfo *> &monitors) {
+    log_trace(crac, stacktrace, dump)("%i monitors", monitors.length());
+    WRITE_CASTED(u4, monitors.length());
+
+    for (const MonitorInfo *monitor : monitors) {
+      guarantee(!monitor->eliminated(), "eliminated locks should have been restored"); // TODO can just treat them as normal?
+      guarantee(!monitor->owner_is_scalar_replaced(), "scalar-replaced objects should have been rematerialized");
+      const oop owner = monitor->owner();
+      precond(owner != nullptr);
+      log_trace(crac, stacktrace, dump)("  " UINTX_FORMAT, oop2uint(owner));
+      WRITE(oop2uint(owner));
     }
 
     return true;

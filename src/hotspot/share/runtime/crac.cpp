@@ -872,6 +872,10 @@ void crac::restore_threads(TRAPS) {
   assert(_stack_dump != nullptr, "call crac::restore_heap() first");
   assert(java_lang_Thread::thread_id(JavaThread::current()->threadObj()) == 1, "must be called on the main thread");
 
+  if (_stack_dump->stack_traces().is_nonempty()) {
+    CracThreadRestorer::prepare(_stack_dump->stack_traces().length());
+  }
+
   // The main thread is the first one in the dump (if it's there at all)
   CracStackTrace *main_stack_trace = nullptr;
   if (_stack_dump->stack_traces().is_nonempty()) {
@@ -885,15 +889,13 @@ void crac::restore_threads(TRAPS) {
 
   while (_stack_dump->stack_traces().is_nonempty()) {
     CracStackTrace *const stack_trace = _stack_dump->stack_traces().pop();
-    CracThreadRestorer::prepare_thread(stack_trace, CHECK);
+    CracThreadRestorer::restore_on_new_thread(stack_trace, CHECK);
   }
 
   delete _stack_dump; // Is empty by now
   _stack_dump = nullptr;
 
-  CracThreadRestorer::start_prepared_threads();
-
   if (main_stack_trace != nullptr) {
-    CracThreadRestorer::restore_current_thread(main_stack_trace, CHECK);
+    CracThreadRestorer::restore_on_current_thread(main_stack_trace, CHECK);
   }
 }

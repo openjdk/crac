@@ -409,7 +409,7 @@ void Threads::initialize_jsr292_core_classes(TRAPS) {
 }
 
 jint Threads::check_for_restore(JavaVMInitArgs* args) {
-  if (Arguments::is_restore_option_set(args)) {
+  if (Arguments::has_classic_restore_request(args)) {
     if (!Arguments::parse_options_for_restore(args)) {
       return JNI_ERR;
     }
@@ -426,6 +426,7 @@ jint Threads::check_for_restore(JavaVMInitArgs* args) {
 jint Threads::create_vm(JavaVMInitArgs* args, bool* canTryAgain) {
   extern void JDK_Version_init();
 
+  // Perform classic CRaC restore if requested
   if (check_for_restore(args) != JNI_OK) return JNI_ERR;
 
   // Preinitialize version info.
@@ -834,6 +835,15 @@ jint Threads::create_vm(JavaVMInitArgs* args, bool* canTryAgain) {
 
   if (DumpSharedSpaces) {
     MetaspaceShared::preload_and_dump();
+  }
+
+  // Perform portable CRaC restore if requested
+  if (CRaCRestoreFrom != nullptr && crac::is_portable_mode()) {
+    bool ok = crac::restore_portable(CHECK_JNI_ERR);
+    if (!ok && !CRaCIgnoreRestoreIfUnavailable) {
+      // Cannot return JNI_ERR because it expects an exception at this stage
+      vm_exit(1);
+    }
   }
 
   return JNI_OK;

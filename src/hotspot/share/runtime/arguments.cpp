@@ -2245,16 +2245,36 @@ jint Arguments::parse_xss(const JavaVMOption* option, const char* tail, intx* ou
   return JNI_OK;
 }
 
-bool Arguments::is_restore_option_set(const JavaVMInitArgs* args) {
-  const char* tail;
+bool Arguments::has_classic_restore_request(const JavaVMInitArgs* args) {
+  bool has_restore_option = false;         // true means there is a restore request
+  bool has_empty_crengine_option = false;  // true means it's not for a classic restore
+
   // iterate over arguments
   for (int index = 0; index < args->nOptions; index++) {
     const JavaVMOption* option = args->options + index;
-    if (match_option(option, "-XX:CRaCRestoreFrom", &tail)) {
-      return true;
+
+    const char* tail;
+    if (!match_option(option, "-XX:", &tail)) {
+      continue;
+    }
+
+    const char* key;
+    const char* value;
+    get_key_value(tail, &key, &value);
+
+    if (strcmp(key, "CREngine") == 0 && strcmp(value, "") == 0) {
+      has_empty_crengine_option = true;
+    } else if (strcmp(key, "CRaCRestoreFrom") == 0) {
+      has_restore_option = true;
+    }
+
+    // Key was copied and needs to be freed
+    if (key != tail) {
+      FreeHeap(const_cast<char *>(key));
     }
   }
-  return false;
+
+  return has_restore_option && !has_empty_crengine_option;
 }
 
 bool Arguments::parse_options_for_restore(const JavaVMInitArgs* args) {

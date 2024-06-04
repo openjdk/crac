@@ -2001,11 +2001,13 @@ const int ObjectAlignmentInBytes = 8;
       "Reset JVM's start time and uptime on restore")                       \
                                                                             \
   product(ccstr, CREngine, "criuengine", RESTORE_SETTABLE,                  \
-      "Path or name of a program implementing checkpoint/restore and "      \
+      "Either (1) or (2). "                                                 \
+      "(1) Path or name of a program implementing checkpoint/restore and "  \
       "optional extra parameters as a comma-separated list: "               \
       "-XX:CREngine=program,--key,value,--anotherkey results in calling "   \
       "'program --key value --anotherkey'. Commas used as part of args "    \
-      "should be escaped with a backslash character ('\\').")               \
+      "should be escaped with a backslash character ('\\'). "               \
+      "(2) Empty string — use an experimental portable CR implementation.") \
                                                                             \
   product(bool, CRaCIgnoreRestoreIfUnavailable, false, RESTORE_SETTABLE,    \
       "Ignore -XX:CRaCRestoreFrom and continue initialization if restore "  \

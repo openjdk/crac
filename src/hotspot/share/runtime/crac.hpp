@@ -26,6 +26,7 @@
 
 #include "memory/allStatic.hpp"
 #include "runtime/handles.hpp"
+#include "utilities/exceptions.hpp"
 #include "utilities/macros.hpp"
 
 // xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
@@ -33,10 +34,16 @@
 
 class crac: AllStatic {
 public:
+  // Returns true if using the experimetnal portable mode.
+  static bool is_portable_mode();
+
   static void vm_create_start();
   static bool prepare_checkpoint();
   static Handle checkpoint(jarray fd_arr, jobjectArray obj_arr, bool dry_run, jlong jcmd_stream, TRAPS);
+  // Restore in the classic mode.
   static void restore();
+  // Restore in the portable mode.
+  static bool restore_portable(TRAPS);
 
   static jlong restore_start_time();
   static jlong uptime_since_restore();

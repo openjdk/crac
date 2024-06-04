@@ -40,7 +40,14 @@
 #include "services/heapDumper.hpp"
 #include "services/writeableFlags.hpp"
 #include "utilities/decoder.hpp"
+#include "utilities/exceptions.hpp"
+#include "utilities/heapDumpParser.hpp"
 #include "os.inline.hpp"
+#ifdef LINUX
+#include "os_linux.hpp"
+#endif
+
+static const char PMODE_HEAP_DUMP_FILENAME[] = "heap.hprof";
 
 static const char* _crengine = NULL;
 static char* _crengine_arg_str = NULL;
@@ -111,6 +118,28 @@ static char * strchrnul(char * str, char c) {
 }
 #endif //__APPLE__ || _WINDOWS
 
+bool crac::is_portable_mode() {
+  return CREngine == nullptr;
+}
+
+// Checkpoint in portable mode.
+static void checkpoint_portable() {
+  char path[JVM_MAXPATHLEN];
+  os::snprintf_checked(path, sizeof(path), "%s%s%s", CRaCCheckpointTo,
+                       os::file_separator(), PMODE_HEAP_DUMP_FILENAME);
+
+  HeapDumper dumper(false /* No GC: it's already done by crac::checkpoint */);
+  if (dumper.dump(path,
+                  nullptr,  // No additional output
+                  -1,       // No compression, TODO: enable this when the parser supports it
+                  false,    // Don't overwrite
+                  HeapDumper::default_num_of_dump_threads()) != 0) {
+    ResourceMark rm;
+    warning("Failed to dump heap into %s for checkpoint: %s",
+            path, dumper.error_as_C_string());
+  }
+}
+
 static size_t cr_util_path(char* path, int len) {
   os::jvm_path(path, len);
   // path is ".../lib/server/libjvm.so", or "...\bin\server\libjvm.dll"
@@ -124,15 +153,14 @@ static size_t cr_util_path(char* path, int len) {
 }
 
 static bool compute_crengine() {
+  assert(CREngine != nullptr, "Portable mode requested, should not call this");
+
   // release possible old copies
   os::free((char *) _crengine); // NULL is allowed
   _crengine = NULL;
   os::free((char *) _crengine_arg_str);
   _crengine_arg_str = NULL;
 
-  if (!CREngine) {
-    return true;
-  }
   char *exec = os::strdup_check_oom(CREngine);
   char *comma = strchr(exec, ',');
   if (comma != NULL) {
@@ -330,7 +358,7 @@ void VM_Crac::doit() {
     return;
   }
 
-  if (!memory_checkpoint()) {
+  if (!crac::is_portable_mode() && !memory_checkpoint()) {
     return;
   }
 
@@ -340,8 +368,9 @@ void VM_Crac::doit() {
   } else {
     trace_cr("Checkpoint ...");
     report_ok_to_jcmd_if_any();
-    int ret = checkpoint_restore(&shmid);
-    if (ret == JVM_CHECKPOINT_ERROR) {
+    if (crac::is_portable_mode()) {
+      checkpoint_portable();
+    } else if (checkpoint_restore(&shmid) == JVM_CHECKPOINT_ERROR) {
       memory_restore();
       return;
     }
@@ -390,7 +419,7 @@ bool crac::prepare_checkpoint() {
     }
   }
 
-  if (!compute_crengine()) {
+  if (!is_portable_mode() && !compute_crengine()) {
     return false;
   }
 
@@ -494,6 +523,8 @@ Handle crac::checkpoint(jarray fd_arr, jobjectArray obj_arr, bool dry_run, jlong
 }
 
 void crac::restore() {
+  assert(!is_portable_mode(), "Use crac::restore_portable");
+
   jlong restore_time = os::javaTimeMillis();
   jlong restore_nanos = os::javaTimeNanos();
 
@@ -631,4 +662,23 @@ void crac::update_javaTimeNanos_offset() {
       javaTimeNanos_offset -= diff;
     }
   }
+}
+
+// Restore in portable mode.
+bool crac::restore_portable(TRAPS) {
+  assert(is_portable_mode(), "Use crac::restore instead");
+  precond(CRaCRestoreFrom != nullptr);
+
+  char path[JVM_MAXPATHLEN];
+  os::snprintf_checked(path, sizeof(path), "%s%s%s", CRaCRestoreFrom,
+                       os::file_separator(), PMODE_HEAP_DUMP_FILENAME);
+
+  ParsedHeapDump heap_dump;
+  const char* err_msg = HeapDumpParser::parse(path, &heap_dump);
+  if (err_msg != nullptr) {
+    warning("Failed to read heap dump %s for restore: %s", path, err_msg);
+    return false;
+  }
+
+  return true;
 }

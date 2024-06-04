@@ -43,7 +43,7 @@ public:
   // Restore in the classic mode.
   static void restore();
   // Restore in the portable mode.
-  static bool restore_portable(TRAPS);
+  static void restore_portable(TRAPS);
 
   static jlong restore_start_time();
   static jlong uptime_since_restore();

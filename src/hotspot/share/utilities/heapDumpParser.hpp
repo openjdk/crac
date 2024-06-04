@@ -3,6 +3,7 @@
 
 #include "memory/allocation.hpp"
 #include "oops/symbolHandle.hpp"
+#include "runtime/os.hpp"
 #include "utilities/debug.hpp"
 #include "utilities/globalDefinitions.hpp"
 #include "utilities/resizeableResourceHash.hpp"

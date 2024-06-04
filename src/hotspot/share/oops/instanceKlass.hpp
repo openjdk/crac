@@ -75,6 +75,7 @@ class OopMapCache;
 class InterpreterOopMap;
 class PackageEntry;
 class ModuleEntry;
+class HeapRestorer;
 
 // This is used in iterators below.
 class FieldClosure: public StackObj {
@@ -137,6 +138,7 @@ class InstanceKlass: public Klass {
   friend class JVMCIVMStructs;
   friend class ClassFileParser;
   friend class CompileReplay;
+  friend class HeapRestorer;
 
  public:
   static const KlassKind Kind = InstanceKlassKind;

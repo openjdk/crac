@@ -1,0 +1,124 @@
+#ifndef SHARE_RUNTIME_CRACHEAPRESTORER_HPP
+#define SHARE_RUNTIME_CRACHEAPRESTORER_HPP
+
+#include "jni.h"
+#include "memory/allocation.hpp"
+#include "oops/oopsHierarchy.hpp"
+#include "runtime/handles.hpp"
+#include "runtime/reflectionUtils.hpp"
+#include "utilities/exceptions.hpp"
+#include "utilities/growableArray.hpp"
+#include "utilities/heapDumpClasses.hpp"
+#include "utilities/heapDumpParser.hpp"
+
+// Matches objects important to the VM with their IDs in the dump.
+class WellKnownObjects {
+ public:
+  explicit WellKnownObjects(const ParsedHeapDump &heap_dump, TRAPS) {
+    find_well_known_class_loaders(heap_dump, CHECK);
+    // TODO other well-known objects (from Universe, security manager etc.)
+  }
+
+  // Adds the collected well-known objects into the table. Should be called
+  // before restoring any objects to avoid re-creating the existing well-known
+  // objects.
+  void put_into(HeapDumpTable<jobject, AnyObj::C_HEAP> *objects) const;
+
+  // Sets the well-known objects that are not yet set in this VM and checks
+  // that the ones that are set have the specified values.
+  void get_from(const HeapDumpTable<jobject, AnyObj::C_HEAP> &objects) const;
+
+ private:
+  HeapDump::ID _platform_loader_id = HeapDump::NULL_ID;       // Built-in platform loader
+  HeapDump::ID _builtin_system_loader_id = HeapDump::NULL_ID; // Built-in system loader
+  HeapDump::ID _actual_system_loader_id = HeapDump::NULL_ID;  // Either the built-in system loader or a user-provided one
+
+  void find_well_known_class_loaders(const ParsedHeapDump &heap_dump, TRAPS);
+
+  void lookup_builtin_class_loaders(const ParsedHeapDump &heap_dump,
+                                    const HeapDump::LoadClass &jdk_internal_loader_ClassLoaders);
+
+  void lookup_actual_system_class_loader(const ParsedHeapDump &heap_dump,
+                                         const HeapDump::LoadClass &java_lang_ClassLoader);
+};
+
+// Interface for providing partially restored ClassLoaders for class definition.
+class ClassLoaderProvider : public StackObj {
+ public:
+  // Returns a ClassLoader object with the requested ID.
+  //
+  // If the object has previously been allocated the same object is returned.
+  // Otherwise, the object is allocated.
+  virtual instanceHandle get_class_loader(HeapDump::ID id, TRAPS) = 0;
+};
+
+struct ClassHeapDeps;
+class StackTrace;
+
+// Restores heap based on an HPROF dump created by HeapDumper (there are some
+// assumptions that are not guaranteed by the general HPROF standard).
+class CracHeapRestorer : public ClassLoaderProvider {
+ public:
+  // Allocates resources, caller must set a resource mark.
+  CracHeapRestorer(const ParsedHeapDump &heap_dump,
+                   const HeapDumpTable<InstanceKlass *, AnyObj::C_HEAP> &instance_classes,
+                   const HeapDumpTable<ArrayKlass *, AnyObj::C_HEAP> &array_classes,
+                   HeapDumpTable<jobject, AnyObj::C_HEAP> *objects, TRAPS) :
+      _heap_dump(heap_dump), _instance_classes(instance_classes), _array_classes(array_classes),
+      _well_known_objects(heap_dump, THREAD), _objects(*objects) {
+    if (HAS_PENDING_EXCEPTION) {
+      return;
+    }
+    _well_known_objects.put_into(&_objects);
+  };
+
+  instanceHandle get_class_loader(HeapDump::ID id, TRAPS) override;
+
+  void restore_heap(const HeapDumpTable<ClassHeapDeps, AnyObj::C_HEAP> &class_heap_deps,
+                    const GrowableArrayView<StackTrace *> &stack_traces, TRAPS);
+
+ private:
+  const ParsedHeapDump &_heap_dump;
+  const HeapDumpTable<InstanceKlass *, AnyObj::C_HEAP> &_instance_classes;
+  const HeapDumpTable<ArrayKlass *, AnyObj::C_HEAP> &_array_classes;
+
+  const WellKnownObjects _well_known_objects;
+  HeapDumpTable<jobject, AnyObj::C_HEAP> &_objects;
+  HeapDumpTable<bool> _prepared_loaders{3, 127};
+
+  HeapDumpClasses::java_lang_ClassLoader _loader_dump_reader;
+  HeapDumpClasses::java_lang_Class _mirror_dump_reader;
+
+  InstanceKlass &get_instance_class(HeapDump::ID id) const;
+  ArrayKlass &get_array_class(HeapDump::ID id) const;
+
+  oop get_object_when_present(HeapDump::ID id) const; // Always not null (nulls aren't recorded)
+  oop get_object_if_present(HeapDump::ID id) const;   // Null iff the object has not been recorded yet
+  jobject put_object_when_absent(HeapDump::ID id, Handle obj);
+  jobject put_object_when_absent(HeapDump::ID id, oop obj);
+  jobject put_object_if_absent(HeapDump::ID id, Handle obj);
+  jobject put_object_if_absent(HeapDump::ID id, oop obj);
+
+  // Partially restores the class loader so it can be used for class definition.
+  instanceHandle prepare_class_loader(HeapDump::ID id, TRAPS);
+  instanceHandle get_class_loader_parent(const HeapDump::InstanceDump &loader_dump, TRAPS);
+  instanceHandle get_class_loader_name(const HeapDump::InstanceDump &loader_dump, bool with_id, TRAPS);
+  instanceHandle get_class_loader_unnamed_module(const HeapDump::InstanceDump &loader_dump, TRAPS);
+  instanceHandle get_class_loader_parallel_lock_map(const HeapDump::InstanceDump &loader_dump, TRAPS);
+
+  void find_and_record_java_class(const HeapDump::ClassDump &class_dump, TRAPS);
+  void record_java_class(instanceHandle mirror, const HeapDump::InstanceDump &mirror_dump, TRAPS);
+
+  void set_field(instanceHandle obj, const FieldStream &fs, const HeapDump::BasicValue &val, TRAPS);
+  bool set_field_if_special(instanceHandle obj, const FieldStream &fs, const HeapDump::BasicValue &val, TRAPS);
+  void restore_instance_fields(instanceHandle obj, const HeapDump::InstanceDump &dump, TRAPS);
+  void restore_static_fields(InstanceKlass *ik, const HeapDump::ClassDump &dump, TRAPS);
+
+  void restore_class_mirror(HeapDump::ID id, TRAPS);
+  Handle restore_object(HeapDump::ID id, TRAPS);
+  instanceHandle restore_instance(const HeapDump::InstanceDump &dump, TRAPS);
+  objArrayHandle restore_obj_array(const HeapDump::ObjArrayDump &dump, TRAPS);
+  typeArrayHandle restore_prim_array(const HeapDump::PrimArrayDump &dump, TRAPS);
+};
+
+#endif // SHARE_RUNTIME_CRACHEAPRESTORER_HPP

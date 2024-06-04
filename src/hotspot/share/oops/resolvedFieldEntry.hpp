@@ -28,6 +28,7 @@
 #include "interpreter/bytecodes.hpp"
 #include "oops/instanceKlass.hpp"
 #include "runtime/atomic.hpp"
+#include "utilities/globalDefinitions.hpp"
 #include "utilities/sizes.hpp"
 
 // ResolvedFieldEntry contains the resolution information for field related bytecodes like
@@ -82,6 +83,7 @@ public:
   u1 tos_state()                const { return _tos_state;    }
   u1 get_code()                 const { return Atomic::load_acquire(&_get_code);      }
   u1 put_code()                 const { return Atomic::load_acquire(&_put_code);      }
+  u1 flags()                    const { return _flags;        }
   bool is_final()               const { return (_flags & (1 << is_final_shift))    != 0; }
   bool is_volatile ()           const { return (_flags & (1 << is_volatile_shift)) != 0; }
   bool is_resolved(Bytecodes::Code code) const {
@@ -127,6 +129,28 @@ public:
     // These must be set after the other fields
     set_bytecode(&_get_code, b1);
     set_bytecode(&_put_code, b2);
+  }
+
+  // CRaC
+  void fill_in_partial(u2 index, u1 tos_state, u1 flags, u1 b1, u1 b2) {
+    assert(_cpool_index > 0, "uninitialized");
+    assert(tos_state < TosState::number_of_states, "not a ToS state");
+
+    _tos_state = tos_state;
+    _flags = flags;
+    _get_code = b1;
+    _put_code = b2;
+
+    // Check b1 and b2 are expected bytecodes
+    postcond(b1 == 0 || is_resolved(Bytecodes::cast(b1)));
+    postcond(b2 == 0 || is_resolved(Bytecodes::cast(b2)));
+  }
+  void fill_in_holder(InstanceKlass* klass) {
+    precond(klass != nullptr);
+    assert(_cpool_index > 0, "uninitialized");
+    assert(_get_code > 0 || _put_code > 0, "unresolved");
+    assert(_field_holder == nullptr, "holder already set");
+    _field_holder = klass;
   }
 
   // CDS

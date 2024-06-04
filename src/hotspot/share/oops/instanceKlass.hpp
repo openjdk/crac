@@ -75,7 +75,15 @@ class OopMapCache;
 class InterpreterOopMap;
 class PackageEntry;
 class ModuleEntry;
-class HeapRestorer;
+
+// Used when allocating a class.
+struct InstanceKlassSizes {
+  int vtable_size;                  // Vtable size in words
+  int itable_size;                  // Itable size in words
+  int layout_size;                  // Size of instances in words
+  int static_field_size;            // Size of static fields in words
+  unsigned int total_oop_map_count; // Number of OopMapBlocks used
+};
 
 // This is used in iterators below.
 class FieldClosure: public StackObj {
@@ -138,13 +146,13 @@ class InstanceKlass: public Klass {
   friend class JVMCIVMStructs;
   friend class ClassFileParser;
   friend class CompileReplay;
-  friend class HeapRestorer;
+  friend struct CracClassStateRestorer;
 
  public:
   static const KlassKind Kind = InstanceKlassKind;
 
  protected:
-  InstanceKlass(const ClassFileParser& parser, KlassKind kind = Kind, ReferenceType reference_type = REF_NONE);
+  InstanceKlass(AccessFlags access_flags, const InstanceKlassSizes& sizes, KlassKind kind = Kind, ReferenceType reference_type = REF_NONE);
 
  public:
   InstanceKlass() { assert(DumpSharedSpaces || UseSharedSpaces, "only for CDS"); }
@@ -161,8 +169,12 @@ class InstanceKlass: public Klass {
     initialization_error                // error happened during initialization
   };
 
- private:
-  static InstanceKlass* allocate_instance_klass(const ClassFileParser& parser, TRAPS);
+  static InstanceKlass* allocate_instance_klass(ClassLoaderData* loader_data,
+                                                const Symbol* class_name,
+                                                const InstanceKlass* super,
+                                                AccessFlags access_flags,
+                                                const InstanceKlassSizes& sizes,
+                                                TRAPS);
 
  protected:
   // If you add a new field that points to any metaspace object, you
@@ -306,6 +318,9 @@ class InstanceKlass: public Klass {
   // Sets finalization state
   static void set_finalization_enabled(bool val) { _finalization_enabled = val; }
 
+  const InstanceKlassFlags &internal_flags() const { return _misc_flags; }
+  void set_internal_flags(InstanceKlassFlags flags) { _misc_flags = flags; }
+
   // The three BUILTIN class loader types
   bool is_shared_boot_class() const { return _misc_flags.is_shared_boot_class(); }
   bool is_shared_platform_class() const { return _misc_flags.is_shared_platform_class(); }
@@ -437,11 +452,6 @@ private:
   bool has_nest_member(JavaThread* current, InstanceKlass* k) const;
 
 public:
-  // Call this only if you know that the nest host has been initialized.
-  InstanceKlass* nest_host_not_null() {
-    assert(_nest_host != nullptr, "must be");
-    return _nest_host;
-  }
   // Used to construct informative IllegalAccessError messages at a higher level,
   // if there was an issue resolving or validating the nest host.
   // Returns null if there was no error.
@@ -449,6 +459,8 @@ public:
   // Returns nest-host class, resolving and validating it if needed.
   // Returns null if resolution is not possible from the calling context.
   InstanceKlass* nest_host(TRAPS);
+  // Returns nest-host class or null if it has not been resolved yet.
+  InstanceKlass* nest_host_noresolve() const { return _nest_host; }
   // Check if this klass is a nestmate of k - resolves this nest-host and k's
   bool has_nestmate_access_to(InstanceKlass* k, TRAPS);
 
@@ -510,6 +522,7 @@ public:
   ClassState  init_state() const           { return Atomic::load(&_init_state); }
   const char* init_state_name() const;
   bool is_rewritten() const                { return _misc_flags.rewritten(); }
+  oop get_initialization_error();
 
   class LockLinkState : public StackObj {
     InstanceKlass* _ik;
@@ -663,7 +676,8 @@ public:
 
   // source debug extension
   const char* source_debug_extension() const { return _source_debug_extension; }
-  void set_source_debug_extension(const char* array, int length);
+  void set_source_debug_extension(const char* array);
+  void copy_source_debug_extension(const char* array, int length);
 
   // nonstatic oop-map blocks
   static int nonstatic_oop_map_size(unsigned int oop_map_count) {
@@ -707,6 +721,9 @@ public:
   bool has_resolved_methods() const { return _misc_flags.has_resolved_methods(); }
   void set_has_resolved_methods()   { _misc_flags.set_has_resolved_methods(true); }
   void set_has_resolved_methods(bool value)   { _misc_flags.set_has_resolved_methods(value); }
+
+  bool is_being_restored() const { return _misc_flags.is_being_restored(); }
+  void set_is_being_restored(bool value) { _misc_flags.set_is_being_restored(value); }
 
 public:
 #if INCLUDE_JVMTI
@@ -1095,6 +1112,7 @@ private:
   void initialize_impl                           (TRAPS);
   void initialize_super_interfaces               (TRAPS);
 
+  void put_initializetion_error(JavaThread* current, Handle init_error);
   void add_initialization_error(JavaThread* current, Handle exception);
   oop get_initialization_error(JavaThread* current);
 

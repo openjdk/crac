@@ -6,8 +6,11 @@
 #include "utilities/basicTypeReader.hpp"
 #include "utilities/debug.hpp"
 #include "utilities/extendableArray.hpp"
+#include "utilities/globalDefinitions.hpp"
 #include "utilities/heapDumpParser.hpp"
 #include "utilities/hprofTag.hpp"
+
+constexpr HeapDump::ID HeapDump::NULL_ID;
 
 constexpr char ERR_INVAL_HEADER_STR[] = "invalid header string";
 constexpr char ERR_INVAL_ID_SIZE[] = "invalid ID size format";
@@ -46,9 +49,9 @@ class RecordsParser : public StackObj {
     State state;
     const char *err_msg = nullptr;
 
-    log_debug(heapdumpparsing)("Parsing records");
+    log_debug(heapdump, parser)("Parsing records");
 
-    while (!_reader->eof() && err_msg == nullptr) {
+    while (!_reader->eos() && err_msg == nullptr) {
       switch (state.position()) {
         case State::Position::TOPLEVEL:
           err_msg = step_toplevel(&state);
@@ -95,19 +98,19 @@ class RecordsParser : public StackObj {
     // When found a HPROF_HEAP_DUMP.
     bool enter_heap_dump(u4 size) {
       if (position() != Position::TOPLEVEL) {
-        log_error(heapdumpparsing)("Illegal position transition: %s -> %s",
+        log_error(heapdump, parser)("Illegal position transition: %s -> %s",
                                    pos2str(position()), pos2str(Position::IN_HEAP_DUMP));
         return false;
       }
       precond(_remaining_record_size == 0);
 
       if (size > 0) {
-        log_debug(heapdumpparsing)("Position transition: %s -> %s (size " UINT32_FORMAT ")",
+        log_debug(heapdump, parser)("Position transition: %s -> %s (size " UINT32_FORMAT ")",
                                    pos2str(position()), pos2str(Position::IN_HEAP_DUMP), size);
         _position = Position::IN_HEAP_DUMP;
         _remaining_record_size = size;
       } else {
-        log_debug(heapdumpparsing)("Got HPROF_HEAP_DUMP of size 0 -- no position transition");
+        log_debug(heapdump, parser)("Got HPROF_HEAP_DUMP of size 0 -- no position transition");
       }
 
       return true;
@@ -116,19 +119,19 @@ class RecordsParser : public StackObj {
     // When found a HPROF_HEAP_DUMP_SEGMENT.
     bool enter_heap_dump_segment(u4 size) {
       if (position() != Position::AMONG_HEAP_DUMP_SEGMENTS && position() != Position::TOPLEVEL) {
-        log_error(heapdumpparsing)("Illegal position transition: %s -> %s",
+        log_error(heapdump, parser)("Illegal position transition: %s -> %s",
                                    pos2str(position()), pos2str(Position::IN_HEAP_DUMP_SEGMENT));
         return false;
       }
       precond(_remaining_record_size == 0);
 
       if (size > 0) {
-        log_debug(heapdumpparsing)("Position transition: %s -> %s (size " UINT32_FORMAT ")",
+        log_debug(heapdump, parser)("Position transition: %s -> %s (size " UINT32_FORMAT ")",
                                    pos2str(position()), pos2str(Position::IN_HEAP_DUMP_SEGMENT), size);
         _position = Position::IN_HEAP_DUMP_SEGMENT;
         _remaining_record_size = size;
       } else {
-        log_debug(heapdumpparsing)("Got HPROF_HEAP_DUMP_SEGMENT of size 0 -- position transition: %s -> %s",
+        log_debug(heapdump, parser)("Got HPROF_HEAP_DUMP_SEGMENT of size 0 -- position transition: %s -> %s",
                                    pos2str(position()), pos2str(Position::AMONG_HEAP_DUMP_SEGMENTS));
         _position = Position::AMONG_HEAP_DUMP_SEGMENTS;
       }
@@ -140,11 +143,11 @@ class RecordsParser : public StackObj {
     bool exit_heap_dump_segments() {
       // Allow top-level position for sequences of zero segments
       if (position() != Position::AMONG_HEAP_DUMP_SEGMENTS && position() != Position::TOPLEVEL) {
-        log_error(heapdumpparsing)("Illegal position transition: %s -> %s", pos2str(position()), pos2str(Position::TOPLEVEL));
+        log_error(heapdump, parser)("Illegal position transition: %s -> %s", pos2str(position()), pos2str(Position::TOPLEVEL));
         return false;
       }
       assert(_remaining_record_size == 0, "must be 0 outside a record");
-      log_debug(heapdumpparsing)("Position transition: %s -> %s", pos2str(position()), pos2str(Position::TOPLEVEL));
+      log_debug(heapdump, parser)("Position transition: %s -> %s", pos2str(position()), pos2str(Position::TOPLEVEL));
       _position = Position::TOPLEVEL;
       return true;
     }
@@ -155,7 +158,7 @@ class RecordsParser : public StackObj {
       assert(_remaining_record_size > 0, "must be > 0 inside a record");
 
       if (_remaining_record_size < amount) {
-        log_error(heapdumpparsing)("Tried to read " UINT32_FORMAT " bytes "
+        log_error(heapdump, parser)("Tried to read " UINT32_FORMAT " bytes "
                                    "from a subrecord with " UINT32_FORMAT " bytes left",
                                    amount, _remaining_record_size);
         return false;
@@ -165,10 +168,10 @@ class RecordsParser : public StackObj {
 
       if (_remaining_record_size == 0) {
         if (position() == Position::IN_HEAP_DUMP) {
-          log_debug(heapdumpparsing)("Position transition: %s -> %s", pos2str(position()), pos2str(Position::TOPLEVEL));
+          log_debug(heapdump, parser)("Position transition: %s -> %s", pos2str(position()), pos2str(Position::TOPLEVEL));
           _position = Position::TOPLEVEL;
         } else if (position() == Position::IN_HEAP_DUMP_SEGMENT) {
-          log_debug(heapdumpparsing)("Position transition: %s -> %s", pos2str(position()), pos2str(Position::AMONG_HEAP_DUMP_SEGMENTS));
+          log_debug(heapdump, parser)("Position transition: %s -> %s", pos2str(position()), pos2str(Position::AMONG_HEAP_DUMP_SEGMENTS));
           _position = Position::AMONG_HEAP_DUMP_SEGMENTS;
         } else {
           ShouldNotReachHere(); // We should be inside a record
@@ -206,7 +209,7 @@ class RecordsParser : public StackObj {
     if (preamble.finish) {
       return nullptr;
     }
-    log_trace(heapdumpparsing)("Record (toplevel): tag " UINT8_FORMAT_X_0 ", size " UINT32_FORMAT,
+    log_trace(heapdump, parser)("Record (toplevel): tag " UINT8_FORMAT_X_0 ", size " UINT32_FORMAT,
                                preamble.tag, preamble.body_size);
 
     Result body_res = Result::OK;
@@ -224,7 +227,7 @@ class RecordsParser : public StackObj {
         break;
       case HPROF_HEAP_DUMP_SEGMENT:
         if (_version < HeapDump::Version::V102) {
-          log_error(heapdumpparsing)("HPROF_HEAP_DUMP_SEGMENT is not allowed in HPROF %s", hprof_version2str(_version));
+          log_error(heapdump, parser)("HPROF_HEAP_DUMP_SEGMENT is not allowed in HPROF %s", hprof_version2str(_version));
           return ERR_UNKNOWN_RECORD_TAG;
         }
         if (!state->enter_heap_dump_segment(preamble.body_size)) {
@@ -233,11 +236,11 @@ class RecordsParser : public StackObj {
         break;
       case HPROF_HEAP_DUMP_END:
         if (_version < HeapDump::Version::V102) {
-          log_error(heapdumpparsing)("HPROF_HEAP_DUMP_END is not allowed in HPROF %s", hprof_version2str(_version));
+          log_error(heapdump, parser)("HPROF_HEAP_DUMP_END is not allowed in HPROF %s", hprof_version2str(_version));
           return ERR_UNKNOWN_RECORD_TAG;
         }
         if (preamble.body_size != 0) {
-          log_error(heapdumpparsing)(
+          log_error(heapdump, parser)(
               "HPROF_HEAP_DUMP_END must have no body, "
               "but its preamble specifies it to have " UINT32_FORMAT " bytes",
               preamble.body_size);
@@ -258,13 +261,13 @@ class RecordsParser : public StackObj {
       case HPROF_CPU_SAMPLES:
       case HPROF_CONTROL_SETTINGS:
         if (!_reader->skip(preamble.body_size)) {
-          log_error(heapdumpparsing)("Failed to read past a " UINT8_FORMAT_X_0 " tagged record body (" UINT32_FORMAT " bytes)",
+          log_error(heapdump, parser)("Failed to read past a " UINT8_FORMAT_X_0 " tagged record body (" UINT32_FORMAT " bytes)",
                                      preamble.tag, preamble.body_size);
           body_res = Result::FAILED;
         }
         break;
       default:
-        log_error(heapdumpparsing)("Unknown record tag: " UINT8_FORMAT_X_0, preamble.tag);
+        log_error(heapdump, parser)("Unknown record tag: " UINT8_FORMAT_X_0, preamble.tag);
         return ERR_UNKNOWN_RECORD_TAG;
     }
 
@@ -290,10 +293,10 @@ class RecordsParser : public StackObj {
       return ERR_INVAL_RECORD_PREAMBLE;
     }
     if (preamble.finish) {
-      log_error(heapdumpparsing)("Reached EOF, but HPROF_HEAP_DUMP_END was expected");
+      log_error(heapdump, parser)("Reached EOF, but HPROF_HEAP_DUMP_END was expected");
       return ERR_INVAL_RECORD_PREAMBLE;
     }
-    log_trace(heapdumpparsing)("Record (heap segments): tag " UINT8_FORMAT_X_0 ", size " UINT32_FORMAT,
+    log_trace(heapdump, parser)("Record (heap segments): tag " UINT8_FORMAT_X_0 ", size " UINT32_FORMAT,
                                preamble.tag, preamble.body_size);
 
     switch (preamble.tag) {
@@ -304,7 +307,7 @@ class RecordsParser : public StackObj {
         return ERR_INVAL_RECORD_TAG_POS;
       case HPROF_HEAP_DUMP_END:
         if (preamble.body_size != 0) {
-          log_error(heapdumpparsing)(
+          log_error(heapdump, parser)(
               "HPROF_HEAP_DUMP_END must have no body, "
               "but its preamble specifies it to have " UINT32_FORMAT " bytes",
               preamble.body_size);
@@ -326,10 +329,10 @@ class RecordsParser : public StackObj {
       case HPROF_END_THREAD:
       case HPROF_CPU_SAMPLES:
       case HPROF_CONTROL_SETTINGS:
-        log_error(heapdumpparsing)("Record tag " UINT8_FORMAT_X_0 " is not allowed among heap dump segments", preamble.tag);
+        log_error(heapdump, parser)("Record tag " UINT8_FORMAT_X_0 " is not allowed among heap dump segments", preamble.tag);
         return ERR_INVAL_RECORD_TAG_POS;
       default:
-        log_error(heapdumpparsing)("Unknown record tag: " UINT8_FORMAT_X_0, preamble.tag);
+        log_error(heapdump, parser)("Unknown record tag: " UINT8_FORMAT_X_0, preamble.tag);
         return ERR_UNKNOWN_RECORD_TAG;
     }
   }
@@ -342,7 +345,7 @@ class RecordsParser : public StackObj {
     if (!parse_subrecord_tag(&tag) || !state->reduce_remaining_record_size(sizeof(u1))) {
       return ERR_INVAL_RECORD_PREAMBLE;
     }
-    log_trace(heapdumpparsing)("Subrecord: tag " UINT8_FORMAT_X_0, tag);
+    log_trace(heapdump, parser)("Subrecord: tag " UINT8_FORMAT_X_0, tag);
 
     Result body_res;
     u4 body_size;
@@ -375,7 +378,7 @@ class RecordsParser : public StackObj {
         }
         body_res = _reader->skip(body_size) ? Result::OK : Result::FAILED;
         if (body_res == Result::FAILED) {
-          log_error(heapdumpparsing)("Failed to read past a " UINT8_FORMAT_X_0 " tagged subrecord body (" UINT32_FORMAT " bytes)",
+          log_error(heapdump, parser)("Failed to read past a " UINT8_FORMAT_X_0 " tagged subrecord body (" UINT32_FORMAT " bytes)",
                                      tag, body_size);
         }
     }
@@ -406,16 +409,16 @@ class RecordsParser : public StackObj {
 
   bool parse_record_preamble(RecordPreamble *preamble) {
     if (!_reader->read(&preamble->tag)) {
-      if (_reader->eof()) {
+      if (_reader->eos()) {
         preamble->finish = true;
         return true;
       }
-      log_error(heapdumpparsing)("Failed to read a record tag");
+      log_error(heapdump, parser)("Failed to read a record tag");
       return false;
     }
     preamble->finish = false;
     if (!_reader->skip(sizeof(u4)) || !_reader->read(&preamble->body_size)) {
-      log_error(heapdumpparsing)("Failed to parse a record preamble after tag " UINT8_FORMAT_X_0, preamble->tag);
+      log_error(heapdump, parser)("Failed to parse a record preamble after tag " UINT8_FORMAT_X_0, preamble->tag);
       return false;
     }
     return true;
@@ -425,7 +428,7 @@ class RecordsParser : public StackObj {
     if (_reader->read(tag)) {
       return true;
     }
-    log_error(heapdumpparsing)("Failed to read a subrecord tag");
+    log_error(heapdump, parser)("Failed to read a subrecord tag");
     return false;
   }
 
@@ -443,7 +446,7 @@ class RecordsParser : public StackObj {
   bool is_new;                                                                                                      \
   auto *record = (hashtable)->put_if_absent(id, &is_new);                                                           \
   if (!is_new) {                                                                                                    \
-    log_error(heapdumpparsing)("Multiple occurences of ID " UINT64_FORMAT " in %s records", id, record_group_name); \
+    log_error(heapdump, parser)("Multiple occurences of ID " UINT64_FORMAT " in %s records", id, record_group_name); \
     return Result::REPEATED_ID;                                                                                     \
   }                                                                                                                 \
   (hashtable)->maybe_grow()
@@ -451,7 +454,7 @@ class RecordsParser : public StackObj {
 #define READ_INTO_OR_FAIL(ptr, what)                         \
   do {                                                       \
     if (!_reader->read(ptr)) {                               \
-      log_error(heapdumpparsing)("Failed to read %s", what); \
+      log_error(heapdump, parser)("Failed to read %s", what); \
       return Result::FAILED;                                 \
     }                                                        \
   } while (false)
@@ -463,7 +466,7 @@ class RecordsParser : public StackObj {
 #define READ_ID_INTO_OR_FAIL(ptr, what)                      \
   do {                                                       \
     if (!_reader->read_uint(ptr, _id_size)) {                \
-      log_error(heapdumpparsing)("Failed to read %s", what); \
+      log_error(heapdump, parser)("Failed to read %s", what); \
       return Result::FAILED;                                 \
     }                                                        \
   } while (false)
@@ -474,7 +477,7 @@ class RecordsParser : public StackObj {
 
   Result parse_UTF8(u4 size, decltype(ParsedHeapDump::utf8s) *out) {
     if (size < _id_size) {
-      log_error(heapdumpparsing)("Too small size specified for HPROF_UTF8");
+      log_error(heapdump, parser)("Too small size specified for HPROF_UTF8");
       return Result::FAILED;
     }
 
@@ -485,7 +488,7 @@ class RecordsParser : public StackObj {
     u4 sym_size = size - _id_size;
     if (sym_size > INT_MAX) {
       // SymbolTable::new_symbol() takes length as an int
-      log_error(heapdumpparsing)("HPROF_UTF8 symbol is too large for the symbol table: " UINT32_FORMAT " > %i",
+      log_error(heapdump, parser)("HPROF_UTF8 symbol is too large for the symbol table: " UINT32_FORMAT " > %i",
                                  sym_size, INT_MAX);
       return Result::FAILED;
     }
@@ -494,7 +497,7 @@ class RecordsParser : public StackObj {
     }
 
     if (!_reader->read_raw(_sym_buf.mem(), sym_size)) {
-      log_error(heapdumpparsing)("Failed to read HPROF_UTF8 symbol bytes");
+      log_error(heapdump, parser)("Failed to read HPROF_UTF8 symbol bytes");
       return Result::FAILED;
     }
 
@@ -505,7 +508,7 @@ class RecordsParser : public StackObj {
 
   Result parse_load_class(u4 size, decltype(ParsedHeapDump::load_classes) *out) {
     if (size != 2 * (sizeof(u4) + _id_size)) {
-      log_error(heapdumpparsing)("Too small size specified for HPROF_LOAD_CLASS");
+      log_error(heapdump, parser)("Too small size specified for HPROF_LOAD_CLASS");
       return Result::FAILED;
     }
 
@@ -585,7 +588,7 @@ class RecordsParser : public StackObj {
 
     // Reserved
     if (!_reader->skip(2 * _id_size)) {
-      log_error(heapdumpparsing)("Failed to read past reserved fields of HPROF_GC_CLASS_DUMP");
+      log_error(heapdump, parser)("Failed to read past reserved fields of HPROF_GC_CLASS_DUMP");
       return Result::FAILED;
     }
 
@@ -600,11 +603,11 @@ class RecordsParser : public StackObj {
 
       u4 value_size;
       if (!read_basic_value(constant.type, &constant.value, &value_size)) {
-        log_error(heapdumpparsing)("Failed to read a constant's value in HPROF_GC_CLASS_DUMP");
+        log_error(heapdump, parser)("Failed to read a constant's value in HPROF_GC_CLASS_DUMP");
         return Result::FAILED;
       }
       if (value_size == 0) {
-        log_error(heapdumpparsing)("Unknown constant type in HPROF_GC_CLASS_DUMP: " UINT8_FORMAT_X_0, constant.type);
+        log_error(heapdump, parser)("Unknown constant type in HPROF_GC_CLASS_DUMP: " UINT8_FORMAT_X_0, constant.type);
         return Result::FAILED;
       }
       *record_size += sizeof(u2) + sizeof(u1) + value_size;
@@ -619,11 +622,11 @@ class RecordsParser : public StackObj {
 
       u4 value_size;
       if (!read_basic_value(field.info.type, &field.value, &value_size)) {
-        log_error(heapdumpparsing)("Failed to read a static field's value in HPROF_GC_CLASS_DUMP");
+        log_error(heapdump, parser)("Failed to read a static field's value in HPROF_GC_CLASS_DUMP");
         return Result::FAILED;
       }
       if (value_size == 0) {
-        log_error(heapdumpparsing)("Unknown static field type in HPROF_GC_CLASS_DUMP: " UINT8_FORMAT_X_0, field.info.type);
+        log_error(heapdump, parser)("Unknown static field type in HPROF_GC_CLASS_DUMP: " UINT8_FORMAT_X_0, field.info.type);
         return Result::FAILED;
       }
       *record_size += _id_size + sizeof(u1) + value_size;
@@ -654,7 +657,7 @@ class RecordsParser : public StackObj {
     READ_OR_FAIL(u4, fields_data_size, "HPROF_GC_INSTANCE_DUMP fields data size");
     record->fields_data.extend(fields_data_size);
     if (!_reader->read_raw(record->fields_data.mem(), fields_data_size)) {
-      log_error(heapdumpparsing)("Failed to read HPROF_GC_INSTANCE_DUMP fields data");
+      log_error(heapdump, parser)("Failed to read HPROF_GC_INSTANCE_DUMP fields data");
       return Result::FAILED;
     }
 
@@ -693,18 +696,23 @@ class RecordsParser : public StackObj {
     READ_INTO_OR_FAIL(&record->elems_num, "HPROF_GC_PRIM_ARRAY_DUMP elements number");
     READ_INTO_OR_FAIL(&record->elem_type, "HPROF_GC_PRIM_ARRAY_DUMP element type");
 
-    u1 elem_size = HeapDump::prim2size(record->elem_type);
-    if (elem_size == 0) {
-      log_error(heapdumpparsing)("Unknown element type in HPROF_GC_PRIM_ARRAY_DUMP: " UINT8_FORMAT_X_0, record->elem_type);
+    const BasicType elem_type = HeapDump::htype2btype(record->elem_type);
+    if (elem_type == T_ILLEGAL) {
+      log_error(heapdump, parser)("Unknown element type in HPROF_GC_PRIM_ARRAY_DUMP: " UINT8_FORMAT_X_0, record->elem_type);
       return Result::FAILED;
     }
+    if (!is_java_primitive(elem_type)) {
+      log_error(heapdump, parser)("Illegal element type in HPROF_GC_PRIM_ARRAY_DUMP: " UINT8_FORMAT_X_0, record->elem_type);
+      return Result::FAILED;
+    }
+    u1 elem_size = type2aelembytes(elem_type);
     u4 elems_data_size = record->elems_num * elem_size;
 
     record->elems_data.extend(elems_data_size);
     if (!Endian::is_Java_byte_ordering_different() || elem_size == 1) {
       // Can save the data as is
       if (!_reader->read_raw(record->elems_data.mem(), elems_data_size)) {
-        log_error(heapdumpparsing)("Failed to read HPROF_GC_PRIM_ARRAY_DUMP elements data");
+        log_error(heapdump, parser)("Failed to read HPROF_GC_PRIM_ARRAY_DUMP elements data");
         return Result::FAILED;
       }
     } else {
@@ -734,7 +742,7 @@ static HeapDump::Version parse_header(BasicTypeReader *reader) {
 
   char header_str[sizeof(HEADER_STR_102)];
   if (!reader->read_raw(header_str, sizeof(header_str))) {
-    log_error(heapdumpparsing)("Failed to read header string");
+    log_error(heapdump, parser)("Failed to read header string");
     return HeapDump::Version::UNKNOWN;
   }
   header_str[sizeof(header_str) - 1] = '\0'; // Ensure nul-terminated
@@ -746,17 +754,17 @@ static HeapDump::Version parse_header(BasicTypeReader *reader) {
     return HeapDump::Version::V101;
   }
 
-  log_error(heapdumpparsing)("Unknown header string: %s", header_str);
+  log_error(heapdump, parser)("Unknown header string: %s", header_str);
   return HeapDump::Version::UNKNOWN;
 }
 
 static const char *parse_id_size(BasicTypeReader *reader, u4 *out) {
   if (!reader->read(out)) {
-    log_error(heapdumpparsing)("Failed to read ID size");
+    log_error(heapdump, parser)("Failed to read ID size");
     return ERR_INVAL_ID_SIZE;
   }
   if (!is_supported_id_size(*out)) {
-    log_error(heapdumpparsing)("ID size " UINT32_FORMAT " is not supported -- use 1, 2, 4, or 8", *out);
+    log_error(heapdump, parser)("ID size " UINT32_FORMAT " is not supported -- use 1, 2, 4, or 8", *out);
     return ERR_UNSUPPORTED_ID_SIZE;
   }
   return nullptr;
@@ -766,12 +774,12 @@ const char *HeapDumpParser::parse(const char *path, ParsedHeapDump *out) {
   guarantee(path != nullptr, "cannot parse from null path");
   guarantee(out != nullptr, "cannot save results into null container");
 
-  log_info(heapdumpparsing)("Started parsing %s", path);
-  TraceTime timer("Heap dump parsing timer", TRACETIME_LOG(Info, heapdumpparsing));
+  log_info(heapdump, parser)("Started parsing heap dump %s", path);
+  TraceTime timer("Heap dump parsing timer", TRACETIME_LOG(Info, heapdump, parser));
 
   FileBasicTypeReader reader;
   if (!reader.open(path)) {
-    log_error(heapdumpparsing)("Failed to open %s: %s", path, os::strerror(errno));
+    log_error(heapdump, parser)("Failed to open %s: %s", path, os::strerror(errno));
     return os::strerror(errno);
   }
 
@@ -779,27 +787,27 @@ const char *HeapDumpParser::parse(const char *path, ParsedHeapDump *out) {
   if (version == HeapDump::Version::UNKNOWN) {
     return ERR_INVAL_HEADER_STR;
   }
-  log_debug(heapdumpparsing)("HPROF version: %s", hprof_version2str(version));
+  log_debug(heapdump, parser)("HPROF version: %s", hprof_version2str(version));
 
   u4 id_size;
   const char *err_msg = parse_id_size(&reader, &id_size);
   if (err_msg != nullptr) {
     return err_msg;
   }
-  log_debug(heapdumpparsing)("ID size: " UINT32_FORMAT, id_size);
+  log_debug(heapdump, parser)("ID size: " UINT32_FORMAT, id_size);
   out->id_size = id_size;
 
   // Skip dump timestamp
   if (!reader.skip(2 * sizeof(u4))) {
-    log_error(heapdumpparsing)("Failed to read past heap dump timestamp");
+    log_error(heapdump, parser)("Failed to read past heap dump timestamp");
     return ERR_INVAL_DUMP_TIMESTAMP;
   }
 
   err_msg = RecordsParser(&reader, out, version, id_size).parse_records();
   if (err_msg == nullptr) {
-    log_info(heapdumpparsing)("Successfully parsed %s", path);
+    log_info(heapdump, parser)("Successfully parsed %s", path);
   } else {
-    log_info(heapdumpparsing)("Position in %s after error: %li", path, reader.pos());
+    log_info(heapdump, parser)("Position in %s after error: %zu", path, reader.pos());
   }
   return err_msg;
 }
@@ -818,24 +826,31 @@ class AddressBasicTypeReader : public BasicTypeReader {
     return true;
   }
 
+  // Reading from a specific address so this does not make sense.
+  bool skip(size_t size) override { ShouldNotCallThis(); return false; }
+  size_t pos() const override     { return 0; }
+  bool eos() const override       { return _max_size == 0; }
+
  private:
   const void *_from;
   size_t _max_size;
 };
 
-u4 HeapDump::InstanceDump::read_field(u4 offset, char sig, u4 id_size, HeapDump::BasicValue *out) const {
+HeapDump::BasicValue HeapDump::InstanceDump::read_field(u4 offset, BasicType type, u4 id_size) const {
   AddressBasicTypeReader reader(&fields_data[offset], fields_data.size() - offset);
-  switch (sig) {
-    case JVM_SIGNATURE_CLASS:
-    case JVM_SIGNATURE_ARRAY:   return reader.read_uint(&out->as_object_id, id_size) ? sizeof(out->as_object_id) : 0;
-    case JVM_SIGNATURE_BOOLEAN: return reader.read(&out->as_boolean) ? sizeof(out->as_boolean) : 0;
-    case JVM_SIGNATURE_CHAR:    return reader.read(&out->as_char) ? sizeof(out->as_char) : 0;
-    case JVM_SIGNATURE_FLOAT:   return reader.read(&out->as_float) ? sizeof(out->as_float) : 0;
-    case JVM_SIGNATURE_DOUBLE:  return reader.read(&out->as_double) ? sizeof(out->as_double) : 0;
-    case JVM_SIGNATURE_BYTE:    return reader.read(&out->as_byte) ? sizeof(out->as_byte) : 0;
-    case JVM_SIGNATURE_SHORT:   return reader.read(&out->as_short) ? sizeof(out->as_short) : 0;
-    case JVM_SIGNATURE_INT:     return reader.read(&out->as_int) ? sizeof(out->as_int) : 0;
-    case JVM_SIGNATURE_LONG:    return reader.read(&out->as_long) ? sizeof(out->as_long) : 0;
-    default:                    return 0;
+  HeapDump::BasicValue val;
+  switch (type) {
+    case T_OBJECT:
+    case T_ARRAY:   guarantee(reader.read_uint(&val.as_object_id, id_size), "out of bounds"); break;
+    case T_BOOLEAN: guarantee(reader.read(&val.as_boolean)                , "out of bounds"); break;
+    case T_CHAR:    guarantee(reader.read(&val.as_char)                   , "out of bounds"); break;
+    case T_FLOAT:   guarantee(reader.read(&val.as_float)                  , "out of bounds"); break;
+    case T_DOUBLE:  guarantee(reader.read(&val.as_double)                 , "out of bounds"); break;
+    case T_BYTE:    guarantee(reader.read(&val.as_byte)                   , "out of bounds"); break;
+    case T_SHORT:   guarantee(reader.read(&val.as_short)                  , "out of bounds"); break;
+    case T_INT:     guarantee(reader.read(&val.as_int)                    , "out of bounds"); break;
+    case T_LONG:    guarantee(reader.read(&val.as_long)                   , "out of bounds"); break;
+    default:        ShouldNotReachHere();
   }
+  return val;
 }

@@ -105,7 +105,7 @@ void FieldGroup::sort_by_size() {
   }
 }
 
-FieldLayout::FieldLayout(GrowableArray<FieldInfo>* field_info, ConstantPool* cp) :
+FieldLayout::FieldLayout(GrowableArrayView<FieldInfo>* field_info, ConstantPool* cp) :
   _field_info(field_info),
   _cp(cp),
   _blocks(nullptr),
@@ -499,7 +499,7 @@ void FieldLayout::print(outputStream* output, bool is_static, const InstanceKlas
 }
 
 FieldLayoutBuilder::FieldLayoutBuilder(const Symbol* classname, const InstanceKlass* super_klass, ConstantPool* constant_pool,
-      GrowableArray<FieldInfo>* field_info, bool is_contended, FieldLayoutInfo* info) :
+      GrowableArrayView<FieldInfo>* field_info, bool is_contended, FieldLayoutInfo* info) :
   _classname(classname),
   _super_klass(super_klass),
   _constant_pool(constant_pool),

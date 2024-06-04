@@ -1,11 +1,11 @@
-#ifndef SHARE_UTILITIES_STACK_DUMP_PARSER_HPP
-#define SHARE_UTILITIES_STACK_DUMP_PARSER_HPP
+#ifndef SHARE_RUNTIME_CRACSTACKDUMPPARSER_HPP
+#define SHARE_RUNTIME_CRACSTACKDUMPPARSER_HPP
 
 #include "memory/allocation.hpp"
 #include "utilities/extendableArray.hpp"
 #include "utilities/globalDefinitions.hpp"
 #include "utilities/growableArray.hpp"
-#include "utilities/stackDumper.hpp"
+#include "runtime/cracStackDumper.hpp"
 
 // Parsed stack trace.
 class StackTrace : public CHeapObj<mtInternal> {
@@ -79,12 +79,10 @@ class ParsedStackDump : public CHeapObj<mtInternal> {
   GrowableArrayCHeap<StackTrace *, mtInternal> _stack_traces;
 };
 
-struct StackDumpParser : public AllStatic {
+struct CracStackDumpParser : public AllStatic {
   // Parses the stack dump in path filling the out container. Returns nullptr on
   // success or a pointer to a static error message otherwise.
-  //
-  // Stack traces and their frames are resource-allocated.
   static const char *parse(const char *path, ParsedStackDump *out);
 };
 
-#endif // SHARE_UTILITIES_STACK_DUMP_PARSER_HPP
+#endif // SHARE_RUNTIME_CRACSTACKDUMPPARSER_HPP

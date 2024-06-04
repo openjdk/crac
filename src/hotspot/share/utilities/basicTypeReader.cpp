@@ -1,6 +1,8 @@
 #include "precompiled.hpp"
 #include "logging/log.hpp"
+#include "runtime/os.hpp"
 #include "utilities/basicTypeReader.hpp"
+#include "utilities/bitCast.hpp"
 
 bool BasicTypeReader::read(jfloat *out) {
   u4 tmp;
@@ -94,4 +96,25 @@ void FileBasicTypeReader::close() {
   } else {
     fclose(_file);
   }
+}
+
+bool FileBasicTypeReader::skip(size_t size) {
+    precond(_file != nullptr);
+    while (size > LONG_MAX) {
+      if (fseek(_file, LONG_MAX, SEEK_CUR) != 0) {
+        return false;
+      }
+      size -= LONG_MAX;
+    }
+    return fseek(_file, checked_cast<long>(size), SEEK_CUR) == 0;
+  }
+
+size_t FileBasicTypeReader::pos() const {
+  precond(_file != nullptr);
+  long pos = ftell(_file);
+  if (pos < 0) {
+    log_warning(data)("Failed to get position in a file after reading: %s", os::strerror(errno));
+    pos = 0;
+  }
+  return pos;
 }

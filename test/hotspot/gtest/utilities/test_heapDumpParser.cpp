@@ -331,28 +331,15 @@ TEST_VM(HeapDumpParser, instance_dump_read_field) {
 
   ASSERT_EQ(expected_field_data_size, record->fields_data.size());
 
-  HeapDump::BasicValue actual_field;
-
-  ASSERT_EQ(sizeof(expected_field1), record->read_field(0, JVM_SIGNATURE_SHORT, expected_id_size, &actual_field));
-  EXPECT_EQ(expected_field1, actual_field.as_short);
-
-  ASSERT_EQ(sizeof(expected_field2),
-            record->read_field(sizeof(expected_field1), JVM_SIGNATURE_INT, expected_id_size, &actual_field));
-  EXPECT_EQ(expected_field2, actual_field.as_int);
-
-  ASSERT_EQ(sizeof(expected_field3), record->read_field(sizeof(expected_field1) + sizeof(expected_field2),
-                                                        JVM_SIGNATURE_BOOLEAN, expected_id_size, &actual_field));
-  EXPECT_EQ(expected_field3, actual_field.as_boolean);
-
-  ASSERT_EQ(sizeof(expected_field4),
-            record->read_field(sizeof(expected_field1) + sizeof(expected_field2) + sizeof(expected_field3),
-                               JVM_SIGNATURE_FLOAT, expected_id_size, &actual_field));
-  EXPECT_EQ(expected_field4, actual_field.as_float);
-
-  ASSERT_EQ(sizeof(expected_field5), record->read_field(sizeof(expected_field1) + sizeof(expected_field2) +
-                                                            sizeof(expected_field3) + sizeof(expected_field4),
-                                                        JVM_SIGNATURE_CLASS, expected_id_size, &actual_field));
-  EXPECT_EQ(expected_field5, actual_field.as_object_id);
+  EXPECT_EQ(expected_field1, record->read_field(0, T_SHORT, expected_id_size).as_short);
+  EXPECT_EQ(expected_field2, record->read_field(sizeof(expected_field1),
+                                                T_INT, expected_id_size).as_int);
+  EXPECT_EQ(expected_field3, record->read_field(sizeof(expected_field1) + sizeof(expected_field2),
+                                                T_BOOLEAN, expected_id_size).as_boolean);
+  EXPECT_EQ(expected_field4, record->read_field(sizeof(expected_field1) + sizeof(expected_field2) + sizeof(expected_field3),
+                                                T_FLOAT, expected_id_size).as_float);
+  EXPECT_EQ(expected_field5, record->read_field(sizeof(expected_field1) + sizeof(expected_field2) + sizeof(expected_field3) + sizeof(expected_field4),
+                                                T_OBJECT, expected_id_size).as_object_id);
 }
 
 static constexpr char CONTENTS_OBJ_ARRAY_DUMP[] =

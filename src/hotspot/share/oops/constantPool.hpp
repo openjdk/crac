@@ -82,6 +82,7 @@ class ConstantPool : public Metadata {
   friend class BytecodeInterpreter;  // Directly extracts a klass in the pool for fast instanceof/checkcast
   friend class Universe;             // For null constructor
   friend class ClassPrelinker;       // CDS
+  friend class CracInstanceClassDumpParser;
  private:
   // If you add a new field that points to any metaspace object, you
   // must add this field to ConstantPool::metaspace_pointers_do().

@@ -1500,6 +1500,15 @@ class java_lang_ClassLoader : AllStatic {
 
   // Debugging
   friend class JavaClasses;
+
+  // Class loader restoration
+  friend class CracHeapRestorer;
+ private:
+  static void set_parent(oop loader, oop value);
+  static void set_parallelLockMap(oop loader, oop value);
+  static void set_name(oop loader, oop value);
+  static void set_nameAndId(oop loader, oop value);
+  static void set_unnamedModule(oop loader, oop value);
 };
 
 

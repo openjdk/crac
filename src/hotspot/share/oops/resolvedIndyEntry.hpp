@@ -71,6 +71,7 @@ public:
   // Note: Only two flags exists at the moment but more could be added
   enum {
       has_appendix_shift        = 1,
+      num_flags
   };
 
   // Getters
@@ -79,6 +80,7 @@ public:
   u2 constant_pool_index()       const { return _cpool_index;                   }
   u2 num_parameters()            const { return _number_of_parameters;          }
   u1 return_type()               const { return _return_type;                   }
+  u1 flags()                     const { return _flags;                         }
   bool is_resolved()             const { return method() != nullptr;            }
   bool has_appendix()            const { return (_flags & (1 << has_appendix_shift)) != 0; }
   bool resolution_failed()       const { return (_flags & 1) != 0; }
@@ -127,6 +129,15 @@ public:
 
   void adjust_method_entry(Method* new_method) { _method = new_method; }
   bool check_no_old_or_obsolete_entry();
+
+  // CRaC
+  void fill_in_partial(u2 num_params, u1 return_type, bool has_appendix) {
+    assert(_cpool_index > 0, "uninitialized");
+    assert(!is_resolved(), "already resolved");
+    _number_of_parameters = num_params;
+    _return_type = return_type;
+    set_flags(has_appendix);
+  }
 
   // CDS
   void remove_unshareable_info();

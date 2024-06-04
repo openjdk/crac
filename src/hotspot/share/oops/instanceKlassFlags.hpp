@@ -69,6 +69,7 @@ class InstanceKlassFlags {
     status(has_been_redefined                , 1 << 2) /* class has been redefined */ \
     status(is_scratch_class                  , 1 << 3) /* class is the redefined scratch class */ \
     status(is_marked_dependent               , 1 << 4) /* class is the redefined scratch class */ \
+    status(is_being_restored                 , 1 << 5) /* class is being restored by CRaC */ \
     /* end of list */
 
 #define IK_STATUS_ENUM_NAME(name, value)    _misc_##name = value,
@@ -90,8 +91,10 @@ class InstanceKlassFlags {
  public:
 
   InstanceKlassFlags() : _flags(0), _status(0) {}
+  InstanceKlassFlags(u2 flags, u1 status) : _flags(flags), _status(status) {}
 
   // Create getters and setters for the flag values.
+  u2 flags() const { return _flags; }
 #define IK_FLAGS_GET_SET(name, ignore)          \
   bool name() const { return (_flags & _misc_##name) != 0; } \
   void set_##name(bool b) {         \
@@ -104,13 +107,16 @@ class InstanceKlassFlags {
   bool is_shared_unregistered_class() const {
     return (_flags & shared_loader_type_bits()) == 0;
   }
-
   void set_shared_class_loader_type(s2 loader_type);
-
   void assign_class_loader_type(const ClassLoaderData* cld);
+
+  // Returns a copy with VM-options-depended flags cleared.
+  InstanceKlassFlags drop_nonportable_flags() const;
+
   void assert_is_safe(bool set) NOT_DEBUG_RETURN;
 
   // Create getters and setters for the status values.
+  u1 status() const { return _status; }
 #define IK_STATUS_GET_SET(name, ignore)          \
   bool name() const { return (_status & _misc_##name) != 0; } \
   void set_##name(bool b) {         \

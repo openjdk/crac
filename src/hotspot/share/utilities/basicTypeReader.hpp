@@ -1,20 +1,18 @@
-#ifndef SHARE_UTILITIES_FILE_READER_HPP
-#define SHARE_UTILITIES_FILE_READER_HPP
+#ifndef SHARE_UTILITIES_BASICTYPEREADER_HPP
+#define SHARE_UTILITIES_BASICTYPEREADER_HPP
 
-#include "memory/allocation.hpp"
-#include "runtime/os.hpp"
-#include "utilities/bitCast.hpp"
+#include "metaprogramming/enableIf.hpp"
 #include "utilities/bytes.hpp"
 #include "utilities/globalDefinitions.hpp"
 
 // Abstarct class for reading Java-ordered (i.e. in big-endian) bytes as basic
 // types.
-class BasicTypeReader : public StackObj {
+class BasicTypeReader {
  public:
   // Reads size bytes into buf. Returns true on success.
   virtual bool read_raw(void *buf, size_t size) = 0;
 
-  // Reads integral types (and boolean).
+  // Reads integral types (and boolean as a byte).
   template <class T, ENABLE_IF(std::is_integral<T>::value && (sizeof(T) == sizeof(u1) ||
                                                               sizeof(T) == sizeof(u2) ||
                                                               sizeof(T) == sizeof(u4) ||
@@ -37,6 +35,16 @@ class BasicTypeReader : public StackObj {
 
   // Reads either u1, u2, u4, or u8 into out based on the provided size.
   bool read_uint(u8 *out, size_t size);
+
+  // Skips size bytes. Returns true on success.
+  virtual bool skip(size_t size) = 0;
+  // Returns the current reading position.
+  virtual size_t pos() const = 0;
+  // Tells whether the end of stream has been reached.
+  virtual bool eos() const = 0;
+
+ protected:
+  ~BasicTypeReader() = default;
 };
 
 // Reads from a binary file.
@@ -52,19 +60,13 @@ class FileBasicTypeReader : public BasicTypeReader {
     return size == 0 || fread(buf, size, 1, _file) == 1;
   }
 
-  bool skip(long size) {
-    precond(_file != nullptr);
-    return fseek(_file, size, SEEK_CUR) == 0;
-  }
+  bool skip(size_t size) override;
 
-  bool eof() const {
+  size_t pos() const override;
+
+  bool eos() const override {
     precond(_file != nullptr);
     return feof(_file) != 0;
-  }
-
-  long pos() const {
-    precond(_file != nullptr);
-    return ftell(_file);
   }
 
  private:
@@ -73,4 +75,4 @@ class FileBasicTypeReader : public BasicTypeReader {
   void close();
 };
 
-#endif // SHARE_UTILITIES_FILE_READER_HPP
+#endif // SHARE_UTILITIES_BASICTYPEREADER_HPP

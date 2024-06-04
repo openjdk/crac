@@ -1,5 +1,5 @@
-#ifndef SHARE_UTILITIES_STACK_DUMPER_HPP
-#define SHARE_UTILITIES_STACK_DUMPER_HPP
+#ifndef SHARE_RUNTIME_CRACSTACKDUMPER_HPP
+#define SHARE_RUNTIME_CRACSTACKDUMPER_HPP
 
 #include "memory/allStatic.hpp"
 #include "runtime/javaThread.hpp"
@@ -8,7 +8,7 @@
 // Thread stack dumping in the big-endian binary format described below.
 //
 // Header:
-//   u1... -- null-termiminated string "JAVA STACK DUMP 0.1"
+//   u1... -- null-termiminated string "CRAC STACK DUMP 0.1"
 //   u2    -- word size in bytes:
 //            4 -- IDs and primitives (PRs) are 4 byte, longs and doubles are
 //                 split in half into their slot pairs with the most significant
@@ -33,6 +33,8 @@
 //     ID -- ID of the method name String object
 //     ID -- ID of the method signature String object
 //     ID -- ID of the Class object of the method's class
+//           TODO JVM TI Redefine/RetransformClass support: add method holder's
+//                redefinition version to select the right one on restore.
 //     u2 -- bytecode index (BCI) of the current bytecode: for the youngest
 //           frame see the BCI meaning in the trace preamble, and for the rest
 //           of the frames this specifies the invoke bytecode being executed
@@ -53,7 +55,7 @@ enum DumpedStackValueType : u1 { PRIMITIVE, REFERENCE };
 
 // Dumps Java frames (until the first CallStub) of non-internal Java threads.
 // Dumped IDs are oops to be compatible with HeapDumper's object IDs.
-struct StackDumper : public AllStatic {
+struct CracStackDumper : public AllStatic {
   class Result {
    public:
     enum class Code {
@@ -82,16 +84,15 @@ struct StackDumper : public AllStatic {
 
    private:
     const Code _code;
-    const char * const _io_error_msg = nullptr;
-    JavaThread * const _problematic_thread = nullptr;
+    const char *const _io_error_msg = nullptr;
+    JavaThread *const _problematic_thread = nullptr;
   };
 
-  // Dumps the stacks to the specified file, possibly overwriting it if the
-  // corresponding parameter is set to true, Returns nullptr on success, or a
-  // pointer to a static error message otherwise.
+  // Dumps the stacks into the specified file, possibly overwriting it if the
+  // corresponding parameter is set to true.
   //
-  // Safepoint is required.
+  // Must be called on safepoint.
   static Result dump(const char *path, bool overwrite = false);
 };
 
-#endif // SHARE_UTILITIES_STACK_DUMPER_HPP
+#endif // SHARE_RUNTIME_CRACSTACKDUMPER_HPP

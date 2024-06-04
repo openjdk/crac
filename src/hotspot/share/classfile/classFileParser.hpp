@@ -61,7 +61,7 @@ class OopMapBlocksBuilder : public ResourceObj {
   OopMapBlock* last_oop_map() const;
   void initialize_inherited_blocks(OopMapBlock* blocks, unsigned int nof_blocks);
   void add(int offset, int count);
-  void copy(OopMapBlock* dst);
+  void copy(OopMapBlock* dst) const;
   void compact();
   void print_on(outputStream* st) const;
   void print_value_on(outputStream* st) const;
@@ -547,29 +547,16 @@ class ClassFileParser {
 
   void set_klass_to_deallocate(InstanceKlass* klass);
 
-  int static_field_size() const;
-  int total_oop_map_count() const;
-  jint layout_size() const;
-
-  int vtable_size() const { return _vtable_size; }
-  int itable_size() const { return _itable_size; }
-
   u2 this_class_index() const { return _this_class_index; }
 
-  bool is_hidden() const { return _is_hidden; }
-  bool is_interface() const { return _access_flags.is_interface(); }
-
-  ClassLoaderData* loader_data() const { return _loader_data; }
-  const Symbol* class_name() const { return _class_name; }
-  const InstanceKlass* super_klass() const { return _super_klass; }
-
-  ReferenceType super_reference_type() const;
-  bool is_instance_ref_klass() const;
-  bool is_java_lang_ref_Reference_subclass() const;
-
-  AccessFlags access_flags() const { return _access_flags; }
-
   bool is_internal() const { return INTERNAL == _pub_level; }
+
+  static Array<InstanceKlass*>* compute_transitive_interfaces(const InstanceKlass* super,
+                                                              Array<InstanceKlass*>* local_ifs,
+                                                              ClassLoaderData* loader_data,
+                                                              TRAPS);
+  static void check_methods_for_intrinsics(const InstanceKlass* ik);
+  static void check_can_allocate_fast(InstanceKlass* ik);
 
   static bool verify_unqualified_name(const char* name, unsigned int length, int type);
 

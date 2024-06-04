@@ -762,15 +762,6 @@ jint Threads::create_vm(JavaVMInitArgs* args, bool* canTryAgain) {
   // Final system initialization including security manager and system class loader
   call_initPhase3(CHECK_JNI_ERR);
 
-  // Perform portable CRaC restore if requested
-  // TODO integrate this with initPhase3 to restore system class loader and
-  // security manager
-  if (CRaCRestoreFrom != nullptr && crac::is_portable_mode()) {
-    // TODO honor CRaCIgnoreRestoreIfUnavailable (will have to differentiate
-    // between errors and exceptions)
-    crac::restore_heap(CHECK_JNI_ERR);
-  }
-
   // cache the system and platform class loaders
   SystemDictionary::compute_java_loaders(CHECK_JNI_ERR);
 
@@ -844,6 +835,19 @@ jint Threads::create_vm(JavaVMInitArgs* args, bool* canTryAgain) {
 
   if (DumpSharedSpaces) {
     MetaspaceShared::preload_and_dump();
+  }
+
+  // Perform portable CRaC restore if requested
+  // TODO do this somewhere earlier?
+  // - Cannot do before initPhase2 because can only load java.base classes until
+  //   then (but a dump can occure until then because AttachListener::init() can
+  //   be called and listen for jcmd commands)
+  // - Integrate into initPhase3 to restore system class loader and
+  //   security manager (currently we rely on them to be created for us)
+  if (CRaCRestoreFrom != nullptr && crac::is_portable_mode()) {
+    // TODO honor CRaCIgnoreRestoreIfUnavailable (will have to differentiate
+    // between errors and exceptions)
+    crac::restore_heap(CHECK_JNI_ERR);
   }
 
   return JNI_OK;

@@ -25,10 +25,10 @@
 #define SHARE_RUNTIME_CRAC_HPP
 
 #include "memory/allStatic.hpp"
+#include "runtime/cracStackDumpParser.hpp"
 #include "runtime/handles.hpp"
 #include "utilities/exceptions.hpp"
 #include "utilities/heapDumpParser.hpp"
-#include "utilities/stackDumpParser.hpp"
 
 // xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
 #define UUID_LENGTH 36
@@ -79,9 +79,8 @@ private:
 
   static ParsedHeapDump  *_heap_dump;
   static ParsedStackDump *_stack_dump;
-  // TODO use restored classes once we are able to restore system classes
-  static ResizeableResourceHashtable<HeapDump::ID, Klass *, AnyObj::C_HEAP> *_portable_loaded_classes;
-  static ResizeableResourceHashtable<HeapDump::ID, jobject, AnyObj::C_HEAP> *_portable_restored_objects;
+  static HeapDumpTable<InstanceKlass *, AnyObj::C_HEAP> *_portable_restored_classes;
+  static HeapDumpTable<jobject, AnyObj::C_HEAP> *_portable_restored_objects;
 };
 
 #endif //SHARE_RUNTIME_CRAC_HPP

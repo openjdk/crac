@@ -1336,6 +1336,20 @@ InstanceKlass* SystemDictionary::load_instance_class_impl(Symbol* class_name, Ha
   }
 }
 
+void SystemDictionary::record_initiating_loader(InstanceKlass* loaded_class, Handle class_loader, TRAPS) {
+  ClassLoaderData* loader_data = class_loader_data(class_loader);
+  check_constraints(loaded_class, loader_data, false, CHECK);
+
+  // Record dependency for non-parent delegation.
+  // This recording keeps the defining class loader of the klass (loaded_class) found
+  // from being unloaded while the initiating class loader is loaded
+  // even if the reference to the defining class loader is dropped
+  // before references to the initiating class loader.
+  loader_data->record_dependency(loaded_class);
+
+  update_dictionary(THREAD, loaded_class, loader_data);
+}
+
 InstanceKlass* SystemDictionary::load_instance_class(Symbol* name,
                                                      Handle class_loader,
                                                      TRAPS) {
@@ -1347,17 +1361,7 @@ InstanceKlass* SystemDictionary::load_instance_class(Symbol* name,
   if (loaded_class != nullptr &&
       loaded_class->class_loader() != class_loader()) {
 
-    ClassLoaderData* loader_data = class_loader_data(class_loader);
-    check_constraints(loaded_class, loader_data, false, CHECK_NULL);
-
-    // Record dependency for non-parent delegation.
-    // This recording keeps the defining class loader of the klass (loaded_class) found
-    // from being unloaded while the initiating class loader is loaded
-    // even if the reference to the defining class loader is dropped
-    // before references to the initiating class loader.
-    loader_data->record_dependency(loaded_class);
-
-    update_dictionary(THREAD, loaded_class, loader_data);
+    record_initiating_loader(loaded_class, class_loader, CHECK_NULL);
 
     if (JvmtiExport::should_post_class_load()) {
       JvmtiExport::post_class_load(THREAD, loaded_class);
@@ -1427,6 +1431,34 @@ void SystemDictionary::define_instance_class(InstanceKlass* k, Handle class_load
     JvmtiExport::post_class_load(THREAD, k);
   }
   post_class_define_event(k, loader_data);
+}
+
+// Define a class being restored by CRaC's portable mode:
+// 1. No lock check since class restoration is currently performed in a single
+// thread. TODO this is actually not guaranteed and must be fixed.
+// 2. Don't call addClass because the classes array will be filled by CRaC when
+// restoring the class loader object.
+// 3. No immediate linking of hidden classes -- this will be done by CRaC.
+// 3. No JVM TI and JFR events because we want to make it seem like the class
+// was already loaded.
+void SystemDictionary::define_recreated_instance_class(InstanceKlass* created_class, TRAPS) {
+  ClassLoaderData *const loader_data = created_class->class_loader_data();
+
+  if (loader_data->has_class_mirror_holder()) { // Non-strong hidden class
+    assert(created_class->is_hidden(), "non-strong hidden implies hidden");
+    loader_data->initialize_holder(Handle(THREAD, created_class->java_mirror()));
+    postcond(created_class->is_non_strong_hidden());
+  }
+
+  if (!created_class->is_hidden()) {
+    check_constraints(created_class, loader_data, true, CHECK);
+  }
+
+  created_class->add_to_hierarchy(CHECK);
+
+  if (!created_class->is_hidden()) {
+    update_dictionary(THREAD, created_class, loader_data);
+  }
 }
 
 // Support parallel classloading

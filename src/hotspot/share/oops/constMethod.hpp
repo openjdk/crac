@@ -230,6 +230,7 @@ public:
   void set_inlined_tables_length(InlineTableSizes* sizes);
 
   // Create getters and setters for the flag values.
+  int flags() const { return _flags.as_int(); }
 #define CM_FLAGS_GET_SET(name, ignore)          \
   bool name() const       { return _flags.name(); } \
   void set_##name()       { _flags.set_##name(); }

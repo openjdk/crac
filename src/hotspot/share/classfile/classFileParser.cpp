@@ -2740,7 +2740,7 @@ Method* ClassFileParser::parse_method(const ClassFileStream* const cfs,
   if (parsed_annotations.has_any_annotations())
     parsed_annotations.apply_to(methodHandle(THREAD, m));
 
-  if (is_hidden()) { // Mark methods in hidden classes as 'hidden'.
+  if (_is_hidden) { // Mark methods in hidden classes as 'hidden'.
     m->set_is_hidden();
   }
 
@@ -3829,7 +3829,7 @@ void ClassFileParser::apply_parsed_class_attributes(InstanceKlass* k) {
     k->set_generic_signature_index(_generic_signature_index);
   }
   if (_sde_buffer != nullptr) {
-    k->set_source_debug_extension(_sde_buffer, _sde_length);
+    k->copy_source_debug_extension(_sde_buffer, _sde_length);
   }
 }
 
@@ -4000,7 +4000,7 @@ void OopMapBlocksBuilder::add(int offset, int count) {
 }
 
 // general purpose copy, e.g. into allocated instanceKlass
-void OopMapBlocksBuilder::copy(OopMapBlock* dst) {
+void OopMapBlocksBuilder::copy(OopMapBlock* dst) const {
   if (_nonstatic_oop_map_count != 0) {
     memcpy(dst, _nonstatic_oop_maps, sizeof(OopMapBlock) * _nonstatic_oop_map_count);
   }
@@ -4069,6 +4069,20 @@ void OopMapBlocksBuilder::print_value_on(outputStream* st) const {
   print_on(st);
 }
 
+void ClassFileParser::check_can_allocate_fast(InstanceKlass* ik) {
+  // If it cannot be fast-path allocated, set a bit in the layout helper.
+  // See documentation of InstanceKlass::can_be_fastpath_allocated().
+  assert(ik->size_helper() > 0, "layout_helper is initialized");
+  if ((!RegisterFinalizersAtInit && ik->has_finalizer())
+      || ik->is_abstract() || ik->is_interface()
+      || (ik->name() == vmSymbols::java_lang_Class() && ik->class_loader() == nullptr)
+      || ik->size_helper() >= FastAllocateSizeLimit) {
+    // Forbid fast-path allocation.
+    const jint lh = Klass::instance_layout_helper(ik->size_helper(), true);
+    ik->set_layout_helper(lh);
+  }
+}
+
 void ClassFileParser::set_precomputed_flags(InstanceKlass* ik) {
   assert(ik != nullptr, "invariant");
 
@@ -4130,17 +4144,7 @@ void ClassFileParser::set_precomputed_flags(InstanceKlass* ik) {
 #endif
   }
 
-  // If it cannot be fast-path allocated, set a bit in the layout helper.
-  // See documentation of InstanceKlass::can_be_fastpath_allocated().
-  assert(ik->size_helper() > 0, "layout_helper is initialized");
-  if ((!RegisterFinalizersAtInit && ik->has_finalizer())
-      || ik->is_abstract() || ik->is_interface()
-      || (ik->name() == vmSymbols::java_lang_Class() && ik->class_loader() == nullptr)
-      || ik->size_helper() >= FastAllocateSizeLimit) {
-    // Forbid fast-path allocation.
-    const jint lh = Klass::instance_layout_helper(ik->size_helper(), true);
-    ik->set_layout_helper(lh);
-  }
+  check_can_allocate_fast(ik);
 }
 
 // utility methods for appending an array with check for duplicates
@@ -4156,10 +4160,10 @@ static void append_interfaces(GrowableArray<InstanceKlass*>* result,
   }
 }
 
-static Array<InstanceKlass*>* compute_transitive_interfaces(const InstanceKlass* super,
-                                                            Array<InstanceKlass*>* local_ifs,
-                                                            ClassLoaderData* loader_data,
-                                                            TRAPS) {
+Array<InstanceKlass*>* ClassFileParser::compute_transitive_interfaces(const InstanceKlass* super,
+                                                                      Array<InstanceKlass*>* local_ifs,
+                                                                      ClassLoaderData* loader_data,
+                                                                      TRAPS) {
   assert(local_ifs != nullptr, "invariant");
   assert(loader_data != nullptr, "invariant");
 
@@ -5041,24 +5045,10 @@ int ClassFileParser::verify_legal_method_signature(const Symbol* name,
   return 0;
 }
 
-int ClassFileParser::static_field_size() const {
-  assert(_field_info != nullptr, "invariant");
-  return _field_info->_static_field_size;
-}
-
-int ClassFileParser::total_oop_map_count() const {
-  assert(_field_info != nullptr, "invariant");
-  return _field_info->oop_map_blocks->_nonstatic_oop_map_count;
-}
-
-jint ClassFileParser::layout_size() const {
-  assert(_field_info != nullptr, "invariant");
-  return _field_info->_instance_size;
-}
-
-static void check_methods_for_intrinsics(const InstanceKlass* ik,
-                                         const Array<Method*>* methods) {
+void ClassFileParser::check_methods_for_intrinsics(const InstanceKlass* ik) {
   assert(ik != nullptr, "invariant");
+
+  const Array<Method*> *methods = ik->methods();
   assert(methods != nullptr, "invariant");
 
   // Set up Method*::intrinsic_id as soon as we know the names of methods.
@@ -5158,10 +5148,14 @@ InstanceKlass* ClassFileParser::create_instance_klass(bool changed_by_loadhook,
     return _klass;
   }
 
-  InstanceKlass* const ik =
-    InstanceKlass::allocate_instance_klass(*this, CHECK_NULL);
+  assert(_field_info != nullptr, "invariant");
+  const InstanceKlassSizes sizes{_vtable_size, _itable_size, _field_info->_instance_size, _field_info->_static_field_size,
+                                 _field_info->oop_map_blocks->_nonstatic_oop_map_count};
 
-  if (is_hidden()) {
+  InstanceKlass* const ik =
+    InstanceKlass::allocate_instance_klass(_loader_data, _class_name, _super_klass, _access_flags, sizes, CHECK_NULL);
+
+  if (_is_hidden) {
     mangle_hidden_class_name(ik);
   }
 
@@ -5177,6 +5171,11 @@ void ClassFileParser::fill_instance_klass(InstanceKlass* ik,
                                           const ClassInstanceInfo& cl_inst_info,
                                           TRAPS) {
   assert(ik != nullptr, "invariant");
+
+  // Set early for internal-to-external class name conversion, e.g. in logs
+  if (_is_hidden) {
+    ik->set_is_hidden();
+  }
 
   // Set name and CLD before adding to CLD
   ik->set_class_loader_data(_loader_data);
@@ -5261,21 +5260,14 @@ void ClassFileParser::fill_instance_klass(InstanceKlass* ik,
   ik->set_has_nonstatic_concrete_methods(_has_nonstatic_concrete_methods);
   ik->set_declares_nonstatic_concrete_methods(_declares_nonstatic_concrete_methods);
 
-  if (_is_hidden) {
-    ik->set_is_hidden();
-  }
-
   // Set PackageEntry for this_klass
   oop cl = ik->class_loader();
   Handle clh = Handle(THREAD, java_lang_ClassLoader::non_reflection_class_loader(cl));
   ClassLoaderData* cld = ClassLoaderData::class_loader_data_or_null(clh());
   ik->set_package(cld, nullptr, CHECK);
 
-  const Array<Method*>* const methods = ik->methods();
-  assert(methods != nullptr, "invariant");
-  const int methods_len = methods->length();
-
-  check_methods_for_intrinsics(ik, methods);
+  assert(ik->methods() != nullptr, "invariant");
+  check_methods_for_intrinsics(ik);
 
   // Fill in field values obtained by parse_classfile_attributes
   if (_parsed_annotations->has_any_annotations()) {
@@ -5660,7 +5652,7 @@ void ClassFileParser::parse_stream(const ClassFileStream* const stream,
     cp_size, CHECK);
 
   _orig_cp_size = cp_size;
-  if (is_hidden()) { // Add a slot for hidden class name.
+  if (_is_hidden) { // Add a slot for hidden class name.
     cp_size++;
   }
 
@@ -5961,14 +5953,14 @@ void ClassFileParser::post_process_parsed_stream(const ClassFileStream* const st
   assert(_parsed_annotations != nullptr, "invariant");
 
   _field_info = new FieldLayoutInfo();
-  FieldLayoutBuilder lb(class_name(), super_klass(), _cp, /*_fields*/ _temp_field_info,
+  FieldLayoutBuilder lb(_class_name, _super_klass, _cp, /*_fields*/ _temp_field_info,
                         _parsed_annotations->is_contended(), _field_info);
   lb.build_layout();
 
   int injected_fields_count = _temp_field_info->length() - _java_fields_count;
   _fieldinfo_stream =
     FieldInfoStream::create_FieldInfoStream(_temp_field_info, _java_fields_count,
-                                            injected_fields_count, loader_data(), CHECK);
+                                            injected_fields_count, _loader_data, CHECK);
   _fields_status =
     MetadataFactory::new_array<FieldStatus>(_loader_data, _temp_field_info->length(),
                                             FieldStatus(0), CHECK);
@@ -6002,32 +5994,6 @@ const ClassFileStream* ClassFileParser::clone_stream() const {
   assert(_stream != nullptr, "invariant");
 
   return _stream->clone();
-}
-
-ReferenceType ClassFileParser::super_reference_type() const {
-  return _super_klass == nullptr ? REF_NONE : _super_klass->reference_type();
-}
-
-bool ClassFileParser::is_instance_ref_klass() const {
-  // Only the subclasses of j.l.r.Reference are InstanceRefKlass.
-  // j.l.r.Reference itself is InstanceKlass because InstanceRefKlass denotes a
-  // klass requiring special treatment in ref-processing. The abstract
-  // j.l.r.Reference cannot be instantiated so doesn't partake in
-  // ref-processing.
-  return is_java_lang_ref_Reference_subclass();
-}
-
-bool ClassFileParser::is_java_lang_ref_Reference_subclass() const {
-  if (_super_klass == nullptr) {
-    return false;
-  }
-
-  if (_super_klass->name() == vmSymbols::java_lang_ref_Reference()) {
-    // Direct subclass of j.l.r.Reference: Soft|Weak|Final|Phantom
-    return true;
-  }
-
-  return _super_klass->reference_type() != REF_NONE;
 }
 
 // ----------------------------------------------------------------------------

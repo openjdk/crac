@@ -45,20 +45,26 @@ static ReferenceType reference_subclass_name_to_type(const Symbol* name) {
   }
 }
 
-static ReferenceType determine_reference_type(const ClassFileParser& parser) {
-  const ReferenceType rt = parser.super_reference_type();
-  if (rt != REF_NONE) {
-    // Inherit type from super class
-    return rt;
+// Only the subclasses of j.l.r.Reference are InstanceRefKlass.
+// j.l.r.Reference itself is InstanceKlass because InstanceRefKlass denotes a
+// klass requiring special treatment in ref-processing. The abstract
+// j.l.r.Reference cannot be instantiated so doesn't partake in
+// ref-processing.
+ReferenceType InstanceRefKlass::determine_reference_type(const InstanceKlass *super_class, const Symbol* const class_name) {
+  if (super_class == nullptr) {
+    // java.lang.Object is not an InstanceRefKlass
+    return REF_NONE;
   }
-
-  // Bootstrapping: this is one of the direct subclasses of java.lang.ref.Reference
-  const Symbol* const name = parser.class_name();
-  return reference_subclass_name_to_type(name);
+  if (super_class->reference_type() != REF_NONE) {
+    // Inherit type from super class
+    return super_class->reference_type();
+  }
+  if (super_class->name() == vmSymbols::java_lang_ref_Reference()) {
+    // Bootstrapping: this is one of the direct subclasses of java.lang.ref.Reference
+    return reference_subclass_name_to_type(class_name);
+  }
+  return REF_NONE;
 }
-
-InstanceRefKlass::InstanceRefKlass(const ClassFileParser& parser)
-  : InstanceKlass(parser, Kind, determine_reference_type(parser)) {}
 
 void InstanceRefKlass::update_nonstatic_oop_maps(Klass* k) {
   // Clear the nonstatic oop-map entries corresponding to referent

@@ -72,6 +72,7 @@ class MethodFlags {
  public:
 
   MethodFlags() : _status(0) {}
+  explicit MethodFlags(jint status) : _status(status) {}
 
   // Create getters and setters for the status values.
 #define M_STATUS_GET_SET(name, ignore)          \

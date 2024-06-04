@@ -1,7 +1,7 @@
 #include "precompiled.hpp"
 #include "unittest.hpp"
-#include "utilities/stackDumpParser.hpp"
-#include "utilities/stackDumper.hpp"
+#include "runtime/cracStackDumpParser.hpp"
+#include "runtime/cracStackDumper.hpp"
 
 constexpr char TEST_FILENAME[] = "stackDumpParser_test.hprof";
 
@@ -51,16 +51,16 @@ static void check_stack_frames(const StackTrace &expected_trace,
 }
 
 static constexpr char CONTENTS_NO_TRACES[] =
-    "JAVA STACK DUMP 0.1\0" // Header
+    "CRAC STACK DUMP 0.1\0" // Header
     "\x00\x04"              // Word size
     ;
 
-TEST(StackDumpParser, no_stack_traces) {
+TEST(CracStackDumpParser, no_stack_traces) {
   fill_test_file(CONTENTS_NO_TRACES, sizeof(CONTENTS_NO_TRACES) - 1);
   ASSERT_FALSE(testing::Test::HasFatalFailure() || testing::Test::HasNonfatalFailure());
 
   ParsedStackDump stack_dump;
-  const char *err_msg = StackDumpParser::parse(TEST_FILENAME, &stack_dump);
+  const char *err_msg = CracStackDumpParser::parse(TEST_FILENAME, &stack_dump);
   ASSERT_EQ(nullptr, err_msg) << "Parsing error: " << err_msg;
 
   EXPECT_EQ(4U, stack_dump.word_size());
@@ -68,7 +68,7 @@ TEST(StackDumpParser, no_stack_traces) {
 }
 
 static constexpr char CONTENTS_EMPTY_TRACE[] =
-    "JAVA STACK DUMP 0.1\0" // Header
+    "CRAC STACK DUMP 0.1\0" // Header
     "\x00\x04"              // Word size
 
     "\xab\xcd\xef\x95"      // Thread ID
@@ -76,12 +76,12 @@ static constexpr char CONTENTS_EMPTY_TRACE[] =
     "\x00\x00\x00\x00"      // Number of frames
     ;
 
-TEST(StackDumpParser, empty_stack_trace) {
+TEST(CracStackDumpParser, empty_stack_trace) {
   fill_test_file(CONTENTS_EMPTY_TRACE, sizeof(CONTENTS_EMPTY_TRACE) - 1);
   ASSERT_FALSE(testing::Test::HasFatalFailure() || testing::Test::HasNonfatalFailure());
 
   ParsedStackDump stack_dump;
-  const char *err_msg = StackDumpParser::parse(TEST_FILENAME, &stack_dump);
+  const char *err_msg = CracStackDumpParser::parse(TEST_FILENAME, &stack_dump);
   ASSERT_EQ(nullptr, err_msg) << "Parsing error: " << err_msg;
 
   EXPECT_EQ(4U, stack_dump.word_size());
@@ -94,7 +94,7 @@ TEST(StackDumpParser, empty_stack_trace) {
 }
 
 static constexpr char CONTENTS_NO_STACK_VALUES[] =
-    "JAVA STACK DUMP 0.1\0" // Header
+    "CRAC STACK DUMP 0.1\0" // Header
     "\x00\x04"              // Word size
 
     "\xab\xcd\xef\x95"      // Thread ID
@@ -109,12 +109,12 @@ static constexpr char CONTENTS_NO_STACK_VALUES[] =
       "\x00\x00"              // Monitors num
     ;
 
-TEST(StackDumpParser, stack_frame_with_no_stack_values) {
+TEST(CracStackDumpParser, stack_frame_with_no_stack_values) {
   fill_test_file(CONTENTS_NO_STACK_VALUES, sizeof(CONTENTS_NO_STACK_VALUES) - 1);
   ASSERT_FALSE(testing::Test::HasFatalFailure() || testing::Test::HasNonfatalFailure());
 
   ParsedStackDump stack_dump;
-  const char *err_msg = StackDumpParser::parse(TEST_FILENAME, &stack_dump);
+  const char *err_msg = CracStackDumpParser::parse(TEST_FILENAME, &stack_dump);
   ASSERT_EQ(nullptr, err_msg) << "Parsing error: " << err_msg;
 
   EXPECT_EQ(4U, stack_dump.word_size());
@@ -133,7 +133,7 @@ TEST(StackDumpParser, stack_frame_with_no_stack_values) {
 }
 
 static constexpr char CONTENTS_CORRECT_STACK_VALUES[] =
-    "JAVA STACK DUMP 0.1\0"              // Header
+    "CRAC STACK DUMP 0.1\0"              // Header
     "\x00\x08"                           // Word size
 
     "\xab\xcd\xef\x95\xba\xdc\xfe\x96"   // Thread ID
@@ -158,12 +158,12 @@ static constexpr char CONTENTS_CORRECT_STACK_VALUES[] =
       "\x00\x00"                           // Monitors num
     ;
 
-TEST(StackDumpParser, stack_frame_with_correct_stack_values) {
+TEST(CracStackDumpParser, stack_frame_with_correct_stack_values) {
   fill_test_file(CONTENTS_CORRECT_STACK_VALUES, sizeof(CONTENTS_CORRECT_STACK_VALUES) - 1);
   ASSERT_FALSE(testing::Test::HasFatalFailure() || testing::Test::HasNonfatalFailure());
 
   ParsedStackDump stack_dump;
-  const char *err_msg = StackDumpParser::parse(TEST_FILENAME, &stack_dump);
+  const char *err_msg = CracStackDumpParser::parse(TEST_FILENAME, &stack_dump);
   ASSERT_EQ(nullptr, err_msg) << "Parsing error: " << err_msg;
 
   EXPECT_EQ(8U, stack_dump.word_size());
@@ -190,7 +190,7 @@ TEST(StackDumpParser, stack_frame_with_correct_stack_values) {
 }
 
 static constexpr char CONTENTS_MULTIPLE_STACKS[] =
-    "JAVA STACK DUMP 0.1\0" // Header
+    "CRAC STACK DUMP 0.1\0" // Header
     "\x00\x04"              // Word size
 
     "\xab\xcd\xef\x95"      // Thread ID
@@ -230,12 +230,12 @@ static constexpr char CONTENTS_MULTIPLE_STACKS[] =
       "\x00\x00"              // Monitors num
     ;
 
-TEST(StackDumpParser, multiple_stacks_dumped) {
+TEST(CracStackDumpParser, multiple_stacks_dumped) {
   fill_test_file(CONTENTS_MULTIPLE_STACKS, sizeof(CONTENTS_MULTIPLE_STACKS) - 1);
   ASSERT_FALSE(testing::Test::HasFatalFailure() || testing::Test::HasNonfatalFailure());
 
   ParsedStackDump stack_dump;
-  const char *err_msg = StackDumpParser::parse(TEST_FILENAME, &stack_dump);
+  const char *err_msg = CracStackDumpParser::parse(TEST_FILENAME, &stack_dump);
   ASSERT_EQ(nullptr, err_msg) << "Parsing error: " << err_msg;
 
   EXPECT_EQ(4U, stack_dump.word_size());

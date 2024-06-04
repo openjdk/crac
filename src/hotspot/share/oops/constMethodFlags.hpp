@@ -72,6 +72,7 @@ class ConstMethodFlags {
  public:
 
   ConstMethodFlags() : _flags(0) {}
+  explicit ConstMethodFlags(int flags) : _flags(flags) {}
 
   // Create getters and setters for the flag values.
 #define CM_FLAGS_GET_SET(name, ignore)          \

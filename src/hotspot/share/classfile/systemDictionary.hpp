@@ -139,6 +139,11 @@ class SystemDictionary : AllStatic {
                                             const ClassLoadInfo& cl_info,
                                             TRAPS);
 
+  // Defines a class being restored using its defining class loader.
+  static void define_recreated_instance_class(InstanceKlass* recreated_class, TRAPS);
+
+  static void record_initiating_loader(InstanceKlass* loaded_class, Handle class_loader, TRAPS);
+
   // Lookup an already loaded class. If not found null is returned.
   static InstanceKlass* find_instance_klass(Thread* current, Symbol* class_name,
                                             Handle class_loader, Handle protection_domain);

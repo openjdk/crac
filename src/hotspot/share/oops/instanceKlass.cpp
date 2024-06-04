@@ -148,7 +148,7 @@
 bool InstanceKlass::_finalization_enabled = true;
 
 static inline bool is_class_loader(const Symbol* class_name,
-                                   const ClassFileParser& parser) {
+                                   const Klass* super_klass) {
   assert(class_name != nullptr, "invariant");
 
   if (class_name == vmSymbols::java_lang_ClassLoader()) {
@@ -156,7 +156,6 @@ static inline bool is_class_loader(const Symbol* class_name,
   }
 
   if (vmClasses::ClassLoader_klass_loaded()) {
-    const Klass* const super_klass = parser.super_klass();
     if (super_klass != nullptr) {
       if (super_klass->is_subtype_of(vmClasses::ClassLoader_klass())) {
         return true;
@@ -434,35 +433,38 @@ const char* InstanceKlass::nest_host_error() {
   }
 }
 
-InstanceKlass* InstanceKlass::allocate_instance_klass(const ClassFileParser& parser, TRAPS) {
-  const int size = InstanceKlass::size(parser.vtable_size(),
-                                       parser.itable_size(),
-                                       nonstatic_oop_map_size(parser.total_oop_map_count()),
-                                       parser.is_interface());
-
-  const Symbol* const class_name = parser.class_name();
-  assert(class_name != nullptr, "invariant");
-  ClassLoaderData* loader_data = parser.loader_data();
+InstanceKlass* InstanceKlass::allocate_instance_klass(ClassLoaderData* loader_data,
+                                                      const Symbol* name,
+                                                      const InstanceKlass* super,
+                                                      AccessFlags access_flags,
+                                                      const InstanceKlassSizes& sizes,
+                                                      TRAPS) {
+  const int size = InstanceKlass::size(sizes.vtable_size,
+                                       sizes.itable_size,
+                                       nonstatic_oop_map_size(sizes.total_oop_map_count),
+                                       access_flags.is_interface());
   assert(loader_data != nullptr, "invariant");
+  assert(name != nullptr, "invariant");
 
   InstanceKlass* ik;
 
   // Allocation
-  if (parser.is_instance_ref_klass()) {
+  const ReferenceType reference_type = InstanceRefKlass::determine_reference_type(super, name);
+  if (reference_type != ReferenceType::REF_NONE) {
     // java.lang.ref.Reference
-    ik = new (loader_data, size, THREAD) InstanceRefKlass(parser);
-  } else if (class_name == vmSymbols::java_lang_Class()) {
+    ik = new (loader_data, size, THREAD) InstanceRefKlass(access_flags, sizes, reference_type);
+  } else if (name == vmSymbols::java_lang_Class()) {
     // mirror - java.lang.Class
-    ik = new (loader_data, size, THREAD) InstanceMirrorKlass(parser);
-  } else if (is_stack_chunk_class(class_name, loader_data)) {
+    ik = new (loader_data, size, THREAD) InstanceMirrorKlass(access_flags, sizes);
+  } else if (is_stack_chunk_class(name, loader_data)) {
     // stack chunk
-    ik = new (loader_data, size, THREAD) InstanceStackChunkKlass(parser);
-  } else if (is_class_loader(class_name, parser)) {
+    ik = new (loader_data, size, THREAD) InstanceStackChunkKlass(access_flags, sizes);
+  } else if (is_class_loader(name, super)) {
     // class loader - java.lang.ClassLoader
-    ik = new (loader_data, size, THREAD) InstanceClassLoaderKlass(parser);
+    ik = new (loader_data, size, THREAD) InstanceClassLoaderKlass(access_flags, sizes);
   } else {
     // normal
-    ik = new (loader_data, size, THREAD) InstanceKlass(parser);
+    ik = new (loader_data, size, THREAD) InstanceKlass(access_flags, sizes);
   }
 
   // Check for pending exception before adding to the loader data and incrementing
@@ -500,30 +502,28 @@ static Monitor* create_init_monitor(const char* name) {
   return new Monitor(Mutex::safepoint, name);
 }
 
-InstanceKlass::InstanceKlass(const ClassFileParser& parser, KlassKind kind, ReferenceType reference_type) :
+InstanceKlass::InstanceKlass(AccessFlags access_flags, const InstanceKlassSizes& sizes, KlassKind kind, ReferenceType reference_type) :
   Klass(kind),
   _nest_members(nullptr),
   _nest_host(nullptr),
   _permitted_subclasses(nullptr),
   _record_components(nullptr),
-  _static_field_size(parser.static_field_size()),
-  _nonstatic_oop_map_size(nonstatic_oop_map_size(parser.total_oop_map_count())),
-  _itable_len(parser.itable_size()),
+  _static_field_size(sizes.static_field_size),
+  _nonstatic_oop_map_size(nonstatic_oop_map_size(sizes.total_oop_map_count)),
+  _itable_len(sizes.itable_size),
   _nest_host_index(0),
   _init_state(allocated),
   _reference_type(reference_type),
   _init_monitor(create_init_monitor("InstanceKlassInitMonitor_lock")),
   _init_thread(nullptr)
 {
-  set_vtable_length(parser.vtable_size());
-  set_access_flags(parser.access_flags());
-  if (parser.is_hidden()) set_is_hidden();
-  set_layout_helper(Klass::instance_layout_helper(parser.layout_size(),
-                                                    false));
+  set_vtable_length(sizes.vtable_size);
+  set_access_flags(access_flags);
+  set_layout_helper(Klass::instance_layout_helper(sizes.layout_size, false));
 
   assert(nullptr == _methods, "underlying memory not zeroed?");
   assert(is_instance_klass(), "is layout incorrect?");
-  assert(size_helper() == parser.layout_size(), "incorrect size_helper?");
+  assert(size_helper() == sizes.layout_size, "incorrect size_helper?");
 }
 
 void InstanceKlass::deallocate_methods(ClassLoaderData* loader_data,
@@ -982,6 +982,17 @@ void InstanceKlass::initialize_super_interfaces(TRAPS) {
 using InitializationErrorTable = ResourceHashtable<const InstanceKlass*, OopHandle, 107, AnyObj::C_HEAP, mtClass>;
 static InitializationErrorTable* _initialization_error_table;
 
+void InstanceKlass::put_initializetion_error(JavaThread* current, Handle init_error) {
+  MutexLocker ml(current, ClassInitError_lock);
+  OopHandle elem = OopHandle(Universe::vm_global(), init_error());
+  bool created;
+  if (_initialization_error_table == nullptr) {
+    _initialization_error_table = new (mtClass) InitializationErrorTable();
+  }
+  _initialization_error_table->put_if_absent(this, elem, &created);
+  assert(created, "Initialization is single threaded");
+}
+
 void InstanceKlass::add_initialization_error(JavaThread* current, Handle exception) {
   // Create the same exception with a message indicating the thread name,
   // and the StackTraceElements.
@@ -1004,19 +1015,21 @@ void InstanceKlass::add_initialization_error(JavaThread* current, Handle excepti
     }
   }
 
-  MutexLocker ml(current, ClassInitError_lock);
-  OopHandle elem = OopHandle(Universe::vm_global(), init_error());
-  bool created;
-  if (_initialization_error_table == nullptr) {
-    _initialization_error_table = new (mtClass) InitializationErrorTable();
-  }
-  _initialization_error_table->put_if_absent(this, elem, &created);
-  assert(created, "Initialization is single threaded");
+  put_initializetion_error(current, init_error);
   log_trace(class, init)("Initialization error added for class %s", external_name());
 }
 
 oop InstanceKlass::get_initialization_error(JavaThread* current) {
   MutexLocker ml(current, ClassInitError_lock);
+  if (_initialization_error_table == nullptr) {
+    return nullptr;
+  }
+  OopHandle* h = _initialization_error_table->get(this);
+  return (h != nullptr) ? h->resolve() : nullptr;
+}
+
+oop InstanceKlass::get_initialization_error() {
+  assert_locked_or_safepoint(ClassInitError_lock);
   if (_initialization_error_table == nullptr) {
     return nullptr;
   }
@@ -2880,7 +2893,12 @@ InstanceKlass* InstanceKlass::get_klass_version(int version) {
   return nullptr;
 }
 
-void InstanceKlass::set_source_debug_extension(const char* array, int length) {
+void InstanceKlass::set_source_debug_extension(const char* array) {
+  precond(_source_debug_extension == nullptr);
+  _source_debug_extension = array;
+}
+
+void InstanceKlass::copy_source_debug_extension(const char* array, int length) {
   if (array == nullptr) {
     _source_debug_extension = nullptr;
   } else {

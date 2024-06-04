@@ -135,6 +135,8 @@ class ConstantPoolCacheEntry {
   friend class VMStructs;
   friend class ConstantPool;
   friend class InterpreterRuntime;
+  friend class CracInstanceClassDumpParser;
+  friend struct CracClassStateRestorer;
 
  private:
   volatile intx     _indices;  // constant pool index & rewrite bytecodes
@@ -421,6 +423,11 @@ class ConstantPoolCache: public MetaspaceObj {
                     const intStack& invokedynamic_references_map,
                     Array<ResolvedIndyEntry>* indy_info,
                     Array<ResolvedFieldEntry>* field_entries);
+  ConstantPoolCache(int length,
+                    Array<ResolvedIndyEntry>* indy_entries,
+                    Array<ResolvedFieldEntry>* field_entries) :
+                    _length(length), _constant_pool(nullptr), _gc_epoch(0),
+                    _resolved_indy_entries(indy_entries), _resolved_field_entries(field_entries) {};
 
   // Initialization
   void initialize(const intArray& inverse_index_map,
@@ -432,6 +439,11 @@ class ConstantPoolCache: public MetaspaceObj {
                                      const GrowableArray<ResolvedIndyEntry> indy_entries,
                                      const GrowableArray<ResolvedFieldEntry> field_entries,
                                      TRAPS);
+  static ConstantPoolCache* allocate_uninitialized(ClassLoaderData* loader_data,
+                                                   int length,
+                                                   int resolved_indy_entries_length,
+                                                   int resolved_field_entries_length,
+                                                   TRAPS);
 
   int length() const                      { return _length; }
   void metaspace_pointers_do(MetaspaceClosure* it);

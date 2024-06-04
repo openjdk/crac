@@ -1298,10 +1298,10 @@ void SymbolTableDumper::do_symbol(Symbol** p) {
   ResourceMark rm;
   Symbol* sym = *p;
   int len = sym->utf8_length();
+  char* s = sym->as_utf8();
+  DumperSupport::write_header(writer(), HPROF_UTF8, oopSize + len);
+  writer()->write_symbolID(sym);
   if (len > 0) {
-    char* s = sym->as_utf8();
-    DumperSupport::write_header(writer(), HPROF_UTF8, oopSize + len);
-    writer()->write_symbolID(sym);
     writer()->write_raw(s, len);
   }
 }
@@ -1409,13 +1409,6 @@ class HeapObjectDumper : public ObjectClosure {
 };
 
 void HeapObjectDumper::do_object(oop o) {
-  // skip classes as these emitted as HPROF_GC_CLASS_DUMP records
-  if (o->klass() == vmClasses::Class_klass()) {
-    if (!java_lang_Class::is_primitive(o)) {
-      return;
-    }
-  }
-
   if (DumperSupport::mask_dormant_archived_object(o) == nullptr) {
     log_debug(cds, heap)("skipped dormant archived object " INTPTR_FORMAT " (%s)", p2i(o), o->klass()->external_name());
     return;

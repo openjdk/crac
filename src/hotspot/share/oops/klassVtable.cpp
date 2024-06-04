@@ -68,7 +68,7 @@ void klassVtable::compute_vtable_size_and_num_mirandas(
     int* vtable_length_ret, int* num_new_mirandas,
     GrowableArray<Method*>* all_mirandas, const Klass* super,
     Array<Method*>* methods, AccessFlags class_flags, u2 major_version,
-    Handle classloader, Symbol* classname, Array<InstanceKlass*>* local_interfaces) {
+    Handle classloader, const Symbol* classname, Array<InstanceKlass*>* local_interfaces) {
   NoSafepointVerifier nsv;
 
   // set up default result values
@@ -277,7 +277,7 @@ void klassVtable::initialize_vtable(GrowableArray<InstanceKlass*>* supers) {
 // See JLS 8.4.8.1
 // Assumes name-signature match
 // Note that the InstanceKlass of the method in the targetclassname has not always been created yet
-static bool can_be_overridden(Method* super_method, Handle targetclassloader, Symbol* targetclassname) {
+static bool can_be_overridden(Method* super_method, Handle targetclassloader, const Symbol* targetclassname) {
    // Private methods can not be overridden
    assert(!super_method->is_private(), "shouldn't call with a private method");
 
@@ -634,7 +634,7 @@ void klassVtable::initialize_vtable_and_check_constraints(TRAPS) {
 bool klassVtable::needs_new_vtable_entry(Method* target_method,
                                          const Klass* super,
                                          Handle classloader,
-                                         Symbol* classname,
+                                         const Symbol* classname,
                                          AccessFlags class_flags,
                                          u2 major_version) {
   if (class_flags.is_interface()) {

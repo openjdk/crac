@@ -1023,6 +1023,23 @@ enum JavaThreadState {
   _thread_max_state         = 12  // maximum thread state+1 - used for statistics allocation
 };
 
+constexpr const char* thread_state_name(JavaThreadState state) {
+  switch (state) {
+    case _thread_uninitialized:     return "_thread_uninitialized";
+    case _thread_new:               return "_thread_new";
+    case _thread_new_trans:         return "_thread_new_trans";
+    case _thread_in_native:         return "_thread_in_native";
+    case _thread_in_native_trans:   return "_thread_in_native_trans";
+    case _thread_in_vm:             return "_thread_in_vm";
+    case _thread_in_vm_trans:       return "_thread_in_vm_trans";
+    case _thread_in_Java:           return "_thread_in_Java";
+    case _thread_in_Java_trans:     return "_thread_in_Java_trans";
+    case _thread_blocked:           return "_thread_blocked";
+    case _thread_blocked_trans:     return "_thread_blocked_trans";
+    default:                        return "unknown thread state";
+  }
+}
+
 enum LockingMode {
   // Use only heavy monitors for locking
   LM_MONITOR     = 0,

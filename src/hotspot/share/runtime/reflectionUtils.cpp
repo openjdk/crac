@@ -69,7 +69,7 @@ bool KlassStream::eos() {
   return eos();
 }
 
-int FieldStream::length() { return _klass->java_fields_count(); }
+int FieldStream::length() { return _java_only ? _klass->java_fields_count() : _klass->total_fields_count(); }
 
 GrowableArray<FilteredField*> *FilteredFieldsMap::_filtered_fields =
   new (mtServiceability) GrowableArray<FilteredField*>(3, mtServiceability);

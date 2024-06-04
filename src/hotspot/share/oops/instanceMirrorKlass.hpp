@@ -28,9 +28,8 @@
 #include "classfile/vmClasses.hpp"
 #include "oops/instanceKlass.hpp"
 #include "runtime/handles.hpp"
+#include "utilities/accessFlags.hpp"
 #include "utilities/macros.hpp"
-
-class ClassFileParser;
 
 // An InstanceMirrorKlass is a specialized InstanceKlass for
 // java.lang.Class instances.  These instances are special because
@@ -50,7 +49,8 @@ class InstanceMirrorKlass: public InstanceKlass {
  private:
   static int _offset_of_static_fields;
 
-  InstanceMirrorKlass(const ClassFileParser& parser) : InstanceKlass(parser, Kind) {}
+  InstanceMirrorKlass(AccessFlags access_flags, const InstanceKlassSizes& sizes)
+      : InstanceKlass(access_flags, sizes, Kind) {}
 
  public:
   InstanceMirrorKlass() { assert(DumpSharedSpaces || UseSharedSpaces, "only for CDS"); }

@@ -364,6 +364,12 @@ void JavaCalls::call_helper(JavaValue* result, const methodHandle& method, JavaC
   if (JvmtiExport::can_post_interpreter_events() && thread->is_interp_only_mode()) {
     entry_point = method->interpreter_entry();
   }
+  if (args->use_restore_stub()) {
+#if INCLUDE_JVMCI
+    precond(args->alternative_target().is_null());
+#endif // INCLUDE_JVMCI
+    entry_point = SharedRuntime::get_restore_stub();
+  }
 
   // Figure out if the result value is an oop or not (Note: This is a different value
   // than result_type. result_type will be T_INT of oops. (it is about size)

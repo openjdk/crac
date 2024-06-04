@@ -36,10 +36,14 @@ import java.util.function.BiFunction;
 import java.util.function.Function;
 import java.util.function.Predicate;
 import java.util.function.UnaryOperator;
+import jdk.crac.Context;
+import jdk.crac.Resource;
 import jdk.internal.access.JavaUtilCollectionAccess;
 import jdk.internal.access.SharedSecrets;
 import jdk.internal.misc.CDS;
 import jdk.internal.vm.annotation.Stable;
+import jdk.internal.crac.Core;
+import jdk.internal.crac.JDKResource;
 
 /**
  * Container class for immutable collections. Not part of the public API.
@@ -118,15 +122,30 @@ class ImmutableCollections {
     }
 
     static class Access {
+        // TODO when portable CRaC supports restoration of all classes this won't be needed anymore
+        private static final JDKResource secretsInitResource;
+
         static {
-            SharedSecrets.setJavaUtilCollectionAccess(new JavaUtilCollectionAccess() {
+            final JavaUtilCollectionAccess access = new JavaUtilCollectionAccess() {
                 public <E> List<E> listFromTrustedArray(Object[] array) {
                     return ImmutableCollections.listFromTrustedArray(array);
                 }
                 public <E> List<E> listFromTrustedArrayNullsAllowed(Object[] array) {
                     return ImmutableCollections.listFromTrustedArrayNullsAllowed(array);
                 }
-            });
+            };
+            SharedSecrets.setJavaUtilCollectionAccess(access);
+            secretsInitResource = new JDKResource() {
+                @Override
+                public void beforeCheckpoint(Context<? extends Resource> context) {
+                };
+
+                @Override
+                public void afterRestore(Context<? extends Resource> context) {
+                    SharedSecrets.setJavaUtilCollectionAccess(access);
+                };
+            };
+            Core.Priority.NORMAL.getContext().register(secretsInitResource);
         }
     }
 

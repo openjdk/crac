@@ -24,23 +24,54 @@
 #include "precompiled.hpp"
 
 #include "classfile/classLoader.hpp"
+#include "classfile/javaClasses.hpp"
+#include "classfile/symbolTable.hpp"
+#include "classfile/systemDictionary.hpp"
+#include "classfile/vmClasses.hpp"
+#include "classfile/vmSymbols.hpp"
+#include "jni.h"
 #include "jvm.h"
+#include "logging/log.hpp"
 #include "logging/logAsyncWriter.hpp"
 #include "logging/logConfiguration.hpp"
+#include "memory/allocation.hpp"
 #include "memory/oopFactory.hpp"
-#include "oops/typeArrayOop.inline.hpp"
-#include "runtime/crac_structs.hpp"
+#include "memory/resourceArea.hpp"
+#include "oops/instanceKlass.hpp"
+#include "oops/oopsHierarchy.hpp"
+#include "oops/symbolHandle.hpp"
+#include "os.inline.hpp"
 #include "runtime/crac.hpp"
+#include "runtime/cracClassDumpParser.hpp"
+#include "runtime/cracClassDumper.hpp"
+#include "runtime/cracHeapRestorer.hpp"
+#include "runtime/cracStackDumpParser.hpp"
+#include "runtime/cracStackDumper.hpp"
+#include "runtime/cracThreadRestorer.hpp"
+#include "runtime/crac_structs.hpp"
+#include "runtime/handles.hpp"
 #include "runtime/interfaceSupport.inline.hpp"
+#include "runtime/java.hpp"
+#include "runtime/javaThread.hpp"
 #include "runtime/jniHandles.hpp"
 #include "runtime/jniHandles.inline.hpp"
+#include "runtime/thread.hpp"
 #include "runtime/threads.hpp"
-#include "runtime/vm_version.hpp"
 #include "runtime/vmThread.hpp"
 #include "services/heapDumper.hpp"
 #include "services/writeableFlags.hpp"
+#include "utilities/debug.hpp"
 #include "utilities/decoder.hpp"
-#include "os.inline.hpp"
+#include "utilities/exceptions.hpp"
+#include "utilities/globalDefinitions.hpp"
+#include "utilities/growableArray.hpp"
+#include "utilities/heapDumpParser.hpp"
+#include "utilities/macros.hpp"
+
+// Filenames used by the portable mode
+static constexpr char PMODE_HEAP_DUMP_FILENAME[] = "heap.hprof";
+static constexpr char PMODE_STACK_DUMP_FILENAME[] = "stacks.bin";
+static constexpr char PMODE_CLASS_DUMP_FILENAME[] = "classes.bin";
 
 static const char* _crengine = NULL;
 static char* _crengine_arg_str = NULL;
@@ -48,6 +79,9 @@ static unsigned int _crengine_argc = 0;
 static const char* _crengine_args[32];
 static jlong _restore_start_time;
 static jlong _restore_start_nanos;
+
+// Used by portable restore
+ParsedCracStackDump *crac::_stack_dump = nullptr;
 
 // Timestamps recorded before checkpoint
 jlong crac::checkpoint_millis;
@@ -111,6 +145,79 @@ static char * strchrnul(char * str, char c) {
 }
 #endif //__APPLE__ || _WINDOWS
 
+bool crac::is_portable_mode() {
+  return CREngine == nullptr;
+}
+
+// Checkpoint in portable mode.
+static VM_Crac::Outcome checkpoint_portable() {
+#if INCLUDE_SERVICES // HeapDumper is a service
+  char path[JVM_MAXPATHLEN];
+
+  // Dump thread stacks
+  os::snprintf_checked(path, sizeof(path), "%s%s%s",
+                       CRaCCheckpointTo, os::file_separator(), PMODE_STACK_DUMP_FILENAME);
+  {
+    const CracStackDumper::Result res = CracStackDumper::dump(path);
+    switch (res.code()) {
+      case CracStackDumper::Result::Code::OK: break;
+      case CracStackDumper::Result::Code::IO_ERROR: {
+        warning("Cannot dump thread stacks into %s: %s", path, res.io_error_msg());
+        if (remove(path) != 0) warning("Cannot remove %s: %s", path, os::strerror(errno));
+        return VM_Crac::Outcome::FAIL; // User action required
+      }
+      case CracStackDumper::Result::Code::NON_JAVA_IN_MID: {
+        ResourceMark rm;
+        warning("Cannot checkpoint now: thread %s has Java frames interleaved with native frames",
+                res.problematic_thread()->name());
+        if (remove(path) != 0) warning("Cannot remove %s: %s", path, os::strerror(errno));
+        return VM_Crac::Outcome::FAIL; // It'll probably take too long to wait until all such frames are gone
+      }
+      case CracStackDumper::Result::Code::NON_JAVA_ON_TOP: {
+        ResourceMark rm;
+        warning("Cannot checkpoint now: thread %s is executing native code",
+                res.problematic_thread()->name());
+        if (remove(path) != 0) warning("Cannot remove %s: %s", path, os::strerror(errno));
+        return VM_Crac::Outcome::RETRY; // Hoping the thread will get out of non-Java code shortly
+      }
+    }
+  }
+
+  // Dump classes
+  os::snprintf_checked(path, sizeof(path), "%s%s%s",
+                       CRaCCheckpointTo, os::file_separator(), PMODE_CLASS_DUMP_FILENAME);
+  {
+    const char* err = CracClassDumper::dump(path, false /* Don't overwrite */);
+    if (err != nullptr) {
+      warning("Cannot dump classes into %s: %s", path, err);
+      return VM_Crac::Outcome::FAIL; // User action required
+    }
+  }
+
+  // Dump heap
+  os::snprintf_checked(path, sizeof(path), "%s%s%s",
+                       CRaCCheckpointTo, os::file_separator(), PMODE_HEAP_DUMP_FILENAME);
+  {
+    HeapDumper dumper(false, // No GC: it's already been performed by crac::checkpoint()
+                      true); // Include all j.l.Class objects and injected fields
+    if (dumper.dump(path,
+                    nullptr,  // No additional output
+                    -1,       // No compression, TODO: enable this when the parser supports it
+                    false,    // Don't overwrite
+                    HeapDumper::default_num_of_dump_threads()) != 0) {
+      ResourceMark rm;
+      warning("Cannot dump heap into %s: %s", path, dumper.error_as_C_string());
+      return VM_Crac::Outcome::FAIL; // User action required
+    }
+  }
+
+  return VM_Crac::Outcome::OK;
+#else  // INCLUDE_SERVICES
+  warning("This VM cannot create checkpoints in portable mode: it is compiled without \"services\" feature");
+  return VM_Crac::Outcome::FAIL;
+#endif  // INCLUDE_SERVICES
+}
+
 static size_t cr_util_path(char* path, int len) {
   os::jvm_path(path, len);
   // path is ".../lib/server/libjvm.so", or "...\bin\server\libjvm.dll"
@@ -124,15 +231,14 @@ static size_t cr_util_path(char* path, int len) {
 }
 
 static bool compute_crengine() {
+  assert(!crac::is_portable_mode(), "Portable mode requested, should not call this");
+
   // release possible old copies
   os::free((char *) _crengine); // NULL is allowed
   _crengine = NULL;
   os::free((char *) _crengine_arg_str);
   _crengine_arg_str = NULL;
 
-  if (!CREngine) {
-    return true;
-  }
   char *exec = os::strdup_check_oom(CREngine);
   char *comma = strchr(exec, ',');
   if (comma != NULL) {
@@ -307,6 +413,13 @@ static void wakeup_threads_in_timedwait() {
 }
 
 void VM_Crac::doit() {
+  // Clear the state (partially: JCMD connection might be gone) if trying again
+  if (_outcome == Outcome::RETRY) {
+    _outcome = Outcome::FAIL;
+    _failures->clear_and_deallocate();
+    _restore_parameters.clear();
+  }
+
   // dry-run fails checkpoint
   bool ok = true;
 
@@ -326,22 +439,24 @@ void VM_Crac::doit() {
   if (!ok && CRDoThrowCheckpointException) {
     return;
   } else if (_dry_run) {
-    _ok = ok;
+    _outcome = ok ? Outcome::OK : Outcome::FAIL;
     return;
   }
 
-  if (!memory_checkpoint()) {
+  if (!crac::is_portable_mode() && !memory_checkpoint()) {
     return;
   }
 
   int shmid = 0;
+  Outcome outcome = Outcome::OK;
   if (CRAllowToSkipCheckpoint) {
     trace_cr("Skip Checkpoint");
   } else {
     trace_cr("Checkpoint ...");
     report_ok_to_jcmd_if_any();
-    int ret = checkpoint_restore(&shmid);
-    if (ret == JVM_CHECKPOINT_ERROR) {
+    if (crac::is_portable_mode()) {
+      outcome = checkpoint_portable();
+    } else if (checkpoint_restore(&shmid) == JVM_CHECKPOINT_ERROR) {
       memory_restore();
       return;
     }
@@ -368,7 +483,7 @@ void VM_Crac::doit() {
 
   wakeup_threads_in_timedwait_vm();
 
-  _ok = true;
+  _outcome = outcome;
 }
 
 bool crac::prepare_checkpoint() {
@@ -390,14 +505,14 @@ bool crac::prepare_checkpoint() {
     }
   }
 
-  if (!compute_crengine()) {
+  if (!is_portable_mode() && !compute_crengine()) {
     return false;
   }
 
   return true;
 }
 
-static Handle ret_cr(int ret, Handle new_args, Handle new_props, Handle err_codes, Handle err_msgs, TRAPS) {
+Handle crac::cr_return(int ret, Handle new_args, Handle new_props, Handle err_codes, Handle err_msgs, TRAPS) {
   objArrayOop bundleObj = oopFactory::new_objectArray(5, CHECK_NH);
   objArrayHandle bundle(THREAD, bundleObj);
   jvalue jval;
@@ -415,12 +530,12 @@ static Handle ret_cr(int ret, Handle new_args, Handle new_props, Handle err_code
  */
 Handle crac::checkpoint(jarray fd_arr, jobjectArray obj_arr, bool dry_run, jlong jcmd_stream, TRAPS) {
   if (!CRaCCheckpointTo) {
-    return ret_cr(JVM_CHECKPOINT_NONE, Handle(), Handle(), Handle(), Handle(), THREAD);
+    return cr_return(JVM_CHECKPOINT_NONE, Handle(), Handle(), Handle(), Handle(), THREAD);
   }
 
   if (-1 == os::mkdir(CRaCCheckpointTo) && errno != EEXIST) {
     warning("cannot create %s: %s", CRaCCheckpointTo, os::strerror(errno));
-    return ret_cr(JVM_CHECKPOINT_NONE, Handle(), Handle(), Handle(), Handle(), THREAD);
+    return cr_return(JVM_CHECKPOINT_NONE, Handle(), Handle(), Handle(), Handle(), THREAD);
   }
 
   Universe::heap()->set_cleanup_unused(true);
@@ -447,9 +562,22 @@ Handle crac::checkpoint(jarray fd_arr, jobjectArray obj_arr, bool dry_run, jlong
   LogConfiguration::close();
 
   VM_Crac cr(fd_arr, obj_arr, dry_run, (bufferedStream*)jcmd_stream);
-  {
-    MutexLocker ml(Heap_lock);
-    VMThread::execute(&cr);
+
+  // TODO make these consts configurable
+  constexpr int RETRIES_NUM = 10;
+  constexpr int RETRY_TIMEOUT_MS = 100;
+  for (int i = 0; i <= RETRIES_NUM; i++) {
+    {
+      MutexLocker ml(Heap_lock);
+      VMThread::execute(&cr);
+    }
+    if (cr.outcome() != VM_Crac::Outcome::RETRY) {
+      break;
+    }
+    if (i < RETRIES_NUM) {
+      warning("Retry %i/%i in %i ms...", i + 1, RETRIES_NUM, RETRY_TIMEOUT_MS);
+      os::naked_short_sleep(RETRY_TIMEOUT_MS);
+    }
   }
 
   LogConfiguration::reopen();
@@ -457,12 +585,12 @@ Handle crac::checkpoint(jarray fd_arr, jobjectArray obj_arr, bool dry_run, jlong
     aio_writer->resume();
   }
 
-  if (cr.ok()) {
+  if (cr.outcome() == VM_Crac::Outcome::OK) {
     oop new_args = NULL;
     if (cr.new_args()) {
       new_args = java_lang_String::create_oop_from_str(cr.new_args(), CHECK_NH);
     }
-    GrowableArray<const char *>* new_properties = cr.new_properties();
+    const GrowableArray<const char *>* new_properties = cr.new_properties();
     objArrayOop propsObj = oopFactory::new_objArray(vmClasses::String_klass(), new_properties->length(), CHECK_NH);
     objArrayHandle props(THREAD, propsObj);
 
@@ -473,10 +601,10 @@ Handle crac::checkpoint(jarray fd_arr, jobjectArray obj_arr, bool dry_run, jlong
 
     wakeup_threads_in_timedwait();
 
-    return ret_cr(JVM_CHECKPOINT_OK, Handle(THREAD, new_args), props, Handle(), Handle(), THREAD);
+    return cr_return(JVM_CHECKPOINT_OK, Handle(THREAD, new_args), props, Handle(), Handle(), THREAD);
   }
 
-  GrowableArray<CracFailDep>* failures = cr.failures();
+  const GrowableArray<CracFailDep>* failures = cr.failures();
 
   typeArrayOop codesObj = oopFactory::new_intArray(failures->length(), CHECK_NH);
   typeArrayHandle codes(THREAD, codesObj);
@@ -490,10 +618,12 @@ Handle crac::checkpoint(jarray fd_arr, jobjectArray obj_arr, bool dry_run, jlong
     msgs->obj_at_put(i, msgObj);
   }
 
-  return ret_cr(JVM_CHECKPOINT_ERROR, Handle(), Handle(), codes, msgs, THREAD);
+  return cr_return(JVM_CHECKPOINT_ERROR, Handle(), Handle(), codes, msgs, THREAD);
 }
 
 void crac::restore() {
+  assert(!is_portable_mode(), "Use crac::restore_portable() instead");
+
   jlong restore_time = os::javaTimeMillis();
   jlong restore_nanos = os::javaTimeNanos();
 
@@ -630,5 +760,142 @@ void crac::update_javaTimeNanos_offset() {
     if (diff < 0) {
       javaTimeNanos_offset -= diff;
     }
+  }
+}
+
+static void init_class(Symbol *name, TRAPS) {
+  Klass *const klass = SystemDictionary::resolve_or_fail(name, true, CHECK);
+  InstanceKlass::cast(klass)->initialize(CHECK);
+}
+
+// This is a temporary hack to fix some inconsistencies between the state of
+// pre-initialized classes and restored ones.
+static void init_problematic_system_classes(TRAPS) {
+  // Fix Java-side invokedynamic-related errors
+  init_class(TempNewSymbol(SymbolTable::new_symbol("java/lang/invoke/BoundMethodHandle")), CHECK);
+
+  // Make sure MethodType creation (requires a Java call) won't trigger class initialization
+  if (vmClasses::MethodType_klass_is_loaded() && vmClasses::MethodType_klass()->is_initialized()) {
+    init_class(TempNewSymbol(SymbolTable::new_symbol("java/util/concurrent/ConcurrentHashMap$ForwardingNode")), CHECK);
+  }
+}
+
+// Restore classes and objects in portable mode.
+void crac::restore_data(TRAPS) {
+  assert(is_portable_mode(), "Use crac::restore() instead");
+  precond(CRaCRestoreFrom != nullptr);
+
+  // TODO remove this when we get rid of pre-initialized classes
+  init_problematic_system_classes(CHECK);
+
+  // Create a top-level resource mark to be able to get resource-allocated
+  // strings (e.g. external class names) for assert/guarantee fails with no fuss
+  assert(Thread::current()->current_resource_mark() == nullptr, "no need for this mark?");
+  ResourceMark rm;
+
+  char path[JVM_MAXPATHLEN];
+
+  ParsedHeapDump heap_dump;
+  os::snprintf_checked(path, sizeof(path), "%s%s%s", CRaCRestoreFrom, os::file_separator(), PMODE_HEAP_DUMP_FILENAME);
+  const char *err_str = HeapDumpParser::parse(path, &heap_dump);
+  if (err_str != nullptr) {
+    THROW_MSG(vmSymbols::java_lang_IllegalArgumentException(),
+              err_msg("Cannot parse heap dump %s (%s)", path, err_str));
+  }
+  assert(!heap_dump.utf8s.contains(HeapDump::NULL_ID) &&
+         !heap_dump.class_dumps.contains(HeapDump::NULL_ID) &&
+         !heap_dump.instance_dumps.contains(HeapDump::NULL_ID) &&
+         !heap_dump.obj_array_dumps.contains(HeapDump::NULL_ID) &&
+         !heap_dump.prim_array_dumps.contains(HeapDump::NULL_ID),
+         "records cannot have null ID");
+
+  auto *const stack_dump = new ParsedCracStackDump();
+  os::snprintf_checked(path, sizeof(path), "%s%s%s", CRaCRestoreFrom, os::file_separator(), PMODE_STACK_DUMP_FILENAME);
+  err_str = CracStackDumpParser::parse(path, stack_dump);
+  if (err_str != nullptr) {
+    delete stack_dump;
+    THROW_MSG(vmSymbols::java_lang_IllegalArgumentException(),
+              err_msg("Cannot parse stack dump %s (%s)", path, err_str));
+  }
+  if (stack_dump->word_size() != oopSize) {
+    const u2 dumped_word_size = stack_dump->word_size();
+    delete stack_dump;
+    THROW_MSG(vmSymbols::java_lang_UnsupportedOperationException(),
+              err_msg("Cannot restore because stack dump comes from an incompatible platform: "
+                      "dumped word size %i != current word size %i", dumped_word_size, oopSize));
+  }
+  STATIC_ASSERT(oopSize == sizeof(intptr_t)); // Need this to safely cast primititve stack values
+
+  // Use heap allocation to allow the class parser to use resource area for internal purposes
+  HeapDumpTable<InstanceKlass *, AnyObj::C_HEAP> instance_classes(107, 10000);
+  HeapDumpTable<ArrayKlass *, AnyObj::C_HEAP> array_classes(107, 10000);
+
+  CracHeapRestorer heap_restorer(heap_dump, instance_classes, array_classes, THREAD);
+  if (HAS_PENDING_EXCEPTION) {
+    delete stack_dump;
+    return;
+  }
+
+  os::snprintf_checked(path, sizeof(path), "%s%s%s", CRaCRestoreFrom, os::file_separator(), PMODE_CLASS_DUMP_FILENAME);
+  HeapDumpTable<UnfilledClassInfo, AnyObj::C_HEAP> class_infos(107, 10000);
+  CracClassDumpParser::parse(path, heap_dump, &heap_restorer, &instance_classes, &array_classes, &class_infos, THREAD);
+  if (HAS_PENDING_EXCEPTION) {
+    delete stack_dump;
+    return;
+  }
+
+  heap_restorer.restore_heap(class_infos, stack_dump->stack_traces(), THREAD); // Also resolves stack values
+  if (HAS_PENDING_EXCEPTION) {
+    delete stack_dump;
+    return;
+  }
+
+  // Resolve all methods on the stacks while we have the ID-to-class and ID-to-symbol mappings
+  for (const auto &stack : stack_dump->stack_traces()) {
+    for (u4 i = 0; i < stack->frames_num(); i++) {
+      stack->frame(i).resolve_method(instance_classes, heap_dump.utf8s, THREAD);
+      if (HAS_PENDING_EXCEPTION) {
+        delete stack_dump;
+        return;
+      }
+    }
+  }
+
+  // Save the stacks for thread restoration
+  precond(_stack_dump == nullptr);
+  _stack_dump = stack_dump;
+}
+
+void crac::restore_threads(TRAPS) {
+  assert(is_portable_mode(), "use crac::restore() instead");
+  precond(CRaCRestoreFrom != nullptr);
+  assert(_stack_dump != nullptr, "call crac::restore_heap() first");
+  assert(java_lang_Thread::thread_id(JavaThread::current()->threadObj()) == 1, "must be called on the main thread");
+
+  if (_stack_dump->stack_traces().is_nonempty()) {
+    CracThreadRestorer::prepare(_stack_dump->stack_traces().length());
+  }
+
+  // The main thread is the first one in the dump (if it's there at all)
+  CracStackTrace *main_stack_trace = nullptr;
+  if (_stack_dump->stack_traces().is_nonempty()) {
+    CracStackTrace *const first_stack_trace = _stack_dump->stack_traces().first();
+    const oop first_thread_obj = JNIHandles::resolve_non_null(first_stack_trace->thread());
+    if (first_thread_obj == JavaThread::current()->threadObj()) {
+      main_stack_trace = first_stack_trace;
+      _stack_dump->stack_traces().delete_at(0); // Efficient but changes the order of stack traces
+    }
+  }
+
+  while (_stack_dump->stack_traces().is_nonempty()) {
+    CracStackTrace *const stack_trace = _stack_dump->stack_traces().pop();
+    CracThreadRestorer::restore_on_new_thread(stack_trace, CHECK);
+  }
+
+  delete _stack_dump; // Is empty by now
+  _stack_dump = nullptr;
+
+  if (main_stack_trace != nullptr) {
+    CracThreadRestorer::restore_on_current_thread(main_stack_trace, CHECK);
   }
 }

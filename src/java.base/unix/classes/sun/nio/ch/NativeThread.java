@@ -25,6 +25,10 @@
 
 package sun.nio.ch;
 
+import jdk.crac.Context;
+import jdk.crac.Resource;
+import jdk.internal.crac.Core;
+import jdk.internal.crac.JDKResource;
 
 // Signalling operations on native threads
 //
@@ -38,6 +42,7 @@ package sun.nio.ch;
 
 public class NativeThread {
     private static final long VIRTUAL_THREAD_ID = -1L;
+    private static final JDKResource nativeInitResource;
 
     /**
      * Returns the id of the current native thread if the platform can signal
@@ -103,6 +108,19 @@ public class NativeThread {
     static {
         IOUtil.load();
         init();
+        nativeInitResource = new JDKResource() {
+            @Override
+            public void beforeCheckpoint(Context<? extends Resource> context) {
+            };
+
+            @Override
+            public void afterRestore(Context<? extends Resource> context) {
+                init();
+            };
+        };
+        // TODO figure out why lower priority makes some crac/fileDescriptors
+        //  tests never complete
+        Core.Priority.NATIVE_THREAD.getContext().register(nativeInitResource);
     }
 
 }

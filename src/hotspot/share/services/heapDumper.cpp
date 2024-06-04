@@ -27,6 +27,7 @@
 #include "classfile/classLoaderData.inline.hpp"
 #include "classfile/classLoaderDataGraph.hpp"
 #include "classfile/javaClasses.inline.hpp"
+#include "classfile/stringTable.hpp"
 #include "classfile/symbolTable.hpp"
 #include "classfile/vmClasses.hpp"
 #include "classfile/vmSymbols.hpp"
@@ -59,7 +60,10 @@
 #include "services/heapDumper.hpp"
 #include "services/heapDumperCompression.hpp"
 #include "services/threadService.hpp"
+#include "utilities/bitCast.hpp"
+#include "utilities/hprofTag.hpp"
 #include "utilities/macros.hpp"
+#include "utilities/methodKind.hpp"
 #include "utilities/ostream.hpp"
 
 /*
@@ -325,56 +329,6 @@
  * HPROF_HEAP_DUMP_END      denotes the end of a heap dump
  *
  */
-
-
-// HPROF tags
-
-enum hprofTag : u1 {
-  // top-level records
-  HPROF_UTF8                    = 0x01,
-  HPROF_LOAD_CLASS              = 0x02,
-  HPROF_UNLOAD_CLASS            = 0x03,
-  HPROF_FRAME                   = 0x04,
-  HPROF_TRACE                   = 0x05,
-  HPROF_ALLOC_SITES             = 0x06,
-  HPROF_HEAP_SUMMARY            = 0x07,
-  HPROF_START_THREAD            = 0x0A,
-  HPROF_END_THREAD              = 0x0B,
-  HPROF_HEAP_DUMP               = 0x0C,
-  HPROF_CPU_SAMPLES             = 0x0D,
-  HPROF_CONTROL_SETTINGS        = 0x0E,
-
-  // 1.0.2 record types
-  HPROF_HEAP_DUMP_SEGMENT       = 0x1C,
-  HPROF_HEAP_DUMP_END           = 0x2C,
-
-  // field types
-  HPROF_ARRAY_OBJECT            = 0x01,
-  HPROF_NORMAL_OBJECT           = 0x02,
-  HPROF_BOOLEAN                 = 0x04,
-  HPROF_CHAR                    = 0x05,
-  HPROF_FLOAT                   = 0x06,
-  HPROF_DOUBLE                  = 0x07,
-  HPROF_BYTE                    = 0x08,
-  HPROF_SHORT                   = 0x09,
-  HPROF_INT                     = 0x0A,
-  HPROF_LONG                    = 0x0B,
-
-  // data-dump sub-records
-  HPROF_GC_ROOT_UNKNOWN         = 0xFF,
-  HPROF_GC_ROOT_JNI_GLOBAL      = 0x01,
-  HPROF_GC_ROOT_JNI_LOCAL       = 0x02,
-  HPROF_GC_ROOT_JAVA_FRAME      = 0x03,
-  HPROF_GC_ROOT_NATIVE_STACK    = 0x04,
-  HPROF_GC_ROOT_STICKY_CLASS    = 0x05,
-  HPROF_GC_ROOT_THREAD_BLOCK    = 0x06,
-  HPROF_GC_ROOT_MONITOR_USED    = 0x07,
-  HPROF_GC_ROOT_THREAD_OBJ      = 0x08,
-  HPROF_GC_CLASS_DUMP           = 0x20,
-  HPROF_GC_INSTANCE_DUMP        = 0x21,
-  HPROF_GC_OBJ_ARRAY_DUMP       = 0x22,
-  HPROF_GC_PRIM_ARRAY_DUMP      = 0x23
-};
 
 // Default stack trace ID (used for dummy HPROF_TRACE record)
 enum {
@@ -732,7 +686,7 @@ class DumperSupport : AllStatic {
   static u4 sig2size(Symbol* sig);
 
   // returns the size of the instance of the given class
-  static u4 instance_size(Klass* k);
+  static u4 instance_size(Klass* k, bool with_injected_fields);
 
   // dump a jfloat
   static void dump_float(AbstractDumpWriter* writer, jfloat f);
@@ -745,22 +699,22 @@ class DumperSupport : AllStatic {
   // dumps static fields of the given class
   static void dump_static_fields(AbstractDumpWriter* writer, Klass* k);
   // dump the raw values of the instance fields of the given object
-  static void dump_instance_fields(AbstractDumpWriter* writer, oop o);
+  static void dump_instance_fields(AbstractDumpWriter* writer, oop o, bool with_injected);
   // get the count of the instance fields for a given class
-  static u2 get_instance_fields_count(InstanceKlass* ik);
+  static u2 get_instance_fields_count(InstanceKlass* ik, bool with_injected);
   // dumps the definition of the instance fields for a given class
-  static void dump_instance_field_descriptors(AbstractDumpWriter* writer, Klass* k);
+  static void dump_instance_field_descriptors(AbstractDumpWriter* writer, Klass* k, bool with_injected);
   // creates HPROF_GC_INSTANCE_DUMP record for the given object
-  static void dump_instance(AbstractDumpWriter* writer, oop o);
+  static void dump_instance(AbstractDumpWriter* writer, oop o, bool extended);
   // creates HPROF_GC_CLASS_DUMP record for the given instance class
-  static void dump_instance_class(AbstractDumpWriter* writer, Klass* k);
+  static void dump_instance_class(AbstractDumpWriter* writer, Klass* k, bool with_injected_fields);
   // creates HPROF_GC_CLASS_DUMP record for a given array class
   static void dump_array_class(AbstractDumpWriter* writer, Klass* k);
 
   // creates HPROF_GC_OBJ_ARRAY_DUMP record for the given object array
-  static void dump_object_array(AbstractDumpWriter* writer, objArrayOop array);
+  static void dump_object_array(AbstractDumpWriter* writer, objArrayOop array, bool extended);
   // creates HPROF_GC_PRIM_ARRAY_DUMP record for the given type array
-  static void dump_prim_array(AbstractDumpWriter* writer, typeArrayOop array);
+  static void dump_prim_array(AbstractDumpWriter* writer, typeArrayOop array, bool extended);
   // create HPROF_FRAME record for the given method and bci
   static void dump_stack_frame(AbstractDumpWriter* writer, int frame_serial_num, int class_serial_num, Method* m, int bci);
 
@@ -833,13 +787,6 @@ u4 DumperSupport::sig2size(Symbol* sig) {
     case JVM_SIGNATURE_DOUBLE: return 8;
     default: ShouldNotReachHere(); /* to shut up compiler */ return 0;
   }
-}
-
-template<typename T, typename F> T bit_cast(F from) { // replace with the real thing when we can use c++20
-  T to;
-  static_assert(sizeof(to) == sizeof(from), "must be of the same size");
-  memcpy(&to, &from, sizeof(to));
-  return to;
 }
 
 // dump a jfloat
@@ -925,15 +872,26 @@ void DumperSupport::dump_field_value(AbstractDumpWriter* writer, char type, oop 
 }
 
 // returns the size of the instance of the given class
-u4 DumperSupport::instance_size(Klass* k) {
+u4 DumperSupport::instance_size(Klass* k, bool with_injected_fields) {
   InstanceKlass* ik = InstanceKlass::cast(k);
   u4 size = 0;
 
-  for (FieldStream fld(ik, false, false); !fld.eos(); fld.next()) {
+  for (FieldStream fld(ik, false, false, !with_injected_fields); !fld.eos(); fld.next()) {
     if (!fld.access_flags().is_static()) {
       size += sig2size(fld.signature());
     }
   }
+
+  if (with_injected_fields) {
+    if (k == vmClasses::String_klass()) {
+      // is_interned flag
+      size++;
+    } else if (k == vmClasses::ResolvedMethodName_klass()) {
+      // Injected Method* identification
+      size += 2 * sig2size(vmSymbols::intptr_signature()) /*name and signature*/ + 1 /*kind*/;
+    }
+  }
+
   return size;
 }
 
@@ -1006,34 +964,66 @@ void DumperSupport::dump_static_fields(AbstractDumpWriter* writer, Klass* k) {
 }
 
 // dump the raw values of the instance fields of the given object
-void DumperSupport::dump_instance_fields(AbstractDumpWriter* writer, oop o) {
+void DumperSupport::dump_instance_fields(AbstractDumpWriter* writer, oop o, bool with_injected) {
   InstanceKlass* ik = InstanceKlass::cast(o->klass());
 
-  for (FieldStream fld(ik, false, false); !fld.eos(); fld.next()) {
+  for (FieldStream fld(ik, false, false, !with_injected); !fld.eos(); fld.next()) {
     if (!fld.access_flags().is_static()) {
       Symbol* sig = fld.signature();
       dump_field_value(writer, sig->char_at(0), o, fld.offset());
     }
   }
+
+  if (with_injected) {
+    if (ik == vmClasses::String_klass()) {
+      bool is_interned;
+      {
+        Thread* current_thread = Thread::current();
+        ResourceMark rm(current_thread);
+        HandleMark hm(current_thread);
+        int len;
+        // FIXME returns null if resource alloc fails: report error in such case
+        const jchar* str = java_lang_String::as_unicode_string_or_null(o, len);
+        is_interned = str != nullptr && StringTable::lookup(str, len) != nullptr;
+      }
+      writer->write_u1(static_cast<u1>(is_interned));
+    } else if (ik == vmClasses::ResolvedMethodName_klass()) {
+      // Injected Method* identification: name, signature, kind
+      const Method* m = java_lang_invoke_ResolvedMethodName::vmtarget(o);
+      writer->write_symbolID(m->name());
+      writer->write_symbolID(m->signature());
+      writer->write_u1(checked_cast<u1>(MethodKind::of_method(*m)));
+    }
+  }
 }
 
 // dumps the definition of the instance fields for a given class
-u2 DumperSupport::get_instance_fields_count(InstanceKlass* ik) {
+u2 DumperSupport::get_instance_fields_count(InstanceKlass* ik, bool with_injected) {
   u2 field_count = 0;
 
-  for (FieldStream fldc(ik, true, true); !fldc.eos(); fldc.next()) {
+  for (FieldStream fldc(ik, true, true, !with_injected); !fldc.eos(); fldc.next()) {
     if (!fldc.access_flags().is_static()) field_count++;
+  }
+
+  if (with_injected) {
+    if (ik == vmClasses::String_klass()) {
+      // is_interned flag
+      field_count++;
+    } else if (ik == vmClasses::ResolvedMethodName_klass()) {
+      // Injected Method* identification: name, signature, kind
+      field_count += 3;
+    }
   }
 
   return field_count;
 }
 
 // dumps the definition of the instance fields for a given class
-void DumperSupport::dump_instance_field_descriptors(AbstractDumpWriter* writer, Klass* k) {
+void DumperSupport::dump_instance_field_descriptors(AbstractDumpWriter* writer, Klass* k, bool with_injected) {
   InstanceKlass* ik = InstanceKlass::cast(k);
 
   // dump the field descriptors
-  for (FieldStream fld(ik, true, true); !fld.eos(); fld.next()) {
+  for (FieldStream fld(ik, true, true, !with_injected); !fld.eos(); fld.next()) {
     if (!fld.access_flags().is_static()) {
       Symbol* sig = fld.signature();
 
@@ -1041,17 +1031,42 @@ void DumperSupport::dump_instance_field_descriptors(AbstractDumpWriter* writer, 
       writer->write_u1(sig2tag(sig));       // type
     }
   }
+
+  if (with_injected) {
+    if (ik == vmClasses::String_klass()) {
+      // is_interned flag
+      writer->write_symbolID(vmSymbols::is_interned_name());
+      writer->write_u1(type2tag(T_BOOLEAN));
+    } else if (ik == vmClasses::ResolvedMethodName_klass()) {
+      // Injected Method* identification: name, signature, kind
+      // Method name
+      writer->write_symbolID(vmSymbols::internal_name_name());      // name
+      writer->write_u1(sig2tag(vmSymbols::intptr_signature()));     // type
+      // Method signature
+      writer->write_symbolID(vmSymbols::internal_signature_name()); // name
+      writer->write_u1(sig2tag(vmSymbols::intptr_signature()));     // type
+      // Method kind
+      writer->write_symbolID(vmSymbols::internal_kind_name());      // name
+      writer->write_u1(type2tag(T_BYTE));                           // type
+    }
+  }
 }
 
 // creates HPROF_GC_INSTANCE_DUMP record for the given object
-void DumperSupport::dump_instance(AbstractDumpWriter* writer, oop o) {
+void DumperSupport::dump_instance(AbstractDumpWriter* writer, oop o, bool extended) {
   InstanceKlass* ik = InstanceKlass::cast(o->klass());
-  u4 is = instance_size(ik);
+  u4 is = instance_size(ik, extended);
   u4 size = 1 + sizeof(address) + 4 + sizeof(address) + 4 + is;
 
   writer->start_sub_record(HPROF_GC_INSTANCE_DUMP, size);
   writer->write_objectID(o);
-  writer->write_u4(STACK_TRACE_ID);
+
+  if (!extended) {
+    writer->write_u4(STACK_TRACE_ID);
+  } else {
+    // Note: this does not adhere to HPROF spec
+    writer->write_u4(checked_cast<jint>(o->read_identity_hash()));
+  }
 
   // class ID
   writer->write_classID(ik);
@@ -1060,13 +1075,13 @@ void DumperSupport::dump_instance(AbstractDumpWriter* writer, oop o) {
   writer->write_u4(is);
 
   // field values
-  dump_instance_fields(writer, o);
+  dump_instance_fields(writer, o, extended);
 
   writer->end_sub_record();
 }
 
 // creates HPROF_GC_CLASS_DUMP record for the given instance class
-void DumperSupport::dump_instance_class(AbstractDumpWriter* writer, Klass* k) {
+void DumperSupport::dump_instance_class(AbstractDumpWriter* writer, Klass* k, bool with_injected_fields) {
   InstanceKlass* ik = InstanceKlass::cast(k);
 
   // We can safepoint and do a heap dump at a point where we have a Klass,
@@ -1078,7 +1093,7 @@ void DumperSupport::dump_instance_class(AbstractDumpWriter* writer, Klass* k) {
 
   u2 static_fields_count = 0;
   u4 static_size = get_static_fields_size(ik, static_fields_count);
-  u2 instance_fields_count = get_instance_fields_count(ik);
+  u2 instance_fields_count = get_instance_fields_count(ik, with_injected_fields);
   u4 instance_fields_size = instance_fields_count * (sizeof(address) + 1);
   u4 size = 1 + sizeof(address) + 4 + 6 * sizeof(address) + 4 + 2 + 2 + static_size + 2 + instance_fields_size;
 
@@ -1105,7 +1120,7 @@ void DumperSupport::dump_instance_class(AbstractDumpWriter* writer, Klass* k) {
   writer->write_objectID(oop(nullptr));
 
   // instance size
-  writer->write_u4(DumperSupport::instance_size(ik));
+  writer->write_u4(DumperSupport::instance_size(ik, with_injected_fields));
 
   // size of constant pool - ignored by HAT 1.1
   writer->write_u2(0);
@@ -1116,7 +1131,7 @@ void DumperSupport::dump_instance_class(AbstractDumpWriter* writer, Klass* k) {
 
   // description of instance fields
   writer->write_u2(instance_fields_count);
-  dump_instance_field_descriptors(writer, ik);
+  dump_instance_field_descriptors(writer, ik, with_injected_fields);
 
   writer->end_sub_record();
 }
@@ -1186,7 +1201,7 @@ int DumperSupport::calculate_array_max_length(AbstractDumpWriter* writer, arrayO
 }
 
 // creates HPROF_GC_OBJ_ARRAY_DUMP record for the given object array
-void DumperSupport::dump_object_array(AbstractDumpWriter* writer, objArrayOop array) {
+void DumperSupport::dump_object_array(AbstractDumpWriter* writer, objArrayOop array, bool extended) {
   // sizeof(u1) + 2 * sizeof(u4) + sizeof(objectID) + sizeof(classID)
   short header_size = 1 + 2 * 4 + 2 * sizeof(address);
   int length = calculate_array_max_length(writer, array, header_size);
@@ -1194,7 +1209,14 @@ void DumperSupport::dump_object_array(AbstractDumpWriter* writer, objArrayOop ar
 
   writer->start_sub_record(HPROF_GC_OBJ_ARRAY_DUMP, size);
   writer->write_objectID(array);
-  writer->write_u4(STACK_TRACE_ID);
+
+  if (!extended) {
+    writer->write_u4(STACK_TRACE_ID);
+  } else {
+    // Note: this does not adhere to HPROF spec
+    writer->write_u4(checked_cast<jint>(array->read_identity_hash()));
+  }
+
   writer->write_u4(length);
 
   // array class ID
@@ -1220,7 +1242,7 @@ void DumperSupport::dump_object_array(AbstractDumpWriter* writer, objArrayOop ar
   for (int i = 0; i < Length; i++) { writer->write_##Size((Size)Array->Type##_at(i)); }
 
 // creates HPROF_GC_PRIM_ARRAY_DUMP record for the given type array
-void DumperSupport::dump_prim_array(AbstractDumpWriter* writer, typeArrayOop array) {
+void DumperSupport::dump_prim_array(AbstractDumpWriter* writer, typeArrayOop array, bool extended) {
   BasicType type = TypeArrayKlass::cast(array->klass())->element_type();
   // 2 * sizeof(u1) + 2 * sizeof(u4) + sizeof(objectID)
   short header_size = 2 * 1 + 2 * 4 + sizeof(address);
@@ -1232,7 +1254,14 @@ void DumperSupport::dump_prim_array(AbstractDumpWriter* writer, typeArrayOop arr
 
   writer->start_sub_record(HPROF_GC_PRIM_ARRAY_DUMP, size);
   writer->write_objectID(array);
-  writer->write_u4(STACK_TRACE_ID);
+
+  if (!extended) {
+    writer->write_u4(STACK_TRACE_ID);
+  } else {
+    // Note: this does not adhere to HPROF spec
+    writer->write_u4(checked_cast<jint>(array->read_identity_hash()));
+  }
+
   writer->write_u4(length);
   writer->write_u1(type2tag(type));
 
@@ -1353,11 +1382,34 @@ void SymbolTableDumper::do_symbol(Symbol** p) {
   ResourceMark rm;
   Symbol* sym = *p;
   int len = sym->utf8_length();
+  char* s = sym->as_utf8();
+  DumperSupport::write_header(writer(), HPROF_UTF8, oopSize + len);
+  writer()->write_symbolID(sym);
   if (len > 0) {
-    char* s = sym->as_utf8();
-    DumperSupport::write_header(writer(), HPROF_UTF8, oopSize + len);
-    writer()->write_symbolID(sym);
     writer()->write_raw(s, len);
+  }
+}
+
+// Support class used to generate HPROF_GC_CLASS_DUMP records from classes.
+
+class ClassDumper : public LockedClassesDo {
+ private:
+  AbstractDumpWriter* _writer;
+  bool _with_injected_fields;
+  AbstractDumpWriter* writer() const                { return _writer; }
+ public:
+  ClassDumper(AbstractDumpWriter* writer, bool with_injected_fields) {
+    _writer = writer;
+    _with_injected_fields = with_injected_fields;
+  }
+  void do_klass(Klass* k) override;
+};
+
+void ClassDumper::do_klass(Klass* k) {
+  if (k->is_instance_klass()) {
+    DumperSupport::dump_instance_class(writer(), k, _with_injected_fields);
+  } else {
+    DumperSupport::dump_array_class(writer(), k);
   }
 }
 
@@ -1452,11 +1504,13 @@ class VM_HeapDumper;
 class HeapObjectDumper : public ObjectClosure {
  private:
   AbstractDumpWriter* _writer;
+  bool _extended;
   AbstractDumpWriter* writer()                  { return _writer; }
 
  public:
-  HeapObjectDumper(AbstractDumpWriter* writer) {
+  HeapObjectDumper(AbstractDumpWriter* writer, bool extended) {
     _writer = writer;
+    _extended = extended;
   }
 
   // called for each object in the heap
@@ -1465,10 +1519,8 @@ class HeapObjectDumper : public ObjectClosure {
 
 void HeapObjectDumper::do_object(oop o) {
   // skip classes as these emitted as HPROF_GC_CLASS_DUMP records
-  if (o->klass() == vmClasses::Class_klass()) {
-    if (!java_lang_Class::is_primitive(o)) {
-      return;
-    }
+  if (!_extended && o->klass() == vmClasses::Class_klass() && !java_lang_Class::is_primitive(o)) {
+    return;
   }
 
   if (DumperSupport::mask_dormant_archived_object(o) == nullptr) {
@@ -1478,13 +1530,13 @@ void HeapObjectDumper::do_object(oop o) {
 
   if (o->is_instance()) {
     // create a HPROF_GC_INSTANCE record for each object
-    DumperSupport::dump_instance(writer(), o);
+    DumperSupport::dump_instance(writer(), o, _extended);
   } else if (o->is_objArray()) {
     // create a HPROF_GC_OBJ_ARRAY_DUMP record for each object array
-    DumperSupport::dump_object_array(writer(), objArrayOop(o));
+    DumperSupport::dump_object_array(writer(), objArrayOop(o), _extended);
   } else if (o->is_typeArray()) {
     // create a HPROF_GC_PRIM_ARRAY_DUMP record for each type array
-    DumperSupport::dump_prim_array(writer(), typeArrayOop(o));
+    DumperSupport::dump_prim_array(writer(), typeArrayOop(o), _extended);
   }
 }
 
@@ -1553,7 +1605,9 @@ void DumpMerger::merge_done() {
 }
 
 void DumpMerger::merge_file(char* path) {
-  assert(!SafepointSynchronize::is_at_safepoint(), "merging happens outside safepoint");
+  // CRaC's portable mode dumps heap entirely on a safepoint making this fail
+  // assert(!SafepointSynchronize::is_at_safepoint(), "merging happens outside safepoint");
+
   TraceTime timer("Merge segmented heap file", TRACETIME_LOG(Info, heapdump));
 
   fileStream segment_fs(path, "rb");
@@ -1582,7 +1636,9 @@ void DumpMerger::merge_file(char* path) {
 }
 
 void DumpMerger::do_merge() {
-  assert(!SafepointSynchronize::is_at_safepoint(), "merging happens outside safepoint");
+  // CRaC's portable mode dumps heap entirely on a safepoint making this fail
+  // assert(!SafepointSynchronize::is_at_safepoint(), "merging happens outside safepoint");
+
   TraceTime timer("Merge heap files complete", TRACETIME_LOG(Info, heapdump));
 
   // Since contents in segmented heap file were already zipped, we don't need to zip
@@ -1629,6 +1685,7 @@ class VM_HeapDumper : public VM_GC_Operation, public WorkerTask {
   JavaThread*             _oome_thread;
   Method*                 _oome_constructor;
   bool                    _gc_before_heap_dump;
+  bool                    _extended;
   GrowableArray<Klass*>*  _klass_map;
   ThreadStackTrace**      _stack_traces;
   int                     _num_threads;
@@ -1665,9 +1722,6 @@ class VM_HeapDumper : public VM_GC_Operation, public WorkerTask {
   // writes a HPROF_LOAD_CLASS record
   static void do_load_class(Klass* k);
 
-  // writes a HPROF_GC_CLASS_DUMP record for the given class
-  static void do_class_dump(Klass* k);
-
   // HPROF_GC_ROOT_THREAD_OBJ records
   int do_thread(JavaThread* thread, u4 thread_serial_num);
   void do_threads();
@@ -1680,7 +1734,7 @@ class VM_HeapDumper : public VM_GC_Operation, public WorkerTask {
   void dump_stack_traces();
 
  public:
-  VM_HeapDumper(DumpWriter* writer, bool gc_before_heap_dump, bool oome, uint num_dump_threads) :
+  VM_HeapDumper(DumpWriter* writer, bool gc_before_heap_dump, bool extended, bool oome, uint num_dump_threads) :
     VM_GC_Operation(0 /* total collections,      dummy, ignored */,
                     GCCause::_heap_dump /* GC Cause */,
                     0 /* total full collections, dummy, ignored */,
@@ -1688,6 +1742,7 @@ class VM_HeapDumper : public VM_GC_Operation, public WorkerTask {
     WorkerTask("dump heap") {
     _local_writer = writer;
     _gc_before_heap_dump = gc_before_heap_dump;
+    _extended = extended;
     _klass_map = new (mtServiceability) GrowableArray<Klass*>(INITIAL_CLASS_COUNT, mtServiceability);
     _stack_traces = nullptr;
     _num_threads = 0;
@@ -1771,15 +1826,6 @@ void VM_HeapDumper::do_load_class(Klass* k) {
   // class name ID
   Symbol* name = k->name();
   writer()->write_symbolID(name);
-}
-
-// writes a HPROF_GC_CLASS_DUMP record for the given class
-void VM_HeapDumper::do_class_dump(Klass* k) {
-  if (k->is_instance_klass()) {
-    DumperSupport::dump_instance_class(writer(), k);
-  } else {
-    DumperSupport::dump_array_class(writer(), k);
-  }
 }
 
 // Walk the stack of the given thread.
@@ -2048,8 +2094,8 @@ void VM_HeapDumper::work(uint worker_id) {
 
     // Writes HPROF_GC_CLASS_DUMP records
     {
-      LockedClassesDo locked_dump_class(&do_class_dump);
-      ClassLoaderDataGraph::classes_do(&locked_dump_class);
+      ClassDumper class_dumper(writer(), _extended);
+      ClassLoaderDataGraph::classes_do(&class_dumper);
     }
 
     // HPROF_GC_ROOT_THREAD_OBJ + frames + jni locals
@@ -2079,7 +2125,7 @@ void VM_HeapDumper::work(uint worker_id) {
     assert(is_vm_dumper(worker_id), "must be");
     // == Serial dump
     TraceTime timer("Dump heap objects", TRACETIME_LOG(Info, heapdump));
-    HeapObjectDumper obj_dumper(writer());
+    HeapObjectDumper obj_dumper(writer(), _extended);
     Universe::heap()->object_iterate(&obj_dumper);
     writer()->finish_dump_segment();
     // Writes the HPROF_HEAP_DUMP_END record because merge does not happen in serial dump
@@ -2091,7 +2137,7 @@ void VM_HeapDumper::work(uint worker_id) {
     TraceTime timer("Dump heap objects in parallel", TRACETIME_LOG(Info, heapdump));
     DumpWriter* local_writer = is_vm_dumper(worker_id) ? writer() : create_local_writer();
     if (!local_writer->has_error()) {
-      HeapObjectDumper obj_dumper(local_writer);
+      HeapObjectDumper obj_dumper(local_writer, _extended);
       _poi->object_iterate(&obj_dumper, worker_id);
       local_writer->finish_dump_segment();
       local_writer->flush();
@@ -2200,7 +2246,7 @@ int HeapDumper::dump(const char* path, outputStream* out, int compression, bool 
   }
 
   // generate the segmented heap dump into separate files
-  VM_HeapDumper dumper(&writer, _gc_before_heap_dump, _oome, num_dump_threads);
+  VM_HeapDumper dumper(&writer, _gc_before_heap_dump, _extended, _oome, num_dump_threads);
   VMThread::execute(&dumper);
 
   // record any error that the writer may have encountered
@@ -2379,6 +2425,7 @@ void HeapDumper::dump_heap(bool oome) {
   dump_file_seq++;   // increment seq number for next time we dump
 
   HeapDumper dumper(false /* no GC before heap dump */,
+                    false /* no injected fields */,
                     oome  /* pass along out-of-memory-error flag */);
   dumper.dump(my_path, tty, HeapDumpGzipLevel);
   os::free(my_path);

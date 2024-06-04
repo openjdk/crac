@@ -162,7 +162,7 @@ class ObjectSynchronizer : AllStatic {
 
   // Returns the identity hash value for an oop
   // NOTE: It may cause monitor inflation
-  static intptr_t FastHashCode(Thread* current, oop obj);
+  static intptr_t FastHashCode(Thread* current, oop obj, intptr_t suggested_hash = markWord::no_hash);
 
   // java.lang.Thread support
   static bool current_thread_holds_lock(JavaThread* current, Handle h_obj);

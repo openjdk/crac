@@ -148,6 +148,7 @@ public:
   virtual bool is_nmethod() const                     { return false; }
   virtual bool is_runtime_stub() const                { return false; }
   virtual bool is_deoptimization_stub() const         { return false; }
+  virtual bool is_restore_stub() const                { return false; }
   virtual bool is_uncommon_trap_stub() const          { return false; }
   virtual bool is_exception_stub() const              { return false; }
   virtual bool is_safepoint_stub() const              { return false; }
@@ -349,7 +350,7 @@ public:
   address content_end() const { return _content_end; }
 };
 
-
+// RuntimeBlob(name, cb, header_size, size, CodeOffsets::frame_never_safe, frame_size, oop_maps)
 class RuntimeBlob : public CodeBlob {
   friend class VMStructs;
  public:
@@ -639,6 +640,23 @@ class DeoptimizationBlob: public SingletonBlob {
   }
   address implicit_exception_uncommon_trap() const { return code_begin() + _implicit_exception_uncommon_trap_offset; }
 #endif // INCLUDE_JVMCI
+};
+
+
+//----------------------------------------------------------------------------------------------------
+// RestoreBlob
+
+class RestoreBlob: public SingletonBlob {
+ private:
+  // Creation support
+  RestoreBlob(CodeBuffer* cb, int size, int frame_size);
+
+ public:
+  // Creation
+  static RestoreBlob* create(CodeBuffer* cb, int frame_size);
+
+  // Typing
+  bool is_restore_stub() const override          { return true; }
 };
 
 

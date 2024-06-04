@@ -122,11 +122,12 @@ class FieldStream : public KlassStream {
  private:
   int length();
 
+  bool _java_only; // If false, include injected fields
   fieldDescriptor _fd_buf;
 
  public:
-  FieldStream(InstanceKlass* klass, bool local_only, bool classes_only)
-    : KlassStream(klass, local_only, classes_only, false) {
+  FieldStream(InstanceKlass* klass, bool local_only, bool classes_only, bool java_only = true)
+    : KlassStream(klass, local_only, classes_only, false), _java_only(java_only) {
     _index = length();
     next();
   }

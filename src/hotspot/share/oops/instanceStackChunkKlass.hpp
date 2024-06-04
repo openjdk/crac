@@ -27,10 +27,10 @@
 
 #include "oops/instanceKlass.hpp"
 #include "oops/oopsHierarchy.hpp"
+#include "utilities/accessFlags.hpp"
 #include "utilities/macros.hpp"
 #include "utilities/ostream.hpp"
 
-class ClassFileParser;
 class MemRegion;
 
 // An InstanceStackChunkKlass is a specialization of the InstanceKlass.
@@ -110,7 +110,7 @@ public:
 private:
   static int _offset_of_stack;
 
-  InstanceStackChunkKlass(const ClassFileParser& parser);
+  InstanceStackChunkKlass(AccessFlags access_flags, const InstanceKlassSizes& sizes);
 
 public:
   InstanceStackChunkKlass() { assert(DumpSharedSpaces || UseSharedSpaces, "only for CDS"); }

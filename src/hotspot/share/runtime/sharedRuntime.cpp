@@ -91,6 +91,7 @@ RuntimeStub*        SharedRuntime::_resolve_virtual_call_blob;
 RuntimeStub*        SharedRuntime::_resolve_static_call_blob;
 address             SharedRuntime::_resolve_static_call_entry;
 
+RestoreBlob*        SharedRuntime::_restore_blob;
 DeoptimizationBlob* SharedRuntime::_deopt_blob;
 SafepointBlob*      SharedRuntime::_polling_page_vectors_safepoint_handler_blob;
 SafepointBlob*      SharedRuntime::_polling_page_safepoint_handler_blob;
@@ -129,6 +130,8 @@ void SharedRuntime::generate_stubs() {
 #ifdef COMPILER2
   generate_uncommon_trap_blob();
 #endif // COMPILER2
+
+  generate_restore_blob();
 }
 
 #include <math.h>

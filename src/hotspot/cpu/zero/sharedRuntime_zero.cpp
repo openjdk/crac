@@ -103,9 +103,17 @@ static DeoptimizationBlob* generate_empty_deopt_blob() {
   return CAST_FROM_FN_PTR(DeoptimizationBlob*,zero_stub);
 }
 
+static RestoreBlob* generate_empty_restore_blob() {
+  return CAST_FROM_FN_PTR(RestoreBlob*,zero_stub);
+}
+
 
 void SharedRuntime::generate_deopt_blob() {
   _deopt_blob = generate_empty_deopt_blob();
+}
+
+void SharedRuntime::generate_restore_blob() {
+  _restore_blob = generate_empty_restore_blob();
 }
 
 SafepointBlob* SharedRuntime::generate_handler_blob(address call_ptr, int poll_type) {

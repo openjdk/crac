@@ -107,10 +107,10 @@ void oopDesc::verify(oopDesc* oop_desc) {
   verify_on(tty, oop_desc);
 }
 
-intptr_t oopDesc::slow_identity_hash() {
+intptr_t oopDesc::slow_identity_hash(intptr_t hash) {
   // slow case; we have to acquire the micro lock in order to locate the header
   Thread* current = Thread::current();
-  return ObjectSynchronizer::FastHashCode(current, this);
+  return ObjectSynchronizer::FastHashCode(current, this, /*suggested_hash=*/hash);
 }
 
 // used only for asserts and guarantees

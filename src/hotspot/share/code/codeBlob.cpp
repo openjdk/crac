@@ -494,6 +494,29 @@ DeoptimizationBlob* DeoptimizationBlob::create(
 
 
 //----------------------------------------------------------------------------------------------------
+// Implementation of RestoreBlob
+
+RestoreBlob::RestoreBlob(CodeBuffer* cb, int size, int frame_size)
+: SingletonBlob("RestoreBlob", cb, sizeof(RestoreBlob), size, frame_size, nullptr)
+{}
+
+
+RestoreBlob* RestoreBlob::create(CodeBuffer* cb, int frame_size) {
+  RestoreBlob* blob = nullptr;
+  unsigned int size = CodeBlob::allocation_size(cb, sizeof(RestoreBlob));
+  ThreadInVMfromUnknown __tiv;  // get to VM state in case we block on CodeCache_lock
+  {
+    MutexLocker mu(CodeCache_lock, Mutex::_no_safepoint_check_flag);
+    blob = new (size) RestoreBlob(cb, size, frame_size);
+  }
+
+  trace_new_stub(blob, "RestoreBlob");
+
+  return blob;
+}
+
+
+//----------------------------------------------------------------------------------------------------
 // Implementation of UncommonTrapBlob
 
 #ifdef COMPILER2

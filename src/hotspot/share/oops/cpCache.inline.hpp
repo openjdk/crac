@@ -115,7 +115,7 @@ inline ResolvedFieldEntry* ConstantPoolCache::resolved_field_entry_at(int field_
 }
 
 inline int ConstantPoolCache::resolved_field_entries_length() const {
-  return _resolved_field_entries->length();
+  return _resolved_field_entries != nullptr ? _resolved_field_entries->length() : 0;
 }
 
 inline ResolvedIndyEntry* ConstantPoolCache::resolved_indy_entry_at(int index) const {
@@ -123,6 +123,6 @@ inline ResolvedIndyEntry* ConstantPoolCache::resolved_indy_entry_at(int index) c
 }
 
 inline int ConstantPoolCache::resolved_indy_entries_length() const {
-  return _resolved_indy_entries->length();
+  return _resolved_indy_entries != nullptr ? _resolved_indy_entries->length() : 0;
 }
 #endif // SHARE_OOPS_CPCACHE_INLINE_HPP

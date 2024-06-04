@@ -357,5 +357,10 @@ class LinkResolver: AllStatic {
   static void throw_abstract_method_error(const methodHandle& resolved_method,
                                           const methodHandle& selected_method,
                                           Klass *recv_klass, TRAPS);
+
+  // Portable CRaC support: handle signature polymorphic resolution cases that
+  // does not require calling into Java, omit JFR events
+  static Method* resolve_intrinsic_polymorphic_method(Klass* klass, Symbol* name,
+                                                      Symbol* signature, TRAPS);
 };
 #endif // SHARE_INTERPRETER_LINKRESOLVER_HPP

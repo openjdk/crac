@@ -1526,7 +1526,13 @@ JRT_LEAF(intptr_t, InterpreterRuntime::trace_bytecode(JavaThread* current, intpt
   LastFrameAccessor last_frame(current);
   assert(last_frame.is_interpreted_frame(), "must be an interpreted frame");
   methodHandle mh(current, last_frame.method());
-  BytecodeTracer::trace_interpreter(mh, last_frame.bcp(), tos, tos2);
+  if (!TraceOperands) {
+    BytecodeTracer::trace_interpreter(mh, last_frame.bcp(), tos, tos2);
+  } else {
+    ttyLocker ttyl;
+    BytecodeTracer::trace_interpreter(mh, last_frame.bcp(), tos, tos2);
+    last_frame.get_frame().interpreter_frame_print_values_on(tty);
+  }
   return preserve_this_value;
 JRT_END
 #endif // !PRODUCT

@@ -49,7 +49,7 @@ class NativeObject {                                    // package-private
 
     // Native base address
     //
-    private final long address;
+    protected long address;
 
     /**
      * Creates a new native object that is based at the given native address.
@@ -70,17 +70,7 @@ class NativeObject {                                    // package-private
 
     // Invoked only by AllocatedNativeObject
     //
-    protected NativeObject(int size, boolean pageAligned) {
-        if (!pageAligned) {
-            this.allocationAddress = unsafe.allocateMemory(size);
-            this.address = this.allocationAddress;
-        } else {
-            int ps = pageSize();
-            long a = unsafe.allocateMemory(size + ps);
-            this.allocationAddress = a;
-            this.address = a + ps - (a & (ps - 1));
-        }
-    }
+    protected NativeObject() {}
 
     /**
      * Returns the native base address of this native object.

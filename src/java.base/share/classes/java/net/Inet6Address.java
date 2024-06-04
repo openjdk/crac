@@ -31,6 +31,12 @@ import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
 import java.io.ObjectStreamField;
 import java.util.Enumeration;
+
+import jdk.crac.Context;
+import jdk.crac.Resource;
+import jdk.internal.crac.Core;
+import jdk.internal.crac.JDKResource;
+
 import java.util.Arrays;
 
 /**
@@ -368,8 +374,22 @@ class Inet6Address extends InetAddress {
     @java.io.Serial
     private static final long serialVersionUID = 6880410070516793377L;
 
+    private static final JDKResource nativeInitResource = new JDKResource() {
+        @Override
+        public void beforeCheckpoint(Context<? extends Resource> context) {
+        };
+
+        @Override
+        public void afterRestore(Context<? extends Resource> context) {
+            init();
+        };
+    };
+
     // Perform native initialization
-    static { init(); }
+    static {
+        init();
+        Core.Priority.NORMAL.getContext().register(nativeInitResource);
+    }
 
     Inet6Address() {
         super();

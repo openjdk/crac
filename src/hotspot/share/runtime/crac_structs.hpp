@@ -156,13 +156,25 @@ class CracRestoreParameters : public CHeapObj<mtInternal> {
 
   bool read_from(int fd);
 
+  void clear() {
+    if (_raw_content) {
+      FREE_C_HEAP_ARRAY(char, _raw_content);
+    }
+    _raw_content = NULL;
+    _properties->clear_and_deallocate();
+    _args = NULL;
+  }
 };
 
 class VM_Crac: public VM_Operation {
-  jarray _fd_arr;
+ public:
+  enum class Outcome { OK, FAIL, RETRY };
+
+ private:
+  const jarray _fd_arr;
   const bool _dry_run;
-  bool _ok;
-  GrowableArray<CracFailDep>* _failures;
+  Outcome _outcome;
+  GrowableArray<CracFailDep>* const _failures;
   CracRestoreParameters _restore_parameters;
   outputStream* _ostream;
 #if defined(LINUX) && INCLUDE_SERVICES
@@ -173,7 +185,7 @@ public:
   VM_Crac(jarray fd_arr, jobjectArray obj_arr, bool dry_run, bufferedStream* jcmd_stream) :
     _fd_arr(fd_arr),
     _dry_run(dry_run),
-    _ok(false),
+    _outcome(Outcome::FAIL),
     _failures(new (mtInternal) GrowableArray<CracFailDep>(0, mtInternal)),
     _restore_parameters(),
     _ostream(jcmd_stream ? jcmd_stream : tty)
@@ -186,10 +198,10 @@ public:
     delete _failures;
   }
 
-  GrowableArray<CracFailDep>* failures() { return _failures; }
-  bool ok() { return _ok; }
+  const GrowableArray<CracFailDep>* failures() const { return _failures; }
+  Outcome outcome() const { return _outcome; }
   const char* new_args() { return _restore_parameters.args(); }
-  GrowableArray<const char *>* new_properties() { return _restore_parameters.properties(); }
+  const GrowableArray<const char *>* new_properties() const { return _restore_parameters.properties(); }
   virtual bool allow_nested_vm_operations() const  { return true; }
   VMOp_Type type() const { return VMOp_VM_Crac; }
   void doit();

@@ -82,6 +82,7 @@ class ConstantPool : public Metadata {
   friend class BytecodeInterpreter;  // Directly extracts a klass in the pool for fast instanceof/checkcast
   friend class Universe;             // For null constructor
   friend class ClassPrelinker;       // CDS
+  friend class CracInstanceClassDumpParser;
  private:
   // If you add a new field that points to any metaspace object, you
   // must add this field to ConstantPool::metaspace_pointers_do().
@@ -277,6 +278,8 @@ class ConstantPool : public Metadata {
 
   // Hidden class support:
   void klass_at_put(int class_index, Klass* k);
+  // Portable CRaC support:
+  Klass* klass_at_put_and_get(int class_index, Klass* k);
 
   void unresolved_klass_at_put(int cp_index, int name_index, int resolved_klass_index) {
     release_tag_at_put(cp_index, JVM_CONSTANT_UnresolvedClass);
@@ -413,24 +416,24 @@ class ConstantPool : public Metadata {
     unresolved_klass_at_put(cp_index, name_index, CPKlassSlot::_temp_resolved_klass_index);
   }
 
-  jint int_at(int cp_index) {
+  jint int_at(int cp_index) const {
     assert(tag_at(cp_index).is_int(), "Corrupted constant pool");
     return *int_at_addr(cp_index);
   }
 
-  jlong long_at(int cp_index) {
+  jlong long_at(int cp_index) const {
     assert(tag_at(cp_index).is_long(), "Corrupted constant pool");
     // return *long_at_addr(cp_index);
     u8 tmp = Bytes::get_native_u8((address)&base()[cp_index]);
     return *((jlong*)&tmp);
   }
 
-  jfloat float_at(int cp_index) {
+  jfloat float_at(int cp_index) const {
     assert(tag_at(cp_index).is_float(), "Corrupted constant pool");
     return *float_at_addr(cp_index);
   }
 
-  jdouble double_at(int cp_index) {
+  jdouble double_at(int cp_index) const {
     assert(tag_at(cp_index).is_double(), "Corrupted constant pool");
     u8 tmp = Bytes::get_native_u8((address)&base()[cp_index]);
     return *((jdouble*)&tmp);

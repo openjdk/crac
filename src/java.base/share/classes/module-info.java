@@ -167,6 +167,7 @@ module java.base {
         jdk.sctp,
         jdk.crypto.cryptoki;
     exports jdk.internal.crac to
+        java.management,
         jdk.sctp;
     exports jdk.internal.foreign to
         jdk.incubator.vector;

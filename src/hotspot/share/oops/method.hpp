@@ -585,6 +585,8 @@ public:
   bool can_omit_stack_trace();
 
   // Flags getting and setting.
+  const MethodFlags &statuses() const  { return _flags; }
+  void set_statuses(MethodFlags flags) { _flags = flags; }
 #define M_STATUS_GET_SET(name, ignore)          \
   bool name() const { return _flags.name(); }   \
   void set_##name(bool x) { _flags.set_##name(x); } \

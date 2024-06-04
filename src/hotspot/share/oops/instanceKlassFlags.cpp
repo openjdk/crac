@@ -67,6 +67,20 @@ void InstanceKlassFlags::assign_class_loader_type(const ClassLoaderData* cld) {
     set_shared_class_loader_type(ClassLoader::APP_LOADER);
   }
 }
+
+InstanceKlassFlags InstanceKlassFlags::drop_nonportable_flags() const {
+  // - Clear flags dependent on CDS archive dumping -- they need to be set
+  //   when restoring based on the VM options
+  const u2 cds_bits = shared_loader_type_bits() | _misc_shared_loading_failed;
+  return {checked_cast<u2>(_flags & ~cds_bits), _status};
+}
+
+#else // INCLUDE_CDS
+
+InstanceKlassFlags InstanceKlassFlags::drop_nonportable_flags() const {
+  return *this;
+}
+
 #endif // INCLUDE_CDS
 
 #ifdef ASSERT

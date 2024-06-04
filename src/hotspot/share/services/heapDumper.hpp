@@ -36,11 +36,13 @@ class HeapDumper : public StackObj {
  private:
   char* _error;
   bool _gc_before_heap_dump;
+  bool _extended; // Includes j.l.Class objects of reference types and injected fields
   bool _oome;
   elapsedTimer _t;
 
-  HeapDumper(bool gc_before_heap_dump, bool oome) :
-    _error(nullptr), _gc_before_heap_dump(gc_before_heap_dump), _oome(oome) { }
+  HeapDumper(bool gc_before_heap_dump, bool extended, bool oome) :
+    _error(nullptr), _gc_before_heap_dump(gc_before_heap_dump),
+    _extended(extended), _oome(oome) { }
 
   // string representation of error
   char* error() const                   { return _error; }
@@ -52,8 +54,8 @@ class HeapDumper : public StackObj {
   static void dump_heap(bool oome);
 
  public:
-  HeapDumper(bool gc_before_heap_dump) :
-    _error(nullptr), _gc_before_heap_dump(gc_before_heap_dump), _oome(false) { }
+  HeapDumper(bool gc_before_heap_dump, bool with_injected_fields = false) :
+    HeapDumper(gc_before_heap_dump, with_injected_fields, false) {}
 
   ~HeapDumper();
 

@@ -26,7 +26,11 @@
 package sun.nio.ch;
 
 import java.io.IOException;
+import jdk.crac.Context;
+import jdk.crac.Resource;
 import jdk.internal.misc.Unsafe;
+import jdk.internal.crac.Core;
+import jdk.internal.crac.JDKResource;
 
 /**
  * Provides access to the Linux epoll facility.
@@ -53,9 +57,9 @@ class EPoll {
     static {
         IOUtil.load();
     }
-    private static final int SIZEOF_EPOLLEVENT   = eventSize();
-    private static final int OFFSETOF_EVENTS     = eventsOffset();
-    private static final int OFFSETOF_FD         = dataOffset();
+    private static int SIZEOF_EPOLLEVENT   = eventSize();
+    private static int OFFSETOF_EVENTS     = eventsOffset();
+    private static int OFFSETOF_FD         = dataOffset();
 
     // opcodes
     static final int EPOLL_CTL_ADD  = 1;
@@ -68,6 +72,24 @@ class EPoll {
 
     // flags
     static final int EPOLLONESHOT   = (1 << 30);
+
+    // Portable CRaC support
+    private static final JDKResource nativeInitResource = new JDKResource() {
+        @Override
+        public void beforeCheckpoint(Context<? extends Resource> context) {
+        };
+
+        @Override
+        public void afterRestore(Context<? extends Resource> context) {
+            IOUtil.load();
+            SIZEOF_EPOLLEVENT   = eventSize();
+            OFFSETOF_EVENTS     = eventsOffset();
+            OFFSETOF_FD         = dataOffset();
+        };
+    };
+    static {
+        Core.Priority.NORMAL.getContext().register(nativeInitResource);
+    }
 
     /**
      * Allocates a poll array to handle up to {@code count} events.

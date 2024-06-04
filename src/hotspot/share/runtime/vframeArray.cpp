@@ -215,11 +215,15 @@ void vframeArrayElement::unpack_on_stack(int caller_actual_parameters,
   // For Compiler1, deoptimization can occur while throwing a NullPointerException at monitorenter,
   // in which case bcp should point to the monitorenter since it is within the exception's range.
   //
+  // thread->deopt_compiled_method() == nullptr when this is used for thread restoration instead of
+  // deoptimization.
+  //
   // For realloc failure exception we just pop frames, skip the guarantee.
 
   assert(*bcp != Bytecodes::_monitorenter || is_top_frame, "a _monitorenter must be a top frame");
-  assert(thread->deopt_compiled_method() != nullptr, "compiled method should be known");
-  guarantee(realloc_failure_exception || !(thread->deopt_compiled_method()->is_compiled_by_c2() &&
+  guarantee(thread->deopt_compiled_method() == nullptr ||
+            realloc_failure_exception ||
+            !(thread->deopt_compiled_method()->is_compiled_by_c2() &&
               *bcp == Bytecodes::_monitorenter             &&
               exec_mode == Deoptimization::Unpack_exception),
             "shouldn't get exception during monitorenter");
@@ -555,7 +559,7 @@ void vframeArray::fill_in(JavaThread* thread,
   }
 }
 
-void vframeArray::unpack_to_stack(frame &unpack_frame, int exec_mode, int caller_actual_parameters) {
+void vframeArray::unpack_to_stack(const frame &unpack_frame, int exec_mode, int caller_actual_parameters) {
   // stack picture
   //   unpack_frame
   //   [new interpreter frames ] (frames are skeletal but walkable)

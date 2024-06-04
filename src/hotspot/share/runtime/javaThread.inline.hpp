@@ -164,6 +164,10 @@ inline void JavaThread::set_thread_state_fence(JavaThreadState s) {
   OrderAccess::fence();
 }
 
+inline const char *JavaThread::thread_state_name() const {
+  return ::thread_state_name(_thread_state);
+}
+
 ThreadSafepointState* JavaThread::safepoint_state() const  {
   return _safepoint_state;
 }

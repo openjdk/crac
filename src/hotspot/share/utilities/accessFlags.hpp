@@ -96,6 +96,7 @@ class AccessFlags {
  private:
   friend class Klass;
   friend class ClassFileParser;
+  friend class CracInstanceClassDumpParser;
   // the functions below should only be called on the _access_flags inst var directly,
   // otherwise they are just changing a copy of the flags
 

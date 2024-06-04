@@ -2552,6 +2552,17 @@ void SharedRuntime::generate_deopt_blob() {
 #endif
 }
 
+//------------------------------generate_restore_blob---------------------------
+void SharedRuntime::generate_restore_blob() {
+  ResourceMark rm;
+  CodeBuffer buffer("restore_blob", 128, 128); // TODO the numbers are random
+  auto *masm = new MacroAssembler(&buffer);
+
+  __ should_not_reach_here(); // TODO Unimplemented
+
+  _restore_blob = RestoreBlob::create(&buffer, 0);
+}
+
 // Number of stack slots between incoming argument block and the start of
 // a new frame.  The PROLOG must add this many slots to the stack.  The
 // EPILOG must remove this many slots. aarch64 needs two slots for

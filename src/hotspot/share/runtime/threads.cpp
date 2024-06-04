@@ -768,7 +768,7 @@ jint Threads::create_vm(JavaVMInitArgs* args, bool* canTryAgain) {
   if (CRaCRestoreFrom != nullptr && crac::is_portable_mode()) {
     // TODO honor CRaCIgnoreRestoreIfUnavailable (will have to differentiate
     // between errors and exceptions)
-    crac::restore_portable(CHECK_JNI_ERR);
+    crac::restore_heap(CHECK_JNI_ERR);
   }
 
   // cache the system and platform class loaders

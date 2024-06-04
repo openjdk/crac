@@ -2423,6 +2423,16 @@ void SharedRuntime::generate_deopt_blob() {
   _deopt_blob->set_unpack_with_exception_in_tls_offset(exception_in_tls_offset);
 }
 
+//------------------------------generate_restore_blob---------------------------
+void SharedRuntime::generate_restore_blob() {
+  ResourceMark rm;
+  CodeBuffer buffer("restore_blob", 128, 128); // TODO the numbers are random
+  auto *masm = new MacroAssembler(&buffer);
+
+  __ should_not_reach_here(); // TODO Unimplemented
+
+  _restore_blob = RestoreBlob::create(&buffer, 0);
+}
 
 #ifdef COMPILER2
 //------------------------------generate_uncommon_trap_blob--------------------

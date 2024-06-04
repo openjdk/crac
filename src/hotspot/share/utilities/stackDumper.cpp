@@ -16,6 +16,7 @@
 #include "utilities/globalDefinitions.hpp"
 #include "utilities/growableArray.hpp"
 #include "utilities/stackDumper.hpp"
+#include <cstdint>
 #include <type_traits>
 
 #ifdef _LP64
@@ -111,14 +112,20 @@ class StackDumpWriter : public StackObj {
     for (JavaThreadIteratorWithHandle jtiwh; JavaThread *thread = jtiwh.next();) {
       {
         ResourceMark rm; // Thread name
-        // Not excluding JVMTI agent and AttachListener threads since they may
-        // execute user-visible operations
+        // TODO for now we only dump the main thread, but there seems to be no
+        //  way to reliably determine that a thread is the main thread
         if (thread->is_exiting() ||
-            thread->is_hidden_from_external_view() ||
-            thread->is_Compiler_thread() ||
-            (strcmp(thread->name(), "Notification Thread") == 0 && java_lang_Thread::threadGroup(thread->threadObj()) == Universe::system_thread_group())) {
+            !(java_lang_Thread::threadGroup(thread->threadObj()) == Universe::main_thread_group() && strcmp(thread->name(), "main") == 0)) {
           continue;
         }
+        // Not excluding JVMTI agent and AttachListener threads since they may
+        // execute user-visible operations
+        // if (thread->is_exiting() ||
+        //     thread->is_hidden_from_external_view() ||
+        //     thread->is_Compiler_thread() ||
+        //     (strcmp(thread->name(), "Notification Thread") == 0 && java_lang_Thread::threadGroup(thread->threadObj()) == Universe::system_thread_group())) {
+        //   continue;
+        // }
       }
       if (!write_stack(thread)) {
         return false;
@@ -230,14 +237,14 @@ class StackDumpWriter : public StackObj {
       ResourceMark rm;
       log_trace(stackdump)("Method name: " UINTX_FORMAT " - %s",  reinterpret_cast<uintptr_t>(name), name->as_C_string());
     }
-    WRITE(reinterpret_cast<uintptr_t>(name));
+    WRITE(reinterpret_cast<WORD_UINT_T>(name));
 
     Symbol *signature = method->signature();
     if (log_is_enabled(Trace, stackdump)) {
       ResourceMark rm;
       log_trace(stackdump)("Method signature: " UINTX_FORMAT " - %s", reinterpret_cast<uintptr_t>(signature), signature->as_C_string());
     }
-    WRITE(reinterpret_cast<uintptr_t>(signature));
+    WRITE(reinterpret_cast<WORD_UINT_T>(signature));
 
     InstanceKlass *holder = method->method_holder();
     if (log_is_enabled(Trace, stackdump)) {

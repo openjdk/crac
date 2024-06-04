@@ -1,5 +1,4 @@
 #include "precompiled.hpp"
-#include "memory/resourceArea.hpp"
 #include "unittest.hpp"
 #include "utilities/stackDumpParser.hpp"
 #include "utilities/stackDumper.hpp"
@@ -56,11 +55,10 @@ static constexpr char CONTENTS_NO_TRACES[] =
     "\x00\x04"              // Word size
     ;
 
-TEST_VM(StackDumpParser, no_stack_traces) {
+TEST(StackDumpParser, no_stack_traces) {
   fill_test_file(CONTENTS_NO_TRACES, sizeof(CONTENTS_NO_TRACES) - 1);
   ASSERT_FALSE(testing::Test::HasFatalFailure() || testing::Test::HasNonfatalFailure());
 
-  ResourceMark rm;
   ParsedStackDump stack_dump;
   const char *err_msg = StackDumpParser::parse(TEST_FILENAME, &stack_dump);
   ASSERT_EQ(nullptr, err_msg) << "Parsing error: " << err_msg;
@@ -78,11 +76,10 @@ static constexpr char CONTENTS_EMPTY_TRACE[] =
     "\x00\x00\x00\x00"      // Number of frames
     ;
 
-TEST_VM(StackDumpParser, empty_stack_trace) {
+TEST(StackDumpParser, empty_stack_trace) {
   fill_test_file(CONTENTS_EMPTY_TRACE, sizeof(CONTENTS_EMPTY_TRACE) - 1);
   ASSERT_FALSE(testing::Test::HasFatalFailure() || testing::Test::HasNonfatalFailure());
 
-  ResourceMark rm;
   ParsedStackDump stack_dump;
   const char *err_msg = StackDumpParser::parse(TEST_FILENAME, &stack_dump);
   ASSERT_EQ(nullptr, err_msg) << "Parsing error: " << err_msg;
@@ -112,11 +109,10 @@ static constexpr char CONTENTS_NO_STACK_VALUES[] =
       "\x00\x00"              // Monitors num
     ;
 
-TEST_VM(StackDumpParser, stack_frame_with_no_stack_values) {
+TEST(StackDumpParser, stack_frame_with_no_stack_values) {
   fill_test_file(CONTENTS_NO_STACK_VALUES, sizeof(CONTENTS_NO_STACK_VALUES) - 1);
   ASSERT_FALSE(testing::Test::HasFatalFailure() || testing::Test::HasNonfatalFailure());
 
-  ResourceMark rm;
   ParsedStackDump stack_dump;
   const char *err_msg = StackDumpParser::parse(TEST_FILENAME, &stack_dump);
   ASSERT_EQ(nullptr, err_msg) << "Parsing error: " << err_msg;
@@ -162,11 +158,10 @@ static constexpr char CONTENTS_CORRECT_STACK_VALUES[] =
       "\x00\x00"                           // Monitors num
     ;
 
-TEST_VM(StackDumpParser, stack_frame_with_correct_stack_values) {
+TEST(StackDumpParser, stack_frame_with_correct_stack_values) {
   fill_test_file(CONTENTS_CORRECT_STACK_VALUES, sizeof(CONTENTS_CORRECT_STACK_VALUES) - 1);
   ASSERT_FALSE(testing::Test::HasFatalFailure() || testing::Test::HasNonfatalFailure());
 
-  ResourceMark rm;
   ParsedStackDump stack_dump;
   const char *err_msg = StackDumpParser::parse(TEST_FILENAME, &stack_dump);
   ASSERT_EQ(nullptr, err_msg) << "Parsing error: " << err_msg;
@@ -235,11 +230,10 @@ static constexpr char CONTENTS_MULTIPLE_STACKS[] =
       "\x00\x00"              // Monitors num
     ;
 
-TEST_VM(StackDumpParser, multiple_stacks_dumped) {
+TEST(StackDumpParser, multiple_stacks_dumped) {
   fill_test_file(CONTENTS_MULTIPLE_STACKS, sizeof(CONTENTS_MULTIPLE_STACKS) - 1);
   ASSERT_FALSE(testing::Test::HasFatalFailure() || testing::Test::HasNonfatalFailure());
 
-  ResourceMark rm;
   ParsedStackDump stack_dump;
   const char *err_msg = StackDumpParser::parse(TEST_FILENAME, &stack_dump);
   ASSERT_EQ(nullptr, err_msg) << "Parsing error: " << err_msg;

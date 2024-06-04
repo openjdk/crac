@@ -45,6 +45,7 @@
 #include "utilities/exceptions.hpp"
 #include "utilities/globalDefinitions.hpp"
 #include "utilities/macros.hpp"
+#include "utilities/sizes.hpp"
 #if INCLUDE_JFR
 #include "jfr/support/jfrThreadExtension.hpp"
 #endif
@@ -779,8 +780,8 @@ private:
   static ByteSize exception_pc_offset()          { return byte_offset_of(JavaThread, _exception_pc); }
   static ByteSize exception_handler_pc_offset()  { return byte_offset_of(JavaThread, _exception_handler_pc); }
   static ByteSize is_method_handle_return_offset() { return byte_offset_of(JavaThread, _is_method_handle_return); }
-
   static ByteSize active_handles_offset()        { return byte_offset_of(JavaThread, _active_handles); }
+  static ByteSize vframe_array_head_offset()     { return byte_offset_of(JavaThread, _vframe_array_head); }
 
   // StackOverflow offsets
   static ByteSize stack_overflow_limit_offset()  {

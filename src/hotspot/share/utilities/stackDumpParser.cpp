@@ -3,8 +3,8 @@
 #include "memory/allocation.hpp"
 #include "runtime/os.hpp"
 #include "utilities/basicTypeReader.hpp"
-#include "utilities/bytes.hpp"
 #include "utilities/debug.hpp"
+#include "utilities/growableArray.hpp"
 #include "utilities/stackDumpParser.hpp"
 #include "utilities/stackDumper.hpp"
 
@@ -22,7 +22,7 @@ static constexpr bool is_supported_word_size(u2 size) {
 
 class StackTracesParser : public StackObj {
  public:
-  StackTracesParser(FileBasicTypeReader *reader, GrowableArray<StackTrace *> *out, u2 word_size)
+  StackTracesParser(FileBasicTypeReader *reader, GrowableArrayCHeap<StackTrace *, mtInternal> *out, u2 word_size)
       : _reader(reader), _out(out), _word_size(word_size) {
     precond(_reader != nullptr && _out != nullptr && is_supported_word_size(_word_size));
   }
@@ -59,7 +59,7 @@ class StackTracesParser : public StackObj {
 
  private:
   FileBasicTypeReader *_reader;
-  GrowableArray<StackTrace *> *_out;
+  GrowableArrayCHeap<StackTrace *, mtInternal> *_out;
   u2 _word_size;
 
   struct TracePreamble {

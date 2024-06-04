@@ -59,7 +59,7 @@ class StackTrace : public CHeapObj<mtInternal> {
   Frame *const _frames;
 };
 
-class ParsedStackDump : public StackObj {
+class ParsedStackDump : public CHeapObj<mtInternal> {
  public:
   ~ParsedStackDump() {
     for (auto *_stack_trace : _stack_traces) {
@@ -68,15 +68,15 @@ class ParsedStackDump : public StackObj {
   }
 
   // Size of IDs and stack slots in the dump.
-  u2 word_size() const                                    { return _word_size; }
-  void set_word_size(u2 value)                            { _word_size = value; }
+  u2 word_size() const                                         { return _word_size; }
+  void set_word_size(u2 value)                                 { _word_size = value; }
   // Parsed stack traces.
-  const GrowableArray<StackTrace *> &stack_traces() const { return _stack_traces; }
-  GrowableArray<StackTrace *> &stack_traces()             { return _stack_traces; }
+  const GrowableArrayView<StackTrace *> &stack_traces() const  { return _stack_traces; }
+  GrowableArrayCHeap<StackTrace *, mtInternal> &stack_traces() { return _stack_traces; }
 
  private:
   u2 _word_size = 0;
-  GrowableArray<StackTrace *> _stack_traces;
+  GrowableArrayCHeap<StackTrace *, mtInternal> _stack_traces;
 };
 
 struct StackDumpParser : public AllStatic {

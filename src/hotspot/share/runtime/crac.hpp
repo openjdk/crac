@@ -27,7 +27,8 @@
 #include "memory/allStatic.hpp"
 #include "runtime/handles.hpp"
 #include "utilities/exceptions.hpp"
-#include "utilities/macros.hpp"
+#include "utilities/heapDumpParser.hpp"
+#include "utilities/stackDumpParser.hpp"
 
 // xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
 #define UUID_LENGTH 36
@@ -42,8 +43,6 @@ public:
   static Handle checkpoint(jarray fd_arr, jobjectArray obj_arr, bool dry_run, jlong jcmd_stream, TRAPS);
   // Restore in the classic mode.
   static void restore();
-  // Restore in the portable mode.
-  static void restore_portable(TRAPS);
 
   static jlong restore_start_time();
   static jlong uptime_since_restore();
@@ -57,6 +56,16 @@ public:
 
   static void initialize_time_counters();
 
+  // Portable mode
+
+  // Restores classes and objects.
+  static void restore_heap(TRAPS);
+  // Restores thread states and launches their execution. Should only be called
+  // once, after restore_heap() has been called.
+  static void restore_threads(TRAPS);
+  // Called by RestoreStub to fill in the skeletal frames just created.
+  static void fill_in_frames();
+
 private:
   static bool read_bootid(char *dest);
 
@@ -64,6 +73,14 @@ private:
   static jlong checkpoint_nanos;
   static char checkpoint_bootid[UUID_LENGTH];
   static jlong javaTimeNanos_offset;
+
+  static JavaValue restore_current_thread(TRAPS);
+
+  static ParsedHeapDump  *_heap_dump;
+  static ParsedStackDump *_stack_dump;
+  // TODO use restored classes once we are able to restore system classes
+  static ResizeableResourceHashtable<HeapDump::ID, Klass *, AnyObj::C_HEAP> *_portable_loaded_classes;
+  static ResizeableResourceHashtable<HeapDump::ID, jobject, AnyObj::C_HEAP> *_portable_restored_objects;
 };
 
 #endif //SHARE_RUNTIME_CRAC_HPP

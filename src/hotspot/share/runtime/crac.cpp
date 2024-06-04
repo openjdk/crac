@@ -22,38 +22,61 @@
  */
 
 #include "precompiled.hpp"
+
 #include "classfile/classLoader.hpp"
 #include "classfile/symbolTable.hpp"
 #include "classfile/systemDictionary.hpp"
+#include "classfile/vmClasses.hpp"
 #include "classfile/vmSymbols.hpp"
+#include "interpreter/bytecodes.hpp"
+#include "interpreter/interpreter.hpp"
+#include "jni.h"
 #include "jvm.h"
 #include "logging/log.hpp"
 #include "logging/logAsyncWriter.hpp"
 #include "logging/logConfiguration.hpp"
+#include "memory/allocation.hpp"
 #include "memory/oopFactory.hpp"
-#include "oops/typeArrayOop.inline.hpp"
+#include "memory/resourceArea.hpp"
+#include "oops/instanceKlass.hpp"
+#include "oops/method.hpp"
+#include "oops/oopsHierarchy.hpp"
 #include "os.inline.hpp"
 #include "runtime/crac.hpp"
 #include "runtime/crac_structs.hpp"
+#include "runtime/deoptimization.hpp"
 #include "runtime/handles.hpp"
 #include "runtime/interfaceSupport.inline.hpp"
+#include "runtime/java.hpp"
 #include "runtime/javaCalls.hpp"
+#include "runtime/javaThread.hpp"
 #include "runtime/jniHandles.hpp"
 #include "runtime/jniHandles.inline.hpp"
 #include "runtime/reflectionUtils.hpp"
+#include "runtime/signature.hpp"
+#include "runtime/stackValue.hpp"
+#include "runtime/stackValueCollection.hpp"
+#include "runtime/stubRoutines.hpp"
 #include "runtime/thread.hpp"
 #include "runtime/threads.hpp"
+#include "runtime/vframeArray.hpp"
 #include "runtime/vmThread.hpp"
 #include "services/heapDumper.hpp"
 #include "services/writeableFlags.hpp"
+#include "utilities/debug.hpp"
 #include "utilities/decoder.hpp"
 #include "utilities/exceptions.hpp"
+#include "utilities/globalDefinitions.hpp"
 #include "utilities/heapDumpParser.hpp"
+#include "utilities/hprofTag.hpp"
+#include "utilities/macros.hpp"
+#include "utilities/stackDumpParser.hpp"
 #include "utilities/stackDumper.hpp"
 #ifdef LINUX
 #include "os_linux.hpp"
 #endif
 
+// Filenames used by the portble mode
 static constexpr char PMODE_HEAP_DUMP_FILENAME[] = "heap.hprof";
 static constexpr char PMODE_STACK_DUMP_FILENAME[] = "stacks.bin";
 
@@ -63,6 +86,12 @@ static unsigned int _crengine_argc = 0;
 static const char* _crengine_args[32];
 static jlong _restore_start_time;
 static jlong _restore_start_nanos;
+
+// Used by portable restore
+ParsedHeapDump  *crac::_heap_dump;
+ParsedStackDump *crac::_stack_dump;
+ResizeableResourceHashtable<HeapDump::ID, Klass *, AnyObj::C_HEAP> *crac::_portable_loaded_classes;
+ResizeableResourceHashtable<HeapDump::ID, jobject, AnyObj::C_HEAP> *crac::_portable_restored_objects;
 
 // Timestamps recorded before checkpoint
 jlong crac::checkpoint_millis;
@@ -718,7 +747,14 @@ class HeapRestorer : public StackObj {
   static constexpr HeapDump::ID NULL_ID = 0;
 
  public:
-  explicit HeapRestorer(const ParsedHeapDump &heap_dump) : _heap_dump(heap_dump) {};
+  HeapRestorer(const ParsedHeapDump  &heap_dump,
+               const GrowableArrayView<StackTrace *> &stack_traces,
+               ResizeableResourceHashtable<HeapDump::ID, Klass *, AnyObj::C_HEAP> **loaded_classes,
+               ResizeableResourceHashtable<HeapDump::ID, jobject, AnyObj::C_HEAP> **restored_objects)
+      : _heap_dump(heap_dump), _stack_traces(stack_traces) {
+    *loaded_classes = _loaded_classes;
+    *restored_objects = _restored_objects;
+  };
 
   void restore_heap(TRAPS) {
     // For now we rely on CDS to pre-initialize the built-in class loaders
@@ -741,8 +777,7 @@ class HeapRestorer : public StackObj {
     );
     if (HAS_PENDING_EXCEPTION) return;
 
-    // TODO this can be removed after object restoration is implemented, since
-    // these are just subsets of all dumped objects
+    // TODO restore all dumped objects instead of only these subsets
     {
       auto restore_iter = [&](HeapDump::ID id, const instanceHandle &_) -> bool {
         restore_object(id, CHECK_false);
@@ -753,11 +788,31 @@ class HeapRestorer : public StackObj {
       _allocated_prot_domains.iterate(restore_iter);
       if (HAS_PENDING_EXCEPTION) return;
     }
-    // TODO restore objects
+    for (const auto *trace : _stack_traces) {
+      // TODO restore the thread, but what to do if it is the main thread?
+      // restore_object(trace->thread_id(), CHECK);
+      // Restore locals and operands
+      for (u4 i = 0; i < trace->frames_num(); i++) {
+        const StackTrace::Frame &frame = trace->frames(i);
+        for (u2 j = 0; j < frame.locals.size(); j++) {
+          const StackTrace::Frame::Value &v = frame.locals.mem()[j];
+          if (v.type == DumpedStackValueType::REFERENCE) {
+            restore_object(v.obj_id, CHECK);
+          }
+        }
+        for (u2 j = 0; j < frame.operands.size(); j++) {
+          const StackTrace::Frame::Value &v = frame.operands.mem()[j];
+          if (v.type == DumpedStackValueType::REFERENCE) {
+            restore_object(v.obj_id, CHECK);
+          }
+        }
+      }
+    }
   }
 
  private:
-  const ParsedHeapDump &_heap_dump;
+  const ParsedHeapDump  &_heap_dump;
+  const GrowableArrayView<StackTrace *> &_stack_traces;
 
   Symbol *get_dumped_symbol(HeapDump::ID id, TRAPS) const {
     HeapDump::UTF8 *utf8 = _heap_dump.utf8s.get(id);
@@ -942,9 +997,11 @@ class HeapRestorer : public StackObj {
 
   ResizeableResourceHashtable<HeapDump::ID, instanceHandle, AnyObj::C_HEAP> _prepared_class_loaders {11,   1228891};
   ResizeableResourceHashtable<HeapDump::ID, instanceHandle, AnyObj::C_HEAP> _allocated_prot_domains {11,   1228891};
-  ResizeableResourceHashtable<HeapDump::ID, Klass *,        AnyObj::C_HEAP> _loaded_classes         {107,  1228891};
+  ResizeableResourceHashtable<HeapDump::ID, Klass *,        AnyObj::C_HEAP> *_loaded_classes =
+    new(mtInternal) ResizeableResourceHashtable<HeapDump::ID, Klass *, AnyObj::C_HEAP>              {107,  1228891};
   ResizeableResourceHashtable<HeapDump::ID, Klass *,        AnyObj::C_HEAP> _restored_classes       {107,  1228891};
-  ResizeableResourceHashtable<HeapDump::ID, Handle,         AnyObj::C_HEAP> _restored_objects       {1009, 1228891};
+  ResizeableResourceHashtable<HeapDump::ID, jobject,        AnyObj::C_HEAP> *_restored_objects =
+    new(mtInternal) ResizeableResourceHashtable<HeapDump::ID, jobject,  AnyObj::C_HEAP>             {1009, 1228891};
 
   // Gets a value or puts an empty-initialized value if the key is absent.
   template <class V>
@@ -959,7 +1016,7 @@ class HeapRestorer : public StackObj {
 
   // Loads the class without restoring it.
   Klass *load_class(const HeapDump::ClassDump &dump, TRAPS) {
-    Klass **ready = get_or_put_stub(dump.id, &_loaded_classes);
+    Klass **ready = get_or_put_stub(dump.id, _loaded_classes);
     if (ready != nullptr) {
       if (*ready == nullptr) {
         THROW_MSG_NULL(vmSymbols::java_lang_IllegalArgumentException(),
@@ -997,7 +1054,7 @@ class HeapRestorer : public StackObj {
       verify_fields(InstanceKlass::cast(klass), dump, CHECK_NULL);
     }
 
-    _loaded_classes.put(dump.id, klass);
+    _loaded_classes->put(dump.id, klass);
     if (log_is_enabled(Trace, restore)) {
       ResourceMark rm;
       log_trace(restore)("Loaded class " INT64_FORMAT " as %s", dump.id, klass->external_name());
@@ -1331,13 +1388,17 @@ class HeapRestorer : public StackObj {
   }
 
   objArrayHandle restore_signers(HeapDump::ID id, TRAPS) {
-    Handle signers = restore_object(id, CHECK_({}));
-    if (signers.not_null() && !signers->is_objArray()) {
+    oop signers;
+    {
+      jobject signers_handle = restore_object(id, CHECK_({}));
+      signers = JNIHandles::resolve(signers_handle);
+    }
+    if (signers != nullptr && !signers->is_objArray()) {
       ResourceMark rm;
       THROW_MSG_(vmSymbols::java_lang_IllegalArgumentException(),
                  err_msg("Unexpected signers object type: %s", signers->klass()->external_name()), {});
     }
-    return {Thread::current(), static_cast<objArrayOop>(signers())};
+    return {Thread::current(), static_cast<objArrayOop>(signers)};
   }
 
   // Sets static fields, basic types should have already been verified during
@@ -1388,16 +1449,20 @@ class HeapRestorer : public StackObj {
     switch (fs.signature()->char_at(0)) {
       case JVM_SIGNATURE_CLASS:
       case JVM_SIGNATURE_ARRAY: {
-        Handle restored = restore_object(val.as_object_id, CHECK);
         // Only basic type has been validated until now, so validate the class
         Klass *field_class = get_field_class(fs, CHECK);
-        if (restored.not_null() && !restored->klass()->is_subtype_of(field_class)) {
+        oop restored;
+        {
+          jobject restored_handle = restore_object(val.as_object_id, CHECK);
+          restored = JNIHandles::resolve(restored_handle);
+        }
+        if (restored != nullptr && !restored->klass()->is_subtype_of(field_class)) {
           ResourceMark rm;
           THROW_MSG(vmSymbols::java_lang_IllegalArgumentException(),
                     err_msg("Field referencing a %s is dumped as an incompatible %s instance",
                             field_class->external_name(), restored->klass()->external_name()));
         }
-        obj->obj_field_put(fs.offset(), restored());
+        obj->obj_field_put(fs.offset(), restored);
         break;
       }
       case JVM_SIGNATURE_BOOLEAN: obj->bool_field_put(fs.offset(), val.as_boolean);  break;
@@ -1433,11 +1498,11 @@ class HeapRestorer : public StackObj {
     return field_class;
   }
 
-  Handle restore_object(HeapDump::ID id, TRAPS) {
+  jobject restore_object(HeapDump::ID id, TRAPS) {
     if (id == NULL_ID) {
       return {};
     }
-    Handle *ready = _restored_objects.get(id);
+    jobject *ready = _restored_objects->get(id);
     if (ready != nullptr) {
       return *ready;
     }
@@ -1447,31 +1512,38 @@ class HeapRestorer : public StackObj {
     HeapDump::PrimArrayDump *prim_array_dump = _heap_dump.prim_array_dumps.get(id);
     // HeapDumper does not include Class<*> instances of non-primitive classes
     // in the instance dumps
-    HeapDump::ClassDump     *class_dump =      _heap_dump.class_dumps.get(id);
+    HeapDump::ClassDump     *class_dump      = _heap_dump.class_dumps.get(id);
 
     if (instance_dump != nullptr && obj_array_dump == nullptr && prim_array_dump == nullptr && class_dump == nullptr) {
-      Handle handle = restore_instance(*instance_dump, CHECK_NH);
+      jobject handle = restore_instance(*instance_dump, CHECK_NULL);
       return handle;
     }
     if (instance_dump == nullptr && obj_array_dump != nullptr && prim_array_dump == nullptr && class_dump == nullptr) {
-      Handle handle = restore_obj_array(*obj_array_dump, CHECK_NH);
+      jobject handle = restore_obj_array(*obj_array_dump, CHECK_NULL);
       return handle;
     }
     if (instance_dump == nullptr && obj_array_dump == nullptr && prim_array_dump != nullptr && class_dump == nullptr) {
-      Handle handle = restore_prim_array(*prim_array_dump, CHECK_NH);
+      jobject handle = restore_prim_array(*prim_array_dump, CHECK_NULL);
       return handle;
     }
     if (instance_dump == nullptr && obj_array_dump == nullptr && prim_array_dump == nullptr && class_dump != nullptr) {
-      Klass *klass = restore_class(*class_dump, CHECK_NH);
-      return {Thread::current(), klass->java_mirror()};
+      Klass *klass = restore_class(*class_dump, CHECK_NULL);
+      jobject *handle_ptr = _restored_objects->get(id); // May have got added during static fields restoration
+      if (handle_ptr == nullptr) {
+        jobject handle = JNIHandles::make_local(klass->java_mirror());
+        _restored_objects->put_when_absent(id, handle);
+        return handle;
+      }
+      assert(JNIHandles::resolve(*handle_ptr) == klass->java_mirror(), "Must be");
+      return *handle_ptr;
     }
 
     THROW_MSG_(vmSymbols::java_lang_IllegalArgumentException(),
                err_msg("Object dump " INT64_FORMAT " occurs in none or multiple dump categories", id), {});
   }
 
-  instanceHandle restore_instance(const HeapDump::InstanceDump &dump, TRAPS) {
-    assert(!_restored_objects.contains(dump.id), "Use restore_object() which also checks for ID duplication");
+  jobject restore_instance(const HeapDump::InstanceDump &dump, TRAPS) {
+    assert(!_restored_objects->contains(dump.id), "Use restore_object() which also checks for ID duplication");
     log_trace(restore)("Restoring instance " INT64_FORMAT, dump.id);
 
     HeapDump::ClassDump *class_dump = get_class_dump(dump.class_id, CHECK_({}));
@@ -1485,7 +1557,8 @@ class HeapRestorer : public StackObj {
 
     // HeapDumper creates Class<*> instance dumps for primitive types
     if (klass == vmClasses::Class_klass()) {
-      return get_primitive_class_mirror(*class_dump, dump, THREAD);
+      jobject handle = get_primitive_class_mirror(*class_dump, dump, THREAD);
+      return handle; // Already saved by get_primitive_class_mirror()
     }
 
     instanceHandle handle;
@@ -1511,8 +1584,10 @@ class HeapRestorer : public StackObj {
       handle = klass->allocate_instance_handle(CHECK_({}));
     }
 
-    assert(!_restored_objects.contains(dump.id), "Should still be not restored");
-    _restored_objects.put_when_absent(dump.id, handle);
+    jobject jni_handle = JNIHandles::make_local(handle());
+    assert(!_restored_objects->contains(dump.id), "Should still not be restored");
+    _restored_objects->put_when_absent(dump.id, jni_handle);
+    _restored_objects->maybe_grow();
 
     restore_class(*class_dump, CHECK_({}));
 
@@ -1528,11 +1603,13 @@ class HeapRestorer : public StackObj {
       ResourceMark rm;
       log_trace(restore)("Restored instance " INT64_FORMAT " (%s)", dump.id, klass->external_name());
     }
-    return handle;
+    return jni_handle;
   }
 
-  instanceHandle get_primitive_class_mirror(const HeapDump::ClassDump &class_dump,
-                                            const HeapDump::InstanceDump &instance_dump, TRAPS) {
+  jobject get_primitive_class_mirror(const HeapDump::ClassDump &class_dump,
+                                     const HeapDump::InstanceDump &instance_dump, TRAPS) {
+    precond(!_restored_objects->contains(instance_dump.id));
+
     // We rely on j.l.Class name field to reveal the primitive type
 #ifdef ASSERT
     {
@@ -1567,15 +1644,19 @@ class HeapRestorer : public StackObj {
                  err_msg("Unexpected fields data size in class instance dump " INT64_FORMAT, instance_dump.id), {});
     }
 
-    Handle name = restore_object(name_id.as_object_id, CHECK_({}));
-    if (name.is_null()) {
+    oop name;
+    {
+      jobject name_handle = restore_object(name_id.as_object_id, CHECK_({}));
+      name = JNIHandles::resolve(name_handle);
+    }
+    if (name == nullptr) {
       THROW_MSG_(vmSymbols::java_lang_IllegalArgumentException(),
                  err_msg("Name field of class instance dump " INT64_FORMAT " is uninitialized", instance_dump.id), {});
     }
     assert(name->klass() == vmClasses::String_klass(), "This must be checked during the field verification");
 
     ResourceMark rm;
-    char *name_str = java_lang_String::as_quoted_ascii(name());
+    char *name_str = java_lang_String::as_quoted_ascii(name);
 
     BasicType type = name2type(name_str);
     if (!is_java_primitive(type) && type != T_VOID) {
@@ -1584,8 +1665,11 @@ class HeapRestorer : public StackObj {
                          "but found class instance dump named %s", name_str), {});
     }
 
-    instanceHandle handle(Thread::current(), static_cast<instanceOop>(Universe::java_mirror(type)));
-    assert(handle.not_null(), "Primitive class mirror must not be null");
+    jobject handle = JNIHandles::make_local(static_cast<instanceOop>(Universe::java_mirror(type)));
+    assert(handle != nullptr, "Primitive class mirror must not be null");
+    assert(!_restored_objects->contains(instance_dump.id), "Should still not be restored");
+    _restored_objects->put_when_absent(instance_dump.id, handle);
+    _restored_objects->maybe_grow();
     return handle;
   }
 
@@ -1623,8 +1707,8 @@ class HeapRestorer : public StackObj {
     }
   }
 
-  objArrayHandle restore_obj_array(const HeapDump::ObjArrayDump &dump, TRAPS) {
-    assert(!_restored_objects.contains(dump.id), "Use restore_object() which also checks for ID duplication");
+  jobject restore_obj_array(const HeapDump::ObjArrayDump &dump, TRAPS) {
+    assert(!_restored_objects->contains(dump.id), "Use restore_object() which also checks for ID duplication");
     log_trace(restore)("Restoring object array " INT64_FORMAT, dump.id);
 
     HeapDump::ClassDump *class_dump = get_class_dump(dump.array_class_id, CHECK_({}));
@@ -1648,21 +1732,26 @@ class HeapRestorer : public StackObj {
     }
     int elems_num = static_cast<int>(dump.elem_ids.size());
 
-    objArrayHandle handle;
+    jobject handle;
     {
       objArrayOop o = klass->allocate(elems_num, CHECK_({}));
-      handle = objArrayHandle(Thread::current(), o);
+      handle = JNIHandles::make_local(o);
     }
 
-    assert(!_restored_objects.contains(dump.id), "Should still be not restored");
-    _restored_objects.put_when_absent(dump.id, handle);
+    assert(!_restored_objects->contains(dump.id), "Should still be not restored");
+    _restored_objects->put_when_absent(dump.id, handle);
+    _restored_objects->maybe_grow();
 
     restore_class(*class_dump, CHECK_({}));
 
     for (int i = 0; i < elems_num; i++) {
-      Handle elem = restore_object(dump.elem_ids[i], CHECK_({}));
-      if (elem.is_null() || elem->klass()->is_subtype_of(klass->element_klass())) {
-        handle->obj_at_put(i, elem());
+      oop elem;
+      {
+        jobject elem_handle = restore_object(dump.elem_ids[i], CHECK_({}));
+        elem = JNIHandles::resolve(elem_handle);
+      }
+      if (elem == nullptr || elem->klass()->is_subtype_of(klass->element_klass())) {
+        static_cast<objArrayOop>(JNIHandles::resolve(handle))->obj_at_put(i, elem);
       } else {
         ResourceMark rm;
         THROW_MSG_(vmSymbols::java_lang_IllegalArgumentException(),
@@ -1679,8 +1768,8 @@ class HeapRestorer : public StackObj {
     return handle;
   }
 
-  typeArrayHandle restore_prim_array(const HeapDump::PrimArrayDump &dump, TRAPS) {
-    assert(!_restored_objects.contains(dump.id), "Use restore_object() which also checks for ID duplication");
+  jobject restore_prim_array(const HeapDump::PrimArrayDump &dump, TRAPS) {
+    assert(!_restored_objects->contains(dump.id), "Use restore_object() which also checks for ID duplication");
     log_trace(restore)("Restoring primitive array " INT64_FORMAT, dump.id);
 
     // Ensure won't overflow array length which is an int
@@ -1737,37 +1826,476 @@ class HeapRestorer : public StackObj {
         ShouldNotReachHere();  // Ensured by the parser
     }
 
-    typeArrayHandle handle(Thread::current(), o);
-    _restored_objects.put_when_absent(dump.id, handle);
-    _restored_objects.maybe_grow();
+    jobject handle = JNIHandles::make_local(o);
+    _restored_objects->put_when_absent(dump.id, handle);
+    _restored_objects->maybe_grow();
     if (log_is_enabled(Trace, restore)) {
       ResourceMark rm;
-      log_trace(restore)("Restored primitive array " INT64_FORMAT " (%s)", dump.id, handle->klass()->external_name());
+      log_trace(restore)("Restored primitive array " INT64_FORMAT " (%s)", dump.id, o->klass()->external_name());
     }
     return handle;
   }
 };
 
 // Restore in portable mode.
-void crac::restore_portable(TRAPS) {
+void crac::restore_heap(TRAPS) {
   assert(is_portable_mode(), "Use crac::restore() instead");
   precond(CRaCRestoreFrom != nullptr);
+  precond(_heap_dump == nullptr && _stack_dump == nullptr &&
+          _portable_loaded_classes == nullptr && _portable_restored_objects == nullptr);
 
   char path[JVM_MAXPATHLEN];
-  os::snprintf_checked(path, sizeof(path), "%s%s%s", CRaCRestoreFrom, os::file_separator(), PMODE_HEAP_DUMP_FILENAME);
 
-  ParsedHeapDump heap_dump;
-  const char* err_str = HeapDumpParser::parse(path, &heap_dump);
+  os::snprintf_checked(path, sizeof(path), "%s%s%s", CRaCRestoreFrom, os::file_separator(), PMODE_HEAP_DUMP_FILENAME);
+  _heap_dump = new ParsedHeapDump();
+  const char* err_str = HeapDumpParser::parse(path, _heap_dump);
   if (err_str != nullptr) {
+    delete _heap_dump;
     THROW_MSG(vmSymbols::java_lang_IllegalArgumentException(),
               err_msg("Restore failed: cannot parse heap dump %s (%s)", path, err_str));
   }
 
-  HeapRestorer heap_restorer(heap_dump);
+  os::snprintf_checked(path, sizeof(path), "%s%s%s", CRaCRestoreFrom, os::file_separator(), PMODE_STACK_DUMP_FILENAME);
+  _stack_dump = new ParsedStackDump();
+  err_str = StackDumpParser::parse(path, _stack_dump);
+  if (err_str != nullptr) {
+    delete _heap_dump;
+    delete _stack_dump;
+    THROW_MSG(vmSymbols::java_lang_IllegalArgumentException(),
+              err_msg("Restore failed: cannot parse stack dump %s (%s)", path, err_str));
+  }
+  if (_stack_dump->word_size() != oopSize) {
+    delete _heap_dump;
+    delete _stack_dump;
+    THROW_MSG(vmSymbols::java_lang_IllegalArgumentException(),
+              err_msg("Restore failed: stack dump comes from an incompatible platform "
+                      "(dumped word size %i != current word size %i)", _stack_dump->word_size(), oopSize));
+  }
+
+  // TODO _portable_restored_objects will be filled with handles, so have to
+  //  ensure they won't be destroyed by the time thread restoration code uses
+  //  them. Use local JNI handles as HandleMark's description suggests?
+  HeapRestorer heap_restorer(*_heap_dump, _stack_dump->stack_traces(),
+                             &_portable_loaded_classes, &_portable_restored_objects);
   heap_restorer.restore_heap(THREAD);
   if (HAS_PENDING_EXCEPTION) {
+    delete _heap_dump;
+    delete _stack_dump;
+    delete _portable_loaded_classes;
+    delete _portable_restored_objects; // TODO destroy JNI handles?
+
     Handle e(Thread::current(), PENDING_EXCEPTION);
     CLEAR_PENDING_EXCEPTION;
     THROW_MSG_CAUSE(vmSymbols::java_lang_IllegalArgumentException(), "Restore failed: cannot restore heap", e);
+  }
+}
+
+class vframeRestoreArrayElement : public vframeArrayElement {
+ public:
+   void fill_in(const StackTrace::Frame &snapshot,
+                bool reexecute,
+                const ResizeableResourceHashtable<HeapDump::ID, Klass *, AnyObj::C_HEAP> &classes,
+                const ResizeableResourceHashtable<HeapDump::ID, jobject,  AnyObj::C_HEAP> &objects,
+                const ParsedHeapDump::RecordTable<HeapDump::UTF8>                        &symbols,
+                TRAPS) {
+    _method = get_method(snapshot, classes, symbols, CHECK);
+
+    _bci = snapshot.bci;
+    if (_method->validate_bci(_bci) != _bci) {
+      THROW_MSG(vmSymbols::java_lang_IllegalArgumentException(), err_msg("Invalid bytecode index %i", _bci));
+    }
+
+    _reexecute = reexecute;
+
+    _locals = get_stack_values(snapshot.locals, objects, CHECK);
+    _expressions = get_stack_values(snapshot.operands, objects, CHECK);
+
+    // TODO add monitor info into the snapshot; for now assuming no monitors
+    _monitors = nullptr;
+    DEBUG_ONLY(_removed_monitors = false;)
+   }
+
+ private:
+  static Method *get_method(const StackTrace::Frame &snapshot,
+                            const ResizeableResourceHashtable<HeapDump::ID, Klass *, AnyObj::C_HEAP> &classes,
+                            const ParsedHeapDump::RecordTable<HeapDump::UTF8>                        &symbols,
+                            TRAPS) {
+    InstanceKlass *method_class;
+    {
+      Klass **c = classes.get(snapshot.class_id);
+      if (c == nullptr) {
+        THROW_MSG_NULL(vmSymbols::java_lang_IllegalArgumentException(),
+                       err_msg("Unknown class ID " UINT64_FORMAT, snapshot.class_id));
+      }
+      if (!(*c)->is_instance_klass()) {
+        ResourceMark rm;
+        THROW_MSG_NULL(vmSymbols::java_lang_IllegalArgumentException(),
+                       err_msg("Class %s (ID " UINT64_FORMAT ") is not an instance class",
+                               (*c)->external_name(), snapshot.class_id));
+      }
+      method_class = InstanceKlass::cast(*c);
+    }
+    Symbol *method_name;
+    {
+      HeapDump::UTF8 *r = symbols.get(snapshot.method_name_id);
+      if (r == nullptr) {
+        THROW_MSG_NULL(vmSymbols::java_lang_IllegalArgumentException(),
+                       err_msg("Unknown method name ID " UINT64_FORMAT, snapshot.method_sig_id));
+      }
+      method_name = r->sym;
+    }
+    Symbol *method_sig;
+    {
+      HeapDump::UTF8 *r = symbols.get(snapshot.method_sig_id);
+      if (r == nullptr) {
+        THROW_MSG_NULL(vmSymbols::java_lang_IllegalArgumentException(),
+                       err_msg("Unknown method signature ID " UINT64_FORMAT, snapshot.method_sig_id));
+      }
+      method_sig = r->sym;
+    }
+
+    Method *method = method_class->find_method(method_name, method_sig);
+    if (method == nullptr) {
+      THROW_MSG_NULL(vmSymbols::java_lang_IllegalArgumentException(),
+                     err_msg("Method %s %s not found in class %s",
+                             method_sig->as_C_string(), method_name->as_C_string(), method_class->external_name()));
+    }
+
+    return method;
+  }
+
+  static StackValueCollection *get_stack_values(const ExtendableArray<StackTrace::Frame::Value, u2> &src,
+                                                const ResizeableResourceHashtable<HeapDump::ID, jobject,  AnyObj::C_HEAP> &objects,
+                                                TRAPS) {
+    auto *stack_values = new StackValueCollection(src.size()); // stack_values->size() == 0 until we add the actual values
+    for (int i = 0; i < src.size(); i++) {
+      const StackTrace::Frame::Value &src_value = src[i];
+      switch (src_value.type) {
+        case DumpedStackValueType::PRIMITIVE: {
+          // At checkpoint this was either a T_INT or a T_CONFLICT StackValue,
+          // in the later case it should have been dumped as 0 for us
+          auto integer_value = *reinterpret_cast<const intptr_t *>(&src_value.prim); // The value is at offset 0
+          stack_values->add(new StackValue(integer_value));
+          break;
+        }
+        case DumpedStackValueType::REFERENCE: {
+          // At checkpoint this was a T_OBJECT StackValue,
+          jobject handle = nullptr;
+          if (src_value.obj_id != 0) { // 0 ID means null
+            jobject *handle_ptr = objects.get(src_value.obj_id);
+            if (handle_ptr == nullptr) {
+              THROW_MSG_NULL(vmSymbols::java_lang_IllegalArgumentException(),
+                             err_msg("Unknown object ID " UINT64_FORMAT " in stack value %i", src_value.obj_id, i));
+            }
+            handle = *handle_ptr;
+          }
+          // Unpacking code of vframeArrayElement expects a raw oop
+          stack_values->add(new StackValue(cast_from_oop<intptr_t>(JNIHandles::resolve(handle)), T_OBJECT));
+          break;
+        }
+        default:
+         ShouldNotReachHere();
+      }
+    }
+    return stack_values;
+  }
+};
+
+class vframeRestoreArray : public vframeArray {
+ public:
+  static vframeRestoreArray *allocate(const StackTrace &stack,
+                                      const ResizeableResourceHashtable<HeapDump::ID, Klass *, AnyObj::C_HEAP> &classes,
+                                      const ResizeableResourceHashtable<HeapDump::ID, jobject,  AnyObj::C_HEAP> &objects,
+                                      const ParsedHeapDump::RecordTable<HeapDump::UTF8>                        &symbols,
+                                      TRAPS) {
+    if (stack.frames_num() > INT_MAX) {
+      THROW_MSG_NULL(vmSymbols::java_lang_IllegalArgumentException(),
+                     err_msg("Stack trace of thread " UINT64_FORMAT " is too long: " UINT32_FORMAT " > %i",
+                             stack.thread_id(), stack.frames_num(), INT_MAX));
+    }
+    auto *result = reinterpret_cast<vframeRestoreArray *>(AllocateHeap(sizeof(vframeArray) + // fixed part
+                                                                       sizeof(vframeArrayElement) * (stack.frames_num() - 1), // variable part
+                                                                       mtInternal));
+    result->_frames = static_cast<int>(stack.frames_num());
+    result->set_unroll_block(nullptr); // The actual value should be set by the caller later
+
+    // We don't use these
+    result->_owner_thread = nullptr; // Would have been JavaThread::current()
+    result->_sender = frame();       // Will be the CallStub frame called before the restored frames
+    result->_caller = frame();       // Seems to be the same as _sender
+    result->_original = frame();     // Deoptimized frame which we don't have
+
+    result->fill_in(stack, classes, objects, symbols, CHECK_NULL);
+    return result;
+  }
+
+  void fill_in(const StackTrace &stack,
+               const ResizeableResourceHashtable<HeapDump::ID, Klass *, AnyObj::C_HEAP> &classes,
+               const ResizeableResourceHashtable<HeapDump::ID, jobject,  AnyObj::C_HEAP> &objects,
+               const ParsedHeapDump::RecordTable<HeapDump::UTF8>                        &symbols,
+               TRAPS) {
+    _frame_size = 0; // Unused (no frame is being deoptimized)
+
+    // The first frame is the youngest, the last is the oldest
+    log_trace(restore)("Filling stack trace for thread " UINT64_FORMAT, stack.thread_id());
+    precond(frames() == static_cast<int>(stack.frames_num()));
+    for (int i = 0; i < frames(); i++) {
+      log_trace(restore)("Filling frame %i", i);
+      static_cast<vframeRestoreArrayElement *>(element(i))->fill_in(stack.frames(i), i == 0 && stack.should_reexecute_youngest(), classes, objects, symbols, THREAD);
+      if (HAS_PENDING_EXCEPTION) {
+        Handle e(Thread::current(), PENDING_EXCEPTION);
+        CLEAR_PENDING_EXCEPTION;
+        THROW_MSG_CAUSE(vmSymbols::java_lang_IllegalArgumentException(), err_msg("Illegal frame snapshot: %i", i), e);
+      }
+    }
+  }
+};
+
+// Called by restore_stub after skeleton frames have been pushed on stack to
+// fill them.
+JRT_LEAF(void, crac::fill_in_frames())
+  JavaThread *current = JavaThread::current();
+  log_debug(restore)("Thread %p: filling skeletal frames", current);
+
+  // The code below is analogous to Deoptimization::unpack_frames()
+
+  // Array created by crac::restore_thread_state()
+  vframeArray* array = current->vframe_array_head();
+  // Java frame between the skeleton frames and the frame of this function
+  frame unpack_frame = current->last_frame();
+  // Amount of parameters in the CallStub frame = amount of parameters of the
+  // oldest skeleton frame
+  int initial_caller_parameters = array->element(array->frames() - 1)->method()->size_of_parameters();
+
+  // TODO save, clear, restore last Java sp like the deopt code does?
+
+  assert(current->deopt_compiled_method() == nullptr, "No method is being deoptimized");
+  guarantee(current->frames_to_pop_failed_realloc() == 0,
+            "We don't deoptimize, so no reallocations of scalar replaced objects can happen and fail");
+  array->unpack_to_stack(unpack_frame, Deoptimization::Unpack_deopt /* TODO this or reexecute? */, initial_caller_parameters);
+  log_debug(restore)("Thread %p: skeletal frames filled", current);
+
+  // Cleanup, analogous to Deoptimization::cleanup_deopt_info()
+  current->set_vframe_array_head(nullptr);
+  delete array->unroll_block(); // Also deletes frame_sizes and frame_pcs
+  delete array;
+  delete current->deopt_mark();
+  current->set_deopt_mark(nullptr);
+JRT_END
+
+// Fills the provided arguments with null-values according to the provided
+// signature.
+class NullArgumentsFiller : public SignatureIterator {
+ public:
+  NullArgumentsFiller(Symbol *signature, JavaCallArguments *args) : SignatureIterator(signature), _args(args) {
+    precond(args->size_of_parameters() == 0);
+    do_parameters_on(this);
+  }
+
+ private:
+  JavaCallArguments *_args;
+
+  friend class SignatureIterator;  // so do_parameters_on can call do_type
+
+  void do_type(BasicType type) {
+    switch (type) {
+      case T_BYTE:
+      case T_BOOLEAN:
+      case T_CHAR:
+      case T_SHORT:
+      case T_INT:    _args->push_int(0);        break;
+      case T_FLOAT:  _args->push_float(0);      break;
+      case T_LONG:   _args->push_long(0);       break;
+      case T_DOUBLE: _args->push_double(0);     break;
+      case T_ARRAY:
+      case T_OBJECT: _args->push_oop(Handle()); break;
+      default:       ShouldNotReachHere();
+    }
+  }
+};
+
+
+// Initiates thread restoration. This won't return until the restored execution
+// completes. Returns the result of the execution. If the stack was empty, the
+// result will have type T_ILLEGAL.
+//
+// The process of thread restoration is as follows:
+// 1. This method is called. It prepares restoration info based on the provided
+// stack snapshot and makes a Java call to the initial method (the oldest one in
+// the stack) with the snapshotted arguments, replacing its entry point with an
+// entry into assembly restoration code (RestoreStub).
+// 2. Java call places a CallStub frame for the initial method and calls
+// RestoreStub.
+// 3. RestoreStub reads the restoration info prepared in (1) from the current
+// JavaThread and creates so-called skeletal frames which are walkable
+// interpreter frames of proper sizes but with monitors, locals, expression
+// stacks, etc. unfilled. Then it calls crac::fill_in_frames().
+// 4. crac::fill_in_frames() also reads the restoration info prepared in (1)
+// from the current JavaThread and fills the skeletal frames.
+// 5. The control flow returns to RestoreStub which jumps to the interpreter to
+// start executing the youngest restored stack frame.
+JavaValue crac::restore_current_thread(TRAPS) {
+  precond(!_stack_dump->stack_traces().is_empty());
+  JavaThread *current = JavaThread::current();
+  if (log_is_enabled(Info, restore)) {
+    ResourceMark rm;
+    log_info(restore)("Thread %p (%s): starting the restoration", current, current->name());
+  }
+  HandleMark hm(current);
+
+  // Kinda replicate what Deoptimization::fetch_unroll_info() does except that
+  // we do this before calling the ASM code (no Java frames exist yet) and we
+  // fetch the frame info from the stack snapshot instead of a deoptee frame
+
+  // Heap-allocated resource mark to use resource-allocated structures (e.g.
+  // StackValues and free them before starting executing the restored code
+  {
+    auto *deopt_mark = new DeoptResourceMark(current);
+    guarantee(current->deopt_mark() == nullptr, "No deopt should be pending");
+    current->set_deopt_mark(deopt_mark);
+  }
+
+  // Create vframe descriptions based on the stack snapshot
+  vframeRestoreArray *array;
+  {
+    const StackTrace *stack = _stack_dump->stack_traces().pop();
+    if (stack->frames_num() == 0) { // TODO should this be considered an error?
+      log_info(restore)("Thread %p: no frames in stack snapshot (ID " UINT64_FORMAT ")", current, stack->thread_id());
+      if (_stack_dump->stack_traces().is_empty()) {
+        delete _heap_dump;
+        delete _stack_dump;
+        delete _portable_loaded_classes;
+        delete _portable_restored_objects; // TODO destroy JNI handles?
+      }
+      delete stack;
+      return {};
+    }
+
+    array = vframeRestoreArray::allocate(*stack,
+                                         *crac::_portable_loaded_classes,
+                                         *crac::_portable_restored_objects,
+                                         crac::_heap_dump->utf8s, THREAD);
+    if (_stack_dump->stack_traces().is_empty()) {
+      delete _heap_dump;
+      delete _stack_dump;
+      delete _portable_loaded_classes;
+      delete _portable_restored_objects; // TODO destroy JNI handles?
+    }
+    if (HAS_PENDING_EXCEPTION) {
+      ResourceMark rm; // Thread name
+      Handle e(current, PENDING_EXCEPTION);
+      CLEAR_PENDING_EXCEPTION;
+      StackTrace::ID thread_id = stack->thread_id();
+      delete stack;
+      THROW_MSG_CAUSE_(vmSymbols::java_lang_IllegalArgumentException(),
+                       err_msg("Cannot restore state of thread %s (ID " UINT64_FORMAT ")", current->name(), thread_id),
+                       e, {});
+    }
+    postcond(array->frames() == static_cast<int>(stack->frames_num()));
+    delete stack;
+  }
+  log_debug(restore)("Thread %p: filled frame array (%i frames)", current, array->frames());
+
+  // Determine sizes and return pcs of the constructed frames.
+  //
+  // The order of frames is the reverse of the array above:
+  // frame_sizes and frame_pcs: 0th -- the oldest frame,   nth -- the youngest.
+  // vframeRestoreArray *array: 0th -- the youngest frame, nth -- the oldest.
+  auto *frame_sizes = NEW_C_HEAP_ARRAY(intptr_t, array->frames(), mtInternal);
+  // +1 because the last element is an address to jump into the interpreter
+  auto *frame_pcs = NEW_C_HEAP_ARRAY(address, array->frames() + 1, mtInternal);
+  // Create an interpreter return address for the assembly code to use as its
+  // return address so the skeletal frames are perfectly walkable
+  frame_pcs[array->frames()] = Interpreter::deopt_entry(vtos, 0);
+
+  // We start from the youngest frame, which has no callee
+  int callee_params = 0;
+  int callee_locals = 0;
+  for (int i = 0; i < array->frames(); i++) {
+    // Deopt code uses this to account for possible JVMTI's PopFrame function
+    // usage which is irrelevant in our case
+    constexpr int popframe_extra_args = 0;
+
+    // i == 0 is the youngest frame, i == array->frames() - 1 is the oldest
+    frame_sizes[array->frames() - i - 1] =
+        BytesPerWord * array->element(i)->on_stack_size(callee_params, callee_locals, i == 0, popframe_extra_args);
+
+    frame_pcs[array->frames() - i - 1] = i < array->frames() - 1 ?
+    // Setting the pcs the same way as the deopt code does. It is needed to
+    // identify the skeleton frames as interpreted and make them walkable. The
+    // correct pcs will be patched later when filling the frames.
+                                         Interpreter::deopt_entry(vtos, 0) - frame::pc_return_offset :
+    // The oldest frame always returns to CallStub
+                                         StubRoutines::call_stub_return_address();
+
+    callee_params = array->element(i)->method()->size_of_parameters();
+    callee_locals = array->element(i)->method()->max_locals();
+  }
+
+  // Adjustment of the CallStub to accomodate the locals of the oldest restored
+  // frame, if any
+  int caller_adjustment = Deoptimization::last_frame_adjust(callee_params, callee_locals);
+
+  auto *info = new Deoptimization::UnrollBlock(
+    0,                           // Deoptimized frame size, unused (no frame is being deoptimized)
+    caller_adjustment * BytesPerWord,
+    0,                           // Amount of params in the CallStub frame, unused (known via the oldest frame's method)
+    array->frames(),
+    frame_sizes,
+    frame_pcs,
+    BasicType::T_ILLEGAL,        // Return type, unused (we are not in the process of returning a value)
+    Deoptimization::Unpack_deopt // fill_in_frames() always specifies Unpack_deopt, regardless of what's set here
+  );
+  array->set_unroll_block(info);
+
+  guarantee(current->vframe_array_head() == nullptr, "No deopt should be pending");
+  current->set_vframe_array_head(array);
+
+  // Do a Java call to the oldest frame's method with RestoreStub as entry point
+
+  vframeArrayElement *oldest_frame_data = array->element(array->frames() - 1);
+  methodHandle method(current, oldest_frame_data->method());
+
+  JavaCallArguments args;
+  // The actual values will be filled by the RestoreStub, we just need the Java
+  // call code to allocate the right amount of space
+  // TODO tell Java call the required size directly without generating the
+  // actual arguments like this
+  NullArgumentsFiller(method->signature(), &args);
+  // Make the CallStub call RestoreStub instead of the actual method entry
+  args.set_use_restore_stub(true);
+
+  if (log_is_enabled(Info, restore)) {
+    ResourceMark rm;
+    log_debug(restore)("Thread %p: calling %s to enter restore stub", current, method->name_and_sig_as_C_string());
+  }
+  JavaValue result(method->result_type());
+  JavaCalls::call(&result, method, &args, CHECK_({}));
+  // Note: any resources allocated in this scope have been freed by the
+  // deopt_mark by now
+
+  log_info(restore)("Thread %p: restored execution completed", current);
+  return result;
+}
+
+void crac::restore_threads(TRAPS) {
+  assert(is_portable_mode(), "Use crac::restore() instead");
+  precond(CRaCRestoreFrom != nullptr);
+  assert(_heap_dump != nullptr && _stack_dump != nullptr &&
+         _portable_loaded_classes != nullptr && _portable_restored_objects != nullptr,
+         "Call crac::restore_heap() first");
+
+  // TODO for now we only restore the main thread
+  assert(_stack_dump->stack_traces().length() == 1, "Expected only a single (main) thread to be dumped");
+#ifdef ASSERT
+  {
+    ResourceMark rm; // Thread name
+    assert(java_lang_Thread::threadGroup(JavaThread::current()->threadObj()) == Universe::main_thread_group() &&
+         strcmp(JavaThread::current()->name(), "main") == 0, "Must be called on the main thread");
+  }
+#endif // ASSERT
+  JavaValue result = restore_current_thread(THREAD);
+  if (!HAS_PENDING_EXCEPTION) {
+    log_info(restore)("Main thread execution resulted in type: %s", type2name(result.get_type()));
   }
 }

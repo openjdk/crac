@@ -113,7 +113,7 @@ struct HeapDump : AllStatic {
   }
 };
 
-struct ParsedHeapDump : public StackObj {
+struct ParsedHeapDump : public CHeapObj<mtInternal> {
   template <class V>
   using RecordTable = ResizeableResourceHashtable<HeapDump::ID, V, AnyObj::C_HEAP>;
 

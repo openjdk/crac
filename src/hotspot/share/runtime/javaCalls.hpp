@@ -90,6 +90,9 @@ class JavaCallArguments : public StackObj {
   Handle      _alternative_target; // HotSpotNmethod wrapping an nmethod whose verified entry point
                                    // should be called instead of the normal target
 #endif
+  // TODO incorporate this into _alternative_target?
+  bool        _use_restore_stub;   // Use RestoreBlob as an entry point instead of the normal
+                                   // method entry
 
   void initialize() {
     // Starts at first element to support set_receiver.
@@ -99,6 +102,8 @@ class JavaCallArguments : public StackObj {
     _max_size = _default_size;
     _size = 0;
     _start_at_zero = false;
+
+    _use_restore_stub = false;
   }
 
  public:
@@ -135,6 +140,13 @@ class JavaCallArguments : public StackObj {
     return _alternative_target;
   }
 #endif
+
+  void set_use_restore_stub(bool value) {
+    _use_restore_stub = value;
+  }
+  bool use_restore_stub() const {
+    return _use_restore_stub;
+  }
 
   // The possible values for _value_state elements.
   enum {

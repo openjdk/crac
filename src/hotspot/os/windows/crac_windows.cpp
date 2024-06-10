@@ -54,6 +54,6 @@ bool crac::read_bootid(char *dest) {
   return true;
 }
 
-void crac::initialize_time_counters() {
-  os::win32::initialize_performance_counter();
+void crac::reset_time_counters() {
+  os::win32::reset_performance_counters();
 }

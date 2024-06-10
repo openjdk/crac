@@ -811,6 +811,7 @@ static jlong first_filetime;
 static jlong initial_performance_count;
 static jlong performance_frequency;
 static double nanos_per_count; // NANOSECS_PER_SEC / performance_frequency
+static jlong restore_performance_count;
 
 jlong os::elapsed_counter() {
   LARGE_INTEGER count;
@@ -818,11 +819,15 @@ jlong os::elapsed_counter() {
   return count.QuadPart - initial_performance_count;
 }
 
-
 jlong os::elapsed_frequency() {
   return performance_frequency;
 }
 
+jlong os::elapsed_counter_since_restore() {
+  LARGE_INTEGER count;
+  QueryPerformanceCounter(&count);
+  return count.QuadPart - restore_performance_count;
+}
 
 julong os::available_memory() {
   return win32::available_memory();
@@ -1108,8 +1113,18 @@ void os::win32::initialize_performance_counter() {
   nanos_per_count = NANOSECS_PER_SEC / (double)performance_frequency;
   QueryPerformanceCounter(&count);
   initial_performance_count = count.QuadPart;
+  restore_performance_count = initial_performance_count;
 }
 
+void os::win32::reset_performance_counters() {
+  LARGE_INTEGER count;
+  QueryPerformanceFrequency(&count);
+  // Until we perform a real C/R on Windows this is safe, performance frequency
+  // should be the same. With real C/R the counters will be probably incomparable.
+  assert(performance_frequency == count.QuadPart, "Performance frequency changed");
+  QueryPerformanceCounter(&count);
+  restore_performance_count = count.QuadPart;
+}
 
 double os::elapsedTime() {
   return (double) elapsed_counter() / (double) elapsed_frequency();

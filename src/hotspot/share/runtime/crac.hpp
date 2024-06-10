@@ -48,7 +48,7 @@ public:
     return javaTimeNanos_offset;
   }
 
-  static void initialize_time_counters();
+  static void reset_time_counters();
 
 private:
   static bool read_bootid(char *dest);

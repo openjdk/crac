@@ -290,6 +290,8 @@ class os: AllStatic {
   // Interface to the performance counter
   static jlong elapsed_counter();
   static jlong elapsed_frequency();
+  // Before restore returns the same value as elapsed_counter()
+  static jlong elapsed_counter_since_restore();
 
   // The "virtual time" of a thread is the amount of time a thread has
   // actually run.  The first function indicates whether the OS supports

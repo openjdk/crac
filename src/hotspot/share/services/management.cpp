@@ -916,7 +916,7 @@ static jlong get_long_attribute(jmmLongAttribute att) {
     return Management::vm_init_done_time();
 
   case JMM_JVM_UPTIME_MS:
-    return Management::ticks_to_ms(os::elapsed_counter());
+    return Management::ticks_to_ms(os::elapsed_counter_since_restore());
 
   case JMM_COMPILE_TOTAL_TIME_MS:
     return Management::ticks_to_ms(CompileBroker::total_compilation_ticks());

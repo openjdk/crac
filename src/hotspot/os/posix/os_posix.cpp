@@ -2094,7 +2094,7 @@ int os::exec_child_process_and_wait(const char *path, const char *argv[]) {
 
   pid_t pid = fork();
   if (pid == -1) {
-    perror("cannot fork for crengine");
+    perror("cannot fork for subprocess");
     return -1;
   }
   if (pid == 0) {

@@ -340,8 +340,8 @@ bool VM_Crac::check_fds() {
       }
     }
 
-    if (CRAllowedOpenFilePrefixes != nullptr) {
-      const char *prefix = CRAllowedOpenFilePrefixes;
+    if (CRaCAllowedOpenFilePrefixes != nullptr) {
+      const char *prefix = CRaCAllowedOpenFilePrefixes;
       // JDK appends to ccstrlist using newline, on command line that would be comma
       size_t prefix_length = strcspn(prefix, ",\n");
       bool matched = false;
@@ -357,7 +357,7 @@ bool VM_Crac::check_fds() {
         prefix_length = strcspn(prefix, ",\n");
       }
       if (matched) {
-        print_resources("OK: allowed in -XX:CRAllowedOpenFilePrefixes\n");
+        print_resources("OK: allowed in -XX:CRaCAllowedOpenFilePrefixes\n");
         continue;
       }
     }

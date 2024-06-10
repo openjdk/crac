@@ -43,7 +43,7 @@ public class VMOptionsTest implements CracTest {
     @Override
     public void test() throws Exception {
         CracBuilder builder = new CracBuilder();
-        // this is here just to test passing CREngine params
+        // this is here just to test passing CRaCEngine params
         builder.engine(CracEngine.CRIU, "--verbosity=4", "--log-file=/dev/null");
         builder.vmOption("-XX:NativeMemoryTracking=off");
         builder.doCheckpoint();

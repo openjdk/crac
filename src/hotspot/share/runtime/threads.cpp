@@ -449,6 +449,9 @@ jint Threads::create_vm(JavaVMInitArgs* args, bool* canTryAgain) {
   os::Bsd::clock_init();
 #endif
 
+  // So that JDK version can be used as a discriminator when parsing arguments
+  JDK_Version_init();
+
   // Output stream module should be already initialized for error reporting during restore.
   if (check_for_restore(args) != JNI_OK) return JNI_ERR;
 
@@ -466,9 +469,6 @@ jint Threads::create_vm(JavaVMInitArgs* args, bool* canTryAgain) {
 
   // Initialize system properties.
   Arguments::init_system_properties();
-
-  // So that JDK version can be used as a discriminator when parsing arguments
-  JDK_Version_init();
 
   // Update/Initialize System properties after JDK version number is known
   Arguments::init_version_specific_system_properties();

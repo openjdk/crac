@@ -91,7 +91,7 @@ public class JdwpTransportTest implements CracTest {
     private void waitForString(BufferedReader reader, String str) throws IOException {
         for (String line = reader.readLine(); true; line = reader.readLine()) {
             System.out.println(line);
-            if (line.contains(str)) 
+            if (line.contains(str))
                 break;
         }
     }
@@ -104,6 +104,7 @@ public class JdwpTransportTest implements CracTest {
         builder.engine(CracEngine.SIMULATE);
 
         CracProcess process = builder.captureOutput(true).startCheckpoint();
+        var errReader = new BufferedReader(new InputStreamReader(process.errOutput()));
         try {
             var reader = new BufferedReader(new InputStreamReader(process.output()));
             if (!suspendOnJdwpStart) {
@@ -140,7 +141,10 @@ public class JdwpTransportTest implements CracTest {
 
             process.waitForSuccess();
         } finally {
-            process.destroyForcibly();
+                for (String line = errReader.readLine(); null != line; line = errReader.readLine()) {
+                    System.err.println(line);
+                }
+                process.destroyForcibly();
         }
     }
 

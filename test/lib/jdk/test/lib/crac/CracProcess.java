@@ -159,6 +159,10 @@ public class CracProcess {
         return process.getInputStream();
     }
 
+    public InputStream errOutput() {
+        return process.getErrorStream();
+    }
+
     public void sendNewline() throws IOException {
         OutputStream input = process.getOutputStream();
         input.write('\n');

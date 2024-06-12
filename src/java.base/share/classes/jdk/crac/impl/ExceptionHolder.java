@@ -1,8 +1,10 @@
 package jdk.crac.impl;
 
+import jdk.crac.ExceptionBase;
+
 import java.util.function.Supplier;
 
-public class ExceptionHolder<E extends Exception> {
+public class ExceptionHolder<E extends ExceptionBase> {
     E exception = null;
     final Supplier<E> constructor;
 
@@ -27,10 +29,10 @@ public class ExceptionHolder<E extends Exception> {
         return exception != null;
     }
 
-    public void resuppress(Exception e) {
+    public void addNestedExceptions(ExceptionBase e) {
         E exception = get();
-        for (Throwable t : e.getSuppressed()) {
-            exception.addSuppressed(t);
+        for (Throwable t : e.getNestedExceptions()) {
+            exception.addNestedException(t);
         }
     }
 
@@ -41,7 +43,7 @@ public class ExceptionHolder<E extends Exception> {
 
         E exception = get();
         if (exception.getClass() == e.getClass()) {
-            resuppress(e);
+            addNestedExceptions((ExceptionBase) e);
         } else {
             if (e instanceof InterruptedException) {
                 // FIXME interrupt re-set should be up to the Context implementation, as
@@ -49,7 +51,7 @@ public class ExceptionHolder<E extends Exception> {
                 // notification, rather than exiting as soon as possible.
                 Thread.currentThread().interrupt();
             }
-            exception.addSuppressed(e);
+            exception.addNestedException(e);
         }
     }
 }

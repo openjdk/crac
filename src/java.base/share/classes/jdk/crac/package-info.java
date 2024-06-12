@@ -60,10 +60,10 @@ restoring instances from the image.
  * The current instance is terminated.
  * Later, a new instance is created by some means, for example via Java launcher in a special mode.
  * The new instance is started at the point where the image was created, it is followed by the restore notification.
- * Exceptions from restore notification are provided as suppressed ones by a {@code RestoreException} (in a sense of {@link Throwable#addSuppressed}).
+ * Exceptions from restore notification are provided as nested ones by a {@link javax.crac.RestoreException#getNestedExceptions()}.
  * <p>
  * If the global {@code Context} throws an exception during checkpoint notification then restore notificaion starts immediately without the image creation.
- * In this case, exceptions from checkpoint and restore notifications are provided as suppressed ones by {@code CheckpointException}.
+ * In this case, exceptions from checkpoint and restore notifications are provided as {@link javax.crac.ExceptionBase#getNestedExceptions() nested} by {@code CheckpointException}.
  * <p>
  * {@code UnsupportedOperationException} is thrown if the service is not supported.
  * No notification is performed in this case.
@@ -82,12 +82,12 @@ restoring instances from the image.
  *   </li>
  *   <li>{@code Resource} is always notified of restore, regardless of its checkpoint or others' restore notification have thrown an exception or not.
  *   </li>
- *   <li>When an exception is thrown during notificaion, it is caught by the {@code Context} and is suppressed by a {@code CheckpointException} or {@code RestoreException}, depends on the throwing method.
+ *   <li>When an exception is thrown during notification, it is caught by the {@code Context} and is nested into a {@code CheckpointException} or {@code RestoreException}, depending on the throwing method.
  *   </li>
- *   <li>When the {@code Resource} is a {@code Context} and it throws {@code CheckpointException} or {@code RestoreException}, exceptions suppressed by the original exception are suppressed by another {@code CheckpointException} or {@code RestoreException}, depends on the throwing method.
+ *   <li>When the {@code Resource} is a {@code Context} and it throws {@code CheckpointException} or {@code RestoreException}, exceptions nested in the original exception are provided as nested in another {@code CheckpointException} or {@code RestoreException}, depending on the throwing method.
  *   </li>
  * </ul>
- * <li>All exceptions thrown by {@code Resource} are suppressed by {@code CheckpointException} or {@code RestoreException} thrown by the {@code Context}.
+ * <li>All exceptions thrown by {@code Resource} are {@link javax.crac.ExceptionBase#getNestedExceptions() nested} in {@code CheckpointException} or {@code RestoreException} thrown by the {@code Context}.
  * </li>
  * </ul>
  *

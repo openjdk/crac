@@ -72,17 +72,9 @@ public class Core {
         try {
             jdk.crac.Core.checkpointRestore();
         } catch (jdk.crac.CheckpointException e) {
-            CheckpointException newException = new CheckpointException();
-            for (Throwable t : e.getSuppressed()) {
-                newException.addSuppressed(t);
-            }
-            throw newException;
+            throw new CheckpointException(e.getNestedExceptions());
         } catch (jdk.crac.RestoreException e) {
-            RestoreException newException = new RestoreException();
-            for (Throwable t : e.getSuppressed()) {
-                newException.addSuppressed(t);
-            }
-            throw newException;
+            throw new RestoreException(e.getNestedExceptions());
         }
     }
 }

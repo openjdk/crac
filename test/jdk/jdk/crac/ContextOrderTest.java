@@ -179,7 +179,7 @@ public class ContextOrderTest {
             Core.checkpointRestore();
             fail("Expected to throw CheckpointException");
         } catch (CheckpointException e) {
-            assertEquals(4, e.getSuppressed().length);
+            assertEquals(4, e.getNestedExceptions().length);
         }
         assertEquals("regular2-before", recorder.poll());
         assertEquals("throwing1-before", recorder.poll());

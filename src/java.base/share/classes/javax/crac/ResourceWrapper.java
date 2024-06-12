@@ -60,11 +60,7 @@ class ResourceWrapper extends WeakReference<Resource> implements jdk.crac.Resour
             try {
                 r.beforeCheckpoint(this.context);
             } catch (CheckpointException e) {
-                Exception newException = new jdk.crac.CheckpointException();
-                for (Throwable t : e.getSuppressed()) {
-                    newException.addSuppressed(t);
-                }
-                throw newException;
+                throw new jdk.crac.CheckpointException(e.getNestedExceptions());
             }
         }
     }
@@ -77,11 +73,7 @@ class ResourceWrapper extends WeakReference<Resource> implements jdk.crac.Resour
             try {
                 r.afterRestore(this.context);
             } catch (RestoreException e) {
-                Exception newException = new jdk.crac.RestoreException();
-                for (Throwable t : e.getSuppressed()) {
-                    newException.addSuppressed(t);
-                }
-                throw newException;
+                throw new jdk.crac.RestoreException(e.getNestedExceptions());
             }
         }
     }

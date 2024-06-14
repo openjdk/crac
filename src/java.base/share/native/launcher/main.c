@@ -371,7 +371,35 @@ main(int argc, char **argv)
             exit(status);
         }
     }
-#endif /* WIN32 */
+#ifdef LINUX
+    // /proc filesystem is only on LINUX/*NIX - rseq is not relevant elsewhere anyway
+    if (is_checkpoint) {
+        const char *GLIBC_TUNABLES = "GLIBC_TUNABLES";
+        const char *tunables = getenv(GLIBC_TUNABLES);
+        // do not try overwrite an existing tunable setting
+        if (!tunables || !strstr(tunables, "glibc.pthread.rseq")) {
+            char tunables_buf[4096];
+            const char *new_tunables = "glibc.pthread.rseq=0";
+            if (tunables) {
+                int sz = snprintf(tunables_buf, sizeof(tunables_buf), "%s:%s", tunables, new_tunables);
+                if (sz < 0 || (int)sizeof(tunables_buf) <= sz) {
+                    fprintf(stderr, "Cannot update GLIBC_TUNABLES: does not fit\n");
+                    return 1;
+                }
+                new_tunables = tunables_buf;
+            }
+
+            if (setenv(GLIBC_TUNABLES, new_tunables, 1) < 0) {
+                perror("setenv GLIBC_TUNABLES");
+                return 1;
+            }
+            execv("/proc/self/exe", argv);
+            perror("re-exec");
+            return 1;
+        }
+    }
+#endif /* LINUX */
+#endif /* not WIN32 */
     return JLI_Launch(margc, margv,
                    jargc, (const char**) jargv,
                    0, NULL,

@@ -67,7 +67,9 @@ G1HeapRegionManager::G1HeapRegionManager() :
   _cardtable_mapper(nullptr),
   _committed_map(),
   _next_highest_used_hrm_index(0),
-  _regions(), _heap_mapper(nullptr),
+  _regions(),
+  _max_available_regions(0),
+  _heap_mapper(nullptr),
   _bitmap_mapper(nullptr),
   _free_list("Free list", new G1MasterFreeRegionListChecker())
 { }
@@ -86,8 +88,14 @@ void G1HeapRegionManager::initialize(G1RegionToSpaceMapper* heap_storage,
   _cardtable_mapper = cardtable;
 
   _regions.initialize(heap_storage->reserved(), G1HeapRegion::GrainBytes);
+  _max_available_regions = (uint) (CRaCMaxHeapSizeBeforeCheckpoint == 0 ? _regions.length() :
+    CRaCMaxHeapSizeBeforeCheckpoint / G1HeapRegion::GrainBytes);
 
   _committed_map.initialize(reserved_length());
+}
+
+void G1HeapRegionManager::after_restore() {
+  _max_available_regions = (uint) _regions.length();
 }
 
 G1HeapRegion* G1HeapRegionManager::allocate_free_region(G1HeapRegionType type, uint requested_node_index) {
@@ -131,7 +139,9 @@ G1HeapRegion* G1HeapRegionManager::allocate_humongous_allow_expand(uint num_regi
   if (candidate == G1_NO_HRM_INDEX) {
     return nullptr;
   }
-  expand_exact(candidate, num_regions, G1CollectedHeap::heap()->workers());
+  if (!expand_exact(candidate, num_regions, G1CollectedHeap::heap()->workers())) {
+    return nullptr;
+  }
   return allocate_free_regions_starting_at(candidate, num_regions);
 }
 
@@ -162,6 +172,10 @@ G1HeapRegion* G1HeapRegionManager::new_heap_region(uint hrm_index) {
 }
 
 void G1HeapRegionManager::expand(uint start, uint num_regions, WorkerThreads* pretouch_workers) {
+  assert(_committed_map.num_active() + _committed_map.num_inactive() + num_regions <= _max_available_regions,
+    "Expanding over the limit: %d active, %d inactive, %d requested, limit %d",
+    _committed_map.num_active(), _committed_map.num_inactive(), num_regions, _max_available_regions);
+
   commit_regions(start, num_regions, pretouch_workers);
   for (uint i = start; i < start + num_regions; i++) {
     G1HeapRegion* hr = _regions.get_by_index(i);
@@ -340,8 +354,11 @@ uint G1HeapRegionManager::expand_any(uint num_regions, WorkerThreads* pretouch_w
       break;
     }
 
-    uint to_expand = MIN2(num_regions - expanded, regions.length());
-    expand(regions.start(), to_expand, pretouch_workers);
+    uint to_expand = MIN3(num_regions - expanded, regions.length(),
+      _max_available_regions - _committed_map.num_active() - _committed_map.num_inactive());
+    if (to_expand > 0) {
+      expand(regions.start(), to_expand, pretouch_workers);
+    }
     expanded += to_expand;
     offset = regions.end();
   } while (expanded < num_regions);
@@ -365,7 +382,7 @@ uint G1HeapRegionManager::expand_by(uint num_regions, WorkerThreads* pretouch_wo
   return expanded;
 }
 
-void G1HeapRegionManager::expand_exact(uint start, uint num_regions, WorkerThreads* pretouch_workers) {
+bool G1HeapRegionManager::expand_exact(uint start, uint num_regions, WorkerThreads* pretouch_workers) {
   assert(num_regions != 0, "Need to request at least one region");
   uint end = start + num_regions;
 
@@ -384,6 +401,12 @@ void G1HeapRegionManager::expand_exact(uint start, uint num_regions, WorkerThrea
     // Not else-if to catch the case where the inactive region was uncommitted
     // while waiting to get the lock.
     if (!_committed_map.active(i)) {
+      // Fail if we're over the limits (were not able to just reactivate)
+      if (_committed_map.num_active() + _committed_map.num_inactive() + (i - start) + 1 > _max_available_regions) {
+        log_debug(gc)("Cannot expand to regions %u - %u: active %u, inactive %u, max %u", start, end,
+         _committed_map.num_active(),  _committed_map.num_inactive(), _max_available_regions);
+        return false;
+      }
       expand(i, 1, pretouch_workers);
     }
 
@@ -391,33 +414,51 @@ void G1HeapRegionManager::expand_exact(uint start, uint num_regions, WorkerThrea
   }
 
   verify_optional();
+  return true;
 }
 
 uint G1HeapRegionManager::expand_on_preferred_node(uint preferred_index) {
   uint expand_candidate = UINT_MAX;
 
   if (available() >= 1) {
-    for (uint i = 0; i < reserved_length(); i++) {
-      if (is_available(i)) {
-        // Already in use continue
-        continue;
+    if (_committed_map.num_active() + _committed_map.num_inactive() >= _max_available_regions) {
+      // We have to use existing inactive region, cannot allocate new one
+      // while we have inactive.
+      for (uint i = 0; i < reserved_length(); i++) {
+        if (!_committed_map.inactive(i)) {
+          continue;
+        }
+        expand_candidate = i;
+        if (is_on_preferred_index(expand_candidate, preferred_index)) {
+          // We have found a candidate on the preferred node, break.
+          break;
+        }
       }
-      // Always save the candidate so we can expand later on.
-      expand_candidate = i;
-      if (is_on_preferred_index(expand_candidate, preferred_index)) {
-        // We have found a candidate on the preferred node, break.
-        break;
+    }
+    if (expand_candidate == UINT_MAX) {
+      for (uint i = 0; i < reserved_length(); i++) {
+        if (is_available(i)) {
+          // Already in use continue
+          continue;
+        }
+        // Always save the candidate so we can expand later on.
+        expand_candidate = i;
+        if (is_on_preferred_index(expand_candidate, preferred_index)) {
+          // We have found a candidate on the preferred node, break.
+          break;
+        }
       }
     }
   }
 
   if (expand_candidate == UINT_MAX) {
      // No regions left, expand failed.
+    log_debug(gc)("No regions left");
     return 0;
   }
+  log_debug(gc)("Candidate is %u", expand_candidate);
 
-  expand_exact(expand_candidate, 1, nullptr);
-  return 1;
+  return expand_exact(expand_candidate, 1, nullptr) ? 1 : 0;
 }
 
 bool G1HeapRegionManager::is_on_preferred_index(uint region_index, uint preferred_node_index) {
@@ -539,7 +580,9 @@ bool G1HeapRegionManager::allocate_containing_regions(MemRegion range, size_t* c
   for (uint curr_index = start_index; curr_index <= last_index; curr_index++) {
     if (!is_available(curr_index)) {
       commits++;
-      expand_exact(curr_index, 1, pretouch_workers);
+      if (!expand_exact(curr_index, 1, pretouch_workers)) {
+        return false;
+      }
     }
     G1HeapRegion* curr_region  = _regions.get_by_index(curr_index);
     if (!curr_region->is_free()) {

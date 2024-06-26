@@ -95,6 +95,8 @@ void GCArguments::assert_size_info() {
   assert(MinHeapSize % HeapAlignment == 0, "MinHeapSize alignment");
   assert(InitialHeapSize % HeapAlignment == 0, "InitialHeapSize alignment");
   assert(MaxHeapSize % HeapAlignment == 0, "MaxHeapSize alignment");
+  assert(CRaCMaxHeapSizeBeforeCheckpoint == 0 || CRaCMaxHeapSizeBeforeCheckpoint >= InitialHeapSize, "Incompatible initial and maximum heap size before checkpoint");
+  assert(CRaCMaxHeapSizeBeforeCheckpoint == 0 || CRaCMaxHeapSizeBeforeCheckpoint <= MaxHeapSize, "Incompatible initial and maximum heap size before checkpoint");
 }
 #endif // ASSERT
 
@@ -163,6 +165,26 @@ void GCArguments::initialize_heap_flags_and_sizes() {
 
   if (FLAG_IS_DEFAULT(SoftMaxHeapSize)) {
     FLAG_SET_ERGO(SoftMaxHeapSize, MaxHeapSize);
+  }
+
+  if (FLAG_IS_CMDLINE(CRaCMaxHeapSizeBeforeCheckpoint)) {
+    if (!UseG1GC) {
+      vm_exit_during_initialization("CRaCMaxHeapSizeBeforeCheckpoint can be used only with G1 garbage collector.");
+    }
+    if (CRaCMaxHeapSizeBeforeCheckpoint < InitialHeapSize) {
+      if (FLAG_IS_CMDLINE(InitialHeapSize)) {
+        vm_exit_during_initialization("Incompatible initial heap and maximum before checkpoint sizes specified");
+      } else {
+        FLAG_SET_ERGO(InitialHeapSize, CRaCMaxHeapSizeBeforeCheckpoint);
+      }
+    }
+    if (CRaCMaxHeapSizeBeforeCheckpoint > MaxHeapSize) {
+      if (FLAG_IS_CMDLINE(MaxHeapSize)) {
+        vm_exit_during_initialization("Incompatible heap sizes - maximum before checkpoint and absolute maximum - specified");
+      } else {
+        FLAG_SET_ERGO(MaxHeapSize, CRaCMaxHeapSizeBeforeCheckpoint);
+      }
+    }
   }
 
   FLAG_SET_ERGO(MinHeapDeltaBytes, align_up(MinHeapDeltaBytes, SpaceAlignment));

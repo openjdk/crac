@@ -794,12 +794,16 @@ void defaultStream::start_log() {
 // finish_log() is called during normal VM shutdown. finish_log_on_error() is
 // called by ostream_abort() after a fatal error.
 //
-void defaultStream::finish_log() {
+void defaultStream::finish_log(bool is_checkpoint) {
   xmlStream* xs = _outer_xmlStream;
   xs->done("tty");
 
+  if (is_checkpoint) {
+    CompileLog::finish_log_on_checkpoint(xs->out());
+  } else {
   // Other log forks are appended here, at the End of Time:
-  CompileLog::finish_log(xs->out());  // write compile logging, if any, now
+    CompileLog::finish_log(xs->out());  // write compile logging, if any, now
+  }
 
   xs->done("hotspot_log");
   xs->flush();

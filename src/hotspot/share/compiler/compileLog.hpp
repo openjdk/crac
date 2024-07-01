@@ -82,6 +82,10 @@ class CompileLog : public xmlStream {
   void inline_fail   (const char* reason);
   void inline_success(const char* reason);
 
+  //CRaC purposes
+  void after_restore();
+  void before_checkpoint();
+
   // virtuals
   virtual void see_tag(const char* tag, bool push);
   virtual void pop_tag(const char* tag);
@@ -95,6 +99,8 @@ class CompileLog : public xmlStream {
   // copy all logs to the given stream
   static void finish_log(outputStream* out);
   static void finish_log_on_error(outputStream* out, char *buf, int buflen);
+  static void finish_log_on_checkpoint(outputStream* out);
+  static void swap_streams_on_restore();
 };
 
 #endif // SHARE_COMPILER_COMPILELOG_HPP

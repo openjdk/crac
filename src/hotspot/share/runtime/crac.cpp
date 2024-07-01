@@ -309,9 +309,22 @@ static void wakeup_threads_in_timedwait() {
   WatcherThread::watcher_thread()->unpark();
 }
 
+class DefaultStreamHandler {
+public:
+  DefaultStreamHandler() {
+    defaultStream::instance->before_checkpoint();
+  }
+
+  ~DefaultStreamHandler() {
+    defaultStream::instance->after_restore();
+  }
+};
+
+
 void VM_Crac::doit() {
   // dry-run fails checkpoint
   bool ok = true;
+  DefaultStreamHandler defStreamHandler;
 
   Decoder::before_checkpoint();
   if (!check_fds()) {
@@ -453,7 +466,6 @@ Handle crac::checkpoint(jarray fd_arr, jobjectArray obj_arr, bool dry_run, jlong
     aio_writer->stop();
   }
   LogConfiguration::close();
-  defaultStream::instance->before_checkpoint();
 
   VM_Crac cr(fd_arr, obj_arr, dry_run, (bufferedStream*)jcmd_stream);
   {
@@ -461,7 +473,6 @@ Handle crac::checkpoint(jarray fd_arr, jobjectArray obj_arr, bool dry_run, jlong
     VMThread::execute(&cr);
   }
 
-  defaultStream::instance->after_restore();
   LogConfiguration::reopen();
   if (aio_writer) {
     aio_writer->resume();

@@ -25,6 +25,7 @@
 package sun.nio.ch;
 
 import java.io.IOException;
+
 import static sun.nio.ch.KQueue.*;
 
 /**
@@ -35,6 +36,7 @@ class KQueuePoller extends Poller {
     private final int filter;
     private final int maxEvents;
     private final long address;
+    private long stopPipe;
 
     KQueuePoller(boolean subPoller, boolean read) throws IOException {
         this.kqfd = KQueue.create();
@@ -46,6 +48,24 @@ class KQueuePoller extends Poller {
     @Override
     int fdVal() {
         return kqfd;
+    }
+
+    @Override
+    protected void stop() throws IOException {
+        super.stop();
+        stopPipe = IOUtil.makePipe(true);
+        int err = KQueue.register(kqfd, (int)(stopPipe >> 32), EVFILT_READ, (EV_ADD|EV_ONESHOT));
+        if (err != 0) {
+            throw new IOException("kqueue_register failed: " + err);
+        }
+        IOUtil.write1((int) stopPipe, (byte) 0);
+    }
+
+    @Override
+    protected void closeFds() throws IOException {
+        Poller.nd.close(IOUtil.newFD((int) (stopPipe >> 32)));
+        Poller.nd.close(IOUtil.newFD((int) stopPipe));
+        super.closeFds();
     }
 
     @Override

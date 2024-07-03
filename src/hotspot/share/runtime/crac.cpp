@@ -518,10 +518,12 @@ Handle crac::checkpoint(jarray fd_arr, jobjectArray obj_arr, bool dry_run, jlong
   return ret_cr(JVM_CHECKPOINT_ERROR, Handle(), Handle(), codes, msgs, THREAD);
 }
 
-void crac::restore() {
-  jlong restore_time = os::javaTimeMillis();
-  jlong restore_nanos = os::javaTimeNanos();
+void crac::prepare_restore(crac_restore_data& restore_data) {
+  restore_data.restore_time = os::javaTimeMillis();
+  restore_data.restore_nanos = os::javaTimeNanos();
+}
 
+void crac::restore(crac_restore_data& restore_data) {
   compute_crengine();
 
   const int id = os::current_process_id();
@@ -534,8 +536,8 @@ void crac::restore() {
           Arguments::jvm_flags_array(), Arguments::num_jvm_flags(),
           Arguments::system_properties(),
           Arguments::java_command() ? Arguments::java_command() : "",
-          restore_time,
-          restore_nanos)) {
+          restore_data.restore_time,
+          restore_data.restore_nanos)) {
       char strid[32];
       snprintf(strid, sizeof(strid), "%d", id);
       LINUX_ONLY(setenv("CRAC_NEW_ARGS_ID", strid, true));

@@ -36,7 +36,13 @@ public:
   static void vm_create_start();
   static bool prepare_checkpoint();
   static Handle checkpoint(jarray fd_arr, jobjectArray obj_arr, bool dry_run, jlong jcmd_stream, TRAPS);
-  static void restore();
+
+  struct crac_restore_data {
+    jlong restore_time;
+    jlong restore_nanos;
+  };
+  static void prepare_restore(crac_restore_data& restore_data);
+  static void restore(crac_restore_data& restore_data);
 
   static jlong restore_start_time();
   static jlong uptime_since_restore();

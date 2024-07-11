@@ -27,10 +27,14 @@ package java.io;
 
 import java.nio.channels.FileChannel;
 
-import jdk.internal.crac.OpenResourcePolicies;
+import jdk.crac.Context;
+import jdk.crac.Resource;
 import jdk.internal.access.JavaIORandomAccessFileAccess;
 import jdk.internal.access.SharedSecrets;
+import jdk.internal.crac.Core;
 import jdk.internal.crac.JDKFileResource;
+import jdk.internal.crac.JDKResource;
+import jdk.internal.crac.OpenResourcePolicies;
 import jdk.internal.misc.Blocker;
 import jdk.internal.util.ByteArray;
 import sun.nio.ch.FileChannelImpl;
@@ -1256,8 +1260,21 @@ public class RandomAccessFile implements DataOutput, DataInput, Closeable {
 
     private static native void initIDs();
 
+    private static final JDKResource nativeInitResource = new JDKResource() {
+        @Override
+        public void beforeCheckpoint(Context<? extends Resource> context) {
+        }
+
+        @Override
+        public void afterRestore(Context<? extends Resource> context) {
+            initIDs();
+        }
+    };
+
     static {
         initIDs();
+        // Must be restored before restoring instances
+        Core.Priority.FILE_DESCRIPTORS.getContext().register(nativeInitResource);
         SharedSecrets.setJavaIORandomAccessFileAccess(new JavaIORandomAccessFileAccess()
         {
             // This is for j.u.z.ZipFile.OPEN_DELETE. The O_TEMPORARY flag

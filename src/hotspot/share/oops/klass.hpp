@@ -668,7 +668,7 @@ protected:
   void set_has_finalizer()              { _access_flags.set_has_finalizer(); }
   bool is_hidden() const                { return access_flags().is_hidden_class(); }
   void set_is_hidden()                  { _access_flags.set_is_hidden_class(); }
-  bool is_value_based()                 { return _access_flags.is_value_based_class(); }
+  bool is_value_based() const           { return _access_flags.is_value_based_class(); }
   void set_is_value_based()             { _access_flags.set_is_value_based_class(); }
 
   inline bool is_non_strong_hidden() const;

@@ -32,6 +32,7 @@
 #include "runtime/monitorChunk.hpp"
 #include "runtime/registerMap.hpp"
 #include "utilities/growableArray.hpp"
+#include "utilities/sizes.hpp"
 
 // A vframeArray is an array used for momentarily storing off stack Java method activations
 // during deoptimization. Essentially it is an array of vframes where each vframe
@@ -51,7 +52,7 @@ class StackValueCollection;
 class vframeArrayElement {
   friend class VMStructs;
 
-  private:
+  protected:
 
     frame _frame;                                                // the interpreter frame we will unpack into
     int  _bci;                                                   // raw bci for this vframe
@@ -122,7 +123,7 @@ class vframeArrayElement {
 class vframeArray: public CHeapObj<mtCompiler> {
   friend class VMStructs;
 
- private:
+ protected:
 
 
   // Here is what a vframeArray looks like in memory
@@ -193,7 +194,7 @@ class vframeArray: public CHeapObj<mtCompiler> {
   int frame_size() const { return _frame_size; }
 
   // Unpack the array on the stack passed in stack interval
-  void unpack_to_stack(frame &unpack_frame, int exec_mode, int caller_actual_parameters);
+  void unpack_to_stack(const frame &unpack_frame, int exec_mode, int caller_actual_parameters);
 
   // Deallocates monitor chunks allocated during deoptimization.
   // This should be called when the array is not used anymore.

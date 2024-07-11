@@ -57,6 +57,7 @@ public class Core {
      * Most resources should use priority NORMAL (the lowest priority).
      */
     public enum Priority {
+        POST_FILE_DESCRIPTORS(new BlockingOrderedContext<>()),
         FILE_DESCRIPTORS(new BlockingOrderedContext<>()),
         PRE_FILE_DESCRIPTORS(new BlockingOrderedContext<>()),
         CLEANERS(new BlockingOrderedContext<>()),
@@ -65,6 +66,7 @@ public class Core {
         SECURE_RANDOM(new BlockingOrderedContext<>()),
         NATIVE_PRNG(new BlockingOrderedContext<>()),
         EPOLLSELECTOR(new BlockingOrderedContext<>()),
+        NATIVE_THREAD(new BlockingOrderedContext<>()),
         NORMAL(new BlockingOrderedContext<>());
 
         private final Context<JDKResource> context;

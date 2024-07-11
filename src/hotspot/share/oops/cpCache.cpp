@@ -689,6 +689,23 @@ void ConstantPoolCache::initialize(const intArray& inverse_index_map,
   }
 }
 
+ConstantPoolCache* ConstantPoolCache::allocate_uninitialized(ClassLoaderData* loader_data,
+                                                             int length,
+                                                             int resolved_indy_entries_length,
+                                                             int resolved_field_entries_length,
+                                                             TRAPS) {
+  const int size = ConstantPoolCache::size(length);
+
+  // Allocate resolved entry arrays leaving them uninitialized
+  Array<ResolvedFieldEntry>* resolved_field_entries = resolved_field_entries_length == 0 ? nullptr
+          : MetadataFactory::new_array<ResolvedFieldEntry>(loader_data, resolved_field_entries_length, CHECK_NULL);
+  Array<ResolvedIndyEntry>* resolved_indy_entries = resolved_indy_entries_length == 0 ? nullptr
+          : MetadataFactory::new_array<ResolvedIndyEntry>(loader_data, resolved_indy_entries_length, CHECK_NULL);
+
+  return new (loader_data, size, MetaspaceObj::ConstantPoolCacheType, THREAD)
+              ConstantPoolCache(length, resolved_indy_entries, resolved_field_entries);
+}
+
 // Record the GC marking cycle when redefined vs. when found in the loom stack chunks.
 void ConstantPoolCache::record_gc_epoch() {
   _gc_epoch = CodeCache::gc_epoch();

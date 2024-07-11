@@ -21,6 +21,7 @@
  * questions.
  */
 
+import jdk.crac.*;
 import jdk.test.lib.Utils;
 import jdk.test.lib.containers.docker.Common;
 import jdk.test.lib.containers.docker.DockerTestUtils;
@@ -31,8 +32,6 @@ import jdk.test.lib.crac.CracTestArg;
 
 import java.net.InetAddress;
 import java.net.UnknownHostException;
-import java.nio.file.Files;
-import java.nio.file.Path;
 import java.util.concurrent.*;
 
 /*
@@ -50,8 +49,10 @@ public class ResolveTest implements CracTest {
     @CracTestArg(value = 0, optional = true)
     String ip;
 
-    @CracTestArg(value = 1, optional = true)
-    String checkFile;
+    // A file mounted on restore was used to identify a restore but now it is
+    // not possible to check for file existance until restoration completes (the
+    // check would use native buffers which are restorable resources themselves)
+    Resource restoreListener;
 
     @Override
     public void test() throws Exception {
@@ -64,7 +65,7 @@ public class ResolveTest implements CracTest {
         CracBuilder builder = new CracBuilder()
                 .inDockerImage(imageName).dockerOptions("--add-host", TEST_HOSTNAME + ":192.168.12.34")
                 .captureOutput(true)
-                .args(CracTest.args(TEST_HOSTNAME, "/second-run"));
+                .args(CracTest.args(TEST_HOSTNAME));
 
         try {
             CompletableFuture<?> firstOutputFuture = new CompletableFuture<Void>();
@@ -84,9 +85,7 @@ public class ResolveTest implements CracTest {
 
             builder.clearVmOptions();
             builder.recreateContainer(imageName,
-                    "--add-host", TEST_HOSTNAME + ":192.168.56.78",
-                    "--volume", Utils.TEST_CLASSES + ":/second-run"); // any file/dir suffices
-
+                    "--add-host", TEST_HOSTNAME + ":192.168.56.78");
 
             builder.startRestore().outputAnalyzer()
                     .shouldHaveExitValue(0)
@@ -98,12 +97,24 @@ public class ResolveTest implements CracTest {
 
     @Override
     public void exec() throws Exception {
-        if (ip == null || checkFile == null) {
-            System.err.println("Args: <ip address> <check file path>");
+        if (ip == null) {
+            System.err.println("Args: <ip address>");
             return;
         }
+
+        restoreListener = new Resource() {
+            @Override
+            public void beforeCheckpoint(Context<? extends Resource> context) {
+            }
+            @Override
+            public void afterRestore(Context<? extends Resource> context) {
+                restoreListener = null;
+            }
+        };
+        Core.getGlobalContext().register(restoreListener);
+
         printAddress(ip);
-        while (!Files.exists(Path.of(checkFile))) {
+        while (restoreListener != null) { // While not restored
             try {
                 //noinspection BusyWait
                 Thread.sleep(100);

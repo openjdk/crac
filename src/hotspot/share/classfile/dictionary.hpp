@@ -73,6 +73,8 @@ public:
   void all_entries_do(KlassClosure* closure);
   void classes_do(MetaspaceClosure* it);
 
+  int number_of_entries() const;
+
   void clean_cached_protection_domains(GrowableArray<ProtectionDomainEntry*>* delete_list);
 
   // Protection domains

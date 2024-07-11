@@ -1883,3 +1883,11 @@ void LinkResolver::throw_abstract_method_error(const methodHandle& resolved_meth
 
   THROW_MSG(vmSymbols::java_lang_AbstractMethodError(), ss.as_string());
 }
+
+Method* LinkResolver::resolve_intrinsic_polymorphic_method(Klass *klass, Symbol *name, Symbol *signature, TRAPS) {
+  precond(MethodHandles::is_signature_polymorphic_intrinsic_name(klass, name));
+  const LinkInfo link_info(klass, name, signature);
+  Method* const result = lookup_polymorphic_method(link_info, nullptr, CHECK_NULL);
+  postcond(result != nullptr);
+  return result;
+}

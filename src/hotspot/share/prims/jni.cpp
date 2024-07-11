@@ -73,6 +73,7 @@
 #include "prims/jvmtiThreadState.hpp"
 #include "runtime/arguments.hpp"
 #include "runtime/atomic.hpp"
+#include "runtime/crac.hpp"
 #include "runtime/fieldDescriptor.inline.hpp"
 #include "runtime/handles.inline.hpp"
 #include "runtime/interfaceSupport.inline.hpp"
@@ -3616,6 +3617,23 @@ static jint JNI_CreateJavaVM_inner(JavaVM **vm, void **penv, void *args) {
       VMError::controlled_crash(ErrorHandlerTest);
     }
 #endif
+
+    // Restore thread states
+    // TODO this should be called by the code that creates the VM
+    if (CRaCRestoreFrom != nullptr && crac::is_portable_mode()) {
+      JavaThread* THREAD = JavaThread::current();
+      crac::restore_threads(THREAD);
+      if (HAS_PENDING_EXCEPTION) {
+        HandleMark hm(THREAD);
+        const Handle e(THREAD, PENDING_EXCEPTION);
+        CLEAR_PENDING_EXCEPTION;
+        jio_fprintf(defaultStream::error_stream(), "Exception in restoring thread ");
+        // If another exception occurs while printing it gets thrown away
+        java_lang_Throwable::java_printStackTrace(e, THREAD);
+        vm_exit(1); // To ensure the VM-creating code won't proceed with execution
+      }
+      vm_exit(0); // To ensure the VM-creating code won't proceed with execution
+    }
 
     // Since this is not a JVM_ENTRY we have to set the thread state manually before leaving.
     ThreadStateTransition::transition_from_vm(thread, _thread_in_native);

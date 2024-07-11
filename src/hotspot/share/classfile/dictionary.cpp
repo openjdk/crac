@@ -206,7 +206,11 @@ void Dictionary::all_entries_do(KlassClosure* closure) {
     return true;
   };
 
-  _table->do_scan(Thread::current(), all_doit);
+  if (SafepointSynchronize::is_at_safepoint()) {
+    _table->do_safepoint_scan(all_doit);
+  } else {
+    _table->do_scan(Thread::current(), all_doit);
+  }
 }
 
 // Used to scan and relocate the classes during CDS archive dump.
@@ -219,6 +223,11 @@ void Dictionary::classes_do(MetaspaceClosure* it) {
     return true;
   };
   _table->do_scan(Thread::current(), push);
+}
+
+int Dictionary::number_of_entries() const {
+  assert_locked_or_safepoint(SystemDictionary_lock);
+  return _number_of_entries;
 }
 
 class DictionaryLookup : StackObj {

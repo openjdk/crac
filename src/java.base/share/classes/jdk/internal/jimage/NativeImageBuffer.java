@@ -24,6 +24,10 @@
  */
 package jdk.internal.jimage;
 
+import java.lang.reflect.InvocationHandler;
+import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Method;
+import java.lang.reflect.Proxy;
 import java.nio.ByteBuffer;
 
 /**
@@ -35,7 +39,14 @@ import java.nio.ByteBuffer;
  */
 @SuppressWarnings("removal")
 class NativeImageBuffer {
+    private static Object nativeInitResource;
+
     static {
+        loadNativeLibrary();
+        registerIfCRaCPresent();
+    }
+
+    private static void loadNativeLibrary() {
         java.security.AccessController.doPrivileged(
                 new java.security.PrivilegedAction<Void>() {
                     public Void run() {
@@ -43,6 +54,58 @@ class NativeImageBuffer {
                         return null;
                     }
                 });
+    }
+
+    // Since this class must be compatible with JDK 8 and any non-CRaC JDK due
+    // to being part of jrtfs.jar we must register this to CRaC via reflection.
+    private static void registerIfCRaCPresent() {
+        try {
+            Class<?> priorityClass = Class.forName("jdk.internal.crac.Core$Priority");
+            Class<?> jdkResourceClass = Class.forName("jdk.internal.crac.JDKResource");
+            Class<?> resourceClass = Class.forName("jdk.crac.Resource");
+            Object[] priorities = priorityClass.getEnumConstants();
+            if (priorities == null) {
+                return;
+            }
+            Object normalPriority = null;
+            for (Object priority : priorities) {
+                if ("NORMAL".equals(priority.toString())) {
+                    normalPriority = priority;
+                }
+            }
+            if (normalPriority == null) {
+                throw new IllegalStateException();
+            }
+            try {
+                Method getContext = priorityClass.getMethod("getContext");
+                Object ctx = getContext.invoke(normalPriority);
+                Method register = ctx.getClass().getMethod("register", resourceClass);
+                nativeInitResource = Proxy.newProxyInstance(null, new Class<?>[] { jdkResourceClass }, new InvocationHandler() {
+                    @Override
+                    public Object invoke(Object proxy, Method method, Object[] args) throws Throwable {
+                        if ("beforeCheckpoint".equals(method.getName())) {
+                            // Do nothing
+                        } else if ("afterRestore".equals(method.getName())) {
+                            loadNativeLibrary();
+                        } else if ("toString".equals(method.getName())) {
+                            return toString();
+                        } else if ("hashCode".equals(method.getName())) {
+                            return hashCode();
+                        } else if ("equals".equals(method.getName())) {
+                            return equals(args[0]);
+                        } else {
+                            throw new UnsupportedOperationException(method.toString());
+                        }
+                        return null;
+                    }
+                });
+                register.invoke(ctx, nativeInitResource);
+            } catch (NoSuchMethodException | InvocationTargetException | IllegalAccessException e) {
+                throw new IllegalStateException(e);
+            }
+        } catch (ClassNotFoundException e) {
+            // ignored if class not present
+        }
     }
 
     static native ByteBuffer getNativeMap(String imagePath);

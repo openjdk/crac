@@ -100,6 +100,22 @@ jbyte constantTag::error_value() const {
   }
 }
 
+jbyte constantTag::external_value() const {
+  if (_tag < JVM_CONSTANT_InternalMin) {
+    return _tag;
+  }
+  switch (_tag) {
+    case JVM_CONSTANT_UnresolvedClass:
+    case JVM_CONSTANT_UnresolvedClassInError:
+    case JVM_CONSTANT_ClassIndex:          return JVM_CONSTANT_Class;
+    case JVM_CONSTANT_StringIndex:         return JVM_CONSTANT_String;
+    case JVM_CONSTANT_MethodHandleInError: return JVM_CONSTANT_MethodHandle;
+    case JVM_CONSTANT_MethodTypeInError:   return JVM_CONSTANT_MethodType;
+    case JVM_CONSTANT_DynamicInError:      return JVM_CONSTANT_Dynamic;
+    default: ShouldNotReachHere();         return JVM_CONSTANT_Invalid;
+  }
+}
+
 const char* constantTag::internal_name() const {
   switch (_tag) {
     case JVM_CONSTANT_Invalid :

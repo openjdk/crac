@@ -310,6 +310,7 @@ class StubRoutines: AllStatic {
   );
 
   static CallStub call_stub()                              { return CAST_TO_FN_PTR(CallStub, _call_stub_entry); }
+  static address call_stub_return_address()                { return _call_stub_return_address; }
 
   // Exceptions
   static address forward_exception_entry()                 { return _forward_exception_entry; }

@@ -45,6 +45,7 @@
 #include "utilities/exceptions.hpp"
 #include "utilities/globalDefinitions.hpp"
 #include "utilities/macros.hpp"
+#include "utilities/sizes.hpp"
 #if INCLUDE_JFR
 #include "jfr/support/jfrThreadExtension.hpp"
 #endif
@@ -71,6 +72,8 @@ class ThreadStatistics;
 class vframeArray;
 class vframe;
 class javaVFrame;
+
+class CracStackTrace;
 
 class JavaThread;
 typedef void (*ThreadFunction)(JavaThread*, TRAPS);
@@ -141,6 +144,9 @@ class JavaThread: public Thread {
   // Used to pass back results to the interpreter or generated code running Java code.
   oop           _vm_result;    // oop result is GC-preserved
   Metadata*     _vm_result_2;  // non-oop result
+
+  // Portable CRaC support
+  CracStackTrace *_crac_stack; // Stack trace to be restored on this thread
 
   // See ReduceInitialCardMarks: this holds the precise space interval of
   // the most recent slow path allocation for which compiled code has
@@ -556,6 +562,7 @@ private:
   inline JavaThreadState thread_state() const;
   inline void set_thread_state(JavaThreadState s);
   inline void set_thread_state_fence(JavaThreadState s);  // fence after setting thread state
+  inline const char *thread_state_name() const;
   inline ThreadSafepointState* safepoint_state() const;
   inline void set_safepoint_state(ThreadSafepointState* state);
   inline bool is_at_poll_safepoint();
@@ -698,6 +705,9 @@ private:
 
   void set_vm_result_2  (Metadata* x)            { _vm_result_2   = x; }
 
+  CracStackTrace *crac_stack()                   { return _crac_stack; }
+  void set_crac_stack(CracStackTrace *stack)     { precond(_crac_stack == nullptr || stack == nullptr); _crac_stack = stack; }
+
   MemRegion deferred_card_mark() const           { return _deferred_card_mark; }
   void set_deferred_card_mark(MemRegion mr)      { _deferred_card_mark = mr;   }
 
@@ -779,8 +789,8 @@ private:
   static ByteSize exception_pc_offset()          { return byte_offset_of(JavaThread, _exception_pc); }
   static ByteSize exception_handler_pc_offset()  { return byte_offset_of(JavaThread, _exception_handler_pc); }
   static ByteSize is_method_handle_return_offset() { return byte_offset_of(JavaThread, _is_method_handle_return); }
-
   static ByteSize active_handles_offset()        { return byte_offset_of(JavaThread, _active_handles); }
+  static ByteSize vframe_array_head_offset()     { return byte_offset_of(JavaThread, _vframe_array_head); }
 
   // StackOverflow offsets
   static ByteSize stack_overflow_limit_offset()  {

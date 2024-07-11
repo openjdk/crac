@@ -48,7 +48,7 @@ void FieldInfo::print_from_growable_array(outputStream* os, GrowableArray<FieldI
   }
 }
 
-Array<u1>* FieldInfoStream::create_FieldInfoStream(GrowableArray<FieldInfo>* fields, int java_fields, int injected_fields,
+Array<u1>* FieldInfoStream::create_FieldInfoStream(GrowableArrayView<FieldInfo>* fields, int java_fields, int injected_fields,
                                                           ClassLoaderData* loader_data, TRAPS) {
   // The stream format described in fieldInfo.hpp is:
   //   FieldInfoStream := j=num_java_fields k=num_injected_fields Field[j+k] End

@@ -26,6 +26,10 @@
 package sun.nio.fs;
 
 import java.lang.ref.Cleaner.Cleanable;
+import jdk.crac.Context;
+import jdk.crac.Resource;
+import jdk.internal.crac.Core;
+import jdk.internal.crac.JDKResource;
 import jdk.internal.misc.Unsafe;
 import jdk.internal.ref.CleanerFactory;
 
@@ -36,13 +40,15 @@ import jdk.internal.ref.CleanerFactory;
 class NativeBuffer implements AutoCloseable {
     private static final Unsafe unsafe = Unsafe.getUnsafe();
 
-    private final long address;
+    private long address;
     private final int size;
-    private final Cleanable cleanable;
+    private Cleanable cleanable;
 
     // optional "owner" to avoid copying
     // (only safe for use by thread-local caches)
     private Object owner;
+
+    private final JDKResource resource;
 
     private static class Deallocator implements Runnable {
         private final long address;
@@ -59,6 +65,35 @@ class NativeBuffer implements AutoCloseable {
         this.size = size;
         this.cleanable = CleanerFactory.cleaner()
                                        .register(this, new Deallocator(address));
+
+        // TODO clear NativeBuffers from released buffers first so that unused
+        //  data is not restored
+        this.resource = new JDKResource() {
+            private byte[] data;
+
+            @Override
+            public void beforeCheckpoint(Context<? extends Resource> context) {
+                if (address != 0) {
+                    data = new byte[size];
+                    unsafe.copyMemory(null, address, data, Unsafe.ARRAY_BYTE_BASE_OFFSET, size);
+                    free();
+                }
+            };
+
+            @Override
+            public void afterRestore(Context<? extends Resource> context) {
+                if (data != null) {
+                    address = unsafe.allocateMemory(size);
+                    cleanable = CleanerFactory.cleaner()
+                                              .register(this, new Deallocator(address));
+                    unsafe.copyMemory(data, Unsafe.ARRAY_BYTE_BASE_OFFSET, null, address, size);
+                    data = null;
+                }
+            };
+        };
+        // Must have a priority higher than that of file descriptors because
+        // used when reading file descriptor policies
+        Core.Priority.POST_FILE_DESCRIPTORS.getContext().register(resource);
     }
 
     @Override
@@ -80,6 +115,7 @@ class NativeBuffer implements AutoCloseable {
 
     void free() {
         cleanable.clean();
+        address = 0;
     }
 
     // not synchronized; only safe for use by thread-local caches

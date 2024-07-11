@@ -79,7 +79,7 @@ class klassVtable {
                                                    AccessFlags class_flags,
                                                    u2 major_version,
                                                    Handle classloader,
-                                                   Symbol* classname,
+                                                   const Symbol* classname,
                                                    Array<InstanceKlass*>* local_interfaces);
 
 #if INCLUDE_JVMTI
@@ -115,7 +115,7 @@ class klassVtable {
   static bool needs_new_vtable_entry(Method* m,
                                      const Klass* super,
                                      Handle classloader,
-                                     Symbol* classname,
+                                     const Symbol* classname,
                                      AccessFlags access_flags,
                                      u2 major_version);
 

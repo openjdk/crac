@@ -129,6 +129,10 @@ class DependencyContext : public StackObj {
   static void cleaning_start();
   static void cleaning_end();
 
+#ifdef ASSERT
+  bool is_unused() const;
+#endif // ASSERT
+
 #ifndef PRODUCT
   void print_dependent_nmethods(bool verbose);
 #endif //PRODUCT

@@ -51,8 +51,8 @@ void InstanceStackChunkKlass::serialize_offsets(SerializeClosure* f) {
 }
 #endif
 
-InstanceStackChunkKlass::InstanceStackChunkKlass(const ClassFileParser& parser)
-  : InstanceKlass(parser, Kind) {
+InstanceStackChunkKlass::InstanceStackChunkKlass(AccessFlags access_flags, const InstanceKlassSizes& sizes)
+  : InstanceKlass(access_flags, sizes, Kind) {
   // Change the layout_helper to use the slow path because StackChunkOops are
   // variable sized InstanceOops.
   const jint lh = Klass::instance_layout_helper(size_helper(), true);

@@ -24,7 +24,11 @@
  */
 package java.lang;
 
+import jdk.crac.Context;
+import jdk.crac.Resource;
 import jdk.internal.misc.InnocuousThread;
+import jdk.internal.crac.Core;
+import jdk.internal.crac.JDKResource;
 
 import java.lang.annotation.Native;
 import java.security.AccessController;
@@ -65,7 +69,7 @@ final class ProcessHandleImpl implements ProcessHandle {
     /**
      * Cache the ProcessHandle of this process.
      */
-    private static final ProcessHandleImpl current;
+    private static ProcessHandleImpl current;
 
     /**
      * Map of pids to ExitCompletions.
@@ -73,10 +77,27 @@ final class ProcessHandleImpl implements ProcessHandle {
     private static final ConcurrentMap<Long, ExitCompletion>
             completions = new ConcurrentHashMap<>();
 
+    /**
+     * Portable CRaC support.
+     */
+    private static final JDKResource nativeInitResource = new JDKResource() {
+        @Override
+        public void beforeCheckpoint(Context<? extends Resource> context) {
+        };
+
+        @Override
+        public void afterRestore(Context<? extends Resource> context) {
+            initNative();
+            long pid = getCurrentPid0();
+            current = new ProcessHandleImpl(pid, isAlive0(pid));
+        };
+    };
+
     static {
         initNative();
         long pid = getCurrentPid0();
         current = new ProcessHandleImpl(pid, isAlive0(pid));
+        Core.Priority.NORMAL.getContext().register(nativeInitResource);
     }
 
     private static native void initNative();

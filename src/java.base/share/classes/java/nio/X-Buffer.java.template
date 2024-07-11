@@ -943,7 +943,7 @@ public abstract sealed class $Type$Buffer
         return get(index, dst, 0, dst.length);
     }
 
-    private $Type$Buffer getArray(int index, $type$[] dst, int offset, int length) {
+    $Type$Buffer getArray(int index, $type$[] dst, int offset, int length) {
         if (
 #if[char]
             isAddressable() &&

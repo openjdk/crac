@@ -26,9 +26,8 @@
 #define SHARE_OOPS_INSTANCECLASSLOADERKLASS_HPP
 
 #include "oops/instanceKlass.hpp"
+#include "utilities/accessFlags.hpp"
 #include "utilities/macros.hpp"
-
-class ClassFileParser;
 
 // An InstanceClassLoaderKlass is a specialization of the InstanceKlass. It does
 // not add any field.  It is added to walk the dependencies for the class loader
@@ -43,7 +42,8 @@ public:
   static const KlassKind Kind = InstanceClassLoaderKlassKind;
 
 private:
-  InstanceClassLoaderKlass(const ClassFileParser& parser) : InstanceKlass(parser, Kind) {}
+  InstanceClassLoaderKlass(AccessFlags access_flags, const InstanceKlassSizes& sizes)
+      : InstanceKlass(access_flags, sizes, Kind) {}
 
 public:
   InstanceClassLoaderKlass() { assert(DumpSharedSpaces || UseSharedSpaces, "only for CDS"); }

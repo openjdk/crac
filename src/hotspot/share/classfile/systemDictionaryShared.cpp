@@ -1447,7 +1447,8 @@ class CleanupDumpTimeLambdaProxyClassTable: StackObj {
   bool do_entry(LambdaProxyClassKey& key, DumpTimeLambdaProxyClassInfo& info) {
     assert_lock_strong(DumpTimeTable_lock);
     InstanceKlass* caller_ik = key.caller_ik();
-    InstanceKlass* nest_host = caller_ik->nest_host_not_null();
+    InstanceKlass* nest_host = caller_ik->nest_host_noresolve();
+    assert(nest_host != nullptr, "must be");
 
     // If the caller class and/or nest_host are excluded, the associated lambda proxy
     // must also be excluded.

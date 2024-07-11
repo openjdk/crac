@@ -143,6 +143,10 @@ class MethodHandles: AllStatic {
     return signature_polymorphic_name_id(klass, name) != vmIntrinsics::_none;
   }
   static bool is_signature_polymorphic_public_name(Klass* klass, Symbol* name);
+  static bool is_signature_polymorphic_intrinsic_name(Klass* klass, Symbol* name) {
+    const vmIntrinsics::ID iid = MethodHandles::signature_polymorphic_name_id(klass, name);
+    return iid != vmIntrinsics::_none && is_signature_polymorphic_intrinsic(iid);
+  }
 
   static Bytecodes::Code signature_polymorphic_intrinsic_bytecode(vmIntrinsics::ID id);
 

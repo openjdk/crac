@@ -62,6 +62,14 @@ void DependencyContext::init() {
   }
 }
 
+#ifdef ASSERT
+bool DependencyContext::is_unused() const {
+  const nmethodBucket* dependencies = Atomic::load(_dependency_context_addr);
+  const uint64_t last_cleanup = Atomic::load(_last_cleanup_addr);
+  return dependencies == nullptr && last_cleanup == 0;
+}
+#endif // ASSERT
+
 //
 // Walk the list of dependent nmethods searching for nmethods which
 // are dependent on the changes that were passed in and mark them for

@@ -599,6 +599,46 @@ void frame::interpreter_frame_print_on(outputStream* st) const {
 #endif
 }
 
+#ifndef PRODUCT
+// Returns true if x is an oop. If it isn't, may return either true or false,
+// but most likely false.
+static bool is_probably_oop(intptr_t x) {
+  const oop o = cast_to_oop(x);
+  return oopDesc::is_oop(o) && o->klass_or_null() != nullptr && o->klass()->is_klass();
+}
+#endif
+
+void frame::interpreter_frame_print_values_on(outputStream* st) const {
+#ifndef PRODUCT
+  assert(is_interpreted_frame(), "Not an interpreted frame");
+  jint i;
+  for (i = 0; i < interpreter_frame_method()->max_locals(); i++ ) {
+    intptr_t x = *interpreter_frame_local_at(i);
+    st->print(" - local  [" INTPTR_FORMAT "]", x);
+    st->fill_to(23);
+    st->print("; #%d", i);
+    if (is_probably_oop(x)) {
+      ResourceMark rm;
+      // May crash if not actually an oop but ok for debugging
+      st->print(" - probably %s oop", cast_to_oop(x)->klass()->internal_name());
+    }
+    st->cr();
+  }
+  for (i = interpreter_frame_expression_stack_size() - 1; i >= 0; --i ) {
+    intptr_t x = *interpreter_frame_expression_stack_at(i);
+    st->print(" - stack  [" INTPTR_FORMAT "]", x);
+    st->fill_to(23);
+    st->print("; #%d", i);
+    if (is_probably_oop(x)) {
+      ResourceMark rm;
+      // May crash if not actually an oop but ok for debugging
+      st->print(" - probably %s oop", cast_to_oop(x)->klass()->internal_name());
+    }
+    st->cr();
+  }
+#endif
+}
+
 // Print whether the frame is in the VM or OS indicating a HotSpot problem.
 // Otherwise, it's likely a bug in the native library that the Java code calls,
 // hopefully indicating where to submit bugs.

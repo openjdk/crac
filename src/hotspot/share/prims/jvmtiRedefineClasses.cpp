@@ -4386,7 +4386,7 @@ void VM_RedefineClasses::redefine_single_class(Thread* current, jclass the_jclas
   // Leave arrays of jmethodIDs and itable index cache unchanged
 
   // Copy the "source debug extension" attribute from new class version
-  the_class->set_source_debug_extension(
+  the_class->copy_source_debug_extension(
     scratch_class->source_debug_extension(),
     scratch_class->source_debug_extension() == nullptr ? 0 :
     (int)strlen(scratch_class->source_debug_extension()));

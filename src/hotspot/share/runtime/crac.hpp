@@ -25,18 +25,26 @@
 #define SHARE_RUNTIME_CRAC_HPP
 
 #include "memory/allStatic.hpp"
+#include "runtime/cracStackDumpParser.hpp"
 #include "runtime/handles.hpp"
-#include "utilities/macros.hpp"
+#include "utilities/exceptions.hpp"
 
 // xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
 #define UUID_LENGTH 36
 
 class crac: AllStatic {
 public:
+  // Returns true if using the experimetnal portable mode.
+  static bool is_portable_mode();
+
   static void vm_create_start();
   static bool prepare_checkpoint();
   static Handle checkpoint(jarray fd_arr, jobjectArray obj_arr, bool dry_run, jlong jcmd_stream, TRAPS);
+  // Restore in the classic mode.
   static void restore();
+
+  static Handle cr_return(int ret, Handle new_args, Handle new_props,
+                          Handle err_codes, Handle err_msgs, TRAPS);
 
   static jlong restore_start_time();
   static jlong uptime_since_restore();
@@ -50,6 +58,14 @@ public:
 
   static void initialize_time_counters();
 
+  // Portable mode
+
+  // Restores classes and objects.
+  static void restore_data(TRAPS);
+  // Launches execution of all threads, returns when the current thread finishes
+  // its restored execution (if any).
+  static void restore_threads(TRAPS);
+
 private:
   static bool read_bootid(char *dest);
 
@@ -57,6 +73,8 @@ private:
   static jlong checkpoint_nanos;
   static char checkpoint_bootid[UUID_LENGTH];
   static jlong javaTimeNanos_offset;
+
+  static ParsedCracStackDump *_stack_dump;
 };
 
 #endif //SHARE_RUNTIME_CRAC_HPP

@@ -930,9 +930,10 @@ const size_t VM_Version::glibc_prefix_len = strlen(glibc_prefix);
 
 bool VM_Version::glibc_env_set(char *disable_str) {
 #define TUNABLES_NAME "GLIBC_TUNABLES"
+#define REEXEC_NAME "HOTSPOT_GLIBC_TUNABLES_REEXEC"
   char *env_val = disable_str;
   const char *env = getenv(TUNABLES_NAME);
-  if (env && strcmp(env, env_val) == 0) {
+  if (env && (strcmp(env, env_val) == 0 || !INCLUDE_CPU_FEATURE_ACTIVE && getenv(REEXEC_NAME))) {
     if (!INCLUDE_CPU_FEATURE_ACTIVE) {
       if (ShowCPUFeatures) {
         tty->print_cr("Environment variable already set, glibc CPU_FEATURE_ACTIVE is unavailable - re-exec suppressed: " TUNABLES_NAME "=%s", env);
@@ -968,7 +969,6 @@ bool VM_Version::glibc_env_set(char *disable_str) {
   if (err)
     vm_exit_during_initialization(err_msg("setenv " TUNABLES_NAME " error: %m"));
 
-#define REEXEC_NAME "HOTSPOT_GLIBC_TUNABLES_REEXEC"
   if (getenv(REEXEC_NAME))
     vm_exit_during_initialization(err_msg("internal error: " TUNABLES_NAME "=%s failed and " REEXEC_NAME " is set", disable_str));
   if (setenv(REEXEC_NAME, "1", 1))

@@ -527,6 +527,17 @@ void crac::prepare_restore(crac_restore_data& restore_data) {
 }
 
 void crac::restore(crac_restore_data& restore_data) {
+  struct stat statbuf;
+  if (os::stat(CRaCRestoreFrom, &statbuf) != 0) {
+    fprintf(stderr, "Cannot open restore directory of the -XX:CRaCRestoreFrom parameter: ");
+    perror(CRaCRestoreFrom);
+    return;
+  }
+  if ((statbuf.st_mode & S_IFMT) != S_IFDIR) {
+    fprintf(stderr, "-XX:CRaCRestoreFrom parameter is not a directory: %s\n", CRaCRestoreFrom);
+    return;
+  }
+
   compute_crengine();
 
   const int id = os::current_process_id();

@@ -25,6 +25,8 @@
 package sun.nio.ch;
 
 import java.io.IOException;
+import java.nio.ByteBuffer;
+
 import static sun.nio.ch.WEPoll.*;
 
 /**
@@ -37,11 +39,30 @@ class WEPollPoller extends Poller {
     private final long handle;
     private final int event;
     private final long address;
+    private PipeImpl stopPipe;
 
     WEPollPoller(boolean read) throws IOException {
         this.handle = WEPoll.create();
         this.event = (read) ? EPOLLIN : EPOLLOUT;
         this.address = WEPoll.allocatePollArray(MAX_EVENTS_TO_POLL);
+    }
+
+    @Override
+    protected void stop() throws IOException {
+        super.stop();
+        stopPipe = new PipeImpl(DefaultSelectorProvider.get(), true, false);
+        int err = WEPoll.ctl(handle, EPOLL_CTL_ADD, stopPipe.source().getFDVal(), EPOLLIN | EPOLLONESHOT);
+        if (err != 0) {
+            throw new IOException("epoll_ctl failed: " + err);
+        }
+        stopPipe.sink().write(ByteBuffer.allocate(1).put((byte) 0).flip());
+    }
+
+    @Override
+    protected void closeFds() throws IOException {
+        stopPipe.source().close();
+        stopPipe.sink().close();
+        WEPoll.close(handle);
     }
 
     @Override

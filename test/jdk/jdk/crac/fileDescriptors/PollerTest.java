@@ -34,13 +34,19 @@ import java.net.Socket;
 import java.util.concurrent.atomic.AtomicReference;
 
 /**
- * @test
+ * @test id=SYSTEM_THREADS
+ * @library /test/lib
+ * @build PollerTest
+ * @run driver/timeout=10 jdk.test.lib.crac.CracTest false SYSTEM_THREADS
+ * @run driver/timeout=10 jdk.test.lib.crac.CracTest true SYSTEM_THREADS
+ */
+/**
+ * @test id=VTHREAD_POLLERS
+ * @requires os.family == "linux" | os.family == "mac"
  * @library /test/lib
  * @build PollerTest
  * @run driver/timeout=10 jdk.test.lib.crac.CracTest false VTHREAD_POLLERS
  * @run driver/timeout=10 jdk.test.lib.crac.CracTest true VTHREAD_POLLERS
- * @run driver/timeout=10 jdk.test.lib.crac.CracTest false SYSTEM_THREADS
- * @run driver/timeout=10 jdk.test.lib.crac.CracTest true SYSTEM_THREADS
  */
 public class PollerTest implements CracTest {
     @CracTestArg(0)

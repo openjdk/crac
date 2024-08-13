@@ -73,14 +73,14 @@ public class BasicImageReader implements AutoCloseable {
     private final Path imagePath;
     private final ByteOrder byteOrder;
     private final String name;
-    private final ByteBuffer memoryMap;
+    private ByteBuffer memoryMap;
     private FileChannel channel;
     private final ImageHeader header;
     private final long indexSize;
-    private final IntBuffer redirect;
-    private final IntBuffer offsets;
-    private final ByteBuffer locations;
-    private final ByteBuffer strings;
+    private IntBuffer redirect;
+    private IntBuffer offsets;
+    private ByteBuffer locations;
+    private ByteBuffer strings;
     private final ImageStringsReader stringsReader;
     private final Decompressor decompressor;
     private Object cracResource;
@@ -112,7 +112,7 @@ public class BasicImageReader implements AutoCloseable {
 
         // If no memory map yet and 64 bit jvm then memory map entire file
         if (MAP_ALL && map == null) {
-            map = channel.map(FileChannel.MapMode.READ_ONLY, 0, channel.size());
+            map = createMemoryMap(channel.size());
         }
 
         // Assume we have a memory map to read image file header
@@ -138,7 +138,7 @@ public class BasicImageReader implements AutoCloseable {
         // If no memory map yet then must be 32 bit jvm not previously mapped
         if (map == null) {
             // Just map the image index
-            map = channel.map(FileChannel.MapMode.READ_ONLY, 0, indexSize);
+            map = createMemoryMap(indexSize);
         }
 
         memoryMap = map.asReadOnlyBuffer();
@@ -147,13 +147,22 @@ public class BasicImageReader implements AutoCloseable {
         if (memoryMap.capacity() < indexSize) {
             throw new IOException("The image file \"" + name + "\" is corrupted");
         }
+        
+        initMappedBuffers();
+
+        stringsReader = new ImageStringsReader(this);
+        decompressor = new Decompressor();
+    }
+
+    protected void initMappedBuffers() {
         redirect = intBuffer(memoryMap, header.getRedirectOffset(), header.getRedirectSize());
         offsets = intBuffer(memoryMap, header.getOffsetsOffset(), header.getOffsetsSize());
         locations = slice(memoryMap, header.getLocationsOffset(), header.getLocationsSize());
         strings = slice(memoryMap, header.getStringsOffset(), header.getStringsSize());
+    }
 
-        stringsReader = new ImageStringsReader(this);
-        decompressor = new Decompressor();
+    protected ByteBuffer createMemoryMap(long size) throws IOException {
+        return channel.map(FileChannel.MapMode.READ_ONLY, 0, size);
     }
 
     // Since this class must be compatible with JDK 8 and any non-CRaC JDK due to being part of jrtfs.jar
@@ -227,9 +236,16 @@ public class BasicImageReader implements AutoCloseable {
                 public Object invoke(Object proxy, Method method, Object[] args) throws Throwable {
                     if ("beforeCheckpoint".equals(method.getName())) {
                         channel.close();
+                        redirect = null;
+                        offsets = null;
+                        locations = null;
+                        strings = null;
+                        memoryMap = null;
                     } else if ("afterRestore".equals(method.getName())) {
                         if (channel != null) {
                             channel = openFileChannel();
+                            memoryMap = createMemoryMap(MAP_ALL ? channel.size() : indexSize).asReadOnlyBuffer();
+                            initMappedBuffers();
                         }
                     } else if ("toString".equals(method.getName())) {
                         return BasicImageReader.this.toString();

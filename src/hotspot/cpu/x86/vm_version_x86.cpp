@@ -901,7 +901,7 @@ uint64_t VM_Version::CPUFeatures_parse(uint64_t &glibc_features) {
       | CPU_CX8 // gcc detects it to set cpu "pentium" (=32-bit only), used by OpenJDK
       | CPU_CMOV // gcc detects it to set cpu "pentiumpro" (=32-bit only), used by OpenJDK
       | CPU_FLUSH // ="clflush" in cpuinfo, not used by gcc, required by OpenJDK
-      // GLIBC_MOVBE is disabled in 'gcc -Q --help=target' and some CPUs do not support it: https://stackoverflow.com/a/5246553/2995591
+      // GLIBC_MOVBE is disabled in 'gcc -Q --help=target' and for example i7-720QM does not support it
       // GLIBC_LAHFSAHF is disabled in 'gcc -Q --help=target' and "Early Intel Pentium 4 CPUs with Intel 64 support ... lacked the LAHF and SAHF instructions"
 #endif
     ;
@@ -1030,9 +1030,9 @@ void VM_Version::glibc_reexec() {
 #undef EXEC
 }
 
-void VM_Version::glibc_not_using(uint64_t excessive_CPU, uint64_t excessive_GLIBC) {
+void VM_Version::glibc_not_using(uint64_t shouldnotuse_CPU, uint64_t shouldnotuse_GLIBC) {
 #ifndef ASSERT
-  if (!excessive_CPU && !excessive_GLIBC)
+  if (!shouldnotuse_CPU && !shouldnotuse_GLIBC)
     return;
 #endif
 
@@ -1050,11 +1050,11 @@ void VM_Version::glibc_not_using(uint64_t excessive_CPU, uint64_t excessive_GLIB
       // FPU is always present on i686+: (_features & CPU_FPU) &&
       (_features & CPU_SSE2)) {
     // These cannot be disabled by GLIBC_TUNABLES.
-    if (excessive_CPU & (CPU_FXSR | CPU_MMX | CPU_SSE)) {
-      assert(!(excessive_CPU & CPU_SSE2), "CPU_SSE2 in both _features and excessive_CPU cannot happen");
+    if (shouldnotuse_CPU & (CPU_FXSR | CPU_MMX | CPU_SSE)) {
+      assert(!(shouldnotuse_CPU & CPU_SSE2), "CPU_SSE2 in both _features and shouldnotuse_CPU cannot happen");
       // FIXME: The choice should be based on glibc impact, not the feature age.
       // CX8 is i586+, CMOV is i686+ 1995+, SSE2 is 2000+
-      excessive_CPU |= CPU_SSE2;
+      shouldnotuse_CPU |= CPU_SSE2;
     }
     if ((_features & CPU_FXSR) &&
         (_features & CPU_MMX) &&
@@ -1071,11 +1071,11 @@ void VM_Version::glibc_not_using(uint64_t excessive_CPU, uint64_t excessive_GLIB
           (_features & CPU_SSSE3) &&
           (_features & CPU_SSE4_1) &&
           (_features & CPU_SSE4_2)) {
-        if ((excessive_CPU & CPU_SSE3) ||
-            (excessive_GLIBC & (GLIBC_CMPXCHG16 | GLIBC_LAHFSAHF))) {
-          assert(!(excessive_CPU & CPU_SSE4_2), "CPU_SSE4_2 in both _features and excessive_CPU cannot happen");
+        if ((shouldnotuse_CPU & CPU_SSE3) ||
+            (shouldnotuse_GLIBC & (GLIBC_CMPXCHG16 | GLIBC_LAHFSAHF))) {
+          assert(!(shouldnotuse_CPU & CPU_SSE4_2), "CPU_SSE4_2 in both _features and shouldnotuse_CPU cannot happen");
           // POPCNT is 2007+, SSSE3 is 2006+, SSE4_1 is 2007+, SSE4_2 is 2008+.
-          excessive_CPU |= CPU_SSE4_2;
+          shouldnotuse_CPU |= CPU_SSE4_2;
         }
         if ((_features & CPU_SSE3) &&
             (_glibc_features & GLIBC_CMPXCHG16) &&
@@ -1096,10 +1096,10 @@ void VM_Version::glibc_not_using(uint64_t excessive_CPU, uint64_t excessive_GLIB
               (_features & CPU_FMA) &&
               (_features & CPU_LZCNT) &&
               (_glibc_features & GLIBC_MOVBE)) {
-            if (excessive_GLIBC & GLIBC_F16C) {
-              assert(!(excessive_GLIBC & GLIBC_MOVBE), "GLIBC_MOVBE in both _glibc_features and excessive_GLIBC cannot happen");
+            if (shouldnotuse_GLIBC & GLIBC_F16C) {
+              assert(!(shouldnotuse_GLIBC & GLIBC_MOVBE), "GLIBC_MOVBE in both _glibc_features and shouldnotuse_GLIBC cannot happen");
               // FMA is 2012+, AVX2+BMI1+BMI2+LZCNT are 2013+, MOVBE is 2015+
-              excessive_GLIBC |= GLIBC_MOVBE;
+              shouldnotuse_GLIBC |= GLIBC_MOVBE;
             }
             if (_glibc_features & GLIBC_F16C) {
               // glibc: if (CPU_FEATURE_USABLE_P (cpu_features, AVX512F)
@@ -1108,38 +1108,56 @@ void VM_Version::glibc_not_using(uint64_t excessive_CPU, uint64_t excessive_GLIB
               // glibc:     && CPU_FEATURE_USABLE_P (cpu_features, AVX512DQ)
               // glibc:     && CPU_FEATURE_USABLE_P (cpu_features, AVX512VL))
               // glibc:   isa_level |= GNU_PROPERTY_X86_ISA_1_V4;
-              // All these flags are supported by GLIBC_DISABLE below.
+              // All these flags are supported by disable() below.
             }
           }
         }
       }
     }
   }
-  uint64_t disable_CPU   = 0;
-  uint64_t disable_GLIBC = 0;
+
 #define PASTE_TOKENS3(x, y, z) PASTE_TOKENS(x, PASTE_TOKENS(y, z))
+  enum kind { KIND_CPU = 0, KIND_GLIBC, KIND_COUNT };
+
+  static const size_t tunables_size_max = 17;
+  // 64 is # of bits in uint64_t VM_Version::_glibc_features.
+  char disable_str[KIND_COUNT * 64 * (1/*','*/ + 1/*'-'*/ + tunables_size_max) + 1/*'\0'*/];
+  strcpy(disable_str, glibc_prefix);
+  char *disable_end = disable_str + glibc_prefix_len;
+  auto disable = [&](enum kind kind, uint64_t value, const char *tunables) {
+    size_t remains = disable_str + sizeof(disable_str) - disable_end;
+    guarantee(2 + strlen(tunables) < remains, "internal error: disable_str overflow");
+    *disable_end++ = ',';
+    *disable_end++ = '-';
+    disable_end = stpcpy(disable_end, tunables);
+  };
+
 #ifdef ASSERT
-  uint64_t excessive_handled_CPU   = 0;
-  uint64_t excessive_handled_GLIBC = 0;
-  uint64_t disable_handled_CPU   = 0;
-  uint64_t disable_handled_GLIBC = 0;
+  uint64_t handled[KIND_COUNT] = { 0 };
 #endif
-#define EXCESSIVE_HANDLED(kind, hotspot) do {                                                                                         \
-    assert(!(PASTE_TOKENS(excessive_handled_, kind) & PASTE_TOKENS3(kind, _, hotspot)), "already used " STR(kind) "_" STR(hotspot) ); \
-    DEBUG_ONLY(PASTE_TOKENS(excessive_handled_, kind) |= PASTE_TOKENS3(kind, _, hotspot));                                            \
-  } while (0)
+  auto shouldnotuse_handled = [&](enum kind kind, uint64_t value, const char *kindstr, const char *tunables) {
+    assert(strlen(tunables) <= tunables_size_max, "Too long string %s", tunables);
+    assert((handled[kind] & value) == 0, "already used %s_%s", kindstr, tunables);
+    DEBUG_ONLY(handled[kind] |= value);
+  };
+#define EXCESSIVE_HANDLED(kind, tunables) shouldnotuse_handled(PASTE_TOKENS(KIND_, kind), PASTE_TOKENS3(kind, _, tunables), STR(kind), STR(tunables))
+
 #if INCLUDE_CPU_FEATURE_ACTIVE
-# define FEATURE_ACTIVE(glibc) CPU_FEATURE_ACTIVE(glibc)
+# define FEATURE_ACTIVE(tunables) CPU_FEATURE_ACTIVE(tunables)
 #else
-# define FEATURE_ACTIVE(glibc) true
+# define FEATURE_ACTIVE(tunables) true
 #endif
-#define EXCESSIVE3(kind, hotspot, glibc) do {                                                        \
-    EXCESSIVE_HANDLED(kind, hotspot);                                                                \
-    if (PASTE_TOKENS(excessive_, kind) & PASTE_TOKENS3(kind, _, hotspot) && FEATURE_ACTIVE(glibc)) { \
-      PASTE_TOKENS(disable_, kind) |= PASTE_TOKENS3(kind, _, hotspot);                               \
-    }                                                                                                \
-  } while (0)
-#define EXCESSIVE(kind, hotspotglibc) EXCESSIVE3(kind, hotspotglibc, hotspotglibc)
+
+  const uint64_t shouldnotuseval[KIND_COUNT] = { shouldnotuse_CPU, shouldnotuse_GLIBC };
+  auto shouldnotuse = [&](enum kind kind, uint64_t value, const char *kindstr, const char *tunables, bool feature_active) {
+    shouldnotuse_handled(kind, value, kindstr, tunables);
+    if ((shouldnotuseval[kind] & value) != 0 && feature_active) {
+      disable(kind, value, tunables);
+    }
+  };
+#define EXCESSIVE(kind, tunables) \
+    shouldnotuse(PASTE_TOKENS(KIND_, kind), PASTE_TOKENS3(kind, _, tunables), STR(kind), STR(tunables), FEATURE_ACTIVE(tunables))
+
   EXCESSIVE(CPU  , AVX     );
   EXCESSIVE(CPU  , CX8     );
   EXCESSIVE(CPU  , FMA     );
@@ -1172,66 +1190,7 @@ void VM_Version::glibc_not_using(uint64_t excessive_CPU, uint64_t excessive_GLIB
 #undef EXCESSIVE
 #undef EXCESSIVE3
 
-  char disable_str[64 * (10 + 3) + 1];
-  strcpy(disable_str, glibc_prefix);
-  char *disable_end = disable_str + glibc_prefix_len;
-#define GLIBC_DISABLE2(kind, hotspot, glibc) do {                                                                                   \
-    assert(!(PASTE_TOKENS(disable_handled_, kind) & PASTE_TOKENS3(kind, _, hotspot)), "already used " STR(kind) "_" STR(hotspot) ); \
-    DEBUG_ONLY(PASTE_TOKENS(disable_handled_, kind) |= PASTE_TOKENS3(kind, _, hotspot));                                            \
-    if (PASTE_TOKENS(disable_, kind) & PASTE_TOKENS3(kind, _, hotspot)) {                                                           \
-      const char str[] = ",-" STR(glibc);                                                                                           \
-      size_t remains = disable_str + sizeof(disable_str) - disable_end;                                                             \
-      strncpy(disable_end, str, remains);                                                                                           \
-      size_t len = strnlen(disable_end, remains);                                                                                   \
-      remains -= len;                                                                                                               \
-      assert(remains > 0, "internal error: disable_str overflow");                                                                  \
-      disable_end += len;                                                                                                           \
-    }                                                                                                                               \
-  } while (0);
-#define GLIBC_DISABLE(kind, hotspot_glibc) GLIBC_DISABLE2(kind, hotspot_glibc, hotspot_glibc)
-  GLIBC_DISABLE(CPU  , AVX)
-  GLIBC_DISABLE(CPU  , CX8)
-  GLIBC_DISABLE(CPU  , FMA)
-  GLIBC_DISABLE(CPU  , RTM)
-  GLIBC_DISABLE(CPU  , AVX2)
-  GLIBC_DISABLE(CPU  , BMI1)
-  GLIBC_DISABLE(CPU  , BMI2)
-  GLIBC_DISABLE(CPU  , CMOV)
-  GLIBC_DISABLE(CPU  , ERMS)
-  GLIBC_DISABLE(CPU  , SSE2)
-  GLIBC_DISABLE(CPU  , LZCNT)
-  GLIBC_DISABLE(CPU  , SSSE3)
-  GLIBC_DISABLE(CPU  , POPCNT)
-  GLIBC_DISABLE(CPU  , SSE4_1)
-  GLIBC_DISABLE(CPU  , SSE4_2)
-  GLIBC_DISABLE(CPU  , AVX512F)
-  GLIBC_DISABLE(CPU  , AVX512CD)
-  GLIBC_DISABLE(CPU  , AVX512BW)
-  GLIBC_DISABLE(CPU  , AVX512DQ)
-  GLIBC_DISABLE(CPU  , AVX512ER)
-  GLIBC_DISABLE(CPU  , AVX512PF)
-  GLIBC_DISABLE(CPU  , AVX512VL)
-  GLIBC_DISABLE2(CPU , CET_IBT, IBT)
-  GLIBC_DISABLE2(CPU , CET_SS , SHSTK)
-  GLIBC_DISABLE(GLIBC, FMA4)
-  GLIBC_DISABLE(GLIBC, MOVBE)
-  GLIBC_DISABLE(GLIBC, XSAVE)
-  GLIBC_DISABLE(GLIBC, OSXSAVE)
-  GLIBC_DISABLE(GLIBC, HTT)
-#undef GLIBC_DISABLE
-#undef GLIBC_DISABLE2
-  *disable_end = 0;
-
 #ifdef ASSERT
-#define CHECK_KIND(kind) do {                                                                                                            \
-    if (PASTE_TOKENS(disable_handled_, kind) != PASTE_TOKENS(excessive_handled_, kind))                                                  \
-      vm_exit_during_initialization(err_msg("internal error: Unsupported disabling of " STR(kind) "_* 0x%" PRIx64 " != used 0x%" PRIx64, \
-                                            PASTE_TOKENS(disable_handled_, kind), PASTE_TOKENS(excessive_handled_, kind)));              \
-  } while (0)
-  CHECK_KIND(CPU  );
-  CHECK_KIND(GLIBC);
-#undef CHECK_KIND
-
   // These cannot be disabled by GLIBC_TUNABLES interface.
 #define GLIBC_UNSUPPORTED(kind, hotspot) EXCESSIVE_HANDLED(kind, hotspot)
   GLIBC_UNSUPPORTED(CPU  , 3DNOW_PREFETCH   );
@@ -1274,16 +1233,19 @@ void VM_Version::glibc_not_using(uint64_t excessive_CPU, uint64_t excessive_GLIB
   GLIBC_UNSUPPORTED(GLIBC, LAHFSAHF         );
   GLIBC_UNSUPPORTED(GLIBC, F16C             );
 #undef GLIBC_UNSUPPORTED
-#define CHECK_KIND(kind) do {                                                                                                                 \
-    if (PASTE_TOKENS(excessive_handled_, kind) != PASTE_TOKENS(MAX_, kind) - 1)                                                               \
-      vm_exit_during_initialization(err_msg("internal error: Unsupported disabling of some " STR(kind) "_* 0x%" PRIx64 " != full 0x%" PRIx64, \
-                                            PASTE_TOKENS(excessive_handled_, kind), PASTE_TOKENS(MAX_, kind) - 1));                           \
-  } while (0)
+
+  auto check_kind = [&](enum kind kind, const char *kindstr, uint64_t mask) {
+    if (handled[kind] != mask) {
+      vm_exit_during_initialization(err_msg("internal error: Unsupported disabling of some %s_* 0x%" PRIx64 " != full 0x%" PRIx64, kindstr, handled[kind], mask));
+    }
+  };
+#define CHECK_KIND(kind) check_kind(PASTE_TOKENS(KIND_, kind), STR(kind), PASTE_TOKENS(MAX_, kind) - 1)
   CHECK_KIND(CPU  );
   CHECK_KIND(GLIBC);
 #undef CHECK_KIND
 #endif // ASSERT
 
+  *disable_end = 0;
   if (disable_end == disable_str + glibc_prefix_len)
     return;
   if (glibc_env_set(disable_str))

@@ -410,11 +410,18 @@ public class CracBuilder {
     }
 
     public CracProcess startRestore(List<String> javaPrefix) throws Exception {
+        return startRestoreWithArgs(javaPrefix, null);
+    }
+
+    public CracProcess startRestoreWithArgs(List<String> javaPrefix, List<String> args) throws Exception {
         if (!runContainerDirectly) {
             ensureContainerStarted();
         }
         List<String> cmd = prepareCommand(javaPrefix, true);
         cmd.add("-XX:CRaCRestoreFrom=" + imageDir);
+        if (null != args) {
+            cmd.addAll(args);
+        }
         log("Starting restored process:");
         log(String.join(" ", cmd));
         return new CracProcess(this, cmd);

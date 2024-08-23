@@ -317,6 +317,7 @@ JLI_Launch(int argc, char ** argv,              /* main argc, argv */
 
     /* set the -Dsun.java.command pseudo property */
     SetJavaCommandLineProp(what, argc, argv);
+    SetJavaCommandLinePropCrac(what, argc, argv);
 
     /* Set the -Dsun.java.launcher pseudo property */
     SetJavaLauncherProp();
@@ -1828,6 +1829,64 @@ SetJavaCommandLineProp(char *what, int argc, char **argv)
  */
 static void SetJavaLauncherProp() {
   AddOption("-Dsun.java.launcher=SUN_STANDARD", NULL);
+}
+
+void
+SetJavaCommandLinePropCrac(char *what, int argc, char **argv)
+{
+    // let's build a new option that escapes whitespaces:
+    // Test "1 2" 3 -> "-Dsun.java.crac_command=Test 1\ 2 3"
+    // and parse it in the VM/JDK
+
+    if (what == NULL) {
+        /* unexpected, one of these should be set. just return without
+         * setting the property
+         */
+        return;
+    }
+
+    const char* dashDstr = "-Dsun.java.crac_command=";
+
+    /* determine the amount of memory to allocate assuming
+     * the individual components will be space separated
+     */
+    size_t len = JLI_StrLen(what);
+    for (int i = 0; i < argc; i++) {
+        len += JLI_StrLen(argv[i]) + 1;
+    }
+    /* allocate space enough for character escaping*/
+    len *= 2;
+
+    /* allocate the memory */
+    char *javaCommand = (char*) JLI_MemAlloc(len + JLI_StrLen(dashDstr) + 1);
+
+    /* build the -D string */
+    *javaCommand = '\0';
+    JLI_StrCat(javaCommand, dashDstr);
+    JLI_StrCat(javaCommand, what);
+
+    char *javaCmdEnd = javaCommand + JLI_StrLen(javaCommand);
+    for (int i = 0; i < argc; i++) {
+        /* The components of the string are space separated. In
+         * the case of embedded white space, it will be escaped
+         * with a special char.
+         * This is needed until SetJavaCommandLineProp is fixed in OpenJDK.
+         */
+        const char escChar = '\\';
+        const char sepChar = ' ';
+        const char *arg = argv[i];
+        const size_t argLen = JLI_StrLen(arg);
+        *javaCmdEnd++ = sepChar;
+        for (size_t j = 0; j < argLen; ++j) {
+            const char curChar = arg[j];
+            if (escChar == curChar || sepChar == curChar) {
+                *javaCmdEnd++ = escChar;
+            }
+            *javaCmdEnd++ = curChar;
+        }
+    }
+    *javaCmdEnd++ = '\0';
+    AddOption(javaCommand, NULL);
 }
 
 /*

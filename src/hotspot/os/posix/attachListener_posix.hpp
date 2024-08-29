@@ -26,12 +26,10 @@
 #ifndef OS_POSIX_ATTACHLISTENER_POSIX_HPP
 #define OS_POSIX_ATTACHLISTENER_POSIX_HPP
 
-class PosixAttachListener;
-
-#if INCLUDE_SERVICES
-
 #include "posixAttachOperation.hpp"
 #include "services/attachListener.hpp"
+
+#if INCLUDE_SERVICES
 
 #include <sys/un.h>
 

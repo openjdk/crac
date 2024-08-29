@@ -28,8 +28,6 @@
 
 #include "services/attachListener.hpp"
 
-class PosixAttachOperation;
-
 #if INCLUDE_SERVICES
 
 class PosixAttachOperation: public AttachOperation {

@@ -52,6 +52,7 @@
 #include "memory/oopFactory.hpp"
 #include "memory/resourceArea.hpp"
 #include "memory/universe.hpp"
+#include "nmt/memTracker.hpp"
 #include "oops/access.inline.hpp"
 #include "oops/arrayOop.hpp"
 #include "oops/instanceKlass.inline.hpp"
@@ -88,7 +89,6 @@
 #include "runtime/synchronizer.hpp"
 #include "runtime/thread.inline.hpp"
 #include "runtime/vmOperations.hpp"
-#include "services/memTracker.hpp"
 #include "services/runtimeService.hpp"
 #include "utilities/defaultStream.hpp"
 #include "utilities/dtrace.hpp"
@@ -928,6 +928,11 @@ static void jni_invoke_nonstatic(JNIEnv *env, JavaValue* result, jobject receive
       Klass* k = h_recv->klass();
       selected_method = InstanceKlass::cast(k)->method_at_itable(holder, itbl_index, CHECK);
     }
+  }
+
+  if (selected_method->is_abstract()) {
+    ResourceMark rm(THREAD);
+    THROW_MSG(vmSymbols::java_lang_AbstractMethodError(), selected_method->name()->as_C_string());
   }
 
   methodHandle method(THREAD, selected_method);
@@ -2875,7 +2880,7 @@ JNI_ENTRY(jweak, jni_NewWeakGlobalRef(JNIEnv *env, jobject ref))
   HOTSPOT_JNI_NEWWEAKGLOBALREF_ENTRY(env, ref);
   Handle ref_handle(thread, JNIHandles::resolve(ref));
   jweak ret = JNIHandles::make_weak_global(ref_handle, AllocFailStrategy::RETURN_NULL);
-  if (ret == nullptr) {
+  if (ret == nullptr && ref_handle.not_null()) {
     THROW_OOP_(Universe::out_of_memory_error_c_heap(), nullptr);
   }
   HOTSPOT_JNI_NEWWEAKGLOBALREF_RETURN(ret);

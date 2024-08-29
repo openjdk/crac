@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2008, 2023, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2008, 2024, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -55,7 +55,6 @@
 #include "runtime/jniHandles.inline.hpp"
 #include "runtime/timerTrace.hpp"
 #include "runtime/reflection.hpp"
-#include "runtime/reflectionUtils.hpp"
 #include "runtime/safepointVerifiers.hpp"
 #include "runtime/signature.hpp"
 #include "runtime/stubRoutines.hpp"
@@ -137,6 +136,7 @@ enum {
   IS_TYPE              = java_lang_invoke_MemberName::MN_IS_TYPE,
   CALLER_SENSITIVE     = java_lang_invoke_MemberName::MN_CALLER_SENSITIVE,
   TRUSTED_FINAL        = java_lang_invoke_MemberName::MN_TRUSTED_FINAL,
+  HIDDEN_MEMBER        = java_lang_invoke_MemberName::MN_HIDDEN_MEMBER,
   REFERENCE_KIND_SHIFT = java_lang_invoke_MemberName::MN_REFERENCE_KIND_SHIFT,
   REFERENCE_KIND_MASK  = java_lang_invoke_MemberName::MN_REFERENCE_KIND_MASK,
   LM_UNCONDITIONAL     = java_lang_invoke_MemberName::MN_UNCONDITIONAL_MODE,
@@ -1003,6 +1003,7 @@ void MethodHandles::trace_method_handle_interpreter_entry(MacroAssembler* _masm,
     template(java_lang_invoke_MemberName,MN_IS_TYPE) \
     template(java_lang_invoke_MemberName,MN_CALLER_SENSITIVE) \
     template(java_lang_invoke_MemberName,MN_TRUSTED_FINAL) \
+    template(java_lang_invoke_MemberName,MN_HIDDEN_MEMBER) \
     template(java_lang_invoke_MemberName,MN_REFERENCE_KIND_SHIFT) \
     template(java_lang_invoke_MemberName,MN_REFERENCE_KIND_MASK) \
     template(java_lang_invoke_MemberName,MN_NESTMATE_CLASS) \
@@ -1051,7 +1052,7 @@ JVM_ENTRY(jint, MHN_getNamedCon(JNIEnv *env, jobject igcls, jint which, jobjectA
     assert(which >= 0 && which < con_value_count, "");
     int con = con_values[which];
     objArrayHandle box(THREAD, (objArrayOop) JNIHandles::resolve(box_jh));
-    if (box.not_null() && box->klass() == Universe::objectArrayKlassObj() && box->length() > 0) {
+    if (box.not_null() && box->klass() == Universe::objectArrayKlass() && box->length() > 0) {
       const char* str = &con_names[0];
       for (int i = 0; i < which; i++)
         str += strlen(str) + 1;   // skip name and null
@@ -1254,7 +1255,7 @@ JVM_ENTRY(void, MHN_copyOutBootstrapArguments(JNIEnv* env, jobject igcls,
   InstanceKlass* caller = InstanceKlass::cast(caller_k);
   typeArrayOop index_info_oop = (typeArrayOop) JNIHandles::resolve(index_info_jh);
   if (index_info_oop == nullptr ||
-      index_info_oop->klass() != Universe::intArrayKlassObj() ||
+      index_info_oop->klass() != Universe::intArrayKlass() ||
       typeArrayOop(index_info_oop)->length() < 2) {
       THROW_MSG(vmSymbols::java_lang_InternalError(), "bad index info (0)");
   }

@@ -36,13 +36,14 @@
 // OopMapCache's are allocated lazily per InstanceKlass.
 
 // The oopMap (InterpreterOopMap) is stored as a bit mask. If the
-// bit_mask can fit into two words it is stored in
+// bit_mask can fit into four words it is stored in
 // the _bit_mask array, otherwise it is allocated on the heap.
 // For OopMapCacheEntry the bit_mask is allocated in the C heap
 // because these entries persist between garbage collections.
-// For InterpreterOopMap the bit_mask is allocated in
-// a resource area for better performance.  InterpreterOopMap
-// should only be created and deleted during same garbage collection.
+// For InterpreterOopMap the bit_mask is allocated in the C heap
+// to avoid issues with allocations from the resource area that have
+// to live accross the oop closure. InterpreterOopMap should only be
+// created and deleted during the same garbage collection.
 //
 // If ENABBLE_ZAP_DEAD_LOCALS is defined, two bits are used
 // per entry instead of one. In all cases,
@@ -84,7 +85,7 @@ class InterpreterOopMap: ResourceObj {
  private:
   Method*        _method;         // the method for which the mask is valid
   unsigned short _bci;            // the bci    for which the mask is valid
-  int            _mask_size;      // the mask size in bits
+  int            _mask_size;      // the mask size in bits (USHRT_MAX if invalid)
   int            _expression_stack_size; // the size of the expression stack in slots
 
  protected:
@@ -95,9 +96,6 @@ class InterpreterOopMap: ResourceObj {
                                   // access it without using trickery in
                                   // method bit_mask().
   int            _num_oops;
-#ifdef ASSERT
-  bool _resource_allocate_bit_mask;
-#endif
 
   // access methods
   Method*        method() const                  { return _method; }
@@ -130,11 +128,11 @@ class InterpreterOopMap: ResourceObj {
   InterpreterOopMap();
   ~InterpreterOopMap();
 
-  // Copy the OopMapCacheEntry in parameter "from" into this
-  // InterpreterOopMap.  If the _bit_mask[0] in "from" points to
-  // allocated space (i.e., the bit mask was to large to hold
-  // in-line), allocate the space from a Resource area.
-  void resource_copy(OopMapCacheEntry* from);
+  // Copy the OopMapCacheEntry in parameter "src" into this
+  // InterpreterOopMap.  If the _bit_mask[0] in "src" points to
+  // allocated space (i.e., the bit mask was too large to hold
+  // in-line), allocate the space from the C heap.
+  void copy_from(const OopMapCacheEntry* src);
 
   void iterate_oop(OffsetClosure* oop_closure) const;
   void print() const;
@@ -146,6 +144,8 @@ class InterpreterOopMap: ResourceObj {
 
   int expression_stack_size() const              { return _expression_stack_size; }
 
+  // Determines if a valid mask has been computed
+  bool has_valid_mask() const { return _mask_size != USHRT_MAX; }
 };
 
 class OopMapCache : public CHeapObj<mtClass> {
@@ -178,7 +178,15 @@ class OopMapCache : public CHeapObj<mtClass> {
 
   // Compute an oop map without updating the cache or grabbing any locks (for debugging)
   static void compute_one_oop_map(const methodHandle& method, int bci, InterpreterOopMap* entry);
-  static void cleanup_old_entries();
+
+  // Check if we need to clean up old entries
+  static bool has_cleanup_work();
+
+  // Request cleanup if work is needed and notification is currently possible
+  static void try_trigger_cleanup();
+
+  // Clean up the old entries
+  static void cleanup();
 };
 
 #endif // SHARE_INTERPRETER_OOPMAPCACHE_HPP

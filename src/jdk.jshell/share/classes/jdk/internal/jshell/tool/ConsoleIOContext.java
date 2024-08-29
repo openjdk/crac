@@ -155,10 +155,15 @@ class ConsoleIOContext extends IOContext {
             setupReader = setupReader.andThen(r -> r.option(Option.DISABLE_HIGHLIGHTER, !enableHighlighter));
             input.setInputStream(cmdin);
         } else {
-            terminal = TerminalBuilder.builder().inputStreamWrapper(in -> {
+            //on platforms which are known to be fully supported by
+            //the FFMTerminalProvider, do not permit the ExecTerminalProvider:
+            boolean allowExecTerminal = !OSUtils.IS_WINDOWS &&
+                                        !OSUtils.IS_LINUX &&
+                                        !OSUtils.IS_OSX;
+            terminal = TerminalBuilder.builder().exec(allowExecTerminal).inputStreamWrapper(in -> {
                 input.setInputStream(in);
                 return nonBlockingInput;
-            }).build();
+            }).nativeSignals(false).build();
             useComplexDeprecationHighlight = !OSUtils.IS_WINDOWS;
         }
         this.allowIncompleteInputs = allowIncompleteInputs;
@@ -1007,7 +1012,7 @@ class ConsoleIOContext extends IOContext {
             input.setState(State.WAIT);
             Display.DISABLE_CR = true;
             in.setHistory(userInputHistory);
-            return in.readLine(prompt, mask);
+            return in.readLine(prompt.replace("%", "%%"), mask);
         } catch (UserInterruptException ex) {
             throw new InterruptedIOException();
         } finally {

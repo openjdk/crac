@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2001, 2023, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2001, 2024, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -575,6 +575,7 @@ class DatagramChannelImpl
             throw new IllegalArgumentException("Read-only buffer");
         readLock.lock();
         try {
+            ensureOpen();
             boolean blocking = isBlocking();
             SocketAddress sender = null;
             try {
@@ -807,14 +808,19 @@ class DatagramChannelImpl
         }
     }
 
+    /**
+     * Receives a datagram into a direct buffer.
+     */
     private int receiveIntoNativeBuffer(ByteBuffer bb, int rem, int pos,
                                         boolean connected)
         throws IOException
     {
         NIO_ACCESS.acquireSession(bb);
         try {
+            long bufAddress = NIO_ACCESS.getBufferAddress(bb);
             int n = receive0(fd,
-                             ((DirectBuffer)bb).address() + pos, rem,
+                             bufAddress + pos,
+                             rem,
                              sourceSockAddr.address(),
                              connected);
             if (n > 0)
@@ -853,6 +859,7 @@ class DatagramChannelImpl
 
         writeLock.lock();
         try {
+            ensureOpen();
             boolean blocking = isBlocking();
             int n;
             boolean completed = false;
@@ -991,6 +998,9 @@ class DatagramChannelImpl
         }
     }
 
+    /**
+     * Send a datagram contained in a direct buffer.
+     */
     private int sendFromNativeBuffer(FileDescriptor fd, ByteBuffer bb,
                                      InetSocketAddress target)
         throws IOException
@@ -1003,9 +1013,13 @@ class DatagramChannelImpl
         int written;
         NIO_ACCESS.acquireSession(bb);
         try {
+            long bufAddress = NIO_ACCESS.getBufferAddress(bb);
             int addressLen = targetSocketAddress(target);
-            written = send0(fd, ((DirectBuffer)bb).address() + pos, rem,
-                            targetSockAddr.address(), addressLen);
+            written = send0(fd,
+                            bufAddress + pos,
+                            rem,
+                            targetSockAddr.address(),
+                            addressLen);
         } catch (PortUnreachableException pue) {
             if (isConnected())
                 throw pue;
@@ -1041,6 +1055,7 @@ class DatagramChannelImpl
 
         readLock.lock();
         try {
+            ensureOpen();
             boolean blocking = isBlocking();
             int n = 0;
             try {
@@ -1071,6 +1086,7 @@ class DatagramChannelImpl
 
         readLock.lock();
         try {
+            ensureOpen();
             boolean blocking = isBlocking();
             long n = 0;
             try {
@@ -1154,6 +1170,7 @@ class DatagramChannelImpl
 
         writeLock.lock();
         try {
+            ensureOpen();
             boolean blocking = isBlocking();
             int n = 0;
             try {
@@ -1184,6 +1201,7 @@ class DatagramChannelImpl
 
         writeLock.lock();
         try {
+            ensureOpen();
             boolean blocking = isBlocking();
             long n = 0;
             try {
@@ -1929,6 +1947,11 @@ class DatagramChannelImpl
 
     @Override
     public void kill() {
+        // wait for any read/write operations to complete before trying to close
+        readLock.lock();
+        readLock.unlock();
+        writeLock.lock();
+        writeLock.unlock();
         synchronized (stateLock) {
             if (state == ST_CLOSING) {
                 tryFinishClose();

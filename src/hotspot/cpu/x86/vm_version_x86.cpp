@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1997, 2023, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 1997, 2024, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -38,6 +38,7 @@
 #include "runtime/os.inline.hpp"
 #include "runtime/stubCodeGenerator.hpp"
 #include "runtime/vm_version.hpp"
+#include "utilities/checkedCast.hpp"
 #include "utilities/formatBuffer.hpp"
 #include "utilities/powerOfTwo.hpp"
 #include "utilities/virtualizationSupport.hpp"
@@ -308,7 +309,7 @@ class VM_Version_StubGenerator: public StubCodeGenerator {
     __ movl(rax, 7);
     __ cmpl(rax, Address(rbp, in_bytes(VM_Version::std_cpuid0_offset()))); // Is cpuid(0x7) supported?
     __ jccb(Assembler::greater, ext_cpuid);
-
+    // ECX = 0
     __ xorl(rcx, rcx);
     __ cpuid();
     __ lea(rsi, Address(rbp, in_bytes(VM_Version::sef_cpuid7_offset())));
@@ -316,6 +317,13 @@ class VM_Version_StubGenerator: public StubCodeGenerator {
     __ movl(Address(rsi, 4), rbx);
     __ movl(Address(rsi, 8), rcx);
     __ movl(Address(rsi, 12), rdx);
+
+    // ECX = 1
+    __ movl(rax, 7);
+    __ movl(rcx, 1);
+    __ cpuid();
+    __ lea(rsi, Address(rbp, in_bytes(VM_Version::sef_cpuid7_ecx1_offset())));
+    __ movl(Address(rsi, 0), rax);
 
     //
     // Extended cpuid(0x80000000)
@@ -1270,7 +1278,8 @@ void VM_Version::get_processor_features_hardware() {
   _stepping = cpu_stepping();
 
   if (cpu_family() > 4) { // it supports CPUID
-    _features = _cpuid_info.feature_flags();
+    _features = _cpuid_info.feature_flags(); // These can be changed by VM settings
+    _cpu_features = _features;   // Preserve features
     LINUX_ONLY(_glibc_features = _cpuid_info.glibc_flags();)
     // Logical processors are only available on P4s and above,
     // and only if hyperthreading is available.
@@ -1278,7 +1287,6 @@ void VM_Version::get_processor_features_hardware() {
     _L1_data_cache_line_size = L1_line_size();
   }
 
-  _supports_cx8 = supports_cmpxchg8();
   // xchg and xadd instructions
   _supports_atomic_getset4 = true;
   _supports_atomic_getadd4 = true;
@@ -1329,6 +1337,12 @@ void VM_Version::get_processor_features_hotspot() {
     _data_cache_line_flush_size = _cpuid_info.std_cpuid1_ebx.bits.clflush_size * 8;
   }
 #endif
+
+  // Check if processor has Intel Ecore
+  if (FLAG_IS_DEFAULT(EnableX86ECoreOpts) && is_intel() && cpu_family() == 6 &&
+    (_model == 0x97 || _model == 0xAA || _model == 0xAC || _model == 0xAF)) {
+    FLAG_SET_DEFAULT(EnableX86ECoreOpts, true);
+  }
 
   if (UseSSE < 4) {
     _features &= ~CPU_SSE4_1;
@@ -1425,8 +1439,10 @@ void VM_Version::get_processor_features_hotspot() {
     _features &= ~CPU_AVX512_IFMA;
   }
 
-  if (UseAVX < 2)
+  if (UseAVX < 2) {
     _features &= ~CPU_AVX2;
+    _features &= ~CPU_AVX_IFMA;
+  }
 
   if (UseAVX < 1) {
     _features &= ~CPU_AVX;
@@ -1456,7 +1472,16 @@ void VM_Version::get_processor_features_hotspot() {
       _features &= ~CPU_GFNI;
       _features &= ~CPU_AVX512_BITALG;
       _features &= ~CPU_AVX512_IFMA;
+      _features &= ~CPU_AVX_IFMA;
     }
+  }
+
+  // APX support not enabled yet
+  if (UseAPX) {
+    if (!FLAG_IS_DEFAULT(UseAPX)) {
+        warning("APX is not supported on this CPU.");
+    }
+    FLAG_SET_DEFAULT(UseAPX, false);
   }
 
   if (FLAG_IS_DEFAULT(IntelJccErratumMitigation)) {
@@ -1598,6 +1623,7 @@ void VM_Version::get_processor_features_hotspot() {
     FLAG_SET_DEFAULT(UseGHASHIntrinsics, false);
   }
 
+#ifdef _LP64
   // ChaCha20 Intrinsics
   // As long as the system supports AVX as a baseline we can do a
   // SIMD-enabled block function.  StubGenerator makes the determination
@@ -1613,6 +1639,13 @@ void VM_Version::get_processor_features_hotspot() {
       }
       FLAG_SET_DEFAULT(UseChaCha20Intrinsics, false);
   }
+#else
+  // No support currently for ChaCha20 intrinsics on 32-bit platforms
+  if (UseChaCha20Intrinsics) {
+      warning("ChaCha20 intrinsics are not available on this CPU.");
+      FLAG_SET_DEFAULT(UseChaCha20Intrinsics, false);
+  }
+#endif // _LP64
 
   // Base64 Intrinsics (Check the condition for which the intrinsic will be active)
   if (UseAVX >= 2) {
@@ -1638,7 +1671,7 @@ void VM_Version::get_processor_features_hotspot() {
     UseMD5Intrinsics = true;
   }
 
-  if (supports_sha() LP64_ONLY(|| supports_avx2() && supports_bmi2())) {
+  if (supports_sha() LP64_ONLY(|| (supports_avx2() && supports_bmi2()))) {
     if (FLAG_IS_DEFAULT(UseSHA)) {
       UseSHA = true;
     }
@@ -1804,7 +1837,7 @@ void VM_Version::get_processor_features_hotspot() {
 #endif // COMPILER2 && ASSERT
 
 #ifdef _LP64
-  if (supports_avx512ifma() && supports_avx512vlbw() && MaxVectorSize >= 64) {
+  if ((supports_avx512ifma() && supports_avx512vlbw()) || supports_avxifma())  {
     if (FLAG_IS_DEFAULT(UsePoly1305Intrinsics)) {
       FLAG_SET_DEFAULT(UsePoly1305Intrinsics, true);
     }
@@ -1813,6 +1846,18 @@ void VM_Version::get_processor_features_hotspot() {
   if (UsePoly1305Intrinsics) {
     warning("Intrinsics for Poly1305 crypto hash functions not available on this CPU.");
     FLAG_SET_DEFAULT(UsePoly1305Intrinsics, false);
+  }
+
+#ifdef _LP64
+  if (supports_avx512ifma() && supports_avx512vlbw()) {
+    if (FLAG_IS_DEFAULT(UseIntPolyIntrinsics)) {
+      FLAG_SET_DEFAULT(UseIntPolyIntrinsics, true);
+    }
+  } else
+#endif
+  if (UseIntPolyIntrinsics) {
+    warning("Intrinsics for Polynomial crypto functions not available on this CPU.");
+    FLAG_SET_DEFAULT(UseIntPolyIntrinsics, false);
   }
 
 #ifdef _LP64
@@ -2387,9 +2432,9 @@ void VM_Version::get_processor_features_hotspot() {
         }
       }
       if (AllocatePrefetchLines > 1) {
-        log->print_cr(" at distance %d, %d lines of %d bytes", (int) AllocatePrefetchDistance, (int) AllocatePrefetchLines, (int) AllocatePrefetchStepSize);
+        log->print_cr(" at distance %d, %d lines of %d bytes", AllocatePrefetchDistance, AllocatePrefetchLines, AllocatePrefetchStepSize);
       } else {
-        log->print_cr(" at distance %d, one line of %d bytes", (int) AllocatePrefetchDistance, (int) AllocatePrefetchStepSize);
+        log->print_cr(" at distance %d, one line of %d bytes", AllocatePrefetchDistance, AllocatePrefetchStepSize);
       }
     }
 
@@ -3513,8 +3558,13 @@ uint64_t VM_Version::CpuidInfo::feature_flags() const {
     result |= CPU_VZEROUPPER;
     if (std_cpuid1_ecx.bits.f16c != 0)
       result |= CPU_F16C;
-    if (sef_cpuid7_ebx.bits.avx2 != 0)
+    if (sef_cpuid7_ebx.bits.avx2 != 0) {
       result |= CPU_AVX2;
+      if (sef_cpuid7_ecx1_eax.bits.avx_ifma != 0)
+        result |= CPU_AVX_IFMA;
+    }
+    if (sef_cpuid7_ecx.bits.gfni != 0)
+        result |= CPU_GFNI;
     if (sef_cpuid7_ebx.bits.avx512f != 0 &&
         xem_xcr0_eax.bits.opmask != 0 &&
         xem_xcr0_eax.bits.zmm512 != 0 &&
@@ -3540,8 +3590,6 @@ uint64_t VM_Version::CpuidInfo::feature_flags() const {
         result |= CPU_AVX512_VPCLMULQDQ;
       if (sef_cpuid7_ecx.bits.vaes != 0)
         result |= CPU_AVX512_VAES;
-      if (sef_cpuid7_ecx.bits.gfni != 0)
-        result |= CPU_GFNI;
       if (sef_cpuid7_ecx.bits.avx512_vnni != 0)
         result |= CPU_AVX512_VNNI;
       if (sef_cpuid7_ecx.bits.avx512_bitalg != 0)
@@ -3761,7 +3809,7 @@ bool VM_Version::is_intel_tsc_synched_at_init() {
   return false;
 }
 
-intx VM_Version::allocate_prefetch_distance(bool use_watermark_prefetch) {
+int VM_Version::allocate_prefetch_distance(bool use_watermark_prefetch) {
   // Hardware prefetching (distance/size in bytes):
   // Pentium 3 -  64 /  32
   // Pentium 4 - 256 / 128
@@ -3821,4 +3869,3 @@ bool VM_Version::is_intrinsic_supported(vmIntrinsicID id) {
   }
   return true;
 }
-

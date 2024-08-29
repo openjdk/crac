@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2019, 2022, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2019, 2024, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -53,7 +53,7 @@ import jdk.javadoc.internal.doclets.formats.html.markup.ContentBuilder;
 import jdk.javadoc.internal.doclets.formats.html.markup.HtmlStyle;
 import jdk.javadoc.internal.doclets.formats.html.markup.HtmlTree;
 import jdk.javadoc.internal.doclets.formats.html.markup.Text;
-import jdk.javadoc.internal.doclets.toolkit.DocletElement;
+import jdk.javadoc.internal.doclets.toolkit.DocFileElement;
 import jdk.javadoc.internal.doclets.toolkit.OverviewElement;
 import jdk.javadoc.internal.doclets.toolkit.util.DocFileIOException;
 import jdk.javadoc.internal.doclets.toolkit.util.DocPaths;
@@ -70,7 +70,7 @@ public class ExternalSpecsWriter extends HtmlDocletWriter {
     /**
      * Cached contents of {@code <title>...</title>} tags of the HTML pages.
      */
-    final Map<Element, String> titles = new WeakHashMap<>();
+    final Map<DocFileElement, String> titles = new WeakHashMap<>();
 
     /**
      * Constructs ExternalSpecsWriter object.
@@ -86,8 +86,8 @@ public class ExternalSpecsWriter extends HtmlDocletWriter {
      */
     @Override
     public void buildPage() throws DocFileIOException {
-        boolean hasExternalSpecs = configuration.mainIndex != null
-                && !configuration.mainIndex.getItems(DocTree.Kind.SPEC).isEmpty();
+        boolean hasExternalSpecs = configuration.indexBuilder != null
+                && !configuration.indexBuilder.getItems(DocTree.Kind.SPEC).isEmpty();
         if (!hasExternalSpecs) {
             return;
         }
@@ -110,15 +110,15 @@ public class ExternalSpecsWriter extends HtmlDocletWriter {
                 .setFooter(getFooter()));
         printHtmlDocument(null, "external specifications", body);
 
-        if (configuration.mainIndex != null) {
-            configuration.mainIndex.add(IndexItem.of(IndexItem.Category.TAGS, title, path));
+        if (configuration.indexBuilder != null) {
+            configuration.indexBuilder.add(IndexItem.of(IndexItem.Category.TAGS, title, path));
         }
     }
 
     protected void checkUniqueItems() {
         Map<String, Map<String, List<IndexItem>>> itemsByURL = new HashMap<>();
         Map<String, Map<String, List<IndexItem>>> itemsByTitle = new HashMap<>();
-        for (IndexItem ii : configuration.mainIndex.getItems(DocTree.Kind.SPEC)) {
+        for (IndexItem ii : configuration.indexBuilder.getItems(DocTree.Kind.SPEC)) {
             if (ii.getDocTree() instanceof SpecTree st) {
                 String url = st.getURL().toString();
                 String title = ii.getLabel(); // normalized form of  st.getTitle()
@@ -230,7 +230,7 @@ public class ExternalSpecsWriter extends HtmlDocletWriter {
     }
 
     private Map<String, List<IndexItem>> groupExternalSpecs() {
-        return configuration.mainIndex.getItems(DocTree.Kind.SPEC).stream()
+        return configuration.indexBuilder.getItems(DocTree.Kind.SPEC).stream()
                 .collect(groupingBy(IndexItem::getLabel, () -> new TreeMap<>(getTitleComparator()), toList()));
     }
 
@@ -274,29 +274,27 @@ public class ExternalSpecsWriter extends HtmlDocletWriter {
 
     private Content createLink(IndexItem i) {
         assert i.getDocTree().getKind() == DocTree.Kind.SPEC : i;
-        Element element = i.getElement();
+        var element = i.getElement();
         if (element instanceof OverviewElement) {
             return links.createLink(pathToRoot.resolve(i.getUrl()),
                     resources.getText("doclet.Overview"));
-        } else if (element instanceof DocletElement e) {
-            // Implementations of DocletElement do not override equals and
-            // hashCode; putting instances of DocletElement in a map is not
-            // incorrect, but might well be inefficient
-            String t = titles.computeIfAbsent(element, utils::getHTMLTitle);
+        } else if (element instanceof DocFileElement e) {
+            var fo = e.getFileObject();
+            var t = titles.computeIfAbsent(e, this::getFileTitle);
             if (t.isBlank()) {
                 // The user should probably be notified (a warning?) that this
                 // file does not have a title
-                Path p = Path.of(e.getFileObject().toUri());
+                Path p = Path.of(fo.toUri());
                 t = p.getFileName().toString();
             }
-            ContentBuilder b = new ContentBuilder();
-            b.add(HtmlTree.CODE(Text.of(i.getHolder() + ": ")));
-            // non-program elements should be displayed using a normal font
-            b.add(t);
+            var b = new ContentBuilder()
+                    .add(HtmlTree.CODE(Text.of(i.getHolder() + ": ")))
+                    // non-program elements should be displayed using a normal font
+                    .add(t);
             return links.createLink(pathToRoot.resolve(i.getUrl()), b);
         } else {
             // program elements should be displayed using a code font
-            Content link = links.createLink(pathToRoot.resolve(i.getUrl()), i.getHolder());
+            var link = links.createLink(pathToRoot.resolve(i.getUrl()), i.getHolder());
             return HtmlTree.CODE(link);
         }
     }

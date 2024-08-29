@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2005, 2023, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2005, 2024, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -135,7 +135,12 @@ static jint load_agent(AttachOperation* op, outputStream* out) {
     }
   }
 
-  return JvmtiAgentList::load_agent(agent, absParam, options, out);
+  // The abs parameter should be "true" or "false".
+  const bool is_absolute_path = (absParam != nullptr) && (strcmp(absParam, "true") == 0);
+  JvmtiAgentList::load_agent(agent, is_absolute_path, options, out);
+
+  // Agent_OnAttach result or error message is written to 'out'.
+  return JNI_OK;
 }
 
 // Implementation of "properties" command.
@@ -218,7 +223,7 @@ static jint jcmd(AttachOperation* op, outputStream* out) {
 //   arg0: Name of the dump file
 //   arg1: "-live" or "-all"
 //   arg2: Compress level
-jint dump_heap(AttachOperation* op, outputStream* out) {
+static jint dump_heap(AttachOperation* op, outputStream* out) {
   const char* path = op->arg(0);
   if (path == nullptr || path[0] == '\0') {
     out->print_cr("No dump file specified");
@@ -234,13 +239,13 @@ jint dump_heap(AttachOperation* op, outputStream* out) {
     }
 
     const char* num_str = op->arg(2);
-    uintx level = 0;
+    uint level = 0;
     if (num_str != nullptr && num_str[0] != '\0') {
-      if (!Arguments::parse_uintx(num_str, &level, 0)) {
+      if (!Arguments::parse_uint(num_str, &level, 0)) {
         out->print_cr("Invalid compress level: [%s]", num_str);
         return JNI_ERR;
       } else if (level < 1 || level > 9) {
-        out->print_cr("Compression level out of range (1-9): " UINTX_FORMAT, level);
+        out->print_cr("Compression level out of range (1-9): %u", level);
         return JNI_ERR;
       }
     }
@@ -249,7 +254,7 @@ jint dump_heap(AttachOperation* op, outputStream* out) {
     // This helps reduces the amount of unreachable objects in the dump
     // and makes it easier to browse.
     HeapDumper dumper(live_objects_only /* request GC */);
-    dumper.dump(path, out, (int)level, false, HeapDumper::default_num_of_dump_threads());
+    dumper.dump(path, out, level);
   }
   return JNI_OK;
 }
@@ -287,13 +292,13 @@ static jint heap_inspection(AttachOperation* op, outputStream* out) {
 
   const char* num_str = op->arg(2);
   if (num_str != nullptr && num_str[0] != '\0') {
-    uintx num;
-    if (!Arguments::parse_uintx(num_str, &num, 0)) {
+    uint num;
+    if (!Arguments::parse_uint(num_str, &num, 0)) {
       out->print_cr("Invalid parallel thread number: [%s]", num_str);
       delete fs;
       return JNI_ERR;
     }
-    parallel_thread_num = num == 0 ? parallel_thread_num : (uint)num;
+    parallel_thread_num = num == 0 ? parallel_thread_num : num;
   }
 
   VM_GC_HeapInspection heapop(os, live_objects_only /* request full gc */, parallel_thread_num);
@@ -319,13 +324,10 @@ static jint set_flag(AttachOperation* op, outputStream* out) {
   int ret = WriteableFlags::set_flag(op->arg(0), op->arg(1), JVMFlagOrigin::ATTACH_ON_DEMAND, err_msg);
   if (ret != JVMFlag::SUCCESS) {
     if (ret == JVMFlag::NON_WRITABLE) {
-      // if the flag is not manageable try to change it through
-      // the platform dependent implementation
-      return AttachListener::pd_set_flag(op, out);
+      out->print_cr("flag '%s' cannot be changed", op->arg(0));
     } else {
       out->print_cr("%s", err_msg.buffer());
     }
-
     return JNI_ERR;
   }
   return JNI_OK;
@@ -409,11 +411,6 @@ void AttachListenerThread::thread_entry(JavaThread* thread, TRAPS) {
           info = &(funcs[i]);
           break;
         }
-      }
-
-      // check for platform dependent attach operation
-      if (info == nullptr) {
-        info = AttachListener::pd_find_operation(op->name());
       }
 
       if (info != nullptr) {

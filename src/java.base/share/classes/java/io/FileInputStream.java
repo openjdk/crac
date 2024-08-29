@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1994, 2023, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 1994, 2024, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -34,8 +34,8 @@ import jdk.internal.crac.LoggerContainer;
 import jdk.internal.crac.OpenResourcePolicies;
 import jdk.internal.crac.Core;
 import jdk.internal.crac.JDKFileResource;
-import jdk.internal.misc.Blocker;
 import jdk.internal.util.ArraysSupport;
+import jdk.internal.event.FileReadEvent;
 import sun.nio.ch.FileChannelImpl;
 
 /**
@@ -66,6 +66,12 @@ import sun.nio.ch.FileChannelImpl;
 public class FileInputStream extends InputStream
 {
     private static final int DEFAULT_BUFFER_SIZE = 8192;
+
+    /**
+     * Flag set by jdk.internal.event.JFRTracing to indicate if
+     * file reads should be traced by JFR.
+     */
+    private static boolean jfrTracing;
 
     /* File Descriptor - handle to the open file */
     private final FileDescriptor fd;
@@ -140,6 +146,7 @@ public class FileInputStream extends InputStream
      * @see        java.io.File#getPath()
      * @see        java.lang.SecurityManager#checkRead(java.lang.String)
      */
+    @SuppressWarnings("this-escape")
     public FileInputStream(File file) throws FileNotFoundException {
         String name = (file != null ? file.getPath() : null);
         @SuppressWarnings("removal")
@@ -184,6 +191,7 @@ public class FileInputStream extends InputStream
      *             file descriptor.
      * @see        SecurityManager#checkRead(java.io.FileDescriptor)
      */
+    @SuppressWarnings("this-escape")
     public FileInputStream(FileDescriptor fdObj) {
         @SuppressWarnings("removal")
         SecurityManager security = System.getSecurityManager();
@@ -215,12 +223,7 @@ public class FileInputStream extends InputStream
      * @param name the name of the file
      */
     private void open(String name) throws FileNotFoundException {
-        long comp = Blocker.begin();
-        try {
-            open0(name);
-        } finally {
-            Blocker.end(comp);
-        }
+        open0(name);
     }
 
     /**
@@ -233,15 +236,35 @@ public class FileInputStream extends InputStream
      */
     @Override
     public int read() throws IOException {
-        long comp = Blocker.begin();
-        try {
-            return read0();
-        } finally {
-            Blocker.end(comp);
+        if (jfrTracing && FileReadEvent.enabled()) {
+            return traceRead0();
         }
+        return read0();
     }
 
     private native int read0() throws IOException;
+
+    private int traceRead0() throws IOException {
+        int result = 0;
+        boolean endOfFile = false;
+        long bytesRead = 0;
+        long start = 0;
+        try {
+            start = FileReadEvent.timestamp();
+            result = read0();
+            if (result < 0) {
+                endOfFile = true;
+            } else {
+                bytesRead = 1;
+            }
+        } finally {
+            long duration = FileReadEvent.timestamp() - start;
+            if (FileReadEvent.shouldCommit(duration)) {
+                FileReadEvent.commit(start, duration, path, bytesRead, endOfFile);
+            }
+        }
+        return result;
+    }
 
     /**
      * Reads a subarray as a sequence of bytes.
@@ -251,6 +274,25 @@ public class FileInputStream extends InputStream
      * @throws    IOException If an I/O error has occurred.
      */
     private native int readBytes(byte[] b, int off, int len) throws IOException;
+
+    private int traceReadBytes(byte b[], int off, int len) throws IOException {
+        int bytesRead = 0;
+        long start = 0;
+        try {
+            start = FileReadEvent.timestamp();
+            bytesRead = readBytes(b, off, len);
+        } finally {
+            long duration = FileReadEvent.timestamp() - start;
+            if (FileReadEvent.shouldCommit(duration)) {
+                if (bytesRead < 0) {
+                    FileReadEvent.commit(start, duration, path, 0L, true);
+                } else {
+                    FileReadEvent.commit(start, duration, path, bytesRead, false);
+                }
+            }
+        }
+        return bytesRead;
+    }
 
     /**
      * Reads up to {@code b.length} bytes of data from this input
@@ -265,12 +307,10 @@ public class FileInputStream extends InputStream
      */
     @Override
     public int read(byte[] b) throws IOException {
-        long comp = Blocker.begin();
-        try {
-            return readBytes(b, 0, b.length);
-        } finally {
-            Blocker.end(comp);
+        if (jfrTracing && FileReadEvent.enabled()) {
+            return traceReadBytes(b, 0, b.length);
         }
+        return readBytes(b, 0, b.length);
     }
 
     /**
@@ -289,12 +329,10 @@ public class FileInputStream extends InputStream
      */
     @Override
     public int read(byte[] b, int off, int len) throws IOException {
-        long comp = Blocker.begin();
-        try {
-            return readBytes(b, off, len);
-        } finally {
-            Blocker.end(comp);
+        if (jfrTracing && FileReadEvent.enabled()) {
+            return traceReadBytes(b, off, len);
         }
+        return readBytes(b, off, len);
     }
 
     @Override
@@ -401,22 +439,12 @@ public class FileInputStream extends InputStream
     }
 
     private long length() throws IOException {
-        long comp = Blocker.begin();
-        try {
-            return length0();
-        } finally {
-            Blocker.end(comp);
-        }
+        return length0();
     }
     private native long length0() throws IOException;
 
     private long position() throws IOException {
-        long comp = Blocker.begin();
-        try {
-            return position0();
-        } finally {
-            Blocker.end(comp);
-        }
+        return position0();
     }
     private native long position0() throws IOException;
 
@@ -446,12 +474,7 @@ public class FileInputStream extends InputStream
      */
     @Override
     public long skip(long n) throws IOException {
-        long comp = Blocker.begin();
-        try {
-            return skip0(n);
-        } finally {
-            Blocker.end(comp);
-        }
+        return skip0(n);
     }
 
     private native long skip0(long n) throws IOException;
@@ -475,12 +498,7 @@ public class FileInputStream extends InputStream
      */
     @Override
     public int available() throws IOException {
-        long comp = Blocker.begin();
-        try {
-            return available0();
-        } finally {
-            Blocker.end(comp);
-        }
+        return available0();
     }
 
     private native int available0() throws IOException;
@@ -506,8 +524,6 @@ public class FileInputStream extends InputStream
      * this method should be prepared to handle possible reentrant invocation.
      *
      * @throws     IOException  {@inheritDoc}
-     *
-     * @revised 1.4
      */
     @Override
     public void close() throws IOException {
@@ -573,8 +589,8 @@ public class FileInputStream extends InputStream
             synchronized (this) {
                 fc = this.channel;
                 if (fc == null) {
-                    this.channel = fc = FileChannelImpl.open(fd, path, true,
-                        false, false, this);
+                    fc = FileChannelImpl.open(fd, path, true, false, false, false, this);
+                    this.channel = fc;
                     if (closed) {
                         try {
                             // possible race with close(), benign since

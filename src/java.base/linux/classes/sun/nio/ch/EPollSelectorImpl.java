@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2005, 2022, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2005, 2024, Oracle and/or its affiliates. All rights reserved.
  * Copyright (c) 2020, 2021, Azul Systems, Inc. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
@@ -213,13 +213,13 @@ class EPollSelectorImpl extends SelectorImpl implements JDKResource {
 
             do {
                 long startTime = timedPoll ? System.nanoTime() : 0;
-                long comp = Blocker.begin(blocking);
+                boolean attempted = Blocker.begin(blocking);
                 try {
                     do {
                         numEntries = EPoll.wait(epfd, pollArrayAddress, NUM_EPOLLEVENTS, to);
                     } while (processCheckpointRestore());
                 } finally {
-                    Blocker.end(comp);
+                    Blocker.end(attempted);
                 }
                 if (numEntries == IOStatus.INTERRUPTED && timedPoll) {
                     // timed poll interrupted so need to adjust timeout

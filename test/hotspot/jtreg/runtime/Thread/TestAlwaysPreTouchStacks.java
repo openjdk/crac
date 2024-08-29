@@ -1,6 +1,6 @@
 /*
  * Copyright (c) 2022 SAP SE. All rights reserved.
- * Copyright (c) 2022, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2022, 2023, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -27,6 +27,7 @@ import jdk.test.lib.process.ProcessTools;
 
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.concurrent.CyclicBarrier;
@@ -89,14 +90,17 @@ public class TestAlwaysPreTouchStacks {
             // should show up with fully - or almost fully - committed thread stacks.
 
         } else {
-
-            ProcessBuilder pb = ProcessTools.createJavaProcessBuilder(
+            ArrayList<String> vmArgs = new ArrayList<>();
+            Collections.addAll(vmArgs,
                     "-XX:+UnlockDiagnosticVMOptions",
                     "-Xmx100M",
                     "-XX:+AlwaysPreTouchStacks",
-                    "-XX:NativeMemoryTracking=summary", "-XX:+PrintNMTStatistics",
-                    "TestAlwaysPreTouchStacks",
-                    "test");
+                    "-XX:NativeMemoryTracking=summary", "-XX:+PrintNMTStatistics");
+            if (System.getProperty("os.name").contains("Linux")) {
+                vmArgs.add("-XX:-UseMadvPopulateWrite");
+            }
+            Collections.addAll(vmArgs, "TestAlwaysPreTouchStacks", "test");
+            ProcessBuilder pb = ProcessTools.createLimitedTestJavaProcessBuilder(vmArgs);
             OutputAnalyzer output = new OutputAnalyzer(pb.start());
             output.reportDiagnosticSummary();
 

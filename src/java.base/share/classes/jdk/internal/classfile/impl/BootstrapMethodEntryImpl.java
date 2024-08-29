@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2022, 2024, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -26,11 +26,11 @@ package jdk.internal.classfile.impl;
 
 import java.util.List;
 
-import jdk.internal.classfile.constantpool.ConstantPool;
-import jdk.internal.classfile.BootstrapMethodEntry;
-import jdk.internal.classfile.BufWriter;
-import jdk.internal.classfile.constantpool.LoadableConstantEntry;
-import jdk.internal.classfile.constantpool.MethodHandleEntry;
+import java.lang.classfile.constantpool.ConstantPool;
+import java.lang.classfile.BootstrapMethodEntry;
+import java.lang.classfile.BufWriter;
+import java.lang.classfile.constantpool.LoadableConstantEntry;
+import java.lang.classfile.constantpool.MethodHandleEntry;
 
 import static jdk.internal.classfile.impl.AbstractPoolEntry.MethodHandleEntryImpl;
 
@@ -76,9 +76,7 @@ public final class BootstrapMethodEntryImpl implements BootstrapMethodEntry {
 
     static int computeHashCode(MethodHandleEntryImpl handle,
                                List<? extends LoadableConstantEntry> arguments) {
-        int hash = handle.hashCode();
-        hash = 31 * hash + arguments.hashCode();
-        return AbstractPoolEntry.phiMix(hash);
+        return (31 * handle.hashCode() + arguments.hashCode()) | AbstractPoolEntry.NON_ZERO;
     }
 
     @Override

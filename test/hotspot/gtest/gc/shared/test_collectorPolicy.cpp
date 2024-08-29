@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2016, 2020, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2016, 2024, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -73,14 +73,14 @@ class TestGenCollectorPolicy {
 
       ASSERT_NO_FATAL_FAILURE(setter1->execute());
 
-      if (setter2 != NULL) {
+      if (setter2 != nullptr) {
         ASSERT_NO_FATAL_FAILURE(setter2->execute());
       }
 
       ASSERT_NO_FATAL_FAILURE(checker->execute());
     }
     static void test(Executor* setter, Executor* checker) {
-      test(setter, NULL, checker);
+      test(setter, nullptr, checker);
     }
   };
 
@@ -211,15 +211,6 @@ class TestGenCollectorPolicy {
 // Testing that the NewSize flag is handled correct is hard because it
 // depends on so many other configurable variables. These tests only try to
 // verify that there are some basic rules for NewSize honored by the policies.
-
-// If NewSize has been ergonomically set, the collector policy
-// should use it for min
-TEST_VM(CollectorPolicy, young_min_ergo) {
-  TestGenCollectorPolicy::SetNewSizeErgo setter(20 * M);
-  TestGenCollectorPolicy::CheckYoungMin checker(20 * M);
-
-  TestGenCollectorPolicy::TestWrapper::test(&setter, &checker);
-}
 
 // If NewSize has been ergonomically set, the collector policy
 // should use it for min but calculate the initial young size

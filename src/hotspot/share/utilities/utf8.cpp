@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1997, 2023, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 1997, 2024, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -24,6 +24,7 @@
 
 #include "precompiled.hpp"
 #include "memory/allocation.hpp"
+#include "utilities/checkedCast.hpp"
 #include "utilities/debug.hpp"
 #include "utilities/globalDefinitions.hpp"
 #include "utilities/utf8.hpp"
@@ -341,10 +342,10 @@ bool UTF8::is_legal_utf8(const unsigned char* buffer, int length,
     // For an unsigned char v,
     // (v | v - 1) is < 128 (highest bit 0) for 0 < v < 128;
     // (v | v - 1) is >= 128 (highest bit 1) for v == 0 or v >= 128.
-    unsigned char res = b0 | b0 - 1 |
-                        b1 | b1 - 1 |
-                        b2 | b2 - 1 |
-                        b3 | b3 - 1;
+    unsigned char res = b0 | (b0 - 1) |
+                        b1 | (b1 - 1) |
+                        b2 | (b2 - 1) |
+                        b3 | (b3 - 1);
     if (res >= 128) break;
     i += 4;
   }
@@ -431,12 +432,16 @@ int UNICODE::utf8_size(jbyte c) {
 
 template<typename T>
 int UNICODE::utf8_length(const T* base, int length) {
-  int result = 0;
+  size_t result = 0;
   for (int index = 0; index < length; index++) {
     T c = base[index];
-    result += utf8_size(c);
+    int sz = utf8_size(c);
+    if (result + sz > INT_MAX-1) {
+      break;
+    }
+    result += sz;
   }
-  return result;
+  return checked_cast<int>(result);
 }
 
 template<typename T>

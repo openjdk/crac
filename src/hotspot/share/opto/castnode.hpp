@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2014, 2019, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2014, 2023, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -140,7 +140,7 @@ public:
     init_class_id(Class_CastFF);
   }
   virtual int Opcode() const;
-  virtual uint ideal_reg() const { return Op_RegF; }
+  virtual uint ideal_reg() const { return in(1)->ideal_reg(); }
 };
 
 class CastDDNode: public ConstraintCastNode {
@@ -150,7 +150,7 @@ public:
     init_class_id(Class_CastDD);
   }
   virtual int Opcode() const;
-  virtual uint ideal_reg() const { return Op_RegD; }
+  virtual uint ideal_reg() const { return in(1)->ideal_reg(); }
 };
 
 class CastVVNode: public ConstraintCastNode {
@@ -197,7 +197,7 @@ class CheckCastPPNode: public ConstraintCastNode {
 // convert a machine-pointer-sized integer to a raw pointer
 class CastX2PNode : public Node {
   public:
-  CastX2PNode( Node *n ) : Node(NULL, n) {}
+  CastX2PNode( Node *n ) : Node(nullptr, n) {}
   virtual int Opcode() const;
   virtual const Type* Value(PhaseGVN* phase) const;
   virtual Node *Ideal(PhaseGVN *phase, bool can_reshape);

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2003, 2021, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2003, 2022, Oracle and/or its affiliates. All rights reserved.
  * Copyright 2007, 2008, 2009, 2010 Red Hat, Inc.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
@@ -247,6 +247,10 @@ void os::print_context(outputStream* st, const void* context) {
   ShouldNotCallThis();
 }
 
+void os::print_tos_pc(outputStream *st, const void *context) {
+  ShouldNotCallThis();
+}
+
 void os::print_register_info(outputStream *st, const void *context) {
   ShouldNotCallThis();
 }
@@ -350,3 +354,9 @@ int os::extra_bang_size_in_bytes() {
   // Zero does not require an additional stack bang.
   return 0;
 }
+
+#if defined(AARCH64) && defined(__APPLE__)
+void os::current_thread_enable_wx(WXMode mode) {
+  pthread_jit_write_protect_np(mode == WXExec);
+}
+#endif

@@ -46,6 +46,7 @@ private:
 public:
   void add(ObjectMonitor* monitor);
   size_t unlink_deflated(Thread* current, LogStream* ls, elapsedTimer* timer_p,
+                         size_t deflated_count,
                          GrowableArray<ObjectMonitor*>* unlinked_list);
   size_t count() const;
   size_t max() const;
@@ -133,7 +134,7 @@ class ObjectSynchronizer : AllStatic {
 
   // JNI detach support
   static void release_monitors_owned_by_thread(JavaThread* current);
-  static void monitors_iterate(MonitorClosure* m);
+  static void monitors_iterate(MonitorClosure* m, JavaThread* thread);
 
   // Initialize the gInflationLocks
   static void initialize();

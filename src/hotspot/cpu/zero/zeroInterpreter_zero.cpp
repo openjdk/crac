@@ -68,14 +68,6 @@ void ZeroInterpreter::initialize_code() {
     ZeroInterpreterGenerator g(_code);
     if (PrintInterpreter) print();
   }
-
-  // Allow c++ interpreter to do one initialization now that switches are set, etc.
-  BytecodeInterpreter start_msg(BytecodeInterpreter::initialize);
-  if (JvmtiExport::can_post_interpreter_events()) {
-    BytecodeInterpreter::run<true>(&start_msg);
-  } else {
-    BytecodeInterpreter::run<false>(&start_msg);
-  }
 }
 
 void ZeroInterpreter::invoke_method(Method* method, address entry_point, TRAPS) {
@@ -194,11 +186,31 @@ void ZeroInterpreter::main_loop(int recurse, TRAPS) {
 
     // Call the interpreter
     if (JvmtiExport::can_post_interpreter_events()) {
-      BytecodeInterpreter::run<true>(istate);
+      if (RewriteBytecodes) {
+        BytecodeInterpreter::run<true, true>(istate);
+      } else {
+        BytecodeInterpreter::run<true, false>(istate);
+      }
     } else {
-      BytecodeInterpreter::run<false>(istate);
+      if (RewriteBytecodes) {
+        BytecodeInterpreter::run<false, true>(istate);
+      } else {
+        BytecodeInterpreter::run<false, false>(istate);
+      }
     }
     fixup_after_potential_safepoint();
+
+    // If we are unwinding, notify the stack watermarks machinery.
+    // Should do this before resetting the frame anchor.
+    if (istate->msg() == BytecodeInterpreter::return_from_method ||
+        istate->msg() == BytecodeInterpreter::do_osr) {
+      stack_watermark_unwind_check(thread);
+    } else {
+      assert(istate->msg() == BytecodeInterpreter::call_method ||
+             istate->msg() == BytecodeInterpreter::more_monitors ||
+             istate->msg() == BytecodeInterpreter::throwing_exception,
+             "Should be one of these otherwise");
+    }
 
     // Clear the frame anchor
     thread->reset_last_Java_frame();
@@ -320,13 +332,13 @@ int ZeroInterpreter::native_entry(Method* method, intptr_t UNUSED, TRAPS) {
     monitor = (BasicObjectLock*) istate->stack_base();
     oop lockee = monitor->obj();
     markWord disp = lockee->mark().set_unlocked();
-
     monitor->lock()->set_displaced_header(disp);
-    if (lockee->cas_set_mark(markWord::from_pointer(monitor), disp) != disp) {
-      if (thread->is_lock_owned((address) disp.clear_lock_bits().to_pointer())) {
+    bool call_vm = UseHeavyMonitors;
+    if (call_vm || lockee->cas_set_mark(markWord::from_pointer(monitor), disp) != disp) {
+      // Is it simple recursive case?
+      if (!call_vm && thread->is_lock_owned((address) disp.clear_lock_bits().to_pointer())) {
         monitor->lock()->set_displaced_header(markWord::from_pointer(NULL));
-      }
-      else {
+      } else {
         CALL_VM_NOCHECK(InterpreterRuntime::monitorenter(thread, monitor));
         if (HAS_PENDING_EXCEPTION)
           goto unwind_and_return;
@@ -435,6 +447,10 @@ int ZeroInterpreter::native_entry(Method* method, intptr_t UNUSED, TRAPS) {
   // Finally we can change the thread state to _thread_in_Java.
   thread->set_thread_state(_thread_in_Java);
   fixup_after_potential_safepoint();
+
+  // Notify the stack watermarks machinery that we are unwinding.
+  // Should do this before resetting the frame anchor.
+  stack_watermark_unwind_check(thread);
 
   // Clear the frame anchor
   thread->reset_last_Java_frame();
@@ -546,6 +562,12 @@ int ZeroInterpreter::native_entry(Method* method, intptr_t UNUSED, TRAPS) {
     }
   }
 
+  // Already did every pending exception check here.
+  // If HAS_PENDING_EXCEPTION is true, the interpreter would handle the rest.
+  if (CheckJNICalls) {
+    THREAD->clear_pending_jni_exception_check();
+  }
+
   // No deoptimized frames on the stack
   return 0;
 }
@@ -597,6 +619,8 @@ int ZeroInterpreter::getter_entry(Method* method, intptr_t UNUSED, TRAPS) {
       stack->alloc(wordSize);
       topOfStack = stack->sp();
       break;
+    default:
+      ;
   }
 
   // Read the field to stack(0)
@@ -868,4 +892,14 @@ address ZeroInterpreter::remove_activation_early_entry(TosState state) {
 
 bool ZeroInterpreter::contains(address pc) {
   return false; // make frame::print_value_on work
+}
+
+void ZeroInterpreter::stack_watermark_unwind_check(JavaThread* thread) {
+  // If frame pointer is in the danger zone, notify the runtime that
+  // it needs to act before continuing the unwinding.
+  uintptr_t fp = (uintptr_t)thread->last_Java_fp();
+  uintptr_t watermark = thread->poll_data()->get_polling_word();
+  if (fp > watermark) {
+    InterpreterRuntime::at_unwind(thread);
+  }
 }

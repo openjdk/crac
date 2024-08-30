@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1997, 2021, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 1997, 2022, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -291,24 +291,36 @@ void CodeCache::initialize_heaps() {
   FLAG_SET_ERGO(ProfiledCodeHeapSize, profiled_size);
   FLAG_SET_ERGO(NonProfiledCodeHeapSize, non_profiled_size);
 
+  const size_t ps = page_size(false, 8);
+  // Print warning if using large pages but not able to use the size given
+  if (UseLargePages) {
+    const size_t lg_ps = page_size(false, 1);
+    if (ps < lg_ps) {
+      log_warning(codecache)("Code cache size too small for " PROPERFMT " pages. "
+                             "Reverting to smaller page size (" PROPERFMT ").",
+                             PROPERFMTARGS(lg_ps), PROPERFMTARGS(ps));
+    }
+  }
+
   // If large page support is enabled, align code heaps according to large
   // page size to make sure that code cache is covered by large pages.
-  const size_t alignment = MAX2(page_size(false, 8), (size_t) os::vm_allocation_granularity());
+  const size_t alignment = MAX2(ps, (size_t) os::vm_allocation_granularity());
   non_nmethod_size = align_up(non_nmethod_size, alignment);
   profiled_size    = align_down(profiled_size, alignment);
+  non_profiled_size = align_down(non_profiled_size, alignment);
 
   // Reserve one continuous chunk of memory for CodeHeaps and split it into
   // parts for the individual heaps. The memory layout looks like this:
   // ---------- high -----------
   //    Non-profiled nmethods
-  //      Profiled nmethods
   //         Non-nmethods
+  //      Profiled nmethods
   // ---------- low ------------
-  ReservedCodeSpace rs = reserve_heap_memory(cache_size);
-  ReservedSpace non_method_space    = rs.first_part(non_nmethod_size);
-  ReservedSpace rest                = rs.last_part(non_nmethod_size);
-  ReservedSpace profiled_space      = rest.first_part(profiled_size);
-  ReservedSpace non_profiled_space  = rest.last_part(profiled_size);
+  ReservedCodeSpace rs = reserve_heap_memory(cache_size, ps);
+  ReservedSpace profiled_space      = rs.first_part(profiled_size);
+  ReservedSpace rest                = rs.last_part(profiled_size);
+  ReservedSpace non_method_space    = rest.first_part(non_nmethod_size);
+  ReservedSpace non_profiled_space  = rest.last_part(non_nmethod_size);
 
   // Non-nmethods (stubs, adapters, ...)
   add_heap(non_method_space, "CodeHeap 'non-nmethods'", CodeBlobType::NonNMethod);
@@ -331,9 +343,8 @@ size_t CodeCache::page_size(bool aligned, size_t min_pages) {
   }
 }
 
-ReservedCodeSpace CodeCache::reserve_heap_memory(size_t size) {
+ReservedCodeSpace CodeCache::reserve_heap_memory(size_t size, size_t rs_ps) {
   // Align and reserve space for code cache
-  const size_t rs_ps = page_size();
   const size_t rs_align = MAX2(rs_ps, (size_t) os::vm_allocation_granularity());
   const size_t rs_size = align_up(size, rs_align);
   ReservedCodeSpace rs(rs_size, rs_align, rs_ps);
@@ -353,7 +364,7 @@ bool CodeCache::heap_available(int code_blob_type) {
   if (!SegmentedCodeCache) {
     // No segmentation: use a single code heap
     return (code_blob_type == CodeBlobType::All);
-  } else if (Arguments::is_interpreter_only()) {
+  } else if (CompilerConfig::is_interpreter_only()) {
     // Interpreter only: we don't need any method code heaps
     return (code_blob_type == CodeBlobType::NonNMethod);
   } else if (CompilerConfig::is_c1_profiling()) {
@@ -487,7 +498,7 @@ CodeBlob* CodeCache::next_blob(CodeHeap* heap, CodeBlob* cb) {
  */
 CodeBlob* CodeCache::allocate(int size, int code_blob_type, bool handle_alloc_failure, int orig_code_blob_type) {
   // Possibly wakes up the sweeper thread.
-  NMethodSweeper::report_allocation(code_blob_type);
+  NMethodSweeper::report_allocation();
   assert_locked_or_safepoint(CodeCache_lock);
   assert(size > 0, "Code cache allocation request must be > 0 but is %d", size);
   if (size <= 0) {
@@ -512,7 +523,7 @@ CodeBlob* CodeCache::allocate(int size, int code_blob_type, bool handle_alloc_fa
         // Fallback solution: Try to store code in another code heap.
         // NonNMethod -> MethodNonProfiled -> MethodProfiled (-> MethodNonProfiled)
         // Note that in the sweeper, we check the reverse_free_ratio of the code heap
-        // and force stack scanning if less than 10% of the code heap are free.
+        // and force stack scanning if less than 10% of the entire code cache are free.
         int type = code_blob_type;
         switch (type) {
         case CodeBlobType::NonNMethod:
@@ -608,9 +619,6 @@ void CodeCache::commit(CodeBlob* cb) {
   if (cb->is_adapter_blob()) {
     heap->set_adapter_count(heap->adapter_count() + 1);
   }
-
-  // flush the hardware I-cache
-  ICache::invalidate_range(cb->content_begin(), cb->content_size());
 }
 
 bool CodeCache::contains(void *p) {
@@ -630,14 +638,23 @@ bool CodeCache::contains(nmethod *nm) {
   return contains((void *)nm);
 }
 
+static bool is_in_asgct() {
+  Thread* current_thread = Thread::current_or_null_safe();
+  return current_thread != NULL && current_thread->is_Java_thread() && current_thread->as_Java_thread()->in_asgct();
+}
+
 // This method is safe to call without holding the CodeCache_lock, as long as a dead CodeBlob is not
 // looked up (i.e., one that has been marked for deletion). It only depends on the _segmap to contain
 // valid indices, which it will always do, as long as the CodeBlob is not in the process of being recycled.
 CodeBlob* CodeCache::find_blob(void* start) {
   CodeBlob* result = find_blob_unsafe(start);
   // We could potentially look up non_entrant methods
-  guarantee(result == NULL || !result->is_zombie() || result->is_locked_by_vm() || VMError::is_error_reported(), "unsafe access to zombie method");
-  return result;
+  bool is_zombie = result != NULL && result->is_zombie();
+  bool is_result_safe = !is_zombie || result->is_locked_by_vm() || VMError::is_error_reported();
+  guarantee(is_result_safe || is_in_asgct(), "unsafe access to zombie method");
+  // When in ASGCT the previous gurantee will pass for a zombie method but we still don't want that code blob returned in order
+  // to minimize the chance of accessing dead memory
+  return is_result_safe ? result : NULL;
 }
 
 // Lookup that does not fail if you lookup a zombie method (if you call this, be sure to know
@@ -678,7 +695,7 @@ void CodeCache::nmethods_do(void f(nmethod* nm)) {
 
 void CodeCache::metadata_do(MetadataClosure* f) {
   assert_locked_or_safepoint(CodeCache_lock);
-  NMethodIterator iter(NMethodIterator::only_alive_and_not_unloading);
+  NMethodIterator iter(NMethodIterator::only_alive);
   while(iter.next()) {
     iter.method()->metadata_do(f);
   }
@@ -889,20 +906,34 @@ size_t CodeCache::max_capacity() {
   return max_cap;
 }
 
-/**
- * Returns the reverse free ratio. E.g., if 25% (1/4) of the code heap
- * is free, reverse_free_ratio() returns 4.
- */
-double CodeCache::reverse_free_ratio(int code_blob_type) {
-  CodeHeap* heap = get_code_heap(code_blob_type);
-  if (heap == NULL) {
-    return 0;
-  }
+bool CodeCache::is_non_nmethod(address addr) {
+  CodeHeap* blob = get_code_heap(CodeBlobType::NonNMethod);
+  return blob->contains(addr);
+}
 
-  double unallocated_capacity = MAX2((double)heap->unallocated_capacity(), 1.0); // Avoid division by 0;
-  double max_capacity = (double)heap->max_capacity();
-  double result = max_capacity / unallocated_capacity;
-  assert (max_capacity >= unallocated_capacity, "Must be");
+size_t CodeCache::max_distance_to_non_nmethod() {
+  if (!SegmentedCodeCache) {
+    return ReservedCodeCacheSize;
+  } else {
+    CodeHeap* blob = get_code_heap(CodeBlobType::NonNMethod);
+    // the max distance is minimized by placing the NonNMethod segment
+    // in between MethodProfiled and MethodNonProfiled segments
+    size_t dist1 = (size_t)blob->high() - (size_t)_low_bound;
+    size_t dist2 = (size_t)_high_bound - (size_t)blob->low();
+    return dist1 > dist2 ? dist1 : dist2;
+  }
+}
+
+// Returns the reverse free ratio. E.g., if 25% (1/4) of the code cache
+// is free, reverse_free_ratio() returns 4.
+// Since code heap for each type of code blobs falls forward to the next
+// type of code heap, return the reverse free ratio for the entire
+// code cache.
+double CodeCache::reverse_free_ratio() {
+  double unallocated = MAX2((double)unallocated_capacity(), 1.0); // Avoid division by 0;
+  double max = (double)max_capacity();
+  double result = max / unallocated;
+  assert (max >= unallocated, "Must be");
   assert (result >= 1.0, "reverse_free_ratio must be at least 1. It is %f", result);
   return result;
 }
@@ -952,7 +983,7 @@ void CodeCache::initialize() {
     FLAG_SET_ERGO(NonNMethodCodeHeapSize, 0);
     FLAG_SET_ERGO(ProfiledCodeHeapSize, 0);
     FLAG_SET_ERGO(NonProfiledCodeHeapSize, 0);
-    ReservedCodeSpace rs = reserve_heap_memory(ReservedCodeCacheSize);
+    ReservedCodeSpace rs = reserve_heap_memory(ReservedCodeCacheSize, page_size(false, 8));
     add_heap(rs, "CodeCache", CodeBlobType::All);
   }
 
@@ -1032,7 +1063,7 @@ CompiledMethod* CodeCache::find_compiled(void* start) {
 }
 
 #if INCLUDE_JVMTI
-// RedefineClasses support for unloading nmethods that are dependent on "old" methods.
+// RedefineClasses support for saving nmethods that are dependent on "old" methods.
 // We don't really expect this table to grow very large.  If it does, it can become a hashtable.
 static GrowableArray<CompiledMethod*>* old_compiled_method_table = NULL;
 
@@ -1091,7 +1122,7 @@ int CodeCache::mark_dependents_for_evol_deoptimization() {
   reset_old_method_table();
 
   int number_of_marked_CodeBlobs = 0;
-  CompiledMethodIterator iter(CompiledMethodIterator::only_alive_and_not_unloading);
+  CompiledMethodIterator iter(CompiledMethodIterator::only_alive);
   while(iter.next()) {
     CompiledMethod* nm = iter.method();
     // Walk all alive nmethods to check for old Methods.
@@ -1111,7 +1142,7 @@ int CodeCache::mark_dependents_for_evol_deoptimization() {
 
 void CodeCache::mark_all_nmethods_for_evol_deoptimization() {
   assert(SafepointSynchronize::is_at_safepoint(), "Can only do this at a safepoint!");
-  CompiledMethodIterator iter(CompiledMethodIterator::only_alive_and_not_unloading);
+  CompiledMethodIterator iter(CompiledMethodIterator::only_alive);
   while(iter.next()) {
     CompiledMethod* nm = iter.method();
     if (!nm->method()->is_method_handle_intrinsic()) {
@@ -1232,7 +1263,9 @@ void CodeCache::report_codemem_full(int code_blob_type, bool print) {
   CodeHeap* heap = get_code_heap(code_blob_type);
   assert(heap != NULL, "heap is null");
 
-  if ((heap->full_count() == 0) || print) {
+  heap->report_full();
+
+  if ((heap->full_count() == 1) || print) {
     // Not yet reported for this heap, report
     if (SegmentedCodeCache) {
       ResourceMark rm;
@@ -1269,14 +1302,12 @@ void CodeCache::report_codemem_full(int code_blob_type, bool print) {
       tty->print("%s", s.as_string());
     }
 
-    if (heap->full_count() == 0) {
+    if (heap->full_count() == 1) {
       if (PrintCodeHeapAnalytics) {
         CompileBroker::print_heapinfo(tty, "all", 4096); // details, may be a lot!
       }
     }
   }
-
-  heap->report_full();
 
   EventCodeCacheFull event;
   if (event.should_commit()) {
@@ -1289,6 +1320,7 @@ void CodeCache::report_codemem_full(int code_blob_type, bool print) {
     event.set_adaptorCount(heap->adapter_count());
     event.set_unallocatedCapacity(heap->unallocated_capacity());
     event.set_fullCount(heap->full_count());
+    event.set_codeCacheMaxCapacity(CodeCache::max_capacity());
     event.commit();
   }
 }

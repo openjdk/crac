@@ -355,7 +355,7 @@ public final class OCSPResponse {
             try {
                 for (int i = 0; i < derCerts.length; i++) {
                     X509CertImpl cert =
-                        new X509CertImpl(derCerts[i].toByteArray());
+                        X509CertImpl.newX509CertImpl(derCerts[i].toByteArray());
                     certs.add(cert);
 
                     if (debug != null) {
@@ -638,7 +638,10 @@ public final class OCSPResponse {
 
         try {
             Signature respSignature = Signature.getInstance(sigAlgId.getName());
-            respSignature.initVerify(cert.getPublicKey());
+            SignatureUtil.initVerifyWithParam(respSignature,
+                    cert.getPublicKey(),
+                    SignatureUtil.getParamSpec(sigAlgId.getName(),
+                            sigAlgId.getEncodedParams()));
             respSignature.update(tbsResponseData);
 
             if (respSignature.verify(signature)) {
@@ -654,8 +657,8 @@ public final class OCSPResponse {
                 }
                 return false;
             }
-        } catch (InvalidKeyException | NoSuchAlgorithmException |
-                 SignatureException e)
+        } catch (InvalidAlgorithmParameterException | InvalidKeyException
+                | NoSuchAlgorithmException | SignatureException e)
         {
             throw new CertPathValidatorException(e);
         }

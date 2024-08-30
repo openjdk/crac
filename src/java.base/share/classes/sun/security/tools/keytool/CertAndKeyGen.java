@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1996, 2021, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 1996, 2022, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -32,7 +32,10 @@ import java.security.cert.CertificateEncodingException;
 import java.security.*;
 import java.security.spec.ECGenParameterSpec;
 import java.security.spec.NamedParameterSpec;
+import java.util.Calendar;
 import java.util.Date;
+import java.util.GregorianCalendar;
+import java.util.TimeZone;
 
 import sun.security.pkcs10.PKCS10;
 import sun.security.util.SignatureUtil;
@@ -157,7 +160,7 @@ public final class CertAndKeyGen {
             }
 
         } catch (Exception e) {
-            throw new IllegalArgumentException(e.getMessage());
+            throw new IllegalArgumentException(e.getMessage(), e);
         }
         generateInternal();
     }
@@ -173,7 +176,7 @@ public final class CertAndKeyGen {
                 keyGen.initialize(keyBits, prng);
 
             } catch (Exception e) {
-                throw new IllegalArgumentException(e.getMessage());
+                throw new IllegalArgumentException(e.getMessage(), e);
             }
         }
         generateInternal();
@@ -304,6 +307,12 @@ public final class CertAndKeyGen {
         try {
             lastDate = new Date ();
             lastDate.setTime (firstDate.getTime () + validity * 1000);
+            Calendar c = new GregorianCalendar(TimeZone.getTimeZone("UTC"));
+            c.setTime(lastDate);
+            if (c.get(Calendar.YEAR) > 9999) {
+                throw new CertificateException("Validity period ends at calendar year " +
+                        c.get(Calendar.YEAR) + " which is greater than 9999");
+            }
 
             CertificateValidity interval =
                                    new CertificateValidity(firstDate,lastDate);
@@ -340,7 +349,7 @@ public final class CertAndKeyGen {
 
         } catch (IOException e) {
              throw new CertificateEncodingException("getSelfCert: " +
-                                                    e.getMessage());
+                                                    e.getMessage(), e);
         }
     }
 

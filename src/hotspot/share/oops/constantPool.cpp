@@ -767,13 +767,16 @@ void ConstantPool::resolve_string_constants_impl(const constantPoolHandle& this_
   }
 }
 
-static Symbol* exception_message(const constantPoolHandle& this_cp, int which, constantTag tag, oop pending_exception) {
+static const char* exception_message(const constantPoolHandle& this_cp, int which, constantTag tag, oop pending_exception) {
+  // Note: caller needs ResourceMark
+
   // Dig out the detailed message to reuse if possible
-  Symbol* message = java_lang_Throwable::detail_message(pending_exception);
-  if (message != NULL) {
-    return message;
+  const char* msg = java_lang_Throwable::message_as_utf8(pending_exception);
+  if (msg != nullptr) {
+    return msg;
   }
 
+  Symbol* message = nullptr;
   // Return specific message for the tag
   switch (tag.value()) {
   case JVM_CONSTANT_UnresolvedClass:
@@ -796,49 +799,48 @@ static Symbol* exception_message(const constantPoolHandle& this_cp, int which, c
     ShouldNotReachHere();
   }
 
-  return message;
+  return message != nullptr ? message->as_C_string() : nullptr;
 }
 
-static void add_resolution_error(const constantPoolHandle& this_cp, int which,
+static void add_resolution_error(JavaThread* current, const constantPoolHandle& this_cp, int which,
                                  constantTag tag, oop pending_exception) {
+  ResourceMark rm(current);
 
   Symbol* error = pending_exception->klass()->name();
   oop cause = java_lang_Throwable::cause(pending_exception);
 
   // Also dig out the exception cause, if present.
   Symbol* cause_sym = NULL;
-  Symbol* cause_msg = NULL;
+  const char* cause_msg = nullptr;
   if (cause != NULL && cause != pending_exception) {
     cause_sym = cause->klass()->name();
-    cause_msg = java_lang_Throwable::detail_message(cause);
+    cause_msg = java_lang_Throwable::message_as_utf8(cause);
   }
 
-  Symbol* message = exception_message(this_cp, which, tag, pending_exception);
+  const char* message = exception_message(this_cp, which, tag, pending_exception);
   SystemDictionary::add_resolution_error(this_cp, which, error, message, cause_sym, cause_msg);
 }
 
 
 void ConstantPool::throw_resolution_error(const constantPoolHandle& this_cp, int which, TRAPS) {
   ResourceMark rm(THREAD);
-  Symbol* message = NULL;
+  const char* message = NULL;
   Symbol* cause = NULL;
-  Symbol* cause_msg = NULL;
+  const char* cause_msg = NULL;
   Symbol* error = SystemDictionary::find_resolution_error(this_cp, which, &message, &cause, &cause_msg);
   assert(error != NULL, "checking");
-  const char* cause_str = cause_msg != NULL ? cause_msg->as_C_string() : NULL;
 
   CLEAR_PENDING_EXCEPTION;
   if (message != NULL) {
-    char* msg = message->as_C_string();
     if (cause != NULL) {
-      Handle h_cause = Exceptions::new_exception(THREAD, cause, cause_str);
-      THROW_MSG_CAUSE(error, msg, h_cause);
+      Handle h_cause = Exceptions::new_exception(THREAD, cause, cause_msg);
+      THROW_MSG_CAUSE(error, message, h_cause);
     } else {
-      THROW_MSG(error, msg);
+      THROW_MSG(error, message);
     }
   } else {
     if (cause != NULL) {
-      Handle h_cause = Exceptions::new_exception(THREAD, cause, cause_str);
+      Handle h_cause = Exceptions::new_exception(THREAD, cause, cause_msg);
       THROW_CAUSE(error, h_cause);
     } else {
       THROW(error);
@@ -860,7 +862,7 @@ void ConstantPool::save_and_throw_exception(const constantPoolHandle& this_cp, i
     // and OutOfMemoryError, etc, or if the thread was hit by stop()
     // Needs clarification to section 5.4.3 of the VM spec (see 6308271)
   } else if (this_cp->tag_at(which).value() != error_tag) {
-    add_resolution_error(this_cp, which, tag, PENDING_EXCEPTION);
+    add_resolution_error(THREAD, this_cp, which, tag, PENDING_EXCEPTION);
     // CAS in the tag.  If a thread beat us to registering this error that's fine.
     // If another thread resolved the reference, this is a race condition. This
     // thread may have had a security manager or something temporary.
@@ -884,11 +886,9 @@ void ConstantPool::save_and_throw_exception(const constantPoolHandle& this_cp, i
 
 constantTag ConstantPool::constant_tag_at(int which) {
   constantTag tag = tag_at(which);
-  if (tag.is_dynamic_constant() ||
-      tag.is_dynamic_constant_in_error()) {
+  if (tag.is_dynamic_constant()) {
     BasicType bt = basic_type_for_constant_at(which);
-    // dynamic constant could return an array, treat as object
-    return constantTag::ofBasicType(is_reference_type(bt) ? T_OBJECT : bt);
+    return constantTag(constantTag::type2tag(bt));
   }
   return tag;
 }
@@ -975,7 +975,6 @@ oop ConstantPool::resolve_constant_at_impl(const constantPoolHandle& this_cp,
   switch (tag.value()) {
 
   case JVM_CONSTANT_UnresolvedClass:
-  case JVM_CONSTANT_UnresolvedClassInError:
   case JVM_CONSTANT_Class:
     {
       assert(cache_index == _no_index_sentinel, "should not have been set");
@@ -1043,14 +1042,6 @@ oop ConstantPool::resolve_constant_at_impl(const constantPoolHandle& this_cp,
     result_oop = string_at_impl(this_cp, index, cache_index, CHECK_NULL);
     break;
 
-  case JVM_CONSTANT_DynamicInError:
-  case JVM_CONSTANT_MethodHandleInError:
-  case JVM_CONSTANT_MethodTypeInError:
-    {
-      throw_resolution_error(this_cp, index, CHECK_NULL);
-      break;
-    }
-
   case JVM_CONSTANT_MethodHandle:
     {
       int ref_kind                 = this_cp->method_handle_ref_kind_at(index);
@@ -1064,11 +1055,14 @@ oop ConstantPool::resolve_constant_at_impl(const constantPoolHandle& this_cp,
                               callee_index, name->as_C_string(), signature->as_C_string());
       }
 
-      Klass* callee = klass_at_impl(this_cp, callee_index, CHECK_NULL);
+      Klass* callee = klass_at_impl(this_cp, callee_index, THREAD);
+      if (HAS_PENDING_EXCEPTION) {
+        save_and_throw_exception(this_cp, index, tag, CHECK_NULL);
+      }
 
       // Check constant pool method consistency
       if ((callee->is_interface() && m_tag.is_method()) ||
-          ((!callee->is_interface() && m_tag.is_interface_method()))) {
+          (!callee->is_interface() && m_tag.is_interface_method())) {
         ResourceMark rm(THREAD);
         stringStream ss;
         ss.print("Inconsistent constant pool data in classfile for class %s. "
@@ -1080,17 +1074,18 @@ oop ConstantPool::resolve_constant_at_impl(const constantPoolHandle& this_cp,
                  index,
                  callee->is_interface() ? "CONSTANT_MethodRef" : "CONSTANT_InterfaceMethodRef",
                  callee->is_interface() ? "CONSTANT_InterfaceMethodRef" : "CONSTANT_MethodRef");
-        THROW_MSG_NULL(vmSymbols::java_lang_IncompatibleClassChangeError(), ss.as_string());
+        Exceptions::fthrow(THREAD_AND_LOCATION, vmSymbols::java_lang_IncompatibleClassChangeError(), "%s", ss.as_string());
+        save_and_throw_exception(this_cp, index, tag, CHECK_NULL);
       }
 
       Klass* klass = this_cp->pool_holder();
       Handle value = SystemDictionary::link_method_handle_constant(klass, ref_kind,
                                                                    callee, name, signature,
                                                                    THREAD);
-      result_oop = value();
       if (HAS_PENDING_EXCEPTION) {
         save_and_throw_exception(this_cp, index, tag, CHECK_NULL);
       }
+      result_oop = value();
       break;
     }
 
@@ -1135,10 +1130,15 @@ oop ConstantPool::resolve_constant_at_impl(const constantPoolHandle& this_cp,
     result_oop = java_lang_boxing_object::create(T_DOUBLE, &prim_value, CHECK_NULL);
     break;
 
+  case JVM_CONSTANT_UnresolvedClassInError:
+  case JVM_CONSTANT_DynamicInError:
+  case JVM_CONSTANT_MethodHandleInError:
+  case JVM_CONSTANT_MethodTypeInError:
+    throw_resolution_error(this_cp, index, CHECK_NULL);
+    break;
+
   default:
-    DEBUG_ONLY( tty->print_cr("*** %p: tag at CP[%d/%d] = %d",
-                              this_cp(), index, cache_index, tag.value()));
-    assert(false, "unexpected constant tag");
+    fatal("unexpected constant tag at CP %p[%d/%d] = %d", this_cp(), index, cache_index, tag.value());
     break;
   }
 
@@ -2246,9 +2246,10 @@ void ConstantPool::print_on(outputStream* st) const {
     st->print_cr(" - holder: " INTPTR_FORMAT, p2i(pool_holder()));
   }
   st->print_cr(" - cache: " INTPTR_FORMAT, p2i(cache()));
-  st->print_cr(" - resolved_references: " INTPTR_FORMAT, p2i(resolved_references()));
+  st->print_cr(" - resolved_references: " INTPTR_FORMAT, p2i(resolved_references_or_null()));
   st->print_cr(" - reference_map: " INTPTR_FORMAT, p2i(reference_map()));
   st->print_cr(" - resolved_klasses: " INTPTR_FORMAT, p2i(resolved_klasses()));
+  st->print_cr(" - cp length: %d", length());
 
   for (int index = 1; index < length(); index++) {      // Index 0 is unused
     ((ConstantPool*)this)->print_entry_on(index, st);

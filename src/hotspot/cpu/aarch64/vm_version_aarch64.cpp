@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1997, 2021, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 1997, 2023, Oracle and/or its affiliates. All rights reserved.
  * Copyright (c) 2015, 2020, Red Hat Inc. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
@@ -45,6 +45,26 @@ int VM_Version::_zva_length;
 int VM_Version::_dcache_line_size;
 int VM_Version::_icache_line_size;
 int VM_Version::_initial_sve_vector_length;
+
+SpinWait VM_Version::_spin_wait;
+
+static SpinWait get_spin_wait_desc() {
+  if (strcmp(OnSpinWaitInst, "nop") == 0) {
+    return SpinWait(SpinWait::NOP, OnSpinWaitInstCount);
+  } else if (strcmp(OnSpinWaitInst, "isb") == 0) {
+    return SpinWait(SpinWait::ISB, OnSpinWaitInstCount);
+  } else if (strcmp(OnSpinWaitInst, "yield") == 0) {
+    return SpinWait(SpinWait::YIELD, OnSpinWaitInstCount);
+  } else if (strcmp(OnSpinWaitInst, "none") != 0) {
+    vm_exit_during_initialization("The options for OnSpinWaitInst are nop, isb, yield, and none", OnSpinWaitInst);
+  }
+
+  if (!FLAG_IS_DEFAULT(OnSpinWaitInstCount) && OnSpinWaitInstCount > 0) {
+    vm_exit_during_initialization("OnSpinWaitInstCount cannot be used for OnSpinWaitInst 'none'");
+  }
+
+  return SpinWait{};
+}
 
 void VM_Version::initialize() {
   _supports_cx8 = true;
@@ -111,7 +131,7 @@ void VM_Version::initialize() {
   // Enable vendor specific features
 
   // Ampere eMAG
-  if (_cpu == CPU_AMCC && (_model == 0) && (_variant == 0x3)) {
+  if (_cpu == CPU_AMCC && (_model == CPU_MODEL_EMAG) && (_variant == 0x3)) {
     if (FLAG_IS_DEFAULT(AvoidUnalignedAccesses)) {
       FLAG_SET_DEFAULT(AvoidUnalignedAccesses, true);
     }
@@ -120,6 +140,21 @@ void VM_Version::initialize() {
     }
     if (FLAG_IS_DEFAULT(UseSIMDForArrayEquals)) {
       FLAG_SET_DEFAULT(UseSIMDForArrayEquals, !(_revision == 1 || _revision == 2));
+    }
+  }
+
+  // Ampere CPUs
+  if (_cpu == CPU_AMPERE && ((_model == CPU_MODEL_AMPERE_1)  ||
+                             (_model == CPU_MODEL_AMPERE_1A) ||
+                             (_model == CPU_MODEL_AMPERE_1B))) {
+    if (FLAG_IS_DEFAULT(UseSIMDForMemoryOps)) {
+      FLAG_SET_DEFAULT(UseSIMDForMemoryOps, true);
+    }
+    if (FLAG_IS_DEFAULT(OnSpinWaitInst)) {
+      FLAG_SET_DEFAULT(OnSpinWaitInst, "isb");
+    }
+    if (FLAG_IS_DEFAULT(OnSpinWaitInstCount)) {
+      FLAG_SET_DEFAULT(OnSpinWaitInstCount, 2);
     }
   }
 
@@ -177,10 +212,20 @@ void VM_Version::initialize() {
     }
   }
 
-  // Neoverse N1
-  if (_cpu == CPU_ARM && (_model == 0xd0c || _model2 == 0xd0c)) {
+  // Neoverse N1, N2 and V1
+  if (_cpu == CPU_ARM && ((_model == 0xd0c || _model2 == 0xd0c)
+                          || (_model == 0xd49 || _model2 == 0xd49)
+                          || (_model == 0xd40 || _model2 == 0xd40))) {
     if (FLAG_IS_DEFAULT(UseSIMDForMemoryOps)) {
       FLAG_SET_DEFAULT(UseSIMDForMemoryOps, true);
+    }
+
+    if (FLAG_IS_DEFAULT(OnSpinWaitInst)) {
+      FLAG_SET_DEFAULT(OnSpinWaitInst, "isb");
+    }
+
+    if (FLAG_IS_DEFAULT(OnSpinWaitInstCount)) {
+      FLAG_SET_DEFAULT(OnSpinWaitInstCount, 1);
     }
   }
 
@@ -237,6 +282,9 @@ void VM_Version::initialize() {
       warning("UseAESIntrinsics enabled, but UseAES not, enabling");
       UseAES = true;
     }
+    if (FLAG_IS_DEFAULT(UseAESCTRIntrinsics)) {
+      FLAG_SET_DEFAULT(UseAESCTRIntrinsics, true);
+    }
   } else {
     if (UseAES) {
       warning("AES instructions are not available on this CPU");
@@ -246,11 +294,10 @@ void VM_Version::initialize() {
       warning("AES intrinsics are not available on this CPU");
       FLAG_SET_DEFAULT(UseAESIntrinsics, false);
     }
-  }
-
-  if (UseAESCTRIntrinsics) {
-    warning("AES/CTR intrinsics are not available on this CPU");
-    FLAG_SET_DEFAULT(UseAESCTRIntrinsics, false);
+    if (UseAESCTRIntrinsics) {
+      warning("AES/CTR intrinsics are not available on this CPU");
+      FLAG_SET_DEFAULT(UseAESCTRIntrinsics, false);
+    }
   }
 
   if (FLAG_IS_DEFAULT(UseCRC32Intrinsics)) {
@@ -270,9 +317,8 @@ void VM_Version::initialize() {
     FLAG_SET_DEFAULT(UseFMA, true);
   }
 
-  if (UseMD5Intrinsics) {
-    warning("MD5 intrinsics are not available on this CPU");
-    FLAG_SET_DEFAULT(UseMD5Intrinsics, false);
+  if (FLAG_IS_DEFAULT(UseMD5Intrinsics)) {
+    UseMD5Intrinsics = true;
   }
 
   if (_features & (CPU_SHA1 | CPU_SHA2 | CPU_SHA3 | CPU_SHA512)) {
@@ -448,5 +494,59 @@ void VM_Version::initialize() {
   }
 #endif
 
+  _spin_wait = get_spin_wait_desc();
+
+  check_virtualizations();
+
   UNSUPPORTED_OPTION(CriticalJNINatives);
+}
+
+#if defined(LINUX)
+static bool check_info_file(const char* fpath,
+                            const char* virt1, VirtualizationType vt1,
+                            const char* virt2, VirtualizationType vt2) {
+  char line[500];
+  FILE* fp = os::fopen(fpath, "r");
+  if (fp == nullptr) {
+    return false;
+  }
+  while (fgets(line, sizeof(line), fp) != nullptr) {
+    if (strcasestr(line, virt1) != 0) {
+      Abstract_VM_Version::_detected_virtualization = vt1;
+      fclose(fp);
+      return true;
+    }
+    if (virt2 != NULL && strcasestr(line, virt2) != 0) {
+      Abstract_VM_Version::_detected_virtualization = vt2;
+      fclose(fp);
+      return true;
+    }
+  }
+  fclose(fp);
+  return false;
+}
+#endif
+
+void VM_Version::check_virtualizations() {
+#if defined(LINUX)
+  const char* pname_file = "/sys/devices/virtual/dmi/id/product_name";
+  const char* tname_file = "/sys/hypervisor/type";
+  if (check_info_file(pname_file, "KVM", KVM, "VMWare", VMWare)) {
+    return;
+  }
+  check_info_file(tname_file, "Xen", XenPVHVM, NULL, NoDetectedVirtualization);
+#endif
+}
+
+void VM_Version::print_platform_virtualization_info(outputStream* st) {
+#if defined(LINUX)
+  VirtualizationType vrt = VM_Version::get_detected_virtualization();
+  if (vrt == KVM) {
+    st->print_cr("KVM virtualization detected");
+  } else if (vrt == VMWare) {
+    st->print_cr("VMWare virtualization detected");
+  } else if (vrt == XenPVHVM) {
+    st->print_cr("Xen virtualization detected");
+  }
+#endif
 }

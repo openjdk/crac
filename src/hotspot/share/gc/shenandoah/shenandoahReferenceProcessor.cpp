@@ -117,20 +117,9 @@ void reference_set_discovered<narrowOop>(oop reference, oop discovered) {
 }
 
 template<typename T>
-static bool reference_cas_discovered(oop reference, oop discovered);
-
-template<>
-bool reference_cas_discovered<narrowOop>(oop reference, oop discovered) {
-  volatile narrowOop* addr = reinterpret_cast<volatile narrowOop*>(java_lang_ref_Reference::discovered_addr_raw(reference));
-  narrowOop compare = CompressedOops::encode(NULL);
-  narrowOop exchange = CompressedOops::encode(discovered);
-  return Atomic::cmpxchg(addr, compare, exchange) == compare;
-}
-
-template<>
-bool reference_cas_discovered<oop>(oop reference, oop discovered) {
-  volatile oop* addr = reinterpret_cast<volatile oop*>(java_lang_ref_Reference::discovered_addr_raw(reference));
-  return Atomic::cmpxchg(addr, oop(NULL), discovered) == NULL;
+static bool reference_cas_discovered(oop reference, oop discovered) {
+  T* addr = reinterpret_cast<T *>(java_lang_ref_Reference::discovered_addr_raw(reference));
+  return ShenandoahHeap::atomic_update_oop_check(discovered, addr, NULL);
 }
 
 template <typename T>
@@ -373,7 +362,7 @@ bool ShenandoahReferenceProcessor::discover_reference(oop reference, ReferenceTy
 
   log_trace(gc, ref)("Encountered Reference: " PTR_FORMAT " (%s)", p2i(reference), reference_type_name(type));
   uint worker_id = ShenandoahThreadLocalData::worker_id(Thread::current());
-  _ref_proc_thread_locals->inc_encountered(type);
+  _ref_proc_thread_locals[worker_id].inc_encountered(type);
 
   if (UseCompressedOops) {
     return discover<narrowOop>(reference, type, worker_id);
@@ -464,14 +453,14 @@ void ShenandoahReferenceProcessor::process_references(ShenandoahRefProcThreadLoc
 void ShenandoahReferenceProcessor::work() {
   // Process discovered references
   uint max_workers = ShenandoahHeap::heap()->max_workers();
-  uint worker_id = Atomic::add(&_iterate_discovered_list_id, 1U) - 1;
+  uint worker_id = Atomic::add(&_iterate_discovered_list_id, 1U, memory_order_relaxed) - 1;
   while (worker_id < max_workers) {
     if (UseCompressedOops) {
       process_references<narrowOop>(_ref_proc_thread_locals[worker_id], worker_id);
     } else {
       process_references<oop>(_ref_proc_thread_locals[worker_id], worker_id);
     }
-    worker_id = Atomic::add(&_iterate_discovered_list_id, 1U) - 1;
+    worker_id = Atomic::add(&_iterate_discovered_list_id, 1U, memory_order_relaxed) - 1;
   }
 }
 

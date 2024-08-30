@@ -260,6 +260,9 @@ void NativeCall::replace_mt_safe(address instr_addr, address code_buffer) {
 
 }
 
+bool NativeCall::is_displacement_aligned() {
+  return (uintptr_t) displacement_address() % 4 == 0;
+}
 
 // Similar to replace_mt_safe, but just changes the destination.  The
 // important thing is that free-running threads are able to execute this
@@ -282,8 +285,7 @@ void NativeCall::set_destination_mt_safe(address dest) {
          CompiledICLocker::is_safe(instruction_address()), "concurrent code patching");
   // Both C1 and C2 should now be generating code which aligns the patched address
   // to be within a single cache line.
-  bool is_aligned = ((uintptr_t)displacement_address() + 0) / cache_line_size ==
-                    ((uintptr_t)displacement_address() + 3) / cache_line_size;
+  bool is_aligned = is_displacement_aligned();
 
   guarantee(is_aligned, "destination must be aligned");
 
@@ -508,12 +510,27 @@ void NativeJump::check_verified_entry_alignment(address entry, address verified_
 //
 void NativeJump::patch_verified_entry(address entry, address verified_entry, address dest) {
   // complete jump instruction (to be inserted) is in code_buffer;
+#ifdef _LP64
+  union {
+    jlong cb_long;
+    unsigned char code_buffer[8];
+  } u;
+
+  u.cb_long = *(jlong *)verified_entry;
+
+  intptr_t disp = (intptr_t)dest - ((intptr_t)verified_entry + 1 + 4);
+  guarantee(disp == (intptr_t)(int32_t)disp, "must be 32-bit offset");
+
+  u.code_buffer[0] = instruction_code;
+  *(int32_t*)(u.code_buffer + 1) = (int32_t)disp;
+
+  Atomic::store((jlong *) verified_entry, u.cb_long);
+  ICache::invalidate_range(verified_entry, 8);
+
+#else
   unsigned char code_buffer[5];
   code_buffer[0] = instruction_code;
   intptr_t disp = (intptr_t)dest - ((intptr_t)verified_entry + 1 + 4);
-#ifdef AMD64
-  guarantee(disp == (intptr_t)(int32_t)disp, "must be 32-bit offset");
-#endif // AMD64
   *(int32_t*)(code_buffer + 1) = (int32_t)disp;
 
   check_verified_entry_alignment(entry, verified_entry);
@@ -544,6 +561,7 @@ void NativeJump::patch_verified_entry(address entry, address verified_entry, add
   *(int32_t*)verified_entry = *(int32_t *)code_buffer;
   // Invalidate.  Opteron requires a flush after every write.
   n_jump->wrote(0);
+#endif // _LP64
 
 }
 

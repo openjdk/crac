@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2005, 2021, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2005, 2022, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -292,6 +292,7 @@ static jint heap_inspection(AttachOperation* op, outputStream* out) {
     uintx num;
     if (!Arguments::parse_uintx(num_str, &num, 0)) {
       out->print_cr("Invalid parallel thread number: [%s]", num_str);
+      delete fs;
       return JNI_ERR;
     }
     parallel_thread_num = num == 0 ? parallel_thread_num : (uint)num;
@@ -488,22 +489,10 @@ void AttachListener::init() {
     return;
   }
 
-  { MutexLocker mu(THREAD, Threads_lock);
-    JavaThread* listener_thread = new JavaThread(&attach_listener_thread_entry);
+  JavaThread* thread = new JavaThread(&attach_listener_thread_entry);
+  JavaThread::vm_exit_on_osthread_failure(thread);
 
-    // Check that thread and osthread were created
-    if (listener_thread == NULL || listener_thread->osthread() == NULL) {
-      vm_exit_during_initialization("java.lang.OutOfMemoryError",
-                                    os::native_thread_creation_failed_msg());
-    }
-
-    java_lang_Thread::set_thread(thread_oop(), listener_thread);
-    java_lang_Thread::set_daemon(thread_oop());
-
-    listener_thread->set_threadObj(thread_oop());
-    Threads::add(listener_thread);
-    Thread::start(listener_thread);
-  }
+  JavaThread::start_internal_daemon(THREAD, thread, thread_oop, NoPriority);
 }
 
 // Performs clean-up tasks on platforms where we can detect that the last

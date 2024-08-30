@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2003, 2021, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2003, 2022, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -169,7 +169,7 @@ public:
     thread->set_active_handles(new_handles);
 #endif
     assert(thread == JavaThread::current(), "thread must be current!");
-    thread->frame_anchor()->make_walkable(thread);
+    thread->frame_anchor()->make_walkable();
   };
 
   ~JvmtiEventMark() {
@@ -730,6 +730,8 @@ void JvmtiExport::post_vm_initialized() {
 void JvmtiExport::post_vm_death() {
   EVT_TRIG_TRACE(JVMTI_EVENT_VM_DEATH, ("Trg VM death event triggered" ));
 
+  JvmtiTagMap::flush_all_object_free_events();
+
   JvmtiEnvIterator it;
   for (JvmtiEnv* env = it.first(); env != NULL; env = it.next(env)) {
     if (env->is_enabled(JVMTI_EVENT_VM_DEATH)) {
@@ -806,8 +808,6 @@ JvmtiExport::cv_external_thread_to_JavaThread(ThreadsList * t_list,
   }
   // Looks like a live JavaThread at this point.
 
-  // We do not check the EnableThreadSMRExtraValidityChecks option
-  // for this includes() call because JVM/TI's spec is tighter.
   if (!t_list->includes(java_thread)) {
     // Not on the JavaThreads list so it is not alive.
     return JVMTI_ERROR_THREAD_NOT_ALIVE;
@@ -849,8 +849,6 @@ JvmtiExport::cv_oop_to_JavaThread(ThreadsList * t_list, oop thread_oop,
   }
   // Looks like a live JavaThread at this point.
 
-  // We do not check the EnableThreadSMRExtraValidityChecks option
-  // for this includes() call because JVM/TI's spec is tighter.
   if (!t_list->includes(java_thread)) {
     // Not on the JavaThreads list so it is not alive.
     return JVMTI_ERROR_THREAD_NOT_ALIVE;
@@ -1490,15 +1488,23 @@ void JvmtiExport::post_thread_end(JavaThread *thread) {
   }
 }
 
-void JvmtiExport::post_object_free(JvmtiEnv* env, jlong tag) {
-  assert(env->is_enabled(JVMTI_EVENT_OBJECT_FREE), "checking");
+void JvmtiExport::post_object_free(JvmtiEnv* env, GrowableArray<jlong>* objects) {
+  assert(objects != NULL, "Nothing to post");
+  if (!env->is_enabled(JVMTI_EVENT_OBJECT_FREE)) {
+    return; // the event type has been already disabled
+  }
 
   EVT_TRIG_TRACE(JVMTI_EVENT_OBJECT_FREE, ("[?] Trg Object Free triggered" ));
   EVT_TRACE(JVMTI_EVENT_OBJECT_FREE, ("[?] Evt Object Free sent"));
 
+  JavaThread* javaThread = JavaThread::current();
+  JvmtiThreadEventMark jem(javaThread);
+  JvmtiJavaThreadEventTransition jet(javaThread);
   jvmtiEventObjectFree callback = env->callbacks()->ObjectFree;
   if (callback != NULL) {
-    (*callback)(env->jvmti_external(), tag);
+    for (int index = 0; index < objects->length(); index++) {
+      (*callback)(env->jvmti_external(), objects->at(index));
+    }
   }
 }
 
@@ -2206,6 +2212,7 @@ void JvmtiExport::post_compiled_method_load(JvmtiEnv* env, nmethod *nm) {
   ResourceMark rm(thread);
   HandleMark hm(thread);
 
+  assert(!nm->is_zombie(), "nmethod zombie in post_compiled_method_load");
   // Add inlining information
   jvmtiCompiledMethodLoadInlineRecord* inlinerecord = create_inline_record(nm);
   // Pass inlining information through the void pointer

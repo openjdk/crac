@@ -67,6 +67,7 @@
  * input.build_osenv
  * input.build_osenv_cpu
  * input.build_osenv_platform
+ * input.build_osenv_version
  *
  * For more complex nested attributes, there is a method "get":
  *
@@ -249,7 +250,7 @@ var getJibProfilesCommon = function (input, data) {
         dependencies: ["boot_jdk", "gnumake", "jtreg", "jib", "autoconf", "jmh", "jcov"],
         default_make_targets: ["product-bundles", "test-bundles", "static-libs-bundles"],
         configure_args: concat("--enable-jtreg-failure-handler",
-            "--with-exclude-translations=de,es,fr,it,ko,pt_BR,sv,ca,tr,cs,sk,ja_JP_A,ja_JP_HA,ja_JP_HI,ja_JP_I,zh_TW,zh_HK",
+            "--with-exclude-translations=es,fr,it,ko,pt_BR,sv,ca,tr,cs,sk,ja_JP_A,ja_JP_HA,ja_JP_HI,ja_JP_I,zh_TW,zh_HK",
             "--disable-manpages",
             "--disable-jvm-feature-shenandoahgc",
             versionArgs(input, common))
@@ -456,7 +457,7 @@ var getJibProfilesProfiles = function (input, common, data) {
             target_os: "macosx",
             target_cpu: "aarch64",
             dependencies: ["devkit", "gtest"],
-            configure_args: concat(common.configure_args_64bit, "--with-zlib=system",
+            configure_args: concat(common.configure_args_64bit,
                 "--with-macosx-version-max=11.00.00"),
         },
 
@@ -564,7 +565,7 @@ var getJibProfilesProfiles = function (input, common, data) {
             "ANT_HOME": input.get("ant", "home_path")
         }
     };
-    [ "linux-x64", "macosx-x64", "windows-x64"]
+    [ "linux-x64", "macosx-aarch64", "macosx-x64", "windows-x64", "linux-aarch64"]
         .forEach(function (name) {
             var maketestName = name + "-testmake";
             profiles[maketestName] = concatObjects(profiles[name], testmakeBase);
@@ -916,10 +917,7 @@ var getJibProfilesProfiles = function (input, common, data) {
             target_os: input.build_os,
             target_cpu: input.build_cpu,
             dependencies: [ "jtreg", "gnumake", "boot_jdk", "devkit", "jib" ],
-            labels: "test",
-            environment: {
-                "JT_JAVA": common.boot_jdk_home
-            }
+            labels: "test"
         }
     };
     profiles = concatObjects(profiles, testOnlyProfiles);
@@ -1047,10 +1045,10 @@ var getJibProfilesProfiles = function (input, common, data) {
 var getJibProfilesDependencies = function (input, common) {
 
     var devkit_platform_revisions = {
-        linux_x64: "gcc10.3.0-OL6.4+1.0",
+        linux_x64: "gcc11.2.0-OL6.4+1.0",
         macosx: "Xcode12.4+1.0",
-        windows_x64: "VS2019-16.9.3+1.0",
-        linux_aarch64: "gcc10.3.0-OL7.6+1.0",
+        windows_x64: "VS2022-17.1.0+1.0",
+        linux_aarch64: "gcc11.2.0-OL7.6+1.0",
         linux_arm: "gcc8.2.0-Fedora27+1.0",
         linux_ppc64le: "gcc8.2.0-Fedora27+1.0",
         linux_s390x: "gcc8.2.0-Fedora27+1.0"
@@ -1098,9 +1096,23 @@ var getJibProfilesDependencies = function (input, common) {
         environment_path: common.boot_jdk_home + "/bin"
     }
 
-    var makeBinDir = (input.build_os == "windows"
-        ? input.get("gnumake", "install_path") + "/cygwin/bin"
-        : input.get("gnumake", "install_path") + "/bin");
+    var makeRevision = "4.0+1.0";
+    var makeBinSubDir = "/bin";
+    var makeModule = "gnumake-" + input.build_platform;
+    if (input.build_os == "windows") {
+        makeModule = "gnumake-" + input.build_osenv_platform;
+        if (input.build_osenv == "cygwin") {
+            var versionArray = input.build_osenv_version.split(/\./);
+            var majorVer = parseInt(versionArray[0]);
+            var minorVer = parseInt(versionArray[1]);
+            if (majorVer > 3 || (majorVer == 3 && minorVer >= 3)) {
+                makeRevision = "4.3+1.0";
+            } else {
+                makeBinSubDir = "/cygwin/bin";
+            }
+        }
+    }
+    var makeBinDir = input.get("gnumake", "install_path") + makeBinSubDir;
 
     var dependencies = {
         boot_jdk: boot_jdk,
@@ -1141,9 +1153,9 @@ var getJibProfilesDependencies = function (input, common) {
         jtreg: {
             server: "jpg",
             product: "jtreg",
-            version: "6",
+            version: "7.3.1",
             build_number: "1",
-            file: "bundles/jtreg-6+1.zip",
+            file: "bundles/jtreg-7.3.1+1.zip",
             environment_name: "JT_HOME",
             environment_path: input.get("jtreg", "home_path") + "/bin",
             configure_args: "--with-jtreg=" + input.get("jtreg", "home_path"),
@@ -1152,7 +1164,7 @@ var getJibProfilesDependencies = function (input, common) {
         jmh: {
             organization: common.organization,
             ext: "tar.gz",
-            revision: "1.28+1.0"
+            revision: "1.35+1.0"
         },
 
         jcov: {
@@ -1172,18 +1184,12 @@ var getJibProfilesDependencies = function (input, common) {
         gnumake: {
             organization: common.organization,
             ext: "tar.gz",
-            revision: "4.0+1.0",
-
-            module: (input.build_os == "windows"
-                ? "gnumake-" + input.build_osenv_platform
-                : "gnumake-" + input.build_platform),
-
+            revision: makeRevision,
+            module: makeModule,
             configure_args: "MAKE=" + makeBinDir + "/make",
-
             environment: {
                 "MAKE": makeBinDir + "/make"
             },
-
             environment_path: makeBinDir
         },
 
@@ -1468,7 +1474,7 @@ var getVersionNumbers = function () {
 var isWsl = function (input) {
     return ( input.build_osenv == "wsl"
              || (input.build_os == "linux"
-                 && java.lang.System.getProperty("os.version").contains("Microsoft")));
+                 && java.lang.System.getProperty("os.version").toLowerCase().contains("microsoft")));
 }
 
 var error = function (s) {

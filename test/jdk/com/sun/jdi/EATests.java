@@ -31,8 +31,8 @@
  * @requires ((vm.compMode == "Xmixed") & vm.compiler2.enabled)
  * @library /test/lib /test/hotspot/jtreg
  *
- * @run build TestScaffold VMConnection TargetListener TargetAdapter sun.hotspot.WhiteBox
- * @run driver jdk.test.lib.helpers.ClassFileInstaller sun.hotspot.WhiteBox
+ * @run build TestScaffold VMConnection TargetListener TargetAdapter jdk.test.whitebox.WhiteBox
+ * @run driver jdk.test.lib.helpers.ClassFileInstaller jdk.test.whitebox.WhiteBox
  * @run compile -g EATests.java
  * @run driver EATests
  *                 -XX:+UnlockDiagnosticVMOptions
@@ -118,8 +118,8 @@
  *
  * @library /test/lib /test/hotspot/jtreg
  *
- * @run build TestScaffold VMConnection TargetListener TargetAdapter sun.hotspot.WhiteBox
- * @run driver jdk.test.lib.helpers.ClassFileInstaller sun.hotspot.WhiteBox
+ * @run build TestScaffold VMConnection TargetListener TargetAdapter jdk.test.whitebox.WhiteBox
+ * @run driver jdk.test.lib.helpers.ClassFileInstaller jdk.test.whitebox.WhiteBox
  * @run compile -g EATests.java
  *
  * @comment Test with Graal. Some testcases are expected to fail because Graal does not provide all information about non-escaping
@@ -146,8 +146,8 @@ import java.util.Map;
 import java.util.function.Function;
 
 import jdk.test.lib.Asserts;
-import sun.hotspot.WhiteBox;
-import sun.hotspot.gc.GC;
+import jdk.test.whitebox.WhiteBox;
+import jdk.test.whitebox.gc.GC;
 
 
 //
@@ -299,6 +299,7 @@ public class EATests extends TestScaffold {
         public final boolean DeoptimizeObjectsALot;
         public final boolean DoEscapeAnalysis;
         public final boolean ZGCIsSelected;
+        public final boolean StressReflectiveCode;
 
         public TargetVMOptions(EATests env, ClassType testCaseBaseTargetClass) {
             Value val;
@@ -313,6 +314,8 @@ public class EATests extends TestScaffold {
             UseJVMCICompiler = ((PrimitiveValue) val).booleanValue();
             val = testCaseBaseTargetClass.getValue(testCaseBaseTargetClass.fieldByName("ZGCIsSelected"));
             ZGCIsSelected = ((PrimitiveValue) val).booleanValue();
+            val = testCaseBaseTargetClass.getValue(testCaseBaseTargetClass.fieldByName("StressReflectiveCode"));
+            StressReflectiveCode = ((PrimitiveValue) val).booleanValue();
         }
 
     }
@@ -424,6 +427,12 @@ abstract class EATestCaseBaseDebugger  extends EATestCaseBaseShared {
     public static final String XYVAL_NAME = XYVal.class.getName();
 
     public abstract void runTestCase() throws Exception;
+
+    @Override
+    public boolean shouldSkip() {
+        // Skip if StressReflectiveCode because it effectively disables escape analysis
+        return super.shouldSkip() || env.targetVMOptions.StressReflectiveCode;
+    }
 
     public void run(EATests env) {
         this.env = env;
@@ -796,6 +805,7 @@ abstract class EATestCaseBaseTarget extends EATestCaseBaseShared implements Runn
     public static final long BiasedLockingBulkRebiasThreshold = WB.getIntxVMFlag("BiasedLockingBulkRebiasThreshold");
     public static final long BiasedLockingBulkRevokeThreshold = WB.getIntxVMFlag("BiasedLockingBulkRevokeThreshold");
     public static final boolean ZGCIsSelected = GC.Z.isSelected();
+    public static final boolean StressReflectiveCode = unbox(WB.getBooleanVMFlag("StressReflectiveCode"), false);
 
     public String testMethodName;
     public int testMethodDepth;
@@ -826,6 +836,12 @@ abstract class EATestCaseBaseTarget extends EATestCaseBaseShared implements Runn
 
     public static final    Long CONST_2_OBJ     = Long.valueOf(2);
     public static final    Long CONST_3_OBJ     = Long.valueOf(3);
+
+    @Override
+    public boolean shouldSkip() {
+        // Skip if StressReflectiveCode because it effectively disables escape analysis
+        return super.shouldSkip() || StressReflectiveCode;
+    }
 
     /**
      * Main driver of a test case.

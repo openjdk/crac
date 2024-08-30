@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1997, 2021, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 1997, 2024, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -144,14 +144,16 @@ int Deoptimization::UnrollBlock::size_of_frames() const {
 
 
 void Deoptimization::UnrollBlock::print() {
-  ttyLocker ttyl;
-  tty->print_cr("UnrollBlock");
-  tty->print_cr("  size_of_deoptimized_frame = %d", _size_of_deoptimized_frame);
-  tty->print(   "  frame_sizes: ");
+  ResourceMark rm;
+  stringStream st;
+  st.print_cr("UnrollBlock");
+  st.print_cr("  size_of_deoptimized_frame = %d", _size_of_deoptimized_frame);
+  st.print(   "  frame_sizes: ");
   for (int index = 0; index < number_of_frames(); index++) {
-    tty->print(INTX_FORMAT " ", frame_sizes()[index]);
+    st.print(INTX_FORMAT " ", frame_sizes()[index]);
   }
-  tty->cr();
+  st.cr();
+  tty->print_raw(st.as_string());
 }
 
 
@@ -180,6 +182,38 @@ JRT_BLOCK_ENTRY(Deoptimization::UnrollBlock*, Deoptimization::fetch_unroll_info(
 JRT_END
 
 #if COMPILER2_OR_JVMCI
+#ifndef PRODUCT
+// print information about reallocated objects
+static void print_objects(JavaThread* deoptee_thread,
+                          GrowableArray<ScopeValue*>* objects, bool realloc_failures) {
+  ResourceMark rm;
+  stringStream st;  // change to logStream with logging
+  st.print_cr("REALLOC OBJECTS in thread " INTPTR_FORMAT, p2i(deoptee_thread));
+  fieldDescriptor fd;
+
+  for (int i = 0; i < objects->length(); i++) {
+    ObjectValue* sv = (ObjectValue*) objects->at(i);
+    Klass* k = java_lang_Class::as_Klass(sv->klass()->as_ConstantOopReadValue()->value()());
+    Handle obj = sv->value();
+
+    st.print("     object <" INTPTR_FORMAT "> of type ", p2i(sv->value()()));
+    k->print_value_on(&st);
+    assert(obj.not_null() || realloc_failures, "reallocation was missed");
+    if (obj.is_null()) {
+      st.print(" allocation failed");
+    } else {
+      st.print(" allocated (%d bytes)", obj->size() * HeapWordSize);
+    }
+    st.cr();
+
+    if (Verbose && !obj.is_null()) {
+      k->oop_print_on(obj(), &st);
+    }
+  }
+  tty->print_raw(st.as_string());
+}
+#endif
+
 static bool rematerialize_objects(JavaThread* thread, int exec_mode, CompiledMethod* compiled_method,
                                   frame& deoptee, RegisterMap& map, GrowableArray<compiledVFrame*>* chunk,
                                   bool& deoptimized_objects) {
@@ -211,7 +245,6 @@ static bool rematerialize_objects(JavaThread* thread, int exec_mode, CompiledMet
     return_value = Handle(thread, result);
     assert(Universe::heap()->is_in_or_null(result), "must be heap pointer");
     if (TraceDeoptimization) {
-      ttyLocker ttyl;
       tty->print_cr("SAVED OOP RESULT " INTPTR_FORMAT " in thread " INTPTR_FORMAT, p2i(result), p2i(thread));
     }
   }
@@ -232,9 +265,7 @@ static bool rematerialize_objects(JavaThread* thread, int exec_mode, CompiledMet
     Deoptimization::reassign_fields(&deoptee, &map, objects, realloc_failures, skip_internal);
 #ifndef PRODUCT
     if (TraceDeoptimization) {
-      ttyLocker ttyl;
-      tty->print_cr("REALLOC OBJECTS in thread " INTPTR_FORMAT, p2i(deoptee_thread));
-      Deoptimization::print_objects(objects, realloc_failures);
+      print_objects(deoptee_thread, objects, realloc_failures);
     }
 #endif
   }
@@ -264,29 +295,31 @@ static void restore_eliminated_locks(JavaThread* thread, GrowableArray<compiledV
       deoptimized_objects = deoptimized_objects || relocked;
 #ifndef PRODUCT
       if (PrintDeoptimizationDetails) {
-        ttyLocker ttyl;
+        ResourceMark rm;
+        stringStream st;
         for (int j = 0; j < monitors->length(); j++) {
           MonitorInfo* mi = monitors->at(j);
           if (mi->eliminated()) {
             if (first) {
               first = false;
-              tty->print_cr("RELOCK OBJECTS in thread " INTPTR_FORMAT, p2i(thread));
+              st.print_cr("RELOCK OBJECTS in thread " INTPTR_FORMAT, p2i(thread));
             }
             if (exec_mode == Deoptimization::Unpack_none) {
               ObjectMonitor* monitor = deoptee_thread->current_waiting_monitor();
               if (monitor != NULL && monitor->object() == mi->owner()) {
-                tty->print_cr("     object <" INTPTR_FORMAT "> DEFERRED relocking after wait", p2i(mi->owner()));
+                st.print_cr("     object <" INTPTR_FORMAT "> DEFERRED relocking after wait", p2i(mi->owner()));
                 continue;
               }
             }
             if (mi->owner_is_scalar_replaced()) {
               Klass* k = java_lang_Class::as_Klass(mi->owner_klass());
-              tty->print_cr("     failed reallocation for klass %s", k->external_name());
+              st.print_cr("     failed reallocation for klass %s", k->external_name());
             } else {
-              tty->print_cr("     object <" INTPTR_FORMAT "> locked", p2i(mi->owner()));
+              st.print_cr("     object <" INTPTR_FORMAT "> locked", p2i(mi->owner()));
             }
           }
         }
+        tty->print_raw(st.as_string());
       }
 #endif // !PRODUCT
     }
@@ -612,7 +645,6 @@ Deoptimization::UnrollBlock* Deoptimization::fetch_unroll_info_helper(JavaThread
 
   if (array->frames() > 1) {
     if (VerifyStack && TraceDeoptimization) {
-      ttyLocker ttyl;
       tty->print_cr("Deoptimizing method containing inlining");
     }
   }
@@ -683,6 +715,21 @@ void Deoptimization::unwind_callee_save_values(frame* f, vframeArray* vframe_arr
   assert(f->is_interpreted_frame(), "must be interpreted");
 }
 
+#ifndef PRODUCT
+static bool falls_through(Bytecodes::Code bc) {
+  switch (bc) {
+    // List may be incomplete.  Here we really only care about bytecodes where compiled code
+    // can deoptimize.
+    case Bytecodes::_goto:
+    case Bytecodes::_goto_w:
+    case Bytecodes::_athrow:
+      return false;
+    default:
+      return true;
+  }
+}
+#endif
+
 // Return BasicType of value being returned
 JRT_LEAF(BasicType, Deoptimization::unpack_frames(JavaThread* thread, int exec_mode))
 
@@ -706,7 +753,6 @@ JRT_LEAF(BasicType, Deoptimization::unpack_frames(JavaThread* thread, int exec_m
 
 #ifndef PRODUCT
   if (TraceDeoptimization) {
-    ttyLocker ttyl;
     tty->print_cr("DEOPT UNPACKING thread " INTPTR_FORMAT " vframeArray " INTPTR_FORMAT " mode %d",
                   p2i(thread), p2i(array), exec_mode);
   }
@@ -775,6 +821,7 @@ JRT_LEAF(BasicType, Deoptimization::unpack_frames(JavaThread* thread, int exec_m
       // at an uncommon trap for an invoke (where the compiler
       // generates debug info before the invoke has executed)
       Bytecodes::Code cur_code = str.next();
+      Bytecodes::Code next_code = Bytecodes::_shouldnotreachhere;
       if (Bytecodes::is_invoke(cur_code)) {
         Bytecode_invoke invoke(mh, iframe->interpreter_frame_bci());
         cur_invoke_parameter_size = invoke.size_of_parameters();
@@ -783,14 +830,14 @@ JRT_LEAF(BasicType, Deoptimization::unpack_frames(JavaThread* thread, int exec_m
         }
       }
       if (str.bci() < max_bci) {
-        Bytecodes::Code next_code = str.next();
+        next_code = str.next();
         if (next_code >= 0) {
           // The interpreter oop map generator reports results before
           // the current bytecode has executed except in the case of
           // calls. It seems to be hard to tell whether the compiler
           // has emitted debug information matching the "state before"
           // a given bytecode or the state after, so we try both
-          if (!Bytecodes::is_invoke(cur_code) && cur_code != Bytecodes::_athrow) {
+          if (!Bytecodes::is_invoke(cur_code) && falls_through(cur_code)) {
             // Get expression stack size for the next bytecode
             InterpreterOopMap next_mask;
             OopMapCache::compute_one_oop_map(mh, str.bci(), &next_mask);
@@ -828,11 +875,13 @@ JRT_LEAF(BasicType, Deoptimization::unpack_frames(JavaThread* thread, int exec_m
              (iframe->interpreter_frame_expression_stack_size() == mask.expression_stack_size() + cur_invoke_parameter_size))
             )) {
         {
-          ttyLocker ttyl;
-
           // Print out some information that will help us debug the problem
           tty->print_cr("Wrong number of expression stack elements during deoptimization");
           tty->print_cr("  Error occurred while verifying frame %d (0..%d, 0 is topmost)", i, cur_array->frames() - 1);
+          tty->print_cr("  Current code %s", Bytecodes::name(cur_code));
+          if (try_next_mask) {
+            tty->print_cr("  Next code %s", Bytecodes::name(next_code));
+          }
           tty->print_cr("  Fabricated interpreter frame had %d expression stack elements",
                         iframe->interpreter_frame_expression_stack_size());
           tty->print_cr("  Interpreter oop map had %d expression stack elements", mask.expression_stack_size());
@@ -850,7 +899,7 @@ JRT_LEAF(BasicType, Deoptimization::unpack_frames(JavaThread* thread, int exec_m
             tty->print_cr("    %s (bci %d)", el->method()->name_and_sig_as_C_string(), el->bci());
           }
           cur_array->print_on_2(tty);
-        } // release tty lock before calling guarantee
+        }
         guarantee(false, "wrong number of expression stack elements during deopt");
       }
       VerifyOopClosure verify;
@@ -1427,6 +1476,10 @@ void Deoptimization::reassign_fields(frame* fr, RegisterMap* reg_map, GrowableAr
       reassign_object_array_elements(fr, reg_map, sv, (objArrayOop) obj());
     }
   }
+  // These objects may escape when we return to Interpreter after deoptimization.
+  // We need barrier so that stores that initialize these objects can't be reordered
+  // with subsequent stores that make these objects accessible by other threads.
+  OrderAccess::storestore();
 }
 
 
@@ -1479,34 +1532,6 @@ bool Deoptimization::relock_objects(JavaThread* thread, GrowableArray<MonitorInf
   }
   return relocked_objects;
 }
-
-
-#ifndef PRODUCT
-// print information about reallocated objects
-void Deoptimization::print_objects(GrowableArray<ScopeValue*>* objects, bool realloc_failures) {
-  fieldDescriptor fd;
-
-  for (int i = 0; i < objects->length(); i++) {
-    ObjectValue* sv = (ObjectValue*) objects->at(i);
-    Klass* k = java_lang_Class::as_Klass(sv->klass()->as_ConstantOopReadValue()->value()());
-    Handle obj = sv->value();
-
-    tty->print("     object <" INTPTR_FORMAT "> of type ", p2i(sv->value()()));
-    k->print_value();
-    assert(obj.not_null() || realloc_failures, "reallocation was missed");
-    if (obj.is_null()) {
-      tty->print(" allocation failed");
-    } else {
-      tty->print(" allocated (%d bytes)", obj->size() * HeapWordSize);
-    }
-    tty->cr();
-
-    if (Verbose && !obj.is_null()) {
-      k->oop_print_on(obj(), tty);
-    }
-  }
-}
-#endif
 #endif // COMPILER2_OR_JVMCI
 
 vframeArray* Deoptimization::create_vframeArray(JavaThread* thread, frame fr, RegisterMap *reg_map, GrowableArray<compiledVFrame*>* chunk, bool realloc_failures) {
@@ -1514,14 +1539,15 @@ vframeArray* Deoptimization::create_vframeArray(JavaThread* thread, frame fr, Re
 
 #ifndef PRODUCT
   if (PrintDeoptimizationDetails) {
-    ttyLocker ttyl;
-    tty->print("DEOPT PACKING thread " INTPTR_FORMAT " ", p2i(thread));
-    fr.print_on(tty);
-    tty->print_cr("     Virtual frames (innermost first):");
+    ResourceMark rm;
+    stringStream st;
+    st.print("DEOPT PACKING thread " INTPTR_FORMAT " ", p2i(thread));
+    fr.print_on(&st);
+    st.print_cr("     Virtual frames (innermost first):");
     for (int index = 0; index < chunk->length(); index++) {
       compiledVFrame* vf = chunk->at(index);
-      tty->print("       %2d - ", index);
-      vf->print_value();
+      st.print("       %2d - ", index);
+      vf->print_value_on(&st);
       int bci = chunk->at(index)->raw_bci();
       const char* code_name;
       if (bci == SynchronizationEntryBCI) {
@@ -1530,13 +1556,14 @@ vframeArray* Deoptimization::create_vframeArray(JavaThread* thread, frame fr, Re
         Bytecodes::Code code = vf->method()->code_at(bci);
         code_name = Bytecodes::name(code);
       }
-      tty->print(" - %s", code_name);
-      tty->print_cr(" @ bci %d ", bci);
+      st.print(" - %s", code_name);
+      st.print_cr(" @ bci %d ", bci);
       if (Verbose) {
-        vf->print();
-        tty->cr();
+        vf->print_on(&st);
+        st.cr();
       }
     }
+    tty->print_raw(st.as_string());
   }
 #endif
 
@@ -1559,7 +1586,6 @@ vframeArray* Deoptimization::create_vframeArray(JavaThread* thread, frame fr, Re
 
 #ifndef PRODUCT
   if (PrintDeoptimizationDetails) {
-    ttyLocker ttyl;
     tty->print_cr("     Created vframeArray " INTPTR_FORMAT, p2i(array));
   }
 #endif // PRODUCT
@@ -1960,7 +1986,6 @@ JRT_ENTRY(void, Deoptimization::uncommon_trap_inner(JavaThread* current, jint tr
     bool is_receiver_constraint_failure = COMPILER2_PRESENT(VerifyReceiverTypes &&) (reason == Deoptimization::Reason_receiver_constraint);
 
     if (TraceDeoptimization || is_receiver_constraint_failure) {
-      ttyLocker ttyl;
       tty->print_cr("  bci=%d pc=" INTPTR_FORMAT ", relative_pc=" INTPTR_FORMAT ", method=%s" JVMCI_ONLY(", debug_id=%d"), trap_scope->bci(), p2i(fr.pc()), fr.pc() - nm->code_begin(), trap_scope->method()->name_and_sig_as_C_string()
 #if INCLUDE_JVMCI
           , debug_id
@@ -2384,7 +2409,8 @@ Deoptimization::query_update_method_data(MethodData* trap_mdo,
     uint idx = reason;
 #if INCLUDE_JVMCI
     if (is_osr) {
-      idx += Reason_LIMIT;
+      // Upper half of history array used for traps in OSR compilations
+      idx += Reason_TRAP_HISTORY_LENGTH;
     }
 #endif
     uint prior_trap_count = trap_mdo->trap_count(idx);

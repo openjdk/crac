@@ -38,10 +38,16 @@ import jdk.jfr.internal.handlers.EventHandler;
 public final class JVM {
     private static final JVM jvm = new JVM();
 
-    // JVM signals file changes by doing Object#notify on this object
-    static final Object FILE_DELTA_CHANGE = new Object();
-
     static final long RESERVED_CLASS_ID_LIMIT = 500;
+
+    private static class ChunkRotationMonitor {}
+
+    /*
+     * The JVM uses the chunk rotation monitor to notify Java that a rotation is warranted.
+     * The monitor type is used to exclude jdk.JavaMonitorWait events from being generated
+     * when Object.wait() is called on this monitor.
+     */
+    static final Object CHUNK_ROTATION_MONITOR = new ChunkRotationMonitor();
 
     private volatile boolean nativeOK;
 
@@ -260,13 +266,13 @@ public final class JVM {
     public native void setMemorySize(long size) throws IllegalArgumentException;
 
     /**
-     * Set interval for method samples, in milliseconds.
+     * Set period for method samples, in milliseconds.
      *
-     * Setting interval to 0 turns off the method sampler.
+     * Setting period to 0 turns off the method sampler.
      *
-     * @param intervalMillis the sampling interval
+     * @param periodMillis the sampling period
      */
-    public native void setMethodSamplingInterval(long type, long intervalMillis);
+    public native void setMethodSamplingPeriod(long type, long periodMillis);
 
     /**
      * Sets the file where data should be written.
@@ -597,4 +603,11 @@ public final class JVM {
      * @return the id, or a negative value if it does not exists.
      */
     public native long getTypeId(String name);
+
+    /**
+     * Emit a jdk.DataLoss event for the specified amount of bytes.
+     *
+     * @param bytes number of bytes that were lost
+     */
+    public static native void emitDataLoss(long bytes);
 }

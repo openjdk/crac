@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2016, 2021, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2016, 2022, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -83,7 +83,7 @@ public final class MetadataRepository {
                 // annotations, such as Period and Threshold.
                 if (pEventType.hasPeriod()) {
                     pEventType.setEventHook(true);
-                    if (!(Type.EVENT_NAME_PREFIX + "ExecutionSample").equals(type.getName())) {
+                    if (!pEventType.isMethodSampling()) {
                         requestHooks.add(new RequestHook(pEventType));
                     }
                 }
@@ -144,7 +144,7 @@ public final class MetadataRepository {
         handler.setRegistered(true);
         typeLibrary.addType(handler.getPlatformEventType());
         if (jvm.isRecording()) {
-            settingsManager.setEventControl(handler.getEventControl());
+            settingsManager.setEventControl(handler.getEventControl(), true);
             settingsManager.updateRetransform(Collections.singletonList((eventClass)));
        }
        setStaleMetadata();
@@ -199,8 +199,8 @@ public final class MetadataRepository {
     }
 
 
-    public synchronized void setSettings(List<Map<String, String>> list) {
-        settingsManager.setSettings(list);
+    public synchronized void setSettings(List<Map<String, String>> list, boolean writeSettingEvents) {
+        settingsManager.setSettings(list, writeSettingEvents);
     }
 
     synchronized void disableEvents() {
@@ -269,9 +269,12 @@ public final class MetadataRepository {
         if (staleMetadata) {
             storeDescriptorInJVM();
         }
-        awaitUniqueTimestamp();
         jvm.setOutput(filename);
-        long nanos = jvm.getChunkStartNanos();
+        // Each chunk needs a unique start timestamp and
+        // if the clock resolution is low, two chunks may
+        // get the same timestamp. Utils.getChunkStartNanos()
+        // ensures the timestamp is unique for the next chunk
+        long chunkStart = Utils.getChunkStartNanos();
         if (filename != null) {
             RepositoryFiles.notifyNewFile();
         }
@@ -282,29 +285,7 @@ public final class MetadataRepository {
             }
             unregistered = false;
         }
-        return Utils.epochNanosToInstant(nanos);
-    }
-
-    // Each chunk needs a unique start timestamp and
-    // if the clock resolution is low, two chunks may
-    // get the same timestamp.
-    private void awaitUniqueTimestamp() {
-        if (outputChange == null) {
-            outputChange = Instant.now();
-            return;
-        }
-        while (true) {
-            Instant time = Instant.now();
-            if (!time.equals(outputChange)) {
-                outputChange = time;
-                return;
-            }
-            try {
-                Thread.sleep(0, 100);
-            } catch (InterruptedException iex) {
-                // ignore
-            }
-        }
+        return Utils.epochNanosToInstant(chunkStart);
     }
 
     private void unregisterUnloaded() {

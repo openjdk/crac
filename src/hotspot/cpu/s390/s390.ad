@@ -1,6 +1,6 @@
 //
 // Copyright (c) 2017, 2021, Oracle and/or its affiliates. All rights reserved.
-// Copyright (c) 2017, 2020 SAP SE. All rights reserved.
+// Copyright (c) 2017, 2024 SAP SE. All rights reserved.
 // DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
 //
 // This code is free software; you can redistribute it and/or modify it
@@ -1466,6 +1466,7 @@ int HandlerImpl::emit_exception_handler(CodeBuffer &cbuf) {
 
   address base = __ start_a_stub(size_exception_handler());
   if (base == NULL) {
+    ciEnv::current()->record_failure("CodeCache is full");
     return 0;          // CodeBuffer::expand failed
   }
 
@@ -1487,6 +1488,7 @@ int HandlerImpl::emit_deopt_handler(CodeBuffer& cbuf) {
   address        base = __ start_a_stub(size_deopt_handler());
 
   if (base == NULL) {
+    ciEnv::current()->record_failure("CodeCache is full");
     return 0;  // CodeBuffer::expand failed
   }
 
@@ -5048,6 +5050,7 @@ instruct membar_CPUOrder() %{
 
 instruct membar_storestore() %{
   match(MemBarStoreStore);
+  match(StoreStoreFence);
   ins_cost(0);
   size(0);
   format %{ "MEMBAR-storestore (empty)" %}
@@ -10277,6 +10280,7 @@ instruct has_negatives(rarg5RegP ary1, iRegI len, iRegI result, roddRegI oddReg,
 
 // encode char[] to byte[] in ISO_8859_1
 instruct encode_iso_array(iRegP src, iRegP dst, iRegI result, iRegI len, iRegI tmp, flagsReg cr) %{
+  predicate(!((EncodeISOArrayNode*)n)->is_ascii());
   match(Set result (EncodeISOArray src (Binary dst len)));
   effect(TEMP_DEF result, TEMP tmp, KILL cr); // R0, R1 are killed, too.
   ins_cost(300);

@@ -49,7 +49,7 @@ const Type* Conv2BNode::Value(PhaseGVN* phase) const {
   if( t == TypeInt::ZERO ) return TypeInt::ZERO;
   if( t == TypePtr::NULL_PTR ) return TypeInt::ZERO;
   const TypePtr *tp = t->isa_ptr();
-  if( tp != NULL ) {
+  if(tp != nullptr) {
     if( tp->ptr() == TypePtr::AnyNull ) return Type::TOP;
     if( tp->ptr() == TypePtr::Constant) return TypeInt::ONE;
     if (tp->ptr() == TypePtr::NotNull)  return TypeInt::ONE;
@@ -85,7 +85,7 @@ Node *ConvD2FNode::Ideal(PhaseGVN *phase, bool can_reshape) {
       }
     }
   }
-  return NULL;
+  return nullptr;
 }
 
 //------------------------------Identity---------------------------------------
@@ -108,9 +108,11 @@ const Type* ConvD2INode::Value(PhaseGVN* phase) const {
 //------------------------------Ideal------------------------------------------
 // If converting to an int type, skip any rounding nodes
 Node *ConvD2INode::Ideal(PhaseGVN *phase, bool can_reshape) {
-  if( in(1)->Opcode() == Op_RoundDouble )
-  set_req(1,in(1)->in(1));
-  return NULL;
+  if (in(1)->Opcode() == Op_RoundDouble) {
+    set_req(1, in(1)->in(1));
+    return this;
+  }
+  return nullptr;
 }
 
 //------------------------------Identity---------------------------------------
@@ -142,9 +144,11 @@ Node* ConvD2LNode::Identity(PhaseGVN* phase) {
 //------------------------------Ideal------------------------------------------
 // If converting to an int type, skip any rounding nodes
 Node *ConvD2LNode::Ideal(PhaseGVN *phase, bool can_reshape) {
-  if( in(1)->Opcode() == Op_RoundDouble )
-  set_req(1,in(1)->in(1));
-  return NULL;
+  if (in(1)->Opcode() == Op_RoundDouble) {
+    set_req(1, in(1)->in(1));
+    return this;
+  }
+  return nullptr;
 }
 
 //=============================================================================
@@ -179,9 +183,11 @@ Node* ConvF2INode::Identity(PhaseGVN* phase) {
 //------------------------------Ideal------------------------------------------
 // If converting to an int type, skip any rounding nodes
 Node *ConvF2INode::Ideal(PhaseGVN *phase, bool can_reshape) {
-  if( in(1)->Opcode() == Op_RoundFloat )
-  set_req(1,in(1)->in(1));
-  return NULL;
+  if (in(1)->Opcode() == Op_RoundFloat) {
+    set_req(1, in(1)->in(1));
+    return this;
+  }
+  return nullptr;
 }
 
 //=============================================================================
@@ -206,9 +212,11 @@ Node* ConvF2LNode::Identity(PhaseGVN* phase) {
 //------------------------------Ideal------------------------------------------
 // If converting to an int type, skip any rounding nodes
 Node *ConvF2LNode::Ideal(PhaseGVN *phase, bool can_reshape) {
-  if( in(1)->Opcode() == Op_RoundFloat )
-  set_req(1,in(1)->in(1));
-  return NULL;
+  if (in(1)->Opcode() == Op_RoundFloat) {
+    set_req(1, in(1)->in(1));
+    return this;
+  }
+  return nullptr;
 }
 
 //=============================================================================
@@ -252,6 +260,20 @@ const Type* ConvI2LNode::Value(PhaseGVN* phase) const {
   return tl;
 }
 
+Node* ConvI2LNode::Identity(PhaseGVN* phase) {
+  // If type is in "int" sub-range, we can
+  // convert I2L(L2I(x)) => x
+  // since the conversions have no effect.
+  if (in(1)->Opcode() == Op_ConvL2I) {
+    Node* x = in(1)->in(1);
+    const TypeLong* t = phase->type(x)->isa_long();
+    if (t != nullptr && t->_lo >= min_jint && t->_hi <= max_jint) {
+      return x;
+    }
+  }
+  return this;
+}
+
 static inline bool long_ranges_overlap(jlong lo1, jlong hi1,
                                        jlong lo2, jlong hi2) {
   // Two ranges overlap iff one range's low point falls in the other range.
@@ -267,7 +289,7 @@ static Node* find_or_make_convI2L(PhaseIterGVN* igvn, Node* parent,
                                   const TypeLong* type) {
   Node* n = new ConvI2LNode(parent, type);
   Node* existing = igvn->hash_find_insert(n);
-  if (existing != NULL) {
+  if (existing != nullptr) {
     n->destruct(igvn);
     return existing;
   }
@@ -422,10 +444,10 @@ Node *ConvI2LNode::Ideal(PhaseGVN *phase, bool can_reshape) {
   // Addressing arithmetic will not absorb it as part of a 64-bit AddL.
 
   Node* z = in(1);
-  const TypeInteger* rx = NULL;
-  const TypeInteger* ry = NULL;
+  const TypeInteger* rx = nullptr;
+  const TypeInteger* ry = nullptr;
   if (Compile::push_thru_add(phase, z, this_type, rx, ry, T_LONG)) {
-    if (igvn == NULL) {
+    if (igvn == nullptr) {
       // Postpone this optimization to iterative GVN, where we can handle deep
       // AddI chains without an exponential number of recursive Ideal() calls.
       phase->record_for_igvn(this);
@@ -510,13 +532,13 @@ Node *ConvL2INode::Ideal(PhaseGVN *phase, bool can_reshape) {
   if( andl_op == Op_AddL ) {
     // Don't do this for nodes which have more than one user since
     // we'll end up computing the long add anyway.
-    if (andl->outcnt() > 1) return NULL;
+    if (andl->outcnt() > 1) return nullptr;
 
     Node* x = andl->in(1);
     Node* y = andl->in(2);
     assert( x != andl && y != andl, "dead loop in ConvL2INode::Ideal" );
-    if (phase->type(x) == Type::TOP)  return NULL;
-    if (phase->type(y) == Type::TOP)  return NULL;
+    if (phase->type(x) == Type::TOP)  return nullptr;
+    if (phase->type(y) == Type::TOP)  return nullptr;
     Node *add1 = phase->transform(new ConvL2INode(x));
     Node *add2 = phase->transform(new ConvL2INode(y));
     return new AddINode(add1,add2);
@@ -525,7 +547,7 @@ Node *ConvL2INode::Ideal(PhaseGVN *phase, bool can_reshape) {
   // Disable optimization: LoadL->ConvL2I ==> LoadI.
   // It causes problems (sizes of Load and Store nodes do not match)
   // in objects initialization code and Escape Analysis.
-  return NULL;
+  return nullptr;
 }
 
 

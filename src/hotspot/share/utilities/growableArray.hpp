@@ -118,7 +118,7 @@ class GrowableArrayView : public GrowableArrayBase {
 protected:
   E* _data; // data array
 
-  GrowableArrayView<E>(E* data, int initial_max, int initial_len) :
+  GrowableArrayView(E* data, int initial_max, int initial_len) :
       GrowableArrayBase(initial_max, initial_len), _data(data) {}
 
   ~GrowableArrayView() {}
@@ -126,7 +126,7 @@ protected:
 public:
   const static GrowableArrayView EMPTY;
 
-  bool operator==(const GrowableArrayView<E>& rhs) const {
+  bool operator==(const GrowableArrayView& rhs) const {
     if (_len != rhs._len)
       return false;
     for (int i = 0; i < _len; i++) {
@@ -137,22 +137,22 @@ public:
     return true;
   }
 
-  bool operator!=(const GrowableArrayView<E>& rhs) const {
+  bool operator!=(const GrowableArrayView& rhs) const {
     return !(*this == rhs);
   }
 
   E& at(int i) {
-    assert(0 <= i && i < _len, "illegal index");
+    assert(0 <= i && i < _len, "illegal index %d for length %d", i, _len);
     return _data[i];
   }
 
   E const& at(int i) const {
-    assert(0 <= i && i < _len, "illegal index");
+    assert(0 <= i && i < _len, "illegal index %d for length %d", i, _len);
     return _data[i];
   }
 
   E* adr_at(int i) const {
-    assert(0 <= i && i < _len, "illegal index");
+    assert(0 <= i && i < _len, "illegal index %d for length %d", i, _len);
     return &_data[i];
   }
 
@@ -184,7 +184,7 @@ public:
   }
 
   void at_put(int i, const E& elem) {
-    assert(0 <= i && i < _len, "illegal index");
+    assert(0 <= i && i < _len, "illegal index %d for length %d", i, _len);
     _data[i] = elem;
   }
 
@@ -245,7 +245,7 @@ public:
   }
 
   void remove_at(int index) {
-    assert(0 <= index && index < _len, "illegal index");
+    assert(0 <= index && index < _len, "illegal index %d for length %d", index, _len);
     for (int j = index + 1; j < _len; j++) {
       _data[j-1] = _data[j];
     }
@@ -262,7 +262,7 @@ public:
 
   // The order is changed.
   void delete_at(int index) {
-    assert(0 <= index && index < _len, "illegal index");
+    assert(0 <= index && index < _len, "illegal index %d for length %d", index, _len);
     if (index < --_len) {
       // Replace removed element with last one.
       _data[index] = _data[_len];
@@ -390,7 +390,7 @@ public:
   void push(const E& elem) { append(elem); }
 
   E at_grow(int i, const E& fill = E()) {
-    assert(0 <= i, "negative index");
+    assert(0 <= i, "negative index %d", i);
     if (i >= this->_len) {
       if (i >= this->_max) grow(i);
       for (int j = this->_len; j <= i; j++)
@@ -401,7 +401,7 @@ public:
   }
 
   void at_put_grow(int i, const E& elem, const E& fill = E()) {
-    assert(0 <= i, "negative index");
+    assert(0 <= i, "negative index %d", i);
     if (i >= this->_len) {
       if (i >= this->_max) grow(i);
       for (int j = this->_len; j < i; j++)
@@ -413,7 +413,7 @@ public:
 
   // inserts the given element before the element at index i
   void insert_before(const int idx, const E& elem) {
-    assert(0 <= idx && idx <= this->_len, "illegal index");
+    assert(0 <= idx && idx <= this->_len, "illegal index %d for length %d", idx, this->_len);
     if (this->_len == this->_max) grow(this->_len);
     for (int j = this->_len - 1; j >= idx; j--) {
       this->_data[j + 1] = this->_data[j];
@@ -423,7 +423,7 @@ public:
   }
 
   void insert_before(const int idx, const GrowableArrayView<E>* array) {
-    assert(0 <= idx && idx <= this->_len, "illegal index");
+    assert(0 <= idx && idx <= this->_len, "illegal index %d for length %d", idx, this->_len);
     int array_len = array->length();
     int new_len = this->_len + array_len;
     if (new_len >= this->_max) grow(new_len);
@@ -467,7 +467,7 @@ public:
     return this->at(location);
   }
 
-  void swap(GrowableArrayWithAllocator<E, Derived>* other) {
+  void swap(GrowableArrayWithAllocator* other) {
     ::swap(this->_data, other->_data);
     ::swap(this->_len, other->_len);
     ::swap(this->_max, other->_max);
@@ -618,8 +618,8 @@ public:
 //  See: init_checks.
 
 template <typename E>
-class GrowableArray : public GrowableArrayWithAllocator<E, GrowableArray<E> > {
-  friend class GrowableArrayWithAllocator<E, GrowableArray<E> >;
+class GrowableArray : public GrowableArrayWithAllocator<E, GrowableArray<E>> {
+  friend class GrowableArrayWithAllocator<E, GrowableArray>;
   friend class GrowableArrayTest;
 
   static E* allocate(int max) {
@@ -669,7 +669,7 @@ class GrowableArray : public GrowableArrayWithAllocator<E, GrowableArray<E> > {
 
 public:
   GrowableArray(int initial_max = 2, MEMFLAGS memflags = mtNone) :
-      GrowableArrayWithAllocator<E, GrowableArray<E> >(
+      GrowableArrayWithAllocator<E, GrowableArray>(
           allocate(initial_max, memflags),
           initial_max),
       _metadata(memflags) {
@@ -677,7 +677,7 @@ public:
   }
 
   GrowableArray(int initial_max, int initial_len, const E& filler, MEMFLAGS memflags = mtNone) :
-      GrowableArrayWithAllocator<E, GrowableArray<E> >(
+      GrowableArrayWithAllocator<E, GrowableArray>(
           allocate(initial_max, memflags),
           initial_max, initial_len, filler),
       _metadata(memflags) {
@@ -685,7 +685,7 @@ public:
   }
 
   GrowableArray(Arena* arena, int initial_max, int initial_len, const E& filler) :
-      GrowableArrayWithAllocator<E, GrowableArray<E> >(
+      GrowableArrayWithAllocator<E, GrowableArray>(
           allocate(initial_max, arena),
           initial_max, initial_len, filler),
       _metadata(arena) {
@@ -766,15 +766,15 @@ class GrowableArrayIterator : public StackObj {
 
  public:
   GrowableArrayIterator() : _array(NULL), _position(0) { }
-  GrowableArrayIterator<E>& operator++() { ++_position; return *this; }
-  E operator*()                          { return _array->at(_position); }
+  GrowableArrayIterator& operator++() { ++_position; return *this; }
+  E operator*()                       { return _array->at(_position); }
 
-  bool operator==(const GrowableArrayIterator<E>& rhs)  {
+  bool operator==(const GrowableArrayIterator& rhs)  {
     assert(_array == rhs._array, "iterator belongs to different array");
     return _position == rhs._position;
   }
 
-  bool operator!=(const GrowableArrayIterator<E>& rhs)  {
+  bool operator!=(const GrowableArrayIterator& rhs)  {
     assert(_array == rhs._array, "iterator belongs to different array");
     return _position != rhs._position;
   }

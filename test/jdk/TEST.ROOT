@@ -11,11 +11,15 @@
 #
 # A "headful" test requires a graphical environment to meaningfully
 # run. Tests that are not headful are "headless".
+# A test flagged with key sound needs audio devices on the system, this
+# may be accompanied by the headful keyword since audio device access 
+# is often linked to access to desktop resources and headful systems are
+# also more likely to have audio devices (ie meaning both input and output)
 # A test flagged with key "printer" requires a printer to succeed, else
 # throws a PrinterException or the like.
 # A test flagged with cgroups uses cgroups.
 
-keys=2d dnd headful i18n intermittent printer randomness jfr cgroups
+keys=2d dnd headful sound i18n intermittent printer randomness jfr cgroups
 
 # Tests that must run in othervm mode
 othervm.dirs=java/awt java/beans javax/accessibility javax/imageio javax/sound javax/swing javax/print \
@@ -27,8 +31,9 @@ exclusiveAccess.dirs=java/math/BigInteger/largeMemory \
 java/rmi/Naming java/util/prefs sun/management/jmxremote \
 sun/tools/jstatd sun/tools/jcmd \
 sun/tools/jinfo sun/tools/jmap sun/tools/jps sun/tools/jstack sun/tools/jstat \
-com/sun/tools/attach sun/security/mscapi java/util/stream java/util/Arrays/largeMemory \
-java/util/BitSet/stream javax/rmi java/net/httpclient/websocket
+com/sun/tools/attach sun/security/mscapi java/util/Arrays/largeMemory \
+java/util/BitSet/stream javax/rmi java/net/httpclient/websocket \
+sun/tools/jhsdb
 
 # Group definitions
 groups=TEST.groups
@@ -47,6 +52,7 @@ requires.extraPropDefns.vmOpts = -XX:+UnlockDiagnosticVMOptions -XX:+WhiteBoxAPI
 requires.properties= \
     sun.arch.data.model \
     java.runtime.name \
+    vm.flagless \
     vm.gc.G1 \
     vm.gc.Serial \
     vm.gc.Parallel \
@@ -67,7 +73,7 @@ requires.properties= \
     jdk.containerized
 
 # Minimum jtreg version
-requiredVersion=6+1
+requiredVersion=7.3.1+1
 
 # Path to libraries in the topmost test directory. This is needed so @library
 # does not need ../../ notation to reach them

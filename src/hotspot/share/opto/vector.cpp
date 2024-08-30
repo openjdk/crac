@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2020, 2023, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -201,7 +201,7 @@ void PhaseVector::scalarize_vbox_node(VectorBoxNode* vec_box) {
       }
       jvms = kit.sync_jvms();
 
-      Node* new_vbox = NULL;
+      Node* new_vbox = nullptr;
       {
         Node* vect = vec_box->in(VectorBoxNode::Value);
         const TypeInstPtr* vbox_type = vec_box->box_type();
@@ -283,7 +283,7 @@ void PhaseVector::scalarize_vbox_node(VectorBoxNode* vec_box) {
     // to the allocated object with vector value.
     for (uint i = jvms->debug_start(); i < jvms->debug_end(); i++) {
       Node* debug = sfpt->in(i);
-      if (debug != NULL && debug->uncast(/*keep_deps*/false) == vec_box) {
+      if (debug != nullptr && debug->uncast(/*keep_deps*/false) == vec_box) {
         sfpt->set_req(i, sobj);
       }
     }
@@ -311,6 +311,21 @@ Node* PhaseVector::expand_vbox_node_helper(Node* vbox,
     Node* new_phi = new PhiNode(vbox->as_Phi()->region(), box_type);
     for (uint i = 1; i < vbox->req(); i++) {
       Node* new_box = expand_vbox_node_helper(vbox->in(i), vect->in(i), box_type, vect_type);
+      new_phi->set_req(i, new_box);
+    }
+    new_phi = C->initial_gvn()->transform(new_phi);
+    return new_phi;
+  } else if (vbox->is_Phi() && (vect->is_Vector() || vect->is_LoadVector())) {
+    // Handle the case when the allocation input to VectorBoxNode is a phi
+    // but the vector input is not, which can definitely be the case if the
+    // vector input has been value-numbered. It seems to be safe to do by
+    // construction because VectorBoxNode and VectorBoxAllocate come in a
+    // specific order as a result of expanding an intrinsic call. After that, if
+    // any of the inputs to VectorBoxNode are value-numbered they can only
+    // move up and are guaranteed to dominate.
+    Node* new_phi = new PhiNode(vbox->as_Phi()->region(), box_type);
+    for (uint i = 1; i < vbox->req(); i++) {
+      Node* new_box = expand_vbox_node_helper(vbox->in(i), vect, box_type, vect_type);
       new_phi->set_req(i, new_box);
     }
     new_phi = C->initial_gvn()->transform(new_phi);
@@ -375,7 +390,7 @@ Node* PhaseVector::expand_vbox_alloc_node(VectorBoxAllocateNode* vbox_alloc,
   ciField* field = ciEnv::current()->vector_VectorPayload_klass()->get_field_by_name(ciSymbols::payload_name(),
                                                                                      ciSymbols::object_signature(),
                                                                                      false);
-  assert(field != NULL, "");
+  assert(field != nullptr, "");
   Node* vec_field = kit.basic_plus_adr(vec_obj, field->offset_in_bytes());
   const TypePtr* vec_adr_type = vec_field->bottom_type()->is_ptr();
 
@@ -416,7 +431,7 @@ void PhaseVector::expand_vunbox_node(VectorUnboxNode* vec_unbox) {
     ciField* field = ciEnv::current()->vector_VectorPayload_klass()->get_field_by_name(ciSymbols::payload_name(),
                                                                                        ciSymbols::object_signature(),
                                                                                        false);
-    assert(field != NULL, "");
+    assert(field != nullptr, "");
     int offset = field->offset_in_bytes();
     Node* vec_adr = kit.basic_plus_adr(obj, offset);
 

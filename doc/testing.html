@@ -27,6 +27,7 @@
 <li><a href="#configuration">Configuration</a></li>
 </ul></li>
 <li><a href="#test-selection">Test selection</a><ul>
+<li><a href="#common-test-groups">Common Test Groups</a></li>
 <li><a href="#jtreg">JTReg</a></li>
 <li><a href="#gtest">Gtest</a></li>
 <li><a href="#microbenchmarks">Microbenchmarks</a></li>
@@ -67,6 +68,19 @@ $ make exploded-test TEST=tier2</code></pre>
 <p>All functionality is available using the <code>test</code> make target. In this use case, the test or tests to be executed is controlled using the <code>TEST</code> variable. To speed up subsequent test runs with no source code changes, <code>test-only</code> can be used instead, which do not depend on the source and test image build.</p>
 <p>For some common top-level tests, direct make targets have been generated. This includes all JTReg test groups, the hotspot gtest, and custom tests (if present). This means that <code>make test-tier1</code> is equivalent to <code>make test TEST=&quot;tier1&quot;</code>, but the latter is more tab-completion friendly. For more complex test runs, the <code>test TEST=&quot;x&quot;</code> solution needs to be used.</p>
 <p>The test specifications given in <code>TEST</code> is parsed into fully qualified test descriptors, which clearly and unambigously show which tests will be run. As an example, <code>:tier1</code> will expand to <code>jtreg:$(TOPDIR)/test/hotspot/jtreg:tier1 jtreg:$(TOPDIR)/test/jdk:tier1 jtreg:$(TOPDIR)/test/langtools:tier1 jtreg:$(TOPDIR)/test/nashorn:tier1 jtreg:$(TOPDIR)/test/jaxp:tier1</code>. You can always submit a list of fully qualified test descriptors in the <code>TEST</code> variable if you want to shortcut the parser.</p>
+<h3 id="common-test-groups">Common Test Groups</h3>
+<p>Ideally, all tests are run for every change but this may not be practical due to the limited testing resources, the scope of the change, etc.</p>
+<p>The source tree currently defines a few common test groups in the relevant <code>TEST.groups</code> files. There are test groups that cover a specific component, for example <code>hotspot_gc</code>. It is a good idea to look into <code>TEST.groups</code> files to get a sense what tests are relevant to a particular JDK component.</p>
+<p>Component-specific tests may miss some unintended consequences of a change, so other tests should also be run. Again, it might be impractical to run all tests, and therefore <em>tiered</em> test groups exist. Tiered test groups are not component-specific, but rather cover the significant parts of the entire JDK.</p>
+<p>Multiple tiers allow balancing test coverage and testing costs. Lower test tiers are supposed to contain the simpler, quicker and more stable tests. Higher tiers are supposed to contain progressively more thorough, slower, and sometimes less stable tests, or the tests that require special configuration.</p>
+<p>Contributors are expected to run the tests for the areas that are changed, and the first N tiers they can afford to run, but at least tier1.</p>
+<p>A brief description of the tiered test groups:</p>
+<ul>
+<li><p><code>tier1</code>: This is the lowest test tier. Multiple developers run these tests every day. Because of the widespread use, the tests in <code>tier1</code> are carefully selected and optimized to run fast, and to run in the most stable manner. The test failures in <code>tier1</code> are usually followed up on quickly, either with fixes, or adding relevant tests to problem list. GitHub Actions workflows, if enabled, run <code>tier1</code> tests.</p></li>
+<li><p><code>tier2</code>: This test group covers even more ground. These contain, among other things, tests that either run for too long to be at <code>tier1</code>, or may require special configuration, or tests that are less stable, or cover the broader range of non-core JVM and JDK features/components (for example, XML).</p></li>
+<li><p><code>tier3</code>: This test group includes more stressful tests, the tests for corner cases not covered by previous tiers, plus the tests that require GUIs. As such, this suite should either be run with low concurrency (<code>TEST_JOBS=1</code>), or without headful tests (<code>JTREG_KEYWORDS=\!headful</code>), or both.</p></li>
+<li><p><code>tier4</code>: This test group includes every other test not covered by previous tiers. It includes, for example, <code>vmTestbase</code> suites for Hotspot, which run for many hours even on large machines. It also runs GUI tests, so the same <code>TEST_JOBS</code> and <code>JTREG_KEYWORDS</code> caveats apply.</p></li>
+</ul>
 <h3 id="jtreg">JTReg</h3>
 <p>JTReg tests can be selected either by picking a JTReg test group, or a selection of files or directories containing JTReg tests.</p>
 <p>JTReg test groups can be specified either without a test root, e.g. <code>:tier1</code> (or <code>tier1</code>, the initial colon is optional), or with, e.g. <code>hotspot:tier1</code>, <code>test/jdk:jdk_util</code> or <code>$(TOPDIR)/test/hotspot/jtreg:hotspot_all</code>. The test root can be specified either as an absolute path, or a path relative to the JDK top directory, or the <code>test</code> directory. For simplicity, the hotspot JTReg test root, which really is <code>hotspot/jtreg</code> can be abbreviated as just <code>hotspot</code>.</p>
@@ -74,6 +88,7 @@ $ make exploded-test TEST=tier2</code></pre>
 <p>Individual JTReg tests or directories containing JTReg tests can also be specified, like <code>test/hotspot/jtreg/native_sanity/JniVersion.java</code> or <code>hotspot/jtreg/native_sanity</code>. Just like for test root selection, you can either specify an absolute path (which can even point to JTReg tests outside the source tree), or a path relative to either the JDK top directory or the <code>test</code> directory. <code>hotspot</code> can be used as an alias for <code>hotspot/jtreg</code> here as well.</p>
 <p>As long as the test groups or test paths can be uniquely resolved, you do not need to enter the <code>jtreg:</code> prefix. If this is not possible, or if you want to use a fully qualified test descriptor, add <code>jtreg:</code>, e.g. <code>jtreg:test/hotspot/jtreg/native_sanity</code>.</p>
 <h3 id="gtest">Gtest</h3>
+<p><strong>Note:</strong> To be able to run the Gtest suite, you need to configure your build to be able to find a proper version of the gtest source. For details, see the section <a href="building.html#running-tests">&quot;Running Tests&quot; in the build documentation</a>.</p>
 <p>Since the Hotspot Gtest suite is so quick, the default is to run all tests. This is specified by just <code>gtest</code>, or as a fully qualified test descriptor <code>gtest:all</code>.</p>
 <p>If you want, you can single out an individual test or a group of tests, for instance <code>gtest:LogDecorations</code> or <code>gtest:LogDecorations.level_test_vm</code>. This can be particularly useful if you want to run a shaky test repeatedly.</p>
 <p>For Gtest, there is a separate test suite for each JVM variant. The JVM variant is defined by adding <code>/&lt;variant&gt;</code> to the test descriptor, e.g. <code>gtest:Log/client</code>. If you specify no variant, gtest will run once for each JVM variant present (e.g. server, client). So if you only have the server JVM present, then <code>gtest:all</code> will be equivalent to <code>gtest:all/server</code>.</p>
@@ -179,7 +194,9 @@ TEST FAILURE</code></pre>
 <h4 id="aot_modules-1">AOT_MODULES</h4>
 <p>Generate AOT modules before testing for the specified module, or set of modules. If multiple modules are specified, they should be separated by space (or, to help avoid quoting issues, the special value <code>%20</code>).</p>
 <h4 id="retry_count">RETRY_COUNT</h4>
-<p>Retry failed tests up to a set number of times. Defaults to 0.</p>
+<p>Retry failed tests up to a set number of times, until they pass. This allows to pass the tests with intermittent failures. Defaults to 0.</p>
+<h4 id="repeat_count">REPEAT_COUNT</h4>
+<p>Repeat the tests up to a set number of times, stopping at first failure. This helps to reproduce intermittent test failures. Defaults to 0.</p>
 <h3 id="gtest-keywords">Gtest keywords</h3>
 <h4 id="repeat">REPEAT</h4>
 <p>The number of times to repeat the tests (<code>--gtest_repeat</code>).</p>
@@ -220,20 +237,45 @@ TEST FAILURE</code></pre>
 <pre><code>$ export LANG=&quot;en_US&quot; &amp;&amp; make test TEST=...
 $ make test JTREG=&quot;VM_OPTIONS=-Duser.language=en -Duser.country=US&quot; TEST=...</code></pre>
 <h3 id="pkcs11-tests">PKCS11 Tests</h3>
-<p>It is highly recommended to use the latest NSS version when running PKCS11 tests. Improper NSS version may lead to unexpected failures which are hard to diagnose. For example, sun/security/pkcs11/Secmod/AddTrustedCert.java may fail on Ubuntu 18.04 with the default NSS version in the system. To run these tests correctly, the system property <code>test.nss.lib.paths</code> is required on Ubuntu 18.04 to specify the alternative NSS lib directories.</p>
+<p>It is highly recommended to use the latest NSS version when running PKCS11 tests. Improper NSS version may lead to unexpected failures which are hard to diagnose. For example, sun/security/pkcs11/Secmod/AddTrustedCert.java may fail on Ubuntu 18.04 with the default NSS version in the system. To run these tests correctly, the system property <<code>jdk.test.lib.artifacts.&lt;NAME&gt;</code> is required on Ubuntu 18.04 to specify the alternative NSS lib directories.The<code>&lt;NAME&gt;</code> component should be replaced with the name element of the appropriate <code>@Artifact</code> class. (See<code>test/jdk/sun/security/pkcs11/PKCS11Test.java</code>)</p>
 <p>For example:</p>
 <pre><code>$ make test TEST=&quot;jtreg:sun/security/pkcs11/Secmod/AddTrustedCert.java&quot; \
-    JTREG=&quot;JAVA_OPTIONS=-Dtest.nss.lib.paths=/path/to/your/latest/NSS-libs&quot;</code></pre>
+    JTREG=&quot;JAVA_OPTIONS=-Djdk.test.lib.artifacts.nsslib-linux_aarch64=/path/to/NSS-libs&quot;</code></pre>
 <p>For more notes about the PKCS11 tests, please refer to test/jdk/sun/security/pkcs11/README.</p>
 <h3 id="client-ui-tests">Client UI Tests</h3>
+<h4 id="system-key-shortcuts">System key shortcuts</h4>
 <p>Some Client UI tests use key sequences which may be reserved by the operating system. Usually that causes the test failure. So it is highly recommended to disable system key shortcuts prior testing. The steps to access and disable system key shortcuts for various platforms are provided below.</p>
-<h4 id="macos">MacOS</h4>
+<h5 id="macos">MacOS</h5>
 <p>Choose Apple menu; System Preferences, click Keyboard, then click Shortcuts; select or deselect desired shortcut.</p>
 <p>For example, test/jdk/javax/swing/TooltipManager/JMenuItemToolTipKeyBindingsTest/JMenuItemToolTipKeyBindingsTest.java fails on MacOS because it uses <code>CTRL + F1</code> key sequence to show or hide tooltip message but the key combination is reserved by the operating system. To run the test correctly the default global key shortcut should be disabled using the steps described above, and then deselect &quot;Turn keyboard access on or off&quot; option which is responsible for <code>CTRL + F1</code> combination.</p>
-<h4 id="linux">Linux</h4>
+<h5 id="linux">Linux</h5>
 <p>Open the Activities overview and start typing Settings; Choose Settings, click Devices, then click Keyboard; set or override desired shortcut.</p>
-<h4 id="windows">Windows</h4>
+<h5 id="windows">Windows</h5>
 <p>Type <code>gpedit</code> in the Search and then click Edit group policy; navigate to User Configuration -&gt; Administrative Templates -&gt; Windows Components -&gt; File Explorer; in the right-side pane look for &quot;Turn off Windows key hotkeys&quot; and double click on it; enable or disable hotkeys.</p>
 <p>Note: restart is required to make the settings take effect.</p>
+<h4 id="robot-api">Robot API</h4>
+<p>Most automated Client UI tests use <code>Robot</code> API to control
+the UI. Usually, the default operating system settings need to be
+adjusted for Robot to work correctly. The detailed steps how to access
+and update these settings for different platforms are provided
+below.</p>
+<h5 id="macos-1">macOS</h5>
+<p><code>Robot</code> is not permitted to control your Mac by default
+since macOS 10.15. To allow it, choose Apple menu -&gt; System Settings,
+click Privacy &amp; Security; then click Accessibility and ensure the
+following apps are allowed to control your computer: <em>Java</em> and
+<em>Terminal</em>. If the tests are run from an IDE, the IDE should be
+granted this permission too.</p>
+<h5 id="windows-1">Windows</h5>
+<p>On Windows if Cygwin terminal is used to run the tests, there is a
+delay in focus transfer. Usually it causes automated UI test failure. To
+disable the delay, type <code>regedit</code> in the Search and then
+select Registry Editor; navigate to the following key:
+<code>HKEY_CURRENT_USER\Control Panel\Desktop</code>; make sure the
+<code>ForegroundLockTimeout</code> value is set to 0.</p>
+<p>Additional information about Client UI tests configuration for
+various operating systems can be obtained at <a
+href="https://wiki.openjdk.org/display/ClientLibs/Automated+client+GUI+testing+system+set+up+requirements">Automated
+client GUI testing system set up requirements</a></p>
 </body>
 </html>

@@ -719,11 +719,14 @@ void JvmtiEventControllerPrivate::set_event_callbacks(JvmtiEnvBase *env,
   flush_object_free_events(env);
 
   env->set_event_callbacks(callbacks, size_of_callbacks);
-  jlong enabled_bits = 0;
+  jlong enabled_bits = env->env_event_enable()->_event_callback_enabled.get_bits();
   for (int ei = JVMTI_MIN_EVENT_TYPE_VAL; ei <= JVMTI_MAX_EVENT_TYPE_VAL; ++ei) {
     jvmtiEvent evt_t = (jvmtiEvent)ei;
+    jlong bit_for = JvmtiEventEnabled::bit_for(evt_t);
     if (env->has_callback(evt_t)) {
-      enabled_bits |= JvmtiEventEnabled::bit_for(evt_t);
+      enabled_bits |= bit_for;
+    } else {
+      enabled_bits &= ~bit_for;
     }
   }
   env->env_event_enable()->_event_callback_enabled.set_bits(enabled_bits);
@@ -829,10 +832,6 @@ JvmtiEventControllerPrivate::set_user_enabled(JvmtiEnvBase *env, JavaThread *thr
   EC_TRACE(("[%s] # user %s event %s",
             thread==NULL? "ALL": JvmtiTrace::safe_get_thread_name(thread),
             enabled? "enabled" : "disabled", JvmtiTrace::event_name(event_type)));
-
-  if (event_type == JVMTI_EVENT_OBJECT_FREE) {
-    flush_object_free_events(env);
-  }
 
   if (thread == NULL) {
     env->env_event_enable()->set_user_enabled(event_type, enabled);
@@ -982,6 +981,10 @@ JvmtiEventController::is_global_event(jvmtiEvent event_type) {
 
 void
 JvmtiEventController::set_user_enabled(JvmtiEnvBase *env, JavaThread *thread, jvmtiEvent event_type, bool enabled) {
+  if (event_type == JVMTI_EVENT_OBJECT_FREE) {
+    JvmtiEventControllerPrivate::flush_object_free_events(env);
+  }
+
   if (Threads::number_of_threads() == 0) {
     // during early VM start-up locks don't exist, but we are safely single threaded,
     // call the functionality without holding the JvmtiThreadState_lock.

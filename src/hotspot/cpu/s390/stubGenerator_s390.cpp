@@ -1,6 +1,6 @@
 /*
- * Copyright (c) 2016, 2020, Oracle and/or its affiliates. All rights reserved.
- * Copyright (c) 2016, 2019 SAP SE. All rights reserved.
+ * Copyright (c) 2016, 2022, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2016, 2022 SAP SE. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -1457,44 +1457,6 @@ class StubGenerator: public StubCodeGenerator {
     StubRoutines::_arrayof_oop_arraycopy_uninit = generate_conjoint_oop_copy  (true, "arrayof_oop_arraycopy_uninit", true);
   }
 
-  void generate_safefetch(const char* name, int size, address* entry, address* fault_pc, address* continuation_pc) {
-
-    // safefetch signatures:
-    //   int      SafeFetch32(int*      adr, int      errValue);
-    //   intptr_t SafeFetchN (intptr_t* adr, intptr_t errValue);
-    //
-    // arguments:
-    //   Z_ARG1 = adr
-    //   Z_ARG2 = errValue
-    //
-    // result:
-    //   Z_RET  = *adr or errValue
-
-    StubCodeMark mark(this, "StubRoutines", name);
-
-    // entry point
-    // Load *adr into Z_ARG2, may fault.
-    *entry = *fault_pc = __ pc();
-    switch (size) {
-      case 4:
-        // Sign extended int32_t.
-        __ z_lgf(Z_ARG2, 0, Z_ARG1);
-        break;
-      case 8:
-        // int64_t
-        __ z_lg(Z_ARG2, 0, Z_ARG1);
-        break;
-      default:
-        ShouldNotReachHere();
-    }
-
-    // Return errValue or *adr.
-    *continuation_pc = __ pc();
-    __ z_lgr(Z_RET, Z_ARG2);
-    __ z_br(Z_R14);
-
-  }
-
   // Call interface for AES_encryptBlock, AES_decryptBlock stubs.
   //
   //   Z_ARG1 - source data block. Ptr to leftmost byte to be processed.
@@ -2337,10 +2299,6 @@ class StubGenerator: public StubCodeGenerator {
 
     // Comapct string intrinsics: Translate table for string inflate intrinsic. Used by trot instruction.
     StubRoutines::zarch::_trot_table_addr = (address)StubRoutines::zarch::_trot_table;
-
-    // safefetch stubs
-    generate_safefetch("SafeFetch32", sizeof(int),      &StubRoutines::_safefetch32_entry, &StubRoutines::_safefetch32_fault_pc, &StubRoutines::_safefetch32_continuation_pc);
-    generate_safefetch("SafeFetchN",  sizeof(intptr_t), &StubRoutines::_safefetchN_entry,  &StubRoutines::_safefetchN_fault_pc,  &StubRoutines::_safefetchN_continuation_pc);
   }
 
 
@@ -2404,9 +2362,6 @@ class StubGenerator: public StubCodeGenerator {
 
  public:
   StubGenerator(CodeBuffer* code, bool all) : StubCodeGenerator(code) {
-    // Replace the standard masm with a special one:
-    _masm = new MacroAssembler(code);
-
     _stub_count = !all ? 0x100 : 0x200;
     if (all) {
       generate_all();

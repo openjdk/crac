@@ -107,7 +107,7 @@ void C2Compiler::compile_method(ciEnv* env, ciMethod* target, int entry_bci, boo
     Compile C(env, target, entry_bci, subsume_loads, do_escape_analysis, eliminate_boxing, do_locks_coarsening, install_code, directive);
 
     // Check result and retry if appropriate.
-    if (C.failure_reason() != NULL) {
+    if (C.failure_reason() != nullptr) {
       if (C.failure_reason_is(retry_class_loading_during_parsing())) {
         env->report_failure(C.failure_reason());
         continue;  // retry
@@ -214,7 +214,10 @@ bool C2Compiler::is_intrinsic_supported(const methodHandle& method, bool is_virt
     if (!Matcher::match_rule_supported(Op_AryEq)) return false;
     break;
   case vmIntrinsics::_copyMemory:
-    if (StubRoutines::unsafe_arraycopy() == NULL) return false;
+    if (StubRoutines::unsafe_arraycopy() == nullptr) return false;
+    break;
+  case vmIntrinsics::_encodeAsciiArray:
+    if (!Matcher::match_rule_supported(Op_EncodeISOArray) || !Matcher::supports_encode_ascii_array) return false;
     break;
   case vmIntrinsics::_encodeISOArray:
   case vmIntrinsics::_encodeByteISOArray:
@@ -424,7 +427,7 @@ bool C2Compiler::is_intrinsic_supported(const methodHandle& method, bool is_virt
     if (!Matcher::match_rule_supported(Op_MulHiL)) return false;
     break;
   case vmIntrinsics::_getCallerClass:
-    if (vmClasses::reflect_CallerSensitive_klass() == NULL) return false;
+    if (vmClasses::reflect_CallerSensitive_klass() == nullptr) return false;
     break;
   case vmIntrinsics::_onSpinWait:
     if (!Matcher::match_rule_supported(Op_OnSpinWait)) return false;
@@ -598,6 +601,7 @@ bool C2Compiler::is_intrinsic_supported(const methodHandle& method, bool is_virt
   case vmIntrinsics::_putLongUnaligned:
   case vmIntrinsics::_loadFence:
   case vmIntrinsics::_storeFence:
+  case vmIntrinsics::_storeStoreFence:
   case vmIntrinsics::_fullFence:
   case vmIntrinsics::_currentThread:
 #ifdef JFR_HAVE_INTRINSICS

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2003, 2021, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2003, 2022, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -1105,8 +1105,8 @@ public final class ProcessBuilder
 
         String dir = directory == null ? null : directory.toString();
 
-        for (int i = 1; i < cmdarray.length; i++) {
-            if (cmdarray[i].indexOf('\u0000') >= 0) {
+        for (String s : cmdarray) {
+            if (s.indexOf('\u0000') >= 0) {
                 throw new IOException("invalid null character in command");
             }
         }
@@ -1308,6 +1308,10 @@ public final class ProcessBuilder
                         pipelineResource.addRedirect(redirectPipe);
                     }
                     processes.add(builder.start(redirects));
+                if (prevOutput instanceof RedirectPipeImpl redir) {
+                    // Wrap the fd so it can be closed
+                    new Process.PipeInputStream(redir.getFd()).close();
+                }
                     prevOutput = redirects[1];
                 }
             } catch (Exception ex) {

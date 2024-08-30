@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1996, 2021, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 1996, 2022, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -963,7 +963,9 @@ public abstract class FontConfiguration {
             return fc.newEncoder();
         }
 
-        if (!charsetName.startsWith("sun.awt.") && !charsetName.equals("default")) {
+        if (!charsetName.startsWith("sun.awt.") &&
+            !charsetName.equals("default") &&
+            !charsetName.startsWith("sun.font.")) {
             fc = Charset.forName(charsetName);
         } else {
             @SuppressWarnings("removal")
@@ -1250,15 +1252,24 @@ public abstract class FontConfiguration {
         return filenamesMap.get(platformName);
     }
 
+    private static final String fontconfigErrorMessage =
+            "Fontconfig head is null, check your fonts or fonts configuration";
+
     /**
      * Returns a configuration specific path to be appended to the font
      * search path.
      */
     public String getExtraFontPath() {
+        if (head == null) {
+            throw new RuntimeException(fontconfigErrorMessage);
+        }
         return getString(head[INDEX_appendedfontpath]);
     }
 
     public String getVersion() {
+        if (head == null) {
+            throw new RuntimeException(fontconfigErrorMessage);
+        }
         return getString(head[INDEX_version]);
     }
 

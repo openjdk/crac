@@ -864,14 +864,14 @@ public final class PKCS12KeyStore extends KeyStoreSpi {
     {
         SecretKey skey = null;
 
+        PBEKeySpec keySpec = new PBEKeySpec(password);
         try {
-            PBEKeySpec keySpec = new PBEKeySpec(password);
             SecretKeyFactory skFac = SecretKeyFactory.getInstance("PBE");
             skey = skFac.generateSecret(keySpec);
-            keySpec.clearPassword();
         } catch (Exception e) {
-           throw new IOException("getSecretKey failed: " +
-                                 e.getMessage(), e);
+            throw new IOException("getSecretKey failed: " + e.getMessage(), e);
+        } finally {
+            keySpec.clearPassword();
         }
         return skey;
     }
@@ -2266,11 +2266,6 @@ public final class PKCS12KeyStore extends KeyStoreSpi {
                 /* Update existing KeyEntry in entries table */
                 if (chain.size() > 0) {
                     entry.chain = chain.toArray(new Certificate[chain.size()]);
-                } else {
-                    // Remove private key entries where there is no associated
-                    // certs. Most likely the keystore is loaded with a null
-                    // password.
-                    entries.remove(entry);
                 }
             }
         }

@@ -32,6 +32,8 @@
 class VM_Version : public Abstract_VM_Version {
  public:
   static void initialize();
+
+  constexpr static bool supports_stack_watermark_barrier() { return true; }
   static void crac_restore() {}
 
   // No _features_names[] available on this CPU.

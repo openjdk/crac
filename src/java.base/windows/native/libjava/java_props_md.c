@@ -23,11 +23,6 @@
  * questions.
  */
 
-/* Access APIs for Windows Vista and above */
-#ifndef _WIN32_WINNT
-#define _WIN32_WINNT 0x0601
-#endif
-
 #include "jni.h"
 #include "jni_util.h"
 
@@ -63,19 +58,19 @@ static boolean SetupI18nProps(LCID lcid, char** language, char** script, char** 
 static char *
 getEncodingInternal(LCID lcid)
 {
-    int codepage;
+    int codepage = 0;
     char * ret = malloc(16);
     if (ret == NULL) {
         return NULL;
     }
 
-    if (GetLocaleInfo(lcid,
+    if (lcid == 0) { // for sun.jnu.encoding
+        codepage = GetACP();
+        _itoa_s(codepage, ret + 2, 14, 10);
+    } else if (GetLocaleInfo(lcid,
                       LOCALE_IDEFAULTANSICODEPAGE,
-                      ret+2, 14) == 0) {
-        codepage = 1252;
-        strcpy(ret+2, "1252");
-    } else {
-        codepage = atoi(ret+2);
+                      ret + 2, 14) != 0) {
+        codepage = atoi(ret + 2);
     }
 
     switch (codepage) {
@@ -389,7 +384,7 @@ GetJavaProperties(JNIEnv* env)
             GetVersionEx((OSVERSIONINFO *) &ver);
             majorVersion = ver.dwMajorVersion;
             minorVersion = ver.dwMinorVersion;
-            /* distinguish Windows Server 2016 and 2019 by build number */
+            /* distinguish Windows Server 2016+ by build number */
             buildNumber = ver.dwBuildNumber;
             is_workstation = (ver.wProductType == VER_NT_WORKSTATION);
             platformId = ver.dwPlatformId;
@@ -471,9 +466,13 @@ GetJavaProperties(JNIEnv* env)
          * Windows Server 2012          6               2  (!VER_NT_WORKSTATION)
          * Windows Server 2012 R2       6               3  (!VER_NT_WORKSTATION)
          * Windows 10                   10              0  (VER_NT_WORKSTATION)
+         * Windows 11                   10              0  (VER_NT_WORKSTATION)
+         *       where (buildNumber >= 22000)
          * Windows Server 2016          10              0  (!VER_NT_WORKSTATION)
          * Windows Server 2019          10              0  (!VER_NT_WORKSTATION)
          *       where (buildNumber > 17762)
+         * Windows Server 2022          10              0  (!VER_NT_WORKSTATION)
+         *       where (buildNumber > 20347)
          *
          * This mapping will presumably be augmented as new Windows
          * versions are released.
@@ -542,14 +541,24 @@ GetJavaProperties(JNIEnv* env)
             } else if (majorVersion == 10) {
                 if (is_workstation) {
                     switch (minorVersion) {
-                    case  0: sprops.os_name = "Windows 10";           break;
+                    case  0:
+                        /* Windows 11 21H2 (original release) build number is 22000 */
+                        if (buildNumber >= 22000) {
+                            sprops.os_name = "Windows 11";
+                        } else {
+                            sprops.os_name = "Windows 10";
+                        }
+                        break;
                     default: sprops.os_name = "Windows NT (unknown)";
                     }
                 } else {
                     switch (minorVersion) {
                     case  0:
                         /* Windows server 2019 GA 10/2018 build number is 17763 */
-                        if (buildNumber > 17762) {
+                        /* Windows server 2022 build number is 20348 */
+                        if (buildNumber > 20347) {
+                            sprops.os_name = "Windows Server 2022";
+                        } else if (buildNumber > 17762) {
                             sprops.os_name = "Windows Server 2019";
                         } else {
                             sprops.os_name = "Windows Server 2016";
@@ -646,7 +655,6 @@ GetJavaProperties(JNIEnv* env)
          * (which is a Windows LCID value),
          */
         LCID userDefaultLCID = GetUserDefaultLCID();
-        LCID systemDefaultLCID = GetSystemDefaultLCID();
         LANGID userDefaultUILang = GetUserDefaultUILanguage();
         LCID userDefaultUILCID = MAKELCID(userDefaultUILang, SORTIDFROMLCID(userDefaultLCID));
 
@@ -679,7 +687,10 @@ GetJavaProperties(JNIEnv* env)
                            &sprops.display_variant,
                            &display_encoding);
 
-            sprops.sun_jnu_encoding = getEncodingInternal(systemDefaultLCID);
+            sprops.sun_jnu_encoding = getEncodingInternal(0);
+            if (sprops.sun_jnu_encoding == NULL) {
+                sprops.sun_jnu_encoding = "UTF-8";
+            }
             if (LANGIDFROMLCID(userDefaultLCID) == 0x0c04 && majorVersion == 6) {
                 // MS claims "Vista has built-in support for HKSCS-2004.
                 // All of the HKSCS-2004 characters have Unicode 4.1.

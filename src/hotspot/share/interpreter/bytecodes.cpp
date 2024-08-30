@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1997, 2020, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 1997, 2021, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -99,12 +99,18 @@ int Bytecodes::special_length_at(Bytecodes::Code code, address bcp, address end)
       if (end != NULL && aligned_bcp + 3*jintSize >= end) {
         return -1; // don't read past end of code buffer
       }
+      // Promote calculation to signed 64 bits to do range checks, used by the verifier.
       jlong lo = (jint)Bytes::get_Java_u4(aligned_bcp + 1*jintSize);
       jlong hi = (jint)Bytes::get_Java_u4(aligned_bcp + 2*jintSize);
       jlong len = (aligned_bcp - bcp) + (3 + hi - lo + 1)*jintSize;
-      // only return len if it can be represented as a positive int;
-      // return -1 otherwise
-      return (len > 0 && len == (int)len) ? len : -1;
+      // Only return len if it can be represented as a positive int and lo <= hi.
+      // The caller checks for bytecode stream overflow.
+      if (lo <= hi && len == (int)len) {
+        assert(len > 0, "must be");
+        return (int)len;
+      } else {
+        return -1;
+      }
     }
 
   case _lookupswitch:      // fall through
@@ -116,9 +122,13 @@ int Bytecodes::special_length_at(Bytecodes::Code code, address bcp, address end)
       }
       jlong npairs = (jint)Bytes::get_Java_u4(aligned_bcp + jintSize);
       jlong len = (aligned_bcp - bcp) + (2 + 2*npairs)*jintSize;
-      // only return len if it can be represented as a positive int;
-      // return -1 otherwise
-      return (len > 0 && len == (int)len) ? len : -1;
+      // Only return len if it can be represented as a positive int and npairs >= 0.
+      if (npairs >= 0 && len == (int)len) {
+        assert(len > 0, "must be");
+        return (int)len;
+      } else {
+        return -1;
+      }
     }
   default:
     // Note: Length functions must return <=0 for invalid bytecodes.
@@ -471,7 +481,7 @@ void Bytecodes::initialize() {
   def(_new                 , "new"                 , "bkk"  , NULL    , T_OBJECT ,  1, true );
   def(_newarray            , "newarray"            , "bc"   , NULL    , T_OBJECT ,  0, true );
   def(_anewarray           , "anewarray"           , "bkk"  , NULL    , T_OBJECT ,  0, true );
-  def(_arraylength         , "arraylength"         , "b"    , NULL    , T_VOID   ,  0, true );
+  def(_arraylength         , "arraylength"         , "b"    , NULL    , T_INT    ,  0, true );
   def(_athrow              , "athrow"              , "b"    , NULL    , T_VOID   , -1, true );
   def(_checkcast           , "checkcast"           , "bkk"  , NULL    , T_OBJECT ,  0, true );
   def(_instanceof          , "instanceof"          , "bkk"  , NULL    , T_INT    ,  0, true );

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2016, 2021, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2016, 2022, Oracle and/or its affiliates. All rights reserved.
  * Copyright (c) 2016, 2019 SAP SE. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
@@ -630,7 +630,7 @@ void SharedRuntime::restore_native_result(MacroAssembler *masm,
 // as framesizes are fixed.
 // VMRegImpl::stack0 refers to the first slot 0(sp).
 // VMRegImpl::stack0+1 refers to the memory word 4-byes higher. Registers
-// up to RegisterImpl::number_of_registers are the 64-bit integer registers.
+// up to Register::number_of_registers are the 64-bit integer registers.
 
 // Note: the INPUTS in sig_bt are in units of Java argument words, which are
 // either 32-bit or 64-bit depending on the build. The OUTPUTS are in 32-bit
@@ -666,8 +666,8 @@ int SharedRuntime::java_calling_convention(const BasicType *sig_bt,
   const int z_num_iarg_registers = sizeof(z_iarg_reg) / sizeof(z_iarg_reg[0]);
   const int z_num_farg_registers = sizeof(z_farg_reg) / sizeof(z_farg_reg[0]);
 
-  assert(RegisterImpl::number_of_arg_registers == z_num_iarg_registers, "iarg reg count mismatch");
-  assert(FloatRegisterImpl::number_of_arg_registers == z_num_farg_registers, "farg reg count mismatch");
+  assert(Register::number_of_arg_registers == z_num_iarg_registers, "iarg reg count mismatch");
+  assert(FloatRegister::number_of_arg_registers == z_num_farg_registers, "farg reg count mismatch");
 
   int i;
   int stk = 0;
@@ -780,8 +780,8 @@ int SharedRuntime::c_calling_convention(const BasicType *sig_bt,
   const int z_num_farg_registers = sizeof(z_farg_reg) / sizeof(z_farg_reg[0]);
 
   // Check calling conventions consistency.
-  assert(RegisterImpl::number_of_arg_registers == z_num_iarg_registers, "iarg reg count mismatch");
-  assert(FloatRegisterImpl::number_of_arg_registers == z_num_farg_registers, "farg reg count mismatch");
+  assert(Register::number_of_arg_registers == z_num_iarg_registers, "iarg reg count mismatch");
+  assert(FloatRegister::number_of_arg_registers == z_num_farg_registers, "farg reg count mismatch");
 
   // Avoid passing C arguments in the wrong stack slots.
 
@@ -1578,7 +1578,7 @@ nmethod *SharedRuntime::generate_native_wrapper(MacroAssembler *masm,
                     SharedRuntime::out_preserve_stack_slots(); // see c_calling_convention
 
   // Now the space for the inbound oop handle area.
-  int total_save_slots = RegisterImpl::number_of_arg_registers * VMRegImpl::slots_per_word;
+  int total_save_slots = Register::number_of_arg_registers * VMRegImpl::slots_per_word;
   if (is_critical_native) {
     // Critical natives may have to call out so they need a save area
     // for register arguments.
@@ -1739,12 +1739,12 @@ nmethod *SharedRuntime::generate_native_wrapper(MacroAssembler *masm,
   //--------------------------------------------------------------------
 
 #ifdef ASSERT
-  bool reg_destroyed[RegisterImpl::number_of_registers];
-  bool freg_destroyed[FloatRegisterImpl::number_of_registers];
-  for (int r = 0; r < RegisterImpl::number_of_registers; r++) {
+  bool reg_destroyed[Register::number_of_registers];
+  bool freg_destroyed[FloatRegister::number_of_registers];
+  for (int r = 0; r < Register::number_of_registers; r++) {
     reg_destroyed[r] = false;
   }
-  for (int f = 0; f < FloatRegisterImpl::number_of_registers; f++) {
+  for (int f = 0; f < FloatRegister::number_of_registers; f++) {
     freg_destroyed[f] = false;
   }
 #endif // ASSERT
@@ -3409,8 +3409,9 @@ void SharedRuntime::montgomery_multiply(jint *a_ints, jint *b_ints, jint *n_ints
   // Make very sure we don't use so much space that the stack might
   // overflow. 512 jints corresponds to an 16384-bit integer and
   // will use here a total of 8k bytes of stack space.
+  int divisor = sizeof(unsigned long) * 4;
+  guarantee(longwords <= 8192 / divisor, "must be");
   int total_allocation = longwords * sizeof (unsigned long) * 4;
-  guarantee(total_allocation <= 8192, "must be");
   unsigned long *scratch = (unsigned long *)alloca(total_allocation);
 
   // Local scratch arrays
@@ -3439,8 +3440,9 @@ void SharedRuntime::montgomery_square(jint *a_ints, jint *n_ints,
   // Make very sure we don't use so much space that the stack might
   // overflow. 512 jints corresponds to an 16384-bit integer and
   // will use here a total of 6k bytes of stack space.
+  int divisor = sizeof(unsigned long) * 3;
+  guarantee(longwords <= (8192 / divisor), "must be");
   int total_allocation = longwords * sizeof (unsigned long) * 3;
-  guarantee(total_allocation <= 8192, "must be");
   unsigned long *scratch = (unsigned long *)alloca(total_allocation);
 
   // Local scratch arrays

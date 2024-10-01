@@ -210,14 +210,25 @@ class CracSHM {
   char _path[128];
 public:
   CracSHM(int id) {
-    int shmpathlen = snprintf(_path, sizeof(_path), "/crac_%d", id);
+    int shmpathlen = snprintf(_path, sizeof(_path), "%s/crac_%d", os::get_temp_directory(), id);
     if (shmpathlen < 0 || sizeof(_path) <= (size_t)shmpathlen) {
       fprintf(stderr, "shmpath is too long: %d\n", shmpathlen);
     }
   }
 
-  int open(int mode);
-  void unlink();
+  int open(int flags) {
+    int fd = os::open(_path, flags, 0600);
+    if (-1 == fd) {
+      log_error(crac)("Cannot %s shared object %s: %s", flags & O_CREAT ? "create" : "open", _path, os::strerror(errno));
+    }
+    return fd;
+  }
+
+  void unlink() {
+    if (::remove(_path)) {
+      log_error(crac)("Cannot remove shared object %s: %s", _path, os::strerror(errno));
+    }
+  }
 };
 
 #endif //SHARE_RUNTIME_CRAC_STRUCTS_HPP

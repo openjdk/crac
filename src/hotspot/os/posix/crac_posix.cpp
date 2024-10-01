@@ -29,18 +29,6 @@
 
 #include <sys/mman.h>
 
-int CracSHM::open(int mode) {
-  int shmfd = shm_open(_path, mode, 0600);
-  if (-1 == shmfd) {
-    perror("shm_open");
-  }
-  return shmfd;
-}
-
-void CracSHM::unlink() {
-  shm_unlink(_path);
-}
-
 void crac::reset_time_counters() {
   os::Posix::reset_time_counters();
 }

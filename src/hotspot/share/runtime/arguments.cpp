@@ -566,6 +566,7 @@ static SpecialFlag const special_jvm_flags[] = {
   { "CRTraceStartupTime",           JDK_Version::jdk(24), JDK_Version::undefined(), JDK_Version::undefined() },
   { "CRDoThrowCheckpointException", JDK_Version::jdk(24), JDK_Version::undefined(), JDK_Version::undefined() },
   { "CRPauseOnCheckpointError",     JDK_Version::jdk(24), JDK_Version::undefined(), JDK_Version::undefined() },
+  { "CRTrace",                      JDK_Version::undefined(), JDK_Version::jdk(24), JDK_Version::undefined() },
 
   { nullptr, JDK_Version(0), JDK_Version(0) }
 };

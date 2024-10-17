@@ -27,6 +27,7 @@ public abstract class JDKFdResource implements JDKResource {
     static volatile boolean stacktraceHintPrinted = false;
     static volatile boolean warningSuppressionHintPrinted = false;
 
+    @SuppressWarnings("this-escape")
     public JDKFdResource() {
         stackTraceHolder = COLLECT_FD_STACKTRACES ?
             // About the timestamp: we cannot format it nicely since this

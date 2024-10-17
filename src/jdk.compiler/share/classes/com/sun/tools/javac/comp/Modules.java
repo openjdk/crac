@@ -117,6 +117,7 @@ import com.sun.tools.javac.code.Kinds;
 import static com.sun.tools.javac.code.Kinds.Kind.ERR;
 import static com.sun.tools.javac.code.Kinds.Kind.MDL;
 import static com.sun.tools.javac.code.Kinds.Kind.MTH;
+import com.sun.tools.javac.code.Lint;
 
 import com.sun.tools.javac.code.Symbol.ModuleResolutionFlags;
 
@@ -134,6 +135,7 @@ public class Modules extends JCTree.Visitor {
     private static final String ALL_SYSTEM = "ALL-SYSTEM";
     private static final String ALL_MODULE_PATH = "ALL-MODULE-PATH";
 
+    private final Lint lint;
     private final Log log;
     private final Names names;
     private final Symtab syms;
@@ -185,6 +187,7 @@ public class Modules extends JCTree.Visitor {
     protected Modules(Context context) {
         context.put(Modules.class, this);
         log = Log.instance(context);
+        lint = Lint.instance(context);
         names = Names.instance(context);
         syms = Symtab.instance(context);
         attr = Attr.instance(context);
@@ -327,6 +330,7 @@ public class Modules extends JCTree.Visitor {
             } else {
                 sym = syms.enterModule(name);
                 if (sym.module_info.sourcefile != null && sym.module_info.sourcefile != toplevel.sourcefile) {
+                    decl.sym = syms.errModule;
                     log.error(decl.pos(), Errors.DuplicateModule(sym));
                     return;
                 }
@@ -1351,13 +1355,15 @@ public class Modules extends JCTree.Visitor {
                 .forEach(result::add);
         }
 
-        String incubatingModules = filterAlreadyWarnedIncubatorModules(result.stream()
-                .filter(msym -> msym.resolutionFlags.contains(ModuleResolutionFlags.WARN_INCUBATING))
-                .map(msym -> msym.name.toString()))
-                .collect(Collectors.joining(","));
+        if (lint.isEnabled(LintCategory.INCUBATING)) {
+            String incubatingModules = filterAlreadyWarnedIncubatorModules(result.stream()
+                    .filter(msym -> msym.resolutionFlags.contains(ModuleResolutionFlags.WARN_INCUBATING))
+                    .map(msym -> msym.name.toString()))
+                    .collect(Collectors.joining(","));
 
-        if (!incubatingModules.isEmpty()) {
-            log.warning(Warnings.IncubatingModules(incubatingModules));
+            if (!incubatingModules.isEmpty()) {
+                log.warning(Warnings.IncubatingModules(incubatingModules));
+            }
         }
 
         allModules = result;
@@ -1593,6 +1599,9 @@ public class Modules extends JCTree.Visitor {
                 addVisiblePackages(msym, seen, exportsFrom, exports);
             }
         });
+
+        //module readability is reflexive:
+        msym.readModules.add(msym);
     }
 
     private void addVisiblePackages(ModuleSymbol msym,

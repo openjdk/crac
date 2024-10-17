@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1997, 2023, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 1997, 2024, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -23,6 +23,7 @@
  */
 
 #include "precompiled.hpp"
+#include "cds/cdsConfig.hpp"
 #include "cds/metaspaceShared.hpp"
 #include "classfile/javaClasses.hpp"
 #include "classfile/moduleEntry.hpp"
@@ -33,13 +34,21 @@
 #include "memory/metaspaceClosure.hpp"
 #include "memory/resourceArea.hpp"
 #include "memory/universe.hpp"
-#include "oops/arrayKlass.hpp"
+#include "oops/arrayKlass.inline.hpp"
 #include "oops/arrayOop.hpp"
 #include "oops/instanceKlass.hpp"
 #include "oops/klass.inline.hpp"
 #include "oops/objArrayOop.hpp"
 #include "oops/oop.inline.hpp"
 #include "runtime/handles.inline.hpp"
+
+void* ArrayKlass::operator new(size_t size, ClassLoaderData* loader_data, size_t word_size, TRAPS) throw() {
+  return Metaspace::allocate(loader_data, word_size, MetaspaceObj::ClassType, true, THREAD);
+}
+
+ArrayKlass::ArrayKlass() {
+  assert(CDSConfig::is_dumping_static_archive() || CDSConfig::is_using_archive(), "only for CDS");
+}
 
 int ArrayKlass::static_size(int header_size) {
   // size of an array klass object
@@ -116,13 +125,66 @@ void ArrayKlass::complete_create_array_klass(ArrayKlass* k, Klass* super_klass, 
   java_lang_Class::create_mirror(k, Handle(THREAD, k->class_loader()), Handle(THREAD, module), Handle(), Handle(), CHECK);
 }
 
+ArrayKlass* ArrayKlass::array_klass(int n, TRAPS) {
+
+  assert(dimension() <= n, "check order of chain");
+  int dim = dimension();
+  if (dim == n) return this;
+
+  // lock-free read needs acquire semantics
+  if (higher_dimension_acquire() == nullptr) {
+
+    // Ensure atomic creation of higher dimensions
+    RecursiveLocker rl(MultiArray_lock, THREAD);
+
+    if (higher_dimension() == nullptr) {
+      // Create multi-dim klass object and link them together
+      ObjArrayKlass* ak =
+          ObjArrayKlass::allocate_objArray_klass(class_loader_data(), dim + 1, this, CHECK_NULL);
+      // use 'release' to pair with lock-free load
+      release_set_higher_dimension(ak);
+      assert(ak->lower_dimension() == this, "lower dimension mismatch");
+    }
+  }
+
+  ObjArrayKlass* ak = higher_dimension();
+  assert(ak != nullptr, "should be set");
+  THREAD->check_possible_safepoint();
+  return ak->array_klass(n, THREAD);
+}
+
+ArrayKlass* ArrayKlass::array_klass_or_null(int n) {
+
+  assert(dimension() <= n, "check order of chain");
+  int dim = dimension();
+  if (dim == n) return this;
+
+  // lock-free read needs acquire semantics
+  if (higher_dimension_acquire() == nullptr) {
+    return nullptr;
+  }
+
+  ObjArrayKlass *ak = higher_dimension();
+  return ak->array_klass_or_null(n);
+}
+
+ArrayKlass* ArrayKlass::array_klass(TRAPS) {
+  return array_klass(dimension() +  1, THREAD);
+}
+
+ArrayKlass* ArrayKlass::array_klass_or_null() {
+  return array_klass_or_null(dimension() +  1);
+}
+
+
 GrowableArray<Klass*>* ArrayKlass::compute_secondary_supers(int num_extra_slots,
                                                             Array<InstanceKlass*>* transitive_interfaces) {
   // interfaces = { cloneable_klass, serializable_klass };
   assert(num_extra_slots == 0, "sanity of primitive array type");
   assert(transitive_interfaces == nullptr, "sanity");
   // Must share this for correct bootstrapping!
-  set_secondary_supers(Universe::the_array_interfaces_array());
+  set_secondary_supers(Universe::the_array_interfaces_array(),
+                       Universe::the_array_interfaces_bitmap());
   return nullptr;
 }
 
@@ -175,7 +237,6 @@ void ArrayKlass::remove_java_mirror() {
 }
 
 void ArrayKlass::restore_unshareable_info(ClassLoaderData* loader_data, Handle protection_domain, TRAPS) {
-  assert(loader_data == ClassLoaderData::the_null_class_loader_data(), "array classes belong to null loader");
   Klass::restore_unshareable_info(loader_data, protection_domain, CHECK);
   // Klass recreates the component mirror also
 

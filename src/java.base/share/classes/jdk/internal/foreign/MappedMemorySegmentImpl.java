@@ -35,7 +35,7 @@ import jdk.internal.misc.ScopedMemoryAccess;
  * memory mapped segment, such as the file descriptor associated with the mapping. This information is crucial
  * in order to correctly reconstruct a byte buffer object from the segment (see {@link #makeByteBuffer()}).
  */
-public final class MappedMemorySegmentImpl extends NativeMemorySegmentImpl {
+final class MappedMemorySegmentImpl extends NativeMemorySegmentImpl {
 
     private final UnmapperProxy unmapper;
 
@@ -48,8 +48,7 @@ public final class MappedMemorySegmentImpl extends NativeMemorySegmentImpl {
 
     @Override
     ByteBuffer makeByteBuffer() {
-        return NIO_ACCESS.newMappedByteBuffer(unmapper, min, (int)length, null,
-                scope == MemorySessionImpl.GLOBAL ? null : this);
+        return NIO_ACCESS.newMappedByteBuffer(unmapper, min, (int)length, null, this);
     }
 
     @Override
@@ -73,23 +72,28 @@ public final class MappedMemorySegmentImpl extends NativeMemorySegmentImpl {
 
     public void load() {
         if (unmapper != null) {
-            SCOPED_MEMORY_ACCESS.load(sessionImpl(), min, unmapper.isSync(), length);
+            SCOPED_MEMORY_ACCESS.load(sessionImpl(), NIO_ACCESS.mappedMemoryUtils(),
+                    min, unmapper.isSync(), length);
         }
     }
 
     public void unload() {
         if (unmapper != null) {
-            SCOPED_MEMORY_ACCESS.unload(sessionImpl(), min, unmapper.isSync(), length);
+            SCOPED_MEMORY_ACCESS.unload(sessionImpl(), NIO_ACCESS.mappedMemoryUtils(),
+                    min, unmapper.isSync(), length);
         }
     }
 
     public boolean isLoaded() {
-        return unmapper == null || SCOPED_MEMORY_ACCESS.isLoaded(sessionImpl(), min, unmapper.isSync(), length);
+        return unmapper == null ||
+                SCOPED_MEMORY_ACCESS.isLoaded(sessionImpl(),
+                        NIO_ACCESS.mappedMemoryUtils(), min, unmapper.isSync(), length);
     }
 
     public void force() {
         if (unmapper != null) {
-            SCOPED_MEMORY_ACCESS.force(sessionImpl(), unmapper.fileDescriptor(), min, unmapper.isSync(), 0, length);
+            SCOPED_MEMORY_ACCESS.force(sessionImpl(), NIO_ACCESS.mappedMemoryUtils(),
+                    unmapper.fileDescriptor(), min, unmapper.isSync(), 0, length);
         }
     }
 

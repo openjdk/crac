@@ -31,8 +31,8 @@
 #include "runtime/vmOperation.hpp"
 
 #ifdef LINUX
-#include "attachListener_linux.hpp"
-#include "linuxAttachOperation.hpp"
+#include "attachListener_posix.hpp"
+#include "posixAttachOperation.hpp"
 #include "services/attachListener.hpp"
 #endif
 
@@ -166,7 +166,7 @@ class VM_Crac: public VM_Operation {
   CracRestoreParameters _restore_parameters;
   outputStream* _ostream;
 #if defined(LINUX) && INCLUDE_SERVICES
-  LinuxAttachOperation* _attach_op;
+  PosixAttachOperation* _attach_op;
 #endif // LINUX && INCLUDE_SERVICES
 
 public:
@@ -178,7 +178,7 @@ public:
     _restore_parameters(),
     _ostream(jcmd_stream ? jcmd_stream : tty)
 #if defined(LINUX) && INCLUDE_SERVICES
-    , _attach_op(jcmd_stream ? LinuxAttachListener::get_current_op() : NULL)
+    , _attach_op(jcmd_stream ? PosixAttachListener::get_current_op() : NULL)
 #endif // LINUX && INCLUDE_SERVICES
   { }
 

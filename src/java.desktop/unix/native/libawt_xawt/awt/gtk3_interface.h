@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2005, 2023, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2005, 2024, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -180,8 +180,6 @@ typedef enum _cairo_status {
 } cairo_status_t;
 
 /* We define all structure pointers to be void* */
-typedef void GdkPixbuf;
-typedef void GMainContext;
 typedef void GVfs;
 
 typedef void GdkColormap;
@@ -528,6 +526,30 @@ static void (*fp_gdk_draw_rectangle)(GdkDrawable*, GdkGC*, gboolean,
         gint, gint, gint, gint);
 static GdkPixbuf *(*fp_gdk_pixbuf_new)(GdkColorspace colorspace,
         gboolean has_alpha, int bits_per_sample, int width, int height);
+
+static GdkPixbuf *(*fp_gdk_pixbuf_new_from_data)(
+        const guchar *data,
+        GdkColorspace colorspace,
+        gboolean has_alpha,
+        int bits_per_sample,
+        int width,
+        int height,
+        int rowstride,
+        GdkPixbufDestroyNotify destroy_fn,
+        gpointer destroy_fn_data
+);
+
+static void (*fp_gdk_pixbuf_copy_area) (
+        const GdkPixbuf* src_pixbuf,
+        int src_x,
+        int src_y,
+        int width,
+        int height,
+        GdkPixbuf* dest_pixbuf,
+        int dest_x,
+        int dest_y
+);
+
 static void (*fp_gdk_drawable_get_size)(GdkDrawable *drawable,
         gint* width, gint* height);
 static gboolean (*fp_gtk_init_check)(int* argc, char** argv);
@@ -757,6 +779,9 @@ static GString *(*fp_g_string_new)(const gchar *init);
 static GString *(*fp_g_string_erase)(GString *string,
                                      gssize pos,
                                      gssize len);
+
+static GString *(*fp_g_string_set_size)(GString* string,
+                                        gsize len);
 
 static gchar *(*fp_g_string_free)(GString *string,
                                   gboolean free_segment);

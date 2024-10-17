@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2007, 2023, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2007, 2024, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -25,7 +25,7 @@
  * @test
  * @bug 4290801 4692419 4693631 5101540 5104960 6296410 6336600 6371531
  *      6488442 7036905 8008577 8039317 8074350 8074351 8150324 8167143
- *      8264792
+ *      8264792 8334653
  * @summary Basic tests for Currency class.
  * @modules java.base/java.util:open
  *          jdk.localedata
@@ -59,7 +59,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 
 public class CurrencyTest {
 
-    // 'tablea1.txt' should be up-to-date before testing
+    // 'ISO4217-list-one.txt' should be up-to-date before testing
     @Test
     public void dataVersionTest() {
         CheckDataVersion.check();
@@ -80,14 +80,31 @@ public class CurrencyTest {
 
         // Calling getInstance() with an invalid currency code should throw an IAE
         @ParameterizedTest
-        @MethodSource("invalidCurrencies")
+        @MethodSource("non4217Currencies")
         public void invalidCurrencyTest(String currencyCode) {
-            assertThrows(IllegalArgumentException.class, () ->
+            IllegalArgumentException ex = assertThrows(IllegalArgumentException.class, () ->
                     Currency.getInstance(currencyCode), "getInstance() did not throw IAE");
+            assertEquals("The input currency code is not a" +
+                    " valid ISO 4217 code", ex.getMessage());
         }
 
-        private static Stream<String> invalidCurrencies() {
-            return Stream.of("AQD", "US$", "\u20AC");
+        private static Stream<String> non4217Currencies() {
+            return Stream.of("AQD", "US$");
+        }
+
+        // Calling getInstance() with a currency code not 3 characters long should throw
+        // an IAE
+        @ParameterizedTest
+        @MethodSource("invalidLengthCurrencies")
+        public void invalidCurrencyLengthTest(String currencyCode) {
+            IllegalArgumentException ex = assertThrows(IllegalArgumentException.class, () ->
+                    Currency.getInstance(currencyCode), "getInstance() did not throw IAE");
+            assertEquals("The input currency code must have a length of 3" +
+                    " characters", ex.getMessage());
+        }
+
+        private static Stream<String> invalidLengthCurrencies() {
+            return Stream.of("\u20AC", "", "12345");
         }
     }
 
@@ -144,7 +161,10 @@ public class CurrencyTest {
                         ctryLength == 3 || // UN M.49 code
                         ctryCode.matches("AA|Q[M-Z]|X[A-JL-Z]|ZZ" + // user defined codes, excluding "XK" (Kosovo)
                                 "AC|CP|DG|EA|EU|FX|IC|SU|TA|UK")) { // exceptional reservation codes
-                    assertThrows(IllegalArgumentException.class, () -> Currency.getInstance(locale), "Did not throw IAE");
+                    IllegalArgumentException ex = assertThrows(IllegalArgumentException.class,
+                            () -> Currency.getInstance(locale), "Did not throw IAE");
+                    assertEquals("The country of the input locale is not a" +
+                            " valid ISO 3166 country code", ex.getMessage());
                 } else {
                     goodCountries++;
                     Currency currency = Currency.getInstance(locale);
@@ -163,8 +183,10 @@ public class CurrencyTest {
         // Check an invalid country code
         @Test
         public void invalidCountryTest() {
-            assertThrows(IllegalArgumentException.class, ()->
-                    Currency.getInstance(Locale.of("", "EU")), "Did not throw IAE");
+            IllegalArgumentException ex = assertThrows(IllegalArgumentException.class,
+                    ()-> Currency.getInstance(Locale.of("", "EU")), "Did not throw IAE");
+            assertEquals("The country of the input locale is not a valid" +
+                    " ISO 3166 country code", ex.getMessage());
         }
 
         // Ensure a selection of countries have the expected currency

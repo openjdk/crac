@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998, 2023, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 1998, 2024, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -30,6 +30,7 @@
 #include "memory/allocation.hpp"
 #include "memory/iterator.hpp"
 #include "oops/oopsHierarchy.hpp"
+#include "utilities/checkedCast.hpp"
 #include "utilities/growableArray.hpp"
 
 // Interface for generating the frame map for compiled code.  A frame map
@@ -334,7 +335,10 @@ private:
   address data() const { return (address) this + sizeof(*this) + sizeof(ImmutableOopMapPair) * _count; }
 
 public:
+  void operator delete(void* p);
+
   ImmutableOopMapSet(const OopMapSet* oopmap_set, int size) : _count(oopmap_set->size()), _size(size) {}
+  ~ImmutableOopMapSet() = default;
 
   ImmutableOopMap* oopmap_at_offset(int offset) const {
     assert(offset >= 0 && offset < _size, "must be within boundaries");
@@ -407,7 +411,7 @@ private:
 
     Mapping() : _kind(OOPMAP_UNKNOWN), _offset(-1), _size(-1), _map(nullptr) {}
 
-    void set(kind_t kind, int offset, int size, const OopMap* map = 0, const OopMap* other = 0) {
+    void set(kind_t kind, int offset, int size, const OopMap* map, const OopMap* other = nullptr) {
       _kind = kind;
       _offset = offset;
       _size = size;

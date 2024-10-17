@@ -1119,7 +1119,7 @@ public class SctpChannelImpl extends SctpChannel
         loadSctpLibrary();
     }
 
-    @SuppressWarnings("removal")
+    @SuppressWarnings({"removal", "restricted"})
     private static void loadSctpLibrary() {
         IOUtil.load();   /* loads nio & net native libraries */
         AccessController.doPrivileged(

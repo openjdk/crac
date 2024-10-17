@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1997, 2023, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 1997, 2024, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -150,6 +150,9 @@ JVM_ActiveProcessorCount(void);
 JNIEXPORT jboolean JNICALL
 JVM_IsUseContainerSupport(void);
 
+JNIEXPORT jboolean JNICALL
+JVM_IsContainerized(void);
+
 JNIEXPORT void * JNICALL
 JVM_LoadZipLibrary();
 
@@ -177,6 +180,9 @@ JVM_IsContinuationsSupported(void);
 JNIEXPORT jboolean JNICALL
 JVM_IsForeignLinkerSupported(void);
 
+JNIEXPORT jboolean JNICALL
+JVM_IsStaticallyLinked(void);
+
 JNIEXPORT void JNICALL
 JVM_InitializeFromArchive(JNIEnv* env, jclass cls);
 
@@ -197,14 +203,8 @@ JVM_LookupLambdaProxyClassFromArchive(JNIEnv* env, jclass caller,
                                       jobject implementationMember,
                                       jobject dynamicMethodType);
 
-JNIEXPORT jboolean JNICALL
-JVM_IsCDSDumpingEnabled(JNIEnv* env);
-
-JNIEXPORT jboolean JNICALL
-JVM_IsSharingEnabled(JNIEnv* env);
-
-JNIEXPORT jboolean JNICALL
-JVM_IsDumpingClassList(JNIEnv* env);
+JNIEXPORT jint JNICALL
+JVM_GetCDSConfigStatus();
 
 JNIEXPORT jlong JNICALL
 JVM_GetRandomSeedForDumping();
@@ -244,20 +244,22 @@ JVM_GetExtendedNPEMessage(JNIEnv *env, jthrowable throwable);
  * java.lang.StackWalker
  */
 enum {
-  JVM_STACKWALK_FILL_CLASS_REFS_ONLY       = 0x2,
-  JVM_STACKWALK_GET_CALLER_CLASS           = 0x04,
+  JVM_STACKWALK_CLASS_INFO_ONLY            = 0x2,
   JVM_STACKWALK_SHOW_HIDDEN_FRAMES         = 0x20,
   JVM_STACKWALK_FILL_LIVE_STACK_FRAMES     = 0x100
 };
 
+JNIEXPORT void JNICALL
+JVM_ExpandStackFrameInfo(JNIEnv *env, jobject obj);
+
 JNIEXPORT jobject JNICALL
-JVM_CallStackWalk(JNIEnv *env, jobject stackStream, jlong mode,
+JVM_CallStackWalk(JNIEnv *env, jobject stackStream, jint mode,
                   jint skip_frames, jobject contScope, jobject cont,
-                  jint frame_count, jint start_index, jobjectArray frames);
+                  jint buffer_size, jint start_index, jobjectArray frames);
 
 JNIEXPORT jint JNICALL
-JVM_MoreStackWalk(JNIEnv *env, jobject stackStream, jlong mode, jlong anchor,
-                  jint frame_count, jint start_index,
+JVM_MoreStackWalk(JNIEnv *env, jobject stackStream, jint mode, jlong anchor,
+                  jint last_batch_count, jint buffer_size, jint start_index,
                   jobjectArray frames);
 
 JNIEXPORT void JNICALL
@@ -295,9 +297,6 @@ JVM_HoldsLock(JNIEnv *env, jclass threadClass, jobject obj);
 
 JNIEXPORT jobject JNICALL
 JVM_GetStackTrace(JNIEnv *env, jobject thread);
-
-JNIEXPORT void JNICALL
-JVM_DumpAllStacks(JNIEnv *env, jclass unused);
 
 JNIEXPORT jobjectArray JNICALL
 JVM_GetAllThreads(JNIEnv *env, jclass dummy);
@@ -553,12 +552,6 @@ JVM_GetClassInterfaces(JNIEnv *env, jclass cls);
 JNIEXPORT jboolean JNICALL
 JVM_IsInterface(JNIEnv *env, jclass cls);
 
-JNIEXPORT jobjectArray JNICALL
-JVM_GetClassSigners(JNIEnv *env, jclass cls);
-
-JNIEXPORT void JNICALL
-JVM_SetClassSigners(JNIEnv *env, jclass cls, jobjectArray signers);
-
 JNIEXPORT jobject JNICALL
 JVM_GetProtectionDomain(JNIEnv *env, jclass cls);
 
@@ -778,12 +771,6 @@ JVM_DesiredAssertionStatus(JNIEnv *env, jclass unused, jclass cls);
  */
 JNIEXPORT jobject JNICALL
 JVM_AssertionStatusDirectives(JNIEnv *env, jclass unused);
-
-/*
- * java.util.concurrent.atomic.AtomicLong
- */
-JNIEXPORT jboolean JNICALL
-JVM_SupportsCX8(void);
 
 /*
  * java.lang.ref.Finalizer
@@ -1156,7 +1143,10 @@ JNIEXPORT void JNICALL
 JVM_VirtualThreadUnmount(JNIEnv* env, jobject vthread, jboolean hide);
 
 JNIEXPORT void JNICALL
-JVM_VirtualThreadHideFrames(JNIEnv* env, jobject vthread, jboolean hide);
+JVM_VirtualThreadHideFrames(JNIEnv* env, jclass clazz, jboolean hide);
+
+JNIEXPORT void JNICALL
+JVM_VirtualThreadDisableSuspend(JNIEnv* env, jclass clazz, jboolean enter);
 
 /*
  * Core reflection support.

@@ -150,7 +150,7 @@ static jstring format_string(JNIEnv *env, struct stat *st, const char *fmt, ...)
     va_list va;
 
     va_start(va, fmt);
-    int len = vsnprintf(details, sizeof(details), fmt, va);
+    vsnprintf(details, sizeof(details), fmt, va);
     va_end(va);
 
     // ensure terminated string

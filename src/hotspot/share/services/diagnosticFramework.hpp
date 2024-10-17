@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2011, 2023, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2011, 2024, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -67,7 +67,7 @@ public:
   const char* cmd_addr() const    { return _cmd; }
   size_t cmd_len() const          { return _cmd_len; }
   bool is_empty() const           { return _cmd_len == 0; }
-  bool is_executable() const      { return is_empty() || _cmd[0] != '#'; }
+  bool is_executable() const      { return !is_empty() && _cmd[0] != '#'; }
   bool is_stop() const            { return !is_empty() && strncmp("stop", _cmd, _cmd_len) == 0; }
 };
 
@@ -140,13 +140,12 @@ public:
   : _name(name), _description(description), _impact(impact), _permission(permission),
     _num_arguments(num_arguments), _is_enabled(enabled) {}
   const char* name() const          { return _name; }
+  bool name_equals(const char* cmd_name) const;
   const char* description() const   { return _description; }
   const char* impact() const        { return _impact; }
   const JavaPermission& permission() const { return _permission; }
   int num_arguments() const         { return _num_arguments; }
   bool is_enabled() const           { return _is_enabled; }
-
-  static bool by_name(void* name, DCmdInfo* info);
 };
 
 // A DCmdArgumentInfo instance provides a description of a diagnostic command
@@ -313,6 +312,9 @@ public:
   // management.cpp every time.
   static void register_dcmds();
 
+  // Helper method to substitute help options "<cmd> -h|-help|--help"
+  // for "help <cmd>".
+  static bool reorder_help_cmd(CmdLine line, stringStream& updated_line);
 };
 
 class DCmdWithParser : public DCmd {

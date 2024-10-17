@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2011, 2023, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2011, 2024, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -64,6 +64,7 @@ import sun.awt.AWTAccessor;
 import sun.awt.AWTAccessor.ComponentAccessor;
 import sun.awt.AWTAccessor.WindowAccessor;
 import sun.java2d.SurfaceData;
+import sun.lwawt.LWKeyboardFocusManagerPeer;
 import sun.lwawt.LWLightweightFramePeer;
 import sun.lwawt.LWToolkit;
 import sun.lwawt.LWWindowPeer;
@@ -667,6 +668,44 @@ public class CPlatformWindow extends CFRetainedResource implements PlatformWindo
             execute(CPlatformWindow::nativeSetNSWindowLocationByPlatform);
         }
 
+        // Manage the extended state when showing
+        if (visible) {
+                /* Frame or Dialog should be set property WINDOW_FULLSCREENABLE to true if the
+                Frame or Dialog is resizable.
+                */
+            final boolean resizable = (target instanceof Frame) ? ((Frame)target).isResizable() :
+                    ((target instanceof Dialog) ? ((Dialog)target).isResizable() : false);
+            if (resizable) {
+                setCanFullscreen(true);
+            }
+
+            // Apply the extended state as expected in shared code
+            if (target instanceof Frame) {
+                if (!wasMaximized && isMaximized()) {
+                    // setVisible could have changed the native maximized state
+                    deliverZoom(true);
+                } else {
+                    int frameState = ((Frame)target).getExtendedState();
+                    if ((frameState & Frame.ICONIFIED) != 0) {
+                        // Treat all state bit masks with ICONIFIED bit as ICONIFIED state.
+                        frameState = Frame.ICONIFIED;
+                    }
+
+                    switch (frameState) {
+                        case Frame.ICONIFIED:
+                            execute(CWrapper.NSWindow::miniaturize);
+                            break;
+                        case Frame.MAXIMIZED_BOTH:
+                            maximize();
+                            break;
+                        default: // NORMAL
+                            unmaximize(); // in case it was maximized, otherwise this is a no-op
+                            break;
+                    }
+                }
+            }
+        }
+
         // Actually show or hide the window
         LWWindowPeer blocker = (peer == null)? null : peer.getBlocker();
         if (blocker == null || !visible) {
@@ -726,44 +765,6 @@ public class CPlatformWindow extends CFRetainedResource implements PlatformWindo
             });
         }
         this.visible = visible;
-
-        // Manage the extended state when showing
-        if (visible) {
-            /* Frame or Dialog should be set property WINDOW_FULLSCREENABLE to true if the
-            Frame or Dialog is resizable.
-            **/
-            final boolean resizable = (target instanceof Frame) ? ((Frame)target).isResizable() :
-            ((target instanceof Dialog) ? ((Dialog)target).isResizable() : false);
-            if (resizable) {
-                setCanFullscreen(true);
-            }
-
-            // Apply the extended state as expected in shared code
-            if (target instanceof Frame) {
-                if (!wasMaximized && isMaximized()) {
-                    // setVisible could have changed the native maximized state
-                    deliverZoom(true);
-                } else {
-                    int frameState = ((Frame)target).getExtendedState();
-                    if ((frameState & Frame.ICONIFIED) != 0) {
-                        // Treat all state bit masks with ICONIFIED bit as ICONIFIED state.
-                        frameState = Frame.ICONIFIED;
-                    }
-
-                    switch (frameState) {
-                        case Frame.ICONIFIED:
-                            execute(CWrapper.NSWindow::miniaturize);
-                            break;
-                        case Frame.MAXIMIZED_BOTH:
-                            maximize();
-                            break;
-                        default: // NORMAL
-                            unmaximize(); // in case it was maximized, otherwise this is a no-op
-                            break;
-                    }
-                }
-            }
-        }
 
         nativeSynthesizeMouseEnteredExitedEvents();
 
@@ -1023,7 +1024,6 @@ public class CPlatformWindow extends CFRetainedResource implements PlatformWindo
                     // let's return into the normal states first
                     execute(CWrapper.NSWindow::deminiaturize);
                     waitForWindowState(Frame.NORMAL);
-
                 }
                 maximize();
                 break;
@@ -1057,6 +1057,11 @@ public class CPlatformWindow extends CFRetainedResource implements PlatformWindo
         }
 
         execute(ptr -> nativeSetEnabled(ptr, !blocked));
+
+        Window currFocus = LWKeyboardFocusManagerPeer.getInstance().getCurrentFocusedWindow();
+        if (!blocked && (target == currFocus)) {
+            requestWindowFocus();
+        }
         checkBlockingAndOrder();
     }
 

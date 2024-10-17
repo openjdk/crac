@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2000, 2023, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2000, 2024, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -60,6 +60,8 @@ import static java.net.StandardProtocolFamily.INET6;
 import static java.net.StandardProtocolFamily.UNIX;
 
 import jdk.internal.crac.JDKSocketResource;
+import jdk.internal.event.SocketReadEvent;
+import jdk.internal.event.SocketWriteEvent;
 import sun.net.ConnectionResetException;
 import sun.net.NetHooks;
 import sun.net.ext.ExtendedSocketOptions;
@@ -403,8 +405,7 @@ class SocketChannelImpl
         throw new SocketException("Connection reset");
     }
 
-    @Override
-    public int read(ByteBuffer buf) throws IOException {
+    private int implRead(ByteBuffer buf) throws IOException {
         Objects.requireNonNull(buf);
 
         readLock.lock();
@@ -445,8 +446,7 @@ class SocketChannelImpl
         }
     }
 
-    @Override
-    public long read(ByteBuffer[] dsts, int offset, int length)
+    private long implRead(ByteBuffer[] dsts, int offset, int length)
         throws IOException
     {
         Objects.checkFromIndexSize(offset, length, dsts.length);
@@ -487,6 +487,31 @@ class SocketChannelImpl
         } finally {
             readLock.unlock();
         }
+    }
+
+    @Override
+    public int read(ByteBuffer buf) throws IOException {
+        if (!SocketReadEvent.enabled()) {
+            return implRead(buf);
+        }
+        long start = SocketReadEvent.timestamp();
+        int nbytes = implRead(buf);
+        SocketReadEvent.offer(start, nbytes, remoteAddress(), 0);
+        return nbytes;
+    }
+
+
+    @Override
+    public long read(ByteBuffer[] dsts, int offset, int length)
+        throws IOException
+    {
+        if (!SocketReadEvent.enabled()) {
+            return implRead(dsts, offset, length);
+        }
+        long start = SocketReadEvent.timestamp();
+        long nbytes = implRead(dsts, offset, length);
+        SocketReadEvent.offer(start, nbytes, remoteAddress(), 0);
+        return nbytes;
     }
 
     /**
@@ -530,8 +555,7 @@ class SocketChannelImpl
         }
     }
 
-    @Override
-    public int write(ByteBuffer buf) throws IOException {
+    private int implWrite(ByteBuffer buf) throws IOException {
         Objects.requireNonNull(buf);
         writeLock.lock();
         try {
@@ -559,8 +583,7 @@ class SocketChannelImpl
         }
     }
 
-    @Override
-    public long write(ByteBuffer[] srcs, int offset, int length)
+    private long implWrite(ByteBuffer[] srcs, int offset, int length)
         throws IOException
     {
         Objects.checkFromIndexSize(offset, length, srcs.length);
@@ -589,6 +612,30 @@ class SocketChannelImpl
         } finally {
             writeLock.unlock();
         }
+    }
+
+    @Override
+    public int write(ByteBuffer buf) throws IOException {
+        if (!SocketWriteEvent.enabled()) {
+            return implWrite(buf);
+        }
+        long start = SocketWriteEvent.timestamp();
+        int nbytes = implWrite(buf);
+        SocketWriteEvent.offer(start, nbytes, remoteAddress());
+        return nbytes;
+    }
+
+    @Override
+    public long write(ByteBuffer[] srcs, int offset, int length)
+        throws IOException
+    {
+        if (!SocketWriteEvent.enabled()) {
+            return implWrite(srcs, offset, length);
+        }
+        long start = SocketWriteEvent.timestamp();
+        long nbytes = implWrite(srcs, offset, length);
+        SocketWriteEvent.offer(start, nbytes, remoteAddress());
+        return nbytes;
     }
 
     /**
@@ -910,6 +957,7 @@ class SocketChannelImpl
             try {
                 writeLock.lock();
                 try {
+                    ensureOpen();
                     boolean blocking = isBlocking();
                     boolean connected = false;
                     try {
@@ -1008,6 +1056,7 @@ class SocketChannelImpl
                     if (isConnected())
                         return true;
 
+                    ensureOpen();
                     boolean blocking = isBlocking();
                     boolean connected = false;
                     try {
@@ -1169,6 +1218,11 @@ class SocketChannelImpl
 
     @Override
     public void kill() {
+        // wait for any read/write operations to complete before trying to close
+        readLock.lock();
+        readLock.unlock();
+        writeLock.lock();
+        writeLock.unlock();
         synchronized (stateLock) {
             if (state == ST_CLOSING) {
                 tryFinishClose();

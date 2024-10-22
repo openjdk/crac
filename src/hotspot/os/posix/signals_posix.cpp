@@ -1169,7 +1169,7 @@ void os::print_siginfo(outputStream* os, const void* si0) {
     const pid_t pid = si->si_pid;
     os->print(", si_pid: %ld", (long) pid);
     if (IS_VALID_PID(pid)) {
-      const pid_t me = getpid();
+      const pid_t me = os::current_process_id();
       if (me == pid) {
         os->print(" (current process)");
       }

@@ -391,7 +391,12 @@ Java_java_lang_ProcessHandleImpl_parent0(JNIEnv *env,
     pid_t pid = (pid_t) jpid;
     pid_t ppid;
 
-    if (pid == getpid()) {
+#ifdef LINUX
+    pid_t mypid = syscall(SYS_getpid);
+#else
+    pid_t mypid = getpid();
+#endif
+    if (pid == mypid) {
         ppid = getppid();
     } else {
         jlong start = 0L;

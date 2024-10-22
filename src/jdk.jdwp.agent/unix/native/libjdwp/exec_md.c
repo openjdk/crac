@@ -26,6 +26,9 @@
 #include <dirent.h>
 #include <errno.h>
 #include <stdlib.h>
+#ifdef LINUX
+#include <sys/syscall.h>
+#endif
 #include <sys/resource.h>
 #include <unistd.h>
 #include <string.h>
@@ -91,9 +94,14 @@ closeDescriptors(void)
 #endif
 
     if ((dp = opendir(FD_DIR)) == NULL) {
+#ifdef LINUX
+        pid_t pid = syscall(SYS_getpid);
+#else
+        pid_t pid = getpid();
+#endif // !LINUX
         ERROR_MESSAGE(("failed to open dir %s while determining"
                        " file descriptors to close for process %d",
-                       FD_DIR, getpid()));
+                       FD_DIR, pid));
         return 0; // failure
     }
 

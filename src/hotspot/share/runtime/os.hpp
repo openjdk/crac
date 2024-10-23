@@ -608,6 +608,7 @@ class os: AllStatic {
   // thread id on Linux/64bit is 64bit, on Windows it's 32bit
   static intx current_thread_id();
   static int current_process_id();
+  static void reset_cached_process_id();
 
   // Short standalone OS sleep routines suitable for slow path spin loop.
   // Ignores safepoints/suspension/Thread.interrupt() (so keep it short).

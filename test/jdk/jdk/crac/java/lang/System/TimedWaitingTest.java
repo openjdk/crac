@@ -46,7 +46,7 @@ import static jdk.test.lib.Asserts.*;
 /**
  * @test TimedWaitingTest checks whether timed waiting does not block when monotonic time runs backwards
  * @requires (os.family == "linux")
- * @requires docker.support
+ * @requires container.support
  * @library /test/lib
  * @build TimedWaitingTest
  * @run driver jdk.test.lib.crac.CracTest

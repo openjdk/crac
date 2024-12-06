@@ -39,7 +39,7 @@ import java.util.concurrent.*;
  * @test
  * @summary Test if InetAddress cache is flushed after checkpoint/restore
  * @requires (os.family == "linux")
- * @requires docker.support
+ * @requires container.support
  * @library /test/lib
  * @build ResolveTest
  * @run driver jdk.test.lib.crac.CracTest

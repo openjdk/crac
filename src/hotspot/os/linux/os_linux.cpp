@@ -2771,7 +2771,7 @@ void os::jvm_path(char *buf, jint buflen) {
   assert(ret, "cannot locate libjvm");
   char *rp = nullptr;
   if (ret && dli_fname[0] != '\0') {
-    rp = os::Posix::realpath(dli_fname, buf, buflen);
+    rp = os::realpath(dli_fname, buf, buflen);
   }
   if (rp == nullptr) {
     return;
@@ -2805,7 +2805,7 @@ void os::jvm_path(char *buf, jint buflen) {
         }
         assert(strstr(p, "/libjvm") == p, "invalid library name");
 
-        rp = os::Posix::realpath(java_home_var, buf, buflen);
+        rp = os::realpath(java_home_var, buf, buflen);
         if (rp == nullptr) {
           return;
         }
@@ -2826,7 +2826,7 @@ void os::jvm_path(char *buf, jint buflen) {
           snprintf(buf + len, buflen-len, "/hotspot/libjvm.so");
         } else {
           // Go back to path of .so
-          rp = os::Posix::realpath(dli_fname, buf, buflen);
+          rp = os::realpath(dli_fname, buf, buflen);
           if (rp == nullptr) {
             return;
           }
@@ -5059,16 +5059,6 @@ int os::open(const char *path, int oflag, int mode) {
 #endif
 
   return fd;
-}
-
-// return current position of file pointer
-jlong os::current_file_offset(int fd) {
-  return (jlong)::lseek(fd, (off_t)0, SEEK_CUR);
-}
-
-// move file pointer to the specified offset
-jlong os::seek_to_file_offset(int fd, jlong offset) {
-  return (jlong)::lseek(fd, (off_t)offset, SEEK_SET);
 }
 
 static jlong slow_thread_cpu_time(Thread *thread, bool user_sys_cpu_time);

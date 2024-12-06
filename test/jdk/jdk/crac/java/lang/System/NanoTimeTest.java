@@ -43,7 +43,7 @@ import static jdk.test.lib.Asserts.*;
 /**
  * @test NanoTimeTest
  * @requires (os.family == "linux")
- * @requires docker.support
+ * @requires container.support
  * @library /test/lib
  * @build NanoTimeTest
  * @run driver jdk.test.lib.crac.CracTest      0 true

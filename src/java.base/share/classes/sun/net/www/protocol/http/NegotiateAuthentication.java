@@ -153,7 +153,7 @@ class NegotiateAuthentication extends AuthenticationInfo {
 
     @Override
     protected boolean useAuthCache() {
-        return super.useAuthCache() && cacheSPNEGO;
+        return false;
     }
 
     /**
@@ -243,6 +243,22 @@ class NegotiateAuthentication extends AuthenticationInfo {
      */
     private byte[] nextToken(byte[] token) throws IOException {
         return negotiator.nextToken(token);
+    }
+
+    /**
+     * Releases any system resources and cryptographic information stored in
+     * the context object and invalidates the context.
+     */
+    @Override
+    public void disposeContext() {
+        if (negotiator != null) {
+            try {
+                negotiator.disposeContext();
+            } catch (IOException ioEx) {
+                //do not rethrow IOException
+            }
+            negotiator = null;
+        }
     }
 
     // MS will send a final WWW-Authenticate even if the status is already

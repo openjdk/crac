@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1997, 2021, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 1997, 2022, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -194,6 +194,8 @@ class MacroAssembler: public Assembler {
   void incrementq(AddressLiteral dst);
 
   // Alignment
+  void align32();
+  void align64();
   void align(int modulus);
   void align(int modulus, int target);
 
@@ -823,6 +825,7 @@ class MacroAssembler: public Assembler {
 
   void testptr(Register src, int32_t imm32) {  LP64_ONLY(testq(src, imm32)) NOT_LP64(testl(src, imm32)); }
   void testptr(Register src1, Address src2) { LP64_ONLY(testq(src1, src2)) NOT_LP64(testl(src1, src2)); }
+  void testptr(Address src, int32_t imm32) {  LP64_ONLY(testq(src, imm32)) NOT_LP64(testl(src, imm32)); }
   void testptr(Register src1, Register src2);
 
   void xorptr(Register dst, Register src) { LP64_ONLY(xorq(dst, src)) NOT_LP64(xorl(dst, src)); }
@@ -962,6 +965,8 @@ private:
   void roundDec(XMMRegister key, int rnum);
   void lastroundDec(XMMRegister key, int rnum);
   void ev_load_key(XMMRegister xmmdst, Register key, int offset, XMMRegister xmm_shuf_mask);
+  void ev_add128(XMMRegister xmmdst, XMMRegister xmmsrc1, XMMRegister xmmsrc2,
+                 int vector_len, KRegister ktmp, Register rscratch = noreg);
 
 public:
   void aesecb_encrypt(Register source_addr, Register dest_addr, Register key, Register len);
@@ -1425,8 +1430,14 @@ public:
   void vpxor(XMMRegister dst, XMMRegister nds, AddressLiteral src, int vector_len, Register scratch_reg = rscratch1);
 
   // Simple version for AVX2 256bit vectors
-  void vpxor(XMMRegister dst, XMMRegister src) { Assembler::vpxor(dst, dst, src, true); }
-  void vpxor(XMMRegister dst, Address src) { Assembler::vpxor(dst, dst, src, true); }
+  void vpxor(XMMRegister dst, XMMRegister src) {
+    assert(UseAVX >= 2, "Should be at least AVX2");
+    Assembler::vpxor(dst, dst, src, AVX_256bit);
+  }
+  void vpxor(XMMRegister dst, Address src) {
+    assert(UseAVX >= 2, "Should be at least AVX2");
+    Assembler::vpxor(dst, dst, src, AVX_256bit);
+  }
 
   void vpermd(XMMRegister dst, XMMRegister nds, XMMRegister src, int vector_len) { Assembler::vpermd(dst, nds, src, vector_len); }
   void vpermd(XMMRegister dst, XMMRegister nds, AddressLiteral src, int vector_len, Register scratch_reg);
@@ -1734,7 +1745,7 @@ public:
 
   void encode_iso_array(Register src, Register dst, Register len,
                         XMMRegister tmp1, XMMRegister tmp2, XMMRegister tmp3,
-                        XMMRegister tmp4, Register tmp5, Register result);
+                        XMMRegister tmp4, Register tmp5, Register result, bool ascii);
 
 #ifdef _LP64
   void add2_with_carry(Register dest_hi, Register dest_lo, Register src1, Register src2);
@@ -1854,7 +1865,11 @@ public:
                          XMMRegister xmm, KRegister mask, Register length,
                          Register temp);
 
+  void fill32(Address dst, XMMRegister xmm);
+
   void fill32_avx(Register dst, int disp, XMMRegister xmm);
+
+  void fill64(Address dst, XMMRegister xmm, bool use64byteVector = false);
 
   void fill64_avx(Register dst, int dis, XMMRegister xmm, bool use64byteVector = false);
 

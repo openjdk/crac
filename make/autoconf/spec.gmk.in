@@ -364,6 +364,9 @@ BUILD_JDK:=@BUILD_JDK@
 CREATE_BUILDJDK:=@CREATE_BUILDJDK@
 EXTERNAL_BUILDJDK:=@EXTERNAL_BUILDJDK@
 
+# Whether the boot jdk jar supports --date=TIMESTAMP
+BOOT_JDK_JAR_SUPPORTS_DATE:=@BOOT_JDK_JAR_SUPPORTS_DATE@
+
 # When compiling Java source to be run by the boot jdk
 # use these extra flags, eg -source 6 -target 6
 BOOT_JDK_SOURCETARGET:=@BOOT_JDK_SOURCETARGET@
@@ -409,6 +412,8 @@ GTEST_FRAMEWORK_SRC := @GTEST_FRAMEWORK_SRC@
 
 # Source file for cacerts
 CACERTS_FILE=@CACERTS_FILE@
+# Source folder for user provided cacerts PEM files 
+CACERTS_SRC=@CACERTS_SRC@
 
 # Enable unlimited crypto policy
 UNLIMITED_CRYPTO=@UNLIMITED_CRYPTO@
@@ -438,7 +443,8 @@ MACOSX_VERSION_MIN=@MACOSX_VERSION_MIN@
 # The highest allowed version of macosx
 MACOSX_VERSION_MAX=@MACOSX_VERSION_MAX@
 
-# The macosx code signing identity to use
+# The macosx code signing configuration
+MACOSX_CODESIGN_MODE:=@MACOSX_CODESIGN_MODE@
 MACOSX_CODESIGN_IDENTITY=@MACOSX_CODESIGN_IDENTITY@
 
 # Toolchain type: gcc, clang, xlc, microsoft...
@@ -647,6 +653,9 @@ JAR = $(JAR_CMD)
 JLINK = $(JLINK_CMD)
 JMOD = $(JMOD_CMD) $(JAVA_TOOL_FLAGS_SMALL)
 
+JTREG_JDK := @JTREG_JDK@
+JTREG_JAVA = @FIXPATH@ $(JTREG_JDK)/bin/java $(JAVA_FLAGS_BIG) $(JAVA_FLAGS)
+
 BUILD_JAVA_FLAGS := @BOOTCYCLE_JVM_ARGS_BIG@
 BUILD_JAVA=@FIXPATH@ $(BUILD_JDK)/bin/java $(BUILD_JAVA_FLAGS)
 BUILD_JAVAC=@FIXPATH@ $(BUILD_JDK)/bin/javac
@@ -698,6 +707,7 @@ CODESIGN:=@CODESIGN@
 CP:=@CP@
 CUT:=@CUT@
 DATE:=@DATE@
+IS_GNU_DATE:=@IS_GNU_DATE@
 DIFF:=@DIFF@
 DIRNAME:=@DIRNAME@
 DSYMUTIL:=@DSYMUTIL@

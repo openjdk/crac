@@ -1293,7 +1293,7 @@ public abstract class SSLContextImpl extends SSLContextSpi {
     }
 
     /*
-     * The SSLContext implementation for customized TLS protocols
+     * The SSLContext implementation for customized DTLS protocols
      *
      * @see SSLContext
      */
@@ -1351,13 +1351,11 @@ public abstract class SSLContextImpl extends SSLContextSpi {
                         ProtocolVersion.DTLS12,
                         ProtocolVersion.DTLS10
                 };
-                if (!client)
-                    return Arrays.asList(candidates);
             } else {
                 // Use the customized TLS protocols.
                 candidates =
                         new ProtocolVersion[customized.size()];
-                candidates = customized.toArray(candidates);
+                candidates = refactored.toArray(candidates);
             }
 
             return getAvailableProtocols(candidates);
@@ -1485,14 +1483,14 @@ final class AbstractTrustManagerWrapper extends X509ExtendedTrustManager
                     String[] peerSupportedSignAlgs =
                             extSession.getLocalSupportedSignatureAlgorithms();
 
-                    constraints = new SSLAlgorithmConstraints(
+                    constraints = SSLAlgorithmConstraints.forSocket(
                                     sslSocket, peerSupportedSignAlgs, true);
                 } else {
                     constraints =
-                            new SSLAlgorithmConstraints(sslSocket, true);
+                            SSLAlgorithmConstraints.forSocket(sslSocket, true);
                 }
             } else {
-                constraints = new SSLAlgorithmConstraints(sslSocket, true);
+                constraints = SSLAlgorithmConstraints.forSocket(sslSocket, true);
             }
 
             checkAlgorithmConstraints(chain, constraints, checkClientTrusted);
@@ -1525,14 +1523,14 @@ final class AbstractTrustManagerWrapper extends X509ExtendedTrustManager
                     String[] peerSupportedSignAlgs =
                             extSession.getLocalSupportedSignatureAlgorithms();
 
-                    constraints = new SSLAlgorithmConstraints(
+                    constraints = SSLAlgorithmConstraints.forEngine(
                                     engine, peerSupportedSignAlgs, true);
                 } else {
                     constraints =
-                            new SSLAlgorithmConstraints(engine, true);
+                            SSLAlgorithmConstraints.forEngine(engine, true);
                 }
             } else {
-                constraints = new SSLAlgorithmConstraints(engine, true);
+                constraints = SSLAlgorithmConstraints.forEngine(engine, true);
             }
 
             checkAlgorithmConstraints(chain, constraints, checkClientTrusted);

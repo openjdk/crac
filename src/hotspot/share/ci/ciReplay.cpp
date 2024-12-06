@@ -103,6 +103,7 @@ class CompileReplay : public StackObj {
   FILE*   _stream;
   Thread* _thread;
   Handle  _protection_domain;
+  bool    _protection_domain_initialized;
   Handle  _loader;
 
   GrowableArray<ciMethodRecord*>     _ci_method_records;
@@ -130,6 +131,7 @@ class CompileReplay : public StackObj {
     _thread = THREAD;
     _loader = Handle(_thread, SystemDictionary::java_system_loader());
     _protection_domain = Handle();
+    _protection_domain_initialized = false;
 
     _stream = fopen(filename, "rt");
     if (_stream == NULL) {
@@ -685,6 +687,18 @@ class CompileReplay : public StackObj {
   void process_instanceKlass(TRAPS) {
     // just load the referenced class
     Klass* k = parse_klass(CHECK);
+    if (!_protection_domain_initialized && k != NULL) {
+      assert(_protection_domain() == NULL, "must be uninitialized");
+      // The first entry is the holder class of the method for which a replay compilation is requested.
+      // Use the same protection domain to load all subsequent classes in order to resolve all classes
+      // in signatures of inlinees. This ensures that inlining can be done as stated in the replay file.
+      _protection_domain = Handle(_thread, k->protection_domain());
+    }
+
+    // Only initialize the protection domain handle with the protection domain of the very first entry.
+    // This also ensures that older replay files work.
+    _protection_domain_initialized = true;
+
   }
 
   // ciInstanceKlass <name> <is_linked> <is_initialized> <length> tag*
@@ -850,6 +864,7 @@ class CompileReplay : public StackObj {
           value = oopFactory::new_longArray(length, CHECK);
         } else if (field_signature[0] == JVM_SIGNATURE_ARRAY &&
                    field_signature[1] == JVM_SIGNATURE_CLASS) {
+          parse_klass(CHECK); // eat up the array class name
           Klass* kelem = resolve_klass(field_signature + 1, CHECK);
           value = oopFactory::new_objArray(kelem, length, CHECK);
         } else {

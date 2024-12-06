@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1994, 2021, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 1994, 2022, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -541,8 +541,7 @@ public final class String
                             offset++;
                             continue;
                         }
-                        if ((b1 == (byte)0xc2 || b1 == (byte)0xc3) &&
-                                offset + 1 < sl) {
+                        if ((b1 & 0xfe) == 0xc2 && offset + 1 < sl) { // b1 either 0xc2 or 0xc3
                             int b2 = bytes[offset + 1];
                             if (!isNotContinuation(b2)) {
                                 dst[dp++] = (byte)decode2(b1, b2);
@@ -564,9 +563,9 @@ public final class String
                     }
                 }
                 if (dp == 0 || dst == null) {
-                    dst = new byte[length << 1];
+                    dst = StringUTF16.newBytesFor(length);
                 } else {
-                    byte[] buf = new byte[length << 1];
+                    byte[] buf = StringUTF16.newBytesFor(length);
                     StringLatin1.inflate(dst, 0, buf, 0, dp);
                     dst = buf;
                 }
@@ -590,7 +589,7 @@ public final class String
                 this.value = Arrays.copyOfRange(bytes, offset, offset + length);
                 this.coder = LATIN1;
             } else {
-                byte[] dst = new byte[length << 1];
+                byte[] dst = StringUTF16.newBytesFor(length);
                 int dp = 0;
                 while (dp < length) {
                     int b = bytes[offset++];
@@ -661,7 +660,13 @@ public final class String
                 offset = 0;
             }
 
-            int caLen = decodeWithDecoder(cd, ca, bytes, offset, length);
+            int caLen;
+            try {
+                caLen = decodeWithDecoder(cd, ca, bytes, offset, length);
+            } catch (CharacterCodingException x) {
+                // Substitution is enabled, so this shouldn't happen
+                throw new Error(x);
+            }
             if (COMPACT_STRINGS) {
                 byte[] bs = StringUTF16.compress(ca, 0, caLen);
                 if (bs != null) {
@@ -698,8 +703,7 @@ public final class String
                         offset++;
                         continue;
                     }
-                    if ((b1 == (byte) 0xc2 || b1 == (byte) 0xc3) &&
-                            offset + 1 < sl) {
+                    if ((b1 & 0xfe) == 0xc2 && offset + 1 < sl) { // b1 either 0xc2 or 0xc3
                         int b2 = bytes[offset + 1];
                         if (!isNotContinuation(b2)) {
                             dst[dp++] = (byte) decode2(b1, b2);
@@ -719,9 +723,9 @@ public final class String
                 }
             }
             if (dp == 0 || dst == null) {
-                dst = new byte[length << 1];
+                dst = StringUTF16.newBytesFor(length);
             } else {
-                byte[] buf = new byte[length << 1];
+                byte[] buf = StringUTF16.newBytesFor(length);
                 StringLatin1.inflate(dst, 0, buf, 0, dp);
                 dst = buf;
             }
@@ -783,7 +787,13 @@ public final class String
                 System.getSecurityManager() != null) {
             src = Arrays.copyOf(src, len);
         }
-        int caLen = decodeWithDecoder(cd, ca, src, 0, src.length);
+        int caLen;
+        try {
+            caLen = decodeWithDecoder(cd, ca, src, 0, src.length);
+        } catch (CharacterCodingException x) {
+            // throw via IAE
+            throw new IllegalArgumentException(x);
+        }
         if (COMPACT_STRINGS) {
             byte[] bs = StringUTF16.compress(ca, 0, caLen);
             if (bs != null) {
@@ -837,7 +847,8 @@ public final class String
         CharsetEncoder ce = cs.newEncoder();
         int len = val.length >> coder;  // assume LATIN1=0/UTF16=1;
         int en = scale(len, ce.maxBytesPerChar());
-        if (ce instanceof ArrayEncoder ae) {
+        // fastpath with ArrayEncoder implies `doReplace`.
+        if (doReplace && ce instanceof ArrayEncoder ae) {
             // fastpath for ascii compatible
             if (coder == LATIN1 &&
                     ae.isASCIICompatible() &&
@@ -847,10 +858,6 @@ public final class String
             byte[] ba = new byte[en];
             if (len == 0) {
                 return ba;
-            }
-            if (doReplace) {
-                ce.onMalformedInput(CodingErrorAction.REPLACE)
-                        .onUnmappableCharacter(CodingErrorAction.REPLACE);
             }
 
             int blen = (coder == LATIN1) ? ae.encodeFromLatin1(val, 0, len, ba)
@@ -1196,21 +1203,16 @@ public final class String
         return dp;
     }
 
-    private static int decodeWithDecoder(CharsetDecoder cd, char[] dst, byte[] src, int offset, int length) {
+    private static int decodeWithDecoder(CharsetDecoder cd, char[] dst, byte[] src, int offset, int length)
+                                            throws CharacterCodingException {
         ByteBuffer bb = ByteBuffer.wrap(src, offset, length);
         CharBuffer cb = CharBuffer.wrap(dst, 0, dst.length);
-        try {
-            CoderResult cr = cd.decode(bb, cb, true);
-            if (!cr.isUnderflow())
-                cr.throwException();
-            cr = cd.flush(cb);
-            if (!cr.isUnderflow())
-                cr.throwException();
-        } catch (CharacterCodingException x) {
-            // Substitution is always enabled,
-            // so this shouldn't happen
-            throw new Error(x);
-        }
+        CoderResult cr = cd.decode(bb, cb, true);
+        if (!cr.isUnderflow())
+            cr.throwException();
+        cr = cd.flush(cb);
+        if (!cr.isUnderflow())
+            cr.throwException();
         return cb.position();
     }
 
@@ -1265,7 +1267,7 @@ public final class String
             return Arrays.copyOf(val, val.length);
 
         int dp = 0;
-        byte[] dst = new byte[val.length << 1];
+        byte[] dst = StringUTF16.newBytesFor(val.length);
         for (byte c : val) {
             if (c < 0) {
                 dst[dp++] = (byte) (0xc0 | ((c & 0xff) >> 6));
@@ -1284,14 +1286,17 @@ public final class String
         int sp = 0;
         int sl = val.length >> 1;
         byte[] dst = new byte[sl * 3];
-        char c;
-        while (sp < sl && (c = StringUTF16.getChar(val, sp)) < '\u0080') {
+        while (sp < sl) {
             // ascii fast loop;
+            char c = StringUTF16.getChar(val, sp);
+            if (c >= '\u0080') {
+                break;
+            }
             dst[dp++] = (byte)c;
             sp++;
         }
         while (sp < sl) {
-            c = StringUTF16.getChar(val, sp++);
+            char c = StringUTF16.getChar(val, sp++);
             if (c < 0x80) {
                 dst[dp++] = (byte)c;
             } else if (c < 0x800) {

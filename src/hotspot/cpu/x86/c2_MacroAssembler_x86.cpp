@@ -602,8 +602,13 @@ void C2_MacroAssembler::fast_lock(Register objReg, Register boxReg, Register tmp
   // Unconditionally set box->_displaced_header = markWord::unused_mark().
   // Without cast to int32_t this style of movptr will destroy r10 which is typically obj.
   movptr(Address(boxReg, 0), (int32_t)intptr_t(markWord::unused_mark().value()));
-  // Intentional fall-through into DONE_LABEL ...
   // Propagate ICC.ZF from CAS above into DONE_LABEL.
+  jcc(Assembler::equal, DONE_LABEL);           // CAS above succeeded; propagate ZF = 1 (success)
+
+  cmpptr(r15_thread, rax);                     // Check if we are already the owner (recursive lock)
+  jcc(Assembler::notEqual, DONE_LABEL);        // If not recursive, ZF = 0 at this point (fail)
+  incq(Address(scrReg, OM_OFFSET_NO_MONITOR_VALUE_TAG(recursions)));
+  xorq(rax, rax); // Set ZF = 1 (success) for recursive lock, denoting locking success
 #endif // _LP64
 #if INCLUDE_RTM_OPT
   } // use_rtm()
@@ -705,10 +710,6 @@ void C2_MacroAssembler::fast_unlock(Register objReg, Register boxReg, Register t
   // Refer to the comments in synchronizer.cpp for how we might encode extra
   // state in _succ so we can avoid fetching EntryList|cxq.
   //
-  // I'd like to add more cases in fast_lock() and fast_unlock() --
-  // such as recursive enter and exit -- but we have to be wary of
-  // I$ bloat, T$ effects and BP$ effects.
-  //
   // If there's no contention try a 1-0 exit.  That is, exit without
   // a costly MEMBAR or CAS.  See synchronizer.cpp for details on how
   // we detect and recover from the race that the 1-0 exit admits.
@@ -756,9 +757,16 @@ void C2_MacroAssembler::fast_unlock(Register objReg, Register boxReg, Register t
   bind (CheckSucc);
 #else // _LP64
   // It's inflated
-  xorptr(boxReg, boxReg);
-  orptr(boxReg, Address(tmpReg, OM_OFFSET_NO_MONITOR_VALUE_TAG(recursions)));
-  jccb  (Assembler::notZero, DONE_LABEL);
+  Label LNotRecursive, LSuccess, LGoSlowPath;
+
+  cmpptr(Address(tmpReg, OM_OFFSET_NO_MONITOR_VALUE_TAG(recursions)), 0);
+  jccb(Assembler::equal, LNotRecursive);
+
+  // Recursive inflated unlock
+  decq(Address(tmpReg, OM_OFFSET_NO_MONITOR_VALUE_TAG(recursions)));
+  jmpb(LSuccess);
+
+  bind(LNotRecursive);
   movptr(boxReg, Address(tmpReg, OM_OFFSET_NO_MONITOR_VALUE_TAG(cxq)));
   orptr(boxReg, Address(tmpReg, OM_OFFSET_NO_MONITOR_VALUE_TAG(EntryList)));
   jccb  (Assembler::notZero, CheckSucc);
@@ -767,7 +775,6 @@ void C2_MacroAssembler::fast_unlock(Register objReg, Register boxReg, Register t
   jmpb  (DONE_LABEL);
 
   // Try to avoid passing control into the slow_path ...
-  Label LSuccess, LGoSlowPath ;
   bind  (CheckSucc);
 
   // The following optional optimization can be elided if necessary
@@ -2087,6 +2094,14 @@ XMMRegister C2_MacroAssembler::get_lane(BasicType typ, XMMRegister dst, XMMRegis
   }
 }
 
+void C2_MacroAssembler::movsxl(BasicType typ, Register dst) {
+  if (typ == T_BYTE) {
+    movsbl(dst, dst);
+  } else if (typ == T_SHORT) {
+    movswl(dst, dst);
+  }
+}
+
 void C2_MacroAssembler::get_elem(BasicType typ, Register dst, XMMRegister src, int elemindex) {
   int esize =  type2aelembytes(typ);
   int elem_per_lane = 16/esize;
@@ -2098,13 +2113,11 @@ void C2_MacroAssembler::get_elem(BasicType typ, Register dst, XMMRegister src, i
       movq(dst, src);
     } else {
       movdl(dst, src);
-      if (typ == T_BYTE)
-        movsbl(dst, dst);
-      else if (typ == T_SHORT)
-        movswl(dst, dst);
+      movsxl(typ, dst);
     }
   } else {
     extract(typ, dst, src, eindex);
+    movsxl(typ, dst);
   }
 }
 
@@ -3915,3 +3928,49 @@ void C2_MacroAssembler::vector_mask_operation(int opc, Register dst, XMMRegister
   }
 }
 #endif
+
+void C2_MacroAssembler::rearrange_bytes(XMMRegister dst, XMMRegister shuffle, XMMRegister src, XMMRegister xtmp1,
+                                        XMMRegister xtmp2, XMMRegister xtmp3, Register rtmp, KRegister ktmp,
+                                        int vlen_enc) {
+  assert(VM_Version::supports_avx512bw(), "");
+  // Byte shuffles are inlane operations and indices are determined using
+  // lower 4 bit of each shuffle lane, thus all shuffle indices are
+  // normalized to index range 0-15. This makes sure that all the multiples
+  // of an index value are placed at same relative position in 128 bit
+  // lane i.e. elements corresponding to shuffle indices 16, 32 and 64
+  // will be 16th element in their respective 128 bit lanes.
+  movl(rtmp, 16);
+  evpbroadcastb(xtmp1, rtmp, vlen_enc);
+
+  // Compute a mask for shuffle vector by comparing indices with expression INDEX < 16,
+  // Broadcast first 128 bit lane across entire vector, shuffle the vector lanes using
+  // original shuffle indices and move the shuffled lanes corresponding to true
+  // mask to destination vector.
+  evpcmpb(ktmp, k0, shuffle, xtmp1, Assembler::lt, true, vlen_enc);
+  evshufi64x2(xtmp2, src, src, 0x0, vlen_enc);
+  evpshufb(dst, ktmp, xtmp2, shuffle, false, vlen_enc);
+
+  // Perform above steps with lane comparison expression as INDEX >= 16 && INDEX < 32
+  // and broadcasting second 128 bit lane.
+  evpcmpb(ktmp, k0, shuffle,  xtmp1, Assembler::nlt, true, vlen_enc);
+  vpsllq(xtmp2, xtmp1, 0x1, vlen_enc);
+  evpcmpb(ktmp, ktmp, shuffle, xtmp2, Assembler::lt, true, vlen_enc);
+  evshufi64x2(xtmp3, src, src, 0x55, vlen_enc);
+  evpshufb(dst, ktmp, xtmp3, shuffle, true, vlen_enc);
+
+  // Perform above steps with lane comparison expression as INDEX >= 32 && INDEX < 48
+  // and broadcasting third 128 bit lane.
+  evpcmpb(ktmp, k0, shuffle,  xtmp2, Assembler::nlt, true, vlen_enc);
+  vpaddb(xtmp1, xtmp1, xtmp2, vlen_enc);
+  evpcmpb(ktmp, ktmp, shuffle,  xtmp1, Assembler::lt, true, vlen_enc);
+  evshufi64x2(xtmp3, src, src, 0xAA, vlen_enc);
+  evpshufb(dst, ktmp, xtmp3, shuffle, true, vlen_enc);
+
+  // Perform above steps with lane comparison expression as INDEX >= 48 && INDEX < 64
+  // and broadcasting third 128 bit lane.
+  evpcmpb(ktmp, k0, shuffle,  xtmp1, Assembler::nlt, true, vlen_enc);
+  vpsllq(xtmp2, xtmp2, 0x1, vlen_enc);
+  evpcmpb(ktmp, ktmp, shuffle,  xtmp2, Assembler::lt, true, vlen_enc);
+  evshufi64x2(xtmp3, src, src, 0xFF, vlen_enc);
+  evpshufb(dst, ktmp, xtmp3, shuffle, true, vlen_enc);
+}

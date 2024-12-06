@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2018, 2019, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2018, 2022, Oracle and/or its affiliates. All rights reserved.
  * Copyright (c) 2018, 2019 SAP SE. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
@@ -25,6 +25,7 @@
 
 #include "precompiled.hpp"
 #include "code/codeHeapState.hpp"
+#include "code/codeBlob.hpp"
 #include "compiler/compileBroker.hpp"
 #include "runtime/safepoint.hpp"
 #include "runtime/sweeper.hpp"
@@ -755,18 +756,17 @@ void CodeHeapState::aggregate(outputStream* out, CodeHeap* heap, size_t granular
         CodeBlob* cb  = (CodeBlob*)heap->find_start(h);
         cbType = get_cbType(cb);  // Will check for cb == NULL and other safety things.
         if (cbType != noType) {
-          const char* blob_name  = os::strdup(cb->name());
+          const char* blob_name  = nullptr;
           unsigned int nm_size   = 0;
           int temperature        = 0;
           nmethod*  nm = cb->as_nmethod_or_null();
           if (nm != NULL) { // no is_readable check required, nm = (nmethod*)cb.
             ResourceMark rm;
             Method* method = nm->method();
-            if (nm->is_in_use()) {
+            if (nm->is_in_use() || nm->is_not_entrant()) {
               blob_name = os::strdup(method->name_and_sig_as_C_string());
-            }
-            if (nm->is_not_entrant()) {
-              blob_name = os::strdup(method->name_and_sig_as_C_string());
+            } else {
+              blob_name = os::strdup(cb->name());
             }
 
             nm_size    = nm->total_size();
@@ -814,6 +814,8 @@ void CodeHeapState::aggregate(outputStream* out, CodeHeap* heap, size_t granular
               default:
                 break;
             }
+          } else {
+            blob_name  = os::strdup(cb->name());
           }
 
           //------------------------------------------
@@ -1151,10 +1153,9 @@ void CodeHeapState::aggregate(outputStream* out, CodeHeap* heap, size_t granular
       ast->cr();
 
       int             reset_val = NMethodSweeper::hotness_counter_reset_val();
-      double reverse_free_ratio = (res_size > size) ? (double)res_size/(double)(res_size-size) : (double)res_size;
       printBox(ast, '-', "Method hotness information at time of this analysis", NULL);
       ast->print_cr("Highest possible method temperature:          %12d", reset_val);
-      ast->print_cr("Threshold for method to be considered 'cold': %12.3f", -reset_val + reverse_free_ratio * NmethodSweepActivity);
+      ast->print_cr("Threshold for method to be considered 'cold': %12.3f", -reset_val + (CodeCache::reverse_free_ratio() * NmethodSweepActivity));
       if (n_methods > 0) {
         avgTemp = hotnessAccumulator/n_methods;
         ast->print_cr("min. hotness = %6d", minTemp);

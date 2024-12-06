@@ -594,7 +594,7 @@ void ErrorContext::stackmap_details(outputStream* ss, const Method* method) cons
 
 ClassVerifier::ClassVerifier(JavaThread* current, InstanceKlass* klass)
     : _thread(current), _previous_symbol(NULL), _symbols(NULL), _exception_type(NULL),
-      _message(NULL), _method_signatures_table(NULL), _klass(klass) {
+      _message(NULL), _klass(klass) {
   _this_type = VerificationType::reference_type(klass->name());
 }
 
@@ -625,16 +625,12 @@ void ClassVerifier::verify_class(TRAPS) {
   // Either verifying both local and remote classes or just remote classes.
   assert(BytecodeVerificationRemote, "Should not be here");
 
-  // Create hash table containing method signatures.
-  method_signatures_table_type method_signatures_table;
-  set_method_signatures_table(&method_signatures_table);
-
   Array<Method*>* methods = _klass->methods();
   int num_methods = methods->length();
 
   for (int index = 0; index < num_methods; index++) {
     // Check for recursive re-verification before each method.
-    if (was_recursively_verified())  return;
+    if (was_recursively_verified()) return;
 
     Method* m = methods->at(index);
     if (m->is_native() || m->is_abstract() || m->is_overpass()) {
@@ -1805,7 +1801,7 @@ void ClassVerifier::verify_method(const methodHandle& m, TRAPS) {
           no_control_flow = true; break;
         default:
           // We only need to check the valid bytecodes in class file.
-          // And jsr and ret are not in the new class file format in JDK1.5.
+          // And jsr and ret are not in the new class file format in JDK1.6.
           verify_error(ErrorContext::bad_code(bci),
               "Bad instruction: %02x", opcode);
           no_control_flow = false;
@@ -2254,11 +2250,12 @@ void ClassVerifier::verify_switch(
           "low must be less than or equal to high in tableswitch");
       return;
     }
-    keys = high - low + 1;
-    if (keys < 0) {
+    int64_t keys64 = ((int64_t)high - low) + 1;
+    if (keys64 > 65535) {  // Max code length
       verify_error(ErrorContext::bad_code(bci), "too many keys in tableswitch");
       return;
     }
+    keys = (int)keys64;
     delta = 1;
   } else {
     keys = (int)Bytes::get_Java_u4(aligned_bcp + jintSize);
@@ -2316,6 +2313,7 @@ void ClassVerifier::verify_field_instructions(RawBytecodeStream* bcs,
   // Get field name and signature
   Symbol* field_name = cp->name_ref_at(index);
   Symbol* field_sig = cp->signature_ref_at(index);
+  bool is_getfield = false;
 
   // Field signature was checked in ClassFileParser.
   assert(SignatureVerifier::is_valid_type_signature(field_sig),
@@ -2362,11 +2360,9 @@ void ClassVerifier::verify_field_instructions(RawBytecodeStream* bcs,
       break;
     }
     case Bytecodes::_getfield: {
+      is_getfield = true;
       stack_object_type = current_frame->pop_stack(
         target_class_type, CHECK_VERIFY(this));
-      for (int i = 0; i < n; i++) {
-        current_frame->push_stack(field_type[i], CHECK_VERIFY(this));
-      }
       goto check_protected;
     }
     case Bytecodes::_putfield: {
@@ -2396,7 +2392,15 @@ void ClassVerifier::verify_field_instructions(RawBytecodeStream* bcs,
     check_protected: {
       if (_this_type == stack_object_type)
         break; // stack_object_type must be assignable to _current_class_type
-      if (was_recursively_verified()) return;
+      if (was_recursively_verified()) {
+        if (is_getfield) {
+          // Push field type for getfield.
+          for (int i = 0; i < n; i++) {
+            current_frame->push_stack(field_type[i], CHECK_VERIFY(this));
+          }
+        }
+        return;
+      }
       Symbol* ref_class_name =
         cp->klass_name_at(cp->klass_ref_index_at(index));
       if (!name_in_supers(ref_class_name, current_class()))
@@ -2417,13 +2421,20 @@ void ClassVerifier::verify_field_instructions(RawBytecodeStream* bcs,
           verify_error(ErrorContext::bad_type(bci,
               current_frame->stack_top_ctx(),
               TypeOrigin::implicit(current_type())),
-              "Bad access to protected data in getfield");
+              "Bad access to protected data in %s",
+              is_getfield ? "getfield" : "putfield");
           return;
         }
       }
       break;
     }
     default: ShouldNotReachHere();
+  }
+  if (is_getfield) {
+    // Push field type for getfield after doing protection check.
+    for (int i = 0; i < n; i++) {
+      current_frame->push_stack(field_type[i], CHECK_VERIFY(this));
+    }
   }
 }
 
@@ -2933,15 +2944,15 @@ void ClassVerifier::verify_invoke_instructions(
                   _klass, ref_class, method_name, method_sig, true)) {
               // It's protected access, check if stack object is
               // assignable to current class.
-              bool is_assignable = current_type().is_assignable_from(
-                stack_object_type, this, true, CHECK_VERIFY(this));
-              if (!is_assignable) {
-                if (ref_class_type.name() == vmSymbols::java_lang_Object()
-                    && stack_object_type.is_array()
-                    && method_name == vmSymbols::clone_name()) {
-                  // Special case: arrays pretend to implement public Object
-                  // clone().
-                } else {
+              if (ref_class_type.name() == vmSymbols::java_lang_Object()
+                  && stack_object_type.is_array()
+                  && method_name == vmSymbols::clone_name()) {
+                // Special case: arrays pretend to implement public Object
+                // clone().
+              } else {
+                bool is_assignable = current_type().is_assignable_from(
+                  stack_object_type, this, true, CHECK_VERIFY(this));
+                if (!is_assignable) {
                   verify_error(ErrorContext::bad_type(bci,
                       current_frame->stack_top_ctx(),
                       TypeOrigin::implicit(current_type())),

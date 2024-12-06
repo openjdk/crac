@@ -980,7 +980,11 @@ public:
     : _hr_printer(hr_printer) { }
 };
 
-void G1CollectedHeap::print_hrm_post_compaction() {
+void G1CollectedHeap::print_heap_after_full_collection() {
+  // Post collection region logging.
+  // We should do this after we potentially resize the heap so
+  // that all the COMMIT / UNCOMMIT events are generated before
+  // the compaction events.
   if (_hr_printer.is_active()) {
     PostCompactionPrinterClosure cl(hr_printer());
     heap_region_iterate(&cl);
@@ -1092,17 +1096,6 @@ void G1CollectedHeap::verify_after_full_collection() {
   _ref_processor_cm->verify_no_references_recorded();
 }
 
-void G1CollectedHeap::print_heap_after_full_collection(G1HeapTransition* heap_transition) {
-  // Post collection logging.
-  // We should do this after we potentially resize the heap so
-  // that all the COMMIT / UNCOMMIT events are generated before
-  // the compaction events.
-  print_hrm_post_compaction();
-  heap_transition->print();
-  print_heap_after_gc();
-  print_heap_regions();
-}
-
 bool G1CollectedHeap::do_full_collection(bool explicit_gc,
                                          bool clear_all_soft_refs,
                                          bool do_maximum_compaction) {
@@ -1116,8 +1109,9 @@ bool G1CollectedHeap::do_full_collection(bool explicit_gc,
   const bool do_clear_all_soft_refs = clear_all_soft_refs ||
       soft_ref_policy()->should_clear_all_soft_refs();
 
-  G1FullCollector collector(this, explicit_gc, do_clear_all_soft_refs, do_maximum_compaction);
+  G1FullGCMark gc_mark;
   GCTraceTime(Info, gc) tm("Pause Full", NULL, gc_cause(), true);
+  G1FullCollector collector(this, explicit_gc, do_clear_all_soft_refs, do_maximum_compaction, gc_mark.tracer());
 
   collector.prepare_collection();
   collector.collect();
@@ -2268,7 +2262,7 @@ void G1CollectedHeap::object_iterate(ObjectClosure* cl) {
   heap_region_iterate(&blk);
 }
 
-class G1ParallelObjectIterator : public ParallelObjectIterator {
+class G1ParallelObjectIterator : public ParallelObjectIteratorImpl {
 private:
   G1CollectedHeap*  _heap;
   HeapRegionClaimer _claimer;
@@ -2283,7 +2277,7 @@ public:
   }
 };
 
-ParallelObjectIterator* G1CollectedHeap::parallel_object_iterator(uint thread_num) {
+ParallelObjectIteratorImpl* G1CollectedHeap::parallel_object_iterator(uint thread_num) {
   return new G1ParallelObjectIterator(thread_num);
 }
 
@@ -2293,7 +2287,7 @@ void G1CollectedHeap::object_iterate_parallel(ObjectClosure* cl, uint worker_id,
 }
 
 void G1CollectedHeap::keep_alive(oop obj) {
-  G1BarrierSet::enqueue(obj);
+  G1BarrierSet::enqueue_preloaded(obj);
 }
 
 void G1CollectedHeap::heap_region_iterate(HeapRegionClosure* cl) const {
@@ -2567,9 +2561,6 @@ void G1CollectedHeap::trace_heap(GCWhen::Type when, const GCTracer* gc_tracer) {
 void G1CollectedHeap::gc_prologue(bool full) {
   assert(InlineCacheBuffer::is_empty(), "should have cleaned up ICBuffer");
 
-  // This summary needs to be printed before incrementing total collections.
-  rem_set()->print_periodic_summary_info("Before GC RS summary", total_collections());
-
   // Update common counters.
   increment_total_collections(full /* full gc */);
   if (full || collector_state()->in_concurrent_start_gc()) {
@@ -2602,9 +2593,6 @@ void G1CollectedHeap::gc_epilogue(bool full) {
     increment_old_marking_cycles_completed(false /* concurrent */, true /* liveness_completed */);
   }
 
-  // We are at the end of the GC. Total collections has already been increased.
-  rem_set()->print_periodic_summary_info("After GC RS summary", total_collections() - 1);
-
 #if COMPILER2_OR_JVMCI
   assert(DerivedPointerTable::is_empty(), "derived pointer present");
 #endif
@@ -2617,9 +2605,6 @@ void G1CollectedHeap::gc_epilogue(bool full) {
   // We have just completed a GC. Update the soft reference
   // policy with the new heap occupancy
   Universe::heap()->update_capacity_and_used_at_gc();
-
-  // Print NUMA statistics.
-  _numa->print_statistics();
 
   _collection_pause_end = Ticks::now();
 }
@@ -2806,10 +2791,10 @@ void G1CollectedHeap::start_new_collection_set() {
   phase_times()->record_start_new_cset_time_ms((os::elapsedTime() - start) * 1000.0);
 }
 
-void G1CollectedHeap::calculate_collection_set(G1EvacuationInfo& evacuation_info, double target_pause_time_ms) {
+void G1CollectedHeap::calculate_collection_set(G1EvacuationInfo* evacuation_info, double target_pause_time_ms) {
 
   _collection_set.finalize_initial_collection_set(target_pause_time_ms, &_survivor);
-  evacuation_info.set_collectionset_regions(collection_set()->region_length() +
+  evacuation_info->set_collectionset_regions(collection_set()->region_length() +
                                             collection_set()->optional_region_length());
 
   _cm->verify_no_collection_set_oops();
@@ -2904,6 +2889,64 @@ void G1CollectedHeap::gc_tracer_report_gc_end(bool concurrent_operation_is_full_
   _gc_timer_stw->time_partitions());
 }
 
+G1HeapPrinterMark::G1HeapPrinterMark(G1CollectedHeap* g1h) : _g1h(g1h), _heap_transition(g1h) {
+  // This summary needs to be printed before incrementing total collections.
+  _g1h->rem_set()->print_periodic_summary_info("Before GC RS summary", _g1h->total_collections());
+  _g1h->print_heap_before_gc();
+  _g1h->print_heap_regions();
+}
+
+G1HeapPrinterMark::~G1HeapPrinterMark() {
+  _g1h->policy()->print_age_table();
+  // not (yet) in 17u: _g1h->rem_set()->print_coarsen_stats();
+  // We are at the end of the GC. Total collections has already been increased.
+  _g1h->rem_set()->print_periodic_summary_info("After GC RS summary", _g1h->total_collections() - 1);
+
+  _heap_transition.print();
+  _g1h->print_heap_regions();
+  _g1h->print_heap_after_gc();
+  // Print NUMA statistics.
+  _g1h->numa()->print_statistics();
+}
+
+G1JFRTracerMark::G1JFRTracerMark(STWGCTimer* timer, GCTracer* tracer) :
+  _timer(timer), _tracer(tracer) {
+
+  _timer->register_gc_start();
+  _tracer->report_gc_start(G1CollectedHeap::heap()->gc_cause(), _timer->gc_start());
+  G1CollectedHeap::heap()->trace_heap_before_gc(_tracer);
+}
+
+G1JFRTracerMark::~G1JFRTracerMark() {
+  G1CollectedHeap::heap()->trace_heap_after_gc(_tracer);
+  _timer->register_gc_end();
+  _tracer->report_gc_end(_timer->gc_end(), _timer->time_partitions());
+}
+
+class G1YoungGCJFRTracerMark : public G1JFRTracerMark {
+  G1EvacuationInfo _evacuation_info;
+
+  G1NewTracer* tracer() const { return (G1NewTracer*)_tracer; }
+
+public:
+
+  G1EvacuationInfo* evacuation_info() { return &_evacuation_info; }
+
+  G1YoungGCJFRTracerMark(STWGCTimer* gc_timer_stw, G1NewTracer* gc_tracer_stw, GCCause::Cause cause) :
+    G1JFRTracerMark(gc_timer_stw, gc_tracer_stw), _evacuation_info() { }
+
+  void report_pause_type(G1GCPauseType type) {
+    tracer()->report_young_gc_pause(type);
+  }
+
+  ~G1YoungGCJFRTracerMark() {
+    G1CollectedHeap* g1h = G1CollectedHeap::heap();
+
+    tracer()->report_evacuation_info(&_evacuation_info);
+    tracer()->report_tenuring_threshold(g1h->policy()->tenuring_threshold());
+  }
+};
+
 void G1CollectedHeap::do_collection_pause_at_safepoint_helper(double target_pause_time_ms) {
   GCIdMark gc_id_mark;
 
@@ -2912,13 +2955,7 @@ void G1CollectedHeap::do_collection_pause_at_safepoint_helper(double target_paus
 
   policy()->note_gc_start();
 
-  gc_tracer_report_gc_start();
-
   wait_for_root_region_scanning();
-
-  print_heap_before_gc();
-  print_heap_regions();
-  trace_heap_before_gc(_gc_tracer_stw);
 
   _verifier->verify_region_sets_optional();
   _verifier->verify_dirty_young_regions();
@@ -2945,9 +2982,7 @@ void G1CollectedHeap::do_collection_pause_at_safepoint_helper(double target_paus
 
   // Inner scope for scope based logging, timers, and stats collection
   {
-    G1EvacuationInfo evacuation_info;
-
-    GCTraceCPUTime tcpu;
+    GCTraceCPUTime tcpu(_gc_tracer_stw);
 
     char young_gc_name[MaxYoungGCNameLength];
     set_young_gc_name(young_gc_name);
@@ -2960,11 +2995,20 @@ void G1CollectedHeap::do_collection_pause_at_safepoint_helper(double target_paus
     active_workers = workers()->update_active_workers(active_workers);
     log_info(gc,task)("Using %u workers of %u for evacuation", active_workers, workers()->total_workers());
 
+    // JFR
+    G1YoungGCJFRTracerMark jtm(_gc_timer_stw, _gc_tracer_stw, gc_cause());
     G1MonitoringScope ms(g1mm(),
                          false /* full_gc */,
                          collector_state()->in_mixed_phase() /* all_memory_pools_affected */);
+    // Create the heap printer before internal pause timing to have
+    // heap information printed as last part of detailed GC log.
+    G1HeapPrinterMark hpm(this);
+    // Young GC internal pause timing
+    // Not (yet) in 17: G1YoungGCNotifyPauseMark npm;
 
-    G1HeapTransition heap_transition(this);
+    // Verification may use the gang workers, so they must be set up before.
+    // Individual parallel phases may override this.
+    // Not (yet) in 17: set_young_collection_default_active_worker_threads();
 
     {
       IsGCActiveMark x;
@@ -2996,7 +3040,7 @@ void G1CollectedHeap::do_collection_pause_at_safepoint_helper(double target_paus
         // of the collection set!).
         _allocator->release_mutator_alloc_regions();
 
-        calculate_collection_set(evacuation_info, target_pause_time_ms);
+        calculate_collection_set(jtm.evacuation_info(), target_pause_time_ms);
 
         G1RedirtyCardsQueueSet rdcqs(G1BarrierSet::dirty_card_queue_set().allocator());
         G1ParScanThreadStateSet per_thread_states(this,
@@ -3004,7 +3048,7 @@ void G1CollectedHeap::do_collection_pause_at_safepoint_helper(double target_paus
                                                   workers()->active_workers(),
                                                   collection_set()->young_region_length(),
                                                   collection_set()->optional_region_length());
-        pre_evacuate_collection_set(evacuation_info, &per_thread_states);
+        pre_evacuate_collection_set(jtm.evacuation_info(), &per_thread_states);
 
         bool may_do_optional_evacuation = _collection_set.optional_region_length() != 0;
         // Actually do the work...
@@ -3013,7 +3057,7 @@ void G1CollectedHeap::do_collection_pause_at_safepoint_helper(double target_paus
         if (may_do_optional_evacuation) {
           evacuate_optional_collection_set(&per_thread_states);
         }
-        post_evacuate_collection_set(evacuation_info, &rdcqs, &per_thread_states);
+        post_evacuate_collection_set(jtm.evacuation_info(), &rdcqs, &per_thread_states);
 
         start_new_collection_set();
 
@@ -3032,7 +3076,7 @@ void G1CollectedHeap::do_collection_pause_at_safepoint_helper(double target_paus
 
         // Need to report the collection pause now since record_collection_pause_end()
         // modifies it to the next state.
-        _gc_tracer_stw->report_young_gc_pause(collector_state()->young_gc_pause_type(concurrent_operation_is_full_mark));
+        jtm.report_pause_type(collector_state()->young_gc_pause_type(concurrent_operation_is_full_mark));
 
         double sample_end_time_sec = os::elapsedTime();
         double pause_time_ms = (sample_end_time_sec - sample_start_time_sec) * MILLIUNITS;
@@ -3050,7 +3094,6 @@ void G1CollectedHeap::do_collection_pause_at_safepoint_helper(double target_paus
     }
 
     policy()->print_phases();
-    heap_transition.print();
 
     _hrm.verify_optional();
     _verifier->verify_region_sets_optional();
@@ -3058,17 +3101,11 @@ void G1CollectedHeap::do_collection_pause_at_safepoint_helper(double target_paus
     TASKQUEUE_STATS_ONLY(print_taskqueue_stats());
     TASKQUEUE_STATS_ONLY(reset_taskqueue_stats());
 
-    print_heap_after_gc();
-    print_heap_regions();
-    trace_heap_after_gc(_gc_tracer_stw);
-
     // We must call G1MonitoringSupport::update_sizes() in the same scoping level
     // as an active TraceMemoryManagerStats object (i.e. before the destructor for the
     // TraceMemoryManagerStats is called) so that the G1 memory pools are updated
     // before any GC notifications are raised.
     g1mm()->update_sizes();
-
-    gc_tracer_report_gc_end(concurrent_operation_is_full_mark, evacuation_info);
   }
   // It should now be safe to tell the concurrent mark thread to start
   // without its logging output interfering with the logging output
@@ -3202,6 +3239,31 @@ public:
   }
 };
 
+// Special closure for enqueuing discovered fields: during enqueue the card table
+// may not be in shape to properly handle normal barrier calls (e.g. card marks
+// in regions that failed evacuation, scribbling of various values by card table
+// scan code). Additionally the regular barrier enqueues into the "global"
+// DCQS, but during GC we need these to-be-refined entries in the GC local queue
+// so that after clearing the card table, the redirty cards phase will properly
+// mark all dirty cards to be picked up by refinement.
+class G1EnqueueDiscoveredFieldClosure : public EnqueueDiscoveredFieldClosure {
+  G1CollectedHeap* _g1h;
+  G1ParScanThreadState* _pss;
+
+public:
+  G1EnqueueDiscoveredFieldClosure(G1CollectedHeap* g1h, G1ParScanThreadState* pss) : _g1h(g1h), _pss(pss) { }
+
+  virtual void enqueue(HeapWord* discovered_field_addr, oop value) {
+    assert(_g1h->is_in(discovered_field_addr), PTR_FORMAT " is not in heap ", p2i(discovered_field_addr));
+    // Store the value first, whatever it is.
+    RawAccess<>::oop_store(discovered_field_addr, value);
+    if (value == NULL) {
+      return;
+    }
+    _pss->write_ref_field_post(discovered_field_addr, value);
+  }
+};
+
 // Serial drain queue closure. Called as the 'complete_gc'
 // closure for each discovered list in some of the
 // reference processing phases.
@@ -3246,7 +3308,8 @@ public:
     G1STWIsAliveClosure is_alive(&_g1h);
     G1CopyingKeepAliveClosure keep_alive(&_g1h, _pss.state_for_worker(index));
     G1ParEvacuateFollowersClosure complete_gc(&_g1h, _pss.state_for_worker(index), &_task_queues, _tm == RefProcThreadModel::Single ? nullptr : &_terminator, G1GCPhaseTimes::ObjCopy);
-    _rp_task->rp_work(worker_id, &is_alive, &keep_alive, &complete_gc);
+    G1EnqueueDiscoveredFieldClosure enqueue(&_g1h, _pss.state_for_worker(index));
+    _rp_task->rp_work(worker_id, &is_alive, &keep_alive, &enqueue, &complete_gc);
   }
 
   void prepare_run_task_hook() override {
@@ -3465,7 +3528,7 @@ public:
   }
 };
 
-void G1CollectedHeap::pre_evacuate_collection_set(G1EvacuationInfo& evacuation_info, G1ParScanThreadStateSet* per_thread_states) {
+void G1CollectedHeap::pre_evacuate_collection_set(G1EvacuationInfo* evacuation_info, G1ParScanThreadStateSet* per_thread_states) {
   _bytes_used_during_gc = 0;
 
   _expand_heap_after_alloc_failure = true;
@@ -3731,7 +3794,7 @@ void G1CollectedHeap::evacuate_optional_collection_set(G1ParScanThreadStateSet* 
   _collection_set.abandon_optional_collection_set(per_thread_states);
 }
 
-void G1CollectedHeap::post_evacuate_collection_set(G1EvacuationInfo& evacuation_info,
+void G1CollectedHeap::post_evacuate_collection_set(G1EvacuationInfo* evacuation_info,
                                                    G1RedirtyCardsQueueSet* rdcqs,
                                                    G1ParScanThreadStateSet* per_thread_states) {
   G1GCPhaseTimes* p = phase_times();
@@ -3752,7 +3815,7 @@ void G1CollectedHeap::post_evacuate_collection_set(G1EvacuationInfo& evacuation_
 
   post_evacuate_cleanup_1(per_thread_states, rdcqs);
 
-  post_evacuate_cleanup_2(&_preserved_marks_set, rdcqs, &evacuation_info, per_thread_states->surviving_young_words());
+  post_evacuate_cleanup_2(&_preserved_marks_set, rdcqs, evacuation_info, per_thread_states->surviving_young_words());
 
   assert_used_and_recalculate_used_equal(this);
 
@@ -3760,10 +3823,8 @@ void G1CollectedHeap::post_evacuate_collection_set(G1EvacuationInfo& evacuation_
 
   record_obj_copy_mem_stats();
 
-  evacuation_info.set_collectionset_used_before(collection_set()->bytes_used_before());
-  evacuation_info.set_bytes_used(_bytes_used_during_gc);
-
-  policy()->print_age_table();
+  evacuation_info->set_collectionset_used_before(collection_set()->bytes_used_before());
+  evacuation_info->set_bytes_used(_bytes_used_during_gc);
 }
 
 void G1CollectedHeap::record_obj_copy_mem_stats() {

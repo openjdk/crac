@@ -549,7 +549,10 @@ public class TableDemo extends DemoModule {
             public int getRowCount() { return data.length;}
             public Object getValueAt(int row, int col) {return data[row][col];}
             public String getColumnName(int column) {return names[column];}
-            public Class<?> getColumnClass(int c) {return getValueAt(0, c).getClass();}
+            public Class<?> getColumnClass(int c) {
+                Object obj = getValueAt(0, c);
+                return obj != null ? obj.getClass() : Object.class;
+            }
             public boolean isCellEditable(int row, int col) {return col != 5;}
             public void setValueAt(Object aValue, int row, int column) { data[row][column] = aValue; }
          };
@@ -738,4 +741,13 @@ public class TableDemo extends DemoModule {
         footerTextField.setDragEnabled(dragEnabled);
     }
 
+    @Override
+    public ImageIcon createImageIcon(String filename, String description) {
+        ImageIcon imageIcon = super.createImageIcon(filename, description);
+        AccessibleContext context = imageIcon.getAccessibleContext();
+        if (context!= null) {
+            context.setAccessibleName(description);
+        }
+        return imageIcon;
+    }
 }

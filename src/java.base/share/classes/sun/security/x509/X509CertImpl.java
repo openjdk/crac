@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1996, 2020, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 1996, 2023, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -25,13 +25,7 @@
 
 package sun.security.x509;
 
-import java.io.BufferedReader;
-import java.io.BufferedInputStream;
-import java.io.ByteArrayOutputStream;
-import java.io.IOException;
-import java.io.InputStream;
-import java.io.InputStreamReader;
-import java.io.OutputStream;
+import java.io.*;
 import java.math.BigInteger;
 import java.security.*;
 import java.security.cert.*;
@@ -41,6 +35,7 @@ import java.util.concurrent.ConcurrentHashMap;
 
 import javax.security.auth.x500.X500Principal;
 
+import sun.security.jca.JCAUtil;
 import sun.security.util.*;
 import sun.security.provider.X509Factory;
 
@@ -302,6 +297,13 @@ public class X509CertImpl extends X509Certificate implements DerEncoder {
             signedCert = null;
             throw new CertificateException("Unable to initialize, " + e, e);
         }
+    }
+
+    // helper method to record certificate, if necessary, after construction
+    public static X509CertImpl newX509CertImpl(byte[] certData) throws CertificateException {
+        var cert = new X509CertImpl(certData);
+        JCAUtil.tryCommitCertEvent(cert);
+        return cert;
     }
 
     /**
@@ -621,7 +623,7 @@ public class X509CertImpl extends X509Certificate implements DerEncoder {
 
     /**
      * Return the requested attribute from the certificate.
-     *
+     * <p>
      * Note that the X509CertInfo is not cloned for performance reasons.
      * Callers must ensure that they do not modify it. All other
      * attributes are cloned.
@@ -1030,13 +1032,7 @@ public class X509CertImpl extends X509Certificate implements DerEncoder {
      *         null if no parameters are present.
      */
     public byte[] getSigAlgParams() {
-        if (algId == null)
-            return null;
-        try {
-            return algId.getEncodedParams();
-        } catch (IOException e) {
-            return null;
-        }
+        return algId == null ? null : algId.getEncodedParams();
     }
 
     /**
@@ -1532,7 +1528,7 @@ public class X509CertImpl extends X509Certificate implements DerEncoder {
         for (GeneralName gname : names.names()) {
             GeneralNameInterface name = gname.getName();
             List<Object> nameEntry = new ArrayList<>(2);
-            nameEntry.add(Integer.valueOf(name.getType()));
+            nameEntry.add(name.getType());
             switch (name.getType()) {
             case GeneralNameInterface.NAME_RFC822:
                 nameEntry.add(((RFC822Name) name).getName());
@@ -1917,25 +1913,73 @@ public class X509CertImpl extends X509Certificate implements DerEncoder {
     private ConcurrentHashMap<String,String> fingerprints =
             new ConcurrentHashMap<>(2);
 
-    public String getFingerprint(String algorithm) {
+    private String getFingerprint(String algorithm, Debug debug) {
         return fingerprints.computeIfAbsent(algorithm,
-            x -> getFingerprint(x, this));
+            x -> {
+                try {
+                    return getFingerprintInternal(x, getEncodedInternal(), debug);
+                } catch (CertificateEncodingException e) {
+                    if (debug != null) {
+                        debug.println("Cannot encode certificate: " + e);
+                    }
+                    return null;
+                }
+            });
+    }
+
+    private static String getFingerprintInternal(String algorithm,
+            byte[] encodedCert, Debug debug) {
+        try {
+            MessageDigest md = MessageDigest.getInstance(algorithm);
+            byte[] digest = md.digest(encodedCert);
+            return HexFormat.of().withUpperCase().formatHex(digest);
+        } catch (NoSuchAlgorithmException e) {
+            if (debug != null) {
+                debug.println("Cannot create " + algorithm
+                    + " MessageDigest: " + e);
+            }
+            return null;
+        }
     }
 
     /**
-     * Gets the requested finger print of the certificate. The result
+     * Gets the requested fingerprint of the certificate. The result
      * only contains 0-9 and A-F. No small case, no colon.
+     *
+     * @param algorithm the MessageDigest algorithm
+     * @param cert the X509Certificate
+     * @return the fingerprint, or null if it cannot be calculated because
+     *     of an exception
      */
     public static String getFingerprint(String algorithm,
-            X509Certificate cert) {
-        try {
-            byte[] encCertInfo = cert.getEncoded();
-            MessageDigest md = MessageDigest.getInstance(algorithm);
-            byte[] digest = md.digest(encCertInfo);
-            return HexFormat.of().withUpperCase().formatHex(digest);
-        } catch (NoSuchAlgorithmException | CertificateEncodingException e) {
-            // ignored
+            X509Certificate cert, Debug debug) {
+        if (cert instanceof X509CertImpl) {
+            return ((X509CertImpl)cert).getFingerprint(algorithm, debug);
+        } else {
+            try {
+                return getFingerprintInternal(algorithm, cert.getEncoded(), debug);
+            } catch (CertificateEncodingException e) {
+                if (debug != null) {
+                    debug.println("Cannot encode certificate: " + e);
+                }
+                return null;
+            }
         }
-        return "";
+    }
+
+    /**
+     * Restores the state of this object from the stream.
+     * <p>
+     * Deserialization of this object is not supported.
+     *
+     * @param  stream the {@code ObjectInputStream} from which data is read
+     * @throws IOException if an I/O error occurs
+     * @throws ClassNotFoundException if a serialized class cannot be loaded
+     */
+    @java.io.Serial
+    private void readObject(ObjectInputStream stream)
+            throws IOException, ClassNotFoundException {
+        throw new InvalidObjectException(
+                "X509CertImpls are not directly deserializable");
     }
 }

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998, 2021, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 1998, 2022, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -40,6 +40,10 @@ import java.util.ServiceLoader;
 import sun.security.util.PendingException;
 import sun.security.util.ResourcesMgr;
 
+import java.util.Set;
+import java.util.WeakHashMap;
+import java.util.stream.*;
+import java.util.ServiceLoader.Provider;
 /**
  * <p> The {@code LoginContext} class describes the basic methods used
  * to authenticate Subjects and provides a way to develop an
@@ -222,6 +226,8 @@ public class LoginContext {
 
     private static final sun.security.util.Debug debug =
         sun.security.util.Debug.getInstance("logincontext", "\t[LoginContext]");
+    private static final WeakHashMap<ClassLoader, Set<Provider<LoginModule>>> providersCache =
+        new WeakHashMap<>();
 
     @SuppressWarnings("removal")
     private void init(String name) throws LoginException {
@@ -288,6 +294,7 @@ public class LoginContext {
                     return loader;
                 }
         });
+
     }
 
     @SuppressWarnings("removal")
@@ -684,28 +691,42 @@ public class LoginContext {
         // - this can only be non-zero if methodName is LOGIN_METHOD
 
         for (int i = moduleIndex; i < moduleStack.length; i++, moduleIndex++) {
+            String name = moduleStack[i].entry.getLoginModuleName();
             try {
 
                 if (moduleStack[i].module == null) {
 
                     // locate and instantiate the LoginModule
                     //
-                    String name = moduleStack[i].entry.getLoginModuleName();
-                    @SuppressWarnings("removal")
-                    ServiceLoader<LoginModule> sc = AccessController.doPrivileged(
-                            (PrivilegedAction<ServiceLoader<LoginModule>>)
-                                    () -> ServiceLoader.load(
-                                        LoginModule.class, contextClassLoader));
-                    for (LoginModule m: sc) {
-                        if (m.getClass().getName().equals(name)) {
-                            moduleStack[i].module = m;
+                    Set<Provider<LoginModule>> lmProviders;
+                    synchronized(providersCache){
+                        lmProviders = providersCache.get(contextClassLoader);
+                        if (lmProviders == null){
+                            if (debug != null){
+                                debug.println("Build ServiceProviders cache for ClassLoader: " + contextClassLoader.getName());
+                            }
+                            @SuppressWarnings("removal")
+                            ServiceLoader<LoginModule> sc = AccessController.doPrivileged(
+                                    (PrivilegedAction<ServiceLoader<LoginModule>>)
+                                            () -> java.util.ServiceLoader.load(
+                                                LoginModule.class, contextClassLoader));
+                            lmProviders = sc.stream().collect(Collectors.toSet());
+                                if (debug != null){
+                                    debug.println("Discovered ServiceProviders for ClassLoader: " + contextClassLoader.getName());
+                                    lmProviders.forEach(System.err::println);
+                                }
+                            providersCache.put(contextClassLoader,lmProviders);
+                        }
+                    }
+                    for (Provider<LoginModule> lm: lmProviders){
+                        if (lm.type().getName().equals(name)){
+                            moduleStack[i].module = lm.get();
                             if (debug != null) {
                                 debug.println(name + " loaded as a service");
                             }
                             break;
                         }
                     }
-
                     if (moduleStack[i].module == null) {
                         try {
                             @SuppressWarnings("deprecation")
@@ -759,16 +780,16 @@ public class LoginContext {
                         clearState();
 
                         if (debug != null)
-                            debug.println(methodName + " SUFFICIENT success");
+                            debug.println(name + " " + methodName + " SUFFICIENT success");
                         return;
                     }
 
                     if (debug != null)
-                        debug.println(methodName + " success");
+                        debug.println(name + " " + methodName + " success");
                     success = true;
                 } else {
                     if (debug != null)
-                        debug.println(methodName + " ignored");
+                        debug.println(name + " " + methodName + " ignored");
                 }
             } catch (Exception ite) {
 
@@ -833,7 +854,7 @@ public class LoginContext {
                     AppConfigurationEntry.LoginModuleControlFlag.REQUISITE) {
 
                     if (debug != null)
-                        debug.println(methodName + " REQUISITE failure");
+                        debug.println(name + " " + methodName + " REQUISITE failure");
 
                     // if REQUISITE, then immediately throw an exception
                     if (methodName.equals(ABORT_METHOD) ||
@@ -848,7 +869,7 @@ public class LoginContext {
                     AppConfigurationEntry.LoginModuleControlFlag.REQUIRED) {
 
                     if (debug != null)
-                        debug.println(methodName + " REQUIRED failure");
+                        debug.println(name + " " + methodName + " REQUIRED failure");
 
                     // mark down that a REQUIRED module failed
                     if (firstRequiredError == null)
@@ -857,7 +878,7 @@ public class LoginContext {
                 } else {
 
                     if (debug != null)
-                        debug.println(methodName + " OPTIONAL failure");
+                        debug.println(name + " " + methodName + " OPTIONAL failure");
 
                     // mark down that an OPTIONAL module failed
                     if (firstError == null)

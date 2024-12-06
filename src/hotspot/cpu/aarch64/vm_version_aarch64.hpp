@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1997, 2021, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 1997, 2023, Oracle and/or its affiliates. All rights reserved.
  * Copyright (c) 2014, 2020, Red Hat Inc. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
@@ -26,6 +26,7 @@
 #ifndef CPU_AARCH64_VM_VERSION_AARCH64_HPP
 #define CPU_AARCH64_VM_VERSION_AARCH64_HPP
 
+#include "spin_wait_aarch64.hpp"
 #include "runtime/abstract_vm_version.hpp"
 #include "utilities/sizes.hpp"
 
@@ -45,6 +46,8 @@ protected:
   static int _icache_line_size;
   static int _initial_sve_vector_length;
 
+  static SpinWait _spin_wait;
+
   // Read additional info using OS-specific interfaces
   static void get_os_cpu_info();
 
@@ -57,6 +60,10 @@ protected:
 public:
   // Initialization
   static void initialize();
+  static void check_virtualizations();
+
+  static void print_platform_virtualization_info(outputStream*);
+
   static void crac_restore() {}
 
   // Asserts
@@ -96,6 +103,15 @@ public:
     CPU_INTEL     = 'i',
     CPU_APPLE     = 'a',
   };
+
+  enum Ampere_CPU_Model {
+    CPU_MODEL_EMAG      = 0x0,   /* CPU implementer is CPU_AMCC */
+    CPU_MODEL_ALTRA     = 0xd0c, /* CPU implementer is CPU_ARM, Neoverse N1 */
+    CPU_MODEL_ALTRAMAX  = 0xd0c, /* CPU implementer is CPU_ARM, Neoverse N1 */
+    CPU_MODEL_AMPERE_1  = 0xac3, /* CPU implementer is CPU_AMPERE */
+    CPU_MODEL_AMPERE_1A = 0xac4, /* CPU implementer is CPU_AMPERE */
+    CPU_MODEL_AMPERE_1B = 0xac5  /* AMPERE_1B core Implements ARMv8.7 with CSSC, MTE, SM3/SM4 extensions */
+};
 
   enum Feature_Flag {
 #define CPU_FEATURE_FLAGS(decl)               \
@@ -142,6 +158,10 @@ public:
   constexpr static bool supports_stack_watermark_barrier() { return true; }
 
   static void get_compatible_board(char *buf, int buflen);
+
+  static const SpinWait& spin_wait_desc() { return _spin_wait; }
+
+  static bool supports_on_spin_wait() { return _spin_wait.inst() != SpinWait::NONE; }
 
 #ifdef __APPLE__
   // Is the CPU running emulated (for example macOS Rosetta running x86_64 code on M1 ARM (aarch64)

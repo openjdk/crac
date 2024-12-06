@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2016, 2021, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2016, 2023, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -74,22 +74,24 @@ public class TestDumpOnCrash {
     }
 
     public static void main(String[] args) throws Exception {
-        test(CrasherIllegalAccess.class, "", true);
-        test(CrasherIllegalAccess.class, "", false);
-        test(CrasherHalt.class, "", true);
-        test(CrasherHalt.class, "", false);
+        test(CrasherIllegalAccess.class, "", true, null, true);
+        test(CrasherIllegalAccess.class, "", false, null, true);
+
+        // JDK-8290020 disables dumps when calling halt, so expect no dump.
+        test(CrasherHalt.class, "", true, null, false);
+        test(CrasherHalt.class, "", false, null, false);
 
         // Test is excluded until 8219680 is fixed
         // @ignore 8219680
-        // test(CrasherSig.class, "FPE", true);
+        // test(CrasherSig.class, "FPE", true, true);
     }
 
-    private static void test(Class<?> crasher, String signal, boolean disk) throws Exception {
+    private static void test(Class<?> crasher, String signal, boolean disk, String dumppath, boolean expectDump) throws Exception {
         // The JVM may be in a state it can't recover from, so try three times
         // before concluding functionality is not working.
         for (int attempt = 0; attempt < ATTEMPTS; attempt++) {
             try {
-                verify(runProcess(crasher, signal, disk));
+                verify(runProcess(crasher, signal, disk), dumppath, expectDump);
                 return;
             } catch (Exception e) {
                 System.out.println("Attempt " + attempt + ". Verification failed:");
@@ -111,6 +113,7 @@ public class TestDumpOnCrash {
         Process p = ProcessTools.createTestJvm(
                 "-Xmx64m",
                 "-XX:-CreateCoredumpOnCrash",
+                "-XX:-TieredCompilation", // Avoid secondary crashes (see JDK-8293166)
                 "--add-exports=java.base/jdk.internal.misc=ALL-UNNAMED",
                 "-XX:StartFlightRecording:" + flightRecordingOptions,
                 crasher.getName(),
@@ -125,18 +128,22 @@ public class TestDumpOnCrash {
         return p.pid();
     }
 
-    private static void verify(long pid) throws IOException {
+    private static void verify(long pid, String dumppath, boolean expectDump) throws IOException {
         String fileName = "hs_err_pid" + pid + ".jfr";
         Path file = Paths.get(fileName).toAbsolutePath().normalize();
 
-        Asserts.assertTrue(Files.exists(file), "No emergency jfr recording file " + file + " exists");
-        Asserts.assertNotEquals(Files.size(file), 0L, "File length 0. Should at least be some bytes");
-        System.out.printf("File size=%d%n", Files.size(file));
+        if (expectDump) {
+            Asserts.assertTrue(Files.exists(file), "No emergency jfr recording file " + file + " exists");
+            Asserts.assertNotEquals(Files.size(file), 0L, "File length 0. Should at least be some bytes");
+            System.out.printf("File size=%d%n", Files.size(file));
 
-        List<RecordedEvent> events = RecordingFile.readAllEvents(file);
-        Asserts.assertFalse(events.isEmpty(), "No event found");
-        System.out.printf("Found event %s%n", events.get(0).getEventType().getName());
+            List<RecordedEvent> events = RecordingFile.readAllEvents(file);
+            Asserts.assertFalse(events.isEmpty(), "No event found");
+            System.out.printf("Found event %s%n", events.get(0).getEventType().getName());
 
-        Files.delete(file);
+            Files.delete(file);
+        } else {
+            Asserts.assertFalse(Files.exists(file), "Emergency jfr recording file " + file + " exists but wasn't expected");
+        }
     }
 }

@@ -237,7 +237,6 @@ void report_vm_error(const char* file, int line, const char* error_msg)
 
 
 static void print_error_for_unit_test(const char* message, const char* detail_fmt, va_list detail_args) {
-#ifdef ASSERT
   if (ExecutingUnitTests) {
     char detail_msg[256];
     if (detail_fmt != NULL) {
@@ -262,7 +261,6 @@ static void print_error_for_unit_test(const char* message, const char* detail_fm
       va_end(detail_args_copy);
     }
   }
-#endif // ASSERT
 }
 
 void report_vm_error(const char* file, int line, const char* error_msg, const char* detail_fmt, ...)
@@ -478,6 +476,10 @@ extern "C" JNIEXPORT void verify() {
 extern "C" JNIEXPORT void pp(void* p) {
   Command c("pp");
   FlagSetting fl(DisplayVMOutput, true);
+  if (p == NULL) {
+    tty->print_cr("NULL");
+    return;
+  }
   if (Universe::heap()->is_in(p)) {
     oop obj = cast_to_oop(p);
     obj->print();
@@ -678,7 +680,8 @@ extern "C" JNIEXPORT void pns(void* sp, void* fp, void* pc) { // print native st
 extern "C" JNIEXPORT void pns2() { // print native stack
   Command c("pns2");
   static char buf[O_BUFLEN];
-  if (os::platform_print_native_stack(tty, NULL, buf, sizeof(buf))) {
+  address lastpc = nullptr;
+  if (os::platform_print_native_stack(tty, NULL, buf, sizeof(buf), lastpc)) {
     // We have printed the native stack in platform-specific code,
     // so nothing else to do in this case.
   } else {

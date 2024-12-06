@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2018, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2018, 2023, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -19,25 +19,6 @@
  * Please contact Oracle, 500 Oracle Parkway, Redwood Shores, CA 94065 USA
  * or visit www.oracle.com if you need additional information or have any
  * questions.
- */
-
-/*
- * @test
- * @summary Basic test for ofFileDownload
- * @bug 8196965
- * @modules java.base/sun.net.www.http
- *          java.net.http/jdk.internal.net.http.common
- *          java.net.http/jdk.internal.net.http.frame
- *          java.net.http/jdk.internal.net.http.hpack
- *          java.logging
- *          jdk.httpserver
- * @library /test/lib http2/server
- * @build Http2TestServer
- * @build jdk.test.lib.net.SimpleSSLContext
- * @build jdk.test.lib.Platform
- * @build jdk.test.lib.util.FileUtils
- * @run testng/othervm AsFileDownloadTest
- * @run testng/othervm/java.security.policy=AsFileDownloadTest.policy AsFileDownloadTest
  */
 
 import com.sun.net.httpserver.HttpExchange;
@@ -69,6 +50,10 @@ import java.util.Map;
 import javax.net.ssl.SSLContext;
 import jdk.test.lib.net.SimpleSSLContext;
 import jdk.test.lib.util.FileUtils;
+import jdk.httpclient.test.lib.common.HttpServerAdapters;
+import jdk.httpclient.test.lib.http2.Http2TestServer;
+import jdk.httpclient.test.lib.http2.Http2TestExchange;
+import jdk.httpclient.test.lib.http2.Http2Handler;
 import org.testng.annotations.AfterTest;
 import org.testng.annotations.BeforeTest;
 import org.testng.annotations.DataProvider;
@@ -80,6 +65,17 @@ import static java.nio.file.StandardOpenOption.*;
 import static org.testng.Assert.assertEquals;
 import static org.testng.Assert.assertTrue;
 import static org.testng.Assert.fail;
+
+/*
+ * @test
+ * @summary Basic test for ofFileDownload
+ * @bug 8196965 8302475
+ * @library /test/lib /test/jdk/java/net/httpclient/lib
+ * @build jdk.httpclient.test.lib.http2.Http2TestServer jdk.test.lib.net.SimpleSSLContext
+ *        jdk.test.lib.Platform jdk.test.lib.util.FileUtils
+ * @run testng/othervm AsFileDownloadTest
+ * @run testng/othervm/java.security.policy=AsFileDownloadTest.policy AsFileDownloadTest
+ */
 
 public class AsFileDownloadTest {
 
@@ -127,18 +123,18 @@ public class AsFileDownloadTest {
             { "024", "attachment; filename=me.txt; filename*=utf-8''you.txt",     "me.txt"     },
             { "025", "attachment; filename=\"m y.txt\"; filename*=utf-8''you.txt", "m y.txt"   },
 
-            { "030", "attachment; filename=foo/file1.txt",        "file1.txt" },
-            { "031", "attachment; filename=foo/bar/file2.txt",    "file2.txt" },
-            { "032", "attachment; filename=baz\\file3.txt",       "file3.txt" },
-            { "033", "attachment; filename=baz\\bar\\file4.txt",  "file4.txt" },
-            { "034", "attachment; filename=x/y\\file5.txt",       "file5.txt" },
-            { "035", "attachment; filename=x/y\\file6.txt",       "file6.txt" },
-            { "036", "attachment; filename=x/y\\z/file7.txt",     "file7.txt" },
-            { "037", "attachment; filename=x/y\\z/\\x/file8.txt", "file8.txt" },
-            { "038", "attachment; filename=/root/file9.txt",      "file9.txt" },
-            { "039", "attachment; filename=../file10.txt",        "file10.txt" },
-            { "040", "attachment; filename=..\\file11.txt",       "file11.txt" },
-            { "041", "attachment; filename=foo/../../file12.txt", "file12.txt" },
+            { "030", "attachment; filename=\"foo/file1.txt\"",        "file1.txt" },
+            { "031", "attachment; filename=\"foo/bar/file2.txt\"",    "file2.txt" },
+            { "032", "attachment; filename=\"baz\\\\file3.txt\"",       "file3.txt" },
+            { "033", "attachment; filename=\"baz\\\\bar\\\\file4.txt\"",  "file4.txt" },
+            { "034", "attachment; filename=\"x/y\\\\file5.txt\"",       "file5.txt" },
+            { "035", "attachment; filename=\"x/y\\\\file6.txt\"",       "file6.txt" },
+            { "036", "attachment; filename=\"x/y\\\\z/file7.txt\"",     "file7.txt" },
+            { "037", "attachment; filename=\"x/y\\\\z/\\\\x/file8.txt\"", "file8.txt" },
+            { "038", "attachment; filename=\"/root/file9.txt\"",      "file9.txt" },
+            { "039", "attachment; filename=\"../file10.txt\"",        "file10.txt" },
+            { "040", "attachment; filename=\"..\\\\file11.txt\"",       "file11.txt" },
+            { "041", "attachment; filename=\"foo/../../file12.txt\"", "file12.txt" },
     };
 
     @DataProvider(name = "positive")
@@ -177,18 +173,24 @@ public class AsFileDownloadTest {
                                         CREATE, TRUNCATE_EXISTING, WRITE);
         HttpResponse<Path> response = client.send(request, bh);
 
+        Path body = response.body();
         out.println("Got response: " + response);
-        out.println("Got body Path: " + response.body());
+        out.println("Got body Path: " + body);
         String fileContents = new String(Files.readAllBytes(response.body()), UTF_8);
         out.println("Got body: " + fileContents);
 
         assertEquals(response.statusCode(),200);
-        assertEquals(response.body().getFileName().toString(), expectedFilename);
+        assertEquals(body.getFileName().toString(), expectedFilename);
         assertTrue(response.headers().firstValue("Content-Disposition").isPresent());
         assertEquals(response.headers().firstValue("Content-Disposition").get(),
                      contentDispositionValue);
         assertEquals(fileContents, "May the luck of the Irish be with you!");
 
+        if (!body.toAbsolutePath().startsWith(tempDir.toAbsolutePath())) {
+            System.out.println("Tempdir = " + tempDir.toAbsolutePath());
+            System.out.println("body = " + body.toAbsolutePath());
+            throw new AssertionError("body in wrong location");
+        }
         // additional checks unrelated to file download
         caseInsensitivityOfHeaders(request.headers());
         caseInsensitivityOfHeaders(response.headers());
@@ -261,8 +263,10 @@ public class AsFileDownloadTest {
     // -- Infrastructure
 
     static String serverAuthority(HttpServer server) {
-        return InetAddress.getLoopbackAddress().getHostName() + ":"
-                + server.getAddress().getPort();
+        final String hostIP = InetAddress.getLoopbackAddress().getHostAddress();
+        // escape for ipv6
+        final String h = hostIP.contains(":") ? "[" + hostIP + "]" : hostIP;
+        return h + ":" + server.getAddress().getPort();
     }
 
     @BeforeTest

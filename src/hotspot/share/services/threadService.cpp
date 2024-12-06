@@ -68,6 +68,8 @@ PerfVariable* ThreadService::_daemon_threads_count = NULL;
 volatile int ThreadService::_atomic_threads_count = 0;
 volatile int ThreadService::_atomic_daemon_threads_count = 0;
 
+volatile jlong ThreadService::_exited_allocated_bytes = 0;
+
 ThreadDumpResult* ThreadService::_threaddump_list = NULL;
 
 static const int INITIAL_ARRAY_SIZE = 10;
@@ -154,6 +156,9 @@ void ThreadService::decrement_thread_counts(JavaThread* jt, bool daemon) {
 
 void ThreadService::remove_thread(JavaThread* thread, bool daemon) {
   assert(Threads_lock->owned_by_self(), "must have threads lock");
+
+  // Include hidden thread allcations in exited_allocated_bytes
+  ThreadService::incr_exited_allocated_bytes(thread->cooked_allocated_bytes());
 
   // Do not count hidden threads
   if (is_hidden_thread(thread)) {
@@ -622,18 +627,14 @@ void StackFrameInfo::print_on(outputStream* st) const {
 class InflatedMonitorsClosure: public MonitorClosure {
 private:
   ThreadStackTrace* _stack_trace;
-  Thread* _thread;
 public:
-  InflatedMonitorsClosure(Thread* t, ThreadStackTrace* st) {
-    _thread = t;
+  InflatedMonitorsClosure(ThreadStackTrace* st) {
     _stack_trace = st;
   }
   void do_monitor(ObjectMonitor* mid) {
-    if (mid->owner() == _thread) {
-      oop object = mid->object();
-      if (!_stack_trace->is_owned_monitor_on_stack(object)) {
-        _stack_trace->add_jni_locked_monitor(object);
-      }
+    oop object = mid->object();
+    if (!_stack_trace->is_owned_monitor_on_stack(object)) {
+      _stack_trace->add_jni_locked_monitor(object);
     }
   }
 };
@@ -692,8 +693,8 @@ void ThreadStackTrace::dump_stack_at_safepoint(int maxDepth) {
   if (_with_locked_monitors) {
     // Iterate inflated monitors and find monitors locked by this thread
     // not found in the stack
-    InflatedMonitorsClosure imc(_thread, this);
-    ObjectSynchronizer::monitors_iterate(&imc);
+    InflatedMonitorsClosure imc(this);
+    ObjectSynchronizer::monitors_iterate(&imc, _thread);
   }
 }
 
@@ -878,7 +879,10 @@ void ThreadSnapshot::initialize(ThreadsList * t_list, JavaThread* thread) {
   _sleep_ticks = stat->sleep_ticks();
   _sleep_count = stat->sleep_count();
 
-  _thread_status = java_lang_Thread::get_thread_status(threadObj);
+  // If thread is still attaching then threadObj will be NULL.
+  _thread_status = threadObj == NULL ? JavaThreadStatus::NEW
+                                     : java_lang_Thread::get_thread_status(threadObj);
+
   _is_suspended = thread->is_suspended();
   _is_in_native = (thread->thread_state() == _thread_in_native);
 

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2016, 2021, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2016, 2022, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -124,10 +124,17 @@ intx CompilerConfig::scaled_freq_log(intx freq_log) {
 // Returns threshold scaled with the value of scale.
 // If scale < 0.0, threshold is returned without scaling.
 intx CompilerConfig::scaled_compile_threshold(intx threshold, double scale) {
+  assert(threshold >= 0, "must be");
   if (scale == 1.0 || scale < 0.0) {
     return threshold;
   } else {
-    return (intx)(threshold * scale);
+    double v = threshold * scale;
+    assert(v >= 0, "must be");
+    if (v > max_intx) {
+      return max_intx;
+    } else {
+      return (intx)(v);
+    }
   }
 }
 
@@ -260,12 +267,11 @@ void CompilerConfig::set_legacy_emulation_flags() {
         FLAG_SET_ERGO(Tier0BackedgeNotifyFreqLog, MAX2<intx>(10, osr_threshold_log));
       }
       // Adjust the tiered policy flags to approximate the legacy behavior.
-      if (CompilerConfig::is_c1_only()) {
-        FLAG_SET_ERGO(Tier3InvocationThreshold, threshold);
-        FLAG_SET_ERGO(Tier3MinInvocationThreshold, threshold);
-        FLAG_SET_ERGO(Tier3CompileThreshold, threshold);
-        FLAG_SET_ERGO(Tier3BackEdgeThreshold, osr_threshold);
-      } else {
+      FLAG_SET_ERGO(Tier3InvocationThreshold, threshold);
+      FLAG_SET_ERGO(Tier3MinInvocationThreshold, threshold);
+      FLAG_SET_ERGO(Tier3CompileThreshold, threshold);
+      FLAG_SET_ERGO(Tier3BackEdgeThreshold, osr_threshold);
+      if (CompilerConfig::is_c2_or_jvmci_compiler_only()) {
         FLAG_SET_ERGO(Tier4InvocationThreshold, threshold);
         FLAG_SET_ERGO(Tier4MinInvocationThreshold, threshold);
         FLAG_SET_ERGO(Tier4CompileThreshold, threshold);
@@ -310,7 +316,6 @@ void CompilerConfig::set_compilation_policy_flags() {
     }
   }
 
-
   if (CompileThresholdScaling < 0) {
     vm_exit_during_initialization("Negative value specified for CompileThresholdScaling", NULL);
   }
@@ -332,6 +337,20 @@ void CompilerConfig::set_compilation_policy_flags() {
     if (FLAG_IS_DEFAULT(Tier4BackEdgeThreshold)) {
       FLAG_SET_DEFAULT(Tier4BackEdgeThreshold, 15000);
     }
+
+    if (FLAG_IS_DEFAULT(Tier3InvocationThreshold)) {
+      FLAG_SET_DEFAULT(Tier3InvocationThreshold, Tier4InvocationThreshold);
+    }
+    if (FLAG_IS_DEFAULT(Tier3MinInvocationThreshold)) {
+      FLAG_SET_DEFAULT(Tier3MinInvocationThreshold, Tier4MinInvocationThreshold);
+    }
+    if (FLAG_IS_DEFAULT(Tier3CompileThreshold)) {
+      FLAG_SET_DEFAULT(Tier3CompileThreshold, Tier4CompileThreshold);
+    }
+    if (FLAG_IS_DEFAULT(Tier3BackEdgeThreshold)) {
+      FLAG_SET_DEFAULT(Tier3BackEdgeThreshold, Tier4BackEdgeThreshold);
+    }
+
   }
 
   // Scale tiered compilation thresholds.
@@ -374,13 +393,7 @@ void CompilerConfig::set_compilation_policy_flags() {
   if (CompilerConfig::is_tiered() && CompilerConfig::is_c2_enabled()) {
 #ifdef COMPILER2
     // Some inlining tuning
-#ifdef X86
-    if (FLAG_IS_DEFAULT(InlineSmallCode)) {
-      FLAG_SET_DEFAULT(InlineSmallCode, 2500);
-    }
-#endif
-
-#if defined AARCH64
+#if defined(X86) || defined(AARCH64) || defined(RISCV64)
     if (FLAG_IS_DEFAULT(InlineSmallCode)) {
       FLAG_SET_DEFAULT(InlineSmallCode, 2500);
     }
@@ -466,6 +479,11 @@ bool CompilerConfig::check_args_consistency(bool status) {
                 "Invalid NonNMethodCodeHeapSize=%dK. Must be at least %uK.\n", NonNMethodCodeHeapSize/K,
                 min_code_cache_size/K);
     status = false;
+  } else if (InlineCacheBufferSize > NonNMethodCodeHeapSize / 2) {
+    jio_fprintf(defaultStream::error_stream(),
+                "Invalid InlineCacheBufferSize=" SIZE_FORMAT "K. Must be less than or equal to " SIZE_FORMAT "K.\n",
+                InlineCacheBufferSize/K, NonNMethodCodeHeapSize/2/K);
+    status = false;
   }
 
 #ifdef _LP64
@@ -508,6 +526,10 @@ bool CompilerConfig::check_args_consistency(bool status) {
         warning("TieredCompilation disabled due to -Xint.");
       }
       FLAG_SET_CMDLINE(TieredCompilation, false);
+    }
+    if (SegmentedCodeCache) {
+      warning("SegmentedCodeCache has no meaningful effect with -Xint");
+      FLAG_SET_DEFAULT(SegmentedCodeCache, false);
     }
 #if INCLUDE_JVMCI
     if (EnableJVMCI) {

@@ -613,7 +613,10 @@ public class Attr extends JCTree.Visitor {
                 }
                 @Override
                 public void report(DiagnosticPosition pos, JCDiagnostic details) {
-                    if (pt == Type.recoveryType) {
+                    boolean needsReport = pt == Type.recoveryType ||
+                            (details.getDiagnosticPosition() != null &&
+                            details.getDiagnosticPosition().getTree().hasTag(LAMBDA));
+                    if (needsReport) {
                         chk.basicHandler.report(pos, details);
                     }
                 }
@@ -859,7 +862,7 @@ public class Attr extends JCTree.Visitor {
             Type itype = attribExpr(variable.init, env, type);
             if (variable.isImplicitlyTyped()) {
                 //fixup local variable type
-                type = variable.type = variable.sym.type = chk.checkLocalVarType(variable, itype.baseType(), variable.name);
+                type = variable.type = variable.sym.type = chk.checkLocalVarType(variable, itype, variable.name);
             }
             if (itype.constValue() != null) {
                 return coerce(itype, type).constValue();
@@ -1180,15 +1183,16 @@ public class Attr extends JCTree.Visitor {
                 }
                 if (isDefaultMethod || (tree.sym.flags() & (ABSTRACT | NATIVE)) == 0)
                     log.error(tree.pos(), Errors.MissingMethBodyOrDeclAbstract);
-            } else if ((tree.sym.flags() & (ABSTRACT|DEFAULT|PRIVATE)) == ABSTRACT) {
-                if ((owner.flags() & INTERFACE) != 0) {
-                    log.error(tree.body.pos(), Errors.IntfMethCantHaveBody);
-                } else {
-                    log.error(tree.pos(), Errors.AbstractMethCantHaveBody);
-                }
-            } else if ((tree.mods.flags & NATIVE) != 0) {
-                log.error(tree.pos(), Errors.NativeMethCantHaveBody);
             } else {
+                if ((tree.sym.flags() & (ABSTRACT|DEFAULT|PRIVATE)) == ABSTRACT) {
+                    if ((owner.flags() & INTERFACE) != 0) {
+                        log.error(tree.body.pos(), Errors.IntfMethCantHaveBody);
+                    } else {
+                        log.error(tree.pos(), Errors.AbstractMethCantHaveBody);
+                    }
+                } else if ((tree.mods.flags & NATIVE) != 0) {
+                    log.error(tree.pos(), Errors.NativeMethCantHaveBody);
+                }
                 // Add an implicit super() call unless an explicit call to
                 // super(...) or this(...) is given
                 // or we are compiling class java.lang.Object.
@@ -1311,7 +1315,7 @@ public class Attr extends JCTree.Visitor {
                     attribExpr(tree.init, initEnv, v.type);
                     if (tree.isImplicitlyTyped()) {
                         //fixup local variable type
-                        v.type = chk.checkLocalVarType(tree, tree.init.type.baseType(), tree.name);
+                        v.type = chk.checkLocalVarType(tree, tree.init.type, tree.name);
                     }
                 }
                 if (tree.isImplicitlyTyped()) {
@@ -1543,7 +1547,7 @@ public class Attr extends JCTree.Visitor {
                     // Check the return type of the method iterator().
                     // This is the bare minimum we need to verify to make sure code generation doesn't crash.
                     Symbol iterSymbol = rs.resolveInternalMethod(tree.pos(),
-                            loopEnv, exprType, names.iterator, List.nil(), List.nil());
+                            loopEnv, types.skipTypeVars(exprType, false), names.iterator, List.nil(), List.nil());
                     if (types.asSuper(iterSymbol.type.getReturnType(), syms.iteratorType.tsym) == null) {
                         log.error(tree.pos(),
                                 Errors.ForeachNotApplicableToType(exprType, Fragments.TypeReqArrayOrIterable));
@@ -1797,6 +1801,7 @@ public class Attr extends JCTree.Visitor {
                 }
                 addVars(c.stats, switchEnv.info.scope);
 
+                preFlow(c);
                 c.completesNormally = flow.aliveAfter(caseEnv, c, make);
 
                 prevBindings = c.caseKind == CaseTree.CaseKind.STATEMENT && c.completesNormally ? currentBindings
@@ -2590,7 +2595,7 @@ public class Attr extends JCTree.Visitor {
                     argtypes.isEmpty()) {
                 // as a special case, x.getClass() has type Class<? extends |X|>
                 return new ClassType(restype.getEnclosingType(),
-                        List.of(new WildcardType(types.erasure(qualifierType),
+                        List.of(new WildcardType(types.erasure(qualifierType.baseType()),
                                 BoundKind.EXTENDS,
                                 syms.boundClass)),
                         restype.tsym,
@@ -5131,27 +5136,11 @@ public class Attr extends JCTree.Visitor {
             case MODULEDEF:
                 attribModule(env.tree.pos(), ((JCModuleDecl)env.tree).sym);
                 break;
-            case TOPLEVEL:
-                attribTopLevel(env);
-                break;
             case PACKAGEDEF:
                 attribPackage(env.tree.pos(), ((JCPackageDecl) env.tree).packge);
                 break;
             default:
                 attribClass(env.tree.pos(), env.enclClass.sym);
-        }
-    }
-
-    /**
-     * Attribute a top level tree. These trees are encountered when the
-     * package declaration has annotations.
-     */
-    public void attribTopLevel(Env<AttrContext> env) {
-        JCCompilationUnit toplevel = env.toplevel;
-        try {
-            annotate.flush();
-        } catch (CompletionFailure ex) {
-            chk.completionError(toplevel.pos(), ex);
         }
     }
 
@@ -5911,6 +5900,8 @@ public class Attr extends JCTree.Visitor {
 
         @Override
         public void visitBindingPattern(JCBindingPattern that) {
+            initTypeIfNeeded(that);
+            initTypeIfNeeded(that.var);
             if (that.var.sym == null) {
                 that.var.sym = new BindingSymbol(0, that.var.name, that.var.type, syms.noSymbol);
                 that.var.sym.adr = 0;

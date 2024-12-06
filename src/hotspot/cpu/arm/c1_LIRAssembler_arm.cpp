@@ -721,11 +721,7 @@ void LIR_Assembler::mem2reg(LIR_Opr src, LIR_Opr dest, BasicType type,
       break;
 
     case T_ADDRESS:
-      if (UseCompressedClassPointers && addr->disp() == oopDesc::klass_offset_in_bytes()) {
-        __ ldr_u32(dest->as_pointer_register(), as_Address(addr));
-      } else {
-        __ ldr(dest->as_pointer_register(), as_Address(addr));
-      }
+      __ ldr(dest->as_pointer_register(), as_Address(addr));
       break;
 
     case T_INT:
@@ -1483,6 +1479,9 @@ void LIR_Assembler::cmove(LIR_Condition condition, LIR_Opr opr1, LIR_Opr opr2, L
           __ mov_double(result->as_double_reg(), c->as_jdouble(), acond);
 #endif // __SOFTFP__
           break;
+        case T_METADATA:
+          __ mov_metadata(result->as_register(), c->as_metadata(), acond);
+          break;
         default:
           ShouldNotReachHere();
       }
@@ -1685,6 +1684,9 @@ void LIR_Assembler::logic_op(LIR_Code code, LIR_Opr left, LIR_Opr right, LIR_Opr
     } else {
       assert(right->is_constant(), "must be");
       const uint c = (uint)right->as_constant_ptr()->as_jint();
+      if (!Assembler::is_arith_imm_in_range(c)) {
+        BAILOUT("illegal arithmetic operand");
+      }
       switch (code) {
         case lir_logic_and: __ and_32(res, lreg, c); break;
         case lir_logic_or:  __ orr_32(res, lreg, c); break;
@@ -1825,8 +1827,8 @@ void LIR_Assembler::comp_op(LIR_Condition condition, LIR_Opr opr1, LIR_Opr opr2,
         __ teq(xhi, yhi);
         __ teq(xlo, ylo, eq);
       } else {
-        __ subs(xlo, xlo, ylo);
-        __ sbcs(xhi, xhi, yhi);
+        __ subs(Rtemp, xlo, ylo);
+        __ sbcs(Rtemp, xhi, yhi);
       }
     } else {
       ShouldNotReachHere();
@@ -2448,6 +2450,21 @@ void LIR_Assembler::emit_lock(LIR_OpLock* op) {
   __ bind(*op->stub()->continuation());
 }
 
+void LIR_Assembler::emit_load_klass(LIR_OpLoadKlass* op) {
+  Register obj = op->obj()->as_pointer_register();
+  Register result = op->result_opr()->as_pointer_register();
+
+  CodeEmitInfo* info = op->info();
+  if (info != NULL) {
+    add_debug_info_for_null_check_here(info);
+  }
+
+  if (UseCompressedClassPointers) { // On 32 bit arm??
+    __ ldr_u32(result, Address(obj, oopDesc::klass_offset_in_bytes()));
+  } else {
+    __ ldr(result, Address(obj, oopDesc::klass_offset_in_bytes()));
+  }
+}
 
 void LIR_Assembler::emit_profile_call(LIR_OpProfileCall* op) {
   ciMethod* method = op->profiled_method();

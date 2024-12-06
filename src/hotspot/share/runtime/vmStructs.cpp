@@ -1598,7 +1598,7 @@ typedef HashtableEntry<InstanceKlass*, mtClass>  KlassHashtableEntry;
   declare_c2_type(MemBarVolatileNode, MemBarNode)                         \
   declare_c2_type(MemBarCPUOrderNode, MemBarNode)                         \
   declare_c2_type(OnSpinWaitNode, MemBarNode)                             \
-  declare_c2_type(BlackholeNode, MemBarNode)                              \
+  declare_c2_type(BlackholeNode, MultiNode)                               \
   declare_c2_type(InitializeNode, MemBarNode)                             \
   declare_c2_type(ThreadLocalNode, Node)                                  \
   declare_c2_type(Opaque1Node, Node)                                      \
@@ -2557,7 +2557,7 @@ typedef HashtableEntry<InstanceKlass*, mtClass>  KlassHashtableEntry;
   /* Calling convention constants */                                      \
   /********************************/                                      \
                                                                           \
-  declare_constant(RegisterImpl::number_of_registers)                     \
+  NOT_S390(NOT_PPC64(declare_constant(RegisterImpl::number_of_registers)))\
   declare_constant(ConcreteRegisterImpl::number_of_registers)             \
   declare_preprocessor_constant("REG_COUNT", REG_COUNT)                \
   declare_c2_preprocessor_constant("SAVED_ON_ENTRY_REG_COUNT", SAVED_ON_ENTRY_REG_COUNT) \

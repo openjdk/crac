@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2009, 2021, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2009, 2024, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -44,6 +44,7 @@ import java.util.List;
 import java.util.Map;
 
 import sun.security.action.GetIntegerAction;
+import sun.security.action.GetPropertyAction;
 import sun.security.util.Debug;
 import sun.security.util.Event;
 import sun.security.util.IOUtils;
@@ -80,6 +81,28 @@ public final class OCSP {
     private static final int CONNECT_TIMEOUT = initializeTimeout();
 
     /**
+     * Boolean value indicating whether OCSP client can use GET for OCSP
+     * requests. There is an ambiguity in RFC recommendations.
+     *
+     * RFC 5019 says a stronger thing, "MUST":
+     *    "When sending requests that are less than or equal to 255 bytes in
+     *     total (after encoding) including the scheme and delimiters (http://),
+     *     server name and base64-encoded OCSPRequest structure, clients MUST
+     *     use the GET method (to enable OCSP response caching)."
+     *
+     * RFC 6960 says a weaker thing, "MAY":
+     *    "HTTP-based OCSP requests can use either the GET or the POST method to
+     *     submit their requests.  To enable HTTP caching, small requests (that
+     *     after encoding are less than 255 bytes) MAY be submitted using GET."
+     *
+     * For performance reasons, we default to stronger behavior. But this
+     * option also allows to fallback to weaker behavior in case of compatibility
+     * problems.
+     */
+    private static final boolean USE_GET = initializeBoolean(
+            "com.sun.security.ocsp.useget", true);
+
+    /**
      * Initialize the timeout length by getting the OCSP timeout
      * system property. If the property has not been set, or if its
      * value is negative, set the timeout length to the default.
@@ -94,6 +117,15 @@ public final class OCSP {
         // Convert to milliseconds, as the system property will be
         // specified in seconds
         return tmp * 1000;
+    }
+
+    private static boolean initializeBoolean(String prop, boolean def) {
+        boolean value =
+                GetPropertyAction.privilegedGetBooleanProp(prop, def, debug);
+        if (debug != null) {
+            debug.println(prop + " set to " + value);
+        }
+        return value;
     }
 
     private OCSP() {}
@@ -226,22 +258,26 @@ public final class OCSP {
             List<Extension> extensions) throws IOException {
         OCSPRequest request = new OCSPRequest(certIds, extensions);
         byte[] bytes = request.encodeBytes();
+        String responder = responderURI.toString();
 
         if (debug != null) {
-            debug.println("connecting to OCSP service at: " + responderURI);
+            debug.println("connecting to OCSP service at: " + responder);
         }
         Event.report(Event.ReporterCategory.CRLCHECK, "event.ocsp.check",
-                responderURI.toString());
+                responder);
 
         URL url;
         HttpURLConnection con = null;
         try {
-            String encodedGetReq = responderURI.toString() + "/" +
-                    URLEncoder.encode(Base64.getEncoder().encodeToString(bytes),
-                            "UTF-8");
+            StringBuilder encodedGetReq = new StringBuilder(responder);
+            if (!responder.endsWith("/")) {
+                encodedGetReq.append("/");
+            }
+            encodedGetReq.append(URLEncoder.encode(
+                    Base64.getEncoder().encodeToString(bytes), "UTF-8"));
 
-            if (encodedGetReq.length() <= 255) {
-                url = new URL(encodedGetReq);
+            if (USE_GET && encodedGetReq.length() <= 255) {
+                url = new URL(encodedGetReq.toString());
                 con = (HttpURLConnection)url.openConnection();
                 con.setDoOutput(true);
                 con.setDoInput(true);
@@ -263,20 +299,23 @@ public final class OCSP {
                 out.flush();
             }
 
-            // Check the response
-            if (debug != null &&
-                con.getResponseCode() != HttpURLConnection.HTTP_OK) {
-                debug.println("Received HTTP error: " + con.getResponseCode()
-                    + " - " + con.getResponseMessage());
+            // Check the response.  Non-200 codes will generate an exception
+            // but path validation may complete successfully if revocation info
+            // can be obtained elsewhere (e.g. CRL).
+            int respCode = con.getResponseCode();
+            if (respCode != HttpURLConnection.HTTP_OK) {
+                String msg = "Received HTTP error: " + respCode + " - " +
+                        con.getResponseMessage();
+                if (debug != null) {
+                    debug.println(msg);
+                }
+                throw new IOException(msg);
             }
 
             int contentLength = con.getContentLength();
-            if (contentLength == -1) {
-                contentLength = Integer.MAX_VALUE;
-            }
-
-            return IOUtils.readExactlyNBytes(con.getInputStream(),
-                    contentLength);
+            return (contentLength == -1) ? con.getInputStream().readAllBytes() :
+                    IOUtils.readExactlyNBytes(con.getInputStream(),
+                            contentLength);
         } finally {
             if (con != null) {
                 con.disconnect();

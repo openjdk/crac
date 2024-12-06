@@ -303,6 +303,34 @@ public class DerValue {
     }
 
     /**
+     * Wraps a byte array as a single DerValue.
+     *
+     * Attention: no cloning is made.
+     *
+     * @param buf the byte array containing the DER-encoded datum
+     * @returns a new DerValue
+     */
+    public static DerValue wrap(byte[] buf)
+            throws IOException {
+        return wrap(buf, 0, buf.length);
+    }
+
+    /**
+     * Wraps a byte array as a single DerValue.
+     *
+     * Attention: no cloning is made.
+     *
+     * @param buf the byte array containing the DER-encoded datum
+     * @param offset where the encoded datum starts inside {@code buf}
+     * @param len length of bytes to parse inside {@code buf}
+     * @returns a new DerValue
+     */
+    public static DerValue wrap(byte[] buf, int offset, int len)
+            throws IOException {
+        return new DerValue(buf, offset, len, true, false);
+    }
+
+    /**
      * Parse an ASN.1/BER encoded datum. The entire encoding must hold exactly
      * one datum, including its tag and length.
      *
@@ -661,6 +689,28 @@ public class DerValue {
         };
     }
 
+    // check the number of pad bits, validate the pad bits in the bytes
+    // if enforcing DER (i.e. allowBER == false), and return the number of
+    // bits of the resulting BitString
+    private static int checkPaddedBits(int numOfPadBits, byte[] data,
+            int start, int end, boolean allowBER) throws IOException {
+        // number of pad bits should be from 0(min) to 7(max).
+        if ((numOfPadBits < 0) || (numOfPadBits > 7)) {
+            throw new IOException("Invalid number of padding bits");
+        }
+        int lenInBits = ((end - start) << 3) - numOfPadBits;
+        if (lenInBits < 0) {
+            throw new IOException("Not enough bytes in BitString");
+        }
+
+        // padding bits should be all zeros for DER
+        if (!allowBER && numOfPadBits != 0 &&
+                (data[end - 1] & (0xff >>> (8 - numOfPadBits))) != 0) {
+            throw new IOException("Invalid value of padding bits");
+        }
+        return lenInBits;
+    }
+
     /**
      * Returns an ASN.1 BIT STRING value, with the tag assumed implicit
      * based on the parameter.  The bit string must be byte-aligned.
@@ -677,18 +727,17 @@ public class DerValue {
         }
         if (end == start) {
             throw new IOException("Invalid encoding: zero length bit string");
-        }
-        int numOfPadBits = buffer[start];
-        if ((numOfPadBits < 0) || (numOfPadBits > 7)) {
-            throw new IOException("Invalid number of padding bits");
-        }
-        // minus the first byte which indicates the number of padding bits
-        byte[] retval = Arrays.copyOfRange(buffer, start + 1, end);
-        if (numOfPadBits != 0) {
-            // get rid of the padding bits
-            retval[end - start - 2] &= (0xff << numOfPadBits);
+
         }
         data.pos = data.end; // Compatibility. Reach end.
+
+        int numOfPadBits = buffer[start];
+        checkPaddedBits(numOfPadBits, buffer, start + 1, end, allowBER);
+        byte[] retval = Arrays.copyOfRange(buffer, start + 1, end);
+        if (allowBER && numOfPadBits != 0) {
+            // fix the potential non-zero padding bits
+            retval[retval.length - 1] &= (0xff << numOfPadBits);
+        }
         return retval;
     }
 
@@ -711,16 +760,11 @@ public class DerValue {
             throw new IOException("Invalid encoding: zero length bit string");
         }
         data.pos = data.end; // Compatibility. Reach end.
+
         int numOfPadBits = buffer[start];
-        if ((numOfPadBits < 0) || (numOfPadBits > 7)) {
-            throw new IOException("Invalid number of padding bits");
-        }
-        if (end == start + 1) {
-            return new BitArray(0);
-        } else {
-            return new BitArray(((end - start - 1) << 3) - numOfPadBits,
-                    Arrays.copyOfRange(buffer, start + 1, end));
-        }
+        int len = checkPaddedBits(numOfPadBits, buffer, start + 1, end,
+                allowBER);
+        return new BitArray(len, buffer, start + 1);
     }
 
     /**

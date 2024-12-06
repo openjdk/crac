@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2016, 2021, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2016, 2022, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -549,14 +549,16 @@ void JfrJavaSupport::throw_runtime_exception(const char* message, TRAPS) {
 
 void JfrJavaSupport::abort(jstring errorMsg, JavaThread* t) {
   DEBUG_ONLY(check_java_thread_in_vm(t));
-
   ResourceMark rm(t);
-  const char* const error_msg = c_str(errorMsg, t);
-  if (error_msg != NULL) {
-    log_error(jfr, system)("%s",error_msg);
+  abort(c_str(errorMsg, t));
+}
+
+void JfrJavaSupport::abort(const char* error_msg, bool dump_core /* true */) {
+  if (error_msg != nullptr) {
+    log_error(jfr, system)("%s", error_msg);
   }
   log_error(jfr, system)("%s", "An irrecoverable error in Jfr. Shutting down VM...");
-  vm_abort();
+  vm_abort(dump_core);
 }
 
 JfrJavaSupport::CAUSE JfrJavaSupport::_cause = JfrJavaSupport::VM_ERROR;
@@ -724,20 +726,21 @@ static bool check_exclusion_state_on_thread_start(JavaThread* jt) {
   return true;
 }
 
-static JavaThread* get_native(jobject thread) {
-  ThreadsListHandle tlh;
+static JavaThread* get_native(ThreadsListHandle& tlh, jobject thread) {
   JavaThread* native_thread = NULL;
   (void)tlh.cv_internal_thread_to_JavaThread(thread, &native_thread, NULL);
   return native_thread;
 }
 
 jlong JfrJavaSupport::jfr_thread_id(jobject thread) {
-  JavaThread* native_thread = get_native(thread);
+  ThreadsListHandle tlh;
+  JavaThread* native_thread = get_native(tlh, thread);
   return native_thread != NULL ? JFR_THREAD_ID(native_thread) : 0;
 }
 
 void JfrJavaSupport::exclude(jobject thread) {
-  JavaThread* native_thread = get_native(thread);
+  ThreadsListHandle tlh;
+  JavaThread* native_thread = get_native(tlh, thread);
   if (native_thread != NULL) {
     JfrThreadLocal::exclude(native_thread);
   } else {
@@ -747,7 +750,8 @@ void JfrJavaSupport::exclude(jobject thread) {
 }
 
 void JfrJavaSupport::include(jobject thread) {
-  JavaThread* native_thread = get_native(thread);
+  ThreadsListHandle tlh;
+  JavaThread* native_thread = get_native(tlh, thread);
   if (native_thread != NULL) {
     JfrThreadLocal::include(native_thread);
   } else {
@@ -757,7 +761,8 @@ void JfrJavaSupport::include(jobject thread) {
 }
 
 bool JfrJavaSupport::is_excluded(jobject thread) {
-  JavaThread* native_thread = get_native(thread);
+  ThreadsListHandle tlh;
+  JavaThread* native_thread = get_native(tlh, thread);
   return native_thread != NULL ? native_thread->jfr_thread_local()->is_excluded() : is_thread_excluded(thread);
 }
 

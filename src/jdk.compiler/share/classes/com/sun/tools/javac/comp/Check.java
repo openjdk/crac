@@ -119,9 +119,6 @@ public class Check {
         context.put(checkKey, this);
 
         names = Names.instance(context);
-        dfltTargetMeta = new Name[] { names.PACKAGE, names.TYPE,
-            names.FIELD, names.RECORD_COMPONENT, names.METHOD, names.CONSTRUCTOR,
-            names.ANNOTATION_TYPE, names.LOCAL_VARIABLE, names.PARAMETER, names.MODULE };
         log = Log.instance(context);
         rs = Resolve.instance(context);
         syms = Symtab.instance(context);
@@ -161,6 +158,7 @@ public class Check {
 
         deferredLintHandler = DeferredLintHandler.instance(context);
 
+        allowModules = Feature.MODULES.allowedInSource(source);
         allowRecords = Feature.RECORDS.allowedInSource(source);
         allowSealed = Feature.SEALED_CLASSES.allowedInSource(source);
     }
@@ -193,6 +191,10 @@ public class Check {
     /** A handler for deferred lint warnings.
      */
     private DeferredLintHandler deferredLintHandler;
+
+    /** Are modules allowed
+     */
+    private final boolean allowModules;
 
     /** Are records allowed
      */
@@ -983,7 +985,7 @@ public class Check {
         }
 
         //upward project the initializer type
-        return types.upward(t, types.captures(t));
+        return types.upward(t, types.captures(t)).baseType();
     }
 
     Type checkMethod(final Type mtype,
@@ -2929,6 +2931,9 @@ public class Check {
     /** Check an annotation of a symbol.
      */
     private void validateAnnotation(JCAnnotation a, JCTree declarationTree, Symbol s) {
+        /** NOTE: if annotation processors are present, annotation processing rounds can happen after this method,
+         *  this can impact in particular records for which annotations are forcibly propagated.
+         */
         validateAnnotationTree(a);
         boolean isRecordMember = ((s.flags_field & RECORD) != 0 || s.enclClass() != null && s.enclClass().isRecord());
 
@@ -2967,9 +2972,15 @@ public class Check {
                     rc.appendAttributes(s.getRawAttributes().stream().filter(anno ->
                             Arrays.stream(getTargetNames(anno.type.tsym)).anyMatch(name -> name == names.RECORD_COMPONENT)
                     ).collect(List.collector()));
-                    rc.setTypeAttributes(s.getRawTypeAttributes());
-                    // to get all the type annotations applied to the type
-                    rc.type = s.type;
+
+                    /* At this point, we used to carry over any type annotations from the VARDEF to the record component, but
+                     * that is problematic, since we get here only when *some* annotation is applied to the SE5 (declaration)
+                     * annotation location, inadvertently failing to carry over the type annotations when the VarDef has no
+                     * annotations in the SE5 annotation location.
+                     *
+                     * Now type annotations are assigned to record components in a method that would execute irrespective of
+                     * whether there are SE5 annotations on a VarDef viz com.sun.tools.javac.code.TypeAnnotations.TypeAnnotationPositions.visitVarDef
+                     */
                 }
             }
         }
@@ -3215,20 +3226,7 @@ public class Check {
     /* get a set of names for the default target */
     private Set<Name> getDefaultTargetSet() {
         if (defaultTargets == null) {
-            Set<Name> targets = new HashSet<>();
-            targets.add(names.ANNOTATION_TYPE);
-            targets.add(names.CONSTRUCTOR);
-            targets.add(names.FIELD);
-            if (allowRecords) {
-                targets.add(names.RECORD_COMPONENT);
-            }
-            targets.add(names.LOCAL_VARIABLE);
-            targets.add(names.METHOD);
-            targets.add(names.PACKAGE);
-            targets.add(names.PARAMETER);
-            targets.add(names.TYPE);
-
-            defaultTargets = java.util.Collections.unmodifiableSet(targets);
+            defaultTargets = Set.of(defaultTargetMetaInfo());
         }
 
         return defaultTargets;
@@ -3428,8 +3426,26 @@ public class Check {
         return (atValue instanceof Attribute.Array attributeArray) ? attributeArray : null;
     }
 
-    public final Name[] dfltTargetMeta;
+    private Name[] dfltTargetMeta;
     private Name[] defaultTargetMetaInfo() {
+        if (dfltTargetMeta == null) {
+            ArrayList<Name> defaultTargets = new ArrayList<>();
+            defaultTargets.add(names.PACKAGE);
+            defaultTargets.add(names.TYPE);
+            defaultTargets.add(names.FIELD);
+            defaultTargets.add(names.METHOD);
+            defaultTargets.add(names.CONSTRUCTOR);
+            defaultTargets.add(names.ANNOTATION_TYPE);
+            defaultTargets.add(names.LOCAL_VARIABLE);
+            defaultTargets.add(names.PARAMETER);
+            if (allowRecords) {
+              defaultTargets.add(names.RECORD_COMPONENT);
+            }
+            if (allowModules) {
+              defaultTargets.add(names.MODULE);
+            }
+            dfltTargetMeta = defaultTargets.toArray(new Name[0]);
+        }
         return dfltTargetMeta;
     }
 

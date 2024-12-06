@@ -178,11 +178,7 @@
 
   // Some microarchitectures have mask registers used on vectors
   static const bool has_predicated_vectors(void) {
-    bool ret_value = false;
-    if (UseAVX > 2) {
-      ret_value = VM_Version::supports_avx512vl();
-    }
-    return ret_value;
+    return VM_Version::supports_evex();
   }
 
   // true means we have fast l2f convers
@@ -190,5 +186,8 @@
   static constexpr bool convL2FSupported(void) {
       return true;
   }
+
+  // Implements a variant of EncodeISOArrayNode that encode ASCII only
+  static const bool supports_encode_ascii_array = true;
 
 #endif // CPU_X86_MATCHER_X86_HPP

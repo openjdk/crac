@@ -1503,17 +1503,29 @@ public abstract class Symbol extends AnnoConstruct implements PoolConstant, Elem
             return null;
         }
 
-        public RecordComponent getRecordComponent(JCVariableDecl var, boolean addIfMissing, List<JCAnnotation> annotations) {
+        public RecordComponent findRecordComponentToRemove(JCVariableDecl var) {
+            RecordComponent toRemove = null;
             for (RecordComponent rc : recordComponents) {
                 /* it could be that a record erroneously declares two record components with the same name, in that
                  * case we need to use the position to disambiguate
                  */
                 if (rc.name == var.name && var.pos == rc.pos) {
-                    return rc;
+                    toRemove = rc;
                 }
             }
+            return toRemove;
+        }
+
+        /* creates a record component if non is related to the given variable and recreates a brand new one
+         * in other case
+         */
+        public RecordComponent createRecordComponent(RecordComponent existing, JCVariableDecl var, List<JCAnnotation> annotations) {
             RecordComponent rc = null;
-            if (addIfMissing) {
+            if (existing != null) {
+                recordComponents = List.filter(recordComponents, existing);
+                recordComponents = recordComponents.append(rc = new RecordComponent(var.sym, existing.originalAnnos, existing.isVarargs));
+            } else {
+                // Didn't find the record component: create one.
                 recordComponents = recordComponents.append(rc = new RecordComponent(var.sym, annotations));
             }
             return rc;
@@ -1795,6 +1807,10 @@ public abstract class Symbol extends AnnoConstruct implements PoolConstant, Elem
         }
 
         public RecordComponent(VarSymbol field, List<JCAnnotation> annotations) {
+            this(field, annotations, field.type.hasTag(TypeTag.ARRAY) && ((ArrayType)field.type).isVarargs());
+        }
+
+        public RecordComponent(VarSymbol field, List<JCAnnotation> annotations, boolean isVarargs) {
             super(PUBLIC, field.name, field.type, field.owner);
             this.originalAnnos = annotations;
             this.pos = field.pos;
@@ -1803,7 +1819,7 @@ public abstract class Symbol extends AnnoConstruct implements PoolConstant, Elem
              * the symbol will be blown out and we won't be able to know if the original
              * record component was declared varargs or not.
              */
-            this.isVarargs = type.hasTag(TypeTag.ARRAY) && ((ArrayType)type).isVarargs();
+            this.isVarargs = isVarargs;
         }
 
         public List<JCAnnotation> getOriginalAnnos() { return originalAnnos; }

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2007, 2021, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2007, 2024, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -71,7 +71,6 @@ typedef union {
 } TagSignature_t, *TagSignature_p;
 
 static jfieldID Trans_renderType_fID;
-static jfieldID Trans_ID_fID;
 static jfieldID IL_isIntPacked_fID;
 static jfieldID IL_dataType_fID;
 static jfieldID IL_pixelType_fID;
@@ -189,8 +188,13 @@ JNIEXPORT jlong JNICALL Java_sun_java2d_cmm_lcms_LCMS_createNativeTransform
         }
     }
 
+    cmsUInt32Number dwFlags = 0;
+    if (T_EXTRA(inFormatter) > 0 && T_EXTRA(outFormatter) > 0) {
+        dwFlags |= cmsFLAGS_COPY_ALPHA;
+    }
+
     sTrans = cmsCreateMultiprofileTransform(iccArray, j,
-        inFormatter, outFormatter, renderType, cmsFLAGS_COPY_ALPHA);
+        inFormatter, outFormatter, renderType, dwFlags);
 
     (*env)->ReleaseLongArrayElements(env, profileIDs, ids, 0);
 
@@ -510,9 +514,9 @@ void releaseILData (JNIEnv *env, void* pData, jint dataType,
  * Signature: (Lsun/java2d/cmm/lcms/LCMSTransform;Lsun/java2d/cmm/lcms/LCMSImageLayout;Lsun/java2d/cmm/lcms/LCMSImageLayout;)V
  */
 JNIEXPORT void JNICALL Java_sun_java2d_cmm_lcms_LCMS_colorConvert
-  (JNIEnv *env, jclass cls, jobject trans, jobject src, jobject dst)
+  (JNIEnv *env, jclass cls, jlong ID, jobject src, jobject dst)
 {
-    cmsHTRANSFORM sTrans = NULL;
+    cmsHTRANSFORM sTrans = jlong_to_ptr(ID);
     int srcDType, dstDType;
     int srcOffset, srcNextRowOffset, dstOffset, dstNextRowOffset;
     int width, height, i;
@@ -532,8 +536,6 @@ JNIEXPORT void JNICALL Java_sun_java2d_cmm_lcms_LCMS_colorConvert
 
     srcAtOnce = (*env)->GetBooleanField(env, src, IL_imageAtOnce_fID);
     dstAtOnce = (*env)->GetBooleanField(env, dst, IL_imageAtOnce_fID);
-
-    sTrans = jlong_to_ptr((*env)->GetLongField (env, trans, Trans_ID_fID));
 
     if (sTrans == NULL) {
         J2dRlsTraceLn(J2D_TRACE_ERROR, "LCMS_colorConvert: transform == NULL");
@@ -626,11 +628,6 @@ JNIEXPORT void JNICALL Java_sun_java2d_cmm_lcms_LCMS_initLCMS
     if (Trans_renderType_fID == NULL) {
         return;
     }
-    Trans_ID_fID = (*env)->GetFieldID (env, Trans, "ID", "J");
-    if (Trans_ID_fID == NULL) {
-        return;
-    }
-
     IL_isIntPacked_fID = (*env)->GetFieldID (env, IL, "isIntPacked", "Z");
     if (IL_isIntPacked_fID == NULL) {
         return;
@@ -805,34 +802,43 @@ static cmsHPROFILE _writeCookedTag(const cmsHPROFILE pfTarget,
 
     // now we have all tags moved to the new profile.
     // do some sanity checks: write it to a memory buffer and read again.
+    void* buf = NULL;
     if (cmsSaveProfileToMem(p, NULL, &pfSize)) {
-        void* buf = malloc(pfSize);
+        buf = malloc(pfSize);
         if (buf != NULL) {
             // load raw profile data into the buffer
             if (cmsSaveProfileToMem(p, buf, &pfSize)) {
                 pfSanity = cmsOpenProfileFromMem(buf, pfSize);
             }
-            free(buf);
         }
     }
+
+    cmsCloseProfile(p); // No longer needed.
 
     if (pfSanity == NULL) {
         // for some reason, we failed to save and read the updated profile
         // It likely indicates that the profile is not correct, so we report
         // a failure here.
-        cmsCloseProfile(p);
-        p =  NULL;
+        free(buf);
+        return NULL;
     } else {
         // do final check whether we can read and handle the target tag.
         const void* pTag = cmsReadTag(pfSanity, sig);
         if (pTag == NULL) {
             // the tag can not be cooked
-            cmsCloseProfile(p);
-            p = NULL;
+            free(buf);
+            cmsCloseProfile(pfSanity);
+            return NULL;
         }
+        // The profile we used for sanity checking needs to be returned
+        // since the one we updated is raw - not cooked.
+        // Except we want to re-open it since the call to cmsReadTag()
+        // means we may not get back the same bytes as we set.
+        // Whilst this may change later anyway, we can at least prevent
+        // it from happening immediately.
         cmsCloseProfile(pfSanity);
-        pfSanity = NULL;
+        pfSanity = cmsOpenProfileFromMem(buf, pfSize);
+        free(buf);
+        return pfSanity;
     }
-
-    return p;
 }

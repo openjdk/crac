@@ -106,12 +106,20 @@ define_pd_global(intx, InlineSmallCode,          1000);
           "Use DC ZVA for block zeroing")                               \
   product(intx, BlockZeroingLowLimit, 256,                              \
           "Minimum size in bytes when block zeroing will be used")      \
-          range(1, max_jint)                                            \
+          range(wordSize, max_jint)                                     \
   product(bool, TraceTraps, false, "Trace all traps the signal handler")\
   product(int, SoftwarePrefetchHintDistance, -1,                        \
           "Use prfm hint with specified distance in compiled code."     \
           "Value -1 means off.")                                        \
-          range(-1, 4096)
+          range(-1, 4096)                                               \
+  product(ccstr, OnSpinWaitInst, "none", DIAGNOSTIC,                    \
+          "The instruction to use to implement "                        \
+          "java.lang.Thread.onSpinWait()."                              \
+          "Options: none, nop, isb, yield.")                            \
+  product(uint, OnSpinWaitInstCount, 1, DIAGNOSTIC,                     \
+          "The number of OnSpinWaitInst instructions to generate."      \
+          "It cannot be used with OnSpinWaitInst=none.")                \
+          range(1, 99)
 
 // end of ARCH_FLAGS
 

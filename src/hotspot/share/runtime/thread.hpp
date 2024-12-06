@@ -54,7 +54,6 @@
 #include "jfr/support/jfrThreadExtension.hpp"
 #endif
 
-
 class SafeThreadsListPtr;
 class ThreadSafepointState;
 class ThreadsList;
@@ -654,6 +653,31 @@ protected:
     assert(_wx_state == expected, "wrong state");
   }
 #endif // __APPLE__ && AARCH64
+
+ private:
+  bool _in_asgct = false;
+ public:
+  bool in_asgct() const { return _in_asgct; }
+  void set_in_asgct(bool value) { _in_asgct = value; }
+  static bool current_in_asgct() {
+    Thread *cur = Thread::current_or_null_safe();
+    return cur != nullptr && cur->in_asgct();
+  }
+};
+
+class ThreadInAsgct {
+ private:
+  Thread* _thread;
+ public:
+  ThreadInAsgct(Thread* thread) : _thread(thread) {
+    assert(thread != nullptr, "invariant");
+    assert(!thread->in_asgct(), "invariant");
+    thread->set_in_asgct(true);
+  }
+  ~ThreadInAsgct() {
+    assert(_thread->in_asgct(), "invariant");
+    _thread->set_in_asgct(false);
+  }
 };
 
 // Inline implementation of Thread::current()
@@ -692,6 +716,7 @@ class JavaThread: public Thread {
   friend class ThreadsSMRSupport; // to access _threadObj for exiting_threads_oops_do
   friend class HandshakeState;
  private:
+  bool           _in_asgct;                      // Is set when this JavaThread is handling ASGCT call
   bool           _on_thread_list;                // Is set when this JavaThread is added to the Threads list
   OopHandle      _threadObj;                     // The Java level thread object
 
@@ -957,8 +982,8 @@ class JavaThread: public Thread {
   jlong*    _jvmci_counters;
 
   // Fast thread locals for use by JVMCI
-  intptr_t*  _jvmci_reserved0;
-  intptr_t*  _jvmci_reserved1;
+  jlong      _jvmci_reserved0;
+  jlong      _jvmci_reserved1;
   oop        _jvmci_reserved_oop0;
 
  public:
@@ -968,6 +993,30 @@ class JavaThread: public Thread {
   bool resize_counters(int current_size, int new_size);
 
   static bool resize_all_jvmci_counters(int new_size);
+
+  void set_jvmci_reserved_oop0(oop value) {
+    _jvmci_reserved_oop0 = value;
+  }
+
+  oop get_jvmci_reserved_oop0() {
+    return _jvmci_reserved_oop0;
+  }
+
+  void set_jvmci_reserved0(jlong value) {
+    _jvmci_reserved0 = value;
+  }
+
+  jlong get_jvmci_reserved0() {
+    return _jvmci_reserved0;
+  }
+
+  void set_jvmci_reserved1(jlong value) {
+    _jvmci_reserved1 = value;
+  }
+
+  jlong get_jvmci_reserved1() {
+    return _jvmci_reserved1;
+  }
 
  private:
 #endif // INCLUDE_JVMCI
@@ -1376,6 +1425,7 @@ class JavaThread: public Thread {
 
   // Misc. operations
   char* name() const { return (char*)get_thread_name(); }
+  static const char* name_for(oop thread_obj);
   void print_on(outputStream* st, bool print_extended_info) const;
   void print_on(outputStream* st) const { print_on(st, false); }
   void print() const;
@@ -1390,7 +1440,7 @@ class JavaThread: public Thread {
  public:
   // Accessing frames
   frame last_frame() {
-    _anchor.make_walkable(this);
+    _anchor.make_walkable();
     return pd_last_frame();
   }
   javaVFrame* last_java_vframe(RegisterMap* reg_map);
@@ -1402,6 +1452,10 @@ class JavaThread: public Thread {
   // Print stack trace in external format
   void print_stack_on(outputStream* st);
   void print_stack() { print_stack_on(tty); }
+  // Print current stack trace for checked JNI warnings and JNI fatal errors.
+  // This is the external format from above, but selecting the platform
+  // as applicable.
+  void print_jni_stack();
 
   // Print stack traces in various internal formats
   void trace_stack()                             PRODUCT_RETURN;
@@ -1589,6 +1643,19 @@ public:
   static OopStorage* thread_oop_storage();
 
   static void verify_cross_modify_fence_failure(JavaThread *thread) PRODUCT_RETURN;
+
+  // Helper function to start a VM-internal daemon thread.
+  // E.g. ServiceThread, NotificationThread, CompilerThread etc.
+  static void start_internal_daemon(JavaThread* current, JavaThread* target,
+                                    Handle thread_oop, ThreadPriority prio);
+
+  // Helper function to do vm_exit_on_initialization for osthread
+  // resource allocation failure.
+  static void vm_exit_on_osthread_failure(JavaThread* thread);
+
+  // AsyncGetCallTrace support
+  inline bool in_asgct(void) {return _in_asgct;}
+  inline void set_in_asgct(bool value) {_in_asgct = value;}
 };
 
 // Inline implementation of JavaThread::current

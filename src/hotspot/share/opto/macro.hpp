@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2005, 2021, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2005, 2023, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -68,10 +68,10 @@ public:
                        const TypeFunc* call_type, address call_addr,
                        const char* call_name,
                        const TypePtr* adr_type,
-                       Node* parm0 = NULL, Node* parm1 = NULL,
-                       Node* parm2 = NULL, Node* parm3 = NULL,
-                       Node* parm4 = NULL, Node* parm5 = NULL,
-                       Node* parm6 = NULL, Node* parm7 = NULL);
+                       Node* parm0 = nullptr, Node* parm1 = nullptr,
+                       Node* parm2 = nullptr, Node* parm3 = nullptr,
+                       Node* parm4 = nullptr, Node* parm5 = nullptr,
+                       Node* parm6 = nullptr, Node* parm7 = nullptr);
 
   address basictype2arraycopy(BasicType t,
                               Node* src_offset,
@@ -92,8 +92,8 @@ private:
   void expand_allocate_common(AllocateNode* alloc,
                               Node* length,
                               const TypeFunc* slow_call_type,
-                              address slow_call_address);
-  void yank_initalize_node(InitializeNode* node);
+                              address slow_call_address,
+                              Node* valid_length_test);
   void yank_alloc_node(AllocateNode* alloc);
   Node *value_from_mem(Node *mem, Node *ctl, BasicType ft, const Type *ftype, const TypeOopPtr *adr_t, AllocateNode *alloc);
   Node *value_from_mem_phi(Node *mem, BasicType ft, const Type *ftype, const TypeOopPtr *adr_t, AllocateNode *alloc, Node_Stack *value_phis, int level);
@@ -112,7 +112,7 @@ private:
   void expand_unlock_node(UnlockNode *unlock);
 
   // More helper methods modeled after GraphKit for array copy
-  void insert_mem_bar(Node** ctrl, Node** mem, int opcode, Node* precedent = NULL);
+  void insert_mem_bar(Node** ctrl, Node** mem, int opcode, Node* precedent = nullptr);
   Node* array_element_address(Node* ary, Node* idx, BasicType elembt);
   Node* ConvI2L(Node* offset);
 
@@ -140,7 +140,7 @@ private:
                            Node* copy_length,
                            bool disjoint_bases = false,
                            bool length_never_negative = false,
-                           RegionNode* slow_region = NULL);
+                           RegionNode* slow_region = nullptr);
   void generate_clear_array(Node* ctrl, MergeMemNode* merge_mem,
                             const TypePtr* adr_type,
                             Node* dest,
@@ -186,7 +186,6 @@ private:
 
   int replace_input(Node *use, Node *oldref, Node *newref);
   void migrate_outs(Node *old, Node *target);
-  void copy_call_debug_info(CallNode *oldcall, CallNode * newcall);
   Node* opt_bits_test(Node* ctrl, Node* region, int edge, Node* word, int mask, int bits, bool return_fast_path = false);
   void copy_predefined_input_for_runtime_call(Node * ctrl, CallNode* oldcall, CallNode* call);
   CallNode* make_slow_call(CallNode *oldcall, const TypeFunc* slow_call_type, address slow_call,
@@ -214,6 +213,7 @@ public:
   Node* intcon(jint con)        const { return _igvn.intcon(con); }
   Node* longcon(jlong con)      const { return _igvn.longcon(con); }
   Node* makecon(const Type *t)  const { return _igvn.makecon(t); }
+  Node* zerocon(BasicType bt)   const { return _igvn.zerocon(bt); }
   Node* top()                   const { return C->top(); }
 
   Node* prefetch_allocation(Node* i_o,

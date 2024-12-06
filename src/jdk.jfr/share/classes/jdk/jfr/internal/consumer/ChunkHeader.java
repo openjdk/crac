@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2016, 2020, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2016, 2021, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -114,7 +114,7 @@ public final class ChunkHeader {
             byte fileState1;
             input.positionPhysical(absoluteChunkStart + FILE_STATE_POSITION);
             while ((fileState1 = input.readPhysicalByte()) == UPDATING_CHUNK_HEADER) {
-                Utils.takeNap(1);
+                input.pollWait();
                 input.positionPhysical(absoluteChunkStart + FILE_STATE_POSITION);
             }
             input.positionPhysical(absoluteChunkStart + CHUNK_SIZE_POSITION);
@@ -158,6 +158,18 @@ public final class ChunkHeader {
                     Logger.log(LogTag.JFR_SYSTEM_PARSER, LogLevel.INFO, "Chunk: finalChunk=" + finalChunk);
                     absoluteChunkEnd = absoluteChunkStart + chunkSize;
                     return;
+                } else {
+                    if (finished) {
+                        throw new IOException("No metadata event found in finished chunk.");
+                    }
+                    if (chunkSize == HEADER_SIZE) {
+                        // This ensures that a non-streaming parser is able
+                        // to break out of the loop in case the file is
+                        // ended before the first metadata event has
+                        // been written. This can happen during a failed crash
+                        // dump.
+                        input.pollWait();
+                    }
                 }
             }
         }
@@ -184,7 +196,7 @@ public final class ChunkHeader {
                     finished = true;
                     return;
                 }
-                Utils.takeNap(1);
+                input.pollWait();
             }
         } finally {
             input.position(pos);

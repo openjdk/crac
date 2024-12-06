@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2014, 2020, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2014, 2021, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -26,6 +26,7 @@
  * @bug 8022865
  * @summary Tests for the -XX:CompressedClassSpaceSize command line option
  * @requires vm.bits == 64 & vm.opt.final.UseCompressedOops == true
+ * @requires vm.flagless
  * @library /test/lib
  * @modules java.base/jdk.internal.misc
  *          java.management
@@ -64,14 +65,14 @@ public class CompressedClassSpaceSize {
 
 
         // Make sure the minimum size is set correctly and printed
-        // (Note: ccs size shall be rounded up to the minimum size of 4m since metaspace reservations
-        //  are done in a 4m granularity. Note that this is **reserved** size and does not affect rss.
+        // (Note: ccs size are rounded up to the next larger root chunk boundary (16m).
+        // Note that this is **reserved** size and does not affect rss.
         pb = ProcessTools.createJavaProcessBuilder("-XX:+UnlockDiagnosticVMOptions",
                                                    "-XX:CompressedClassSpaceSize=1m",
                                                    "-Xlog:gc+metaspace=trace",
                                                    "-version");
         output = new OutputAnalyzer(pb.start());
-        output.shouldMatch("Compressed class space.*4194304")
+        output.shouldMatch("Compressed class space.*16777216")
               .shouldHaveExitValue(0);
 
 

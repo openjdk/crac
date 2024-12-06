@@ -35,6 +35,7 @@ extern Mutex*   Patching_lock;                   // a lock used to guard code pa
 extern Mutex*   CompiledMethod_lock;             // a lock used to guard a compiled method and OSR queues
 extern Monitor* SystemDictionary_lock;           // a lock on the system dictionary
 extern Mutex*   SharedDictionary_lock;           // a lock on the CDS shared dictionary
+extern Monitor* ClassInitError_lock;             // a lock on the class initialization error table
 extern Mutex*   Module_lock;                     // a lock on module and package related data structures
 extern Mutex*   CompiledIC_lock;                 // a lock used to guard compiled IC patching and access
 extern Mutex*   InlineCacheBuffer_lock;          // a lock used to guard the InlineCacheBuffer
@@ -73,7 +74,7 @@ extern Mutex*   Shared_DirtyCardQ_lock;          // Lock protecting dirty card
 extern Mutex*   G1DetachedRefinementStats_lock;  // Lock protecting detached refinement stats
 extern Mutex*   MarkStackFreeList_lock;          // Protects access to the global mark stack free list.
 extern Mutex*   MarkStackChunkList_lock;         // Protects access to the global mark stack chunk list.
-extern Mutex*   MonitoringSupport_lock;          // Protects updates to the serviceability memory pools.
+extern Mutex*   MonitoringSupport_lock;          // Protects updates to the serviceability memory pools and allocated memory high water mark.
 extern Mutex*   ParGCRareEvent_lock;             // Synchronizes various (rare) parallel GC ops.
 extern Monitor* ConcurrentGCBreakpoints_lock;    // Protects concurrent GC breakpoint management
 extern Mutex*   Compile_lock;                    // a lock held when Compilation is updating code (used to block CodeCache traversal, CHA updates, etc)
@@ -260,12 +261,8 @@ class MonitorLocker: public MutexLocker {
   }
 
   bool wait(int64_t timeout = 0) {
-    if (_flag == Mutex::_safepoint_check_flag) {
-      return as_monitor()->wait(timeout);
-    } else {
-      return as_monitor()->wait_without_safepoint_check(timeout);
-    }
-    return false;
+    return _flag == Mutex::_safepoint_check_flag ?
+      as_monitor()->wait(timeout) : as_monitor()->wait_without_safepoint_check(timeout);
   }
 
   void notify_all() {

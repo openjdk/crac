@@ -88,7 +88,6 @@ static void scavenge_roots_work(ParallelRootType::Value root_type, uint worker_i
   assert(ParallelScavengeHeap::heap()->is_gc_active(), "called outside gc");
 
   PSPromotionManager* pm = PSPromotionManager::gc_thread_promotion_manager(worker_id);
-  PSScavengeRootsClosure roots_closure(pm);
   PSPromoteRootsClosure  roots_to_old_closure(pm);
 
   switch (root_type) {
@@ -210,9 +209,10 @@ public:
     assert(worker_id < _max_workers, "sanity");
     PSPromotionManager* promotion_manager = (_tm == RefProcThreadModel::Single) ? PSPromotionManager::vm_thread_promotion_manager() : PSPromotionManager::gc_thread_promotion_manager(worker_id);
     PSIsAliveClosure is_alive;
-    PSKeepAliveClosure keep_alive(promotion_manager);;
+    PSKeepAliveClosure keep_alive(promotion_manager);
+    BarrierEnqueueDiscoveredFieldClosure enqueue;
     PSEvacuateFollowersClosure complete_gc(promotion_manager, (_marks_oops_alive && _tm == RefProcThreadModel::Multi) ? &_terminator : nullptr, worker_id);;
-    _rp_task->rp_work(worker_id, &is_alive, &keep_alive, &complete_gc);
+    _rp_task->rp_work(worker_id, &is_alive, &keep_alive, &enqueue, &complete_gc);
   }
 
   void prepare_run_task_hook() override {
@@ -300,6 +300,10 @@ public:
       _active_workers(active_workers),
       _is_empty(is_empty),
       _terminator(active_workers, PSPromotionManager::vm_thread_promotion_manager()->stack_array_depth()) {
+    if (!_is_empty) {
+      PSCardTable* card_table = ParallelScavengeHeap::heap()->card_table();
+      card_table->pre_scavenge(_old_gen->object_space()->bottom(), active_workers);
+    }
   }
 
   virtual void work(uint worker_id) {
@@ -319,8 +323,9 @@ public:
         PSPromotionManager* pm = PSPromotionManager::gc_thread_promotion_manager(worker_id);
         PSCardTable* card_table = ParallelScavengeHeap::heap()->card_table();
 
+        // The top of the old gen changes during scavenge when objects are promoted.
         card_table->scavenge_contents_parallel(_old_gen->start_array(),
-                                               _old_gen->object_space(),
+                                               _old_gen->object_space()->bottom(),
                                                _gen_top,
                                                pm,
                                                worker_id,
@@ -416,10 +421,10 @@ bool PSScavenge::invoke_no_policy() {
   {
     ResourceMark rm;
 
-    GCTraceCPUTime tcpu;
+    GCTraceCPUTime tcpu(&_gc_tracer);
     GCTraceTime(Info, gc) tm("Pause Young", NULL, gc_cause, true);
     TraceCollectorStats tcs(counters());
-    TraceMemoryManagerStats tms(heap->young_gc_manager(), gc_cause);
+    TraceMemoryManagerStats tms(heap->young_gc_manager(), gc_cause, "end of minor GC");
 
     if (log_is_enabled(Debug, gc, heap, exit)) {
       accumulated_time()->start();
@@ -704,19 +709,11 @@ bool PSScavenge::invoke_no_policy() {
   return !promotion_failure_occurred;
 }
 
-// This method iterates over all objects in the young generation,
-// removing all forwarding references. It then restores any preserved marks.
 void PSScavenge::clean_up_failed_promotion() {
-  ParallelScavengeHeap* heap = ParallelScavengeHeap::heap();
-  PSYoungGen* young_gen = heap->young_gen();
-
-  RemoveForwardedPointerClosure remove_fwd_ptr_closure;
-  young_gen->object_iterate(&remove_fwd_ptr_closure);
-
   PSPromotionManager::restore_preserved_marks();
 
   // Reset the PromotionFailureALot counters.
-  NOT_PRODUCT(heap->reset_promotion_should_fail();)
+  NOT_PRODUCT(ParallelScavengeHeap::heap()->reset_promotion_should_fail();)
 }
 
 bool PSScavenge::should_attempt_scavenge() {

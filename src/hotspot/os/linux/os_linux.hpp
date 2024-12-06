@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1999, 2021, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 1999, 2022, Oracle and/or its affiliates. All rights reserved.
  * Copyright (c) 2017, 2021, Azul Systems, Inc. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
@@ -51,8 +51,6 @@ class Linux {
   static GrowableArray<int>* _cpu_to_node;
   static GrowableArray<int>* _nindex_to_node;
 
-  static size_t _default_large_page_size;
-
  protected:
 
   static julong _physical_memory;
@@ -60,8 +58,6 @@ class Linux {
   static int _page_size;
 
   static julong available_memory();
-  static julong physical_memory() { return _physical_memory; }
-  static void set_physical_memory(julong phys_mem) { _physical_memory = phys_mem; }
   static int active_processor_count();
 
   static void initialize_processor_count();
@@ -78,10 +74,6 @@ class Linux {
   static void rebuild_nindex_to_node_map();
   static GrowableArray<int>* cpu_to_node()    { return _cpu_to_node; }
   static GrowableArray<int>* nindex_to_node()  { return _nindex_to_node; }
-
-  static size_t default_large_page_size();
-  static size_t scan_default_large_page_size();
-  static os::PageSizes scan_multiple_page_support();
 
   static bool setup_large_page_type(size_t page_size);
   static bool transparent_huge_pages_sanity_check(bool warn, size_t pages_size);
@@ -122,6 +114,7 @@ class Linux {
   static bool _stack_is_executable;
   static void *dlopen_helper(const char *name, char *ebuf, int ebuflen);
   static void *dll_load_in_vmthread(const char *name, char *ebuf, int ebuflen);
+  static const char *dll_path(void* lib);
 
   static void init_thread_fpu_state();
   static int  get_fpu_control_word();
@@ -136,6 +129,9 @@ class Linux {
 
   static int page_size(void)                                        { return _page_size; }
   static void set_page_size(int val)                                { _page_size = val; }
+
+  static julong physical_memory() { return _physical_memory; }
+  static julong host_swap();
 
   static intptr_t* ucontext_get_sp(const ucontext_t* uc);
   static intptr_t* ucontext_get_fp(const ucontext_t* uc);
@@ -153,6 +149,8 @@ class Linux {
 
   // Return default guard size for the specified thread type
   static size_t default_guard_size(os::ThreadType thr_type);
+
+  static bool adjustStackSizeForGuardPages(); // See comments in os_linux.cpp
 
   static void capture_initial_stack(size_t max_size);
 
@@ -175,6 +173,23 @@ class Linux {
   // Determine if the vmid is the parent pid for a child in a PID namespace.
   // Return the namespace pid if so, otherwise -1.
   static int get_namespace_pid(int vmid);
+
+  // Output structure for query_process_memory_info()
+  struct meminfo_t {
+    ssize_t vmsize;     // current virtual size
+    ssize_t vmpeak;     // peak virtual size
+    ssize_t vmrss;      // current resident set size
+    ssize_t vmhwm;      // peak resident set size
+    ssize_t vmswap;     // swapped out
+    ssize_t rssanon;    // resident set size (anonymous mappings, needs 4.5)
+    ssize_t rssfile;    // resident set size (file mappings, needs 4.5)
+    ssize_t rssshmem;   // resident set size (shared mappings, needs 4.5)
+  };
+
+  // Attempts to query memory information about the current process and return it in the output structure.
+  // May fail (returns false) or succeed (returns true) but not all output fields are available; unavailable
+  // fields will contain -1.
+  static bool query_process_memory_info(meminfo_t* info);
 
   // Stack repair handling
 

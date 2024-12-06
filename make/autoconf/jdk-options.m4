@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2011, 2021, Oracle and/or its affiliates. All rights reserved.
+# Copyright (c) 2011, 2023, Oracle and/or its affiliates. All rights reserved.
 # DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
 #
 # This code is free software; you can redistribute it and/or modify it
@@ -169,6 +169,23 @@ AC_DEFUN_ONCE([JDKOPT_SETUP_JDK_OPTIONS],
   fi
   AC_SUBST(CACERTS_FILE)
 
+  # Choose cacerts source folder for user provided PEM files
+  AC_ARG_WITH(cacerts-src, [AS_HELP_STRING([--with-cacerts-src],
+      [specify alternative cacerts source folder containing certificates])])
+  CACERTS_SRC=""
+  AC_MSG_CHECKING([for cacerts source])
+  if test "x$with_cacerts_src" == x; then
+    AC_MSG_RESULT([default])
+  else
+    CACERTS_SRC=$with_cacerts_src
+    if test ! -d "$CACERTS_SRC"; then
+      AC_MSG_RESULT([fail])
+      AC_MSG_ERROR([Specified cacerts source folder "$CACERTS_SRC" does not exist])
+    fi
+    AC_MSG_RESULT([$CACERTS_SRC])
+  fi
+  AC_SUBST(CACERTS_SRC)
+
   # Enable or disable unlimited crypto
   UTIL_ARG_ENABLE(NAME: unlimited-crypto, DEFAULT: true, RESULT: UNLIMITED_CRYPTO,
       DESC: [enable unlimited crypto policy])
@@ -187,6 +204,17 @@ AC_DEFUN_ONCE([JDKOPT_SETUP_JDK_OPTIONS],
   fi
   AC_SUBST(INCLUDE_SA)
 
+  # Setup default CDS alignment. On platforms where one build may run on machines with different
+  # page sizes, the JVM choses a compatible alignment to fit all possible page sizes. This slightly
+  # increases archive size.
+  # The only platform having this problem at the moment is Linux on aarch64, which may encounter
+  # three different page sizes: 4K, 64K, and if run on Mac m1 hardware, 16K.
+  COMPATIBLE_CDS_ALIGNMENT_DEFAULT=false
+  if test "x$OPENJDK_TARGET_OS" = "xlinux" && test "x$OPENJDK_TARGET_CPU" = "xaarch64"; then
+    COMPATIBLE_CDS_ALIGNMENT_DEFAULT=true
+  fi
+  AC_SUBST(COMPATIBLE_CDS_ALIGNMENT_DEFAULT)
+
   # Compress jars
   COMPRESS_JARS=false
 
@@ -199,6 +227,12 @@ AC_DEFUN_ONCE([JDKOPT_SETUP_JDK_OPTIONS],
     AC_MSG_ERROR([Copyright year must have a value])
   elif test "x$with_copyright_year" != x; then
     COPYRIGHT_YEAR="$with_copyright_year"
+  elif test "x$SOURCE_DATE_EPOCH" != x; then
+    if test "x$IS_GNU_DATE" = xyes; then
+      COPYRIGHT_YEAR=`date --date=@$SOURCE_DATE_EPOCH +%Y`
+    else
+      COPYRIGHT_YEAR=`date -j -f %s $SOURCE_DATE_EPOCH +%Y`
+    fi
   else
     COPYRIGHT_YEAR=`$DATE +'%Y'`
   fi
@@ -479,29 +513,6 @@ AC_DEFUN_ONCE([JDKOPT_SETUP_JLINK_OPTIONS],
 
 ################################################################################
 #
-# Check if building of the jtreg failure handler should be enabled.
-#
-AC_DEFUN_ONCE([JDKOPT_ENABLE_DISABLE_FAILURE_HANDLER],
-[
-  UTIL_ARG_ENABLE(NAME: jtreg-failure-handler, DEFAULT: auto,
-      RESULT: BUILD_FAILURE_HANDLER,
-      DESC: [enable keeping of packaged modules in jdk image],
-      DEFAULT_DESC: [enabled if jtreg is present],
-      CHECKING_MSG: [if the jtreg failure handler should be built],
-      CHECK_AVAILABLE: [
-        AC_MSG_CHECKING([if the jtreg failure handler is available])
-        if test "x$JT_HOME" != "x"; then
-          AC_MSG_RESULT([yes])
-        else
-          AVAILABLE=false
-          AC_MSG_RESULT([no (jtreg not present)])
-        fi
-      ])
-  AC_SUBST(BUILD_FAILURE_HANDLER)
-])
-
-################################################################################
-#
 # Enable or disable generation of the classlist at build time
 #
 AC_DEFUN_ONCE([JDKOPT_ENABLE_DISABLE_GENERATE_CLASSLIST],
@@ -582,7 +593,7 @@ AC_DEFUN([JDKOPT_ENABLE_DISABLE_CDS_ARCHIVE],
 #
 AC_DEFUN([JDKOPT_ENABLE_DISABLE_COMPATIBLE_CDS_ALIGNMENT],
 [
-  UTIL_ARG_ENABLE(NAME: compatible-cds-alignment, DEFAULT: false,
+  UTIL_ARG_ENABLE(NAME: compatible-cds-alignment, DEFAULT: $COMPATIBLE_CDS_ALIGNMENT_DEFAULT,
       RESULT: ENABLE_COMPATIBLE_CDS_ALIGNMENT,
       DESC: [enable use alternative compatible cds core region alignment],
       DEFAULT_DESC: [disabled],
@@ -703,4 +714,109 @@ AC_DEFUN_ONCE([JDKOPT_SETUP_REPRODUCIBLE_BUILD],
 
   AC_SUBST(SOURCE_DATE)
   AC_SUBST(ENABLE_REPRODUCIBLE_BUILD)
+])
+
+################################################################################
+#
+# Setup signing on macOS. This can either be setup to sign with a real identity
+# and enabling the hardened runtime, or it can simply add the debug entitlement
+# com.apple.security.get-task-allow without actually signing any binaries. The
+# latter is needed to be able to debug processes and dump core files on modern
+# versions of macOS. It can also be skipped completely.
+#
+# Check if codesign will run with the given parameters
+# $1: Parameters to run with
+# $2: Checking message
+# Sets CODESIGN_SUCCESS=true/false
+AC_DEFUN([JDKOPT_CHECK_CODESIGN_PARAMS],
+[
+  PARAMS="$1"
+  MESSAGE="$2"
+  CODESIGN_TESTFILE="$CONFIGURESUPPORT_OUTPUTDIR/codesign-testfile"
+  $RM "$CODESIGN_TESTFILE"
+  $TOUCH "$CODESIGN_TESTFILE"
+  CODESIGN_SUCCESS=false
+
+  $ECHO "check codesign, calling $CODESIGN $PARAMS $CODESIGN_TESTFILE" >&AS_MESSAGE_LOG_FD
+
+  eval \"$CODESIGN\" $PARAMS \"$CODESIGN_TESTFILE\" 2>&AS_MESSAGE_LOG_FD \
+      >&AS_MESSAGE_LOG_FD && CODESIGN_SUCCESS=true
+  $RM "$CODESIGN_TESTFILE"
+  AC_MSG_CHECKING([$MESSAGE])
+  if test "x$CODESIGN_SUCCESS" = "xtrue"; then
+    AC_MSG_RESULT([yes])
+  else
+    AC_MSG_RESULT([no])
+  fi
+])
+
+AC_DEFUN([JDKOPT_CHECK_CODESIGN_HARDENED],
+[
+  JDKOPT_CHECK_CODESIGN_PARAMS([-s \"$MACOSX_CODESIGN_IDENTITY\" --option runtime],
+      [if codesign with hardened runtime is possible])
+])
+
+AC_DEFUN([JDKOPT_CHECK_CODESIGN_DEBUG],
+[
+  JDKOPT_CHECK_CODESIGN_PARAMS([-s -], [if debug mode codesign is possible])
+])
+
+AC_DEFUN([JDKOPT_SETUP_MACOSX_SIGNING],
+[
+  ENABLE_CODESIGN=false
+  if test "x$OPENJDK_TARGET_OS" = "xmacosx" && test "x$CODESIGN" != "x"; then
+
+    UTIL_ARG_WITH(NAME: macosx-codesign, TYPE: literal, OPTIONAL: true,
+        VALID_VALUES: [hardened debug auto], DEFAULT: auto,
+        ENABLED_DEFAULT: true,
+        CHECKING_MSG: [for macosx code signing mode],
+        DESC: [set the macosx code signing mode (hardened, debug, auto)]
+    )
+
+    MACOSX_CODESIGN_MODE=disabled
+    if test "x$MACOSX_CODESIGN_ENABLED" = "xtrue"; then
+
+      # Check for user provided code signing identity.
+      UTIL_ARG_WITH(NAME: macosx-codesign-identity, TYPE: string,
+          DEFAULT: openjdk_codesign, CHECK_VALUE: UTIL_CHECK_STRING_NON_EMPTY,
+          DESC: [specify the macosx code signing identity],
+          CHECKING_MSG: [for macosx code signing identity]
+      )
+      AC_SUBST(MACOSX_CODESIGN_IDENTITY)
+
+      if test "x$MACOSX_CODESIGN" = "xauto"; then
+        # Only try to default to hardened signing on release builds
+        if test "x$DEBUG_LEVEL" = "xrelease"; then
+          JDKOPT_CHECK_CODESIGN_HARDENED
+          if test "x$CODESIGN_SUCCESS" = "xtrue"; then
+            MACOSX_CODESIGN_MODE=hardened
+          fi
+        fi
+        if test "x$MACOSX_CODESIGN_MODE" = "xdisabled"; then
+          JDKOPT_CHECK_CODESIGN_DEBUG
+          if test "x$CODESIGN_SUCCESS" = "xtrue"; then
+            MACOSX_CODESIGN_MODE=debug
+          fi
+        fi
+        AC_MSG_CHECKING([for macosx code signing mode])
+        AC_MSG_RESULT([$MACOSX_CODESIGN_MODE])
+      elif test "x$MACOSX_CODESIGN" = "xhardened"; then
+        JDKOPT_CHECK_CODESIGN_HARDENED
+        if test "x$CODESIGN_SUCCESS" = "xfalse"; then
+          AC_MSG_ERROR([Signing with hardened runtime is not possible])
+        fi
+        MACOSX_CODESIGN_MODE=hardened
+      elif test "x$MACOSX_CODESIGN" = "xdebug"; then
+        JDKOPT_CHECK_CODESIGN_DEBUG
+        if test "x$CODESIGN_SUCCESS" = "xfalse"; then
+          AC_MSG_ERROR([Signing in debug mode is not possible])
+        fi
+        MACOSX_CODESIGN_MODE=debug
+      else
+        AC_MSG_ERROR([unknown value for --with-macosx-codesign: $MACOSX_CODESIGN])
+      fi
+    fi
+    AC_SUBST(MACOSX_CODESIGN_IDENTITY)
+    AC_SUBST(MACOSX_CODESIGN_MODE)
+  fi
 ])

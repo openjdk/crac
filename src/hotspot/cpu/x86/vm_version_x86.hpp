@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1997, 2021, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 1997, 2022, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -154,14 +154,13 @@ class VM_Version : public Abstract_VM_Version {
       uint32_t LahfSahf     : 1,
                CmpLegacy    : 1,
                             : 3,
-               lzcnt_intel  : 1,
                lzcnt        : 1,
                sse4a        : 1,
                misalignsse  : 1,
                prefetchw    : 1,
                             : 7,
                fma4         : 1,
-                            : 14;
+                            : 15;
     } bits;
   };
 
@@ -672,10 +671,10 @@ enum Extended_Family {
 
     // Intel features.
     if (is_intel()) {
-      if (_cpuid_info.ext_cpuid1_ecx.bits.lzcnt_intel != 0)
+      if (_cpuid_info.ext_cpuid1_ecx.bits.lzcnt != 0) {
         result |= CPU_LZCNT;
-      // for Intel, ecx.bits.misalignsse bit (bit 8) indicates support for prefetchw
-      if (_cpuid_info.ext_cpuid1_ecx.bits.misalignsse != 0) {
+      }
+      if (_cpuid_info.ext_cpuid1_ecx.bits.prefetchw != 0) {
         result |= CPU_3DNOW_PREFETCH;
       }
       if (_cpuid_info.sef_cpuid7_ebx.bits.clwb != 0) {
@@ -685,10 +684,10 @@ enum Extended_Family {
 
     // ZX features.
     if (is_zx()) {
-      if (_cpuid_info.ext_cpuid1_ecx.bits.lzcnt_intel != 0)
+      if (_cpuid_info.ext_cpuid1_ecx.bits.lzcnt != 0) {
         result |= CPU_LZCNT;
-      // for ZX, ecx.bits.misalignsse bit (bit 8) indicates support for prefetchw
-      if (_cpuid_info.ext_cpuid1_ecx.bits.misalignsse != 0) {
+      }
+      if (_cpuid_info.ext_cpuid1_ecx.bits.prefetchw != 0) {
         result |= CPU_3DNOW_PREFETCH;
       }
     }

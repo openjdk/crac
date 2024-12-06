@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2005, 2021, Oracle and/or its affiliates. All rights reserved.
+# Copyright (c) 2005, 2023, Oracle and/or its affiliates. All rights reserved.
 # DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
 #
 # This code is free software; you can redistribute it and/or modify it
@@ -32,7 +32,8 @@
 # intermittent:         flaky test, known to fail intermittently
 # randomness:           test uses randomness, test cases differ from run to run
 # cgroups:              test uses cgroups
-keys=stress headful intermittent randomness cgroups
+# external-dep:         test requires external dependencies to work
+keys=stress headful intermittent randomness cgroups external-dep
 
 groups=TEST.groups TEST.quick-groups
 
@@ -63,11 +64,12 @@ requires.properties= \
     vm.debug \
     vm.hasSA \
     vm.hasJFR \
+    vm.hasDTrace \
     vm.rtm.cpu \
     vm.rtm.compiler \
     vm.cds \
     vm.cds.custom.loaders \
-    vm.cds.archived.java.heap \
+    vm.cds.write.archived.java.heap \
     vm.jvmti \
     vm.graal.enabled \
     vm.compiler1.enabled \
@@ -78,7 +80,7 @@ requires.properties= \
     jdk.containerized
 
 # Minimum jtreg version
-requiredVersion=6+1
+requiredVersion=7.3.1+1
 
 # Path to libraries in the topmost test directory. This is needed so @library
 # does not need ../../../ notation to reach them

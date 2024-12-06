@@ -22,6 +22,17 @@
 
 ###############################################################################
 #
+# All tests
+#
+
+all = \
+    :jdk_all
+
+jdk_all = \
+    /
+
+###############################################################################
+#
 # Tiered testing definitions
 #
 
@@ -74,7 +85,16 @@ tier3 = \
     :build \
     :jdk_vector \
     :jdk_rmi \
-    :jdk_jfr_tier3
+    :jdk_svc \
+   -:jdk_svc_sanity \
+   -:svc_tools
+
+# Everything not in other tiers
+tier4 = \
+    / \
+   -:tier1 \
+   -:tier2 \
+   -:tier3
 
 ###############################################################################
 #
@@ -197,6 +217,7 @@ jdk_security1 = \
 jdk_security2 = \
     javax/crypto \
     javax/xml/crypto \
+    com/sun/org/apache/xml/internal/security \
     com/sun/crypto
 
 jdk_security3 = \
@@ -205,7 +226,6 @@ jdk_security3 = \
     com/sun/jarsigner \
     com/sun/security \
     -com/sun/security/jgss \
-    com/sun/org/apache/xml/internal/security \
     jdk/security \
     sun/security \
     -sun/security/krb5 \
@@ -224,6 +244,8 @@ jdk_security = \
     :jdk_security3 \
     :jdk_security4
 
+# Tests in this group are manual as they depend on external infra
+# and may fail with external reasons, for instance - change in CA test portal.
 jdk_security_infra = \
     security/infra/java/security/cert/CertPathValidator/certification
 
@@ -275,9 +297,6 @@ jdk_tools = \
 
 jdk_jfr = \
     jdk/jfr
-
-jdk_jfr_tier3 = \
-    jdk/jfr/event/metadata/TestLookForUntestedEvents.java
 
 #
 # Catch-all for other areas with a small number of tests
@@ -375,16 +394,37 @@ jdk_accessibility = \
 jfc_demo = \
      demo/jfc
 
+jdk_editpad = \
+     jdk/editpad
+
 jdk_desktop = \
-    :jdk_awt \
-    :jdk_2d \
-    :jdk_beans \
+    :jdk_desktop_part1 \
+    :jdk_desktop_part2 \
+    :jdk_desktop_part3
+
+jdk_desktop_part1 = \
+    :jdk_client_sanity \
     :jdk_swing \
+    :jdk_2d \
     :jdk_sound \
     :jdk_imageio \
-    :jdk_accessibility \
+    :jdk_editpad \
     :jfc_demo \
-    :jdk_client_sanity
+    :jdk_accessibility \
+    :jdk_beans
+
+jdk_desktop_part2 = \
+    :jdk_awt \
+    -java/awt/Component \
+    -java/awt/Modal \
+    -java/awt/datatransfer \
+    -java/awt/Window
+
+jdk_desktop_part3 = \
+    java/awt/Component \
+    java/awt/Modal \
+    java/awt/datatransfer \
+    java/awt/Window
 
 # SwingSet3 tests.
 jdk_client_sanity = \
@@ -527,6 +567,7 @@ jdk_core_manual_no_input = \
     jdk/nio/zipfs/TestLocOffsetFromZip64EF.java
 
 jdk_core_manual_no_input_security = \
+    :jdk_security_infra \
     com/sun/crypto/provider/Cipher/DES/PerformanceTest.java \
     com/sun/security/auth/callback/TextCallbackHandler/Default.java \
     com/sun/security/auth/callback/TextCallbackHandler/Password.java \
@@ -556,3 +597,8 @@ jdk_core_manual_requires_human_input = \
     java/util/TimeZone/DefaultTimeZoneTest.java
 
 
+# Test sets for running inside container environment
+jdk_containers_extended = \
+    :jdk_io \
+    :jdk_nio \
+    :jdk_svc

@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2011, 2021, Oracle and/or its affiliates. All rights reserved.
+# Copyright (c) 2011, 2024, Oracle and/or its affiliates. All rights reserved.
 # DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
 #
 # This code is free software; you can redistribute it and/or modify it
@@ -221,6 +221,12 @@ AC_DEFUN_ONCE([TOOLCHAIN_DETERMINE_TOOLCHAIN_TYPE],
   AC_ARG_WITH(toolchain-type, [AS_HELP_STRING([--with-toolchain-type],
       [the toolchain type (or family) to use, use '--help' to show possible values @<:@platform dependent@:>@])])
 
+  # Linux x86_64 needs higher binutils after 8265783
+  # (this really is a dependency on as version, but we take ld as a check for a general binutils version)
+  if test "x$OPENJDK_TARGET_CPU" = "xx86_64"; then
+    TOOLCHAIN_MINIMUM_LD_VERSION_gcc="2.25"
+  fi
+
   # Use indirect variable referencing
   toolchain_var_name=VALID_TOOLCHAINS_$OPENJDK_BUILD_OS
   VALID_TOOLCHAINS=${!toolchain_var_name}
@@ -228,7 +234,7 @@ AC_DEFUN_ONCE([TOOLCHAIN_DETERMINE_TOOLCHAIN_TYPE],
   if test "x$OPENJDK_TARGET_OS" = xmacosx; then
     if test -n "$XCODEBUILD"; then
       # On Mac OS X, default toolchain to clang after Xcode 5
-      XCODE_VERSION_OUTPUT=`"$XCODEBUILD" -version 2>&1 | $HEAD -n 1`
+      XCODE_VERSION_OUTPUT=`"$XCODEBUILD" -version | $HEAD -n 1`
       $ECHO "$XCODE_VERSION_OUTPUT" | $GREP "Xcode " > /dev/null
       if test $? -ne 0; then
         AC_MSG_NOTICE([xcodebuild output: $XCODE_VERSION_OUTPUT])
@@ -363,6 +369,10 @@ AC_DEFUN_ONCE([TOOLCHAIN_POST_DETECTION],
   # This is necessary since AC_PROG_CC defaults CFLAGS to "-g -O2"
   CFLAGS="$ORG_CFLAGS"
   CXXFLAGS="$ORG_CXXFLAGS"
+
+  # filter out some unwanted additions autoconf may add to CXX; we saw this on macOS with autoconf 2.72
+  UTIL_GET_NON_MATCHING_VALUES(cxx_filtered, $CXX, -std=c++11 -std=gnu++11)
+  CXX="$cxx_filtered"
 ])
 
 # Check if a compiler is of the toolchain type we expect, and save the version
@@ -677,9 +687,10 @@ AC_DEFUN_ONCE([TOOLCHAIN_DETECT_TOOLCHAIN_CORE],
   TOOLCHAIN_PREPARE_FOR_LD_VERSION_COMPARISONS
 
   if test "x$TOOLCHAIN_MINIMUM_LD_VERSION" != x; then
+    AC_MSG_NOTICE([comparing linker version to minimum version $TOOLCHAIN_MINIMUM_LD_VERSION])
     TOOLCHAIN_CHECK_LINKER_VERSION(VERSION: $TOOLCHAIN_MINIMUM_LD_VERSION,
         IF_OLDER_THAN: [
-          AC_MSG_WARN([You are using a linker older than $TOOLCHAIN_MINIMUM_LD_VERSION. This is not a supported configuration.])
+          AC_MSG_ERROR([You are using a linker older than $TOOLCHAIN_MINIMUM_LD_VERSION. This is not a supported configuration.])
         ]
     )
   fi
@@ -983,124 +994,4 @@ AC_DEFUN_ONCE([TOOLCHAIN_MISC_CHECKS],
     HOTSPOT_TOOLCHAIN_TYPE=visCPP
   fi
   AC_SUBST(HOTSPOT_TOOLCHAIN_TYPE)
-])
-
-# Setup the JTReg Regression Test Harness.
-AC_DEFUN_ONCE([TOOLCHAIN_SETUP_JTREG],
-[
-  AC_ARG_WITH(jtreg, [AS_HELP_STRING([--with-jtreg],
-      [Regression Test Harness @<:@probed@:>@])])
-
-  if test "x$with_jtreg" = xno; then
-    # jtreg disabled
-    AC_MSG_CHECKING([for jtreg test harness])
-    AC_MSG_RESULT([no, disabled])
-  elif test "x$with_jtreg" != xyes && test "x$with_jtreg" != x; then
-    if test -d "$with_jtreg"; then
-      # An explicit path is specified, use it.
-      JT_HOME="$with_jtreg"
-    else
-      case "$with_jtreg" in
-        *.zip )
-          JTREG_SUPPORT_DIR=$CONFIGURESUPPORT_OUTPUTDIR/jtreg
-          $RM -rf $JTREG_SUPPORT_DIR
-          $MKDIR -p $JTREG_SUPPORT_DIR
-          $UNZIP -qq -d $JTREG_SUPPORT_DIR $with_jtreg
-
-          # Try to find jtreg to determine JT_HOME path
-          JTREG_PATH=`$FIND $JTREG_SUPPORT_DIR | $GREP "/bin/jtreg"`
-          if test "x$JTREG_PATH" != x; then
-            JT_HOME=$($DIRNAME $($DIRNAME $JTREG_PATH))
-          fi
-          ;;
-        * )
-          ;;
-      esac
-    fi
-    UTIL_FIXUP_PATH([JT_HOME])
-    if test ! -d "$JT_HOME"; then
-      AC_MSG_ERROR([jtreg home directory from --with-jtreg=$with_jtreg does not exist])
-    fi
-
-    if test ! -e "$JT_HOME/lib/jtreg.jar"; then
-      AC_MSG_ERROR([jtreg home directory from --with-jtreg=$with_jtreg is not a valid jtreg home])
-    fi
-
-    AC_MSG_CHECKING([for jtreg test harness])
-    AC_MSG_RESULT([$JT_HOME])
-  else
-    # Try to locate jtreg using the JT_HOME environment variable
-    if test "x$JT_HOME" != x; then
-      # JT_HOME set in environment, use it
-      if test ! -d "$JT_HOME"; then
-        AC_MSG_WARN([Ignoring JT_HOME pointing to invalid directory: $JT_HOME])
-        JT_HOME=
-      else
-        if test ! -e "$JT_HOME/lib/jtreg.jar"; then
-          AC_MSG_WARN([Ignoring JT_HOME which is not a valid jtreg home: $JT_HOME])
-          JT_HOME=
-        else
-          AC_MSG_NOTICE([Located jtreg using JT_HOME from environment])
-        fi
-      fi
-    fi
-
-    if test "x$JT_HOME" = x; then
-      # JT_HOME is not set in environment, or was deemed invalid.
-      # Try to find jtreg on path
-      UTIL_LOOKUP_PROGS(JTREGEXE, jtreg)
-      if test "x$JTREGEXE" != x; then
-        # That's good, now try to derive JT_HOME
-        JT_HOME=`(cd $($DIRNAME $JTREGEXE)/.. && pwd)`
-        if test ! -e "$JT_HOME/lib/jtreg.jar"; then
-          AC_MSG_WARN([Ignoring jtreg from path since a valid jtreg home cannot be found])
-          JT_HOME=
-        else
-          AC_MSG_NOTICE([Located jtreg using jtreg executable in path])
-        fi
-      fi
-    fi
-
-    AC_MSG_CHECKING([for jtreg test harness])
-    if test "x$JT_HOME" != x; then
-      AC_MSG_RESULT([$JT_HOME])
-    else
-      AC_MSG_RESULT([no, not found])
-
-      if test "x$with_jtreg" = xyes; then
-        AC_MSG_ERROR([--with-jtreg was specified, but no jtreg found.])
-      fi
-    fi
-  fi
-
-  UTIL_FIXUP_PATH(JT_HOME)
-  AC_SUBST(JT_HOME)
-])
-
-# Setup the JIB dependency resolver
-AC_DEFUN_ONCE([TOOLCHAIN_SETUP_JIB],
-[
-  AC_ARG_WITH(jib, [AS_HELP_STRING([--with-jib],
-      [Jib dependency management tool @<:@not used@:>@])])
-
-  if test "x$with_jib" = xno || test "x$with_jib" = x; then
-    # jib disabled
-    AC_MSG_CHECKING([for jib])
-    AC_MSG_RESULT(no)
-  elif test "x$with_jib" = xyes; then
-    AC_MSG_ERROR([Must supply a value to --with-jib])
-  else
-    JIB_HOME="${with_jib}"
-    AC_MSG_CHECKING([for jib])
-    AC_MSG_RESULT(${JIB_HOME})
-    if test ! -d "${JIB_HOME}"; then
-      AC_MSG_ERROR([--with-jib must be a directory])
-    fi
-    JIB_JAR=$(ls ${JIB_HOME}/lib/jib-*.jar)
-    if test ! -f "${JIB_JAR}"; then
-      AC_MSG_ERROR([Could not find jib jar file in ${JIB_HOME}])
-    fi
-  fi
-
-  AC_SUBST(JIB_HOME)
 ])

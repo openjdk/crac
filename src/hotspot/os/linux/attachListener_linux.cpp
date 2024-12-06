@@ -29,7 +29,6 @@
 #include "runtime/os.inline.hpp"
 #include "services/attachListener.hpp"
 #include "attachListener_linux.hpp"
-#include "services/dtraceAttacher.hpp"
 #include "linuxAttachOperation.hpp"
 #include "memory/resourceArea.hpp"
 

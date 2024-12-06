@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2011, 2020, Oracle and/or its affiliates. All rights reserved.
+# Copyright (c) 2011, 2021, Oracle and/or its affiliates. All rights reserved.
 # DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
 #
 # This code is free software; you can redistribute it and/or modify it
@@ -55,6 +55,7 @@ AC_DEFUN([BASIC_CHECK_LEFTOVER_OVERRIDDEN],
 
 ###############################################################################
 # Setup basic configuration paths, and platform-specific stuff related to PATHs.
+# Make sure to only use tools set up in BASIC_SETUP_FUNDAMENTAL_TOOLS.
 AC_DEFUN_ONCE([BASIC_SETUP_PATHS],
 [
   # Save the current directory this script was started from
@@ -94,11 +95,6 @@ AC_DEFUN_ONCE([BASIC_SETUP_PATHS],
 
   # Locate the directory of this script.
   AUTOCONF_DIR=$TOPDIR/make/autoconf
-
-  # Setup username (for use in adhoc version strings etc)
-  # Outer [ ] to quote m4.
-  [ USERNAME=`$ECHO "$USER" | $TR -d -c '[a-z][A-Z][0-9]'` ]
-  AC_SUBST(USERNAME)
 ])
 
 ###############################################################################
@@ -217,6 +213,18 @@ AC_DEFUN_ONCE([BASIC_SETUP_DEVKIT],
       [UTIL_PREPEND_TO_PATH([TOOLCHAIN_PATH],$with_toolchain_path)]
   )
 
+  AC_ARG_WITH([xcode-path], [AS_HELP_STRING([--with-xcode-path],
+      [set up toolchain on Mac OS using a path to an Xcode installation])])
+
+  if test "x$with_xcode_path" != x; then
+    if test "x$OPENJDK_BUILD_OS" = "xmacosx"; then
+      UTIL_PREPEND_TO_PATH([TOOLCHAIN_PATH],
+          $with_xcode_path/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin:$with_xcode_path/Contents/Developer/usr/bin)
+    else
+      AC_MSG_WARN([Option --with-xcode-path is only valid on Mac OS, ignoring.])
+    fi
+  fi
+
   AC_ARG_WITH([extra-path], [AS_HELP_STRING([--with-extra-path],
       [prepend these directories to the default path])],
       [UTIL_PREPEND_TO_PATH([EXTRA_PATH],$with_extra_path)]
@@ -227,7 +235,7 @@ AC_DEFUN_ONCE([BASIC_SETUP_DEVKIT],
     # If not, detect if Xcode is installed by running xcodebuild -version
     # if no Xcode installed, xcodebuild exits with 1
     # if Xcode is installed, even if xcode-select is misconfigured, then it exits with 0
-    if test "x$DEVKIT_ROOT" != x || /usr/bin/xcodebuild -version >/dev/null 2>&1; then
+    if test "x$DEVKIT_ROOT" != x || test "x$TOOLCHAIN_PATH" != x || /usr/bin/xcodebuild -version >/dev/null 2>&1; then
       # We need to use xcodebuild in the toolchain dir provided by the user
       UTIL_LOOKUP_PROGS(XCODEBUILD, xcodebuild, $TOOLCHAIN_PATH)
       if test x$XCODEBUILD = x; then
@@ -350,9 +358,9 @@ AC_DEFUN_ONCE([BASIC_SETUP_OUTPUT_DIR],
     # WARNING: This might be a bad thing to do. You need to be sure you want to
     # have a configuration in this directory. Do some sanity checks!
 
-    if test ! -e "$OUTPUTDIR/spec.gmk"; then
-      # If we have a spec.gmk, we have run here before and we are OK. Otherwise, check for
-      # other files
+    if test ! -e "$OUTPUTDIR/spec.gmk" && test ! -e "$OUTPUTDIR/configure-support/generated-configure.sh"; then
+      # If we have a spec.gmk or configure-support/generated-configure.sh,
+      # we have run here before and we are OK. Otherwise, check for other files
       files_present=`$LS $OUTPUTDIR`
       # Configure has already touched config.log and confdefs.h in the current dir when this check
       # is performed.
@@ -367,8 +375,9 @@ AC_DEFUN_ONCE([BASIC_SETUP_OUTPUT_DIR],
         AC_MSG_NOTICE([Current directory is $CONFIGURE_START_DIR.])
         AC_MSG_NOTICE([Since this is not the source root, configure will output the configuration here])
         AC_MSG_NOTICE([(as opposed to creating a configuration in <src_root>/build/<conf-name>).])
-        AC_MSG_NOTICE([However, this directory is not empty. This is not allowed, since it could])
-        AC_MSG_NOTICE([seriously mess up just about everything.])
+        AC_MSG_NOTICE([However, this directory is not empty, additionally to some allowed files])
+        AC_MSG_NOTICE([it contains $filtered_files.])
+        AC_MSG_NOTICE([This is not allowed, since it could seriously mess up just about everything.])
         AC_MSG_NOTICE([Try 'cd $TOPDIR' and restart configure])
         AC_MSG_NOTICE([(or create a new empty directory and cd to it).])
         AC_MSG_ERROR([Will not continue creating configuration in $CONFIGURE_START_DIR])

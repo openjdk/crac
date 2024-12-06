@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013, 2020, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2013, 2024, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -116,12 +116,12 @@ public final class ProcessTools {
      * <span>The default redirects of STDOUT and STDERR are started</span>
      * <p>
      * It is possible to wait for the process to get to a warmed-up state
-     * via {@linkplain Predicate} condition on the STDOUT
+     * via {@linkplain Predicate} condition on the STDOUT/STDERR
      * </p>
      *
      * @param name           The process name
      * @param processBuilder The process builder
-     * @param linePredicate  The {@linkplain Predicate} to use on the STDOUT
+     * @param linePredicate  The {@linkplain Predicate} to use on the STDOUT and STDERR.
      *                       Used to determine the moment the target app is
      *                       properly warmed-up.
      *                       It can be null - in that case the warmup is skipped.
@@ -146,14 +146,14 @@ public final class ProcessTools {
      * <span>The default redirects of STDOUT and STDERR are started</span>
      * <p>
      * It is possible to wait for the process to get to a warmed-up state
-     * via {@linkplain Predicate} condition on the STDOUT and monitor the
+     * via {@linkplain Predicate} condition on the STDOUT/STDERR and monitor the
      * in-streams via the provided {@linkplain Consumer}
      * </p>
      *
      * @param name           The process name
      * @param processBuilder The process builder
      * @param lineConsumer   The {@linkplain Consumer} the lines will be forwarded to
-     * @param linePredicate  The {@linkplain Predicate} to use on the STDOUT
+     * @param linePredicate  The {@linkplain Predicate} to use on the STDOUT and STDERR.
      *                       Used to determine the moment the target app is
      *                       properly warmed-up.
      *                       It can be null - in that case the warmup is skipped.
@@ -193,10 +193,14 @@ public final class ProcessTools {
         CountDownLatch latch = new CountDownLatch(1);
         if (linePredicate != null) {
             StreamPumper.LinePump pump = new StreamPumper.LinePump() {
+                // synchronization between stdout and stderr pumps
+                private final Object sync = new Object();
                 @Override
                 protected void processLine(String line) {
-                    if (latch.getCount() > 0 && linePredicate.test(line)) {
-                        latch.countDown();
+                    synchronized (sync) {
+                        if (latch.getCount() > 0 && linePredicate.test(line)) {
+                            latch.countDown();
+                        }
                     }
                 }
             };
@@ -241,13 +245,13 @@ public final class ProcessTools {
      * <span>The default redirects of STDOUT and STDERR are started</span>
      * <p>
      * It is possible to wait for the process to get to a warmed-up state
-     * via {@linkplain Predicate} condition on the STDOUT. The warm-up will
-     * wait indefinitely.
+     * via {@linkplain Predicate} condition on the STDOUT/STDERR.
+     * The warm-up will wait indefinitely.
      * </p>
      *
      * @param name           The process name
      * @param processBuilder The process builder
-     * @param linePredicate  The {@linkplain Predicate} to use on the STDOUT
+     * @param linePredicate  The {@linkplain Predicate} to use on the STDOUT and STDERR.
      *                       Used to determine the moment the target app is
      *                       properly warmed-up.
      *                       It can be null - in that case the warmup is skipped.
@@ -428,6 +432,7 @@ public final class ProcessTools {
      *              the default charset.
      * @return The {@linkplain OutputAnalyzer} instance wrapping the process.
      */
+    @SuppressWarnings("removal")
     public static OutputAnalyzer executeProcess(ProcessBuilder pb, String input,
                                                 Charset cs) throws Exception {
         OutputAnalyzer output = null;
@@ -480,7 +485,7 @@ public final class ProcessTools {
      * @param cmds The command line to execute.
      * @return The output from the process.
      */
-    public static OutputAnalyzer executeProcess(String... cmds) throws Throwable {
+    public static OutputAnalyzer executeProcess(String... cmds) throws Exception {
         return executeProcess(new ProcessBuilder(cmds));
     }
 
@@ -525,8 +530,7 @@ public final class ProcessTools {
      * @param cmds The command line to execute.
      * @return The {@linkplain OutputAnalyzer} instance wrapping the process.
      */
-    public static OutputAnalyzer executeCommand(String... cmds)
-            throws Throwable {
+    public static OutputAnalyzer executeCommand(String... cmds) throws Exception {
         String cmdLine = String.join(" ", cmds);
         System.out.println("Command line: [" + cmdLine + "]");
         OutputAnalyzer analyzer = ProcessTools.executeProcess(cmds);
@@ -543,8 +547,7 @@ public final class ProcessTools {
      * @param pb The ProcessBuilder to execute.
      * @return The {@linkplain OutputAnalyzer} instance wrapping the process.
      */
-    public static OutputAnalyzer executeCommand(ProcessBuilder pb)
-            throws Throwable {
+    public static OutputAnalyzer executeCommand(ProcessBuilder pb) throws Exception {
         String cmdLine = pb.command().stream()
                 .map(x -> (x.contains(" ") || x.contains("$"))
                         ? ("'" + x + "'") : x)
@@ -600,6 +603,7 @@ public final class ProcessTools {
         return pb;
     }
 
+    @SuppressWarnings("removal")
     private static Process privilegedStart(ProcessBuilder pb) throws IOException {
         try {
             return AccessController.doPrivileged(

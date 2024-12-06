@@ -213,8 +213,10 @@ void BlockListBuilder::handle_exceptions(BlockBegin* current, int cur_bci) {
 }
 
 void BlockListBuilder::handle_jsr(BlockBegin* current, int sr_bci, int next_bci) {
-  // start a new block after jsr-bytecode and link this block into cfg
-  make_block_at(next_bci, current);
+  if (next_bci < method()->code_size()) {
+    // start a new block after jsr-bytecode and link this block into cfg
+    make_block_at(next_bci, current);
+  }
 
   // start a new block at the subroutine entry at mark it with special flag
   BlockBegin* sr_block = make_block_at(sr_bci, current);
@@ -233,6 +235,8 @@ void BlockListBuilder::set_leaders() {
   // during bytecode iteration. This would require the creation of a new block at the
   // branch target and a modification of the successor lists.
   const BitMap& bci_block_start = method()->bci_block_start();
+
+  int end_bci = method()->code_size();
 
   ciBytecodeStream s(method());
   while (s.next() != ciBytecodeStream::EOBC()) {
@@ -304,7 +308,9 @@ void BlockListBuilder::set_leaders() {
       case Bytecodes::_if_acmpne: // fall through
       case Bytecodes::_ifnull:    // fall through
       case Bytecodes::_ifnonnull:
-        make_block_at(s.next_bci(), current);
+        if (s.next_bci() < end_bci) {
+          make_block_at(s.next_bci(), current);
+        }
         make_block_at(s.get_dest(), current);
         current = NULL;
         break;
@@ -1865,22 +1871,17 @@ void GraphBuilder::invoke(Bytecodes::Code code) {
                 log->identify(target),
                 Bytecodes::name(code));
 
-  // invoke-special-super
-  if (bc_raw == Bytecodes::_invokespecial && !target->is_object_initializer()) {
-    ciInstanceKlass* sender_klass = calling_klass;
-    if (sender_klass->is_interface()) {
-      int index = state()->stack_size() - (target->arg_size_no_receiver() + 1);
-      Value receiver = state()->stack_at(index);
-      CheckCast* c = new CheckCast(sender_klass, receiver, copy_state_before());
-      c->set_invokespecial_receiver_check();
-      state()->stack_at_put(index, append_split(c));
-    }
-  }
-
   // Some methods are obviously bindable without any type checks so
   // convert them directly to an invokespecial or invokestatic.
   if (target->is_loaded() && !target->is_abstract() && target->can_be_statically_bound()) {
     switch (bc_raw) {
+    case Bytecodes::_invokeinterface:
+      // convert to invokespecial if the target is the private interface method.
+      if (target->is_private()) {
+        assert(holder->is_interface(), "How did we get a non-interface method here!");
+        code = Bytecodes::_invokespecial;
+      }
+      break;
     case Bytecodes::_invokevirtual:
       code = Bytecodes::_invokespecial;
       break;
@@ -1894,6 +1895,26 @@ void GraphBuilder::invoke(Bytecodes::Code code) {
     if (bc_raw == Bytecodes::_invokehandle) {
       assert(!will_link, "should come here only for unlinked call");
       code = Bytecodes::_invokespecial;
+    }
+  }
+
+  if (code == Bytecodes::_invokespecial) {
+    // Additional receiver subtype checks for interface calls via invokespecial or invokeinterface.
+    ciKlass* receiver_constraint = nullptr;
+
+    if (bc_raw == Bytecodes::_invokeinterface) {
+      receiver_constraint = holder;
+    } else if (bc_raw == Bytecodes::_invokespecial && !target->is_object_initializer() && calling_klass->is_interface()) {
+      receiver_constraint = calling_klass;
+    }
+
+    if (receiver_constraint != nullptr) {
+      int index = state()->stack_size() - (target->arg_size_no_receiver() + 1);
+      Value receiver = state()->stack_at(index);
+      CheckCast* c = new CheckCast(receiver_constraint, receiver, copy_state_before());
+      // go to uncommon_trap when checkcast fails
+      c->set_invokespecial_receiver_check();
+      state()->stack_at_put(index, append_split(c));
     }
   }
 
@@ -1988,22 +2009,23 @@ void GraphBuilder::invoke(Bytecodes::Code code) {
         assert(singleton != declared_interface, "not a unique implementor");
         cha_monomorphic_target = target->find_monomorphic_target(calling_klass, declared_interface, singleton);
         if (cha_monomorphic_target != NULL) {
-          if (cha_monomorphic_target->holder() != compilation()->env()->Object_klass()) {
-            // If CHA is able to bind this invoke then update the class
-            // to match that class, otherwise klass will refer to the
-            // interface.
-            klass = cha_monomorphic_target->holder();
+          ciInstanceKlass* holder = cha_monomorphic_target->holder();
+          ciInstanceKlass* constraint = (holder->is_subtype_of(singleton) ? holder : singleton); // avoid upcasts
+          if (holder != compilation()->env()->Object_klass() &&
+              (!type_is_exact || receiver_klass->is_subtype_of(constraint))) {
             actual_recv = declared_interface;
 
             // insert a check it's really the expected class.
-            CheckCast* c = new CheckCast(klass, receiver, copy_state_for_exception());
+            CheckCast* c = new CheckCast(constraint, receiver, copy_state_for_exception());
             c->set_incompatible_class_change_check();
-            c->set_direct_compare(klass->is_final());
+            c->set_direct_compare(constraint->is_final());
             // pass the result of the checkcast so that the compiler has
             // more accurate type info in the inlinee
             better_receiver = append_split(c);
+
+            dependency_recorder()->assert_unique_implementor(declared_interface, singleton);
           } else {
-            cha_monomorphic_target = NULL; // subtype check against Object is useless
+            cha_monomorphic_target = nullptr;
           }
         }
       }
@@ -2025,9 +2047,11 @@ void GraphBuilder::invoke(Bytecodes::Code code) {
   }
 
   // check if we could do inlining
-  if (!PatchALot && Inline && target->is_loaded() && callee_holder->is_linked() && !patch_for_appendix) {
+  if (!PatchALot && Inline && target->is_loaded() && !patch_for_appendix &&
+      callee_holder->is_loaded()) { // the effect of symbolic reference resolution
+
     // callee is known => check if we have static binding
-    if ((code == Bytecodes::_invokestatic && callee_holder->is_initialized()) || // invokestatic involves an initialization barrier on resolved klass
+    if ((code == Bytecodes::_invokestatic && klass->is_initialized()) || // invokestatic involves an initialization barrier on declaring class
         code == Bytecodes::_invokespecial ||
         (code == Bytecodes::_invokevirtual && target->is_final_method()) ||
         code == Bytecodes::_invokedynamic) {
@@ -2131,8 +2155,7 @@ void GraphBuilder::invoke(Bytecodes::Code code) {
 
 void GraphBuilder::new_instance(int klass_index) {
   ValueStack* state_before = copy_state_exhandling();
-  bool will_link;
-  ciKlass* klass = stream()->get_klass(will_link);
+  ciKlass* klass = stream()->get_klass();
   assert(klass->is_instance_klass(), "must be an instance klass");
   NewInstance* new_instance = new NewInstance(klass->as_instance_klass(), state_before, stream()->is_unresolved_klass());
   _memory->new_instance(new_instance);
@@ -2147,8 +2170,7 @@ void GraphBuilder::new_type_array() {
 
 
 void GraphBuilder::new_object_array() {
-  bool will_link;
-  ciKlass* klass = stream()->get_klass(will_link);
+  ciKlass* klass = stream()->get_klass();
   ValueStack* state_before = !klass->is_loaded() || PatchALot ? copy_state_before() : copy_state_exhandling();
   NewArray* n = new NewObjectArray(klass, ipop(), state_before);
   apush(append_split(n));
@@ -2173,8 +2195,7 @@ bool GraphBuilder::direct_compare(ciKlass* k) {
 
 
 void GraphBuilder::check_cast(int klass_index) {
-  bool will_link;
-  ciKlass* klass = stream()->get_klass(will_link);
+  ciKlass* klass = stream()->get_klass();
   ValueStack* state_before = !klass->is_loaded() || PatchALot ? copy_state_before() : copy_state_for_exception();
   CheckCast* c = new CheckCast(klass, apop(), state_before);
   apush(append_split(c));
@@ -2194,8 +2215,7 @@ void GraphBuilder::check_cast(int klass_index) {
 
 
 void GraphBuilder::instance_of(int klass_index) {
-  bool will_link;
-  ciKlass* klass = stream()->get_klass(will_link);
+  ciKlass* klass = stream()->get_klass();
   ValueStack* state_before = !klass->is_loaded() || PatchALot ? copy_state_before() : copy_state_exhandling();
   InstanceOf* i = new InstanceOf(klass, apop(), state_before);
   ipush(append_split(i));
@@ -2229,8 +2249,7 @@ void GraphBuilder::monitorexit(Value x, int bci) {
 
 
 void GraphBuilder::new_multi_array(int dimensions) {
-  bool will_link;
-  ciKlass* klass = stream()->get_klass(will_link);
+  ciKlass* klass = stream()->get_klass();
   ValueStack* state_before = !klass->is_loaded() || PatchALot ? copy_state_before() : copy_state_exhandling();
 
   Values* dims = new Values(dimensions, dimensions, NULL);
@@ -4028,20 +4047,28 @@ bool GraphBuilder::try_method_handle_inline(ciMethod* callee, bool ignore_return
       const int args_base = state()->stack_size() - callee->arg_size();
       ValueType* type = state()->stack_at(args_base)->type();
       if (type->is_constant()) {
-        ciMethod* target = type->as_ObjectType()->constant_value()->as_method_handle()->get_vmtarget();
-        // We don't do CHA here so only inline static and statically bindable methods.
-        if (target->is_static() || target->can_be_statically_bound()) {
-          if (ciMethod::is_consistent_info(callee, target)) {
-            Bytecodes::Code bc = target->is_static() ? Bytecodes::_invokestatic : Bytecodes::_invokevirtual;
-            ignore_return = ignore_return || (callee->return_type()->is_void() && !target->return_type()->is_void());
-            if (try_inline(target, /*holder_known*/ !callee->is_static(), ignore_return, bc)) {
-              return true;
+        ciObject* mh = type->as_ObjectType()->constant_value();
+        if (mh->is_method_handle()) {
+          ciMethod* target = mh->as_method_handle()->get_vmtarget();
+
+          // We don't do CHA here so only inline static and statically bindable methods.
+          if (target->is_static() || target->can_be_statically_bound()) {
+            if (ciMethod::is_consistent_info(callee, target)) {
+              Bytecodes::Code bc = target->is_static() ? Bytecodes::_invokestatic : Bytecodes::_invokevirtual;
+              ignore_return = ignore_return || (callee->return_type()->is_void() && !target->return_type()->is_void());
+              if (try_inline(target, /*holder_known*/ !callee->is_static(), ignore_return, bc)) {
+                return true;
+              }
+            } else {
+              print_inlining(target, "signatures mismatch", /*success*/ false);
             }
           } else {
-            print_inlining(target, "signatures mismatch", /*success*/ false);
+            assert(false, "no inlining through MH::invokeBasic"); // missing optimization opportunity due to suboptimal LF shape
+            print_inlining(target, "not static or statically bindable", /*success*/ false);
           }
         } else {
-          print_inlining(target, "not static or statically bindable", /*success*/ false);
+          assert(mh->is_null_object(), "not a null");
+          print_inlining(callee, "receiver is always null", /*success*/ false);
         }
       } else {
         print_inlining(callee, "receiver not constant", /*success*/ false);

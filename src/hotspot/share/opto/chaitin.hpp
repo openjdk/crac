@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1997, 2020, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 1997, 2023, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -216,7 +216,7 @@ public:
 
 
   // Alive if non-zero, dead if zero
-  bool alive() const { return _def != NULL; }
+  bool alive() const { return _def != nullptr; }
   bool is_multidef() const { return _def == NodeSentinel; }
   bool is_singledef() const { return _def != NodeSentinel; }
 
@@ -291,7 +291,7 @@ public:
 #endif
 
   //--------------- Live Range Accessors
-  LRG &lrgs(uint idx) const { assert(idx < _maxlrg, "oob"); return _lrgs[idx]; }
+  LRG &lrgs(uint idx) const { assert(idx < _maxlrg, "oob: index %u not smaller than %u", idx, _maxlrg); return _lrgs[idx]; }
 
   // Compute and set effective degree.  Might be folded into SquareUp().
   void Compute_Effective_Degree();
@@ -730,8 +730,8 @@ private:
   int yank_if_dead_recurse(Node *old, Node *orig_old, Block *current_block,
       Node_List *value, Node_List *regnd);
   int yank( Node *old, Block *current_block, Node_List *value, Node_List *regnd );
-  int elide_copy( Node *n, int k, Block *current_block, Node_List &value, Node_List &regnd, bool can_change_regs );
-  int use_prior_register( Node *copy, uint idx, Node *def, Block *current_block, Node_List &value, Node_List &regnd );
+  int elide_copy( Node *n, int k, Block *current_block, Node_List *value, Node_List *regnd, bool can_change_regs );
+  int use_prior_register( Node *copy, uint idx, Node *def, Block *current_block, Node_List *value, Node_List *regnd );
   bool may_be_copy_of_callee( Node *def ) const;
 
   // If nreg already contains the same constant as val then eliminate it
@@ -746,7 +746,7 @@ private:
     Node* _def;
     Node* _first_use;
   public:
-    RegDefUse() : _def(NULL), _first_use(NULL) { }
+    RegDefUse() : _def(nullptr), _first_use(nullptr) { }
     Node* def() const       { return _def;       }
     Node* first_use() const { return _first_use; }
 
@@ -757,8 +757,8 @@ private:
       }
     }
     void clear() {
-      _def = NULL;
-      _first_use = NULL;
+      _def = nullptr;
+      _first_use = nullptr;
     }
   };
   typedef GrowableArray<RegDefUse> RegToDefUseMap;

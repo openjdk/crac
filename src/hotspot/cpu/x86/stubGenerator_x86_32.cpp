@@ -2998,7 +2998,7 @@ class StubGenerator: public StubCodeGenerator {
   }
 
   address generate_upper_word_mask() {
-    __ align(64);
+    __ align64();
     StubCodeMark mark(this, "StubRoutines", "upper_word_mask");
     address start = __ pc();
     __ emit_data(0x00000000, relocInfo::none, 0);
@@ -3009,7 +3009,7 @@ class StubGenerator: public StubCodeGenerator {
   }
 
   address generate_shuffle_byte_flip_mask() {
-    __ align(64);
+    __ align64();
     StubCodeMark mark(this, "StubRoutines", "shuffle_byte_flip_mask");
     address start = __ pc();
     __ emit_data(0x0c0d0e0f, relocInfo::none, 0);
@@ -3068,7 +3068,7 @@ class StubGenerator: public StubCodeGenerator {
   }
 
   address generate_pshuffle_byte_flip_mask() {
-    __ align(64);
+    __ align64();
     StubCodeMark mark(this, "StubRoutines", "pshuffle_byte_flip_mask");
     address start = __ pc();
     __ emit_data(0x00010203, relocInfo::none, 0);
@@ -3629,40 +3629,6 @@ class StubGenerator: public StubCodeGenerator {
 
  }
 
-  // Safefetch stubs.
-  void generate_safefetch(const char* name, int size, address* entry,
-                          address* fault_pc, address* continuation_pc) {
-    // safefetch signatures:
-    //   int      SafeFetch32(int*      adr, int      errValue);
-    //   intptr_t SafeFetchN (intptr_t* adr, intptr_t errValue);
-
-    StubCodeMark mark(this, "StubRoutines", name);
-
-    // Entry point, pc or function descriptor.
-    *entry = __ pc();
-
-    __ movl(rax, Address(rsp, 0x8));
-    __ movl(rcx, Address(rsp, 0x4));
-    // Load *adr into eax, may fault.
-    *fault_pc = __ pc();
-    switch (size) {
-      case 4:
-        // int32_t
-        __ movl(rax, Address(rcx, 0));
-        break;
-      case 8:
-        // int64_t
-        Unimplemented();
-        break;
-      default:
-        ShouldNotReachHere();
-    }
-
-    // Return errValue or *adr.
-    *continuation_pc = __ pc();
-    __ ret(0);
-  }
-
   address generate_method_entry_barrier() {
     __ align(CodeEntryAlignment);
     StubCodeMark mark(this, "StubRoutines", "nmethod_entry_barrier");
@@ -3961,14 +3927,6 @@ class StubGenerator: public StubCodeGenerator {
         StubRoutines::_dtan = generate_libmTan();
       }
     }
-
-    // Safefetch stubs.
-    generate_safefetch("SafeFetch32", sizeof(int), &StubRoutines::_safefetch32_entry,
-                                                   &StubRoutines::_safefetch32_fault_pc,
-                                                   &StubRoutines::_safefetch32_continuation_pc);
-    StubRoutines::_safefetchN_entry           = StubRoutines::_safefetch32_entry;
-    StubRoutines::_safefetchN_fault_pc        = StubRoutines::_safefetch32_fault_pc;
-    StubRoutines::_safefetchN_continuation_pc = StubRoutines::_safefetch32_continuation_pc;
   }
 
   void generate_all() {

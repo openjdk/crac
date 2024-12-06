@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2021, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2022, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -32,19 +32,13 @@
 #include "runtime/java.hpp"
 #include "runtime/os.hpp"
 #include "runtime/osThread.hpp"
+#include "runtime/safefetch.hpp"
 #include "runtime/semaphore.inline.hpp"
-#include "runtime/stubRoutines.hpp"
 #include "runtime/thread.hpp"
 #include "signals_posix.hpp"
 #include "utilities/events.hpp"
 #include "utilities/ostream.hpp"
 #include "utilities/vmError.hpp"
-
-#ifdef ZERO
-// See stubGenerator_zero.cpp
-#include <setjmp.h>
-extern sigjmp_buf* get_jmp_buf_for_continuation();
-#endif
 
 #include <signal.h>
 
@@ -341,7 +335,7 @@ static const struct {
 };
 
 ////////////////////////////////////////////////////////////////////////////////
-// sun.misc.Signal support
+// sun.misc.Signal and BREAK_SIGNAL support
 
 void jdk_misc_signal_init() {
   // Initialize signal structures
@@ -594,25 +588,26 @@ int JVM_HANDLE_XXX_SIGNAL(int sig, siginfo_t* info,
   }
 #endif
 
+  // Extract pc from context. Note that for certain signals and certain
+  // architectures the pc in ucontext_t will point *after* the offending
+  // instruction. In those cases, use siginfo si_addr instead.
+  address pc = NULL;
+  if (uc != NULL) {
+    if (S390_ONLY(sig == SIGILL || sig == SIGFPE) NOT_S390(false)) {
+      pc = (address)info->si_addr;
+    } else if (ZERO_ONLY(true) NOT_ZERO(false)) {
+      // Non-arch-specific Zero code does not really know the pc.
+      // This can be alleviated by making arch-specific os::Posix::ucontext_get_pc
+      // available for Zero for known architectures. But for generic Zero
+      // code, it would still remain unknown.
+      pc = NULL;
+    } else {
+      pc = os::Posix::ucontext_get_pc(uc);
+    }
+  }
+
   if (!signal_was_handled) {
-    // Handle SafeFetch access.
-#ifndef ZERO
-    if (uc != NULL) {
-      address pc = os::Posix::ucontext_get_pc(uc);
-      if (StubRoutines::is_safefetch_fault(pc)) {
-        os::Posix::ucontext_set_pc(uc, StubRoutines::continuation_for_safefetch_fault(pc));
-        signal_was_handled = true;
-      }
-    }
-#else
-    // See JDK-8076185
-    if (sig == SIGSEGV || sig == SIGBUS) {
-      sigjmp_buf* const pjb = get_jmp_buf_for_continuation();
-      if (pjb) {
-        siglongjmp(*pjb, 1);
-      }
-    }
-#endif // ZERO
+    signal_was_handled = handle_safefetch(sig, pc, uc);
   }
 
   // Ignore SIGPIPE and SIGXFSZ (4229104, 6499219).
@@ -637,22 +632,6 @@ int JVM_HANDLE_XXX_SIGNAL(int sig, siginfo_t* info,
 
   // Invoke fatal error handling.
   if (!signal_was_handled && abort_if_unrecognized) {
-    // Extract pc from context for the error handler to display.
-    address pc = NULL;
-    if (uc != NULL) {
-      // prepare fault pc address for error reporting.
-      if (S390_ONLY(sig == SIGILL || sig == SIGFPE) NOT_S390(false)) {
-        pc = (address)info->si_addr;
-      } else if (ZERO_ONLY(true) NOT_ZERO(false)) {
-        // Non-arch-specific Zero code does not really know the pc.
-        // This can be alleviated by making arch-specific os::Posix::ucontext_get_pc
-        // available for Zero for known architectures. But for generic Zero
-        // code, it would still remain unknown.
-        pc = NULL;
-      } else {
-        pc = os::Posix::ucontext_get_pc(uc);
-      }
-    }
     // For Zero, we ignore the crash context, because:
     //  a) The crash would be in C++ interpreter code, so context is not really relevant;
     //  b) Generic Zero code would not be able to parse it, so when generic error
@@ -1145,7 +1124,11 @@ void os::print_siginfo(outputStream* os, const void* si0) {
     os->print(", si_addr: " PTR_FORMAT, p2i(si->si_addr));
 #ifdef SIGPOLL
   } else if (sig == SIGPOLL) {
-    os->print(", si_band: %ld", si->si_band);
+    // siginfo_t.si_band is defined as "long", and it is so in most
+    // implementations. But SPARC64 glibc has a bug: si_band is "int".
+    // Cast si_band to "long" to prevent format specifier mismatch.
+    // See: https://sourceware.org/bugzilla/show_bug.cgi?id=23821
+    os->print(", si_band: %ld", (long) si->si_band);
 #endif
   }
 }
@@ -1235,8 +1218,9 @@ void set_signal_handler(int sig) {
   }
 #endif
 
-  // Save handler setup for later checking
+  // Save handler setup for possible later checking
   vm_handlers.set(sig, &sigAct);
+
   do_check_signal_periodically[sig] = true;
 
   int ret = sigaction(sig, &sigAct, &oldAct);
@@ -1275,6 +1259,24 @@ void install_signal_handlers() {
   set_signal_handler(SIGFPE);
   PPC64_ONLY(set_signal_handler(SIGTRAP);)
   set_signal_handler(SIGXFSZ);
+  if (!ReduceSignalUsage) {
+    // Install BREAK_SIGNAL's handler in early initialization phase, in
+    // order to reduce the risk that an attach client accidentally forces
+    // HotSpot to quit prematurely.
+    // The actual work for handling BREAK_SIGNAL is performed by the Signal
+    // Dispatcher thread, which is created and started at a much later point,
+    // see os::initialize_jdk_signal_support(). Any BREAK_SIGNAL received
+    // before the Signal Dispatcher thread is started is queued up via the
+    // pending_signals[BREAK_SIGNAL] counter, and will be processed by the
+    // Signal Dispatcher thread in a delayed fashion.
+    //
+    // Also note that HotSpot does NOT support signal chaining for BREAK_SIGNAL.
+    // Applications that require a custom BREAK_SIGNAL handler should run with
+    // -XX:+ReduceSignalUsage. Otherwise if libjsig is used together with
+    // -XX:+ReduceSignalUsage, libjsig will prevent changing BREAK_SIGNAL's
+    // handler to a custom handler.
+    os::signal(BREAK_SIGNAL, os::user_handler());
+  }
 
 #if defined(__APPLE__)
   // lldb (gdb) installs both standard BSD signal handlers, and mach exception
@@ -1358,7 +1360,6 @@ static void print_single_signal_handler(outputStream* st,
   st->print(", flags=");
   int flags = get_sanitized_sa_flags(act);
   print_sa_flags(st, flags);
-
 }
 
 // Print established signal handler for this signal.
@@ -1375,6 +1376,11 @@ void PosixSignals::print_signal_handler(outputStream* st, int sig,
   sigaction(sig, NULL, &current_act);
 
   print_single_signal_handler(st, &current_act, buf, buflen);
+
+  sigset_t thread_sig_mask;
+  if (::pthread_sigmask(/* ignored */ SIG_BLOCK, NULL, &thread_sig_mask) == 0) {
+    st->print(", %s", sigismember(&thread_sig_mask, sig) ? "blocked" : "unblocked");
+  }
   st->cr();
 
   // If we expected to see our own hotspot signal handler but found a different one,
@@ -1780,12 +1786,12 @@ int PosixSignals::init() {
 
   signal_sets_init();
 
-  install_signal_handlers();
-
-  // Initialize data for jdk.internal.misc.Signal
+  // Initialize data for jdk.internal.misc.Signal and BREAK_SIGNAL's handler.
   if (!ReduceSignalUsage) {
     jdk_misc_signal_init();
   }
+
+  install_signal_handlers();
 
   return JNI_OK;
 }

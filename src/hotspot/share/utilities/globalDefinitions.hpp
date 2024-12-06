@@ -35,6 +35,7 @@
 #include COMPILER_HEADER(utilities/globalDefinitions)
 
 #include <cstddef>
+#include <type_traits>
 
 class oopDesc;
 
@@ -140,6 +141,7 @@ class oopDesc;
 #define INTPTR_FORMAT_W(width)   "%" #width PRIxPTR
 
 #define SSIZE_FORMAT             "%"   PRIdPTR
+#define SSIZE_PLUS_FORMAT        "%+"  PRIdPTR
 #define SIZE_FORMAT              "%"   PRIuPTR
 #define SIZE_FORMAT_HEX          "0x%" PRIxPTR
 #define SSIZE_FORMAT_W(width)    "%"   #width PRIdPTR
@@ -323,6 +325,9 @@ inline T byte_size_in_proper_unit(T s) {
   }
 }
 
+#define PROPERFMT             SIZE_FORMAT "%s"
+#define PROPERFMTARGS(s)      byte_size_in_proper_unit(s), proper_unit_for_byte_size(s)
+
 inline const char* exact_unit_for_byte_size(size_t s) {
 #ifdef _LP64
   if (s >= G && (s % G) == 0) {
@@ -352,6 +357,9 @@ inline size_t byte_size_in_exact_unit(size_t s) {
   }
   return s;
 }
+
+#define EXACTFMT            SIZE_FORMAT "%s"
+#define EXACTFMTARGS(s)     byte_size_in_exact_unit(s), exact_unit_for_byte_size(s)
 
 // Memory size transition formatting.
 
@@ -718,9 +726,10 @@ inline bool is_floating_point_type(BasicType t) {
 extern char type2char_tab[T_CONFLICT+1];     // Map a BasicType to a jchar
 inline char type2char(BasicType t) { return (uint)t < T_CONFLICT+1 ? type2char_tab[t] : 0; }
 extern int type2size[T_CONFLICT+1];         // Map BasicType to result stack elements
-extern const char* type2name_tab[T_CONFLICT+1];     // Map a BasicType to a jchar
-inline const char* type2name(BasicType t) { return (uint)t < T_CONFLICT+1 ? type2name_tab[t] : NULL; }
+extern const char* type2name_tab[T_CONFLICT+1];     // Map a BasicType to a char*
 extern BasicType name2type(const char* name);
+
+const char* type2name(BasicType t);
 
 inline jlong max_signed_integer(BasicType bt) {
   if (bt == T_INT) {
@@ -1209,5 +1218,9 @@ template<typename K> bool primitive_equals(const K& k0, const K& k1) {
   return k0 == k1;
 }
 
+
+// Converts any type T to a reference type.
+template<typename T>
+std::add_rvalue_reference_t<T> declval() noexcept;
 
 #endif // SHARE_UTILITIES_GLOBALDEFINITIONS_HPP

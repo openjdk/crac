@@ -142,6 +142,12 @@ frame os::fetch_frame_from_context(const void* ucVoid) {
   intptr_t* sp;
   intptr_t* fp;
   address epc = fetch_frame_from_context(ucVoid, &sp, &fp);
+  if (!is_readable_pointer(epc)) {
+    // Try to recover from calling into bad memory
+    // Assume new frame has not been set up, the same as
+    // compiled frame stack bang
+    return fetch_compiled_frame_from_context(ucVoid);
+  }
   return frame(sp, fp, epc);
 }
 
@@ -468,11 +474,26 @@ bool os::supports_sse() {
 }
 
 juint os::cpu_microcode_revision() {
+  // Note: this code runs on startup, and therefore should not be slow,
+  // see JDK-8283200.
+
   juint result = 0;
-  char data[2048] = {0}; // lines should fit in 2K buf
-  size_t len = sizeof(data);
-  FILE *fp = fopen("/proc/cpuinfo", "r");
+
+  // Attempt 1 (faster): Read the microcode version off the sysfs.
+  FILE *fp = fopen("/sys/devices/system/cpu/cpu0/microcode/version", "r");
   if (fp) {
+    int read = fscanf(fp, "%x", &result);
+    fclose(fp);
+    if (read > 0) {
+      return result;
+    }
+  }
+
+  // Attempt 2 (slower): Read the microcode version off the procfs.
+  fp = fopen("/proc/cpuinfo", "r");
+  if (fp) {
+    char data[2048] = {0}; // lines should fit in 2K buf
+    size_t len = sizeof(data);
     while (!feof(fp)) {
       if (fgets(data, len, fp)) {
         if (strstr(data, "microcode") != NULL) {
@@ -484,6 +505,7 @@ juint os::cpu_microcode_revision() {
     }
     fclose(fp);
   }
+
   return result;
 }
 
@@ -518,6 +540,7 @@ void os::print_context(outputStream *st, const void *context) {
   if (context == NULL) return;
 
   const ucontext_t *uc = (const ucontext_t*)context;
+
   st->print_cr("Registers:");
 #ifdef AMD64
   st->print(  "RAX=" INTPTR_FORMAT, (intptr_t)uc->uc_mcontext.gregs[REG_RAX]);
@@ -563,17 +586,22 @@ void os::print_context(outputStream *st, const void *context) {
 #endif // AMD64
   st->cr();
   st->cr();
+}
 
-  intptr_t *sp = (intptr_t *)os::Linux::ucontext_get_sp(uc);
-  st->print_cr("Top of Stack: (sp=" PTR_FORMAT ")", p2i(sp));
-  print_hex_dump(st, (address)sp, (address)(sp + 8), sizeof(intptr_t));
+void os::print_tos_pc(outputStream *st, const void *context) {
+  if (context == NULL) return;
+
+  const ucontext_t* uc = (const ucontext_t*)context;
+
+  address sp = (address)os::Linux::ucontext_get_sp(uc);
+  print_tos(st, sp);
   st->cr();
 
   // Note: it may be unsafe to inspect memory near pc. For example, pc may
   // point to garbage if entry point in an nmethod is corrupted. Leave
   // this at the end, and hope for the best.
-  address pc = os::Posix::ucontext_get_pc(uc);
-  print_instructions(st, pc, sizeof(char));
+  address pc = os::fetch_frame_from_context(uc).pc();
+  print_instructions(st, pc);
   st->cr();
 }
 

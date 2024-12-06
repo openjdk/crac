@@ -66,6 +66,10 @@ ShenandoahFullGC::ShenandoahFullGC() :
   _gc_timer(ShenandoahHeap::heap()->gc_timer()),
   _preserved_marks(new PreservedMarksSet(true)) {}
 
+ShenandoahFullGC::~ShenandoahFullGC() {
+  delete _preserved_marks;
+}
+
 bool ShenandoahFullGC::collect(GCCause::Cause cause) {
   vmop_entry_full(cause);
   // Always success
@@ -904,6 +908,9 @@ public:
     // Make empty regions that have been allocated into regular
     if (r->is_empty() && live > 0) {
       r->make_regular_bypass();
+      if (ZapUnusedHeapArea) {
+        SpaceMangler::mangle_region(MemRegion(r->top(), r->end()));
+      }
     }
 
     // Reclaim regular regions that became empty

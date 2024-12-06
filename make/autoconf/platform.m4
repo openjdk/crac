@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2011, 2021, Oracle and/or its affiliates. All rights reserved.
+# Copyright (c) 2011, 2022, Oracle and/or its affiliates. All rights reserved.
 # DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
 #
 # This code is free software; you can redistribute it and/or modify it
@@ -69,6 +69,12 @@ AC_DEFUN([PLATFORM_EXTRACT_VARS_FROM_CPU],
     ia64)
       VAR_CPU=ia64
       VAR_CPU_ARCH=ia64
+      VAR_CPU_BITS=64
+      VAR_CPU_ENDIAN=little
+      ;;
+    loongarch64)
+      VAR_CPU=loongarch64
+      VAR_CPU_ARCH=loongarch
       VAR_CPU_BITS=64
       VAR_CPU_ENDIAN=little
       ;;
@@ -206,7 +212,7 @@ AC_DEFUN([PLATFORM_EXTRACT_VARS_FROM_OS],
       VAR_OS=windows
       VAR_OS_ENV=windows.wsl
       ;;
-    *msys*)
+    *msys* | *mingw*)
       VAR_OS=windows
       VAR_OS_ENV=windows.msys2
       ;;
@@ -555,6 +561,8 @@ AC_DEFUN([PLATFORM_SETUP_LEGACY_VARS_HELPER],
     HOTSPOT_$1_CPU_DEFINE=PPC64
   elif test "x$OPENJDK_$1_CPU" = xppc64le; then
     HOTSPOT_$1_CPU_DEFINE=PPC64
+  elif test "x$OPENJDK_$1_CPU" = xriscv64; then
+    HOTSPOT_$1_CPU_DEFINE=RISCV64
 
   # The cpu defines below are for zero, we don't support them directly.
   elif test "x$OPENJDK_$1_CPU" = xsparc; then
@@ -565,8 +573,8 @@ AC_DEFUN([PLATFORM_SETUP_LEGACY_VARS_HELPER],
     HOTSPOT_$1_CPU_DEFINE=S390
   elif test "x$OPENJDK_$1_CPU" = xs390x; then
     HOTSPOT_$1_CPU_DEFINE=S390
-  elif test "x$OPENJDK_$1_CPU" = xriscv64; then
-    HOTSPOT_$1_CPU_DEFINE=RISCV
+  elif test "x$OPENJDK_$1_CPU" = xloongarch64; then
+    HOTSPOT_$1_CPU_DEFINE=LOONGARCH64
   elif test "x$OPENJDK_$1_CPU" != x; then
     HOTSPOT_$1_CPU_DEFINE=$(echo $OPENJDK_$1_CPU | tr a-z A-Z)
   fi
@@ -626,6 +634,7 @@ AC_DEFUN([PLATFORM_SET_MODULE_TARGET_OS_VALUES],
 ])
 
 #%%% Build and target systems %%%
+# Make sure to only use tools set up in BASIC_SETUP_FUNDAMENTAL_TOOLS.
 AC_DEFUN_ONCE([PLATFORM_SETUP_OPENJDK_BUILD_AND_TARGET],
 [
   # Figure out the build and target systems. # Note that in autoconf terminology, "build" is obvious, but "target"
@@ -712,7 +721,7 @@ AC_DEFUN_ONCE([PLATFORM_SETUP_OPENJDK_TARGET_ENDIANNESS],
 [
   ###############################################################################
   #
-  # Is the target little of big endian?
+  # Is the target little or big endian?
   #
   AC_C_BIGENDIAN([ENDIAN="big"],[ENDIAN="little"],[ENDIAN="unknown"],[ENDIAN="universal_endianness"])
 

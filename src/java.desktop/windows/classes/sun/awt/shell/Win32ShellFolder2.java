@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2003, 2021, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2003, 2023, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -30,6 +30,7 @@ import java.awt.Toolkit;
 import java.awt.image.AbstractMultiResolutionImage;
 import java.awt.image.BufferedImage;
 import java.awt.image.ImageObserver;
+import java.awt.image.MultiResolutionImage;
 import java.io.File;
 import java.io.FileNotFoundException;
 import java.io.IOException;
@@ -901,7 +902,7 @@ final class Win32ShellFolder2 extends ShellFolder {
                         location =
                                 Win32ShellFolderManager2.createShellFolderFromRelativePIDL(getDesktop(),
                                         linkLocationPIDL);
-                    } catch (InterruptedException e) {
+                    } catch (InterruptedException | FileNotFoundException e) {
                         // Return null
                     } catch (InternalError e) {
                         // Could be a link to a non-bindable object, such as a network connection
@@ -1160,10 +1161,17 @@ final class Win32ShellFolder2 extends ShellFolder {
                                 getRelativePIDL(), s, true);
                         if (hIcon <= 0) {
                             if (isDirectory()) {
-                                return getShell32Icon(FOLDER_ICON_ID, size);
+                                newIcon = getShell32Icon(FOLDER_ICON_ID, size);
                             } else {
-                                return getShell32Icon(FILE_ICON_ID, size);
+                                newIcon = getShell32Icon(FILE_ICON_ID, size);
                             }
+                            if (newIcon == null) {
+                                return null;
+                            }
+                            if (!(newIcon instanceof MultiResolutionImage)) {
+                                newIcon = new MultiResolutionIconImage(size, newIcon);
+                            }
+                            return newIcon;
                         }
                     }
                     newIcon = makeIcon(hIcon);

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998, 2021, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 1998, 2022, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -47,7 +47,7 @@
 #include "runtime/orderAccess.hpp"
 #include "runtime/osThread.hpp"
 #include "runtime/perfData.hpp"
-#include "runtime/safefetch.inline.hpp"
+#include "runtime/safefetch.hpp"
 #include "runtime/safepointMechanism.inline.hpp"
 #include "runtime/sharedRuntime.hpp"
 #include "runtime/thread.inline.hpp"
@@ -232,19 +232,6 @@ OopStorage* ObjectMonitor::_oop_storage = NULL;
 //
 // * See also http://blogs.sun.com/dave
 
-
-void* ObjectMonitor::operator new (size_t size) throw() {
-  return AllocateHeap(size, mtInternal);
-}
-void* ObjectMonitor::operator new[] (size_t size) throw() {
-  return operator new (size);
-}
-void ObjectMonitor::operator delete(void* p) {
-  FreeHeap(p);
-}
-void ObjectMonitor::operator delete[] (void *p) {
-  operator delete(p);
-}
 
 // Check that object() and set_object() are called from the right context:
 static void check_object_context() {
@@ -681,7 +668,7 @@ const char* ObjectMonitor::is_busy_to_string(stringStream* ss) {
   } else {
     // We report NULL instead of DEFLATER_MARKER here because is_busy()
     // ignores DEFLATER_MARKER values.
-    ss->print("owner=" INTPTR_FORMAT, NULL);
+    ss->print("owner=" INTPTR_FORMAT, NULL_WORD);
   }
   ss->print(", cxq=" INTPTR_FORMAT ", EntryList=" INTPTR_FORMAT, p2i(_cxq),
             p2i(_EntryList));
@@ -1429,6 +1416,12 @@ bool ObjectMonitor::check_owner(TRAPS) {
              "current thread is not owner", false);
 }
 
+static inline bool is_excluded(const Klass* monitor_klass) {
+  assert(monitor_klass != nullptr, "invariant");
+  NOT_JFR_RETURN_(false);
+  JFR_ONLY(return vmSymbols::jfr_chunk_rotation_monitor() == monitor_klass->name());
+}
+
 static void post_monitor_wait_event(EventJavaMonitorWait* event,
                                     ObjectMonitor* monitor,
                                     jlong notifier_tid,
@@ -1436,7 +1429,11 @@ static void post_monitor_wait_event(EventJavaMonitorWait* event,
                                     bool timedout) {
   assert(event != NULL, "invariant");
   assert(monitor != NULL, "invariant");
-  event->set_monitorClass(monitor->object()->klass());
+  const Klass* monitor_klass = monitor->object()->klass();
+  if (is_excluded(monitor_klass)) {
+    return;
+  }
+  event->set_monitorClass(monitor_klass);
   event->set_timeout(timeout);
   // Set an address that is 'unique enough', such that events close in
   // time and with the same address are likely (but not guaranteed) to

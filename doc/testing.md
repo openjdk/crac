@@ -64,6 +64,52 @@ jtreg:$(TOPDIR)/test/nashorn:tier1 jtreg:$(TOPDIR)/test/jaxp:tier1`. You can
 always submit a list of fully qualified test descriptors in the `TEST` variable
 if you want to shortcut the parser.
 
+### Common Test Groups
+
+Ideally, all tests are run for every change but this may not be practical due to the limited
+testing resources, the scope of the change, etc.
+
+The source tree currently defines a few common test groups in the relevant `TEST.groups`
+files. There are test groups that cover a specific component, for example `hotspot_gc`.
+It is a good idea to look into `TEST.groups` files to get a sense what tests are relevant
+to a particular JDK component.
+
+Component-specific tests may miss some unintended consequences of a change, so other
+tests should also be run. Again, it might be impractical to run all tests, and therefore
+_tiered_ test groups exist. Tiered test groups are not component-specific, but rather cover
+the significant parts of the entire JDK.
+
+Multiple tiers allow balancing test coverage and testing costs. Lower test tiers are supposed to
+contain the simpler, quicker and more stable tests. Higher tiers are supposed to contain
+progressively more thorough, slower, and sometimes less stable tests, or the tests that require
+special configuration.
+
+Contributors are expected to run the tests for the areas that are changed, and the first N tiers
+they can afford to run, but at least tier1.
+
+A brief description of the tiered test groups:
+
+- `tier1`: This is the lowest test tier. Multiple developers run these tests every day.
+Because of the widespread use, the tests in `tier1` are carefully selected and optimized to run
+fast, and to run in the most stable manner. The test failures in `tier1` are usually followed up
+on quickly, either with fixes, or adding relevant tests to problem list. GitHub Actions workflows,
+if enabled, run `tier1` tests.
+
+- `tier2`: This test group covers even more ground. These contain, among other things,
+tests that either run for too long to be at `tier1`, or may require special configuration,
+or tests that are less stable, or cover the broader range of non-core JVM and JDK features/components
+(for example, XML).
+
+- `tier3`: This test group includes more stressful tests, the tests for corner cases
+not covered by previous tiers, plus the tests that require GUIs. As such, this suite
+should either be run with low concurrency (`TEST_JOBS=1`), or without headful tests
+(`JTREG_KEYWORDS=\!headful`), or both.
+
+- `tier4`: This test group includes every other test not covered by previous tiers. It includes,
+for example, `vmTestbase` suites for Hotspot, which run for many hours even on large
+machines. It also runs GUI tests, so the same `TEST_JOBS` and `JTREG_KEYWORDS` caveats
+apply.
+
 ### JTReg
 
 JTReg tests can be selected either by picking a JTReg test group, or a selection
@@ -95,6 +141,11 @@ use a fully qualified test descriptor, add `jtreg:`, e.g.
 `jtreg:test/hotspot/jtreg/native_sanity`.
 
 ### Gtest
+
+**Note:** To be able to run the Gtest suite, you need to configure your build to
+be able to find a proper version of the gtest source. For details, see the
+section ["Running Tests" in the build
+documentation](building.html#running-tests).
 
 Since the Hotspot Gtest suite is so quick, the default is to run all tests.
 This is specified by just `gtest`, or as a fully qualified test descriptor
@@ -373,7 +424,15 @@ modules. If multiple modules are specified, they should be separated by space
 
 #### RETRY_COUNT
 
-Retry failed tests up to a set number of times. Defaults to 0.
+Retry failed tests up to a set number of times, until they pass.
+This allows to pass the tests with intermittent failures.
+Defaults to 0.
+
+#### REPEAT_COUNT
+
+Repeat the tests up to a set number of times, stopping at first failure.
+This helps to reproduce intermittent test failures.
+Defaults to 0.
 
 ### Gtest keywords
 
@@ -477,14 +536,16 @@ It is highly recommended to use the latest NSS version when running PKCS11
 tests. Improper NSS version may lead to unexpected failures which are hard to
 diagnose. For example, sun/security/pkcs11/Secmod/AddTrustedCert.java may fail
 on Ubuntu 18.04 with the default NSS version in the system. To run these tests
-correctly, the system property `test.nss.lib.paths` is required on Ubuntu 18.04
-to specify the alternative NSS lib directories.
+correctly, the system property `jdk.test.lib.artifacts.<NAME>` is required on
+Ubuntu 18.04 to specify the alternative NSS lib directory. The `<NAME>`
+component should be replaced with the name element of the appropriate
+`@Artifact` class. (See `test/jdk/sun/security/pkcs11/PKCS11Test.java`)
 
 For example:
 
 ```
 $ make test TEST="jtreg:sun/security/pkcs11/Secmod/AddTrustedCert.java" \
-    JTREG="JAVA_OPTIONS=-Dtest.nss.lib.paths=/path/to/your/latest/NSS-libs"
+    JTREG="JAVA_OPTIONS=-Djdk.test.lib.artifacts.nsslib-linux_aarch64=/path/to/NSS-libs"
 ```
 
 For more notes about the PKCS11 tests, please refer to
@@ -492,12 +553,14 @@ test/jdk/sun/security/pkcs11/README.
 
 ### Client UI Tests
 
+#### System key shortcuts
+
 Some Client UI tests use key sequences which may be reserved by the operating
 system. Usually that causes the test failure. So it is highly recommended to
 disable system key shortcuts prior testing. The steps to access and disable
 system key shortcuts for various platforms are provided below.
 
-#### MacOS
+##### macOS
 
 Choose Apple menu; System Preferences, click Keyboard, then click Shortcuts;
 select or deselect desired shortcut.
@@ -510,12 +573,12 @@ test correctly the default global key shortcut should be disabled using the
 steps described above, and then deselect "Turn keyboard access on or off"
 option which is responsible for `CTRL + F1` combination.
 
-#### Linux
+##### Linux
 
 Open the Activities overview and start typing Settings; Choose Settings, click
 Devices, then click Keyboard; set or override desired shortcut.
 
-#### Windows
+##### Windows
 
 Type `gpedit` in the Search and then click Edit group policy; navigate to User
 Configuration -> Administrative Templates -> Windows Components -> File
@@ -523,6 +586,33 @@ Explorer; in the right-side pane look for "Turn off Windows key hotkeys" and
 double click on it; enable or disable hotkeys.
 
 Note: restart is required to make the settings take effect.
+
+#### Robot API
+
+Most automated Client UI tests use `Robot` API to control the UI. Usually,
+the default operating system settings need to be adjusted for Robot
+to work correctly. The detailed steps how to access and update these settings
+for different platforms are provided below.
+
+##### macOS
+
+`Robot` is not permitted to control your Mac by default since
+macOS 10.15. To allow it, choose Apple menu -> System Settings, click
+Privacy & Security; then click Accessibility and ensure the following apps are
+allowed to control your computer: *Java* and *Terminal*. If the tests are run
+from an IDE, the IDE should be granted this permission too.
+
+##### Windows
+
+On Windows if Cygwin terminal is used to run the tests, there is a delay in
+focus transfer. Usually it causes automated UI test failure. To disable the
+delay, type `regedit` in the Search and then select Registry Editor; navigate
+to the following key: `HKEY_CURRENT_USER\Control Panel\Desktop`; make sure
+the `ForegroundLockTimeout` value is set to 0.
+
+Additional information about Client UI tests configuration for various operating
+systems can be obtained at [Automated client GUI testing system set up
+requirements](https://wiki.openjdk.org/display/ClientLibs/Automated+client+GUI+testing+system+set+up+requirements)
 
 ---
 # Override some definitions in the global css file that are not optimal for

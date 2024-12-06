@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2005, 2021, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2005, 2023, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -356,7 +356,7 @@ public abstract class HotSpotVirtualMachine extends VirtualMachine {
     String readErrorMessage(InputStream in) throws IOException {
         String s;
         StringBuilder message = new StringBuilder();
-        BufferedReader br = new BufferedReader(new InputStreamReader(in));
+        BufferedReader br = new BufferedReader(new InputStreamReader(in,"UTF-8"));
         while ((s = br.readLine()) != null) {
             message.append(s);
         }
@@ -392,5 +392,15 @@ public abstract class HotSpotVirtualMachine extends VirtualMachine {
             }
         }
         return attachTimeout;
+    }
+
+    protected static void checkNulls(Object... args) {
+        for (Object arg : args) {
+            if (arg instanceof String s) {
+                if (s.indexOf(0) >= 0) {
+                    throw new IllegalArgumentException("illegal null character in command");
+                }
+            }
+        }
     }
 }

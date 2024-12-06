@@ -121,7 +121,6 @@ class Http2Connection  {
 
     static private final int MAX_CLIENT_STREAM_ID = Integer.MAX_VALUE; // 2147483647
     static private final int MAX_SERVER_STREAM_ID = Integer.MAX_VALUE - 1; // 2147483646
-    static private final int BUFFER = 8; // added as an upper bound
 
     /**
      * Flag set when no more streams to be opened on this connection.
@@ -403,7 +402,7 @@ class Http2Connection  {
         this(connection,
              h2client,
              1,
-             keyFor(request.uri(), request.proxy()));
+             keyFor(request));
 
         Log.logTrace("Connection send window size {0} ", windowController.connectionWindowSize());
 
@@ -469,10 +468,11 @@ class Http2Connection  {
             CompletableFuture<Void> cf = new MinimalFuture<>();
             SSLEngine engine = aconn.getEngine();
             String engineAlpn = engine.getApplicationProtocol();
-            assert Objects.equals(alpn, engineAlpn)
-                    : "alpn: %s, engine: %s".formatted(alpn, engineAlpn);
-
-            DEBUG_LOGGER.log("checkSSLConfig: alpn: %s", alpn );
+            DEBUG_LOGGER.log("checkSSLConfig: alpn: '%s', engine: '%s'", alpn, engineAlpn);
+            if (alpn == null && engineAlpn != null) {
+                alpn = engineAlpn;
+            }
+            DEBUG_LOGGER.log("checkSSLConfig: alpn: '%s'", alpn );
 
             if (alpn == null || !alpn.equals("h2")) {
                 String msg;
@@ -495,6 +495,8 @@ class Http2Connection  {
                 cf.completeExceptionally(new ALPNException(msg, aconn));
                 return cf;
             }
+            assert Objects.equals(alpn, engineAlpn)
+                    : "alpn: %s, engine: %s".formatted(alpn, engineAlpn);
             cf.complete(null);
             return cf;
         };
@@ -532,14 +534,12 @@ class Http2Connection  {
         return keyString(isSecure, proxyAddr, addr.getHostString(), addr.getPort());
     }
 
-    static String keyFor(URI uri, InetSocketAddress proxy) {
-        boolean isSecure = uri.getScheme().equalsIgnoreCase("https");
-
-        String host = uri.getHost();
-        int port = uri.getPort();
-        return keyString(isSecure, proxy, host, port);
+    static String keyFor(final HttpRequestImpl request) {
+        final InetSocketAddress targetAddr = request.getAddress();
+        final InetSocketAddress proxy = request.proxy();
+        final boolean secure = request.secure();
+        return keyString(secure, proxy, targetAddr.getHostString(), targetAddr.getPort());
     }
-
 
     // Compute the key for an HttpConnection in the Http2ClientImpl pool:
     // The key string follows one of the three forms below:

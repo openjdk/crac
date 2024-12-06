@@ -183,8 +183,8 @@
   nonstatic_field(JavaThread,                  _pending_failed_speculation,                   jlong)                                 \
   nonstatic_field(JavaThread,                  _pending_transfer_to_interpreter,              bool)                                  \
   nonstatic_field(JavaThread,                  _jvmci_counters,                               jlong*)                                \
-  nonstatic_field(JavaThread,                  _jvmci_reserved0,                              intptr_t*)                             \
-  nonstatic_field(JavaThread,                  _jvmci_reserved1,                              intptr_t*)                             \
+  nonstatic_field(JavaThread,                  _jvmci_reserved0,                              jlong)                                 \
+  nonstatic_field(JavaThread,                  _jvmci_reserved1,                              jlong)                                 \
   nonstatic_field(JavaThread,                  _jvmci_reserved_oop0,                          oop)                                   \
   nonstatic_field(JavaThread,                  _should_post_on_exceptions_flag,               int)                                   \
   nonstatic_field(JavaThread,                  _jni_environment,                              JNIEnv)                                \
@@ -565,8 +565,8 @@
   declare_constant(Deoptimization::Reason_not_compiled_exception_handler) \
   declare_constant(Deoptimization::Reason_unresolved)                     \
   declare_constant(Deoptimization::Reason_jsr_mismatch)                   \
-  declare_constant(Deoptimization::Reason_LIMIT)                          \
-  declare_constant(Deoptimization::_support_large_access_byte_array_virtualization)               \
+  declare_constant(Deoptimization::Reason_TRAP_HISTORY_LENGTH)            \
+  declare_constant(Deoptimization::_support_large_access_byte_array_virtualization) \
                                                                           \
   declare_constant(FieldInfo::access_flags_offset)                        \
   declare_constant(FieldInfo::name_index_offset)                          \

@@ -128,7 +128,7 @@ AWT_NS_WINDOW_IMPLEMENTATION
 
             // send up to the GestureHandler to recursively dispatch on the AWT event thread
             DECLARE_CLASS(jc_GestureHandler, "com/apple/eawt/event/GestureHandler");
-            DECLARE_METHOD(sjm_handleGestureFromNative, jc_GestureHandler,
+            DECLARE_STATIC_METHOD(sjm_handleGestureFromNative, jc_GestureHandler,
                             "handleGestureFromNative", "(Ljava/awt/Window;IDDDD)V");
             (*env)->CallStaticVoidMethod(env, jc_GestureHandler, sjm_handleGestureFromNative,
                                awtWindow, type, (jdouble)loc.x, (jdouble)loc.y, (jdouble)a, (jdouble)b);
@@ -841,7 +841,7 @@ AWT_ASSERT_APPKIT_THREAD;
         isDisabled = !awtWindow.isEnabled;
     }
 
-    if (menuBar == nil) {
+    if (menuBar == nil && [ApplicationDelegate sharedDelegate] != nil) {
         menuBar = [[ApplicationDelegate sharedDelegate] defaultMenuBar];
         isDisabled = NO;
     }
@@ -1228,7 +1228,7 @@ JNI_COCOA_ENTER(env);
         window.javaMenuBar = menuBar;
 
         CMenuBar* actualMenuBar = menuBar;
-        if (actualMenuBar == nil) {
+        if (actualMenuBar == nil && [ApplicationDelegate sharedDelegate] != nil) {
             actualMenuBar = [[ApplicationDelegate sharedDelegate] defaultMenuBar];
         }
 

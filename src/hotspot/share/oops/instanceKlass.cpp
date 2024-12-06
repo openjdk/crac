@@ -589,7 +589,10 @@ void InstanceKlass::deallocate_contents(ClassLoaderData* loader_data) {
 
   // Release C heap allocated data that this points to, which includes
   // reference counting symbol names.
-  release_C_heap_structures_internal();
+  // Can't release the constant pool here because the constant pool can be
+  // deallocated separately from the InstanceKlass for default methods and
+  // redefine classes.
+  release_C_heap_structures(/* release_constant_pool */ false);
 
   deallocate_methods(loader_data, methods());
   set_methods(NULL);
@@ -1018,6 +1021,59 @@ void InstanceKlass::initialize_super_interfaces(TRAPS) {
   }
 }
 
+ResourceHashtable<const InstanceKlass*, OopHandle,
+                  primitive_hash<const InstanceKlass*>,
+                  primitive_equals<const InstanceKlass*>,
+                  107,
+                  ResourceObj::C_HEAP,
+                  mtClass>
+      _initialization_error_table;
+
+void InstanceKlass::add_initialization_error(JavaThread* current, Handle exception) {
+  // Create the same exception with a message indicating the thread name,
+  // and the StackTraceElements.
+  // If the initialization error is OOM, this might not work, but if GC kicks in
+  // this would be still be helpful.
+  JavaThread* THREAD = current;
+  Handle init_error = java_lang_Throwable::create_initialization_error(current, exception);
+  ResourceMark rm(THREAD);
+  if (init_error.is_null()) {
+    log_trace(class, init)("Initialization error is null for class %s", external_name());
+    return;
+  }
+
+  MutexLocker ml(THREAD, ClassInitError_lock);
+  OopHandle elem = OopHandle(Universe::vm_global(), init_error());
+  bool created;
+  _initialization_error_table.put_if_absent(this, elem, &created);
+  assert(created, "Initialization is single threaded");
+  log_trace(class, init)("Initialization error added for class %s", external_name());
+}
+
+oop InstanceKlass::get_initialization_error(JavaThread* current) {
+  MutexLocker ml(current, ClassInitError_lock);
+  OopHandle* h = _initialization_error_table.get(this);
+  return (h != nullptr) ? h->resolve() : nullptr;
+}
+
+// Need to remove entries for unloaded classes.
+void InstanceKlass::clean_initialization_error_table() {
+  struct InitErrorTableCleaner {
+    bool do_entry(const InstanceKlass* ik, OopHandle h) {
+      if (!ik->is_loader_alive()) {
+        h.release(Universe::vm_global());
+        return true;
+      } else {
+        return false;
+      }
+    }
+  };
+
+  MutexLocker ml(ClassInitError_lock);
+  InitErrorTableCleaner cleaner;
+  _initialization_error_table.unlink(&cleaner);
+}
+
 void InstanceKlass::initialize_impl(TRAPS) {
   HandleMark hm(THREAD);
 
@@ -1064,16 +1120,15 @@ void InstanceKlass::initialize_impl(TRAPS) {
     if (is_in_error_state()) {
       DTRACE_CLASSINIT_PROBE_WAIT(erroneous, -1, wait);
       ResourceMark rm(THREAD);
-      const char* desc = "Could not initialize class ";
-      const char* className = external_name();
-      size_t msglen = strlen(desc) + strlen(className) + 1;
-      char* message = NEW_RESOURCE_ARRAY(char, msglen);
-      if (NULL == message) {
-        // Out of memory: can't create detailed error message
-          THROW_MSG(vmSymbols::java_lang_NoClassDefFoundError(), className);
+      Handle cause(THREAD, get_initialization_error(THREAD));
+
+      stringStream ss;
+      ss.print("Could not initialize class %s", external_name());
+      if (cause.is_null()) {
+        THROW_MSG(vmSymbols::java_lang_NoClassDefFoundError(), ss.as_string());
       } else {
-        jio_snprintf(message, msglen, "%s%s", desc, className);
-          THROW_MSG(vmSymbols::java_lang_NoClassDefFoundError(), message);
+        THROW_MSG_CAUSE(vmSymbols::java_lang_NoClassDefFoundError(),
+                        ss.as_string(), cause);
       }
     }
 
@@ -1104,6 +1159,7 @@ void InstanceKlass::initialize_impl(TRAPS) {
       CLEAR_PENDING_EXCEPTION;
       {
         EXCEPTION_MARK;
+        add_initialization_error(THREAD, e);
         // Locks object, set state, and notify all waiting threads
         set_initialization_state_and_notify(initialization_error, THREAD);
         CLEAR_PENDING_EXCEPTION;
@@ -1139,9 +1195,7 @@ void InstanceKlass::initialize_impl(TRAPS) {
   // Step 9
   if (!HAS_PENDING_EXCEPTION) {
     set_initialization_state_and_notify(fully_initialized, CHECK);
-    {
-      debug_only(vtable().verify(tty, true);)
-    }
+    debug_only(vtable().verify(tty, true);)
   }
   else {
     // Step 10 and 11
@@ -1152,6 +1206,7 @@ void InstanceKlass::initialize_impl(TRAPS) {
     JvmtiExport::clear_detected_exception(jt);
     {
       EXCEPTION_MARK;
+      add_initialization_error(THREAD, e);
       set_initialization_state_and_notify(initialization_error, THREAD);
       CLEAR_PENDING_EXCEPTION;   // ignore any exception thrown, class initialization error is thrown below
       // JVMTI has already reported the pending exception
@@ -1593,7 +1648,8 @@ bool InstanceKlass::find_field_from_offset(int offset, bool is_static, fieldDesc
 void InstanceKlass::methods_do(void f(Method* method)) {
   // Methods aren't stable until they are loaded.  This can be read outside
   // a lock through the ClassLoaderData for profiling
-  if (!is_loaded()) {
+  // Redefined scratch classes are on the list and need to be cleaned
+  if (!is_loaded() && !is_scratch_class()) {
     return;
   }
 
@@ -2009,25 +2065,14 @@ Method* InstanceKlass::lookup_method_in_all_interfaces(Symbol* name,
   return NULL;
 }
 
-/* jni_id_for_impl for jfieldIds only */
-JNIid* InstanceKlass::jni_id_for_impl(int offset) {
-  MutexLocker ml(JfieldIdCreation_lock);
-  // Retry lookup after we got the lock
-  JNIid* probe = jni_ids() == NULL ? NULL : jni_ids()->find(offset);
-  if (probe == NULL) {
-    // Slow case, allocate new static field identifier
-    probe = new JNIid(this, offset, jni_ids());
-    set_jni_ids(probe);
-  }
-  return probe;
-}
-
-
 /* jni_id_for for jfieldIds only */
 JNIid* InstanceKlass::jni_id_for(int offset) {
+  MutexLocker ml(JfieldIdCreation_lock);
   JNIid* probe = jni_ids() == NULL ? NULL : jni_ids()->find(offset);
   if (probe == NULL) {
-    probe = jni_id_for_impl(offset);
+    // Allocate new static field identifier
+    probe = new JNIid(this, offset, jni_ids());
+    set_jni_ids(probe);
   }
   return probe;
 }
@@ -2375,7 +2420,9 @@ void InstanceKlass::metaspace_pointers_do(MetaspaceClosure* it) {
   } else {
     it->push(&_default_vtable_indices);
   }
-  it->push(&_fields);
+
+  // _fields might be written into by Rewriter::scan_method() -> fd.set_has_initialized_final_update()
+  it->push(&_fields, MetaspaceClosure::_writable);
 
   if (itable_length() > 0) {
     itableOffsetEntry* ioe = (itableOffsetEntry*)start_of_itable();
@@ -2525,6 +2572,9 @@ void InstanceKlass::restore_unshareable_info(ClassLoaderData* loader_data, Handl
   constants()->restore_unshareable_info(CHECK);
 
   if (array_klasses() != NULL) {
+    // To get a consistent list of classes we need MultiArray_lock to ensure
+    // array classes aren't observed while they are being restored.
+     MutexLocker ml(MultiArray_lock);
     // Array classes have null protection domain.
     // --> see ArrayKlass::complete_create_array_klass()
     array_klasses()->restore_unshareable_info(ClassLoaderData::the_null_class_loader_data(), Handle(), CHECK);
@@ -2636,22 +2686,13 @@ static void method_release_C_heap_structures(Method* m) {
   m->release_C_heap_structures();
 }
 
-void InstanceKlass::release_C_heap_structures() {
-
+// Called also by InstanceKlass::deallocate_contents, with false for release_constant_pool.
+void InstanceKlass::release_C_heap_structures(bool release_constant_pool) {
   // Clean up C heap
-  release_C_heap_structures_internal();
-  constants()->release_C_heap_structures();
+  Klass::release_C_heap_structures();
 
   // Deallocate and call destructors for MDO mutexes
   methods_do(method_release_C_heap_structures);
-}
-
-void InstanceKlass::release_C_heap_structures_internal() {
-  Klass::release_C_heap_structures();
-
-  // Can't release the constant pool here because the constant pool can be
-  // deallocated separately from the InstanceKlass for default methods and
-  // redefine classes.
 
   // Deallocate oop map cache
   if (_oop_map_cache != NULL) {
@@ -2687,6 +2728,10 @@ void InstanceKlass::release_C_heap_structures_internal() {
 #endif
 
   FREE_C_HEAP_ARRAY(char, _source_debug_extension);
+
+  if (release_constant_pool) {
+    constants()->release_C_heap_structures();
+  }
 }
 
 void InstanceKlass::set_source_debug_extension(const char* array, int length) {
@@ -3011,6 +3056,18 @@ InstanceKlass* InstanceKlass::compute_enclosing_class(bool* inner_is_member, TRA
     constantPoolHandle i_cp(THREAD, constants());
     if (ooff != 0) {
       Klass* ok = i_cp->klass_at(ooff, CHECK_NULL);
+      if (!ok->is_instance_klass()) {
+        // If the outer class is not an instance klass then it cannot have
+        // declared any inner classes.
+        ResourceMark rm(THREAD);
+        Exceptions::fthrow(
+          THREAD_AND_LOCATION,
+          vmSymbols::java_lang_IncompatibleClassChangeError(),
+          "%s and %s disagree on InnerClasses attribute",
+          ok->external_name(),
+          external_name());
+        return NULL;
+      }
       outer_klass = InstanceKlass::cast(ok);
       *inner_is_member = true;
     }
@@ -3899,6 +3956,23 @@ bool InstanceKlass::has_previous_versions_and_reset() {
   return ret;
 }
 
+// This nulls out jmethodIDs for all methods in 'klass'
+// It needs to be called explicitly for all previous versions of a class because these may not be cleaned up
+// during class unloading.
+// We can not use the jmethodID cache associated with klass directly because the 'previous' versions
+// do not have the jmethodID cache filled in. Instead, we need to lookup jmethodID for each method and this
+// is expensive - O(n) for one jmethodID lookup. For all contained methods it is O(n^2).
+// The reason for expensive jmethodID lookup for each method is that there is no direct link between method and jmethodID.
+void InstanceKlass::clear_jmethod_ids(InstanceKlass* klass) {
+  Array<Method*>* method_refs = klass->methods();
+  for (int k = 0; k < method_refs->length(); k++) {
+    Method* method = method_refs->at(k);
+    if (method != nullptr && method->is_obsolete()) {
+      method->clear_jmethod_id();
+    }
+  }
+}
+
 // Purge previous versions before adding new previous versions of the class and
 // during class unloading.
 void InstanceKlass::purge_previous_version_list() {
@@ -3939,11 +4013,10 @@ void InstanceKlass::purge_previous_version_list() {
       // so will be deallocated during the next phase of class unloading.
       log_trace(redefine, class, iklass, purge)
         ("previous version " INTPTR_FORMAT " is dead.", p2i(pv_node));
-      // For debugging purposes.
-      pv_node->set_is_scratch_class();
       // Unlink from previous version list.
       assert(pv_node->class_loader_data() == loader_data, "wrong loader_data");
       InstanceKlass* next = pv_node->previous_versions();
+      clear_jmethod_ids(pv_node); // jmethodID maintenance for the unloaded class
       pv_node->link_previous_versions(NULL);   // point next to NULL
       last->link_previous_versions(next);
       // Delete this node directly. Nothing is referring to it and we don't
@@ -4055,8 +4128,6 @@ void InstanceKlass::add_previous_version(InstanceKlass* scratch_class,
   ConstantPool* cp_ref = scratch_class->constants();
   if (!cp_ref->on_stack()) {
     log_trace(redefine, class, iklass, add)("scratch class not added; no methods are running");
-    // For debugging purposes.
-    scratch_class->set_is_scratch_class();
     scratch_class->class_loader_data()->add_to_deallocate_list(scratch_class);
     return;
   }

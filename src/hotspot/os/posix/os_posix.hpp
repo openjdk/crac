@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1999, 2021, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 1999, 2022, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -24,6 +24,15 @@
 
 #ifndef OS_POSIX_OS_POSIX_HPP
 #define OS_POSIX_OS_POSIX_HPP
+
+// Note: the Posix API aims to capture functionality available on all Posix
+// compliant platforms, but in practice the implementations may depend on
+// non-Posix functionality. For example, the use of lseek64 and ftruncate64.
+// This use of non-Posix API's is made possible by compiling/linking in a mode
+// that is not restricted to being fully Posix complaint, such as by declaring
+// -D_GNU_SOURCE. But be aware that in doing so we may enable non-Posix
+// behaviour in API's that are defined by Posix. For example, that SIGSTKSZ
+// is not defined as a constant as of Glibc 2.34.
 
 // File conventions
 static const char* file_separator() { return "/"; }
@@ -95,6 +104,8 @@ public:
   static bool handle_stack_overflow(JavaThread* thread, address addr, address pc,
                                     const void* ucVoid,
                                     address* stub);
+
+  static void print_active_locale(outputStream* st);
 };
 
 /*

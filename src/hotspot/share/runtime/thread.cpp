@@ -113,6 +113,7 @@
 #include "runtime/threadWXSetters.inline.hpp"
 #include "runtime/timer.hpp"
 #include "runtime/timerTrace.hpp"
+#include "runtime/trimNativeHeap.hpp"
 #include "runtime/vframe.inline.hpp"
 #include "runtime/vframeArray.hpp"
 #include "runtime/vframe_hp.hpp"
@@ -375,9 +376,9 @@ void Thread::call_run() {
 
   // Perform common initialization actions
 
-  register_thread_stack_with_NMT();
-
   MACOS_AARCH64_ONLY(this->init_wx());
+
+  register_thread_stack_with_NMT();
 
   JFR_ONLY(Jfr::on_thread_start(this);)
 
@@ -477,6 +478,13 @@ bool Thread::is_JavaThread_protected(const JavaThread* p) {
   if (SafepointSynchronize::is_at_safepoint()) {
     // The target is protected since JavaThreads cannot exit
     // while we're at a safepoint.
+    return true;
+  }
+
+  // If the target hasn't been started yet then it is trivially
+  // "protected". We assume the caller is the thread that will do
+  // the starting.
+  if (p->osthread() == NULL || p->osthread()->get_state() <= INITIALIZED) {
     return true;
   }
 
@@ -647,7 +655,9 @@ void Thread::print_on_error(outputStream* st, char* buf, int buflen) const {
   else if (is_GC_task_thread())       { st->print("GCTaskThread"); }
   else if (is_Watcher_thread())       { st->print("WatcherThread"); }
   else if (is_ConcurrentGC_thread())  { st->print("ConcurrentGCThread"); }
-  else                                { st->print("Thread"); }
+  else if (this == AsyncLogWriter::instance()) {
+    st->print("%s", this->name());
+  } else                                { st->print("Thread"); }
 
   if (is_Named_thread()) {
     st->print(" \"%s\"", name());
@@ -1008,6 +1018,7 @@ void JavaThread::check_for_valid_safepoint_state() {
 JavaThread::JavaThread() :
   // Initialize fields
 
+  _in_asgct(false),
   _on_thread_list(false),
   DEBUG_ONLY(_java_call_counter(0) COMMA)
   _entry_point(nullptr),
@@ -1051,8 +1062,8 @@ JavaThread::JavaThread() :
   _pending_failed_speculation(0),
   _jvmci{nullptr},
   _jvmci_counters(nullptr),
-  _jvmci_reserved0(nullptr),
-  _jvmci_reserved1(nullptr),
+  _jvmci_reserved0(0),
+  _jvmci_reserved1(0),
   _jvmci_reserved_oop0(nullptr),
 #endif // INCLUDE_JVMCI
 
@@ -1330,8 +1341,9 @@ static void ensure_join(JavaThread* thread) {
   // Thread is exiting. So set thread_status field in  java.lang.Thread class to TERMINATED.
   java_lang_Thread::set_thread_status(threadObj(), JavaThreadStatus::TERMINATED);
   // Clear the native thread instance - this makes isAlive return false and allows the join()
-  // to complete once we've done the notify_all below
-  java_lang_Thread::set_thread(threadObj(), NULL);
+  // to complete once we've done the notify_all below. Needs a release() to obey Java Memory Model
+  // requirements.
+  java_lang_Thread::release_set_thread(threadObj(), NULL);
   lock.notify_all(thread);
   // Ignore pending exception (ThreadDeath), since we are exiting anyway
   thread->clear_pending_exception();
@@ -1695,7 +1707,7 @@ void JavaThread::check_and_handle_async_exceptions() {
 void JavaThread::handle_special_runtime_exit_condition(bool check_asyncs) {
 
   if (is_obj_deopt_suspend()) {
-    frame_anchor()->make_walkable(this);
+    frame_anchor()->make_walkable();
     wait_for_object_deoptimization();
   }
 
@@ -2191,7 +2203,7 @@ const char* JavaThread::get_thread_name() const {
 }
 
 // Returns a non-NULL representation of this thread's name, or a suitable
-// descriptive string if there is no set name
+// descriptive string if there is no set name.
 const char* JavaThread::get_thread_name_string(char* buf, int buflen) const {
   const char* name_str;
   oop thread_obj = threadObj();
@@ -2212,6 +2224,19 @@ const char* JavaThread::get_thread_name_string(char* buf, int buflen) const {
     name_str = Thread::name();
   }
   assert(name_str != NULL, "unexpected NULL thread name");
+  return name_str;
+}
+
+// Helper to extract the name from the thread oop for logging.
+const char* JavaThread::name_for(oop thread_obj) {
+  assert(thread_obj != NULL, "precondition");
+  oop name = java_lang_Thread::name(thread_obj);
+  const char* name_str;
+  if (name != NULL) {
+    name_str = java_lang_String::as_utf8_string(name);
+  } else {
+    name_str = "<un-named>";
+  }
   return name_str;
 }
 
@@ -2237,7 +2262,6 @@ void JavaThread::prepare(jobject jni_thread, ThreadPriority prio) {
   assert(InstanceKlass::cast(thread_oop->klass())->is_linked(),
          "must be initialized");
   set_threadObj(thread_oop());
-  java_lang_Thread::set_thread(thread_oop(), this);
 
   if (prio == NoPriority) {
     prio = java_lang_Thread::priority(thread_oop());
@@ -2253,6 +2277,11 @@ void JavaThread::prepare(jobject jni_thread, ThreadPriority prio) {
   // added to the Threads list for if a GC happens, then the java_thread oop
   // will not be visited by GC.
   Threads::add(this);
+  // Publish the JavaThread* in java.lang.Thread after the JavaThread* is
+  // on a ThreadsList. We don't want to wait for the release when the
+  // Theads_lock is dropped somewhere in the caller since the JavaThread*
+  // is already visible to JVM/TI via the ThreadsList.
+  java_lang_Thread::release_set_thread(thread_oop(), this);
 }
 
 oop JavaThread::current_park_blocker() {
@@ -2264,6 +2293,25 @@ oop JavaThread::current_park_blocker() {
   return NULL;
 }
 
+// Print current stack trace for checked JNI warnings and JNI fatal errors.
+// This is the external format, selecting the platform
+// as applicable, and allowing for a native-only stack.
+void JavaThread::print_jni_stack() {
+  assert(this == JavaThread::current(), "Can't print stack of other threads");
+  if (!has_last_Java_frame()) {
+    ResourceMark rm(this);
+    char* buf = NEW_RESOURCE_ARRAY_RETURN_NULL(char, O_BUFLEN);
+    if (buf == nullptr) {
+      tty->print_cr("Unable to print native stack - out of memory");
+      return;
+    }
+    frame f = os::current_frame();
+    VMError::print_native_stack(tty, f, this,
+                                buf, O_BUFLEN);
+  } else {
+    print_stack_on(tty);
+  }
+}
 
 void JavaThread::print_stack_on(outputStream* st) {
   if (!has_last_Java_frame()) return;
@@ -2766,6 +2814,11 @@ jint Threads::create_vm(JavaVMInitArgs* args, bool* canTryAgain) {
   jint parse_result = Arguments::parse(args);
   if (parse_result != JNI_OK) return parse_result;
 
+#if INCLUDE_NMT
+  // Initialize NMT right after argument parsing to keep the pre-NMT-init window small.
+  MemTracker::initialize();
+#endif // INCLUDE_NMT
+
   os::init_before_ergo();
 
   jint ergo_result = Arguments::apply_ergo();
@@ -3049,6 +3102,10 @@ jint Threads::create_vm(JavaVMInitArgs* args, bool* canTryAgain) {
     CompileBroker::compilation_init_phase2();
   }
 #endif
+
+  if (NativeHeapTrimmer::enabled()) {
+    NativeHeapTrimmer::initialize();
+  }
 
   // Always call even when there are not JVMTI environments yet, since environments
   // may be attached late and JVMTI must track phases of VM execution
@@ -3966,3 +4023,46 @@ void JavaThread::verify_cross_modify_fence_failure(JavaThread *thread) {
    report_vm_error(__FILE__, __LINE__, "Cross modify fence failure", "%p", thread);
 }
 #endif
+
+// Starts the target JavaThread as a daemon of the given priority, and
+// bound to the given java.lang.Thread instance.
+// The Threads_lock is held for the duration.
+void JavaThread::start_internal_daemon(JavaThread* current, JavaThread* target,
+                                       Handle thread_oop, ThreadPriority prio) {
+
+  assert(target->osthread()!= NULL, "target thread is not properly initialized");
+
+  MutexLocker mu(current, Threads_lock);
+
+  // Initialize the fields of the thread_oop first.
+  if (prio != NoPriority) {
+    java_lang_Thread::set_priority(thread_oop(), prio);
+    // Note: we don't call os::set_priority here. Possibly we should,
+    // else all threads should call it themselves when they first run.
+  }
+
+  java_lang_Thread::set_daemon(thread_oop());
+
+  // Now bind the thread_oop to the target JavaThread.
+  target->set_threadObj(thread_oop());
+
+  Threads::add(target); // target is now visible for safepoint/handshake
+  // Publish the JavaThread* in java.lang.Thread after the JavaThread* is
+  // on a ThreadsList. We don't want to wait for the release when the
+  // Theads_lock is dropped when the 'mu' destructor is run since the
+  // JavaThread* is already visible to JVM/TI via the ThreadsList.
+  java_lang_Thread::release_set_thread(thread_oop(), target); // isAlive == true now
+  Thread::start(target);
+}
+
+void JavaThread::vm_exit_on_osthread_failure(JavaThread* thread) {
+  // At this point it may be possible that no osthread was created for the
+  // JavaThread due to lack of resources. However, since this must work
+  // for critical system threads just check and abort if this fails.
+  if (thread->osthread() == nullptr) {
+    // This isn't really an OOM condition, but historically this is what
+    // we report.
+    vm_exit_during_initialization("java.lang.OutOfMemoryError",
+                                  os::native_thread_creation_failed_msg());
+  }
+}

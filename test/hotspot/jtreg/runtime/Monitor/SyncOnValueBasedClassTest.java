@@ -30,6 +30,7 @@ import java.util.stream.*;
  * @test
  * @bug 8242263
  * @summary Exercise DiagnoseSyncOnValueBasedClasses diagnostic flag
+ * @requires vm.flagless
  * @library /test/lib
  * @run driver/timeout=180000 SyncOnValueBasedClassTest
  */
@@ -47,8 +48,8 @@ public class SyncOnValueBasedClassTest {
         {"-Xcomp", "-XX:TieredStopAtLevel=1", "-XX:+UseBiasedLocking"},
         {"-Xcomp", "-XX:TieredStopAtLevel=1", "-XX:-UseBiasedLocking"},
         {"-Xcomp", "-XX:-TieredCompilation", "-XX:-UseBiasedLocking"},
-        {"-Xcomp", "-XX:-TieredCompilation", "-XX:+UseBiasedLocking", "-XX:+UseOptoBiasInlining"},
-        {"-Xcomp", "-XX:-TieredCompilation", "-XX:+UseBiasedLocking", "-XX:-UseOptoBiasInlining"}
+        {"-Xcomp", "-XX:-TieredCompilation", "-XX:+UseBiasedLocking", "-XX:+IgnoreUnrecognizedVMOptions", "-XX:+UseOptoBiasInlining"},
+        {"-Xcomp", "-XX:-TieredCompilation", "-XX:+UseBiasedLocking", "-XX:+IgnoreUnrecognizedVMOptions", "-XX:-UseOptoBiasInlining"}
     };
 
     private static void initTestObjects() {

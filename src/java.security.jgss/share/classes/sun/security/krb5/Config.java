@@ -104,7 +104,7 @@ public class Config {
 
     private static boolean DEBUG = sun.security.krb5.internal.Krb5.DEBUG;
 
-    // these are used for hexdecimal calculation.
+    // these are used for hexadecimal calculation.
     private static final int BASE16_0 = 1;
     private static final int BASE16_1 = 16;
     private static final int BASE16_2 = 16 * 16;
@@ -276,7 +276,7 @@ public class Config {
     /**
      * Gets the boolean value for the specified keys. Returns TRUE if the
      * string value is "yes", or "true", FALSE if "no", or "false", or null
-     * if otherwise or not defined. The comparision is case-insensitive.
+     * if otherwise or not defined. The comparison is case-insensitive.
      *
      * @param keys the keys, see {@link #get(String...)}
      * @return the boolean value, or null if there is no value defined or the
@@ -672,6 +672,9 @@ public class Config {
     private List<String> loadConfigFile(final String fileName)
             throws IOException, KrbException {
 
+        if (DEBUG) {
+            System.out.println("Loading config file from " + fileName);
+        }
         List<String> result = new ArrayList<>();
         List<String> raw = new ArrayList<>();
         Set<Path> dupsCheck = new HashSet<>();
@@ -782,6 +785,9 @@ public class Config {
             throws KrbException {
         Hashtable<String,Object> current = stanzaTable;
         for (String line: v) {
+            if (DEBUG) {
+                System.out.println(line);
+            }
             // There are only 3 kinds of lines
             // 1. a = b
             // 2. a = {
@@ -981,16 +987,22 @@ public class Config {
         String default_enctypes;
         default_enctypes = get("libdefaults", configName);
         if (default_enctypes == null && !configName.equals("permitted_enctypes")) {
+            if (DEBUG) {
+                System.out.println("Getting permitted_enctypes from libdefaults");
+            }
             default_enctypes = get("libdefaults", "permitted_enctypes");
         }
         int[] etype;
         if (default_enctypes == null) {
             if (DEBUG) {
-                System.out.println("Using builtin default etypes for " +
+                System.out.println("default_enctypes were null, using builtin default etypes for configuration " +
                     configName);
             }
             etype = EType.getBuiltInDefaults();
         } else {
+            if (DEBUG) {
+                System.out.println("default_enctypes:" + default_enctypes);
+            }
             String delim = " ";
             StringTokenizer st;
             for (int j = 0; j < default_enctypes.length(); j++) {
@@ -1012,7 +1024,8 @@ public class Config {
                 }
             }
             if (ls.isEmpty()) {
-                throw new KrbException("no supported default etypes for "
+                throw new KrbException("out of " + len +
+                        " default etypes no supported etypes found for configuration "
                         + configName);
             } else {
                 etype = new int[ls.size()];

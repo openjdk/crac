@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1996, 2021, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 1996, 2023, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -24,6 +24,7 @@
  */
 
 #include "awt.h"
+#include <strsafe.h>
 #include <math.h>
 #include <windef.h>
 #include <wtypes.h>
@@ -2408,7 +2409,7 @@ static jboolean jFontToWFontW(JNIEnv *env, HDC printDC, jstring fontName,
     size_t nameLen = wcslen(fontNameW);
     if (nameLen < (sizeof(lf.lfFaceName) / sizeof(lf.lfFaceName[0]))) {
 
-        wcscpy(lf.lfFaceName, fontNameW);
+        StringCchCopyW(lf.lfFaceName, LF_FACESIZE, fontNameW);
 
         lf.lfCharSet = DEFAULT_CHARSET;
         lf.lfPitchAndFamily = 0;
@@ -3924,9 +3925,13 @@ static void throwPrinterException(JNIEnv *env, DWORD err) {
                   sizeof(t_errStr),
                   NULL );
 
-    WideCharToMultiByte(CP_UTF8, 0, t_errStr, -1,
+    int nb = WideCharToMultiByte(CP_UTF8, 0, t_errStr, -1,
                         errStr, sizeof(errStr), NULL, NULL);
-    JNU_ThrowByName(env, PRINTEREXCEPTION_STR, errStr);
+    if (nb > 0) {
+        JNU_ThrowByName(env, PRINTEREXCEPTION_STR, errStr);
+    } else {
+        JNU_ThrowByName(env, PRINTEREXCEPTION_STR, "secondary error during OS message extraction");
+    }
 }
 
 

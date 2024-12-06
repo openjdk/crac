@@ -281,7 +281,10 @@ public class ResponseSubscribers {
         @Override
         public void onNext(List<ByteBuffer> items) {
             try {
-                out.write(items.toArray(Utils.EMPTY_BB_ARRAY));
+                ByteBuffer[] buffers = items.toArray(Utils.EMPTY_BB_ARRAY);
+                do {
+                    out.write(buffers);
+                } while (Utils.hasRemaining(buffers));
             } catch (IOException ex) {
                 close();
                 subscription.cancel();
@@ -529,8 +532,8 @@ public class ResponseSubscribers {
             if (available != 0) return available;
             Iterator<?> iterator = currentListItr;
             if (iterator != null && iterator.hasNext()) return 1;
-            if (buffers.isEmpty()) return 0;
-            return 1;
+            if (!buffers.isEmpty() && buffers.peek() != LAST_LIST ) return 1;
+            return available;
         }
 
         @Override

@@ -67,10 +67,13 @@ langtools_sjavac = \
     tools/all \
     tools/sjavac
 
+# All tests
+
+all = \
+    :langtools_all
+
 langtools_all = \
-    jdk \
-    lib \
-    tools
+    /
 
 # Tiered testing definitions
 
@@ -87,3 +90,6 @@ tier2 = \
 
 # No langtools tests are tier 3 either.
 tier3 =
+
+# No langtools tests are tier 4 either.
+tier4 =

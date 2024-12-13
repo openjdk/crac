@@ -361,6 +361,11 @@ bool VM_Crac::check_fds() {
       }
     }
 
+    if (ClassLoader::is_in_boot_append_entries(details)) {
+      print_resources("OK: appended to bootclasspath\n");
+      continue;
+    }
+
     print_resources("BAD: opened by application\n");
     ok = false;
 

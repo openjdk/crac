@@ -825,6 +825,17 @@ void ClassLoader::add_to_boot_append_entries(ClassPathEntry *new_entry) {
   }
 }
 
+bool ClassLoader::is_in_boot_append_entries(const char* path) {
+  ClassPathEntry* e = first_append_entry();
+  while (e != nullptr) {
+    if (strcmp(e->name(), path) == 0) {
+      return true;
+    }
+    e = e->next();
+  }
+  return false;
+}
+
 // Record the path entries specified in -cp during dump time. The recorded
 // information will be used at runtime for loading the archived app classes.
 //

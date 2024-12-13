@@ -409,6 +409,7 @@ class ClassLoader: AllStatic {
 
   // adds a class path to the boot append entries
   static void add_to_boot_append_entries(ClassPathEntry* new_entry);
+  static bool is_in_boot_append_entries(const char* path);
 
   // creates a class path zip entry (returns null if JAR file cannot be opened)
   static ClassPathZipEntry* create_class_path_zip_entry(const char *apath, bool is_boot_append);

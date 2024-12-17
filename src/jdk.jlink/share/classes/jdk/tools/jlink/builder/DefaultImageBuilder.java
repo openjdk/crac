@@ -217,7 +217,8 @@ public final class DefaultImageBuilder implements ImageBuilder {
                                 || fileName.equals("jexec")
                                 || fileName.equals("criuengine")
                                 || fileName.equals("pauseengine")
-                                || fileName.equals("simengine");
+                                || fileName.equals("simengine")
+                                || fileName.equals("criu");
                         }, this::setExecutable);
                 }
 

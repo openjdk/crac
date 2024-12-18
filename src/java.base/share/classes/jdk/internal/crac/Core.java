@@ -41,7 +41,7 @@ public class Core {
     }
 
     /**
-     * Called by jdk.crac.Core to publish current ClaimedFDs
+     * Called by jdk.internal.crac.mirror.Core to publish current ClaimedFDs
      */
     public static void setClaimedFDs(ClaimedFDs fds) {
         claimedFDs = fds;

@@ -877,6 +877,7 @@ public final class System {
      * @see        java.lang.SecurityManager#checkPropertiesAccess()
      * @see        java.util.Properties
      */
+    @SuppressWarnings("doclint:reference") // cross-module links
     public static Properties getProperties() {
         @SuppressWarnings("removal")
         SecurityManager sm = getSecurityManager();
@@ -1175,6 +1176,7 @@ public final class System {
      * @see    #getenv()
      * @see    ProcessBuilder#environment()
      */
+    @SuppressWarnings("doclint:reference") // cross-module links
     public static String getenv(String name) {
         @SuppressWarnings("removal")
         SecurityManager sm = getSecurityManager();
@@ -1231,6 +1233,7 @@ public final class System {
      * @see    ProcessBuilder#environment()
      * @since  1.5
      */
+    @SuppressWarnings("doclint:reference") // cross-module links
     public static java.util.Map<String,String> getenv() {
         @SuppressWarnings("removal")
         SecurityManager sm = getSecurityManager();

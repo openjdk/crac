@@ -833,9 +833,9 @@ public final class System {
      * {@link #clearProperty(String)} may not have the desired effect.
      *
      * @crac System properties can be updated on restore from a checkpoint.
-     * The application can {@link jdk.internal.crac.mirror.Context#register(jdk.internal.crac.mirror.Resource) register}
+     * The application can {@link jdk.crac/jdk.crac.Context#register(jdk.crac.Resource) register}
      * a resource and reload system properties in the
-     * {@link jdk.internal.crac.mirror.Resource#afterRestore(jdk.internal.crac.mirror.Context) afterRestore method},
+     * {@link jdk.crac/jdk.crac.Resource#afterRestore(jdk.crac.Context) afterRestore method},
      * updating the application.
      *
      * @implNote
@@ -1158,9 +1158,9 @@ public final class System {
      * is likely to be true on Microsoft Windows.
      *
      * @crac Environment variables can be updated on restore from a checkpoint.
-     * The application can {@link jdk.internal.crac.mirror.Context#register(jdk.internal.crac.mirror.Resource) register}
+     * The application can {@link jdk.crac/jdk.crac.Context#register(jdk.crac.Resource) register}
      * a resource and reload environment variables in the
-     * {@link jdk.internal.crac.mirror.Resource#afterRestore(jdk.internal.crac.mirror.Context) afterRestore method},
+     * {@link jdk.crac/jdk.crac.Resource#afterRestore(jdk.crac.Context) afterRestore method},
      * updating the application.
      *
      * @param  name the name of the environment variable
@@ -1217,9 +1217,9 @@ public final class System {
      * are generally preferred over environment variables.
      *
      * @crac Environment variables can be updated on restore from a checkpoint.
-     * The application can {@link jdk.internal.crac.mirror.Context#register(jdk.internal.crac.mirror.Resource) register}
+     * The application can {@link jdk.crac/jdk.crac.Context#register(jdk.crac.Resource) register}
      * a resource and reload the environment variables in the
-     * {@link jdk.internal.crac.mirror.Resource#afterRestore(jdk.internal.crac.mirror.Context) afterRestore method},
+     * {@link jdk.crac/jdk.crac.Resource#afterRestore(jdk.crac.Context) afterRestore method},
      * updating the application.
      *
      * @return the environment as a map of variable names to values

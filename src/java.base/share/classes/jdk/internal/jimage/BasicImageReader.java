@@ -162,7 +162,7 @@ public class BasicImageReader implements AutoCloseable {
         try {
             Class<?> priorityClass = Class.forName("jdk.internal.crac.Core$Priority");
             Class<?> jdkResourceClass = Class.forName("jdk.internal.crac.JDKResource");
-            Class<?> resourceClass = Class.forName("jdk.crac.Resource");
+            Class<?> resourceClass = Class.forName("jdk.internal.crac.mirror.Resource");
             Object[] priorities = priorityClass.getEnumConstants();
             if (priorities == null) {
                 return;

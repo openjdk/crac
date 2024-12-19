@@ -61,15 +61,15 @@ import java.util.Arrays;
  * during different runs should differ (and the application will consume system entropy).
  * If a seed was provided externally the application might depend on the sequence
  * produced by this generator, therefore it is not reseeded.
- * If this behaviour is not desired the application should {@link javax.crac.Context#register(javax.crac.Resource) register}
- * a resource and in the {@link javax.crac.Resource#afterRestore(javax.crac.Context) afterRestore method}
+ * If this behaviour is not desired the application should {@link jdk.crac/jdk.crac.Context#register(jdk.crac.Resource) register}
+ * a resource and in the {@link jdk.crac/jdk.crac.Resource#afterRestore(jdk.crac.Context) afterRestore method}
  * reseed it using the {@link #engineSetSeed(byte[])}.
  *
  * @author Benjamin Renaud
  * @author Josh Bloch
  * @author Gadi Guy
  */
-
+@SuppressWarnings("doclint:reference") // cross-module links
 public final class SecureRandom extends SecureRandomSpi
 implements java.io.Serializable, jdk.internal.crac.JDKResource {
 

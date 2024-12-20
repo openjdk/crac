@@ -1,6 +1,5 @@
 /*
- * Copyright (c) 2017, 2021, Azul Systems, Inc. All rights reserved.
- * Copyright (c) 2021, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2014, 2021, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -24,20 +23,8 @@
  * questions.
  */
 
-package javax.crac;
+module jdk.crac {
 
-/**
- * This exception works as an aggregate for all errors found during checkpoint;
- * these are recorded as {@linkplain #getSuppressed() suppressed exceptions}.
- * The exception does not have any own message, cause nor collects stack trace.
- */
-public final class CheckpointException extends Exception {
-    private static final long serialVersionUID = 6859967688386143096L;
+    exports jdk.crac;
 
-    /**
-     * Creates a {@code CheckpointException}.
-     */
-    public CheckpointException() {
-        super(null, null, true, false);
-    }
 }

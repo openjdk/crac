@@ -24,13 +24,20 @@
  * questions.
  */
 
-package jdk.crac.impl;
+package jdk.internal.crac.mirror;
 
-public class CheckpointOpenSocketException extends
-        CheckpointOpenResourceException {
-    private static final long serialVersionUID = 4778540502218641776L;
+/**
+ * This exception works as an aggregate for all errors found during checkpoint;
+ * these are recorded as {@linkplain #getSuppressed() suppressed exceptions}.
+ * The exception does not have any own message, cause nor collects stack trace.
+ */
+public final class RestoreException extends Exception {
+    private static final long serialVersionUID = -4091592505524280559L;
 
-    public CheckpointOpenSocketException(String details, Throwable cause) {
-        super(details, cause);
+    /**
+     * Creates a {@code RestoreException}.
+     */
+    public RestoreException() {
+        super(null, null, true, false);
     }
 }

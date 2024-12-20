@@ -55,8 +55,8 @@
 
 package java.lang;
 
-import jdk.crac.Context;
-import jdk.crac.Resource;
+import jdk.internal.crac.mirror.Context;
+import jdk.internal.crac.mirror.Resource;
 import jdk.internal.crac.Core;
 
 import java.util.*;

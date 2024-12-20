@@ -95,4 +95,3 @@ restoring instances from the image.
  */
 
 package jdk.crac;
-

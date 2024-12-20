@@ -1,7 +1,7 @@
-package jdk.crac.impl;
+package jdk.internal.crac.mirror.impl;
 
-import jdk.crac.Context;
-import jdk.crac.Resource;
+import jdk.internal.crac.mirror.Context;
+import jdk.internal.crac.mirror.Resource;
 import sun.security.action.GetPropertyAction;
 
 public class GlobalContext {

@@ -1,9 +1,9 @@
 package jdk.internal.crac;
 
-import jdk.crac.Context;
-import jdk.crac.Resource;
-import jdk.crac.impl.CheckpointOpenFileException;
-import jdk.crac.impl.CheckpointOpenResourceException;
+import jdk.internal.crac.mirror.Context;
+import jdk.internal.crac.mirror.Resource;
+import jdk.internal.crac.mirror.impl.CheckpointOpenFileException;
+import jdk.internal.crac.mirror.impl.CheckpointOpenResourceException;
 import sun.security.action.GetPropertyAction;
 
 import java.io.File;

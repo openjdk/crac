@@ -31,8 +31,8 @@ import java.security.*;
 import java.util.Arrays;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 
-import jdk.crac.Context;
-import jdk.crac.Resource;
+import jdk.internal.crac.mirror.Context;
+import jdk.internal.crac.mirror.Resource;
 import jdk.internal.crac.Core;
 import jdk.internal.crac.JDKResource;
 import sun.security.util.Debug;

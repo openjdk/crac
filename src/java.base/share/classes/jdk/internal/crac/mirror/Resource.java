@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2019, 2021, Azul Systems, Inc. All rights reserved.
+ * Copyright (c) 2017, 2021, Azul Systems, Inc. All rights reserved.
  * Copyright (c) 2021, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
@@ -24,10 +24,30 @@
  * questions.
  */
 
-package jdk.internal.crac;
+package jdk.internal.crac.mirror;
 
-import jdk.internal.crac.mirror.Context;
-import jdk.internal.crac.mirror.Resource;
+/**
+ * An interface for receiving checkpoint/restore notifications.
+ *
+ * <p>The class that is interested in receiving a checkpoint/restore notification
+ * implements this interface, and the object created with that class is
+ * registered with a {@code Context}, using {@code register} method.
+ */
+public interface Resource {
 
-public interface JDKResource extends Resource {
+    /**
+     * Invoked by a {@code Context} as a notification about checkpoint.
+     *
+     * @param context {@code Context} providing notification
+     * @throws Exception if the method have failed
+     */
+    void beforeCheckpoint(Context<? extends Resource> context) throws Exception;
+
+    /**
+     * Invoked by a {@code Context} as a notification about restore.
+     *
+     * @param context {@code Context} providing notification
+     * @throws Exception if the method have failed
+     */
+    void afterRestore(Context<? extends Resource> context) throws Exception;
 }

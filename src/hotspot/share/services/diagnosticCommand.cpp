@@ -1059,7 +1059,7 @@ void DumpSharedArchiveDCmd::execute(DCmdSource source, TRAPS) {
 #endif // INCLUDE_CDS
 
 void CheckpointDCmd::execute(DCmdSource source, TRAPS) {
-  Klass* k = SystemDictionary::resolve_or_fail(vmSymbols::jdk_crac_Core(),
+  Klass* k = SystemDictionary::resolve_or_fail(vmSymbols::jdk_internal_crac_mirror_Core(),
                                                  true, CHECK);
   JavaValue result(T_OBJECT);
   JavaCallArguments args;

@@ -32,9 +32,9 @@
 #include "io_util.h"
 #include "io_util_md.h"
 
-#include "jdk_crac_Core.h"
+#include "jdk_internal_crac_mirror_Core.h"
 
 JNIEXPORT jobjectArray JNICALL
-Java_jdk_crac_Core_checkpointRestore0(JNIEnv *env, jclass ignore, jarray fdArr, jobjectArray objArr, jboolean dry_run, jlong jcmd_stream) {
+Java_jdk_internal_crac_mirror_Core_checkpointRestore0(JNIEnv *env, jclass ignore, jarray fdArr, jobjectArray objArr, jboolean dry_run, jlong jcmd_stream) {
     return JVM_Checkpoint(env, fdArr, objArr, dry_run, jcmd_stream);
 }

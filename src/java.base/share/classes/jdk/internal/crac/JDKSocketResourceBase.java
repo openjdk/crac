@@ -1,8 +1,8 @@
 package jdk.internal.crac;
 
-import jdk.crac.Context;
-import jdk.crac.Resource;
-import jdk.crac.impl.CheckpointOpenSocketException;
+import jdk.internal.crac.mirror.Context;
+import jdk.internal.crac.mirror.Resource;
+import jdk.internal.crac.mirror.impl.CheckpointOpenSocketException;
 
 import java.io.FileDescriptor;
 import java.io.IOException;

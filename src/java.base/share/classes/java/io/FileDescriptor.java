@@ -29,8 +29,8 @@ import java.util.*;
 import java.util.function.Supplier;
 import java.util.regex.Pattern;
 
-import jdk.crac.Context;
-import jdk.crac.impl.CheckpointOpenResourceException;
+import jdk.internal.crac.mirror.Context;
+import jdk.internal.crac.mirror.impl.CheckpointOpenResourceException;
 import jdk.internal.access.JavaIOFileDescriptorAccess;
 import jdk.internal.access.SharedSecrets;
 import jdk.internal.crac.*;
@@ -64,7 +64,7 @@ public final class FileDescriptor {
 
         @SuppressWarnings("fallthrough")
         @Override
-        public void beforeCheckpoint(Context<? extends jdk.crac.Resource> context) throws Exception {
+        public void beforeCheckpoint(Context<? extends jdk.internal.crac.mirror.Resource> context) throws Exception {
             if (!closedByNIO && valid()) {
                 ClaimedFDs claimedFDs = Core.getClaimedFDs();
                 FileDescriptor self = FileDescriptor.this;

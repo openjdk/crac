@@ -833,9 +833,9 @@ public final class System {
      * {@link #clearProperty(String)} may not have the desired effect.
      *
      * @crac System properties can be updated on restore from a checkpoint.
-     * The application can {@link javax.crac.Context#register(javax.crac.Resource) register}
+     * The application can {@link jdk.crac/jdk.crac.Context#register(jdk.crac.Resource) register}
      * a resource and reload system properties in the
-     * {@link javax.crac.Resource#afterRestore(javax.crac.Context) afterRestore method},
+     * {@link jdk.crac/jdk.crac.Resource#afterRestore(jdk.crac.Context) afterRestore method},
      * updating the application.
      *
      * @implNote
@@ -877,6 +877,7 @@ public final class System {
      * @see        java.lang.SecurityManager#checkPropertiesAccess()
      * @see        java.util.Properties
      */
+    @SuppressWarnings("doclint:reference") // cross-module links
     public static Properties getProperties() {
         @SuppressWarnings("removal")
         SecurityManager sm = getSecurityManager();
@@ -1158,9 +1159,9 @@ public final class System {
      * is likely to be true on Microsoft Windows.
      *
      * @crac Environment variables can be updated on restore from a checkpoint.
-     * The application can {@link javax.crac.Context#register(javax.crac.Resource) register}
+     * The application can {@link jdk.crac/jdk.crac.Context#register(jdk.crac.Resource) register}
      * a resource and reload environment variables in the
-     * {@link javax.crac.Resource#afterRestore(javax.crac.Context) afterRestore method},
+     * {@link jdk.crac/jdk.crac.Resource#afterRestore(jdk.crac.Context) afterRestore method},
      * updating the application.
      *
      * @param  name the name of the environment variable
@@ -1175,6 +1176,7 @@ public final class System {
      * @see    #getenv()
      * @see    ProcessBuilder#environment()
      */
+    @SuppressWarnings("doclint:reference") // cross-module links
     public static String getenv(String name) {
         @SuppressWarnings("removal")
         SecurityManager sm = getSecurityManager();
@@ -1217,9 +1219,9 @@ public final class System {
      * are generally preferred over environment variables.
      *
      * @crac Environment variables can be updated on restore from a checkpoint.
-     * The application can {@link javax.crac.Context#register(javax.crac.Resource) register}
+     * The application can {@link jdk.crac/jdk.crac.Context#register(jdk.crac.Resource) register}
      * a resource and reload the environment variables in the
-     * {@link javax.crac.Resource#afterRestore(javax.crac.Context) afterRestore method},
+     * {@link jdk.crac/jdk.crac.Resource#afterRestore(jdk.crac.Context) afterRestore method},
      * updating the application.
      *
      * @return the environment as a map of variable names to values
@@ -1231,6 +1233,7 @@ public final class System {
      * @see    ProcessBuilder#environment()
      * @since  1.5
      */
+    @SuppressWarnings("doclint:reference") // cross-module links
     public static java.util.Map<String,String> getenv() {
         @SuppressWarnings("removal")
         SecurityManager sm = getSecurityManager();

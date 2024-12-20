@@ -24,9 +24,9 @@
  * questions.
  */
 
-package jdk.crac.impl;
+package jdk.internal.crac.mirror.impl;
 
-import jdk.crac.*;
+import jdk.internal.crac.mirror.*;
 import jdk.internal.crac.LoggerContainer;
 
 import java.util.List;

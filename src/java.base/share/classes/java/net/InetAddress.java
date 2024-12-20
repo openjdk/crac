@@ -56,8 +56,8 @@ import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.stream.Stream;
 
-import jdk.crac.Context;
-import jdk.crac.Resource;
+import jdk.internal.crac.mirror.Context;
+import jdk.internal.crac.mirror.Resource;
 import jdk.internal.access.JavaNetInetAddressAccess;
 import jdk.internal.access.SharedSecrets;
 import jdk.internal.crac.Core;

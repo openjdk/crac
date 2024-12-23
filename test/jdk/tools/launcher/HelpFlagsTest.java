@@ -45,6 +45,9 @@ public class HelpFlagsTest extends TestHelper {
 
     // Tools that should not be tested because a usage message is pointless.
     static final String[] TOOLS_NOT_TO_TEST = {
+        "pauseengine", // crac, don't test
+        "simengine", // crac, don't test
+
         "jaccessinspector", // gui, don't test, win only
         "jaccessinspector-32", // gui, don't test, win-32 only
         "jaccesswalker",    // gui, don't test, win only

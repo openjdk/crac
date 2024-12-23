@@ -50,5 +50,6 @@ define_pd_global(bool, UseLargePages, false);
 define_pd_global(bool, UseLargePagesIndividualAllocation, false);
 define_pd_global(bool, UseThreadPriorities, true) ;
 define_pd_global(ccstrlist, CRAllowedOpenFilePrefixes, nullptr);
+define_pd_global(ccstr, CREngine, "simengine");
 
 #endif // OS_BSD_GLOBALS_BSD_HPP

@@ -1961,7 +1961,7 @@ const int ObjectAlignmentInBytes = 8;
   product(bool, CRaCResetStartTime, true, DIAGNOSTIC | RESTORE_SETTABLE,    \
       "Reset JVM's start time and uptime on restore")                       \
                                                                             \
-  product(ccstr, CREngine, "criuengine", RESTORE_SETTABLE,                  \
+  product_pd(ccstr, CREngine, RESTORE_SETTABLE,                             \
       "Path or name of a program implementing checkpoint/restore and "      \
       "optional extra parameters as a comma-separated list: "               \
       "-XX:CREngine=program,--key,value,--anotherkey results in calling "   \

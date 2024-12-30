@@ -21,31 +21,54 @@
  * questions.
  */
 
+import jdk.crac.Core;
 import jdk.test.lib.Utils;
+import jdk.test.lib.crac.CracBuilder;
+import jdk.test.lib.crac.CracEngine;
+import jdk.test.lib.crac.CracTest;
 
+import java.io.File;
+import java.io.FileInputStream;
 import java.io.IOException;
+import java.util.Arrays;
 
 import static jdk.test.lib.Asserts.assertEquals;
 
 /**
  * @test
  * @library /test/lib
- * @run driver ClasspathParseTest
+ * @modules java.base/jdk.internal.crac:+open
+ * @build ClasspathParseTest
+ * @run driver jdk.test.lib.crac.CracTest
  */
-public class ClasspathParseTest {
+public class ClasspathParseTest implements CracTest {
     public static final String JAVA = Utils.TEST_JDK + "/bin/java";
 
-    public static void main(String[] args) throws IOException, InterruptedException {
-        if (args.length == 0) {
-            String classpath = ClasspathParseTest.class.getProtectionDomain().getCodeSource().getLocation().getPath();
-            int exit = new ProcessBuilder().command(JAVA, "-cp", classpath, ClasspathParseTest.class.getName(), "ignored")
-                    .inheritIO().start().waitFor();
-            assertEquals(0, exit);
-        } else {
-            // assert that code source path started with "/" as we expect (even on Windows)
-            if (!System.getProperty("java.class.path").startsWith("/")) {
-                System.exit(2);
-            }
+    @Override
+    public void test() throws Exception {
+        String someJar = Arrays.stream(System.getProperty("java.class.path").split(File.pathSeparator))
+                .filter(f -> f.endsWith(".jar")).findAny()
+                .orElseThrow(() -> new AssertionError("there should be some jar on classpath"));
+        new CracBuilder()
+                .engine(CracEngine.SIMULATE)
+                .printResources(true)
+                .classpathEntry(ClasspathParseTest.class.getProtectionDomain().getCodeSource().getLocation().getPath())
+                .classpathEntry("file:/C:\\some\\invalid/path")
+                .classpathEntry(someJar)
+                .startCheckpoint().waitForSuccess();
+    }
+
+    @Override
+    public void exec() throws Exception {
+        // assert that code source path started with "/" as we expect (even on Windows)
+        String cp = System.getProperty("java.class.path");
+        if (!cp.startsWith("/")) {
+            System.exit(2);
+        }
+        String someJar = Arrays.stream(cp.split(File.pathSeparator)).filter(f -> f.endsWith(".jar")).findAny()
+                .orElseThrow(() -> new AssertionError("jar file should be provided on classpath"));
+        try (var fis = new FileInputStream(someJar)) {
+            Core.checkpointRestore();
         }
     }
 }

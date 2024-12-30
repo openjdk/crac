@@ -428,6 +428,11 @@ jint Threads::check_for_restore(JavaVMInitArgs* args) {
 jint Threads::create_vm(JavaVMInitArgs* args, bool* canTryAgain) {
   extern void JDK_Version_init();
 
+#ifdef __APPLE__
+    // BSD clock would be initialized in os::init() but we need to do that earlier
+    // as crac::restore() calls os::javaTimeNanos().
+    os::Bsd::clock_init();
+#endif
   if (check_for_restore(args) != JNI_OK) return JNI_ERR;
 
   // Preinitialize version info.

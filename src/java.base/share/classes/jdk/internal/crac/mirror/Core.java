@@ -338,7 +338,7 @@ public class Core {
         } catch (ClassNotFoundException | NoSuchMethodException e) {
             LoggerContainer.error(e, "Cannot find JMX agent start method");
         } catch (InvocationTargetException | IllegalAccessException e) {
-            LoggerContainer.error(e, "Cannot start JXM agent");
+            LoggerContainer.error(e, "Cannot start JMX agent");
         }
     }
 }

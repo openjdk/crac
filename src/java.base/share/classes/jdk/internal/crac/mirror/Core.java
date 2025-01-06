@@ -227,6 +227,14 @@ public class Core {
             }
         }
 
+        // The agent should be started only after all Resources are restored so that it finds
+        // the system in consistent state and is free to register more Resources (e.g. because
+        // it may open configuration file for JMX).
+        if (newProperties != null && Arrays.stream(newProperties).anyMatch(prop -> prop.startsWith("com.sun.management")) ||
+                System.getProperties().keySet().stream().anyMatch(prop -> prop.toString().startsWith("com.sun.management"))) {
+            tryStartManagementAgent();
+        }
+
         if (newArguments != null && newArguments.length() > 0) {
             String[] args = newArguments.split(" ");
             if (args.length > 0) {
@@ -319,5 +327,18 @@ public class Core {
             return null;
         }
         return null;
+    }
+
+    private static void tryStartManagementAgent() {
+        try {
+            Class<?> agentClass = Class.forName("jdk.internal.agent.Agent");
+            Method startAgent = agentClass.getMethod("startAgent");
+            startAgent.setAccessible(true);
+            startAgent.invoke(null);
+        } catch (ClassNotFoundException | NoSuchMethodException e) {
+            LoggerContainer.error(e, "Cannot find JMX agent start method");
+        } catch (InvocationTargetException | IllegalAccessException e) {
+            LoggerContainer.error(e, "Cannot start JMX agent");
+        }
     }
 }

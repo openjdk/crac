@@ -7,6 +7,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.nio.file.*;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.List;
 import java.util.function.Consumer;
@@ -96,17 +97,21 @@ public class CracProcess {
     public CracProcess waitForSuccess() throws InterruptedException {
         int exitValue = process.waitFor();
         if (exitValue != 0 && builder.captureOutput) {
-            try {
-                OutputAnalyzer oa = outputAnalyzer();
-                System.err.print(oa.getStderr());
-                System.out.print(oa.getStdout());
-            } catch (IOException e) {
-                throw new RuntimeException(e);
-            }
+            printOutput();
         }
         assertEquals(0, exitValue, "Process returned unexpected exit code: " + exitValue);
         builder.log("Process %d completed with exit value %d%n", process.pid(), exitValue);
         return this;
+    }
+
+    private void printOutput() {
+        try {
+            OutputAnalyzer oa = outputAnalyzer();
+            System.err.print(oa.getStderr());
+            System.out.print(oa.getStdout());
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
     }
 
     public OutputAnalyzer outputAnalyzer() throws IOException {
@@ -119,6 +124,18 @@ public class CracProcess {
         pump(process.getInputStream(), outputConsumer);
         pump(process.getErrorStream(), errorConsumer);
         return this;
+    }
+
+    public void waitForStdout(String str) throws InterruptedException {
+        CountDownLatch latch = new CountDownLatch(1);
+        watch(line -> {
+            if (line.equals(str)) {
+                latch.countDown();
+            } else {
+                throw new IllegalArgumentException("Unexpected input");
+            }
+        }, System.err::println);
+        assertTrue(latch.await(10, TimeUnit.SECONDS));
     }
 
     private static void pump(InputStream stream, Consumer<String> consumer) {
@@ -136,5 +153,19 @@ public class CracProcess {
 
     public OutputStream input() {
         return process.getOutputStream();
+    }
+
+    public InputStream output() {
+        return process.getInputStream();
+    }
+
+    public void sendNewline() throws IOException {
+        OutputStream input = process.getOutputStream();
+        input.write('\n');
+        input.flush();
+    }
+
+    public void destroyForcibly() {
+        process.destroyForcibly();
     }
 }

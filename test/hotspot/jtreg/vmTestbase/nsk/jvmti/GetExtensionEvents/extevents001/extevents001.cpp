@@ -39,6 +39,7 @@ extern "C" {
 #define PARAM_KIND_MAX_VALUE  97
 
 #define NAME_PREFIX "com.sun.hotspot"
+#define CRAC_PREFIX "jdk.crac"
 
 /* ============================================================================= */
 
@@ -123,7 +124,7 @@ static int checkExtensions(jvmtiEnv* jvmti, const char phase[]) {
                                 nsk_null_string(extList[i].short_description),
                                 (int)extList[i].param_count);
                 success = NSK_FALSE;
-            } else if (strstr(extList[i].id, NAME_PREFIX) == nullptr) {
+            } else if (strstr(extList[i].id, NAME_PREFIX) == nullptr && strstr(extList[i].id, CRAC_PREFIX) == nullptr) {
                 NSK_COMPLAIN6("In %s phase GetExtensionEvents() returned event #%d with unexpected id:\n"
                               "#   event_index: %d\n"
                               "#   id:          \"%s\"\n"

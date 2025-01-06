@@ -840,6 +840,14 @@ JvmtiEventControllerPrivate::set_extension_event_callback(JvmtiEnvBase *env,
     case EXT_EVENT_VIRTUAL_THREAD_UNMOUNT :
       ext_callbacks->VirtualThreadUnmount = callback;
       break;
+    case EXT_EVENT_CRAC_BEFORE_CHECKPOINT :
+      ext_callbacks->CracBeforeCheckpoint = callback;
+      env->env_event_enable()->set_user_enabled(event_type, enabling);
+      break;
+    case EXT_EVENT_CRAC_AFTER_RESTORE :
+      ext_callbacks->CracAfterRestore = callback;
+      env->env_event_enable()->set_user_enabled(event_type, enabling);
+      break;
     default:
       ShouldNotReachHere();
   }

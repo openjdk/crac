@@ -426,9 +426,9 @@ module java.base {
         jdk.internal.jrtfs.JrtFileSystemProvider;
 
     exports jdk.internal.crac.mirror to
-	java.rmi,
+        java.rmi,
         jdk.crac,
-	jdk.management.agent;
+        jdk.management.agent;
 
     exports jdk.internal.crac.mirror.impl to
         jdk.crac;

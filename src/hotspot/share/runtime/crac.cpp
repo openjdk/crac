@@ -146,10 +146,11 @@ static bool compute_crengine() {
     size_t pathlen = cr_util_path(path, sizeof(path));
     strcat(path + pathlen, os::file_separator());
     strcat(path + pathlen, exec);
+    WINDOWS_ONLY(strcat(path + pathlen, ".exe"));
 
     struct stat st;
     if (0 != os::stat(path, &st)) {
-      warning("Could not find %s: %s", path, os::strerror(errno));
+      warning("Could not find CREngine %s: %s", path, os::strerror(errno));
       return false;
     }
     _crengine = os::strdup_check_oom(path);

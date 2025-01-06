@@ -1,5 +1,6 @@
 /*
- * Copyright (c) 1997, 2023, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 1997, 2024, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2024, Alibaba Group Holding Limited. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -508,6 +509,10 @@ Node *Node::clone() const {
     // If it is applicable, it will happen anyway when the cloned node is registered with IGVN.
     n->remove_flag(Node::NodeFlags::Flag_for_post_loop_opts_igvn);
   }
+  if (n->is_ParsePredicate()) {
+    C->add_parse_predicate(n->as_ParsePredicate());
+  }
+
   BarrierSetC2* bs = BarrierSet::barrier_set()->barrier_set_c2();
   bs->register_potential_barrier_node(n);
 
@@ -606,8 +611,11 @@ void Node::destruct(PhaseValues* phase) {
   if (is_expensive()) {
     compile->remove_expensive_node(this);
   }
-  if (Opcode() == Op_Opaque4) {
+  if (is_OpaqueTemplateAssertionPredicate()) {
     compile->remove_template_assertion_predicate_opaq(this);
+  }
+  if (is_ParsePredicate()) {
+    compile->remove_parse_predicate(as_ParsePredicate());
   }
   if (for_post_loop_opts_igvn()) {
     compile->remove_from_post_loop_opts_igvn(this);
@@ -1085,8 +1093,8 @@ juint Node::max_flags() {
 // Print as assembly
 void Node::format( PhaseRegAlloc *, outputStream *st ) const {}
 //------------------------------emit-------------------------------------------
-// Emit bytes starting at parameter 'ptr'.
-void Node::emit(CodeBuffer &cbuf, PhaseRegAlloc *ra_) const {}
+// Emit bytes using C2_MacroAssembler
+void Node::emit(C2_MacroAssembler *masm, PhaseRegAlloc *ra_) const {}
 //------------------------------size-------------------------------------------
 // Size of instruction in bytes
 uint Node::size(PhaseRegAlloc *ra_) const { return 0; }
@@ -1094,7 +1102,7 @@ uint Node::size(PhaseRegAlloc *ra_) const { return 0; }
 //------------------------------CFG Construction-------------------------------
 // Nodes that end basic blocks, e.g. IfTrue/IfFalse, JumpProjNode, Root,
 // Goto and Return.
-const Node *Node::is_block_proj() const { return 0; }
+const Node *Node::is_block_proj() const { return nullptr; }
 
 // Minimum guaranteed type
 const Type *Node::bottom_type() const { return Type::BOTTOM; }
@@ -1242,7 +1250,7 @@ Node* Node::find_exact_control(Node* ctrl) {
 // We already know that if any path back to Root or Start reaches 'this',
 // then all paths so, so this is a simple search for one example,
 // not an exhaustive search for a counterexample.
-bool Node::dominates(Node* sub, Node_List &nlist) {
+Node::DomResult Node::dominates(Node* sub, Node_List &nlist) {
   assert(this->is_CFG(), "expecting control");
   assert(sub != nullptr && sub->is_CFG(), "expecting control");
 
@@ -1262,12 +1270,15 @@ bool Node::dominates(Node* sub, Node_List &nlist) {
   // will either exit through the loop head, or give up.
   // (If we get confused, break out and return a conservative 'false'.)
   while (sub != nullptr) {
-    if (sub->is_top())  break; // Conservative answer for dead code.
+    if (sub->is_top()) {
+      // Conservative answer for dead code.
+      return DomResult::EncounteredDeadCode;
+    }
     if (sub == dom) {
       if (nlist.size() == 0) {
         // No Region nodes except loops were visited before and the EntryControl
         // path was taken for loops: it did not walk in a cycle.
-        return true;
+        return DomResult::Dominate;
       } else if (met_dom) {
         break;          // already met before: walk in a cycle
       } else {
@@ -1281,7 +1292,7 @@ bool Node::dominates(Node* sub, Node_List &nlist) {
       // Success if we met 'dom' along a path to Start or Root.
       // We assume there are no alternative paths that avoid 'dom'.
       // (This assumption is up to the caller to ensure!)
-      return met_dom;
+      return met_dom ? DomResult::Dominate : DomResult::NotDominate;
     }
     Node* up = sub->in(0);
     // Normalize simple pass-through regions and projections:
@@ -1312,7 +1323,7 @@ bool Node::dominates(Node* sub, Node_List &nlist) {
         if (visited == sub) {
           if (visited_twice_already) {
             // Visited 2 paths, but still stuck in loop body.  Give up.
-            return false;
+            return DomResult::NotDominate;
           }
           // The Region node was visited before only once.
           // (We will repush with the low bit set, below.)
@@ -1355,8 +1366,7 @@ bool Node::dominates(Node* sub, Node_List &nlist) {
   }
 
   // Did not meet Root or Start node in pred. chain.
-  // Conservative answer for dead code.
-  return false;
+  return DomResult::NotDominate;
 }
 
 //------------------------------remove_dead_region-----------------------------
@@ -1625,7 +1635,7 @@ void visit_nodes(Node* start, Callback callback, bool traverse_output, bool only
 }
 
 // BFS traverse from start, return node with idx
-Node* find_node_by_idx(Node* start, uint idx, bool traverse_output, bool only_ctrl) {
+static Node* find_node_by_idx(Node* start, uint idx, bool traverse_output, bool only_ctrl) {
   ResourceMark rm;
   Node* result = nullptr;
   auto callback = [&] (Node* n) {
@@ -1641,11 +1651,11 @@ Node* find_node_by_idx(Node* start, uint idx, bool traverse_output, bool only_ct
   return result;
 }
 
-int node_idx_cmp(const Node** n1, const Node** n2) {
+static int node_idx_cmp(const Node** n1, const Node** n2) {
   return (*n1)->_idx - (*n2)->_idx;
 }
 
-void find_nodes_by_name(Node* start, const char* name) {
+static void find_nodes_by_name(Node* start, const char* name) {
   ResourceMark rm;
   GrowableArray<const Node*> ns;
   auto callback = [&] (const Node* n) {
@@ -1660,7 +1670,7 @@ void find_nodes_by_name(Node* start, const char* name) {
   }
 }
 
-void find_nodes_by_dump(Node* start, const char* pattern) {
+static void find_nodes_by_dump(Node* start, const char* pattern) {
   ResourceMark rm;
   GrowableArray<const Node*> ns;
   auto callback = [&] (const Node* n) {
@@ -2759,6 +2769,8 @@ const RegMask &Node::in_RegMask(uint) const {
 }
 
 void Node_Array::grow(uint i) {
+  _nesting.check(_a); // Check if a potential reallocation in the arena is safe
+  assert(i >= _max, "Should have been checked before, use maybe_grow?");
   assert(_max > 0, "invariant");
   uint old = _max;
   _max = next_power_of_2(i);
@@ -2966,6 +2978,10 @@ void Unique_Node_List::remove_useless_nodes(VectorSet &useful) {
 
 //=============================================================================
 void Node_Stack::grow() {
+  _nesting.check(_a); // Check if a potential reallocation in the arena is safe
+  if (_inode_top < _inode_max) {
+    return; // No need to grow
+  }
   size_t old_top = pointer_delta(_inode_top,_inodes,sizeof(INode)); // save _top
   size_t old_max = pointer_delta(_inode_max,_inodes,sizeof(INode));
   size_t max = old_max << 1;             // max * 2
@@ -3004,7 +3020,7 @@ uint TypeNode::hash() const {
   return Node::hash() + _type->hash();
 }
 bool TypeNode::cmp(const Node& n) const {
-  return !Type::cmp(_type, ((TypeNode&)n)._type);
+  return Type::equals(_type, n.as_Type()->_type);
 }
 const Type* TypeNode::bottom_type() const { return _type; }
 const Type* TypeNode::Value(PhaseGVN* phase) const { return _type; }

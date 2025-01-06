@@ -119,14 +119,6 @@ void GrowableCache::recache() {
   _listener_fun(_this_obj,_cache);
 }
 
-bool GrowableCache::equals(void* v, GrowableElement *e2) {
-  GrowableElement *e1 = (GrowableElement *) v;
-  assert(e1 != nullptr, "e1 != nullptr");
-  assert(e2 != nullptr, "e2 != nullptr");
-
-  return e1->equals(e2);
-}
-
 //
 // class GrowableCache - public methods
 //
@@ -163,8 +155,8 @@ GrowableElement* GrowableCache::at(int index) {
   return e;
 }
 
-int GrowableCache::find(GrowableElement* e) {
-  return _elements->find(e, GrowableCache::equals);
+int GrowableCache::find(const GrowableElement* e) const {
+  return _elements->find_if([&](const GrowableElement* other_e) { return e->equals(other_e); });
 }
 
 // append a copy of the element to the end of the collection
@@ -216,7 +208,7 @@ void JvmtiBreakpoint::copy(JvmtiBreakpoint& bp) {
   _class_holder = OopHandle(JvmtiExport::jvmti_oop_storage(), bp._class_holder.resolve());
 }
 
-bool JvmtiBreakpoint::equals(JvmtiBreakpoint& bp) {
+bool JvmtiBreakpoint::equals(const JvmtiBreakpoint& bp) const {
   return _method   == bp._method
     &&   _bci      == bp._bci;
 }
@@ -841,11 +833,6 @@ VM_VirtualThreadGetOrSetLocal::VM_VirtualThreadGetOrSetLocal(JvmtiEnv* env, Hand
 }
 
 javaVFrame *VM_VirtualThreadGetOrSetLocal::get_java_vframe() {
-  Thread* cur_thread = Thread::current();
-  oop cont = java_lang_VirtualThread::continuation(_vthread_h());
-  assert(cont != nullptr, "vthread contintuation must not be null");
-
-  javaVFrame* jvf = nullptr;
   JavaThread* java_thread = JvmtiEnvBase::get_JavaThread_or_null(_vthread_h());
   bool is_cont_mounted = (java_thread != nullptr);
 
@@ -853,22 +840,8 @@ javaVFrame *VM_VirtualThreadGetOrSetLocal::get_java_vframe() {
     _result = JVMTI_ERROR_THREAD_NOT_SUSPENDED;
     return nullptr;
   }
+  javaVFrame* jvf = JvmtiEnvBase::get_vthread_jvf(_vthread_h());
 
-  if (is_cont_mounted) {
-    vframeStream vfs(java_thread);
-
-    if (!vfs.at_end()) {
-      jvf = vfs.asJavaVFrame();
-      jvf = JvmtiEnvBase::check_and_skip_hidden_frames(java_thread, jvf);
-    }
-  } else {
-    vframeStream vfs(cont);
-
-    if (!vfs.at_end()) {
-      jvf = vfs.asJavaVFrame();
-      jvf = JvmtiEnvBase::check_and_skip_hidden_frames(_vthread_h(), jvf);
-    }
-  }
   int d = 0;
   while ((jvf != nullptr) && (d < _depth)) {
     jvf = jvf->java_sender();
@@ -1022,17 +995,17 @@ void JvmtiDeferredEvent::run_nmethod_entry_barriers() {
 
 
 // Keep the nmethod for compiled_method_load from being unloaded.
-void JvmtiDeferredEvent::oops_do(OopClosure* f, CodeBlobClosure* cf) {
+void JvmtiDeferredEvent::oops_do(OopClosure* f, NMethodClosure* cf) {
   if (cf != nullptr && _type == TYPE_COMPILED_METHOD_LOAD) {
-    cf->do_code_blob(_event_data.compiled_method_load);
+    cf->do_nmethod(_event_data.compiled_method_load);
   }
 }
 
 // The GC calls this and marks the nmethods here on the stack so that
 // they cannot be unloaded while in the queue.
-void JvmtiDeferredEvent::nmethods_do(CodeBlobClosure* cf) {
+void JvmtiDeferredEvent::nmethods_do(NMethodClosure* cf) {
   if (cf != nullptr && _type == TYPE_COMPILED_METHOD_LOAD) {
-    cf->do_code_blob(_event_data.compiled_method_load);
+    cf->do_nmethod(_event_data.compiled_method_load);
   }
 }
 
@@ -1100,13 +1073,13 @@ void JvmtiDeferredEventQueue::run_nmethod_entry_barriers() {
 }
 
 
-void JvmtiDeferredEventQueue::oops_do(OopClosure* f, CodeBlobClosure* cf) {
+void JvmtiDeferredEventQueue::oops_do(OopClosure* f, NMethodClosure* cf) {
   for(QueueNode* node = _queue_head; node != nullptr; node = node->next()) {
      node->event().oops_do(f, cf);
   }
 }
 
-void JvmtiDeferredEventQueue::nmethods_do(CodeBlobClosure* cf) {
+void JvmtiDeferredEventQueue::nmethods_do(NMethodClosure* cf) {
   for(QueueNode* node = _queue_head; node != nullptr; node = node->next()) {
      node->event().nmethods_do(cf);
   }

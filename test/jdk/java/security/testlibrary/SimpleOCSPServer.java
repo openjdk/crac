@@ -1,12 +1,10 @@
 /*
- * Copyright (c) 2015, 2023, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2015, 2024, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 2 only, as
- * published by the Free Software Foundation.  Oracle designates this
- * particular file as subject to the "Classpath" exception as provided
- * by Oracle in the LICENSE file that accompanied this code.
+ * published by the Free Software Foundation.
  *
  * This code is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
@@ -574,8 +572,8 @@ public class SimpleOCSPServer {
      */
     private synchronized void log(String message) {
         if (logEnabled || debug != null) {
-            System.out.println("[" + Thread.currentThread().getName() + "]: " +
-                    message);
+            System.out.println("[" + Thread.currentThread().getName() + "][" +
+                    System.currentTimeMillis() + "]: " + message);
         }
     }
 
@@ -704,6 +702,9 @@ public class SimpleOCSPServer {
      * responses.
      */
     private class OcspHandler implements Runnable {
+        private final boolean USE_GET =
+            !System.getProperty("com.sun.security.ocsp.useget", "").equals("false");
+
         private final Socket sock;
         InetSocketAddress peerSockAddr;
 
@@ -726,6 +727,7 @@ public class SimpleOCSPServer {
             // wait out the delay here before any other processing.
             try {
                 if (delayMsec > 0) {
+                    log("Delaying response for " + delayMsec + " milliseconds.");
                     Thread.sleep(delayMsec);
                 }
             } catch (InterruptedException ie) {
@@ -876,6 +878,12 @@ public class SimpleOCSPServer {
             // Okay, make sure we got what we needed from the header, then
             // read the remaining OCSP Request bytes
             if (properContentType && length >= 0) {
+                if (USE_GET && length <= 255) {
+                    // Received a small POST request. Check that our client code properly
+                    // handled the relevant flag. We expect small GET requests, unless
+                    // explicitly disabled.
+                    throw new IOException("Should have received small GET, not POST.");
+                }
                 byte[] ocspBytes = new byte[length];
                 inStream.read(ocspBytes);
                 return new LocalOcspRequest(ocspBytes);
@@ -901,6 +909,13 @@ public class SimpleOCSPServer {
          */
         private LocalOcspRequest parseHttpOcspGet(String[] headerTokens,
                 InputStream inStream) throws IOException, CertificateException {
+            // Display the whole request
+            StringBuilder sb = new StringBuilder("OCSP GET REQUEST\n");
+            for (String hTok : headerTokens) {
+                sb.append(hTok).append("\n");
+            }
+            log(sb.toString());
+
             // Before we process the remainder of the GET URL, we should drain
             // the InputStream of any other header data.  We (for now) won't
             // use it, but will display the contents if logging is enabled.
@@ -992,6 +1007,10 @@ public class SimpleOCSPServer {
         private LocalOcspRequest(byte[] requestBytes) throws IOException,
                 CertificateException {
             Objects.requireNonNull(requestBytes, "Received null input");
+
+            // Display the DER encoding before parsing
+            log("Local OCSP Request Constructor, parsing bytes:\n" +
+                    dumpHexBytes(requestBytes));
 
             DerInputStream dis = new DerInputStream(requestBytes);
 

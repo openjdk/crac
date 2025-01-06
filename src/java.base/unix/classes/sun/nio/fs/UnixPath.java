@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2008, 2023, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2008, 2024, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -36,7 +36,6 @@ import java.nio.file.ProviderMismatchException;
 import java.nio.file.WatchEvent;
 import java.nio.file.WatchKey;
 import java.nio.file.WatchService;
-import java.nio.file.spi.FileSystemProvider;
 import java.util.Arrays;
 import java.util.Objects;
 
@@ -90,8 +89,9 @@ class UnixPath implements Path {
             checkNotNul(input, c);
             prevChar = c;
         }
-        if (prevChar == '/')
-            return normalize(input, n, n - 1);
+        if (prevChar == '/' && n > 1) {
+            return input.substring(0, n - 1);
+        }
         return input;
     }
 
@@ -109,7 +109,7 @@ class UnixPath implements Path {
             return "/";
         StringBuilder sb = new StringBuilder(input.length());
         if (off > 0)
-            sb.append(input.substring(0, off));
+            sb.append(input, 0, off);
         char prevChar = 0;
         for (int i=off; i < n; i++) {
             char c = input.charAt(i);
@@ -803,8 +803,7 @@ class UnixPath implements Path {
         // OK if two or more threads compute hash
         int h = hash;
         if (h == 0) {
-            h = ArraysSupport.vectorizedHashCode(path, 0, path.length, 0,
-                    /* unsigned bytes */ ArraysSupport.T_BOOLEAN);
+            h = ArraysSupport.hashCodeOfUnsigned(path, 0, path.length, 0);
             hash = h;
         }
         return h;
@@ -888,8 +887,15 @@ class UnixPath implements Path {
         }
 
         // if not resolving links then eliminate "." and also ".."
-        // where the previous element is not a link.
+        // where the previous element is neither a link nor "..".
+        // if there is a preceding "..", then it might have followed
+        // a link or a link followed by a sequence of two or more "..".
+        // if for example one has the path "link/../../file",
+        // then if a preceding ".." were eliminated, then the result
+        // would be "<root>/link/file" instead of the correct
+        // "<root>/link/../../file".
         UnixPath result = fs.rootDirectory();
+        boolean parentIsDotDot = false;
         for (int i = 0; i < absolute.getNameCount(); i++) {
             UnixPath element = absolute.getName(i);
 
@@ -898,7 +904,7 @@ class UnixPath implements Path {
                 (element.asByteArray()[0] == '.'))
                 continue;
 
-            // cannot eliminate ".." if previous element is a link
+            // cannot eliminate ".." if previous element is a link or ".."
             if ((element.asByteArray().length == 2) &&
                 (element.asByteArray()[0] == '.') &&
                 (element.asByteArray()[1] == '.'))
@@ -909,13 +915,16 @@ class UnixPath implements Path {
                 } catch (UnixException x) {
                     x.rethrowAsIOException(result);
                 }
-                if (!attrs.isSymbolicLink()) {
+                if (!attrs.isSymbolicLink() && !parentIsDotDot) {
                     result = result.getParent();
                     if (result == null) {
                         result = fs.rootDirectory();
                     }
                     continue;
                 }
+                parentIsDotDot = true;
+            } else {
+                parentIsDotDot = false;
             }
             result = result.resolve(element);
         }

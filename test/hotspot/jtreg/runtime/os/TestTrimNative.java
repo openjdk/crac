@@ -1,7 +1,7 @@
 /*
  * Copyright (c) 2023 SAP SE. All rights reserved.
- * Copyright (c) 2023 Red Hat, Inc. All rights reserved.
- * Copyright (c) 2023, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2023, 2024, Red Hat, Inc. All rights reserved.
+ * Copyright (c) 2023, 2024, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -26,6 +26,7 @@
 
 /*
  * @test id=trimNative
+ * @requires vm.flagless
  * @requires (os.family=="linux") & !vm.musl
  * @modules java.base/jdk.internal.misc
  * @library /test/lib
@@ -36,6 +37,7 @@
 
 /*
  * @test id=trimNativeStrict
+ * @requires vm.flagless
  * @requires (os.family=="linux") & !vm.musl
  * @modules java.base/jdk.internal.misc
  * @library /test/lib
@@ -47,6 +49,7 @@
 /*
  * @test id=trimNativeHighInterval
  * @summary High interval trimming should not even kick in for short program runtimes
+ * @requires vm.flagless
  * @requires (os.family=="linux") & !vm.musl
  * @modules java.base/jdk.internal.misc
  * @library /test/lib
@@ -58,6 +61,7 @@
 /*
  * @test id=trimNativeLowInterval
  * @summary Very low (sub-second) interval, nothing should explode
+ * @requires vm.flagless
  * @requires (os.family=="linux") & !vm.musl
  * @modules java.base/jdk.internal.misc
  * @library /test/lib
@@ -69,6 +73,7 @@
 /*
  * @test id=trimNativeLowIntervalStrict
  * @summary Very low (sub-second) interval, nothing should explode (stricter test, manual mode)
+ * @requires vm.flagless
  * @requires (os.family=="linux") & !vm.musl
  * @modules java.base/jdk.internal.misc
  * @library /test/lib
@@ -80,6 +85,7 @@
 /*
  * @test id=testOffByDefault
  * @summary Test that trimming is disabled by default
+ * @requires vm.flagless
  * @requires (os.family=="linux") & !vm.musl
  * @modules java.base/jdk.internal.misc
  * @library /test/lib
@@ -91,6 +97,7 @@
 /*
  * @test id=testOffExplicit
  * @summary Test that trimming can be disabled explicitly
+ * @requires vm.flagless
  * @requires (os.family=="linux") & !vm.musl
  * @modules java.base/jdk.internal.misc
  * @library /test/lib
@@ -102,6 +109,7 @@
 /*
  * @test id=testOffOnNonCompliantPlatforms
  * @summary Test that trimming is correctly reported as unavailable if unavailable
+ * @requires vm.flagless
  * @requires (os.family!="linux") | vm.musl
  * @modules java.base/jdk.internal.misc
  * @library /test/lib
@@ -159,7 +167,7 @@ public class TestTrimNative {
     }
 
     private static OutputAnalyzer runTestWithOptions(String[] extraOptions, String[] programOptions) throws IOException {
-        ProcessBuilder pb = ProcessTools.createJavaProcessBuilder(prepareOptions(extraOptions, programOptions));
+        ProcessBuilder pb = ProcessTools.createLimitedTestJavaProcessBuilder(prepareOptions(extraOptions, programOptions));
         OutputAnalyzer output = new OutputAnalyzer(pb.start());
         output.shouldHaveExitValue(0);
         return output;
@@ -170,7 +178,6 @@ public class TestTrimNative {
         if (expectEnabled) {
             output.shouldContain("Periodic native trim enabled (interval: " + expectedInterval + " ms");
             output.shouldContain("Native heap trimmer start");
-            output.shouldContain("Native heap trimmer stop");
         } else {
             output.shouldNotContain("Periodic native trim enabled");
         }
@@ -251,7 +258,7 @@ public class TestTrimNative {
             System.gc();
 
             // give GC time to react
-            System.out.println("Sleeping...");
+            System.out.println("Sleeping for " + sleeptime + " ms...");
             Thread.sleep(sleeptime);
             System.out.println("Done.");
         }
@@ -271,7 +278,7 @@ public class TestTrimNative {
                 long trimInterval = 500; // twice per second
                 long ms1 = System.currentTimeMillis();
                 OutputAnalyzer output = runTestWithOptions(
-                        new String[] { "-XX:+UnlockExperimentalVMOptions", "-XX:TrimNativeHeapInterval=" + trimInterval },
+                        new String[] { "-XX:TrimNativeHeapInterval=" + trimInterval },
                         new String[] { TestTrimNative.Tester.class.getName(), "5000" }
                 );
                 long ms2 = System.currentTimeMillis();
@@ -286,7 +293,7 @@ public class TestTrimNative {
 
             case "trimNativeHighInterval": {
                 OutputAnalyzer output = runTestWithOptions(
-                        new String[] { "-XX:+UnlockExperimentalVMOptions", "-XX:TrimNativeHeapInterval=" + Integer.MAX_VALUE },
+                        new String[] { "-XX:TrimNativeHeapInterval=" + Integer.MAX_VALUE },
                         new String[] { TestTrimNative.Tester.class.getName(), "5000" }
                 );
                 checkExpectedLogMessages(output, true, Integer.MAX_VALUE);
@@ -296,17 +303,20 @@ public class TestTrimNative {
 
             case "trimNativeLowInterval":
             case "trimNativeLowIntervalStrict": {
+                long ms1 = System.currentTimeMillis();
                 OutputAnalyzer output = runTestWithOptions(
-                        new String[] { "-XX:+UnlockExperimentalVMOptions", "-XX:TrimNativeHeapInterval=1" },
+                        new String[] { "-XX:TrimNativeHeapInterval=1" },
                         new String[] { TestTrimNative.Tester.class.getName(), "0" }
                 );
+                long ms2 = System.currentTimeMillis();
+                int maxTrimsExpected = (int)(ms2 - ms1); // 1ms trim interval
                 checkExpectedLogMessages(output, true, 1);
-                parseOutputAndLookForNegativeTrim(output, 1, 3000, strictTesting);
+                parseOutputAndLookForNegativeTrim(output, 1, (int)maxTrimsExpected, strictTesting);
             } break;
 
             case "testOffOnNonCompliantPlatforms": {
                 OutputAnalyzer output = runTestWithOptions(
-                        new String[] { "-XX:+UnlockExperimentalVMOptions", "-XX:TrimNativeHeapInterval=1" },
+                        new String[] { "-XX:TrimNativeHeapInterval=1" },
                         new String[] { "-version" }
                 );
                 checkExpectedLogMessages(output, false, 0);
@@ -317,7 +327,7 @@ public class TestTrimNative {
 
             case "testOffExplicit": {
                 OutputAnalyzer output = runTestWithOptions(
-                        new String[] { "-XX:+UnlockExperimentalVMOptions", "-XX:TrimNativeHeapInterval=0" },
+                        new String[] { "-XX:TrimNativeHeapInterval=0" },
                         new String[] { "-version" }
                 );
                 checkExpectedLogMessages(output, false, 0);

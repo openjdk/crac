@@ -82,7 +82,8 @@ class GraphKit : public Phase {
 
 #ifdef ASSERT
   ~GraphKit() {
-    assert(!has_exceptions(), "user must call transfer_exceptions_into_jvms");
+    assert(failing_internal() || !has_exceptions(),
+           "unless compilation failed, user must call transfer_exceptions_into_jvms");
   }
 #endif
 
@@ -181,6 +182,7 @@ class GraphKit : public Phase {
 
   // Tell if the compilation is failing.
   bool failing() const { return C->failing(); }
+  bool failing_internal() const { return C->failing_internal(); }
 
   // Set _map to null, signalling a stop to further bytecode execution.
   // Preserve the map intact for future use, and return it back to the caller.
@@ -193,7 +195,7 @@ class GraphKit : public Phase {
   bool stopped();
 
   // Tell if this method or any caller method has exception handlers.
-  bool has_ex_handler();
+  bool has_exception_handler();
 
   // Save an exception without blowing stack contents or other JVM state.
   // (The extra pointer is stuck with add_req on the map, beyond the JVMS.)
@@ -439,6 +441,8 @@ class GraphKit : public Phase {
   Node* cast_not_null(Node* obj, bool do_replace_in_map = true);
   // Replace all occurrences of one node by another.
   void replace_in_map(Node* old, Node* neww);
+
+  Node* maybe_narrow_object_type(Node* obj, ciKlass* type);
 
   void  push(Node* n)     { map_not_null();        _map->set_stack(_map->_jvms,   _sp++        , n); }
   Node* pop()             { map_not_null(); return _map->stack(    _map->_jvms, --_sp             ); }
@@ -727,7 +731,7 @@ class GraphKit : public Phase {
   // Replace the call with the current state of the kit.  Requires
   // that the call was generated with separate io_projs so that
   // exceptional control flow can be handled properly.
-  void replace_call(CallNode* call, Node* result, bool do_replaced_nodes = false);
+  void replace_call(CallNode* call, Node* result, bool do_replaced_nodes = false, bool do_asserts = true);
 
   // helper functions for statistics
   void increment_counter(address counter_addr);   // increment a debug counter

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2005, 2020, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2005, 2024, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -32,9 +32,15 @@
                          develop_pd,                                      \
                          product,                                         \
                          product_pd,                                      \
-                         notproduct,                                      \
                          range,                                           \
                          constraint)                                      \
+                                                                          \
+product(bool, UseAllWindowsProcessorGroups, false,                        \
+        "Use all processor groups on supported Windows versions")         \
+                                                                          \
+product(bool, EnableAllLargePageSizesForWindows, false,                   \
+        "Enable support for multiple large page sizes on "                \
+        "Windows Server")                                                 \
                                                                           \
 product(bool, UseOSErrorReporting, false,                                 \
         "Let VM fatal error propagate to the OS (ie. WER on Windows)")
@@ -50,5 +56,6 @@ define_pd_global(bool, UseLargePages, false);
 define_pd_global(bool, UseLargePagesIndividualAllocation, true);
 define_pd_global(bool, UseThreadPriorities, true) ;
 define_pd_global(ccstrlist, CRAllowedOpenFilePrefixes, nullptr);
+define_pd_global(ccstr, CREngine, "simengine");
 
 #endif // OS_WINDOWS_GLOBALS_WINDOWS_HPP

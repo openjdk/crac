@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2005, 2022, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2005, 2024, Oracle and/or its affiliates. All rights reserved.
  * Copyright (c) 2020, 2021, Azul Systems, Inc. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
@@ -26,8 +26,8 @@
 
 package sun.nio.ch;
 
-import jdk.crac.Context;
-import jdk.crac.Resource;
+import jdk.internal.crac.mirror.Context;
+import jdk.internal.crac.mirror.Resource;
 import jdk.internal.access.JavaIOFileDescriptorAccess;
 import jdk.internal.access.SharedSecrets;
 import jdk.internal.crac.Core;
@@ -35,7 +35,6 @@ import jdk.internal.crac.JDKResource;
 
 import java.io.FileDescriptor;
 import java.io.IOException;
-import java.nio.channels.ClosedSelectorException;
 import java.nio.channels.IllegalSelectorException;
 import java.nio.channels.SelectionKey;
 import java.nio.channels.Selector;
@@ -142,11 +141,6 @@ class EPollSelectorImpl extends SelectorImpl implements JDKResource {
         Core.Priority.EPOLLSELECTOR.getContext().register(this);
     }
 
-    private void ensureOpen() {
-        if (!isOpen())
-            throw new ClosedSelectorException();
-    }
-
     private boolean processCheckpointRestore() throws IOException {
         assert Thread.holdsLock(this);
 
@@ -213,13 +207,13 @@ class EPollSelectorImpl extends SelectorImpl implements JDKResource {
 
             do {
                 long startTime = timedPoll ? System.nanoTime() : 0;
-                long comp = Blocker.begin(blocking);
+                boolean attempted = Blocker.begin(blocking);
                 try {
                     do {
                         numEntries = EPoll.wait(epfd, pollArrayAddress, NUM_EPOLLEVENTS, to);
                     } while (processCheckpointRestore());
                 } finally {
-                    Blocker.end(comp);
+                    Blocker.end(attempted);
                 }
                 if (numEntries == IOStatus.INTERRUPTED && timedPoll) {
                     // timed poll interrupted so need to adjust timeout
@@ -342,7 +336,6 @@ class EPollSelectorImpl extends SelectorImpl implements JDKResource {
 
     @Override
     public void setEventOps(SelectionKeyImpl ski) {
-        ensureOpen();
         synchronized (updateLock) {
             updateKeys.addLast(ski);
         }

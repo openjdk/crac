@@ -1,9 +1,9 @@
 package jdk.internal.crac;
 
-import jdk.crac.Context;
-import jdk.crac.Resource;
-import jdk.crac.impl.CheckpointOpenFileException;
-import jdk.crac.impl.CheckpointOpenResourceException;
+import jdk.internal.crac.mirror.Context;
+import jdk.internal.crac.mirror.Resource;
+import jdk.internal.crac.mirror.impl.CheckpointOpenFileException;
+import jdk.internal.crac.mirror.impl.CheckpointOpenResourceException;
 import sun.security.action.GetPropertyAction;
 
 import java.io.File;
@@ -25,9 +25,14 @@ public abstract class JDKFileResource extends JDKFdResource {
                 .split(File.pathSeparator);
         CLASSPATH_ENTRIES = new Path[items.length];
         for (int i = 0; i < items.length; i++) {
-            // On Windows, path with forward slashes starting with '/' is an accepted classpath
-            // element, even though it might seem as invalid and parsing in Path.of(...) would fail.
-            CLASSPATH_ENTRIES[i] = new File(items[i]).toPath();
+            try {
+                // On Windows, path with forward slashes starting with '/' is an accepted classpath
+                // element, even though it might seem as invalid and parsing in Path.of(...) would fail.
+                CLASSPATH_ENTRIES[i] = new File(items[i]).toPath();
+            } catch (Exception e) {
+                // Ignore any exception parsing the path: URLClassPath.toFileURL() ignores IOExceptions
+                // as well, here we might get InvalidPathException
+            }
         }
     }
 
@@ -56,7 +61,7 @@ public abstract class JDKFileResource extends JDKFdResource {
         Path p = Path.of(path);
         for (Path entry : CLASSPATH_ENTRIES) {
             try {
-                if (Files.isSameFile(p, entry)) {
+                if (entry != null && Files.isSameFile(p, entry)) {
                     return true;
                 }
             } catch (IOException e) {

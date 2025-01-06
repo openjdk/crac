@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2019, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2019, 2024, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -25,6 +25,7 @@ import java.util.List;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
+import java.io.IOException;
 
 import jdk.jpackage.test.TKit;
 import jdk.jpackage.test.Executor;
@@ -33,41 +34,33 @@ import jdk.jpackage.internal.MacCertificate;
 
 public class SigningCheck {
 
-    public static void checkCertificates() {
-        List<String> result = findCertificate(SigningBase.APP_CERT, SigningBase.KEYCHAIN);
-        String key = findKey(SigningBase.APP_CERT, result);
-        validateCertificate(key);
-        validateCertificateTrust(SigningBase.APP_CERT);
-
-        result = findCertificate(SigningBase.INSTALLER_CERT, SigningBase.KEYCHAIN);
-        key = findKey(SigningBase.INSTALLER_CERT, result);
-        validateCertificate(key);
-        validateCertificateTrust(SigningBase.INSTALLER_CERT);
-    }
-
-    private static List<String> findCertificate(String name, String keyChain) {
-        List<String> result = new Executor()
-                .setExecutable("/usr/bin/security")
-                .addArguments("find-certificate", "-c", name, "-a", keyChain)
-                .executeAndGetOutput();
-
-        return result;
-    }
-
-    private static String findKey(String name, List<String> result) {
-        Pattern p = Pattern.compile("\"alis\"<blob>=\"([^\"]+)\"");
-        Matcher m = p.matcher(result.stream().collect(Collectors.joining()));
-        if (!m.find()) {
-            TKit.trace("Did not found a key for '" + name + "'");
-            return null;
+    public static void checkCertificates(int certIndex) {
+        if (!SigningBase.isDevNameDefault()) {
+            // Do not validate user supplied certificates.
+            // User supplied certs whose trust is set to "Use System Defaults"
+            // will not be listed as trusted by dump-trust-settings, so we
+            // cannot verify them completely.
+            return;
         }
-        String matchedKey = m.group(1);
-        if (m.find()) {
-            TKit.trace("Found more than one key for '" + name + "'");
-            return null;
+
+        // Index can be -1 for unsigned tests, but we still skipping test
+        // if machine is not configured for signing testing, so default it to
+        // SigningBase.DEFAULT_INDEX
+        if (certIndex <= -1) {
+            certIndex = SigningBase.DEFAULT_INDEX;
         }
-        TKit.trace("Using key '" + matchedKey);
-        return matchedKey;
+
+        String key = MacCertificate.findCertificateKey(null,
+                        SigningBase.getAppCert(certIndex),
+                        SigningBase.getKeyChain());
+        validateCertificate(key);
+        validateCertificateTrust(SigningBase.getAppCert(certIndex));
+
+        key = MacCertificate.findCertificateKey(null,
+                SigningBase.getInstallerCert(certIndex),
+                SigningBase.getKeyChain());
+        validateCertificate(key);
+        validateCertificateTrust(SigningBase.getInstallerCert(certIndex));
     }
 
     private static void validateCertificate(String key) {
@@ -85,19 +78,23 @@ public class SigningCheck {
 
     private static void validateCertificateTrust(String name) {
         // Certificates using the default user name must be trusted by user.
-        // User supplied certs whose trust is set to "Use System Defaults"
-        // will not be listed as trusted by dump-trust-settings
-        if (SigningBase.DEV_NAME.equals("jpackage.openjdk.java.net")) {
-            List<String> result = new Executor()
-                    .setExecutable("/usr/bin/security")
-                    .addArguments("dump-trust-settings")
-                    .executeWithoutExitCodeCheckAndGetOutput();
-            result.stream().forEachOrdered(TKit::trace);
-            TKit.assertTextStream(name)
-                    .predicate((line, what) -> line.trim().endsWith(what))
-                    .orElseThrow(() -> TKit.throwSkippedException(
-                            "Certifcate not trusted by current user: " + name))
-                    .apply(result.stream());
+        List<String> result = new Executor()
+                .setExecutable("/usr/bin/security")
+                .addArguments("dump-trust-settings")
+                .executeWithoutExitCodeCheckAndGetOutput();
+        result.stream().forEachOrdered(TKit::trace);
+        TKit.assertTextStream(name)
+                .predicate((line, what) -> line.trim().endsWith(what))
+                .orElseThrow(() -> TKit.throwSkippedException(
+                        "Certifcate not trusted by current user: " + name))
+                .apply(result.stream());
+    }
+
+    public static void isXcodeDevToolsInstalled() {
+        int code = Executor.of("/usr/bin/xcrun", "--help")
+                .executeWithoutExitCodeCheck().getExitCode();
+        if (code != 0) {
+            TKit.throwSkippedException("Missing Xcode with command line developer tools");
         }
     }
 

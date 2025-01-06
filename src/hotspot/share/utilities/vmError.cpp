@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2003, 2023, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2003, 2024, Oracle and/or its affiliates. All rights reserved.
  * Copyright (c) 2017, 2020 SAP SE. All rights reserved.
  * Copyright (c) 2023, Red Hat, Inc. and/or its affiliates.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
@@ -27,6 +27,7 @@
 #include "precompiled.hpp"
 #include "cds/metaspaceShared.hpp"
 #include "code/codeCache.hpp"
+#include "compiler/compilationFailureInfo.hpp"
 #include "compiler/compileBroker.hpp"
 #include "compiler/disassembler.hpp"
 #include "gc/shared/gcConfig.hpp"
@@ -38,14 +39,15 @@
 #include "memory/metaspaceUtils.hpp"
 #include "memory/resourceArea.inline.hpp"
 #include "memory/universe.hpp"
+#include "nmt/memTracker.hpp"
 #include "oops/compressedOops.hpp"
 #include "prims/whitebox.hpp"
 #include "runtime/arguments.hpp"
 #include "runtime/atomic.hpp"
 #include "runtime/flags/jvmFlag.hpp"
 #include "runtime/frame.inline.hpp"
-#include "runtime/javaThread.inline.hpp"
 #include "runtime/init.hpp"
+#include "runtime/javaThread.inline.hpp"
 #include "runtime/os.inline.hpp"
 #include "runtime/osThread.hpp"
 #include "runtime/safefetch.hpp"
@@ -55,10 +57,10 @@
 #include "runtime/threads.hpp"
 #include "runtime/threadSMR.hpp"
 #include "runtime/trimNativeHeap.hpp"
-#include "runtime/vmThread.hpp"
 #include "runtime/vmOperations.hpp"
+#include "runtime/vmThread.hpp"
 #include "runtime/vm_version.hpp"
-#include "services/memTracker.hpp"
+#include "sanitizers/ub.hpp"
 #include "utilities/debug.hpp"
 #include "utilities/decoder.hpp"
 #include "utilities/defaultStream.hpp"
@@ -178,7 +180,10 @@ static void print_bug_submit_message(outputStream *out, Thread *thread) {
 }
 
 static bool stack_has_headroom(size_t headroom) {
-  const size_t stack_size = os::current_stack_size();
+  size_t stack_size = 0;
+  address stack_base = nullptr;
+  os::current_stack_base_and_size(&stack_base, &stack_size);
+
   const size_t guard_size = StackOverflow::stack_guard_zone_size();
   const size_t unguarded_stack_size = stack_size - guard_size;
 
@@ -186,7 +191,6 @@ static bool stack_has_headroom(size_t headroom) {
     return false;
   }
 
-  const address stack_base          = os::current_stack_base();
   const address unguarded_stack_end = stack_base - unguarded_stack_size;
   const address stack_pointer       = os::current_stack_pointer();
 
@@ -199,9 +203,11 @@ PRAGMA_INFINITE_RECURSION_IGNORED
 void VMError::reattempt_test_hit_stack_limit(outputStream* st) {
   if (stack_has_headroom(_reattempt_required_stack_headroom)) {
     // Use all but (_reattempt_required_stack_headroom - K) unguarded stack space.
-    const size_t stack_size     = os::current_stack_size();
+    size_t stack_size = 0;
+    address stack_base = nullptr;
+    os::current_stack_base_and_size(&stack_base, &stack_size);
+
     const size_t guard_size     = StackOverflow::stack_guard_zone_size();
-    const address stack_base    = os::current_stack_base();
     const address stack_pointer = os::current_stack_pointer();
 
     const size_t unguarded_stack_size = stack_size - guard_size;
@@ -427,7 +433,7 @@ static frame next_frame(frame fr, Thread* t) {
     if (!t->is_in_full_stack((address)(fr.real_fp() + 1))) {
       return invalid;
     }
-    if (fr.is_java_frame() || fr.is_native_frame() || fr.is_runtime_frame()) {
+    if (fr.is_interpreted_frame() || (fr.cb() != nullptr && fr.cb()->frame_size() > 0)) {
       RegisterMap map(JavaThread::cast(t),
                       RegisterMap::UpdateMap::skip,
                       RegisterMap::ProcessFrames::include,
@@ -450,7 +456,7 @@ void VMError::print_native_stack(outputStream* st, frame fr, Thread* t, bool pri
   // see if it's a valid frame
   if (fr.pc()) {
     st->print_cr("Native frames: (J=compiled Java code, j=interpreted, Vv=VM code, C=native code)");
-    const int limit = max_frames == -1 ? StackPrintLimit : MIN2(max_frames, (int)StackPrintLimit);
+    const int limit = max_frames == -1 ? StackPrintLimit : MIN2(max_frames, StackPrintLimit);
     int count = 0;
     while (count++ < limit) {
       fr.print_on_error(st, buf, buf_size);
@@ -484,8 +490,12 @@ void VMError::print_native_stack(outputStream* st, frame fr, Thread* t, bool pri
 static void print_oom_reasons(outputStream* st) {
   st->print_cr("# Possible reasons:");
   st->print_cr("#   The system is out of physical RAM or swap space");
+#ifdef LINUX
+  st->print_cr("#   This process has exceeded the maximum number of memory mappings (check below");
+  st->print_cr("#     for `/proc/sys/vm/max_map_count` and `Total number of mappings`)");
+#endif
   if (UseCompressedOops) {
-    st->print_cr("#   The process is running with CompressedOops enabled, and the Java Heap may be blocking the growth of the native heap");
+    st->print_cr("#   This process is running with CompressedOops enabled, and the Java Heap may be blocking the growth of the native heap");
   }
   if (LogBytesPerWord == 2) {
     st->print_cr("#   In 32 bit mode, the process size limit was hit");
@@ -707,6 +717,10 @@ void VMError::report(outputStream* st, bool _verbose) {
   address lastpc = nullptr;
 
   BEGIN
+  if (MemTracker::enabled() && NmtVirtualMemory_lock != nullptr && NmtVirtualMemory_lock->owned_by_self()) {
+    // Manually unlock to avoid reentrancy due to mallocs in detailed mode.
+    NmtVirtualMemory_lock->unlock();
+  }
 
   STEP("printing fatal error message")
     st->print_cr("#");
@@ -716,6 +730,11 @@ void VMError::report(outputStream* st, bool _verbose) {
       st->print_cr("# There is insufficient memory for the Java "
                    "Runtime Environment to continue.");
     }
+
+  // avoid the cache update for malloc/mmap errors
+  if (should_report_bug(_id)) {
+    os::prepare_native_symbols();
+  }
 
 #ifdef ASSERT
   // Error handler self tests
@@ -823,9 +842,9 @@ void VMError::report(outputStream* st, bool _verbose) {
                                                     "(mprotect) failed to protect ");
           jio_snprintf(buf, sizeof(buf), SIZE_FORMAT, _size);
           st->print("%s", buf);
-          st->print(" bytes");
+          st->print(" bytes.");
           if (strlen(_detail_msg) > 0) {
-            st->print(" for ");
+            st->print(" Error detail: ");
             st->print("%s", _detail_msg);
           }
           st->cr();
@@ -975,8 +994,7 @@ void VMError::report(outputStream* st, bool _verbose) {
       stack_top = _thread->stack_base();
       stack_size = _thread->stack_size();
     } else {
-      stack_top = os::current_stack_base();
-      stack_size = os::current_stack_size();
+      os::current_stack_base_and_size(&stack_top, &stack_size);
     }
 
     address stack_bottom = stack_top - stack_size;
@@ -1045,6 +1063,12 @@ void VMError::report(outputStream* st, bool _verbose) {
     check_failing_cds_access(st, _siginfo);
     st->cr();
 
+#if defined(COMPILER1) || defined(COMPILER2)
+  STEP_IF("printing pending compilation failure",
+          _verbose && _thread != nullptr && _thread->is_Compiler_thread())
+    CompilationFailureInfo::print_pending_compilation_failure(st);
+#endif
+
   STEP_IF("printing registers", _verbose && _context != nullptr)
     // printing registers
     os::print_context(st, _context);
@@ -1095,6 +1119,11 @@ void VMError::report(outputStream* st, bool _verbose) {
       _verbose && _context != nullptr && _thread != nullptr && Universe::is_fully_initialized())
     ResourceMark rm(_thread);
     print_stack_location(st, _context, continuation);
+    st->cr();
+
+  STEP_IF("printing lock stack", _verbose && _thread != nullptr && _thread->is_Java_thread() && LockingMode == LM_LIGHTWEIGHT);
+    st->print_cr("Lock stack of current Java thread (top to bottom):");
+    JavaThread::cast(_thread)->lock_stack().print_on(st);
     st->cr();
 
   STEP_IF("printing code blobs if possible", _verbose)
@@ -1335,6 +1364,8 @@ void VMError::report(outputStream* st, bool _verbose) {
 void VMError::print_vm_info(outputStream* st) {
 
   char buf[O_BUFLEN];
+  os::prepare_native_symbols();
+
   report_vm_version(st, buf, sizeof(buf));
 
   // STEP("printing summary")
@@ -1565,6 +1596,14 @@ void VMError::report_and_die(Thread* thread, unsigned int sig, address pc, void*
   va_end(detail_args);
 }
 
+void VMError::report_and_die(Thread* thread, void* context, const char* filename, int lineno, const char* message,
+                             const char* detail_fmt, ...) {
+  va_list detail_args;
+  va_start(detail_args, detail_fmt);
+  report_and_die(thread, context, filename, lineno, message, detail_fmt, detail_args);
+  va_end(detail_args);
+}
+
 void VMError::report_and_die(Thread* thread, unsigned int sig, address pc, void* siginfo, void* context)
 {
   report_and_die(thread, sig, pc, siginfo, context, "%s", "");
@@ -1661,7 +1700,7 @@ void VMError::report_and_die(int id, const char* message, const char* detail_fmt
       ShowMessageBoxOnError = false;
     }
 
-    os::check_dump_limit(buffer, sizeof(buffer));
+    os::check_core_dump_prerequisites(buffer, sizeof(buffer));
 
     // reset signal handlers or exception filter; make sure recursive crashes
     // are handled properly.
@@ -1827,7 +1866,7 @@ void VMError::report_and_die(int id, const char* message, const char* detail_fmt
   if (DumpReplayDataOnError && _thread && _thread->is_Compiler_thread() && !skip_replay) {
     skip_replay = true;
     ciEnv* env = ciEnv::current();
-    if (env != nullptr) {
+    if (env != nullptr && env->task() != nullptr) {
       const bool overwrite = false; // We do not overwrite an existing replay file.
       int fd = prepare_log_file(ReplayDataFile, "replay_pid%p.log", overwrite, buffer, sizeof(buffer));
       if (fd != -1) {
@@ -2048,8 +2087,11 @@ bool VMError::check_timeout() {
 #ifdef ASSERT
 typedef void (*voidfun_t)();
 
-// Crash with an authentic sigfpe
+// Crash with an authentic sigfpe; behavior is subtly different from a real signal
+// compared to one generated with raise (asynchronous vs synchronous). See JDK-8065895.
 volatile int sigfpe_int = 0;
+
+ATTRIBUTE_NO_UBSAN
 static void ALWAYSINLINE crash_with_sigfpe() {
 
   // generate a native synchronous SIGFPE where possible;

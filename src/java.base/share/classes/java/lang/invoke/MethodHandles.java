@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2008, 2023, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2008, 2024, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -26,13 +26,8 @@
 package java.lang.invoke;
 
 import jdk.internal.access.SharedSecrets;
-import jdk.internal.foreign.Utils;
-import jdk.internal.javac.PreviewFeature;
 import jdk.internal.misc.Unsafe;
 import jdk.internal.misc.VM;
-import jdk.internal.org.objectweb.asm.ClassReader;
-import jdk.internal.org.objectweb.asm.Opcodes;
-import jdk.internal.org.objectweb.asm.Type;
 import jdk.internal.reflect.CallerSensitive;
 import jdk.internal.reflect.CallerSensitiveAdapter;
 import jdk.internal.reflect.Reflection;
@@ -44,12 +39,12 @@ import sun.invoke.util.Wrapper;
 import sun.reflect.misc.ReflectUtil;
 import sun.security.util.SecurityConstants;
 
+import java.lang.classfile.ClassFile;
+import java.lang.classfile.ClassModel;
+import java.lang.constant.ClassDesc;
 import java.lang.constant.ConstantDescs;
-import java.lang.foreign.GroupLayout;
-import java.lang.foreign.MemoryLayout;
-import java.lang.foreign.MemorySegment;
-import java.lang.foreign.ValueLayout;
 import java.lang.invoke.LambdaForm.BasicType;
+import java.lang.invoke.MethodHandleImpl.Intrinsic;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
 import java.lang.reflect.Member;
@@ -68,8 +63,8 @@ import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Stream;
 
+import static java.lang.classfile.ClassFile.*;
 import static java.lang.invoke.LambdaForm.BasicType.V_TYPE;
-import static java.lang.invoke.MethodHandleImpl.Intrinsic;
 import static java.lang.invoke.MethodHandleNatives.Constants.*;
 import static java.lang.invoke.MethodHandleStatics.UNSAFE;
 import static java.lang.invoke.MethodHandleStatics.newIllegalArgumentException;
@@ -99,7 +94,7 @@ public class MethodHandles {
 
     // See IMPL_LOOKUP below.
 
-    //// Method handle creation from ordinary methods.
+    //--- Method handle creation from ordinary methods.
 
     /**
      * Returns a {@link Lookup lookup object} with
@@ -175,8 +170,6 @@ public class MethodHandles {
      * Also, it cannot access
      * <a href="MethodHandles.Lookup.html#callsens">caller sensitive methods</a>.
      * @return a lookup object which is trusted minimally
-     *
-     * @revised 9
      */
     public static Lookup publicLookup() {
         return Lookup.PUBLIC_LOOKUP;
@@ -470,8 +463,8 @@ public class MethodHandles {
      * If there is a security manager, its {@code checkPermission} method
      * is called with a {@code ReflectPermission("suppressAccessChecks")} permission.
      * @param <T> the desired type of the result, either {@link Member} or a subtype
-     * @param target a direct method handle to crack into symbolic reference components
      * @param expected a class object representing the desired result type {@code T}
+     * @param target a direct method handle to crack into symbolic reference components
      * @return a reference to the method, constructor, or field object
      * @throws    SecurityException if the caller is not privileged to call {@code setAccessible}
      * @throws    NullPointerException if either argument is {@code null}
@@ -1437,8 +1430,6 @@ public class MethodHandles {
      * so that there can be a secure foundation for lookups.
      * Nearly all other methods in the JSR 292 API rely on lookup
      * objects to check access requests.
-     *
-     * @revised 9
      */
     public static final
     class Lookup {
@@ -1621,8 +1612,6 @@ public class MethodHandles {
          *  @return the lookup modes, which limit the kinds of access performed by this lookup object
          *  @see #in
          *  @see #dropLookupMode
-         *
-         *  @revised 9
          */
         public int lookupModes() {
             return allowedModes & ALL_MODES;
@@ -1703,7 +1692,6 @@ public class MethodHandles {
          * @throws IllegalArgumentException if {@code requestedLookupClass} is a primitive type or void or array class
          * @throws NullPointerException if the argument is null
          *
-         * @revised 9
          * @see #accessClass(Class)
          * @see <a href="#cross-module-lookup">Cross-module lookups</a>
          */
@@ -1854,7 +1842,7 @@ public class MethodHandles {
          *                           <a href="MethodHandles.Lookup.html#secmgr">refuses access</a>
          * @throws NullPointerException if {@code bytes} is {@code null}
          * @since 9
-         * @see Lookup#privateLookupIn
+         * @see MethodHandles#privateLookupIn
          * @see Lookup#dropLookupMode
          * @see ClassLoader#defineClass(String,byte[],int,int,ProtectionDomain)
          */
@@ -1920,9 +1908,12 @@ public class MethodHandles {
                 this.flag = flag;
             }
 
-            static int optionsToFlag(Set<ClassOption> options) {
+            static int optionsToFlag(ClassOption[] options) {
                 int flags = 0;
                 for (ClassOption cp : options) {
+                    if ((flags & cp.flag) != 0) {
+                        throw new IllegalArgumentException("Duplicate ClassOption " + cp);
+                    }
                     flags |= cp.flag;
                 }
                 return flags;
@@ -2140,14 +2131,13 @@ public class MethodHandles {
                 throws IllegalAccessException
         {
             Objects.requireNonNull(bytes);
-            Objects.requireNonNull(options);
-
+            int flags = ClassOption.optionsToFlag(options);
             ensureDefineClassPermission();
             if (!hasFullPrivilegeAccess()) {
                 throw new IllegalAccessException(this + " does not have full privilege access");
             }
 
-            return makeHiddenClassDefiner(bytes.clone(), Set.of(options), false).defineClassAsLookup(initialize);
+            return makeHiddenClassDefiner(bytes.clone(), false, flags).defineClassAsLookup(initialize);
         }
 
         /**
@@ -2220,21 +2210,22 @@ public class MethodHandles {
          * @jvms 5.3.5 Deriving a {@code Class} from a {@code class} File Representation
          * @jvms 5.4 Linking
          * @jvms 5.5 Initialization
-         * @jls 12.7 Unloading of Classes and Interface
+         * @jls 12.7 Unloading of Classes and Interfaces
          */
         public Lookup defineHiddenClassWithClassData(byte[] bytes, Object classData, boolean initialize, ClassOption... options)
                 throws IllegalAccessException
         {
             Objects.requireNonNull(bytes);
             Objects.requireNonNull(classData);
-            Objects.requireNonNull(options);
+
+            int flags = ClassOption.optionsToFlag(options);
 
             ensureDefineClassPermission();
             if (!hasFullPrivilegeAccess()) {
                 throw new IllegalAccessException(this + " does not have full privilege access");
             }
 
-            return makeHiddenClassDefiner(bytes.clone(), Set.of(options), false)
+            return makeHiddenClassDefiner(bytes.clone(), false, flags)
                        .defineClassAsLookup(initialize, classData);
         }
 
@@ -2253,96 +2244,70 @@ public class MethodHandles {
         private static final ClassFileDumper DEFAULT_DUMPER = ClassFileDumper.getInstance(
                 "jdk.invoke.MethodHandle.dumpClassFiles", "DUMP_CLASS_FILES");
 
-        static class ClassFile {
-            final String name;  // internal name
-            final int accessFlags;
-            final byte[] bytes;
-            ClassFile(String name, int accessFlags, byte[] bytes) {
-                this.name = name;
-                this.accessFlags = accessFlags;
-                this.bytes = bytes;
+        /**
+         * This method checks the class file version and the structure of `this_class`.
+         * and checks if the bytes is a class or interface (ACC_MODULE flag not set)
+         * that is in the named package.
+         *
+         * @throws IllegalArgumentException if ACC_MODULE flag is set in access flags
+         * or the class is not in the given package name.
+         */
+        static String validateAndFindInternalName(byte[] bytes, String pkgName) {
+            int magic = readInt(bytes, 0);
+            if (magic != ClassFile.MAGIC_NUMBER) {
+                throw new ClassFormatError("Incompatible magic value: " + magic);
+            }
+            // We have to read major and minor this way as ClassFile API throws IAE
+            // yet we want distinct ClassFormatError and UnsupportedClassVersionError
+            int minor = readUnsignedShort(bytes, 4);
+            int major = readUnsignedShort(bytes, 6);
+
+            if (!VM.isSupportedClassFileVersion(major, minor)) {
+                throw new UnsupportedClassVersionError("Unsupported class file version " + major + "." + minor);
             }
 
-            static ClassFile newInstanceNoCheck(String name, byte[] bytes) {
-                return new ClassFile(name, 0, bytes);
+            String name;
+            ClassDesc sym;
+            int accessFlags;
+            try {
+                ClassModel cm = ClassFile.of().parse(bytes);
+                var thisClass = cm.thisClass();
+                name = thisClass.asInternalName();
+                sym = thisClass.asSymbol();
+                accessFlags = cm.flags().flagsMask();
+            } catch (IllegalArgumentException e) {
+                ClassFormatError cfe = new ClassFormatError();
+                cfe.initCause(e);
+                throw cfe;
+            }
+            // must be a class or interface
+            if ((accessFlags & ACC_MODULE) != 0) {
+                throw newIllegalArgumentException("Not a class or interface: ACC_MODULE flag is set");
             }
 
-            /**
-             * This method checks the class file version and the structure of `this_class`.
-             * and checks if the bytes is a class or interface (ACC_MODULE flag not set)
-             * that is in the named package.
-             *
-             * @throws IllegalArgumentException if ACC_MODULE flag is set in access flags
-             * or the class is not in the given package name.
-             */
-            static ClassFile newInstance(byte[] bytes, String pkgName) {
-                var cf = readClassFile(bytes);
-
-                // check if it's in the named package
-                int index = cf.name.lastIndexOf('/');
-                String pn = (index == -1) ? "" : cf.name.substring(0, index).replace('/', '.');
-                if (!pn.equals(pkgName)) {
-                    throw newIllegalArgumentException(cf.name + " not in same package as lookup class");
-                }
-                return cf;
+            String pn = sym.packageName();
+            if (!pn.equals(pkgName)) {
+                throw newIllegalArgumentException(name + " not in same package as lookup class");
             }
 
-            private static ClassFile readClassFile(byte[] bytes) {
-                int magic = readInt(bytes, 0);
-                if (magic != 0xCAFEBABE) {
-                    throw new ClassFormatError("Incompatible magic value: " + magic);
-                }
-                int minor = readUnsignedShort(bytes, 4);
-                int major = readUnsignedShort(bytes, 6);
-                if (!VM.isSupportedClassFileVersion(major, minor)) {
-                    throw new UnsupportedClassVersionError("Unsupported class file version " + major + "." + minor);
-                }
+            return name;
+        }
 
-                String name;
-                int accessFlags;
-                try {
-                    ClassReader reader = new ClassReader(bytes);
-                    // ClassReader does not check if `this_class` is CONSTANT_Class_info
-                    // workaround to read `this_class` using readConst and validate the value
-                    int thisClass = reader.readUnsignedShort(reader.header + 2);
-                    Object constant = reader.readConst(thisClass, new char[reader.getMaxStringLength()]);
-                    if (!(constant instanceof Type type)) {
-                        throw new ClassFormatError("this_class item: #" + thisClass + " not a CONSTANT_Class_info");
-                    }
-                    if (!type.getDescriptor().startsWith("L")) {
-                        throw new ClassFormatError("this_class item: #" + thisClass + " not a CONSTANT_Class_info");
-                    }
-                    name = type.getInternalName();
-                    accessFlags = reader.readUnsignedShort(reader.header);
-                } catch (RuntimeException e) {
-                    // ASM exceptions are poorly specified
-                    ClassFormatError cfe = new ClassFormatError();
-                    cfe.initCause(e);
-                    throw cfe;
-                }
-                // must be a class or interface
-                if ((accessFlags & Opcodes.ACC_MODULE) != 0) {
-                    throw newIllegalArgumentException("Not a class or interface: ACC_MODULE flag is set");
-                }
-                return new ClassFile(name, accessFlags, bytes);
+        private static int readInt(byte[] bytes, int offset) {
+            if ((offset + 4) > bytes.length) {
+                throw new ClassFormatError("Invalid ClassFile structure");
             }
+            return ((bytes[offset] & 0xFF) << 24)
+                    | ((bytes[offset + 1] & 0xFF) << 16)
+                    | ((bytes[offset + 2] & 0xFF) << 8)
+                    | (bytes[offset + 3] & 0xFF);
+        }
 
-            private static int readInt(byte[] bytes, int offset) {
-                if ((offset+4) > bytes.length) {
-                    throw new ClassFormatError("Invalid ClassFile structure");
-                }
-                return ((bytes[offset] & 0xFF) << 24)
-                        | ((bytes[offset + 1] & 0xFF) << 16)
-                        | ((bytes[offset + 2] & 0xFF) << 8)
-                        | (bytes[offset + 3] & 0xFF);
+        private static int readUnsignedShort(byte[] bytes, int offset) {
+            if ((offset+2) > bytes.length) {
+                throw new ClassFormatError("Invalid ClassFile structure");
             }
-
-            private static int readUnsignedShort(byte[] bytes, int offset) {
-                if ((offset+2) > bytes.length) {
-                    throw new ClassFormatError("Invalid ClassFile structure");
-                }
-                return ((bytes[offset] & 0xFF) << 8) | (bytes[offset + 1] & 0xFF);
-            }
+            return ((bytes[offset] & 0xFF) << 8) | (bytes[offset + 1] & 0xFF);
         }
 
         /*
@@ -2356,23 +2321,22 @@ public class MethodHandles {
          * {@code bytes} denotes a class in a different package than the lookup class
          */
         private ClassDefiner makeClassDefiner(byte[] bytes) {
-            ClassFile cf = ClassFile.newInstance(bytes, lookupClass().getPackageName());
-            return new ClassDefiner(this, cf, STRONG_LOADER_LINK, defaultDumper());
+            var internalName = validateAndFindInternalName(bytes, lookupClass().getPackageName());
+            return new ClassDefiner(this, internalName, bytes, STRONG_LOADER_LINK, defaultDumper());
         }
 
         /**
          * Returns a ClassDefiner that creates a {@code Class} object of a normal class
          * from the given bytes.  No package name check on the given bytes.
          *
-         * @param name    internal name
+         * @param internalName internal name
          * @param bytes   class bytes
          * @param dumper  dumper to write the given bytes to the dumper's output directory
          * @return ClassDefiner that defines a normal class of the given bytes.
          */
-        ClassDefiner makeClassDefiner(String name, byte[] bytes, ClassFileDumper dumper) {
+        ClassDefiner makeClassDefiner(String internalName, byte[] bytes, ClassFileDumper dumper) {
             // skip package name validation
-            ClassFile cf = ClassFile.newInstanceNoCheck(name, bytes);
-            return new ClassDefiner(this, cf, STRONG_LOADER_LINK, dumper);
+            return new ClassDefiner(this, internalName, bytes, STRONG_LOADER_LINK, dumper);
         }
 
         /**
@@ -2390,8 +2354,8 @@ public class MethodHandles {
          * {@code bytes} denotes a class in a different package than the lookup class
          */
         ClassDefiner makeHiddenClassDefiner(byte[] bytes, ClassFileDumper dumper) {
-            ClassFile cf = ClassFile.newInstance(bytes, lookupClass().getPackageName());
-            return makeHiddenClassDefiner(cf, Set.of(), false, dumper);
+            var internalName = validateAndFindInternalName(bytes, lookupClass().getPackageName());
+            return makeHiddenClassDefiner(internalName, bytes, false, dumper, 0);
         }
 
         /**
@@ -2403,7 +2367,7 @@ public class MethodHandles {
          * before calling this factory method.
          *
          * @param bytes   class bytes
-         * @param options class options
+         * @param flags   class option flag mask
          * @param accessVmAnnotations true to give the hidden class access to VM annotations
          * @return ClassDefiner that defines a hidden class of the given bytes and options
          *
@@ -2411,69 +2375,71 @@ public class MethodHandles {
          * {@code bytes} denotes a class in a different package than the lookup class
          */
         private ClassDefiner makeHiddenClassDefiner(byte[] bytes,
-                                                    Set<ClassOption> options,
-                                                    boolean accessVmAnnotations) {
-            ClassFile cf = ClassFile.newInstance(bytes, lookupClass().getPackageName());
-            return makeHiddenClassDefiner(cf, options, accessVmAnnotations, defaultDumper());
+                                                    boolean accessVmAnnotations,
+                                                    int flags) {
+            var internalName = validateAndFindInternalName(bytes, lookupClass().getPackageName());
+            return makeHiddenClassDefiner(internalName, bytes, accessVmAnnotations, defaultDumper(), flags);
         }
 
         /**
          * Returns a ClassDefiner that creates a {@code Class} object of a hidden class
          * from the given bytes and the given options.  No package name check on the given bytes.
          *
-         * @param name    internal name that specifies the prefix of the hidden class
+         * @param internalName internal name that specifies the prefix of the hidden class
          * @param bytes   class bytes
-         * @param options class options
          * @param dumper  dumper to write the given bytes to the dumper's output directory
          * @return ClassDefiner that defines a hidden class of the given bytes and options.
          */
-        ClassDefiner makeHiddenClassDefiner(String name, byte[] bytes, Set<ClassOption> options, ClassFileDumper dumper) {
+        ClassDefiner makeHiddenClassDefiner(String internalName, byte[] bytes, ClassFileDumper dumper) {
             Objects.requireNonNull(dumper);
             // skip name and access flags validation
-            return makeHiddenClassDefiner(ClassFile.newInstanceNoCheck(name, bytes), options, false, dumper);
+            return makeHiddenClassDefiner(internalName, bytes, false, dumper, 0);
+        }
+
+        /**
+         * Returns a ClassDefiner that creates a {@code Class} object of a hidden class
+         * from the given bytes and the given options.  No package name check on the given bytes.
+         *
+         * @param internalName internal name that specifies the prefix of the hidden class
+         * @param bytes   class bytes
+         * @param flags   class options flag mask
+         * @param dumper  dumper to write the given bytes to the dumper's output directory
+         * @return ClassDefiner that defines a hidden class of the given bytes and options.
+         */
+        ClassDefiner makeHiddenClassDefiner(String internalName, byte[] bytes, ClassFileDumper dumper, int flags) {
+            Objects.requireNonNull(dumper);
+            // skip name and access flags validation
+            return makeHiddenClassDefiner(internalName, bytes, false, dumper, flags);
         }
 
         /**
          * Returns a ClassDefiner that creates a {@code Class} object of a hidden class
          * from the given class file and options.
          *
-         * @param cf ClassFile
-         * @param options class options
+         * @param internalName internal name
+         * @param bytes Class byte array
+         * @param flags class option flag mask
          * @param accessVmAnnotations true to give the hidden class access to VM annotations
          * @param dumper dumper to write the given bytes to the dumper's output directory
          */
-        private ClassDefiner makeHiddenClassDefiner(ClassFile cf,
-                                                    Set<ClassOption> options,
+        private ClassDefiner makeHiddenClassDefiner(String internalName,
+                                                    byte[] bytes,
                                                     boolean accessVmAnnotations,
-                                                    ClassFileDumper dumper) {
-            int flags = HIDDEN_CLASS | ClassOption.optionsToFlag(options);
+                                                    ClassFileDumper dumper,
+                                                    int flags) {
+            flags |= HIDDEN_CLASS;
             if (accessVmAnnotations | VM.isSystemDomainLoader(lookupClass.getClassLoader())) {
                 // jdk.internal.vm.annotations are permitted for classes
                 // defined to boot loader and platform loader
                 flags |= ACCESS_VM_ANNOTATIONS;
             }
 
-            return new ClassDefiner(this, cf, flags, dumper);
+            return new ClassDefiner(this, internalName, bytes, flags, dumper);
         }
 
-        static class ClassDefiner {
-            private final Lookup lookup;
-            private final String name;  // internal name
-            private final byte[] bytes;
-            private final int classFlags;
-            private final ClassFileDumper dumper;
-
-            private ClassDefiner(Lookup lookup, ClassFile cf, int flags, ClassFileDumper dumper) {
-                assert ((flags & HIDDEN_CLASS) != 0 || (flags & STRONG_LOADER_LINK) == STRONG_LOADER_LINK);
-                this.lookup = lookup;
-                this.bytes = cf.bytes;
-                this.name = cf.name;
-                this.classFlags = flags;
-                this.dumper = dumper;
-            }
-
-            String internalName() {
-                return name;
+        record ClassDefiner(Lookup lookup, String internalName, byte[] bytes, int classFlags, ClassFileDumper dumper) {
+            ClassDefiner {
+                assert ((classFlags & HIDDEN_CLASS) != 0 || (classFlags & STRONG_LOADER_LINK) == STRONG_LOADER_LINK);
             }
 
             Class<?> defineClass(boolean initialize) {
@@ -2502,7 +2468,7 @@ public class MethodHandles {
                 Class<?> c = null;
                 try {
                     c = SharedSecrets.getJavaLangAccess()
-                            .defineClass(loader, lookupClass, name, bytes, pd, initialize, classFlags, classData);
+                            .defineClass(loader, lookupClass, internalName, bytes, pd, initialize, classFlags, classData);
                     assert !isNestmate() || c.getNestHost() == lookupClass.getNestHost();
                     return c;
                 } finally {
@@ -2599,8 +2565,6 @@ public class MethodHandles {
          * because it requires a direct subclass relationship between
          * caller and callee.)
          * @see #in
-         *
-         * @revised 9
          */
         @Override
         public String toString() {
@@ -3534,6 +3498,33 @@ return mh1;
             return lookup.getDirectConstructorNoSecurityManager(ctor.getDeclaringClass(), ctor);
         }
 
+        /*
+         * Produces a method handle that is capable of creating instances of the given class
+         * and instantiated by the given constructor.  No security manager check.
+         *
+         * This method should only be used by ReflectionFactory::newConstructorForSerialization.
+         */
+        /* package-private */ MethodHandle serializableConstructor(Class<?> decl, Constructor<?> c) throws IllegalAccessException {
+            MemberName ctor = new MemberName(c);
+            assert(ctor.isConstructor() && constructorInSuperclass(decl, c));
+            checkAccess(REF_newInvokeSpecial, decl, ctor);
+            assert(!MethodHandleNatives.isCallerSensitive(ctor));  // maybeBindCaller not relevant here
+            return DirectMethodHandle.makeAllocator(decl, ctor).setVarargs(ctor);
+        }
+
+        private static boolean constructorInSuperclass(Class<?> decl, Constructor<?> ctor) {
+            if (decl == ctor.getDeclaringClass())
+                return true;
+
+            Class<?> cl = decl;
+            while ((cl = cl.getSuperclass()) != null) {
+                if (cl == ctor.getDeclaringClass()) {
+                    return true;
+                }
+            }
+            return false;
+        }
+
         /**
          * Produces a method handle giving read access to a reflected field.
          * The type of the method handle will have a return type of the field's
@@ -3733,7 +3724,7 @@ return mh1;
             return new InfoFromMemberName(this, member, refKind);
         }
 
-        /// Helper methods, all package-private.
+        //--- Helper methods, all package-private.
 
         MemberName resolveOrFail(byte refKind, Class<?> refc, String name, Class<?> type) throws NoSuchFieldException, IllegalAccessException {
             checkSymbolicClass(refc);  // do this before attempting to resolve
@@ -4501,48 +4492,18 @@ return mh1;
      * or greater than the {@code byte[]} array length minus the size (in bytes)
      * of {@code T}.
      * <p>
-     * Access of bytes at an index may be aligned or misaligned for {@code T},
-     * with respect to the underlying memory address, {@code A} say, associated
-     * with the array and index.
-     * If access is misaligned then access for anything other than the
-     * {@code get} and {@code set} access modes will result in an
-     * {@code IllegalStateException}.  In such cases atomic access is only
-     * guaranteed with respect to the largest power of two that divides the GCD
-     * of {@code A} and the size (in bytes) of {@code T}.
-     * If access is aligned then following access modes are supported and are
-     * guaranteed to support atomic access:
-     * <ul>
-     * <li>read write access modes for all {@code T}, with the exception of
-     *     access modes {@code get} and {@code set} for {@code long} and
-     *     {@code double} on 32-bit platforms.
-     * <li>atomic update access modes for {@code int}, {@code long},
-     *     {@code float} or {@code double}.
-     *     (Future major platform releases of the JDK may support additional
-     *     types for certain currently unsupported access modes.)
-     * <li>numeric atomic update access modes for {@code int} and {@code long}.
-     *     (Future major platform releases of the JDK may support additional
-     *     numeric types for certain currently unsupported access modes.)
-     * <li>bitwise atomic update access modes for {@code int} and {@code long}.
-     *     (Future major platform releases of the JDK may support additional
-     *     numeric types for certain currently unsupported access modes.)
-     * </ul>
-     * <p>
-     * Misaligned access, and therefore atomicity guarantees, may be determined
-     * for {@code byte[]} arrays without operating on a specific array.  Given
-     * an {@code index}, {@code T} and its corresponding boxed type,
-     * {@code T_BOX}, misalignment may be determined as follows:
-     * <pre>{@code
-     * int sizeOfT = T_BOX.BYTES;  // size in bytes of T
-     * int misalignedAtZeroIndex = ByteBuffer.wrap(new byte[0]).
-     *     alignmentOffset(0, sizeOfT);
-     * int misalignedAtIndex = (misalignedAtZeroIndex + index) % sizeOfT;
-     * boolean isMisaligned = misalignedAtIndex != 0;
-     * }</pre>
-     * <p>
-     * If the variable type is {@code float} or {@code double} then atomic
-     * update access modes compare values using their bitwise representation
-     * (see {@link Float#floatToRawIntBits} and
-     * {@link Double#doubleToRawLongBits}, respectively).
+     * Only plain {@linkplain VarHandle.AccessMode#GET get} and {@linkplain VarHandle.AccessMode#SET set}
+     * access modes are supported by the returned var handle. For all other access modes, an
+     * {@link UnsupportedOperationException} will be thrown.
+     *
+     * @apiNote if access modes other than plain access are required, clients should
+     * consider using off-heap memory through
+     * {@linkplain java.nio.ByteBuffer#allocateDirect(int) direct byte buffers} or
+     * off-heap {@linkplain java.lang.foreign.MemorySegment memory segments},
+     * or memory segments backed by a
+     * {@linkplain java.lang.foreign.MemorySegment#ofArray(long[]) {@code long[]}},
+     * for which stronger alignment guarantees can be made.
+     *
      * @param viewArrayClass the view array class, with a component type of
      * type {@code T}
      * @param byteOrder the endianness of the view array elements, as
@@ -4588,7 +4549,13 @@ return mh1;
      * or greater than the {@code ByteBuffer} limit minus the size (in bytes) of
      * {@code T}.
      * <p>
-     * Access of bytes at an index may be aligned or misaligned for {@code T},
+     * For heap byte buffers, access is always unaligned. As a result, only the plain
+     * {@linkplain VarHandle.AccessMode#GET get}
+     * and {@linkplain VarHandle.AccessMode#SET set} access modes are supported by the
+     * returned var handle. For all other access modes, an {@link IllegalStateException}
+     * will be thrown.
+     * <p>
+     * For direct buffers only, access of bytes at an index may be aligned or misaligned for {@code T},
      * with respect to the underlying memory address, {@code A} say, associated
      * with the {@code ByteBuffer} and index.
      * If access is misaligned then access for anything other than the
@@ -4651,7 +4618,7 @@ return mh1;
     }
 
 
-    /// method handle invocation (reflective style)
+    //--- method handle invocation (reflective style)
 
     /**
      * Produces a method handle which will invoke any method handle of the
@@ -4834,7 +4801,7 @@ return invoker;
         return type.invokers().basicInvoker();
     }
 
-     /// method handle modification (creation from other method handles)
+     //--- method handle modification (creation from other method handles)
 
     /**
      * Produces a method handle which adapts the type of the
@@ -7931,6 +7898,8 @@ assertEquals("boojum", (String) catTrace.invokeExact("boo", "jum"));
      *                                  handles is not {@code int}, or if the types of
      *                                  the fallback handle and all of target handles are
      *                                  not the same.
+     *
+     * @since 17
      */
     public static MethodHandle tableSwitch(MethodHandle fallback, MethodHandle... targets) {
         Objects.requireNonNull(fallback);
@@ -7958,85 +7927,6 @@ assertEquals("boojum", (String) catTrace.invokeExact("boo", "jum"));
         }
 
         return expectedType;
-    }
-
-    /**
-     * Creates a var handle object, which can be used to dereference a {@linkplain java.lang.foreign.MemorySegment memory segment}
-     * at a given byte offset, using the provided value layout.
-     *
-     * <p>The provided layout specifies the {@linkplain ValueLayout#carrier() carrier type},
-     * the {@linkplain ValueLayout#byteSize() byte size},
-     * the {@linkplain ValueLayout#byteAlignment() byte alignment} and the {@linkplain ValueLayout#order() byte order}
-     * associated with the returned var handle.
-     *
-     * <p>The list of coordinate types associated with the returned var handle is {@code (MemorySegment, long)},
-     * where the {@code long} coordinate type corresponds to byte offset into the given memory segment coordinate.
-     * Thus, the returned var handle accesses bytes at an offset in a given memory segment, composing bytes to or from
-     * a value of the var handle type. Moreover, the access operation will honor the endianness and the
-     * alignment constraints expressed in the provided layout.
-     *
-     * <p>As an example, consider the memory layout expressed by a {@link GroupLayout} instance constructed as follows:
-     * {@snippet lang="java" :
-     *     GroupLayout seq = java.lang.foreign.MemoryLayout.structLayout(
-     *             MemoryLayout.paddingLayout(4),
-     *             ValueLayout.JAVA_INT.withOrder(ByteOrder.BIG_ENDIAN).withName("value")
-     *     );
-     * }
-     * To access the member layout named {@code value}, we can construct a memory segment view var handle as follows:
-     * {@snippet lang="java" :
-     *     VarHandle handle = MethodHandles.memorySegmentViewVarHandle(ValueLayout.JAVA_INT.withOrder(ByteOrder.BIG_ENDIAN)); //(MemorySegment, long) -> int
-     *     handle = MethodHandles.insertCoordinates(handle, 1, 4); //(MemorySegment) -> int
-     * }
-     *
-     * @apiNote The resulting var handle features certain <i>access mode restrictions</i>,
-     * which are common to all memory segment view var handles. A memory segment view var handle is associated
-     * with an access size {@code S} and an alignment constraint {@code B}
-     * (both expressed in bytes). We say that a memory access operation is <em>fully aligned</em> if it occurs
-     * at a memory address {@code A} which is compatible with both alignment constraints {@code S} and {@code B}.
-     * If access is fully aligned then following access modes are supported and are
-     * guaranteed to support atomic access:
-     * <ul>
-     * <li>read write access modes for all {@code T}, with the exception of
-     *     access modes {@code get} and {@code set} for {@code long} and
-     *     {@code double} on 32-bit platforms.
-     * <li>atomic update access modes for {@code int}, {@code long},
-     *     {@code float}, {@code double} or {@link MemorySegment}.
-     *     (Future major platform releases of the JDK may support additional
-     *     types for certain currently unsupported access modes.)
-     * <li>numeric atomic update access modes for {@code int}, {@code long} and {@link MemorySegment}.
-     *     (Future major platform releases of the JDK may support additional
-     *     numeric types for certain currently unsupported access modes.)
-     * <li>bitwise atomic update access modes for {@code int}, {@code long} and {@link MemorySegment}.
-     *     (Future major platform releases of the JDK may support additional
-     *     numeric types for certain currently unsupported access modes.)
-     * </ul>
-     *
-     * If {@code T} is {@code float}, {@code double} or {@link MemorySegment} then atomic
-     * update access modes compare values using their bitwise representation
-     * (see {@link Float#floatToRawIntBits},
-     * {@link Double#doubleToRawLongBits} and {@link MemorySegment#address()}, respectively).
-     * <p>
-     * Alternatively, a memory access operation is <em>partially aligned</em> if it occurs at a memory address {@code A}
-     * which is only compatible with the alignment constraint {@code B}; in such cases, access for anything other than the
-     * {@code get} and {@code set} access modes will result in an {@code IllegalStateException}. If access is partially aligned,
-     * atomic access is only guaranteed with respect to the largest power of two that divides the GCD of {@code A} and {@code S}.
-     * <p>
-     * In all other cases, we say that a memory access operation is <em>misaligned</em>; in such cases an
-     * {@code IllegalStateException} is thrown, irrespective of the access mode being used.
-     * <p>
-     * Finally, if {@code T} is {@code MemorySegment} all write access modes throw {@link IllegalArgumentException}
-     * unless the value to be written is a {@linkplain MemorySegment#isNative() native} memory segment.
-     *
-     * @param layout the value layout for which a memory access handle is to be obtained.
-     * @return the new memory segment view var handle.
-     * @throws NullPointerException if {@code layout} is {@code null}.
-     * @see MemoryLayout#varHandle(MemoryLayout.PathElement...)
-     * @since 19
-     */
-    @PreviewFeature(feature=PreviewFeature.Feature.FOREIGN)
-    public static VarHandle memorySegmentViewVarHandle(ValueLayout layout) {
-        Objects.requireNonNull(layout);
-        return Utils.makeSegmentViewVarHandle(layout);
     }
 
     /**
@@ -8069,9 +7959,8 @@ assertEquals("boojum", (String) catTrace.invokeExact("boo", "jum"));
      * other than {@code (A... , S) -> T} and {@code (A... , T) -> S}, respectively, where {@code T} is the type of the target var handle,
      * or if it's determined that either {@code filterFromTarget} or {@code filterToTarget} throws any checked exceptions.
      * @throws NullPointerException if any of the arguments is {@code null}.
-     * @since 19
+     * @since 22
      */
-    @PreviewFeature(feature=PreviewFeature.Feature.FOREIGN)
     public static VarHandle filterValue(VarHandle target, MethodHandle filterToTarget, MethodHandle filterFromTarget) {
         return VarHandles.filterValue(target, filterToTarget, filterFromTarget);
     }
@@ -8105,9 +7994,8 @@ assertEquals("boojum", (String) catTrace.invokeExact("boo", "jum"));
      * or if more filters are provided than the actual number of coordinate types available starting at {@code pos},
      * or if it's determined that any of the filters throws any checked exceptions.
      * @throws NullPointerException if any of the arguments is {@code null} or {@code filters} contains {@code null}.
-     * @since 19
+     * @since 22
      */
-    @PreviewFeature(feature=PreviewFeature.Feature.FOREIGN)
     public static VarHandle filterCoordinates(VarHandle target, int pos, MethodHandle... filters) {
         return VarHandles.filterCoordinates(target, pos, filters);
     }
@@ -8137,9 +8025,8 @@ assertEquals("boojum", (String) catTrace.invokeExact("boo", "jum"));
      * other than {@code T1, T2 ... Tn }, where {@code T1, T2 ... Tn} are the coordinate types starting at position {@code pos}
      * of the target var handle.
      * @throws NullPointerException if any of the arguments is {@code null} or {@code values} contains {@code null}.
-     * @since 19
+     * @since 22
      */
-    @PreviewFeature(feature=PreviewFeature.Feature.FOREIGN)
     public static VarHandle insertCoordinates(VarHandle target, int pos, Object... values) {
         return VarHandles.insertCoordinates(target, pos, values);
     }
@@ -8180,9 +8067,8 @@ assertEquals("boojum", (String) catTrace.invokeExact("boo", "jum"));
      * a coordinate of {@code newCoordinates}, or if two corresponding coordinate types in
      * the target var handle and in {@code newCoordinates} are not identical.
      * @throws NullPointerException if any of the arguments is {@code null} or {@code newCoordinates} contains {@code null}.
-     * @since 19
+     * @since 22
      */
-    @PreviewFeature(feature=PreviewFeature.Feature.FOREIGN)
     public static VarHandle permuteCoordinates(VarHandle target, List<Class<?>> newCoordinates, int... reorder) {
         return VarHandles.permuteCoordinates(target, newCoordinates, reorder);
     }
@@ -8224,9 +8110,8 @@ assertEquals("boojum", (String) catTrace.invokeExact("boo", "jum"));
      * if the resulting var handle's type would have <a href="MethodHandle.html#maxarity">too many coordinates</a>,
      * or if it's determined that {@code filter} throws any checked exceptions.
      * @throws NullPointerException if any of the arguments is {@code null}.
-     * @since 19
+     * @since 22
      */
-    @PreviewFeature(feature=PreviewFeature.Feature.FOREIGN)
     public static VarHandle collectCoordinates(VarHandle target, int pos, MethodHandle filter) {
         return VarHandles.collectCoordinates(target, pos, filter);
     }
@@ -8250,9 +8135,8 @@ assertEquals("boojum", (String) catTrace.invokeExact("boo", "jum"));
      *         before calling the target var handle
      * @throws IllegalArgumentException if {@code pos} is not between 0 and the target var handle coordinate arity, inclusive.
      * @throws NullPointerException if any of the arguments is {@code null} or {@code valueTypes} contains {@code null}.
-     * @since 19
+     * @since 22
      */
-    @PreviewFeature(feature=PreviewFeature.Feature.FOREIGN)
     public static VarHandle dropCoordinates(VarHandle target, int pos, Class<?>... valueTypes) {
         return VarHandles.dropCoordinates(target, pos, valueTypes);
     }

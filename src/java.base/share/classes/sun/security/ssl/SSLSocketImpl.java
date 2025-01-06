@@ -1321,7 +1321,6 @@ public final class SSLSocketImpl
             }
             // Check if NewSessionTicket PostHandshake message needs to be sent
             if (conContext.conSession.updateNST) {
-                conContext.conSession.updateNST = false;
                 tryNewSessionTicket();
             }
         }
@@ -1556,15 +1555,17 @@ public final class SSLSocketImpl
     private void tryNewSessionTicket() throws IOException {
         // Don't bother to kickstart if handshaking is in progress, or if the
         // connection is not duplex-open.
-        if (!conContext.sslConfig.isClientMode &&
-                conContext.protocolVersion.useTLS13PlusSpec() &&
-                conContext.handshakeContext == null &&
-                !conContext.isOutboundClosed() &&
-                !conContext.isInboundClosed() &&
-                !conContext.isBroken) {
+        if (SSLConfiguration.serverNewSessionTicketCount > 0 &&
+            !conContext.sslConfig.isClientMode &&
+            conContext.protocolVersion.useTLS13PlusSpec() &&
+            conContext.handshakeContext == null &&
+            !conContext.isOutboundClosed() &&
+            !conContext.isInboundClosed() &&
+            !conContext.isBroken) {
             if (SSLLogger.isOn && SSLLogger.isOn("ssl")) {
                 SSLLogger.finest("trigger new session ticket");
             }
+            conContext.conSession.updateNST = false;
             NewSessionTicket.t13PosthandshakeProducer.produce(
                     new PostHandshakeContext(conContext));
         }
@@ -1782,21 +1783,24 @@ public final class SSLSocketImpl
             if (conContext.inputRecord instanceof
                     SSLSocketInputRecord inputRecord && isConnected) {
                 if (appInput.readLock.tryLock()) {
-                    int soTimeout = getSoTimeout();
                     try {
-                        // deplete could hang on the skip operation
-                        // in case of infinite socket read timeout.
-                        // Change read timeout to avoid deadlock.
-                        // This workaround could be replaced later
-                        // with the right synchronization
-                        if (soTimeout == 0)
-                            setSoTimeout(DEFAULT_SKIP_TIMEOUT);
-                        inputRecord.deplete(false);
-                    } catch (java.net.SocketTimeoutException stEx) {
-                        // skip timeout exception during deplete
+                        int soTimeout = getSoTimeout();
+                        try {
+                            // deplete could hang on the skip operation
+                            // in case of infinite socket read timeout.
+                            // Change read timeout to avoid deadlock.
+                            // This workaround could be replaced later
+                            // with the right synchronization
+                            if (soTimeout == 0)
+                                setSoTimeout(DEFAULT_SKIP_TIMEOUT);
+                            inputRecord.deplete(false);
+                        } catch (java.net.SocketTimeoutException stEx) {
+                            // skip timeout exception during deplete
+                        } finally {
+                            if (soTimeout == 0)
+                                setSoTimeout(soTimeout);
+                        }
                     } finally {
-                        if (soTimeout == 0)
-                            setSoTimeout(soTimeout);
                         appInput.readLock.unlock();
                     }
                 }

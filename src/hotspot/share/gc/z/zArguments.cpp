@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2017, 2023, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2017, 2024, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -35,6 +35,20 @@
 void ZArguments::initialize_alignments() {
   SpaceAlignment = ZGranuleSize;
   HeapAlignment = SpaceAlignment;
+}
+
+void ZArguments::initialize_heap_flags_and_sizes() {
+  GCArguments::initialize_heap_flags_and_sizes();
+
+  if (!FLAG_IS_CMDLINE(MaxHeapSize) &&
+      !FLAG_IS_CMDLINE(MaxRAMPercentage) &&
+      !FLAG_IS_CMDLINE(SoftMaxHeapSize)) {
+    // We are really just guessing how much memory the program needs.
+    // When that is the case, we don't want the soft and hard limits to be the same
+    // as it can cause flakyness in the number of GC threads used, in order to keep
+    // to a random number we just pulled out of thin air.
+    FLAG_SET_ERGO(SoftMaxHeapSize, MaxHeapSize * 90 / 100);
+  }
 }
 
 void ZArguments::select_max_gc_threads() {
@@ -105,6 +119,8 @@ void ZArguments::select_max_gc_threads() {
 }
 
 void ZArguments::initialize() {
+  GCArguments::initialize();
+
   // Check mark stack size
   const size_t mark_stack_space_limit = ZAddressSpaceLimit::mark_stack();
   if (ZMarkStackSpaceLimit > mark_stack_space_limit) {
@@ -126,22 +142,15 @@ void ZArguments::initialize() {
     FLAG_SET_ERGO_IF_DEFAULT(ZCollectionIntervalMajor, ZCollectionInterval);
   }
 
-  if (!FLAG_IS_CMDLINE(MaxHeapSize) &&
-      !FLAG_IS_CMDLINE(MaxRAMFraction) &&
-      !FLAG_IS_CMDLINE(MaxRAMPercentage)) {
-    // We are really just guessing how much memory the program needs.
-    // When that is the case, we don't want the soft and hard limits to be the same
-    // as it can cause flakyness in the number of GC threads used, in order to keep
-    // to a random number we just pulled out of thin air.
-    FLAG_SET_ERGO_IF_DEFAULT(SoftMaxHeapSize, MaxHeapSize * 90 / 100);
-  }
-
   if (FLAG_IS_DEFAULT(ZFragmentationLimit)) {
     FLAG_SET_DEFAULT(ZFragmentationLimit, 5.0);
   }
 
+  // Set medium page size here because MaxTenuringThreshold may use it.
+  ZHeuristics::set_medium_page_size();
+
   if (!FLAG_IS_DEFAULT(ZTenuringThreshold) && ZTenuringThreshold != -1) {
-    FLAG_SET_ERGO_IF_DEFAULT(MaxTenuringThreshold, ZTenuringThreshold);
+    FLAG_SET_ERGO_IF_DEFAULT(MaxTenuringThreshold, (uint)ZTenuringThreshold);
     if (MaxTenuringThreshold == 0) {
       FLAG_SET_ERGO_IF_DEFAULT(AlwaysTenure, true);
     }
@@ -215,6 +224,10 @@ void ZArguments::initialize() {
 #endif
 }
 
+size_t ZArguments::conservative_max_heap_alignment() {
+  return 0;
+}
+
 size_t ZArguments::heap_virtual_to_physical_ratio() {
   return ZVirtualToPhysicalRatio;
 }
@@ -223,6 +236,6 @@ CollectedHeap* ZArguments::create_heap() {
   return new ZCollectedHeap();
 }
 
-bool ZArguments::is_supported() {
+bool ZArguments::is_supported() const {
   return is_os_supported();
 }

@@ -71,11 +71,6 @@ class NativeHeapTrimmerThread : public NamedThread {
     return --_suspend_count;
   }
 
-  bool is_stopped() const {
-    assert(_lock->is_locked(), "Must be");
-    return _stop;
-  }
-
   bool at_or_nearing_safepoint() const {
     return SafepointSynchronize::is_at_safepoint() ||
            SafepointSynchronize::is_synchronizing();
@@ -116,8 +111,8 @@ class NativeHeapTrimmerThread : public NamedThread {
             ml.wait(0); // infinite
           } else if (next_trim_time > tnow) {
             times_waited ++;
-            const int64_t wait_ms = MAX2(1.0, to_ms(next_trim_time - tnow));
-            ml.wait(wait_ms);
+            const double wait_ms = MAX2(1.0, to_ms(next_trim_time - tnow));
+            ml.wait((int64_t)wait_ms);
           } else if (at_or_nearing_safepoint()) {
             times_safepoint ++;
             const int64_t wait_ms = MIN2<int64_t>(TrimNativeHeapInterval, safepoint_poll_ms);
@@ -215,13 +210,12 @@ public:
   }
 
   void print_state(outputStream* st) const {
-    // Don't pull lock during error reporting
-    Mutex* const lock = VMError::is_error_reported() ? nullptr : _lock;
     int64_t num_trims = 0;
     bool stopped = false;
     uint16_t suspenders = 0;
     {
-      MutexLocker ml(lock, Mutex::_no_safepoint_check_flag);
+      // Don't pull lock during error reporting
+      ConditionalMutexLocker ml(_lock, !VMError::is_error_reported(), Mutex::_no_safepoint_check_flag);
       num_trims = _num_trims_performed;
       stopped = _stop;
       suspenders = _suspend_count;

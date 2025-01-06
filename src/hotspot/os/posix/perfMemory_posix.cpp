@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2001, 2023, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2001, 2024, Oracle and/or its affiliates. All rights reserved.
  * Copyright (c) 2012, 2021 SAP SE. All rights reserved.
  * Copyright (c) 2020, 2021, Azul Systems, Inc. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
@@ -30,6 +30,7 @@
 #include "logging/log.hpp"
 #include "memory/allocation.inline.hpp"
 #include "memory/resourceArea.hpp"
+#include "nmt/memTracker.hpp"
 #include "oops/oop.inline.hpp"
 //#include "os_linux.inline.hpp"
 #include "os_posix.inline.hpp"
@@ -37,7 +38,6 @@
 #include "runtime/handles.inline.hpp"
 #include "runtime/os.hpp"
 #include "runtime/perfMemory.hpp"
-#include "services/memTracker.hpp"
 #include "utilities/exceptions.hpp"
 #if defined(LINUX)
 #include "os_linux.hpp"
@@ -505,11 +505,11 @@ static char* get_user_name_slow(int vmid, int nspid, TRAPS) {
   // short circuit the directory search if the process doesn't even exist.
   if (kill(vmid, 0) == OS_ERR) {
     if (errno == ESRCH) {
-      THROW_MSG_0(vmSymbols::java_lang_IllegalArgumentException(),
-                  "Process not found");
+      THROW_MSG_NULL(vmSymbols::java_lang_IllegalArgumentException(),
+                     "Process not found");
     }
     else /* EPERM */ {
-      THROW_MSG_0(vmSymbols::java_io_IOException(), os::strerror(errno));
+      THROW_MSG_NULL(vmSymbols::java_io_IOException(), os::strerror(errno));
     }
   }
 
@@ -1092,11 +1092,10 @@ static char* mmap_create_shared(size_t size) {
 static void unmap_shared(char* addr, size_t bytes) {
   int res;
   if (MemTracker::enabled()) {
-    // Note: Tracker contains a ThreadCritical.
-    Tracker tkr(Tracker::release);
+    NmtVirtualMemoryLocker ml;
     res = ::munmap(addr, bytes);
     if (res == 0) {
-      tkr.record((address)addr, bytes);
+      MemTracker::record_virtual_memory_release((address)addr, bytes);
     }
   } else {
     res = ::munmap(addr, bytes);
@@ -1336,7 +1335,7 @@ void PerfMemory::attach(int vmid, char** addrp, size_t* sizep, TRAPS) {
 //
 void PerfMemory::detach(char* addr, size_t bytes) {
 
-  assert(addr != 0, "address sanity check");
+  assert(addr != nullptr, "address sanity check");
   assert(bytes > 0, "capacity sanity check");
 
   if (PerfMemory::contains(addr) || PerfMemory::contains(addr + bytes - 1)) {

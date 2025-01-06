@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1997, 2023, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 1997, 2024, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -59,7 +59,6 @@ import java.util.Properties;
 import java.util.StringTokenizer;
 import java.util.jar.JarFile;
 import java.util.zip.CRC32;
-import java.util.zip.ZipEntry;
 import java.util.jar.JarEntry;
 import java.util.jar.Manifest;
 import java.util.jar.Attributes;
@@ -434,40 +433,60 @@ public class URLClassPath {
                 if (url == null)
                     return null;
             }
-            // Skip this URL if it already has a Loader. (Loader
-            // may be null in the case where URL has not been opened
-            // but is referenced by a JAR index.)
+            // Skip this URL if it already has a Loader.
             String urlNoFragString = URLUtil.urlNoFragString(url);
             if (lmap.containsKey(urlNoFragString)) {
                 continue;
             }
             // Otherwise, create a new Loader for the URL.
-            Loader loader;
+            Loader loader = null;
+            final URL[] loaderClassPathURLs;
             try {
                 loader = getLoader(url);
                 // If the loader defines a local class path then add the
                 // URLs as the next URLs to be opened.
-                URL[] urls = loader.getClassPath();
-                if (urls != null) {
-                    push(urls);
-                }
+                loaderClassPathURLs = loader.getClassPath();
             } catch (IOException e) {
-                // Silently ignore for now...
+                // log the error and close the unusable loader (if any)
+                if (DEBUG) {
+                    System.err.println("Failed to construct a loader or construct its" +
+                            " local classpath for " + url + ", cause:" + e);
+                }
+                if (loader != null) {
+                    closeQuietly(loader);
+                }
                 continue;
             } catch (SecurityException se) {
-                // Always silently ignore. The context, if there is one, that
-                // this URLClassPath was given during construction will never
-                // have permission to access the URL.
+                // log the error and close the unusable loader (if any).
+                // The context, if there is one, that this URLClassPath was
+                // given during construction will never have permission to access the URL.
                 if (DEBUG) {
                     System.err.println("Failed to access " + url + ", " + se );
                 }
+                if (loader != null) {
+                    closeQuietly(loader);
+                }
                 continue;
+            }
+            if (loaderClassPathURLs != null) {
+                push(loaderClassPathURLs);
             }
             // Finally, add the Loader to the search path.
             loaders.add(loader);
             lmap.put(urlNoFragString, loader);
         }
         return loaders.get(index);
+    }
+
+    // closes the given loader and ignores any IOException that may occur during close
+    private static void closeQuietly(final Loader loader) {
+        try {
+            loader.close();
+        } catch (IOException ioe) {
+            if (DEBUG) {
+                System.err.println("ignoring exception " + ioe + " while closing loader " + loader);
+            }
+        }
     }
 
     /*
@@ -490,12 +509,12 @@ public class URLClassPath {
                                     // extract the nested URL
                                     @SuppressWarnings("deprecation")
                                     URL nestedUrl = new URL(file.substring(0, file.length() - 2));
-                                    return new JarLoader(nestedUrl, jarHandler, lmap, acc);
+                                    return new JarLoader(nestedUrl, jarHandler, acc);
                                 } else {
                                     return new Loader(url);
                                 }
                             } else {
-                                return new JarLoader(url, jarHandler, lmap, acc);
+                                return new JarLoader(url, jarHandler, acc);
                             }
                         }
                     }, acc);
@@ -709,8 +728,6 @@ public class URLClassPath {
     private static class JarLoader extends Loader {
         private JarFile jar;
         private final URL csu;
-        private URLStreamHandler handler;
-        private final HashMap<String, Loader> lmap;
         @SuppressWarnings("removal")
         private final AccessControlContext acc;
         private boolean closed = false;
@@ -722,14 +739,11 @@ public class URLClassPath {
          * a JAR file.
          */
         private JarLoader(URL url, URLStreamHandler jarHandler,
-                          HashMap<String, Loader> loaderMap,
                           @SuppressWarnings("removal") AccessControlContext acc)
             throws IOException
         {
             super(newURL("jar", "", -1, url + "!/", jarHandler));
             csu = url;
-            handler = jarHandler;
-            lmap = loaderMap;
             this.acc = acc;
 
             ensureOpen();
@@ -751,10 +765,6 @@ public class URLClassPath {
                 ensureOpen();
                 jar.close();
             }
-        }
-
-        JarFile getJarFile () {
-            return jar;
         }
 
         private boolean isOptimizable(URL url) {
@@ -870,33 +880,6 @@ public class URLClassPath {
                     return bytes;
                 }
             };
-        }
-
-
-        /*
-         * Returns true iff at least one resource in the jar file has the same
-         * package name as that of the specified resource name.
-         */
-        boolean validIndex(final String name) {
-            String packageName = name;
-            int pos;
-            if ((pos = name.lastIndexOf('/')) != -1) {
-                packageName = name.substring(0, pos);
-            }
-
-            String entryName;
-            ZipEntry entry;
-            Enumeration<JarEntry> enum_ = jar.entries();
-            while (enum_.hasMoreElements()) {
-                entry = enum_.nextElement();
-                entryName = entry.getName();
-                if ((pos = entryName.lastIndexOf('/')) != -1)
-                    entryName = entryName.substring(0, pos);
-                if (entryName.equals(packageName)) {
-                    return true;
-                }
-            }
-            return false;
         }
 
         /*

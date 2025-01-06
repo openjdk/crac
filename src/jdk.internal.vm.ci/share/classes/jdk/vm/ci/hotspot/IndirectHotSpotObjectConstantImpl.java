@@ -155,21 +155,26 @@ final class IndirectHotSpotObjectConstantImpl extends HotSpotObjectConstantImpl 
 
     /**
      * Sets the referent of {@code handle} to 0 so that it will be reclaimed when calling
-     * {@link CompilerToVM#releaseClearedOopHandles}.
+     * {@link CompilerToVM#releaseClearedOopHandles}. This must be done with a VM call so
+     * that the JNI handle is cleared at a safepoint.
      */
     static void clearHandle(long handle) {
-        UNSAFE.putLong(handle, 0);
+        runtime().compilerToVm.clearOopHandle(handle);
     }
 
     @Override
     public JavaConstant compress() {
-        assert !compressed;
+        if (compressed) {
+            throw new IllegalArgumentException("already compressed: " + this);
+        }
         return new IndirectHotSpotObjectConstantImpl(this, true);
     }
 
     @Override
     public JavaConstant uncompress() {
-        assert compressed;
+        if (!compressed) {
+            throw new IllegalArgumentException("not compressed: " + this);
+        }
         return new IndirectHotSpotObjectConstantImpl(this, false);
     }
 

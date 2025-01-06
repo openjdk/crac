@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1994, 2023, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 1994, 2024, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -35,6 +35,7 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.io.PrintStream;
 import java.lang.annotation.Annotation;
+import java.lang.foreign.MemorySegment;
 import java.lang.invoke.MethodHandle;
 import java.lang.invoke.MethodType;
 import java.lang.invoke.StringConcatFactory;
@@ -56,6 +57,7 @@ import java.security.PrivilegedAction;
 import java.security.ProtectionDomain;
 import java.util.Collections;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Properties;
@@ -63,11 +65,15 @@ import java.util.PropertyPermission;
 import java.util.ResourceBundle;
 import java.util.Set;
 import java.util.WeakHashMap;
-import java.util.concurrent.Callable;
+import java.util.concurrent.Executor;
 import java.util.function.Supplier;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Stream;
 
+import jdk.internal.javac.Restricted;
+import jdk.internal.loader.NativeLibraries;
+import jdk.internal.logger.LoggerFinderLoader.TemporaryLoggerFinder;
+import jdk.internal.misc.Blocker;
 import jdk.internal.misc.CarrierThreadLocal;
 import jdk.internal.misc.Unsafe;
 import jdk.internal.util.StaticProperty;
@@ -77,7 +83,6 @@ import jdk.internal.reflect.CallerSensitive;
 import jdk.internal.reflect.Reflection;
 import jdk.internal.access.JavaLangAccess;
 import jdk.internal.access.SharedSecrets;
-import jdk.internal.javac.PreviewFeature;
 import jdk.internal.logger.LoggerFinderLoader;
 import jdk.internal.logger.LazyLoggers;
 import jdk.internal.logger.LocalizedLoggerWrapper;
@@ -87,7 +92,6 @@ import jdk.internal.vm.Continuation;
 import jdk.internal.vm.ContinuationScope;
 import jdk.internal.vm.StackableScope;
 import jdk.internal.vm.ThreadContainer;
-import jdk.internal.vm.annotation.ForceInline;
 import jdk.internal.vm.annotation.IntrinsicCandidate;
 import jdk.internal.vm.annotation.Stable;
 import sun.nio.fs.DefaultFileSystemProvider;
@@ -143,8 +147,7 @@ public final class System {
      * corresponds to display output or another output destination
      * specified by the host environment or user. The encoding used
      * in the conversion from characters to bytes is equivalent to
-     * {@link Console#charset()} if the {@code Console} exists,
-     * <a href="#stdout.encoding">stdout.encoding</a> otherwise.
+     * {@link ##stdout.encoding stdout.encoding}.
      * <p>
      * For simple stand-alone Java applications, a typical way to write
      * a line of output data is:
@@ -164,8 +167,7 @@ public final class System {
      * @see     java.io.PrintStream#println(long)
      * @see     java.io.PrintStream#println(java.lang.Object)
      * @see     java.io.PrintStream#println(java.lang.String)
-     * @see     Console#charset()
-     * @see     <a href="#stdout.encoding">stdout.encoding</a>
+     * @see     ##stdout.encoding stdout.encoding
      */
     public static final PrintStream out = null;
 
@@ -181,16 +183,15 @@ public final class System {
      * variable {@code out}, has been redirected to a file or other
      * destination that is typically not continuously monitored.
      * The encoding used in the conversion from characters to bytes is
-     * equivalent to {@link Console#charset()} if the {@code Console}
-     * exists, <a href="#stderr.encoding">stderr.encoding</a> otherwise.
+     * equivalent to {@link ##stderr.encoding stderr.encoding}.
      *
-     * @see     Console#charset()
-     * @see     <a href="#stderr.encoding">stderr.encoding</a>
+     * @see     ##stderr.encoding stderr.encoding
      */
     public static final PrintStream err = null;
 
-    // Holder for the initial value of `in`, set within `initPhase1()`.
-    private static InputStream initialIn;
+    // Initial values of System.in and System.err, set in initPhase1().
+    private static @Stable InputStream initialIn;
+    private static @Stable PrintStream initialErr;
 
     // indicates if a security manager is possible
     private static final int NEVER = 1;
@@ -353,10 +354,7 @@ public final class System {
             = Collections.synchronizedMap(new WeakHashMap<>());
     }
 
-    // Remember initial System.err. setSecurityManager() warning goes here
-    private static volatile @Stable PrintStream initialErrStream;
-
-    private static URL codeSource(Class<?> clazz) {
+    static URL codeSource(Class<?> clazz) {
         PrivilegedAction<ProtectionDomain> pa = clazz::getProtectionDomain;
         @SuppressWarnings("removal")
         CodeSource cs = AccessController.doPrivileged(pa).getCodeSource();
@@ -415,7 +413,7 @@ public final class System {
                 } else {
                     source = callerClass.getName() + " (" + url + ")";
                 }
-                initialErrStream.printf("""
+                initialErr.printf("""
                         WARNING: A terminally deprecated method in java.lang.System has been called
                         WARNING: System::setSecurityManager has been called by %s
                         WARNING: Please consider reporting this to the maintainers of %s
@@ -791,7 +789,8 @@ public final class System {
      *     <td>Character encoding name derived from the host environment and/or
      *     the user's settings. Setting this system property has no effect.</td></tr>
      * <tr><th scope="row">{@systemProperty stdout.encoding}</th>
-     *     <td>Character encoding name for {@link System#out System.out}.
+     *     <td>Character encoding name for {@link System#out System.out} and
+     *     {@link System#console() System.console()}.
      *     The Java runtime can be started with the system property set to {@code UTF-8},
      *     starting it with the property set to another value leads to undefined behavior.
      * <tr><th scope="row">{@systemProperty stderr.encoding}</th>
@@ -817,6 +816,10 @@ public final class System {
      * Note that even if the security manager does not permit the
      * {@code getProperties} operation, it may choose to permit the
      * {@link #getProperty(String)} operation.
+     * <p>
+     * Additional locale-related system properties defined by the
+     * {@link Locale##default_locale Default Locale} section in the {@code Locale}
+     * class description may also be obtained with this method.
      *
      * @apiNote
      * <strong>Changing a standard system property may have unpredictable results
@@ -827,9 +830,9 @@ public final class System {
      * {@link #clearProperty(String)} may not have the desired effect.
      *
      * @crac System properties can be updated on restore from a checkpoint.
-     * The application can {@link javax.crac.Context#register(javax.crac.Resource) register}
+     * The application can {@link jdk.crac/jdk.crac.Context#register(jdk.crac.Resource) register}
      * a resource and reload system properties in the
-     * {@link javax.crac.Resource#afterRestore(javax.crac.Context) afterRestore method},
+     * {@link jdk.crac/jdk.crac.Resource#afterRestore(jdk.crac.Context) afterRestore method},
      * updating the application.
      *
      * @implNote
@@ -871,6 +874,7 @@ public final class System {
      * @see        java.lang.SecurityManager#checkPropertiesAccess()
      * @see        java.util.Properties
      */
+    @SuppressWarnings("doclint:reference") // cross-module links
     public static Properties getProperties() {
         @SuppressWarnings("removal")
         SecurityManager sm = getSecurityManager();
@@ -1152,9 +1156,9 @@ public final class System {
      * is likely to be true on Microsoft Windows.
      *
      * @crac Environment variables can be updated on restore from a checkpoint.
-     * The application can {@link javax.crac.Context#register(javax.crac.Resource) register}
+     * The application can {@link jdk.crac/jdk.crac.Context#register(jdk.crac.Resource) register}
      * a resource and reload environment variables in the
-     * {@link javax.crac.Resource#afterRestore(javax.crac.Context) afterRestore method},
+     * {@link jdk.crac/jdk.crac.Resource#afterRestore(jdk.crac.Context) afterRestore method},
      * updating the application.
      *
      * @param  name the name of the environment variable
@@ -1169,6 +1173,7 @@ public final class System {
      * @see    #getenv()
      * @see    ProcessBuilder#environment()
      */
+    @SuppressWarnings("doclint:reference") // cross-module links
     public static String getenv(String name) {
         @SuppressWarnings("removal")
         SecurityManager sm = getSecurityManager();
@@ -1211,9 +1216,9 @@ public final class System {
      * are generally preferred over environment variables.
      *
      * @crac Environment variables can be updated on restore from a checkpoint.
-     * The application can {@link javax.crac.Context#register(javax.crac.Resource) register}
+     * The application can {@link jdk.crac/jdk.crac.Context#register(jdk.crac.Resource) register}
      * a resource and reload the environment variables in the
-     * {@link javax.crac.Resource#afterRestore(javax.crac.Context) afterRestore method},
+     * {@link jdk.crac/jdk.crac.Resource#afterRestore(jdk.crac.Context) afterRestore method},
      * updating the application.
      *
      * @return the environment as a map of variable names to values
@@ -1225,6 +1230,7 @@ public final class System {
      * @see    ProcessBuilder#environment()
      * @since  1.5
      */
+    @SuppressWarnings("doclint:reference") // cross-module links
     public static java.util.Map<String,String> getenv() {
         @SuppressWarnings("removal")
         SecurityManager sm = getSecurityManager();
@@ -1795,13 +1801,16 @@ public final class System {
             // We do not need to synchronize: LoggerFinderLoader will
             // always return the same instance, so if we don't have it,
             // just fetch it again.
-            if (service == null) {
+            LoggerFinder finder = service;
+            if (finder == null) {
                 PrivilegedAction<LoggerFinder> pa =
                         () -> LoggerFinderLoader.getLoggerFinder();
-                service = AccessController.doPrivileged(pa, null,
+                finder = AccessController.doPrivileged(pa, null,
                         LOGGERFINDER_PERMISSION);
+                if (finder instanceof TemporaryLoggerFinder) return finder;
+                service = finder;
             }
-            return service;
+            return finder;
         }
 
     }
@@ -2040,14 +2049,19 @@ public final class System {
      *             linked with the VM, or the library cannot be mapped to
      *             a native library image by the host system.
      * @throws     NullPointerException if {@code filename} is {@code null}
+     * @throws     IllegalCallerException if the caller is in a module that
+     *             does not have native access enabled.
      *
      * @spec jni/index.html Java Native Interface Specification
      * @see        java.lang.Runtime#load(java.lang.String)
      * @see        java.lang.SecurityManager#checkLink(java.lang.String)
      */
     @CallerSensitive
+    @Restricted
     public static void load(String filename) {
-        Runtime.getRuntime().load0(Reflection.getCallerClass(), filename);
+        Class<?> caller = Reflection.getCallerClass();
+        Reflection.ensureNativeAccess(caller, System.class, "load", false);
+        Runtime.getRuntime().load0(caller, filename);
     }
 
     /**
@@ -2078,14 +2092,19 @@ public final class System {
      *             linked with the VM,  or the library cannot be mapped to a
      *             native library image by the host system.
      * @throws     NullPointerException if {@code libname} is {@code null}
+     * @throws     IllegalCallerException if the caller is in a module that
+     *             does not have native access enabled.
      *
      * @spec jni/index.html Java Native Interface Specification
      * @see        java.lang.Runtime#loadLibrary(java.lang.String)
      * @see        java.lang.SecurityManager#checkLink(java.lang.String)
      */
     @CallerSensitive
+    @Restricted
     public static void loadLibrary(String libname) {
-        Runtime.getRuntime().loadLibrary0(Reflection.getCallerClass(), libname);
+        Class<?> caller = Reflection.getCallerClass();
+        Reflection.ensureNativeAccess(caller, System.class, "loadLibrary", false);
+        Runtime.getRuntime().loadLibrary0(caller, libname);
     }
 
     /**
@@ -2211,16 +2230,17 @@ public final class System {
 
         lineSeparator = props.getProperty("line.separator");
 
-        FileInputStream fdIn = new FileInputStream(FileDescriptor.in);
-        FileOutputStream fdOut = new FileOutputStream(FileDescriptor.out);
-        FileOutputStream fdErr = new FileOutputStream(FileDescriptor.err);
+        FileInputStream fdIn = new In(FileDescriptor.in);
+        FileOutputStream fdOut = new Out(FileDescriptor.out);
+        FileOutputStream fdErr = new Out(FileDescriptor.err);
         initialIn = new BufferedInputStream(fdIn);
         setIn0(initialIn);
         // stdout/err.encoding are set when the VM is associated with the terminal,
         // thus they are equivalent to Console.charset(), otherwise the encodings
         // of those properties default to native.encoding
         setOut0(newPrintStream(fdOut, props.getProperty("stdout.encoding")));
-        setErr0(newPrintStream(fdErr, props.getProperty("stderr.encoding")));
+        initialErr = newPrintStream(fdErr, props.getProperty("stderr.encoding"));
+        setErr0(initialErr);
 
         // Setup Java signal handlers for HUP, TERM, and INT (where available).
         Terminator.setup();
@@ -2236,6 +2256,84 @@ public final class System {
 
         // system properties, java.lang and other core classes are now initialized
         VM.initLevel(1);
+    }
+
+    /**
+     * System.in.
+     */
+    private static class In extends FileInputStream {
+        In(FileDescriptor fd) {
+            super(fd);
+        }
+
+        @Override
+        public int read() throws IOException {
+            boolean attempted = Blocker.begin();
+            try {
+                return super.read();
+            } finally {
+                Blocker.end(attempted);
+            }
+        }
+
+        @Override
+        public int read(byte[] b) throws IOException {
+            boolean attempted = Blocker.begin();
+            try {
+                return super.read(b);
+            } finally {
+                Blocker.end(attempted);
+            }
+        }
+
+        @Override
+        public int read(byte[] b, int off, int len) throws IOException {
+            boolean attempted = Blocker.begin();
+            try {
+                return super.read(b, off, len);
+            } finally {
+                Blocker.end(attempted);
+            }
+        }
+    }
+
+    /**
+     * System.out/System.err wrap this output stream.
+     */
+    private static class Out extends FileOutputStream {
+        Out(FileDescriptor fd) {
+            super(fd);
+        }
+
+        @Override
+        public void write(int b) throws IOException {
+            boolean attempted = Blocker.begin();
+            try {
+                super.write(b);
+            } finally {
+                Blocker.end(attempted);
+            }
+        }
+
+        @Override
+        public void write(byte[] b) throws IOException {
+            boolean attempted = Blocker.begin();
+            try {
+                super.write(b);
+            } finally {
+                Blocker.end(attempted);
+            }
+        }
+
+        @Override
+        public void write(byte[] b, int off, int len) throws IOException {
+            boolean attempted = Blocker.begin();
+            try {
+                super.write(b, off, len);
+            } finally {
+                Blocker.end(attempted);
+            }
+        }
     }
 
     // @see #initPhase2()
@@ -2349,8 +2447,6 @@ public final class System {
                     notSupportedJnuEncoding);
         }
 
-        initialErrStream = System.err;
-
         // initializing the system class loader
         VM.initLevel(3);
 
@@ -2369,6 +2465,9 @@ public final class System {
         SharedSecrets.setJavaLangAccess(new JavaLangAccess() {
             public List<Method> getDeclaredPublicMethods(Class<?> klass, String name, Class<?>... parameterTypes) {
                 return klass.getDeclaredPublicMethods(name, parameterTypes);
+            }
+            public Method findMethod(Class<?> klass, boolean publicOnly, String name, Class<?>... parameterTypes) {
+                return klass.findMethod(publicOnly, name, parameterTypes);
             }
             public jdk.internal.reflect.ConstantPool getConstantPool(Class<?> klass) {
                 return klass.getConstantPool();
@@ -2396,7 +2495,7 @@ public final class System {
                 return klass.getEnumConstantsShared();
             }
             public void blockedOn(Interruptible b) {
-                Thread.blockedOn(b);
+                Thread.currentThread().blockedOn(b);
             }
             public void registerShutdownHook(int slot, boolean registerShutdownInProgress, Runnable hook) {
                 Shutdown.add(slot, registerShutdownInProgress, hook);
@@ -2476,11 +2575,14 @@ public final class System {
             public Module addEnableNativeAccess(Module m) {
                 return m.implAddEnableNativeAccess();
             }
+            public boolean addEnableNativeAccess(ModuleLayer layer, String name) {
+                return layer.addEnableNativeAccess(name);
+            }
             public void addEnableNativeAccessToAllUnnamed() {
                 Module.implAddEnableNativeAccessToAllUnnamed();
             }
-            public void ensureNativeAccess(Module m, Class<?> owner, String methodName) {
-                m.ensureNativeAccess(owner, methodName);
+            public void ensureNativeAccess(Module m, Class<?> owner, String methodName, Class<?> currentClass, boolean jni) {
+                m.ensureNativeAccess(owner, methodName, currentClass, jni);
             }
             public ServicesCatalog getServicesCatalog(ModuleLayer layer) {
                 return layer.getServicesCatalog();
@@ -2498,11 +2600,17 @@ public final class System {
             public int countPositives(byte[] bytes, int offset, int length) {
                 return StringCoding.countPositives(bytes, offset, length);
             }
+            public int countNonZeroAscii(String s) {
+                return StringCoding.countNonZeroAscii(s);
+            }
             public String newStringNoRepl(byte[] bytes, Charset cs) throws CharacterCodingException  {
                 return String.newStringNoRepl(bytes, cs);
             }
             public char getUTF16Char(byte[] bytes, int index) {
                 return StringUTF16.getChar(bytes, index);
+            }
+            public void putCharUTF16(byte[] bytes, int index, int ch) {
+                StringUTF16.putChar(bytes, index, ch);
             }
             public byte[] getBytesNoRepl(String s, Charset cs) throws CharacterCodingException {
                 return String.getBytesNoRepl(s, cs);
@@ -2532,6 +2640,10 @@ public final class System {
                 return initialIn;
             }
 
+            public PrintStream initialSystemErr() {
+                return initialErr;
+            }
+
             public void setCause(Throwable t, Throwable cause) {
                 t.setCause(cause);
             }
@@ -2552,25 +2664,36 @@ public final class System {
                 return StringConcatHelper.mix(lengthCoder, constant);
             }
 
-            @PreviewFeature(feature=PreviewFeature.Feature.STRING_TEMPLATES)
-            public long stringConcatCoder(char value) {
-                return StringConcatHelper.coder(value);
+            public long stringConcatMix(long lengthCoder, char value) {
+                return StringConcatHelper.mix(lengthCoder, value);
             }
 
-            @PreviewFeature(feature=PreviewFeature.Feature.STRING_TEMPLATES)
-            public long stringBuilderConcatMix(long lengthCoder,
-                                               StringBuilder sb) {
-                return sb.mix(lengthCoder);
+            public Object stringConcat1(String[] constants) {
+                return new StringConcatHelper.Concat1(constants);
             }
 
-            @PreviewFeature(feature=PreviewFeature.Feature.STRING_TEMPLATES)
-            public long stringBuilderConcatPrepend(long lengthCoder, byte[] buf,
-                                                   StringBuilder sb) {
-                return sb.prepend(lengthCoder, buf);
+            public byte stringInitCoder() {
+                return String.COMPACT_STRINGS ? String.LATIN1 : String.UTF16;
+            }
+
+            public byte stringCoder(String str) {
+                return str.coder();
+            }
+
+            public int getCharsLatin1(long i, int index, byte[] buf) {
+                return StringLatin1.getChars(i, index, buf);
+            }
+
+            public int getCharsUTF16(long i, int index, byte[] buf) {
+                return StringUTF16.getChars(i, index, buf);
             }
 
             public String join(String prefix, String suffix, String delimiter, String[] elements, int size) {
                 return String.join(prefix, suffix, delimiter, elements, size);
+            }
+
+            public String concat(String prefix, Object value, String suffix) {
+                return StringConcatHelper.concat(prefix, value, suffix);
             }
 
             public Object classData(Class<?> c) {
@@ -2578,8 +2701,8 @@ public final class System {
             }
 
             @Override
-            public long findNative(ClassLoader loader, String entry) {
-                return ClassLoader.findNative(loader, entry);
+            public NativeLibraries nativeLibrariesFor(ClassLoader loader) {
+                return ClassLoader.nativeLibrariesFor(loader);
             }
 
             @Override
@@ -2609,14 +2732,6 @@ public final class System {
 
             public Thread currentCarrierThread() {
                 return Thread.currentCarrierThread();
-            }
-
-            public <V> V executeOnCarrierThread(Callable<V> task) throws Exception {
-                if (Thread.currentThread() instanceof VirtualThread vthread) {
-                    return vthread.executeOnCarrierThread(task);
-                } else {
-                    return task.call();
-                }
             }
 
             public <T> T getCarrierThreadLocal(CarrierThreadLocal<T> local) {
@@ -2685,6 +2800,10 @@ public final class System {
                 }
             }
 
+            public Executor virtualThreadDefaultScheduler() {
+                return VirtualThread.defaultScheduler();
+            }
+
             public StackWalker newStackWalkerInstance(Set<StackWalker.Option> options,
                                                       ContinuationScope contScope,
                                                       Continuation continuation) {
@@ -2692,7 +2811,22 @@ public final class System {
             }
 
             public String getLoaderNameID(ClassLoader loader) {
-                return loader.nameAndId();
+                return loader != null ? loader.nameAndId() : "null";
+            }
+
+            @Override
+            public void copyToSegmentRaw(String string, MemorySegment segment, long offset) {
+                string.copyToSegmentRaw(segment, offset);
+            }
+
+            @Override
+            public boolean bytesCompatible(String string, Charset charset) {
+                return string.bytesCompatible(charset);
+            }
+
+            @Override
+            public boolean allowSecurityManager() {
+                return System.allowSecurityManager();
             }
         });
     }

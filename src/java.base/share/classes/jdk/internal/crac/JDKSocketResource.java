@@ -1,6 +1,6 @@
 package jdk.internal.crac;
 
-import jdk.crac.impl.CheckpointOpenSocketException;
+import jdk.internal.crac.mirror.impl.CheckpointOpenSocketException;
 
 import java.io.IOException;
 import java.net.*;

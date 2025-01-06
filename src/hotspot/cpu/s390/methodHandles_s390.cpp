@@ -180,8 +180,8 @@ void MethodHandles::jump_from_method_handle(MacroAssembler* _masm, Register meth
   __ z_br(target);
 
   __ bind(L_no_such_method);
-  assert(StubRoutines::throw_AbstractMethodError_entry() != nullptr, "not yet generated!");
-  __ load_const_optimized(target, StubRoutines::throw_AbstractMethodError_entry());
+  assert(SharedRuntime::throw_AbstractMethodError_entry() != nullptr, "not yet generated!");
+  __ load_const_optimized(target, SharedRuntime::throw_AbstractMethodError_entry());
   __ z_br(target);
 }
 
@@ -349,7 +349,16 @@ address MethodHandles::generate_method_handle_interpreter_entry(MacroAssembler* 
 
 void MethodHandles::jump_to_native_invoker(MacroAssembler* _masm, Register nep_reg, Register temp_target) {
   BLOCK_COMMENT("jump_to_native_invoker {");
-  __ should_not_reach_here();
+  assert(nep_reg != noreg, "required register");
+
+  // Load the invoker, as NEP -> .invoker
+  __ verify_oop(nep_reg);
+
+  __ z_lg(temp_target, Address(nep_reg,
+        NONZERO(jdk_internal_foreign_abi_NativeEntryPoint::downcall_stub_address_offset_in_bytes())));
+
+  __ z_br(temp_target);
+
   BLOCK_COMMENT("} jump_to_native_invoker");
 }
 
@@ -534,7 +543,7 @@ void MethodHandles::generate_method_handle_dispatch(MacroAssembler* _masm,
       __ bind(L_no_such_interface);
 
       // Throw exception.
-      __ load_const_optimized(Z_R1, StubRoutines::throw_IncompatibleClassChangeError_entry());
+      __ load_const_optimized(Z_R1, SharedRuntime::throw_IncompatibleClassChangeError_entry());
       __ z_br(Z_R1);
       break;
     }

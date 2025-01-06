@@ -1,7 +1,7 @@
 package jdk.internal.crac;
 
-import jdk.crac.Context;
-import jdk.crac.Resource;
+import jdk.internal.crac.mirror.Context;
+import jdk.internal.crac.mirror.Resource;
 import sun.security.action.GetBooleanAction;
 
 import java.util.function.Supplier;
@@ -27,6 +27,7 @@ public abstract class JDKFdResource implements JDKResource {
     static volatile boolean stacktraceHintPrinted = false;
     static volatile boolean warningSuppressionHintPrinted = false;
 
+    @SuppressWarnings("this-escape")
     public JDKFdResource() {
         stackTraceHolder = COLLECT_FD_STACKTRACES ?
             // About the timestamp: we cannot format it nicely since this

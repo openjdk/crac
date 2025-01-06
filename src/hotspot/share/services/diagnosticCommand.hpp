@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2011, 2023, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2011, 2024, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -577,9 +577,12 @@ public:
 };
 
 #ifdef LINUX
-class PerfMapDCmd : public DCmd {
+class PerfMapDCmd : public DCmdWithParser {
+protected:
+  DCmdArgument<char*> _filename;
 public:
-  PerfMapDCmd(outputStream* output, bool heap) : DCmd(output, heap) {}
+  static int num_arguments() { return 1; }
+  PerfMapDCmd(outputStream* output, bool heap);
   static const char* name() {
     return "Compiler.perfmap";
   }
@@ -883,27 +886,6 @@ public:
   virtual void execute(DCmdSource source, TRAPS);
 };
 
-#if INCLUDE_JVMTI
-class DebugOnCmdStartDCmd : public DCmd {
-public:
-  DebugOnCmdStartDCmd(outputStream* output, bool heap) : DCmd(output, heap) {}
-  static const char* name() {
-    return "VM.start_java_debugging";
-  }
-  static const char* description() {
-    return "Starts up the Java debugging if the jdwp agentlib was enabled with the option onjcmd=y.";
-  }
-  static const char* impact() {
-    return "High: Switches the VM into Java debug mode.";
-  }
-  static const JavaPermission permission() {
-    JavaPermission p = { "java.lang.management.ManagementPermission", "control", nullptr };
-    return p;
-  }
-  virtual void execute(DCmdSource source, TRAPS);
-};
-#endif // INCLUDE_JVMTI
-
 class EventLogDCmd : public DCmdWithParser {
 protected:
   DCmdArgument<char*> _log;
@@ -953,6 +935,68 @@ public:
   }
   virtual void execute(DCmdSource source, TRAPS);
 };
+
+class CompilationMemoryStatisticDCmd: public DCmdWithParser {
+protected:
+  DCmdArgument<bool> _human_readable;
+  DCmdArgument<MemorySizeArgument> _minsize;
+public:
+  static int num_arguments() { return 2; }
+  CompilationMemoryStatisticDCmd(outputStream* output, bool heap);
+  static const char* name() {
+    return "Compiler.memory";
+  }
+  static const char* description() {
+    return "Print compilation footprint";
+  }
+  static const char* impact() {
+    return "Medium: Pause time depends on number of compiled methods";
+  }
+  static const JavaPermission permission() {
+    JavaPermission p = {"java.lang.management.ManagementPermission",
+                        "monitor", nullptr};
+    return p;
+  }
+  virtual void execute(DCmdSource source, TRAPS);
+};
+
+#if defined(LINUX) || defined(_WIN64)
+
+class SystemMapDCmd : public DCmd {
+public:
+  SystemMapDCmd(outputStream* output, bool heap);
+  static const char* name() { return "System.map"; }
+  static const char* description() {
+    return "Prints an annotated process memory map of the VM process (linux and Windows only).";
+  }
+  static const char* impact() { return "Medium; can be high for very large java heaps."; }
+  static const JavaPermission permission() {
+    JavaPermission p = {"java.lang.management.ManagementPermission",
+                        "control", nullptr};
+    return p;
+  }
+  virtual void execute(DCmdSource source, TRAPS);
+};
+
+class SystemDumpMapDCmd : public DCmdWithParser {
+  DCmdArgument<char*> _filename;
+public:
+  static int num_arguments() { return 1; }
+  SystemDumpMapDCmd(outputStream* output, bool heap);
+  static const char* name() { return "System.dump_map"; }
+  static const char* description() {
+    return "Dumps an annotated process memory map to an output file (linux and Windows only).";
+  }
+  static const char* impact() { return "Medium; can be high for very large java heaps."; }
+  static const JavaPermission permission() {
+    JavaPermission p = {"java.lang.management.ManagementPermission",
+                        "control", nullptr};
+    return p;
+  }
+  virtual void execute(DCmdSource source, TRAPS);
+};
+
+#endif // LINUX or WINDOWS
 
 class CheckpointDCmd : public DCmd {
 public:

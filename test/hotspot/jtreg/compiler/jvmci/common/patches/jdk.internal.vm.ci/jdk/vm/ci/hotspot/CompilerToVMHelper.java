@@ -84,7 +84,7 @@ public class CompilerToVMHelper {
     }
 
     public static HotSpotResolvedObjectType lookupType(String name,
-            Class<?> accessClass, boolean resolve) throws ClassNotFoundException {
+            Class<?> accessClass, boolean resolve) throws NoClassDefFoundError {
         if (accessClass == null) {
             throw new NullPointerException();
         }
@@ -94,11 +94,7 @@ public class CompilerToVMHelper {
 
     public static HotSpotResolvedObjectType lookupTypeHelper(String name,
             Class<?> accessingClass, boolean resolve) {
-        try {
-            return lookupType(name, accessingClass, resolve);
-        } catch (ClassNotFoundException e) {
-            throw (NoClassDefFoundError) new NoClassDefFoundError().initCause(e);
-        }
+        return lookupType(name, accessingClass, resolve);
     }
 
     public static Object lookupConstantInPool(ConstantPool constantPool, int cpi, boolean resolve) {
@@ -147,14 +143,9 @@ public class CompilerToVMHelper {
         return CTVM.resolveFieldInPool((HotSpotConstantPool) constantPool, cpi, (HotSpotResolvedJavaMethodImpl) method, opcode, info);
     }
 
-    public static int constantPoolRemapInstructionOperandFromCache(
-            ConstantPool constantPool, int cpci) {
-        return CTVM.constantPoolRemapInstructionOperandFromCache((HotSpotConstantPool) constantPool, cpci);
-    }
-
     public static Object lookupAppendixInPool(
-            ConstantPool constantPool, int cpi) {
-        return CTVM.lookupAppendixInPool((HotSpotConstantPool) constantPool, cpi);
+            ConstantPool constantPool, int cpi, int opcode) {
+        return CTVM.lookupAppendixInPool((HotSpotConstantPool) constantPool, cpi, opcode);
     }
 
     public static int installCode(TargetDescription target,

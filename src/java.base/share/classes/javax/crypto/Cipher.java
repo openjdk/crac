@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1997, 2022, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 1997, 2024, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -164,6 +164,10 @@ import sun.security.util.KnownOIDs;
  * Consult the release documentation for your implementation to see if any
  * other transformations are supported.
  *
+ * @spec https://www.rfc-editor.org/info/rfc5116
+ *      RFC 5116: An Interface and Algorithms for Authenticated Encryption
+ * @spec https://www.rfc-editor.org/info/rfc7539
+ *      RFC 7539: ChaCha20 and Poly1305 for IETF Protocols
  * @author Jan Luehe
  * @see KeyGenerator
  * @see SecretKey
@@ -539,10 +543,9 @@ public class Cipher {
         for (Transform transform : transforms) {
             cipherServices.add(new ServiceId("Cipher", transform.transform));
         }
-        List<Service> services = GetInstance.getServices(cipherServices);
         // make sure there is at least one service from a signed provider
         // and that it can use the specified mode and padding
-        Iterator<Service> t = services.iterator();
+        Iterator<Service> t = GetInstance.getServices(cipherServices);
         Exception failure = null;
         while (t.hasNext()) {
             Service s = t.next();
@@ -1815,8 +1818,8 @@ public class Cipher {
 
     /**
      * Ensures that {@code Cipher} object is in a valid state for update() and
-     * doFinal() calls - should be initialized and in ENCRYPT_MODE or
-     * DECRYPT_MODE.
+     * doFinal() calls - should be initialized and in {@code ENCRYPT_MODE} or
+     * {@code DECRYPT_MODE}.
      * @throws IllegalStateException if this {@code Cipher} object is not in
      * valid state
      */
@@ -1851,7 +1854,8 @@ public class Cipher {
      * new block
      *
      * @throws IllegalStateException if this {@code Cipher} object is in a
-     * wrong state (e.g., has not been initialized)
+     * wrong state (e.g., has not been initialized, or is not
+     * in {@code ENCRYPT_MODE} or {@code DECRYPT_MODE})
      */
     public final byte[] update(byte[] input) {
         checkCipherState();
@@ -1890,7 +1894,8 @@ public class Cipher {
      * new block.
      *
      * @throws IllegalStateException if this {@code Cipher} object
-     * is in a wrong state (e.g., has not been initialized)
+     * is in a wrong state (e.g., has not been initialized, or is not
+     * in {@code ENCRYPT_MODE} or {@code DECRYPT_MODE})
      */
     public final byte[] update(byte[] input, int inputOffset, int inputLen) {
         checkCipherState();
@@ -1940,7 +1945,8 @@ public class Cipher {
      * @return the number of bytes stored in {@code output}
      *
      * @throws IllegalStateException if this {@code Cipher} object
-     * is in a wrong state (e.g., has not been initialized)
+     * is in a wrong state (e.g., has not been initialized, or is not
+     * in {@code ENCRYPT_MODE} or {@code DECRYPT_MODE})
      * @throws ShortBufferException if the given output buffer is too small
      * to hold the result
      */
@@ -1998,7 +2004,8 @@ public class Cipher {
      * @return the number of bytes stored in {@code output}
      *
      * @throws IllegalStateException if this {@code Cipher} object
-     * is in a wrong state (e.g., has not been initialized)
+     * is in a wrong state (e.g., has not been initialized, or is not
+     * in {@code ENCRYPT_MODE} or {@code DECRYPT_MODE})
      * @throws ShortBufferException if the given output buffer is too small
      * to hold the result
      */
@@ -2052,7 +2059,8 @@ public class Cipher {
      * @return the number of bytes stored in {@code output}
      *
      * @throws IllegalStateException if this {@code Cipher} object
-     * is in a wrong state (e.g., has not been initialized)
+     * is in a wrong state (e.g., has not been initialized, or is not
+     * in {@code ENCRYPT_MODE} or {@code DECRYPT_MODE})
      * @throws IllegalArgumentException if input and output are the
      *   same object
      * @throws ReadOnlyBufferException if the output buffer is read-only
@@ -2104,7 +2112,8 @@ public class Cipher {
      * @return the new buffer with the result
      *
      * @throws IllegalStateException if this {@code Cipher} object
-     * is in a wrong state (e.g., has not been initialized)
+     * is in a wrong state (e.g., has not been initialized, or is not
+     * in {@code ENCRYPT_MODE} or {@code DECRYPT_MODE})
      * @throws IllegalBlockSizeException if this cipher is a block cipher,
      * no padding has been requested (only in encryption mode), and the total
      * input length of the data processed by this cipher is not a multiple of
@@ -2161,7 +2170,8 @@ public class Cipher {
      * @return the number of bytes stored in {@code output}
      *
      * @throws IllegalStateException if this {@code Cipher} object
-     *  is in a wrong state (e.g., has not been initialized)
+     * is in a wrong state (e.g., has not been initialized, or is not
+     * in {@code ENCRYPT_MODE} or {@code DECRYPT_MODE})
      * @throws IllegalBlockSizeException if this cipher is a block cipher,
      * no padding has been requested (only in encryption mode), and the total
      * input length of the data processed by this cipher is not a multiple of
@@ -2218,7 +2228,8 @@ public class Cipher {
      * @return the new buffer with the result
      *
      * @throws IllegalStateException if this {@code Cipher} object
-     * is in a wrong state (e.g., has not been initialized)
+     * is in a wrong state (e.g., has not been initialized, or is not
+     * in {@code ENCRYPT_MODE} or {@code DECRYPT_MODE})
      * @throws IllegalBlockSizeException if this cipher is a block cipher,
      * no padding has been requested (only in encryption mode), and the total
      * input length of the data processed by this cipher is not a multiple of
@@ -2276,7 +2287,8 @@ public class Cipher {
      * @return the new buffer with the result
      *
      * @throws IllegalStateException if this {@code Cipher} object
-     * is in a wrong state (e.g., has not been initialized)
+     * is in a wrong state (e.g., has not been initialized, or is not
+     * in {@code ENCRYPT_MODE} or {@code DECRYPT_MODE})
      * @throws IllegalBlockSizeException if this cipher is a block cipher,
      * no padding has been requested (only in encryption mode), and the total
      * input length of the data processed by this cipher is not a multiple of
@@ -2347,7 +2359,8 @@ public class Cipher {
      * @return the number of bytes stored in {@code output}
      *
      * @throws IllegalStateException if this {@code Cipher} object
-     * is in a wrong state (e.g., has not been initialized)
+     * is in a wrong state (e.g., has not been initialized, or is not
+     * in  or {@code ENCRYPT_MODE} or {@code DECRYPT_MODE})
      * @throws IllegalBlockSizeException if this cipher is a block cipher,
      * no padding has been requested (only in encryption mode), and the total
      * input length of the data processed by this cipher is not a multiple of
@@ -2427,7 +2440,8 @@ public class Cipher {
      * @return the number of bytes stored in {@code output}
      *
      * @throws IllegalStateException if this {@code Cipher} object
-     * is in a wrong state (e.g., has not been initialized)
+     * is in a wrong state (e.g., has not been initialized, or is not
+     * in {@code ENCRYPT_MODE} or {@code DECRYPT_MODE})
      * @throws IllegalBlockSizeException if this cipher is a block cipher,
      * no padding has been requested (only in encryption mode), and the total
      * input length of the data processed by this cipher is not a multiple of
@@ -2503,7 +2517,8 @@ public class Cipher {
      * @return the number of bytes stored in {@code output}
      *
      * @throws IllegalStateException if this {@code Cipher} object
-     * is in a wrong state (e.g., has not been initialized)
+     * is in a wrong state (e.g., has not been initialized, or is not
+     * in {@code ENCRYPT_MODE} or {@code DECRYPT_MODE})
      * @throws IllegalArgumentException if input and output are the
      *   same object
      * @throws ReadOnlyBufferException if the output buffer is read-only
@@ -2551,7 +2566,7 @@ public class Cipher {
      * @return the wrapped key
      *
      * @throws IllegalStateException if this {@code Cipher} object is in a wrong
-     * state (e.g., has not been initialized)
+     * state (e.g., has not been initialized, or is not in {@code WRAP_MODE})
      *
      * @throws IllegalBlockSizeException if this cipher is a block
      * cipher, no padding has been requested, and the length of the
@@ -2595,8 +2610,8 @@ public class Cipher {
      *
      * @return the unwrapped key
      *
-     * @throws IllegalStateException if this {@code Cipher} object
-     *  is in a wrong state (e.g., has not been initialized)
+     * @throws IllegalStateException if this {@code Cipher} object is in a wrong
+     * state (e.g., has not been initialized, or is not in {@code UNWRAP_MODE})
      *
      * @throws NoSuchAlgorithmException if no installed providers
      * can create keys of type {@code wrappedKeyType} for the
@@ -2732,10 +2747,11 @@ public class Cipher {
      * @throws IllegalArgumentException if the {@code src}
      * byte array is {@code null}
      * @throws IllegalStateException if this {@code Cipher} object
-     *  is in a wrong state (e.g., has not been initialized),
-     * does not accept AAD, or if operating in either GCM or CCM mode and
-     * one of the {@code update} methods has already been called for the active
-     * encryption/decryption operation
+     * is in a wrong state (e.g., has not been initialized, or is not in
+     * {@code ENCRYPT_MODE} or {@code DECRYPT_MODE}), does not accept AAD,
+     * or if operating in either GCM or CCM mode and one of the {@code update}
+     * methods has already been called for the active encryption/decryption
+     * operation
      * @throws UnsupportedOperationException if the corresponding method
      * in the {@code CipherSpi} has not been overridden by an
      * implementation
@@ -2770,10 +2786,11 @@ public class Cipher {
      * {@code len} is greater than the length of the
      * {@code src} byte array
      * @throws IllegalStateException if this {@code Cipher} object
-     * is in a wrong state (e.g., has not been initialized),
-     * does not accept AAD, or if operating in either GCM or CCM mode and
-     * one of the {@code update} methods has already been called for the active
-     * encryption/decryption operation
+     * is in a wrong state (e.g., has not been initialized, or is not in
+     * {@code ENCRYPT_MODE} or {@code DECRYPT_MODE}), does not accept AAD,
+     * or if operating in either GCM or CCM mode and one of the {@code update}
+     * methods has already been called for the active encryption/decryption
+     * operation
      * @throws UnsupportedOperationException if the corresponding method
      * in the {@code CipherSpi} has not been overridden by an
      * implementation
@@ -2816,10 +2833,11 @@ public class Cipher {
      * @throws IllegalArgumentException if the {@code src ByteBuffer}
      * is {@code null}
      * @throws IllegalStateException if this {@code Cipher} object
-     * is in a wrong state (e.g., has not been initialized),
-     * does not accept AAD, or if operating in either GCM or CCM mode and
-     * one of the {@code update} methods has already been called for the active
-     * encryption/decryption operation
+     * is in a wrong state (e.g., has not been initialized, or is not in
+     * {@code ENCRYPT_MODE} or {@code DECRYPT_MODE}), does not accept AAD,
+     * or if operating in either GCM or CCM mode and one of the {@code update}
+     * methods has already been called for the active encryption/decryption
+     * operation
      * @throws UnsupportedOperationException if the corresponding method
      * in the {@code CipherSpi} has not been overridden by an
      * implementation

@@ -75,7 +75,7 @@ public class DryRunTest implements CracTest {
                 String name = e.getClass().getName();
                 switch (name) {
                     case "java.lang.RuntimeException":                exceptions |= 0x1; break;
-                    case "jdk.crac.impl.CheckpointOpenFileException": exceptions |= 0x2; break;
+                    case "jdk.internal.crac.mirror.impl.CheckpointOpenFileException": exceptions |= 0x2; break;
                 }
             }
         }

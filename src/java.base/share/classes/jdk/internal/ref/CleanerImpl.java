@@ -32,8 +32,8 @@ import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Function;
 
-import jdk.crac.Context;
-import jdk.crac.Resource;
+import jdk.internal.crac.mirror.Context;
+import jdk.internal.crac.mirror.Resource;
 import jdk.internal.access.JavaLangRefAccess;
 import jdk.internal.access.SharedSecrets;
 import jdk.internal.crac.Core;

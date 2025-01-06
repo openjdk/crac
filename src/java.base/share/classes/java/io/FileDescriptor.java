@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2003, 2023, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2003, 2024, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -29,8 +29,8 @@ import java.util.*;
 import java.util.function.Supplier;
 import java.util.regex.Pattern;
 
-import jdk.crac.Context;
-import jdk.crac.impl.CheckpointOpenResourceException;
+import jdk.internal.crac.mirror.Context;
+import jdk.internal.crac.mirror.impl.CheckpointOpenResourceException;
 import jdk.internal.access.JavaIOFileDescriptorAccess;
 import jdk.internal.access.SharedSecrets;
 import jdk.internal.crac.*;
@@ -64,7 +64,7 @@ public final class FileDescriptor {
 
         @SuppressWarnings("fallthrough")
         @Override
-        public void beforeCheckpoint(Context<? extends jdk.crac.Resource> context) throws Exception {
+        public void beforeCheckpoint(Context<? extends jdk.internal.crac.mirror.Resource> context) throws Exception {
             if (!closedByNIO && valid()) {
                 ClaimedFDs claimedFDs = Core.getClaimedFDs();
                 FileDescriptor self = FileDescriptor.this;
@@ -281,11 +281,11 @@ public final class FileDescriptor {
      * @since     1.1
      */
     public void sync() throws SyncFailedException {
-        long comp = Blocker.begin();
+        boolean attempted = Blocker.begin();
         try {
             sync0();
         } finally {
-            Blocker.end(comp);
+            Blocker.end(attempted);
         }
     }
 

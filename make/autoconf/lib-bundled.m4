@@ -41,6 +41,7 @@ AC_DEFUN_ONCE([LIB_SETUP_BUNDLED_LIBS],
   LIB_SETUP_ZLIB
   LIB_SETUP_LCMS
   LIB_SETUP_HARFBUZZ
+  LIB_SETUP_CRIU_CRAC
 ])
 
 ################################################################################
@@ -69,11 +70,13 @@ AC_DEFUN_ONCE([LIB_SETUP_LIBJPEG],
         [ AC_MSG_ERROR([--with-libjpeg=system specified, but no libjpeg found])])
 
     USE_EXTERNAL_LIBJPEG=true
+    LIBJPEG_LIBS="-ljpeg"
   else
     AC_MSG_ERROR([Invalid use of --with-libjpeg: ${with_libjpeg}, use 'system' or 'bundled'])
   fi
 
   AC_SUBST(USE_EXTERNAL_LIBJPEG)
+  AC_SUBST(LIBJPEG_LIBS)
 ])
 
 ################################################################################
@@ -102,11 +105,13 @@ AC_DEFUN_ONCE([LIB_SETUP_GIFLIB],
         [ AC_MSG_ERROR([--with-giflib=system specified, but no giflib found!])])
 
     USE_EXTERNAL_LIBGIF=true
+    GIFLIB_LIBS=-lgif
   else
     AC_MSG_ERROR([Invalid value of --with-giflib: ${with_giflib}, use 'system' or 'bundled'])
   fi
 
   AC_SUBST(USE_EXTERNAL_LIBGIF)
+  AC_SUBST(GIFLIB_LIBS)
 ])
 
 ################################################################################
@@ -115,7 +120,7 @@ AC_DEFUN_ONCE([LIB_SETUP_GIFLIB],
 AC_DEFUN_ONCE([LIB_SETUP_LIBPNG],
 [
   AC_ARG_WITH(libpng, [AS_HELP_STRING([--with-libpng],
-     [use libpng from build system or OpenJDK source (system, bundled) @<:@bundled@:>@])])
+      [use libpng from build system or OpenJDK source (system, bundled) @<:@bundled@:>@])])
 
   PKG_CHECK_MODULES(PNG, libpng, [LIBPNG_FOUND=yes], [LIBPNG_FOUND=no])
   AC_MSG_CHECKING([for which libpng to use])
@@ -308,4 +313,22 @@ AC_DEFUN_ONCE([LIB_SETUP_HARFBUZZ],
   AC_SUBST(USE_EXTERNAL_HARFBUZZ)
   AC_SUBST(HARFBUZZ_CFLAGS)
   AC_SUBST(HARFBUZZ_LIBS)
+])
+
+AC_DEFUN_ONCE([LIB_SETUP_CRIU_CRAC],
+[
+  AC_ARG_WITH(criu-crac, [AS_HELP_STRING([--with-criu-crac],
+      [use specified criu binary for CRaC implementation])])
+
+  AC_MSG_CHECKING([for criu-crac])
+
+  USE_CRIU_CRAC=
+  if test -f "${with_criu_crac}"; then
+    USE_CRIU_CRAC="${with_criu_crac}"
+    AC_MSG_RESULT([exists])
+  else
+    AC_MSG_RESULT([none])
+  fi
+
+  AC_SUBST(USE_CRIU_CRAC)
 ])

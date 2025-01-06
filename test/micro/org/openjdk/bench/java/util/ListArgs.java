@@ -34,9 +34,9 @@ import java.util.concurrent.TimeUnit;
  * initializers. Use parallel GC and set initial heap size to avoid
  * GC during runs.
  */
-@State(Scope.Benchmark)
+@State(Scope.Thread)
 @OutputTimeUnit(TimeUnit.MILLISECONDS)
-@Fork(value = 3, jvmArgsAppend = { "-verbose:gc", "-XX:+UseParallelGC", "-Xms4g", "-Xmx4g", "-Xint" })
+@Fork(value = 3, jvmArgs = { "-verbose:gc", "-XX:+UseParallelGC", "-Xms4g", "-Xmx4g", "-Xint" })
 @Warmup(iterations = 5, time = 1, timeUnit = TimeUnit.SECONDS)
 @Measurement(iterations = 5, time = 2, timeUnit = TimeUnit.SECONDS)
 public class ListArgs {

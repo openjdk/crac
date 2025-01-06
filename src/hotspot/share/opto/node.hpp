@@ -1,5 +1,6 @@
 /*
- * Copyright (c) 1997, 2023, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 1997, 2024, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2024, Alibaba Group Holding Limited. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -61,6 +62,7 @@ class CastDDNode;
 class CastVVNode;
 class CastIINode;
 class CastLLNode;
+class CastPPNode;
 class CatchNode;
 class CatchProjNode;
 class CheckCastPPNode;
@@ -70,6 +72,7 @@ class CodeBuffer;
 class ConstraintCastNode;
 class ConNode;
 class ConINode;
+class ConvertNode;
 class CompareAndSwapNode;
 class CompareAndExchangeNode;
 class CountedLoopNode;
@@ -129,8 +132,15 @@ class MoveNode;
 class MulNode;
 class MultiNode;
 class MultiBranchNode;
+class NegNode;
+class NegVNode;
 class NeverBranchNode;
 class Opaque1Node;
+class OpaqueLoopInitNode;
+class OpaqueLoopStrideNode;
+class OpaqueNotNullNode;
+class OpaqueInitializedAssertionPredicateNode;
+class OpaqueTemplateAssertionPredicateNode;
 class OuterStripMinedLoopNode;
 class OuterStripMinedLoopEndNode;
 class Node;
@@ -159,6 +169,7 @@ class RootNode;
 class SafePointNode;
 class SafePointScalarObjectNode;
 class SafePointScalarMergeNode;
+class SaturatingVectorNode;
 class StartNode;
 class State;
 class StoreNode;
@@ -167,14 +178,16 @@ class SubTypeCheckNode;
 class Type;
 class TypeNode;
 class UnlockNode;
-class UnorderedReductionNode;
 class VectorNode;
 class LoadVectorNode;
 class LoadVectorMaskedNode;
 class StoreVectorMaskedNode;
 class LoadVectorGatherNode;
+class LoadVectorGatherMaskedNode;
 class StoreVectorNode;
 class StoreVectorScatterNode;
+class StoreVectorScatterMaskedNode;
+class VerifyVectorAlignmentNode;
 class VectorMaskCmpNode;
 class VectorUnboxNode;
 class VectorSet;
@@ -183,6 +196,7 @@ class ShiftVNode;
 class ExpandVNode;
 class CompressVNode;
 class CompressMNode;
+class C2_MacroAssembler;
 
 
 #ifndef OPTO_DU_ITERATOR_ASSERT
@@ -202,6 +216,8 @@ typedef uint   DUIterator;
 typedef Node** DUIterator_Fast;
 typedef Node** DUIterator_Last;
 #endif
+
+typedef ResizeableResourceHashtable<Node*, Node*, AnyObj::RESOURCE_AREA, mtCompiler> OrigToNewHashtable;
 
 // Node Sentinel
 #define NodeSentinel (Node*)-1
@@ -445,7 +461,7 @@ protected:
   }
   // Light version of set_req() to init inputs after node creation.
   void init_req( uint i, Node *n ) {
-    assert( i == 0 && this == n ||
+    assert( (i == 0 && this == n) ||
             is_not_dead(n), "can not use dead node");
     assert( i < _cnt, "oob");
     assert( !VerifyHashTableKeys || _hash_lock == 0,
@@ -707,6 +723,7 @@ public:
         DEFINE_CLASS_ID(CastFF, ConstraintCast, 3)
         DEFINE_CLASS_ID(CastDD, ConstraintCast, 4)
         DEFINE_CLASS_ID(CastVV, ConstraintCast, 5)
+        DEFINE_CLASS_ID(CastPP, ConstraintCast, 6)
       DEFINE_CLASS_ID(CMove, Type, 3)
       DEFINE_CLASS_ID(SafePointScalarObject, Type, 4)
       DEFINE_CLASS_ID(DecodeNarrowPtr, Type, 5)
@@ -724,10 +741,12 @@ public:
         DEFINE_CLASS_ID(ExpandV, Vector, 5)
         DEFINE_CLASS_ID(CompressM, Vector, 6)
         DEFINE_CLASS_ID(Reduction, Vector, 7)
-          DEFINE_CLASS_ID(UnorderedReduction, Reduction, 0)
+        DEFINE_CLASS_ID(NegV, Vector, 8)
+        DEFINE_CLASS_ID(SaturatingVector, Vector, 9)
       DEFINE_CLASS_ID(Con, Type, 8)
           DEFINE_CLASS_ID(ConI, Con, 0)
       DEFINE_CLASS_ID(SafePointScalarMerge, Type, 9)
+      DEFINE_CLASS_ID(Convert, Type, 10)
 
 
     DEFINE_CLASS_ID(Proj,  Node, 3)
@@ -778,10 +797,16 @@ public:
     DEFINE_CLASS_ID(ClearArray, Node, 14)
     DEFINE_CLASS_ID(Halt,     Node, 15)
     DEFINE_CLASS_ID(Opaque1,  Node, 16)
-    DEFINE_CLASS_ID(Move,     Node, 17)
-    DEFINE_CLASS_ID(LShift,   Node, 18)
+      DEFINE_CLASS_ID(OpaqueLoopInit, Opaque1, 0)
+      DEFINE_CLASS_ID(OpaqueLoopStride, Opaque1, 1)
+    DEFINE_CLASS_ID(OpaqueNotNull,  Node, 17)
+    DEFINE_CLASS_ID(OpaqueInitializedAssertionPredicate,  Node, 18)
+    DEFINE_CLASS_ID(OpaqueTemplateAssertionPredicate,  Node, 19)
+    DEFINE_CLASS_ID(Move,     Node, 20)
+    DEFINE_CLASS_ID(LShift,   Node, 21)
+    DEFINE_CLASS_ID(Neg,      Node, 22)
 
-    _max_classes  = ClassMask_LShift
+    _max_classes  = ClassMask_Neg
   };
   #undef DEFINE_CLASS_ID
 
@@ -814,7 +839,9 @@ private:
   juint _class_id;
   juint _flags;
 
+#ifdef ASSERT
   static juint max_flags();
+#endif
 
 protected:
   // These methods should be called from constructors only.
@@ -881,10 +908,12 @@ public:
   DEFINE_CLASS_QUERY(CastII)
   DEFINE_CLASS_QUERY(CastLL)
   DEFINE_CLASS_QUERY(ConI)
+  DEFINE_CLASS_QUERY(CastPP)
   DEFINE_CLASS_QUERY(ConstraintCast)
   DEFINE_CLASS_QUERY(ClearArray)
   DEFINE_CLASS_QUERY(CMove)
   DEFINE_CLASS_QUERY(Cmp)
+  DEFINE_CLASS_QUERY(Convert)
   DEFINE_CLASS_QUERY(CountedLoop)
   DEFINE_CLASS_QUERY(CountedLoopEnd)
   DEFINE_CLASS_QUERY(DecodeNarrowPtr)
@@ -941,8 +970,15 @@ public:
   DEFINE_CLASS_QUERY(Mul)
   DEFINE_CLASS_QUERY(Multi)
   DEFINE_CLASS_QUERY(MultiBranch)
+  DEFINE_CLASS_QUERY(Neg)
+  DEFINE_CLASS_QUERY(NegV)
   DEFINE_CLASS_QUERY(NeverBranch)
   DEFINE_CLASS_QUERY(Opaque1)
+  DEFINE_CLASS_QUERY(OpaqueNotNull)
+  DEFINE_CLASS_QUERY(OpaqueInitializedAssertionPredicate)
+  DEFINE_CLASS_QUERY(OpaqueTemplateAssertionPredicate)
+  DEFINE_CLASS_QUERY(OpaqueLoopInit)
+  DEFINE_CLASS_QUERY(OpaqueLoopStride)
   DEFINE_CLASS_QUERY(OuterStripMinedLoop)
   DEFINE_CLASS_QUERY(OuterStripMinedLoopEnd)
   DEFINE_CLASS_QUERY(Parm)
@@ -961,7 +997,6 @@ public:
   DEFINE_CLASS_QUERY(Sub)
   DEFINE_CLASS_QUERY(SubTypeCheck)
   DEFINE_CLASS_QUERY(Type)
-  DEFINE_CLASS_QUERY(UnorderedReduction)
   DEFINE_CLASS_QUERY(Vector)
   DEFINE_CLASS_QUERY(VectorMaskCmp)
   DEFINE_CLASS_QUERY(VectorUnbox)
@@ -971,8 +1006,13 @@ public:
   DEFINE_CLASS_QUERY(CompressM)
   DEFINE_CLASS_QUERY(LoadVector)
   DEFINE_CLASS_QUERY(LoadVectorGather)
+  DEFINE_CLASS_QUERY(LoadVectorMasked)
+  DEFINE_CLASS_QUERY(LoadVectorGatherMasked)
   DEFINE_CLASS_QUERY(StoreVector)
   DEFINE_CLASS_QUERY(StoreVectorScatter)
+  DEFINE_CLASS_QUERY(StoreVectorMasked)
+  DEFINE_CLASS_QUERY(StoreVectorScatterMasked)
+  DEFINE_CLASS_QUERY(SaturatingVector)
   DEFINE_CLASS_QUERY(ShiftV)
   DEFINE_CLASS_QUERY(Unlock)
 
@@ -1074,8 +1114,14 @@ public:
   // Skip Proj and CatchProj nodes chains. Check for Null and Top.
   Node* find_exact_control(Node* ctrl);
 
+  // Results of the dominance analysis.
+  enum class DomResult {
+    NotDominate,         // 'this' node does not dominate 'sub'.
+    Dominate,            // 'this' node dominates or is equal to 'sub'.
+    EncounteredDeadCode  // Result is undefined due to encountering dead code.
+  };
   // Check if 'this' node dominates or equal to 'sub'.
-  bool dominates(Node* sub, Node_List &nlist);
+  DomResult dominates(Node* sub, Node_List &nlist);
 
 protected:
   bool remove_dead_region(PhaseGVN *phase, bool can_reshape);
@@ -1119,7 +1165,21 @@ public:
   // Set control or add control as precedence edge
   void ensure_control_or_add_prec(Node* c);
 
-//----------------- Code Generation
+  // Visit boundary uses of the node and apply a callback function for each.
+  // Recursively traverse uses, stopping and applying the callback when
+  // reaching a boundary node, defined by is_boundary. Note: the function
+  // definition appears after the complete type definition of Node_List.
+  template <typename Callback, typename Check>
+  void visit_uses(Callback callback, Check is_boundary) const;
+
+  // Returns a clone of the current node that's pinned (if the current node is not) for nodes found in array accesses
+  // (Load and range check CastII nodes).
+  // This is used when an array access is made dependent on 2 or more range checks (range check smearing or Loop Predication).
+  virtual Node* pin_array_access_node() const {
+    return nullptr;
+  }
+
+  //----------------- Code Generation
 
   // Ideal register class for Matching.  Zero means unmatched instruction
   // (these are cloned instead of converted to machine nodes).
@@ -1143,9 +1203,8 @@ public:
 
   // Print as assembly
   virtual void format( PhaseRegAlloc *, outputStream* st = tty ) const;
-  // Emit bytes starting at parameter 'ptr'
-  // Bump 'ptr' by the number of output bytes
-  virtual void emit(CodeBuffer &cbuf, PhaseRegAlloc *ra_) const;
+  // Emit bytes using C2_MacroAssembler
+  virtual void emit(C2_MacroAssembler *masm, PhaseRegAlloc *ra_) const;
   // Size of instruction in bytes
   virtual uint size(PhaseRegAlloc *ra_) const;
 
@@ -1212,6 +1271,9 @@ public:
 
   // Whether this is a memory-writing machine node.
   bool is_memory_writer() const { return is_Mach() && bottom_type()->has_memory(); }
+
+  // Whether this is a memory phi node
+  bool is_memory_phi() const { return is_Phi() && bottom_type() == Type::MEMORY; }
 
 //----------------- Printing, etc
 #ifndef PRODUCT
@@ -1528,8 +1590,8 @@ Node* Node::last_out(DUIterator_Last& i) const {
 class SimpleDUIterator : public StackObj {
  private:
   Node* node;
-  DUIterator_Fast i;
   DUIterator_Fast imax;
+  DUIterator_Fast i;
  public:
   SimpleDUIterator(Node* n): node(n), i(n->fast_outs(imax)) {}
   bool has_next() { return i < imax; }
@@ -1549,7 +1611,16 @@ protected:
   Arena* _a;                    // Arena to allocate in
   uint   _max;
   Node** _nodes;
-  void   grow( uint i );        // Grow array node to fit
+  ReallocMark _nesting;         // Safety checks for arena reallocation
+
+  // Grow array to required capacity
+  void maybe_grow(uint i) {
+    if (i >= _max) {
+      grow(i);
+    }
+  }
+  void grow(uint i);
+
 public:
   Node_Array(Arena* a, uint max = OptoNodeListSize) : _a(a), _max(max) {
     _nodes = NEW_ARENA_ARRAY(a, Node*, max);
@@ -1567,7 +1638,7 @@ public:
   Node* at(uint i) const { assert(i<_max,"oob"); return _nodes[i]; }
   Node** adr() { return _nodes; }
   // Extend the mapping: index i maps to Node *n.
-  void map( uint i, Node *n ) { if( i>=_max ) grow(i); _nodes[i] = n; }
+  void map( uint i, Node *n ) { maybe_grow(i); _nodes[i] = n; }
   void insert( uint i, Node *n );
   void remove( uint i );        // Remove, preserving order
   // Clear all entries in _nodes to null but keep storage
@@ -1616,6 +1687,35 @@ public:
   void dump_simple() const;
 };
 
+// Definition must appear after complete type definition of Node_List
+template <typename Callback, typename Check>
+void Node::visit_uses(Callback callback, Check is_boundary) const {
+  ResourceMark rm;
+  VectorSet visited;
+  Node_List worklist;
+
+  // The initial worklist consists of the direct uses
+  for (DUIterator_Fast kmax, k = fast_outs(kmax); k < kmax; k++) {
+    Node* out = fast_out(k);
+    if (!visited.test_set(out->_idx)) { worklist.push(out); }
+  }
+
+  while (worklist.size() > 0) {
+    Node* use = worklist.pop();
+    // Apply callback on boundary nodes
+    if (is_boundary(use)) {
+      callback(use);
+    } else {
+      // Not a boundary node, continue search
+      for (DUIterator_Fast kmax, k = use->fast_outs(kmax); k < kmax; k++) {
+        Node* out = use->fast_out(k);
+        if (!visited.test_set(out->_idx)) { worklist.push(out); }
+      }
+    }
+  }
+}
+
+
 //------------------------------Unique_Node_List-------------------------------
 class Unique_Node_List : public Node_List {
   friend class VMStructs;
@@ -1638,6 +1738,22 @@ public:
     if( !_in_worklist.test_set(b->_idx) )
       Node_List::push(b);
   }
+  void push_non_cfg_inputs_of(const Node* node) {
+    for (uint i = 1; i < node->req(); i++) {
+      Node* input = node->in(i);
+      if (input != nullptr && !input->is_CFG()) {
+        push(input);
+      }
+    }
+  }
+
+  void push_outputs_of(const Node* node) {
+    for (DUIterator_Fast imax, i = node->fast_outs(imax); i < imax; i++) {
+      Node* output = node->fast_out(i);
+      push(output);
+    }
+  }
+
   Node *pop() {
     if( _clock_index >= size() ) _clock_index = 0;
     Node *b = at(_clock_index);
@@ -1752,6 +1868,7 @@ protected:
   INode *_inode_max; // End of _inodes == _inodes + _max
   INode *_inodes;    // Array storage for the stack
   Arena *_a;         // Arena to allocate in
+  ReallocMark _nesting; // Safety checks for arena reallocation
   void grow();
 public:
   Node_Stack(int size) {
@@ -1775,7 +1892,7 @@ public:
   }
   void push(Node *n, uint i) {
     ++_inode_top;
-    if (_inode_top >= _inode_max) grow();
+    grow();
     INode *top = _inode_top; // optimization
     top->node = n;
     top->indx = i;
@@ -1960,6 +2077,38 @@ inline int Op_Cast(BasicType bt) {
     return Op_CastII;
   }
   return Op_CastLL;
+}
+
+inline int Op_DivIL(BasicType bt, bool is_unsigned) {
+  assert(bt == T_INT || bt == T_LONG, "only for int or longs");
+  if (bt == T_INT) {
+    if (is_unsigned) {
+      return Op_UDivI;
+    } else {
+      return Op_DivI;
+    }
+  }
+  if (is_unsigned) {
+    return Op_UDivL;
+  } else {
+    return Op_DivL;
+  }
+}
+
+inline int Op_DivModIL(BasicType bt, bool is_unsigned) {
+  assert(bt == T_INT || bt == T_LONG, "only for int or longs");
+  if (bt == T_INT) {
+    if (is_unsigned) {
+      return Op_UDivModI;
+    } else {
+      return Op_DivModI;
+    }
+  }
+  if (is_unsigned) {
+    return Op_UDivModL;
+  } else {
+    return Op_DivModL;
+  }
 }
 
 #endif // SHARE_OPTO_NODE_HPP

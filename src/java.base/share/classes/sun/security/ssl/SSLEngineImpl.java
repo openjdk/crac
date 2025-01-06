@@ -416,11 +416,12 @@ final class SSLEngineImpl extends SSLEngine implements SSLTransport {
             HandshakeStatus currentHandshakeStatus) throws IOException {
         // Don't bother to kickstart if handshaking is in progress, or if the
         // connection is not duplex-open.
-        if ((conContext.handshakeContext == null) &&
-                conContext.protocolVersion.useTLS13PlusSpec() &&
-                !conContext.isOutboundClosed() &&
-                !conContext.isInboundClosed() &&
-                !conContext.isBroken) {
+        if (SSLConfiguration.serverNewSessionTicketCount > 0 &&
+            conContext.handshakeContext == null &&
+            conContext.protocolVersion.useTLS13PlusSpec() &&
+            !conContext.isOutboundClosed() &&
+            !conContext.isInboundClosed() &&
+            !conContext.isBroken) {
             if (SSLLogger.isOn && SSLLogger.isOn("ssl")) {
                 SSLLogger.finest("trigger NST");
             }
@@ -1270,7 +1271,12 @@ final class SSLEngineImpl extends SSLEngine implements SSLTransport {
                     Map.Entry<Byte, ByteBuffer> me =
                             context.delegatedActions.poll();
                     if (me != null) {
-                        context.dispatch(me.getKey(), me.getValue());
+                        try {
+                            context.dispatch(me.getKey(), me.getValue());
+                        } catch (Exception e) {
+                            throw context.conContext.fatal(Alert.INTERNAL_ERROR,
+                                    "Unhandled exception", e);
+                        }
                     }
                 }
                 return null;

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1999, 2023, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 1999, 2024, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -27,22 +27,23 @@
 #include "jvmtifiles/jvmti.h"
 #include "logging/log.hpp"
 #include "memory/allocation.inline.hpp"
+#include "nmt/memTracker.hpp"
 #include "os_posix.inline.hpp"
-#include "runtime/globals_extension.hpp"
-#include "runtime/osThread.hpp"
-#include "runtime/frame.inline.hpp"
-#include "runtime/interfaceSupport.inline.hpp"
-#include "runtime/sharedRuntime.hpp"
-#include "services/attachListener.hpp"
-#include "services/memTracker.hpp"
 #include "runtime/arguments.hpp"
 #include "runtime/atomic.hpp"
+#include "runtime/frame.inline.hpp"
+#include "runtime/globals_extension.hpp"
+#include "runtime/interfaceSupport.inline.hpp"
 #include "runtime/crac.hpp"
 #include "runtime/java.hpp"
 #include "runtime/orderAccess.hpp"
+#include "runtime/osThread.hpp"
 #include "runtime/park.hpp"
 #include "runtime/perfMemory.hpp"
+#include "runtime/sharedRuntime.hpp"
+#include "services/attachListener.hpp"
 #include "utilities/align.hpp"
+#include "utilities/checkedCast.hpp"
 #include "utilities/debug.hpp"
 #include "utilities/defaultStream.hpp"
 #include "utilities/events.hpp"
@@ -50,8 +51,13 @@
 #include "utilities/globalDefinitions.hpp"
 #include "utilities/macros.hpp"
 #include "utilities/vmError.hpp"
+#if INCLUDE_JFR
+#include "jfr/support/jfrNativeLibraryLoadEvent.hpp"
+#endif
+
 #ifdef AIX
 #include "loadlib_aix.hpp"
+#include "os_aix.hpp"
 #endif
 #ifdef LINUX
 #include "os_linux.hpp"
@@ -88,6 +94,9 @@
   #define MAP_ANONYMOUS MAP_ANON
 #endif
 
+/* Input/Output types for mincore(2) */
+typedef LINUX_ONLY(unsigned) char mincore_vec_t;
+
 static jlong initial_time_count = 0;
 
 static int clock_tics_per_sec = 100;
@@ -96,49 +105,132 @@ static int clock_tics_per_sec = 100;
 size_t os::_os_min_stack_allowed = PTHREAD_STACK_MIN;
 
 // Check core dump limit and report possible place where core can be found
-void os::check_dump_limit(char* buffer, size_t bufferSize) {
+void os::check_core_dump_prerequisites(char* buffer, size_t bufferSize, bool check_only) {
   if (!FLAG_IS_DEFAULT(CreateCoredumpOnCrash) && !CreateCoredumpOnCrash) {
     jio_snprintf(buffer, bufferSize, "CreateCoredumpOnCrash is disabled from command line");
     VMError::record_coredump_status(buffer, false);
-    return;
-  }
-
-  int n;
-  struct rlimit rlim;
-  bool success;
-
-  char core_path[PATH_MAX];
-  n = get_core_path(core_path, PATH_MAX);
-
-  if (n <= 0) {
-    jio_snprintf(buffer, bufferSize, "core.%d (may not exist)", current_process_id());
-    success = true;
-#ifdef LINUX
-  } else if (core_path[0] == '"') { // redirect to user process
-    jio_snprintf(buffer, bufferSize, "Core dumps may be processed with %s", core_path);
-    success = true;
-#endif
-  } else if (getrlimit(RLIMIT_CORE, &rlim) != 0) {
-    jio_snprintf(buffer, bufferSize, "%s (may not exist)", core_path);
-    success = true;
   } else {
-    switch(rlim.rlim_cur) {
-      case RLIM_INFINITY:
-        jio_snprintf(buffer, bufferSize, "%s", core_path);
-        success = true;
-        break;
-      case 0:
-        jio_snprintf(buffer, bufferSize, "Core dumps have been disabled. To enable core dumping, try \"ulimit -c unlimited\" before starting Java again");
-        success = false;
-        break;
-      default:
-        jio_snprintf(buffer, bufferSize, "%s (max size " UINT64_FORMAT " k). To ensure a full core dump, try \"ulimit -c unlimited\" before starting Java again", core_path, uint64_t(rlim.rlim_cur) / K);
-        success = true;
-        break;
+    struct rlimit rlim;
+    bool success = true;
+    bool warn = true;
+    char core_path[PATH_MAX];
+    if (get_core_path(core_path, PATH_MAX) <= 0) {
+      jio_snprintf(buffer, bufferSize, "core.%d (may not exist)", current_process_id());
+#ifdef LINUX
+    } else if (core_path[0] == '"') { // redirect to user process
+      jio_snprintf(buffer, bufferSize, "Core dumps may be processed with %s", core_path);
+#endif
+    } else if (getrlimit(RLIMIT_CORE, &rlim) != 0) {
+      jio_snprintf(buffer, bufferSize, "%s (may not exist)", core_path);
+    } else {
+      switch(rlim.rlim_cur) {
+        case RLIM_INFINITY:
+          jio_snprintf(buffer, bufferSize, "%s", core_path);
+          warn = false;
+          break;
+        case 0:
+          jio_snprintf(buffer, bufferSize, "Core dumps have been disabled. To enable core dumping, try \"ulimit -c unlimited\" before starting Java again");
+          success = false;
+          break;
+        default:
+          jio_snprintf(buffer, bufferSize, "%s (max size " UINT64_FORMAT " k). To ensure a full core dump, try \"ulimit -c unlimited\" before starting Java again", core_path, uint64_t(rlim.rlim_cur) / K);
+          break;
+      }
+    }
+    if (!check_only) {
+      VMError::record_coredump_status(buffer, success);
+    } else if (warn) {
+      warning("CreateCoredumpOnCrash specified, but %s", buffer);
     }
   }
+}
 
-  VMError::record_coredump_status(buffer, success);
+bool os::committed_in_range(address start, size_t size, address& committed_start, size_t& committed_size) {
+
+#ifdef _AIX
+  committed_start = start;
+  committed_size = size;
+  return true;
+#else
+
+  int mincore_return_value;
+  constexpr size_t stripe = 1024;  // query this many pages each time
+  mincore_vec_t vec [stripe + 1];
+
+  // set a guard
+  DEBUG_ONLY(vec[stripe] = 'X');
+
+  size_t page_sz = os::vm_page_size();
+  uintx pages = size / page_sz;
+
+  assert(is_aligned(start, page_sz), "Start address must be page aligned");
+  assert(is_aligned(size, page_sz), "Size must be page aligned");
+
+  committed_start = nullptr;
+
+  int loops = checked_cast<int>((pages + stripe - 1) / stripe);
+  int committed_pages = 0;
+  address loop_base = start;
+  bool found_range = false;
+
+  for (int index = 0; index < loops && !found_range; index ++) {
+    assert(pages > 0, "Nothing to do");
+    uintx pages_to_query = (pages >= stripe) ? stripe : pages;
+    pages -= pages_to_query;
+
+    // Get stable read
+    int fail_count = 0;
+    while ((mincore_return_value = mincore(loop_base, pages_to_query * page_sz, vec)) == -1 && errno == EAGAIN){
+      if (++fail_count == 1000){
+        return false;
+      }
+    }
+
+    // During shutdown, some memory goes away without properly notifying NMT,
+    // E.g. ConcurrentGCThread/WatcherThread can exit without deleting thread object.
+    // Bailout and return as not committed for now.
+    if (mincore_return_value == -1 && errno == ENOMEM) {
+      return false;
+    }
+
+    // If mincore is not supported.
+    if (mincore_return_value == -1 && errno == ENOSYS) {
+      return false;
+    }
+
+    assert(vec[stripe] == 'X', "overflow guard");
+    assert(mincore_return_value == 0, "Range must be valid");
+    // Process this stripe
+    for (uintx vecIdx = 0; vecIdx < pages_to_query; vecIdx ++) {
+      if ((vec[vecIdx] & 0x01) == 0) { // not committed
+        // End of current contiguous region
+        if (committed_start != nullptr) {
+          found_range = true;
+          break;
+        }
+      } else { // committed
+        // Start of region
+        if (committed_start == nullptr) {
+          committed_start = loop_base + page_sz * vecIdx;
+        }
+        committed_pages ++;
+      }
+    }
+
+    loop_base += pages_to_query * page_sz;
+  }
+
+  if (committed_start != nullptr) {
+    assert(committed_pages > 0, "Must have committed region");
+    assert(committed_pages <= int(size / page_sz), "Can not commit more than it has");
+    assert(committed_start >= start && committed_start < start + size, "Out of range");
+    committed_size = page_sz * committed_pages;
+    return true;
+  } else {
+    assert(committed_pages == 0, "Should not have committed region");
+    return false;
+  }
+#endif
 }
 
 int os::get_native_stack(address* stack, int frames, int toSkip) {
@@ -152,13 +244,10 @@ int os::get_native_stack(address* stack, int frames, int toSkip) {
       stack[frame_idx ++] = fr.pc();
     }
     if (fr.fp() == nullptr || fr.cb() != nullptr ||
-        fr.sender_pc() == nullptr || os::is_first_C_frame(&fr)) break;
-
-    if (fr.sender_pc() && !os::is_first_C_frame(&fr)) {
-      fr = os::get_sender_for_C_frame(&fr);
-    } else {
+        fr.sender_pc() == nullptr || os::is_first_C_frame(&fr)) {
       break;
     }
+    fr = os::get_sender_for_C_frame(&fr);
   }
   num_of_frames = frame_idx;
   for (; frame_idx < frames; frame_idx ++) {
@@ -183,6 +272,17 @@ size_t os::lasterror(char *buf, size_t len) {
   ::strncpy(buf, s, n);
   buf[n] = '\0';
   return n;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// breakpoint support
+
+void os::breakpoint() {
+  BREAKPOINT;
+}
+
+extern "C" void breakpoint() {
+  // use debugger to set breakpoint here
 }
 
 // Return true if user is running as root.
@@ -244,6 +344,16 @@ int os::create_file_for_heap(const char* dir) {
   return fd;
 }
 
+// return current position of file pointer
+jlong os::current_file_offset(int fd) {
+  return (jlong)::lseek(fd, (off_t)0, SEEK_CUR);
+}
+
+// move file pointer to the specified offset
+jlong os::seek_to_file_offset(int fd, jlong offset) {
+  return (jlong)::lseek(fd, (off_t)offset, SEEK_SET);
+}
+
 // Is a (classpath) directory empty?
 bool os::dir_is_empty(const char* path) {
   DIR *dir = nullptr;
@@ -263,7 +373,7 @@ bool os::dir_is_empty(const char* path) {
   return result;
 }
 
-static char* reserve_mmapped_memory(size_t bytes, char* requested_addr) {
+static char* reserve_mmapped_memory(size_t bytes, char* requested_addr, MemTag mem_tag) {
   char * addr;
   int flags = MAP_PRIVATE NOT_AIX( | MAP_NORESERVE ) | MAP_ANONYMOUS;
   if (requested_addr != nullptr) {
@@ -278,13 +388,14 @@ static char* reserve_mmapped_memory(size_t bytes, char* requested_addr) {
                        flags, -1, 0);
 
   if (addr != MAP_FAILED) {
-    MemTracker::record_virtual_memory_reserve((address)addr, bytes, CALLER_PC);
+    MemTracker::record_virtual_memory_reserve((address)addr, bytes, CALLER_PC, mem_tag);
     return addr;
   }
   return nullptr;
 }
 
 static int util_posix_fallocate(int fd, off_t offset, off_t len) {
+  static_assert(sizeof(off_t) == 8, "Expected Large File Support in this file");
 #ifdef __APPLE__
   fstore_t store = { F_ALLOCATECONTIG, F_PEOFPOSMODE, 0, len };
   // First we try to get a continuous chunk of disk space
@@ -342,9 +453,10 @@ char* os::replace_existing_mapping_with_file_mapping(char* base, size_t size, in
 }
 
 static size_t calculate_aligned_extra_size(size_t size, size_t alignment) {
-  assert((alignment & (os::vm_allocation_granularity() - 1)) == 0,
+  assert(is_aligned(alignment, os::vm_allocation_granularity()),
       "Alignment must be a multiple of allocation granularity (page size)");
-  assert((size & (alignment -1)) == 0, "size must be 'alignment' aligned");
+  assert(is_aligned(size, os::vm_allocation_granularity()),
+      "Size must be a multiple of allocation granularity (page size)");
 
   size_t extra_size = size + alignment;
   assert(extra_size >= size, "overflow, size is too large to allow alignment");
@@ -389,7 +501,7 @@ char* os::reserve_memory_aligned(size_t size, size_t alignment, bool exec) {
   return chop_extra_memory(size, alignment, extra_base, extra_size);
 }
 
-char* os::map_memory_to_file_aligned(size_t size, size_t alignment, int file_desc) {
+char* os::map_memory_to_file_aligned(size_t size, size_t alignment, int file_desc, MemTag mem_tag) {
   size_t extra_size = calculate_aligned_extra_size(size, alignment);
   // For file mapping, we do not call os:map_memory_to_file(size,fd) since:
   // - we later chop away parts of the mapping using os::release_memory and that could fail if the
@@ -397,7 +509,7 @@ char* os::map_memory_to_file_aligned(size_t size, size_t alignment, int file_des
   // - The memory API os::reserve_memory uses is an implementation detail. It may (and usually is)
   //   mmap but it also may System V shared memory which cannot be uncommitted as a whole, so
   //   chopping off and unmapping excess bits back and front (see below) would not work.
-  char* extra_base = reserve_mmapped_memory(extra_size, nullptr);
+  char* extra_base = reserve_mmapped_memory(extra_size, nullptr, mem_tag);
   if (extra_base == nullptr) {
     return nullptr;
   }
@@ -408,17 +520,6 @@ char* os::map_memory_to_file_aligned(size_t size, size_t alignment, int file_des
   }
   MemTracker::record_virtual_memory_commit((address)aligned_base, size, CALLER_PC);
   return aligned_base;
-}
-
-int os::vsnprintf(char* buf, size_t len, const char* fmt, va_list args) {
-  // All supported POSIX platforms provide C99 semantics.
-  ALLOW_C_FUNCTION(::vsnprintf, int result = ::vsnprintf(buf, len, fmt, args);)
-  // If an encoding error occurred (result < 0) then it's not clear
-  // whether the buffer is NUL terminated, so ensure it is.
-  if ((result < 0) && (len > 0)) {
-    buf[len - 1] = '\0';
-  }
-  return result;
 }
 
 int os::get_fileno(FILE* fp) {
@@ -446,7 +547,7 @@ void os::Posix::print_load_average(outputStream* st) {
 // for reboot at least on my test machines
 void os::Posix::print_uptime_info(outputStream* st) {
   int bootsec = -1;
-  int currsec = time(nullptr);
+  time_t currsec = time(nullptr);
   struct utmpx* ent;
   setutxent();
   while ((ent = getutxent())) {
@@ -457,7 +558,7 @@ void os::Posix::print_uptime_info(outputStream* st) {
   }
 
   if (bootsec != -1) {
-    os::print_dhm(st, "OS uptime:", (long) (currsec-bootsec));
+    os::print_dhm(st, "OS uptime:", currsec-bootsec);
   }
 }
 
@@ -493,7 +594,7 @@ void os::Posix::print_rlimit_info(outputStream* st) {
 
 #if defined(AIX)
   st->print(", NPROC ");
-  st->print("%d", sysconf(_SC_CHILD_MAX));
+  st->print("%ld", sysconf(_SC_CHILD_MAX));
 
   print_rlimit(st, ", THREADS", RLIMIT_THREADS);
 #else
@@ -606,9 +707,14 @@ void os::print_jni_name_suffix_on(outputStream* st, int args_size) {
 
 bool os::get_host_name(char* buf, size_t buflen) {
   struct utsname name;
-  uname(&name);
-  jio_snprintf(buf, buflen, "%s", name.nodename);
-  return true;
+  int retcode = uname(&name);
+  if (retcode != -1) {
+    jio_snprintf(buf, buflen, "%s", name.nodename);
+    return true;
+  }
+  const char* errmsg = os::strerror(errno);
+  log_warning(os)("Failed to get host name, error message: %s", errmsg);
+  return false;
 }
 
 #ifndef _LP64
@@ -707,7 +813,16 @@ void* os::get_default_process_handle() {
 }
 
 void* os::dll_lookup(void* handle, const char* name) {
-  return dlsym(handle, name);
+  ::dlerror(); // Clear any previous error
+  void* ret = ::dlsym(handle, name);
+  if (ret == nullptr) {
+    const char* tmp = ::dlerror();
+    // It is possible that we found a NULL symbol, hence no error.
+    if (tmp != nullptr) {
+      log_debug(os)("Symbol %s not found in dll: %s", name, tmp);
+    }
+  }
+  return ret;
 }
 
 void os::dll_unload(void *lib) {
@@ -715,6 +830,7 @@ void os::dll_unload(void *lib) {
   // calling dlclose the dynamic loader may free the memory containing the string, thus we need to
   // copy the string to be able to reference it after dlclose.
   const char* l_path = nullptr;
+
 #ifdef LINUX
   char* l_pathdup = nullptr;
   l_path = os::Linux::dll_path(lib);
@@ -722,37 +838,37 @@ void os::dll_unload(void *lib) {
     l_path = l_pathdup = os::strdup(l_path);
   }
 #endif  // LINUX
+
+  JFR_ONLY(NativeLibraryUnloadEvent unload_event(l_path);)
+
   if (l_path == nullptr) {
     l_path = "<not available>";
   }
-  int res = ::dlclose(lib);
 
-  if (res == 0) {
+  char ebuf[1024];
+  bool res = os::pd_dll_unload(lib, ebuf, sizeof(ebuf));
+
+  if (res) {
     Events::log_dll_message(nullptr, "Unloaded shared library \"%s\" [" INTPTR_FORMAT "]",
                             l_path, p2i(lib));
     log_info(os)("Unloaded shared library \"%s\" [" INTPTR_FORMAT "]", l_path, p2i(lib));
+    JFR_ONLY(unload_event.set_result(true);)
   } else {
-    const char* error_report = ::dlerror();
-    if (error_report == nullptr) {
-      error_report = "dlerror returned no error description";
-    }
-
     Events::log_dll_message(nullptr, "Attempt to unload shared library \"%s\" [" INTPTR_FORMAT "] failed, %s",
-                            l_path, p2i(lib), error_report);
+                            l_path, p2i(lib), ebuf);
     log_info(os)("Attempt to unload shared library \"%s\" [" INTPTR_FORMAT "] failed, %s",
-                  l_path, p2i(lib), error_report);
+                  l_path, p2i(lib), ebuf);
+    JFR_ONLY(unload_event.set_error_msg(ebuf);)
   }
-  // Update the dll cache
-  AIX_ONLY(LoadedLibraries::reload());
   LINUX_ONLY(os::free(l_pathdup));
 }
 
 jlong os::lseek(int fd, jlong offset, int whence) {
-  return (jlong) BSD_ONLY(::lseek) NOT_BSD(::lseek64)(fd, offset, whence);
+  return (jlong) ::lseek(fd, offset, whence);
 }
 
 int os::ftruncate(int fd, jlong length) {
-   return BSD_ONLY(::ftruncate) NOT_BSD(::ftruncate64)(fd, length);
+   return ::ftruncate(fd, length);
 }
 
 const char* os::get_current_directory(char *buf, size_t buflen) {
@@ -812,20 +928,20 @@ int os::socket_close(int fd) {
   return ::close(fd);
 }
 
-int os::recv(int fd, char* buf, size_t nBytes, uint flags) {
-  RESTARTABLE_RETURN_INT(::recv(fd, buf, nBytes, flags));
+ssize_t os::recv(int fd, char* buf, size_t nBytes, uint flags) {
+  RESTARTABLE_RETURN_SSIZE_T(::recv(fd, buf, nBytes, flags));
 }
 
-int os::send(int fd, char* buf, size_t nBytes, uint flags) {
-  RESTARTABLE_RETURN_INT(::send(fd, buf, nBytes, flags));
+ssize_t os::send(int fd, char* buf, size_t nBytes, uint flags) {
+  RESTARTABLE_RETURN_SSIZE_T(::send(fd, buf, nBytes, flags));
 }
 
-int os::raw_send(int fd, char* buf, size_t nBytes, uint flags) {
+ssize_t os::raw_send(int fd, char* buf, size_t nBytes, uint flags) {
   return os::send(fd, buf, nBytes, flags);
 }
 
-int os::connect(int fd, struct sockaddr* him, socklen_t len) {
-  RESTARTABLE_RETURN_INT(::connect(fd, him, len));
+ssize_t os::connect(int fd, struct sockaddr* him, socklen_t len) {
+  RESTARTABLE_RETURN_SSIZE_T(::connect(fd, him, len));
 }
 
 void os::exit(int num) {
@@ -834,6 +950,14 @@ void os::exit(int num) {
 
 void os::_exit(int num) {
   ALLOW_C_FUNCTION(::_exit, ::_exit(num);)
+}
+
+bool os::dont_yield() {
+  return DontYieldALot;
+}
+
+void os::naked_yield() {
+  sched_yield();
 }
 
 // Builds a platform dependent Agent_OnLoad_<lib_name> function name
@@ -918,10 +1042,10 @@ char* os::Posix::describe_pthread_attr(char* buf, size_t buflen, const pthread_a
   return buf;
 }
 
-char* os::Posix::realpath(const char* filename, char* outbuf, size_t outbuflen) {
+char* os::realpath(const char* filename, char* outbuf, size_t outbuflen) {
 
   if (filename == nullptr || outbuf == nullptr || outbuflen < 1) {
-    assert(false, "os::Posix::realpath: invalid arguments.");
+    assert(false, "os::realpath: invalid arguments.");
     errno = EINVAL;
     return nullptr;
   }
@@ -956,7 +1080,6 @@ char* os::Posix::realpath(const char* filename, char* outbuf, size_t outbuflen) 
     }
   }
   return result;
-
 }
 
 int os::stat(const char *path, struct stat *sbuf) {
@@ -1221,7 +1344,7 @@ void os::Posix::init(void) {
 #if defined(_ALLBSD_SOURCE)
   clock_tics_per_sec = CLK_TCK;
 #else
-  clock_tics_per_sec = sysconf(_SC_CLK_TCK);
+  clock_tics_per_sec = checked_cast<int>(sysconf(_SC_CLK_TCK));
 #endif
   // NOTE: no logging available when this is called. Put logging
   // statements in init_2().
@@ -1349,7 +1472,7 @@ static jlong millis_to_nanos_bounded(jlong millis) {
 
 static void to_abstime(timespec* abstime, jlong timeout,
                        bool isAbsolute, bool isRealtime) {
-  DEBUG_ONLY(int max_secs = MAX_SECS;)
+  DEBUG_ONLY(time_t max_secs = MAX_SECS;)
 
   if (timeout < 0) {
     timeout = 0;
@@ -1431,7 +1554,7 @@ void os::javaTimeNanos_info(jvmtiTimerInfo *info_ptr) {
 
 // Time since start-up in seconds to a fine granularity.
 double os::elapsedTime() {
-  return ((double)os::elapsed_counter()) / os::elapsed_frequency(); // nanosecond resolution
+  return ((double)os::elapsed_counter()) / (double)os::elapsed_frequency(); // nanosecond resolution
 }
 
 jlong os::elapsed_counter() {
@@ -2072,3 +2195,53 @@ void os::die() {
 const char* os::file_separator() { return "/"; }
 const char* os::line_separator() { return "\n"; }
 const char* os::path_separator() { return ":"; }
+
+// Map file into memory; uses mmap().
+// Notes:
+// - if caller specifies addr, MAP_FIXED is used. That means existing
+//   mappings will be replaced.
+// - The file descriptor must be valid (to create anonymous mappings, use
+//   os::reserve_memory()).
+// Returns address to mapped memory, nullptr on error
+char* os::pd_map_memory(int fd, const char* unused,
+                        size_t file_offset, char *addr, size_t bytes,
+                        bool read_only, bool allow_exec) {
+
+  assert(fd != -1, "Specify a valid file descriptor");
+
+  int prot;
+  int flags = MAP_PRIVATE;
+
+  if (read_only) {
+    prot = PROT_READ;
+  } else {
+    prot = PROT_READ | PROT_WRITE;
+  }
+
+  if (allow_exec) {
+    prot |= PROT_EXEC;
+  }
+
+  if (addr != nullptr) {
+    flags |= MAP_FIXED;
+  }
+
+  char* mapped_address = (char*)mmap(addr, (size_t)bytes, prot, flags,
+                                     fd, file_offset);
+  if (mapped_address == MAP_FAILED) {
+    return nullptr;
+  }
+
+  // If we did specify an address, and the mapping succeeded, it should
+  // have returned that address since we specify MAP_FIXED
+  assert(addr == nullptr || addr == mapped_address,
+         "mmap+MAP_FIXED returned " PTR_FORMAT ", expected " PTR_FORMAT,
+         p2i(mapped_address), p2i(addr));
+
+  return mapped_address;
+}
+
+// Unmap a block of memory. Uses munmap.
+bool os::pd_unmap_memory(char* addr, size_t bytes) {
+  return munmap(addr, bytes) == 0;
+}

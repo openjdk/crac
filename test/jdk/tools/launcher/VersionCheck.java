@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2007, 2021, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2007, 2024, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -44,6 +44,9 @@ public class VersionCheck extends TestHelper {
 
     // tools that do not accept -J-option
     static final String[] BLACKLIST_JOPTION = {
+        "pauseengine", // crac, don't test
+        "simengine", // crac, don't test
+
         "controlpanel",
         "jabswitch",
         "java-rmi",
@@ -67,7 +70,9 @@ public class VersionCheck extends TestHelper {
 
     // tools that do not accept -version
     static final String[] BLACKLIST_VERSION = {
-        "appletviewer",
+        "pauseengine", // crac, don't test
+        "simengine", // crac, don't test
+
         "controlpanel",
         "jaccessinspector",
         "jaccessinspector-32",

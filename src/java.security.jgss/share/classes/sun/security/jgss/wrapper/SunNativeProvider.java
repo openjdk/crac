@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2005, 2023, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2005, 2024, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -65,10 +65,10 @@ public final class SunNativeProvider extends Provider {
         if (message == null) {
             throw new NullPointerException();
         }
-        System.out.println(NAME + ": " + message);
+        System.err.println(NAME + ": " + message);
     }
 
-    @SuppressWarnings("removal")
+    @SuppressWarnings({"removal", "restricted"})
     private static final HashMap<String, String> MECH_MAP =
             AccessController.doPrivileged(
                 new PrivilegedAction<>() {
@@ -103,6 +103,9 @@ public final class SunNativeProvider extends Provider {
                                 case WINDOWS -> new String[]{
                                         // Full path needed, DLL is in jre/bin
                                         StaticProperty.javaHome() + "\\bin\\sspi_bridge.dll",
+                                };
+                                case AIX -> new String[]{
+                                        "/opt/freeware/lib64/libgssapi_krb5.so",
                                 };
                                 default -> new String[0];
                             };

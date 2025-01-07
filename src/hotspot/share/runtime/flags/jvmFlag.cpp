@@ -335,6 +335,7 @@ void JVMFlag::print_kind(outputStream* st, unsigned int width) const {
     { KIND_C1, "C1" },
     { KIND_C2, "C2" },
     { KIND_ARCH, "ARCH" },
+    { KIND_RESTORE_SETTABLE, "restore" },
     { KIND_PLATFORM_DEPENDENT, "pd" },
     { KIND_PRODUCT, "product" },
     { KIND_MANAGEABLE, "manageable" },

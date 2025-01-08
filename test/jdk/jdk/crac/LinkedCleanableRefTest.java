@@ -38,10 +38,10 @@ import java.lang.reflect.Field;
 
 /**
  * @test
- * @modules java.base/jdk.internal.ref 
+ * @modules java.base/jdk.internal.ref
  * @library /test/lib
  * @build LinkedCleanableRefTest
- * @run driver jdk.test.lib.crac.CracTest 
+ * @run driver jdk.test.lib.crac.CracTest
  */
 public class LinkedCleanableRefTest implements CracTest {
     static private String RESTORED = "RESTORED";

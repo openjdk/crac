@@ -147,7 +147,7 @@ public class BasicImageReader implements AutoCloseable {
         if (memoryMap.capacity() < indexSize) {
             throw new IOException("The image file \"" + name + "\" is corrupted");
         }
-        
+
         initMappedBuffers();
 
         stringsReader = new ImageStringsReader(this);

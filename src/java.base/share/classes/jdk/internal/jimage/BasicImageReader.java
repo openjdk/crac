@@ -73,14 +73,14 @@ public class BasicImageReader implements AutoCloseable {
     private final Path imagePath;
     private final ByteOrder byteOrder;
     private final String name;
-    private final ByteBuffer memoryMap;
+    private ByteBuffer memoryMap;
     private FileChannel channel;
     private final ImageHeader header;
     private final long indexSize;
-    private final IntBuffer redirect;
-    private final IntBuffer offsets;
-    private final ByteBuffer locations;
-    private final ByteBuffer strings;
+    private IntBuffer redirect;
+    private IntBuffer offsets;
+    private ByteBuffer locations;
+    private ByteBuffer strings;
     private final ImageStringsReader stringsReader;
     private final Decompressor decompressor;
     private Object cracResource;
@@ -107,12 +107,12 @@ public class BasicImageReader implements AutoCloseable {
             channel = null;
         } else {
             channel = openFileChannel();
-            registerIfCRaCPresent();
+            registerIfCracPresent();
         }
 
         // If no memory map yet and 64 bit jvm then memory map entire file
         if (MAP_ALL && map == null) {
-            map = channel.map(FileChannel.MapMode.READ_ONLY, 0, channel.size());
+            map = createMemoryMap(channel.size());
         }
 
         // Assume we have a memory map to read image file header
@@ -138,7 +138,7 @@ public class BasicImageReader implements AutoCloseable {
         // If no memory map yet then must be 32 bit jvm not previously mapped
         if (map == null) {
             // Just map the image index
-            map = channel.map(FileChannel.MapMode.READ_ONLY, 0, indexSize);
+            map = createMemoryMap(indexSize);
         }
 
         memoryMap = map.asReadOnlyBuffer();
@@ -147,22 +147,35 @@ public class BasicImageReader implements AutoCloseable {
         if (memoryMap.capacity() < indexSize) {
             throw new IOException("The image file \"" + name + "\" is corrupted");
         }
-        redirect = intBuffer(memoryMap, header.getRedirectOffset(), header.getRedirectSize());
-        offsets = intBuffer(memoryMap, header.getOffsetsOffset(), header.getOffsetsSize());
-        locations = slice(memoryMap, header.getLocationsOffset(), header.getLocationsSize());
-        strings = slice(memoryMap, header.getStringsOffset(), header.getStringsSize());
+
+        initMappedBuffers();
 
         stringsReader = new ImageStringsReader(this);
         decompressor = new Decompressor();
     }
 
+    protected void initMappedBuffers() {
+        redirect = intBuffer(memoryMap, header.getRedirectOffset(), header.getRedirectSize());
+        offsets = intBuffer(memoryMap, header.getOffsetsOffset(), header.getOffsetsSize());
+        locations = slice(memoryMap, header.getLocationsOffset(), header.getLocationsSize());
+        strings = slice(memoryMap, header.getStringsOffset(), header.getStringsSize());
+    }
+
+    protected ByteBuffer createMemoryMap(long size) throws IOException {
+        return channel.map(FileChannel.MapMode.READ_ONLY, 0, size);
+    }
+
     // Since this class must be compatible with JDK 8 and any non-CRaC JDK due to being part of jrtfs.jar
     // we must register this to CRaC via reflection.
-    private void registerIfCRaCPresent() {
+    private void registerIfCracPresent() {
+        Class<?> priorityClass = null;
         try {
-            Class<?> priorityClass = Class.forName("jdk.internal.crac.Core$Priority");
-            Class<?> jdkResourceClass = Class.forName("jdk.internal.crac.JDKResource");
-            Class<?> resourceClass = Class.forName("jdk.internal.crac.mirror.Resource");
+            priorityClass = Class.forName("jdk.internal.crac.Core$Priority");
+        } catch (ClassNotFoundException e) {
+            // there is no CRaC; suppress an exception
+            return;
+        }
+        try {
             Object[] priorities = priorityClass.getEnumConstants();
             if (priorities == null) {
                 return;
@@ -176,38 +189,78 @@ public class BasicImageReader implements AutoCloseable {
             if (normalPriority == null) {
                 throw new IllegalStateException();
             }
-            try {
-                Method getContext = priorityClass.getMethod("getContext");
-                Object ctx = getContext.invoke(normalPriority);
-                Method register = ctx.getClass().getMethod("register", resourceClass);
-                cracResource = Proxy.newProxyInstance(null, new Class<?>[] { jdkResourceClass }, new InvocationHandler() {
-                    @Override
-                    public Object invoke(Object proxy, Method method, Object[] args) throws Throwable {
-                        if ("beforeCheckpoint".equals(method.getName())) {
-                            channel.close();
-                        } else if ("afterRestore".equals(method.getName())) {
-                            if (channel != null) {
-                                channel = openFileChannel();
-                            }
-                        } else if ("toString".equals(method.getName())) {
-                            return BasicImageReader.this.toString();
-                        } else if ("hashCode".equals(method.getName())) {
-                            return 0;
-                        } else if ("equals".equals(method.getName())) {
-                            return args[0] == cracResource;
-                        } else {
-                            throw new UnsupportedOperationException(method.toString());
-                        }
-                        return null;
-                    }
-                });
-                register.invoke(ctx, cracResource);
-            } catch (NoSuchMethodException | InvocationTargetException | IllegalAccessException e) {
-                throw new IllegalStateException(e);
-            }
-        } catch (ClassNotFoundException e) {
-            // ignored if class not present
+            Class<?> resourceClass = Class.forName("jdk.internal.crac.mirror.Resource");
+            Method getContextMethod = priorityClass.getMethod("getContext");
+            Object ctx = getContextMethod.invoke(normalPriority);
+            Class<?> ctxClass = ctx.getClass();
+
+            registerCracResource(resourceClass, ctxClass, ctx);
+        } catch (IllegalAccessException e) {
+            // try to register via public API
+            registerIfPublicCracPresent();
+        } catch (NoSuchMethodException | InvocationTargetException | ClassNotFoundException e) {
+            throw new IllegalStateException(e);
         }
+    }
+
+    private void registerIfPublicCracPresent() {
+        Class<?> cracCoreClass = null;
+        try {
+            cracCoreClass = Class.forName("jdk.crac.Core");
+        } catch (ClassNotFoundException e) {
+            // there is no public CRaC; suppress an exception
+            return;
+        }
+        try {
+            Class<?> resourceClass = Class.forName("jdk.crac.Resource");
+            Method getGlobalContextMethod = cracCoreClass.getMethod("getGlobalContext");
+            Object ctx = getGlobalContextMethod.invoke(null);
+            Class<?> ctxClass = Class.forName("jdk.crac.Context");
+
+            registerCracResource(resourceClass, ctxClass, ctx);
+        } catch (IllegalAccessException e) {
+            e.printStackTrace();
+        } catch (NoSuchMethodException | InvocationTargetException | ClassNotFoundException e) {
+            throw new IllegalStateException(e);
+        }
+    }
+
+    private void registerCracResource(Class<?> resourceClass, Class<?> ctxClass, Object ctx)
+            throws NoSuchMethodException, IllegalAccessException, InvocationTargetException {
+        Method registerMethod = ctxClass.getMethod("register", resourceClass);
+        cracResource = Proxy.newProxyInstance(
+            resourceClass.getClassLoader(),
+            new Class<?>[] { resourceClass },
+            new InvocationHandler() {
+                @Override
+                public Object invoke(Object proxy, Method method, Object[] args) throws Throwable {
+                    if ("beforeCheckpoint".equals(method.getName())) {
+                        channel.close();
+                        redirect = null;
+                        offsets = null;
+                        locations = null;
+                        strings = null;
+                        memoryMap = null;
+                    } else if ("afterRestore".equals(method.getName())) {
+                        if (channel != null) {
+                            channel = openFileChannel();
+                            memoryMap = createMemoryMap(MAP_ALL ? channel.size() : indexSize).asReadOnlyBuffer();
+                            initMappedBuffers();
+                        }
+                    } else if ("toString".equals(method.getName())) {
+                        return BasicImageReader.this.toString();
+                    } else if ("hashCode".equals(method.getName())) {
+                        return 0;
+                    } else if ("equals".equals(method.getName())) {
+                        return args[0] == cracResource;
+                    } else {
+                        throw new UnsupportedOperationException(method.toString());
+                    }
+                    return null;
+                }
+            }
+        );
+        registerMethod.invoke(ctx, cracResource);
     }
 
     @SuppressWarnings("removal")

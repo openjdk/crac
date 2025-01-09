@@ -33,6 +33,7 @@
 #include "logging/log.hpp"
 #include "logging/logConfiguration.hpp"
 #include "classfile/classLoader.hpp"
+#include "utilities/defaultStream.hpp"
 
 #include <netinet/in.h>
 
@@ -420,6 +421,10 @@ static bool is_fd_ignored(int fd, const char *path) {
   }
 
   if (LogConfiguration::is_fd_used(fd)) {
+    return true;
+  }
+
+  if (defaultStream::instance->is_fd_used(fd)) {
     return true;
   }
 

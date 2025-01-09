@@ -299,6 +299,7 @@ class fileStream : public outputStream {
   }
   long fileSize();
   void flush();
+  int get_fd() { return fileno(_file); }
 };
 
 // unlike fileStream, fdStream does unbuffered I/O by calling

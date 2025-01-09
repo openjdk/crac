@@ -42,6 +42,7 @@
 #include "services/writeableFlags.hpp"
 #include "utilities/decoder.hpp"
 #include "os.inline.hpp"
+#include "utilities/defaultStream.hpp"
 
 static const char* _crengine = NULL;
 static char* _crengine_arg_str = NULL;
@@ -308,9 +309,22 @@ static void wakeup_threads_in_timedwait() {
   WatcherThread::watcher_thread()->unpark();
 }
 
+class DefaultStreamHandler {
+public:
+  DefaultStreamHandler() {
+    defaultStream::instance->before_checkpoint();
+  }
+
+  ~DefaultStreamHandler() {
+    defaultStream::instance->after_restore();
+  }
+};
+
+
 void VM_Crac::doit() {
   // dry-run fails checkpoint
   bool ok = true;
+  DefaultStreamHandler defStreamHandler;
 
   Decoder::before_checkpoint();
   if (!check_fds()) {
@@ -351,7 +365,7 @@ void VM_Crac::doit() {
 
   // It needs to check CPU features before any other code (such as VM_Crac::read_shm) depends on them.
   VM_Version::crac_restore();
-
+  Arguments::reset_for_crac_restore();
   if (shmid <= 0 || !VM_Crac::read_shm(shmid)) {
     _restore_start_time = os::javaTimeMillis();
     _restore_start_nanos = os::javaTimeNanos();
@@ -372,6 +386,7 @@ void VM_Crac::doit() {
 
   _ok = true;
 }
+
 
 bool crac::prepare_checkpoint() {
   struct stat st;

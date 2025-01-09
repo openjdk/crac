@@ -489,6 +489,10 @@ void LogFileOutput::reopen() {
   assert(_stream == nullptr, "reopening an already opened log file");
 
   // Open the active log file using the same stream as before
+  jlong the_time = os::javaTimeMillis();
+  LogFileOutput::set_file_name_parameters(the_time);
+  FREE_C_HEAP_ARRAY(char, _file_name);
+  _file_name = make_file_name(_name + strlen(Prefix), _pid_str, _vm_start_time_str);
   _stream = os::fopen(_file_name, FileOpenMode);
   if (_stream == nullptr) {
     jio_fprintf(defaultStream::error_stream(), "Could not reopen log file '%s' (%s).\n",

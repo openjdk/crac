@@ -192,6 +192,27 @@ void CompileLog::clear_identities() {
   _identities_limit = 0;
 }
 
+void CompileLog::before_checkpoint() {
+  // Remove only output stream, don't destroy the CompileLog itself.
+  delete _out;
+  _out = NULL;
+  unlink(_file); // like in CompileLog dtor
+  // _file_end: do not touch, mark_file_end calculates it based on the actual file size.
+}
+
+void CompileLog::after_restore() {
+  FILE* fp = os::fopen(_file, "wt");
+  _out = new(mtCompiler) fileStream(fp, true);
+}
+
+void CompileLog::swap_streams_on_restore() {
+  CompileLog* log = _first;
+  while (log != nullptr) {
+    log->after_restore();
+    log = log->_next;
+  }
+}
+
 // ------------------------------------------------------------------
 // CompileLog::finish_log_on_error
 //
@@ -303,6 +324,46 @@ void CompileLog::finish_log_on_error(outputStream* file, char* buf, int buflen) 
 void CompileLog::finish_log(outputStream* file) {
   char buf[4 * K];
   finish_log_on_error(file, buf, sizeof(buf));
+}
+
+void CompileLog::finish_log_on_checkpoint(outputStream* file) {
+  char buf[4 * K];
+  int buflen = sizeof(buf);
+  CompileLog* log = _first;
+  file->print_raw("<compilation_log closed at a checkpoint >");
+
+  while (log != nullptr) {
+    log->flush();
+    const char* partial_file = log->file();
+    int partial_fd = open(partial_file, O_RDONLY);
+    if (partial_fd != -1) {
+      // print/print_cr may need to allocate large stack buffer to format
+      // strings, here we use snprintf() and print_raw() instead.
+      file->print_raw("<compilation_log thread='");
+      jio_snprintf(buf, buflen, UINTX_FORMAT, log->thread_id());
+      file->print_raw(buf);
+      file->print_raw_cr("'>");
+
+      size_t nr; // number read into buf from partial log
+      // In case of unsuccessful completion, read returns -1.
+      ssize_t bytes_read;
+      // Copy data up to the end of the last <event> element:
+      julong to_read = log->_file_end;
+      while (to_read > 0) {
+        if (to_read < (julong)buflen)
+              nr = (size_t)to_read;
+        else  nr = buflen;
+        bytes_read = ::read(partial_fd, buf, (int)nr);
+        if (bytes_read <= 0) break;
+        nr = bytes_read;
+        to_read -= (julong)nr;
+        file->write(buf, nr);
+      }
+      ::close(partial_fd);
+    }
+    log->before_checkpoint();
+    log = log->_next;
+  }
 }
 
 // ------------------------------------------------------------------

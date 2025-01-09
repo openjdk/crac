@@ -26,6 +26,7 @@
 #define SHARE_UTILITIES_DEFAULTSTREAM_HPP
 
 #include "utilities/xmlstream.hpp"
+#include "compiler/compileLog.hpp"
 
 class defaultStream : public xmlTextStream {
   friend void ostream_abort();
@@ -43,7 +44,7 @@ class defaultStream : public xmlTextStream {
   void init_log();
   fileStream* open_file(const char* log_name);
   void start_log();
-  void finish_log();
+  void finish_log(bool is_checkpoint = false);
   void finish_log_on_error(char *buf, int buflen);
  public:
   // must defer time stamp due to the fact that os::init() hasn't
@@ -81,6 +82,26 @@ class defaultStream : public xmlTextStream {
     xmlTextStream::flush();
     fflush(output_stream());
     if (has_log_file()) _log_file->flush();
+  }
+
+  bool is_fd_used(int fd) {
+    return has_log_file() ? fd == _log_file->get_fd() : false;
+  }
+  void before_checkpoint() {
+    if (has_log_file()){
+      if (xtty != nullptr) {
+        ttyLocker ttyl;
+        xtty->begin_elem("crac_checkpoint_vm");
+        xtty->stamp();
+        xtty->end_elem();
+        xtty = nullptr;
+      }
+      finish_log(true);
+    }
+  }
+  void after_restore() {
+    init();
+    CompileLog::swap_streams_on_restore();
   }
 
   // advisory lock/unlock of _writer field:

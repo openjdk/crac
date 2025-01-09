@@ -30,6 +30,7 @@
 
 void transport_initialize(void);
 void transport_reset(void);
+void transport_before_checkpoint(void);
 jdwpError transport_startTransport(jboolean isServer, char *name, char *address,
                                    long timeout, char *allowed_peers);
 

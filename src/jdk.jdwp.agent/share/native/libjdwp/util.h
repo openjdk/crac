@@ -143,6 +143,9 @@ typedef struct {
     /* Indication that VM_DEATH has been received and the JVMTI callbacks have been cleared. */
     volatile jboolean jvmtiCallBacksCleared;
 
+    jboolean checkpointInProgress;
+    jboolean restoreInProgress;
+
 } BackendGlobalData;
 
 extern BackendGlobalData * gdata;

@@ -1339,6 +1339,7 @@ jdwpTransport_OnLoad(JavaVM *vm, jdwpTransportCallback* cbTablePtr,
         /*
          * This library doesn't support multiple environments (yet)
          */
+        *env = &single_env;
         return JNI_EEXIST;
     }
     initialized = JNI_TRUE;

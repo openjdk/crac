@@ -41,8 +41,8 @@ void CracSHM::unlink() {
   shm_unlink(_path);
 }
 
-void crac::initialize_time_counters() {
-  os::Posix::initialize_time_counters();
+void crac::reset_time_counters() {
+  os::Posix::reset_time_counters();
 }
 
 #ifndef LINUX

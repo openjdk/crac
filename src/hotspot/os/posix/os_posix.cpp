@@ -98,6 +98,7 @@
 typedef LINUX_ONLY(unsigned) char mincore_vec_t;
 
 static jlong initial_time_count = 0;
+static jlong restore_time_count = 0;
 
 static int clock_tics_per_sec = 100;
 
@@ -1375,6 +1376,11 @@ void os::Posix::init(void) {
 
 void os::Posix::initialize_time_counters(void) {
   initial_time_count = javaTimeNanos();
+  restore_time_count = initial_time_count;
+}
+
+void os::Posix::reset_time_counters(void) {
+  restore_time_count = javaTimeNanos();
 }
 
 void os::Posix::init_2(void) {
@@ -1555,6 +1561,10 @@ jlong os::elapsed_counter() {
 
 jlong os::elapsed_frequency() {
   return NANOSECS_PER_SEC; // nanosecond resolution
+}
+
+jlong os::elapsed_counter_since_restore() {
+  return os::javaTimeNanos() - restore_time_count;
 }
 
 bool os::supports_vtime() { return true; }

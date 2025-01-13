@@ -374,7 +374,7 @@ void VM_Crac::doit() {
   }
 
   if (CRaCResetStartTime) {
-    crac::initialize_time_counters();
+    crac::reset_time_counters();
   }
 
   // VM_Crac::read_shm needs to be already called to read RESTORE_SETTABLE parameters.

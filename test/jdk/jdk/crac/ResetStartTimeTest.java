@@ -22,6 +22,7 @@
  */
 
 import jdk.crac.Core;
+import jdk.internal.perf.Perf;
 import jdk.test.lib.crac.CracBuilder;
 import jdk.test.lib.crac.CracEngine;
 import jdk.test.lib.crac.CracTest;
@@ -38,6 +39,7 @@ import static jdk.test.lib.Asserts.assertLTE;
 /**
  * @test
  * @library /test/lib
+ * @modules java.base/jdk.internal.perf:+open
  * @build ResetStartTimeTest
  * @run driver/timeout=60 jdk.test.lib.crac.CracTest false
  * @run driver/timeout=60 jdk.test.lib.crac.CracTest true
@@ -52,7 +54,7 @@ public class ResetStartTimeTest implements CracTest {
 
     @Override
     public void test() throws Exception {
-        CracBuilder builder = new CracBuilder();
+        CracBuilder builder = new CracBuilder().vmOption("--add-opens").vmOption("java.base/jdk.internal.perf=ALL-UNNAMED");
         builder.startCheckpoint().waitForCheckpointed();
         if (!resetUptime) {
             builder.vmOption("-XX:+UnlockDiagnosticVMOptions");
@@ -66,10 +68,11 @@ public class ResetStartTimeTest implements CracTest {
     public void exec() throws Exception {
         Thread.sleep(WAIT_TIMEOUT);
         final long uptime0 = ManagementFactory.getRuntimeMXBean().getUptime();
+        final long counter0 = Perf.getPerf().highResCounter();
 
         Core.checkpointRestore();
-        System.out.println(RESTORED_MESSAGE);
         final long uptime1 = ManagementFactory.getRuntimeMXBean().getUptime();
+        final long counter1 = Perf.getPerf().highResCounter();
 
         if (resetUptime) {
             assertLT(uptime1, uptime0);
@@ -77,5 +80,8 @@ public class ResetStartTimeTest implements CracTest {
         } else {
             assertLTE(uptime0, uptime1);
         }
+        assertLT(counter0, counter1);
+
+        System.out.println(RESTORED_MESSAGE);
     }
 }

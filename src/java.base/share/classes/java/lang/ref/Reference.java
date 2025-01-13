@@ -344,11 +344,6 @@ public abstract sealed class Reference<T>
             public void wakeupReferenceQueue(ReferenceQueue<?> queue) {
                 queue.wakeup();
             }
-
-            @Override
-            public <T> ReferenceQueue<T> newNativeReferenceQueue() {
-                return new NativeReferenceQueue<T>();
-            }
         });
     }
 

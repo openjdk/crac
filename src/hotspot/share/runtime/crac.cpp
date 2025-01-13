@@ -483,10 +483,13 @@ Handle crac::checkpoint(jarray fd_arr, jobjectArray obj_arr, bool dry_run, jlong
 #endif
 
   if (cr.ok()) {
-    oop new_args = NULL;
+    // Using handle rather than oop; dangling oop would fail with -XX:+CheckUnhandledOops
+    Handle new_args;
     if (cr.new_args()) {
-      new_args = java_lang_String::create_oop_from_str(cr.new_args(), CHECK_NH);
+      oop args_oop = java_lang_String::create_oop_from_str(cr.new_args(), CHECK_NH);
+      new_args = Handle(THREAD, args_oop);
     }
+
     GrowableArray<const char *>* new_properties = cr.new_properties();
     objArrayOop propsObj = oopFactory::new_objArray(vmClasses::String_klass(), new_properties->length(), CHECK_NH);
     objArrayHandle props(THREAD, propsObj);
@@ -498,7 +501,7 @@ Handle crac::checkpoint(jarray fd_arr, jobjectArray obj_arr, bool dry_run, jlong
 
     wakeup_threads_in_timedwait();
 
-    return ret_cr(JVM_CHECKPOINT_OK, Handle(THREAD, new_args), props, Handle(), Handle(), THREAD);
+    return ret_cr(JVM_CHECKPOINT_OK, new_args, props, Handle(), Handle(), THREAD);
   }
 
   GrowableArray<CracFailDep>* failures = cr.failures();

@@ -218,28 +218,20 @@ public class FileOutputStream extends OutputStream
     public FileOutputStream(File file, boolean append)
         throws FileNotFoundException
     {
-        String name = (file != null ? file.getPath() : null);
-        @SuppressWarnings("removal")
-        SecurityManager security = System.getSecurityManager();
-        if (security != null) {
-            security.checkWrite(name);
-        }
-        if (name == null) {
-            throw new NullPointerException();
-        }
         if (file.isInvalid()) {
             throw new FileNotFoundException("Invalid file path");
         }
+        this.path = file.getPath();
+
         this.fd = new FileDescriptor();
         fd.attach(this);
-        this.path = name;
         if (append) {
             channelResource = null;
         } else {
             channelResource = new EnsureChannelResource();
         }
 
-        open(name, append);
+        open(this.path, append);
         FileCleanable.register(fd);   // open sets the fd, register the cleanup
     }
 
@@ -260,13 +252,8 @@ public class FileOutputStream extends OutputStream
      */
     @SuppressWarnings("this-escape")
     public FileOutputStream(FileDescriptor fdObj) {
-        @SuppressWarnings("removal")
-        SecurityManager security = System.getSecurityManager();
         if (fdObj == null) {
             throw new NullPointerException();
-        }
-        if (security != null) {
-            security.checkWrite(fdObj);
         }
         this.fd = fdObj;
         this.path = null;

@@ -39,7 +39,7 @@ import static jdk.test.lib.Asserts.*;
  * This test includes two behaviours:
  * 1) inheriting open FD from parent process: this is achieved using EXTRA_FD_WRAPPER
  *    - any excess inherited FDs should be closed when JVM starts.
- * 2) open files on classpath: these files are ignored, handling is left to CREngine
+ * 2) open files on classpath: these files are ignored, handling is left to CRaCEngine
  *
  * @test
  * @library /test/lib

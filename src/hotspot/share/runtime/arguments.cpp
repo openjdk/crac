@@ -557,6 +557,15 @@ static SpecialFlag const special_jvm_flags[] = {
   { "dup option",                   JDK_Version::jdk(9), JDK_Version::undefined(), JDK_Version::undefined() },
 #endif
 
+  { "CREngine",                     JDK_Version::jdk(24), JDK_Version::undefined(), JDK_Version::undefined() },
+  { "CRAllowedOpenFilePrefixes",    JDK_Version::jdk(24), JDK_Version::undefined(), JDK_Version::undefined() },
+  { "CRAllowToSkipCheckpoint",      JDK_Version::jdk(24), JDK_Version::undefined(), JDK_Version::undefined() },
+  { "CRHeapDumpOnCheckpointException", JDK_Version::jdk(24), JDK_Version::undefined(), JDK_Version::undefined() },
+  { "CRPrintResourcesOnCheckpoint", JDK_Version::jdk(24), JDK_Version::undefined(), JDK_Version::undefined() },
+  { "CRTraceStartupTime",           JDK_Version::jdk(24), JDK_Version::undefined(), JDK_Version::undefined() },
+  { "CRDoThrowCheckpointException", JDK_Version::jdk(24), JDK_Version::undefined(), JDK_Version::undefined() },
+  { "CRPauseOnCheckpointError",     JDK_Version::jdk(24), JDK_Version::undefined(), JDK_Version::undefined() },
+
   { nullptr, JDK_Version(0), JDK_Version(0) }
 };
 
@@ -568,6 +577,14 @@ typedef struct {
 
 static AliasedFlag const aliased_jvm_flags[] = {
   { "CreateMinidumpOnCrash",    "CreateCoredumpOnCrash" },
+  { "CREngine",                        "CRaCEngine" },
+  { "CRAllowedOpenFilePrefixes",       "CRaCAllowedOpenFilePrefixes" },
+  { "CRAllowToSkipCheckpoint",         "CRaCAllowToSkipCheckpoint "},
+  { "CRHeapDumpOnCheckpointException", "CRaCHeapDumpOnCheckpointException" },
+  { "CRPrintResourcesOnCheckpoint",    "CRaCPrintResourcesOnCheckpoint" },
+  { "CRTraceStartupTime",              "CRaCTraceStartupTime" },
+  { "CRDoThrowCheckpointException",    "CRaCDoThrowCheckpointException" },
+  { "CRPauseOnCheckpointError",        "CRaCPauseOnCheckpointError" },
   { nullptr, nullptr}
 };
 

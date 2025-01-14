@@ -91,7 +91,7 @@ void VM_Crac::trace_cr(const char* msg, ...) {
 }
 
 void VM_Crac::print_resources(const char* msg, ...) {
-  if (CRPrintResourcesOnCheckpoint) {
+  if (CRaCPrintResourcesOnCheckpoint) {
     va_list ap;
     va_start(ap, msg);
 #ifdef __clang__
@@ -132,10 +132,10 @@ static bool compute_crengine() {
   os::free((char *) _crengine_arg_str);
   _crengine_arg_str = NULL;
 
-  if (!CREngine) {
+  if (!CRaCEngine) {
     return true;
   }
-  char *exec = os::strdup_check_oom(CREngine);
+  char *exec = os::strdup_check_oom(CRaCEngine);
   char *comma = strchr(exec, ',');
   if (comma != NULL) {
     *comma = '\0';
@@ -152,7 +152,7 @@ static bool compute_crengine() {
 
     struct stat st;
     if (0 != os::stat(path, &st)) {
-      warning("Could not find CREngine %s: %s", path, os::strerror(errno));
+      warning("Could not find CRaCEngine %s: %s", path, os::strerror(errno));
       return false;
     }
     _crengine = os::strdup_check_oom(path);
@@ -168,7 +168,7 @@ static bool compute_crengine() {
     bool escaped = false;
     for (char *c = arg; *c != '\0'; ++c) {
       if (_crengine_argc >= ARRAY_SIZE(_crengine_args) - 2) {
-        warning("Too many options to CREngine; cannot proceed with these: %s", arg);
+        warning("Too many options to CRaCEngine; cannot proceed with these: %s", arg);
         return false;
       }
       if (!escaped) {
@@ -195,7 +195,7 @@ static bool compute_crengine() {
 
 static void add_crengine_arg(const char *arg) {
   if (_crengine_argc >= ARRAY_SIZE(_crengine_args) - 1) {
-      warning("Too many options to CREngine; cannot add %s", arg);
+      warning("Too many options to CRaCEngine; cannot add %s", arg);
       return;
   }
   _crengine_args[_crengine_argc++] = arg;
@@ -241,7 +241,7 @@ static int checkpoint_restore(int *shmid) {
 
   crac::update_javaTimeNanos_offset();
 
-  if (CRTraceStartupTime) {
+  if (CRaCTraceStartupTime) {
     tty->print_cr("STARTUPTIME " JLONG_FORMAT " restore-native", os::javaTimeNanos());
   }
 
@@ -331,15 +331,15 @@ void VM_Crac::doit() {
     ok = false;
   }
 
-  if ((!ok || _dry_run) && CRHeapDumpOnCheckpointException) {
+  if ((!ok || _dry_run) && CRaCHeapDumpOnCheckpointException) {
     HeapDumper::dump_heap();
   }
 
-  if (!ok && CRPauseOnCheckpointError) {
+  if (!ok && CRaCPauseOnCheckpointError) {
     os::message_box("Checkpoint failed", "Errors were found during checkpoint.");
   }
 
-  if (!ok && CRDoThrowCheckpointException) {
+  if (!ok && CRaCDoThrowCheckpointException) {
     return;
   } else if (_dry_run) {
     _ok = ok;
@@ -351,7 +351,7 @@ void VM_Crac::doit() {
   }
 
   int shmid = 0;
-  if (CRAllowToSkipCheckpoint) {
+  if (CRaCAllowToSkipCheckpoint) {
     trace_cr("Skip Checkpoint");
   } else {
     trace_cr("Checkpoint ...");
@@ -521,10 +521,12 @@ Handle crac::checkpoint(jarray fd_arr, jobjectArray obj_arr, bool dry_run, jlong
   return ret_cr(JVM_CHECKPOINT_ERROR, Handle(), Handle(), codes, msgs, THREAD);
 }
 
-void crac::restore() {
-  jlong restore_time = os::javaTimeMillis();
-  jlong restore_nanos = os::javaTimeNanos();
+void crac::prepare_restore(crac_restore_data& restore_data) {
+  restore_data.restore_time = os::javaTimeMillis();
+  restore_data.restore_nanos = os::javaTimeNanos();
+}
 
+void crac::restore(crac_restore_data& restore_data) {
   compute_crengine();
 
   const int id = os::current_process_id();
@@ -537,8 +539,8 @@ void crac::restore() {
           Arguments::jvm_flags_array(), Arguments::num_jvm_flags(),
           Arguments::system_properties(),
           Arguments::java_command() ? Arguments::java_command() : "",
-          restore_time,
-          restore_nanos)) {
+          restore_data.restore_time,
+          restore_data.restore_nanos)) {
       char strid[32];
       snprintf(strid, sizeof(strid), "%d", id);
       LINUX_ONLY(setenv("CRAC_NEW_ARGS_ID", strid, true));

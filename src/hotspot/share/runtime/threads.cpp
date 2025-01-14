@@ -415,12 +415,12 @@ void Threads::initialize_jsr292_core_classes(TRAPS) {
   initialize_class(vmSymbols::java_lang_invoke_MethodHandleNatives(), CHECK);
 }
 
-jint Threads::check_for_restore(JavaVMInitArgs* args) {
+static jint check_for_restore(JavaVMInitArgs* args, crac::crac_restore_data& restore_data) {
   if (Arguments::is_restore_option_set(args)) {
     if (!Arguments::parse_options_for_restore(args)) {
       return JNI_ERR;
     }
-    crac::restore();
+    crac::restore(restore_data);
     if (!CRaCIgnoreRestoreIfUnavailable) {
       // FIXME switch to unified hotspot logging
       warning("cannot restore");
@@ -433,6 +433,14 @@ jint Threads::check_for_restore(JavaVMInitArgs* args) {
 jint Threads::create_vm(JavaVMInitArgs* args, bool* canTryAgain) {
   extern void JDK_Version_init();
 
+#ifdef __APPLE__
+  // BSD clock would be initialized in os::init() but we need to do that earlier
+  // as crac::prepare_restore() calls os::javaTimeNanos().
+  os::Bsd::clock_init();
+#endif
+  crac::crac_restore_data restore_data;
+  crac::prepare_restore(restore_data);
+
   // Preinitialize version info.
   VM_Version::early_initialize();
 
@@ -444,15 +452,6 @@ jint Threads::create_vm(JavaVMInitArgs* args, bool* canTryAgain) {
 
   // Initialize the output stream module
   ostream_init();
-
-#ifdef __APPLE__
-  // BSD clock would be initialized in os::init() but we need to do that earlier
-  // as crac::restore() calls os::javaTimeNanos().
-  os::Bsd::clock_init();
-#endif
-
-  // Output stream module should be already initialized for error reporting during restore.
-  if (check_for_restore(args) != JNI_OK) return JNI_ERR;
 
   // Process java launcher properties.
   Arguments::process_sun_java_launcher_properties(args);
@@ -471,6 +470,10 @@ jint Threads::create_vm(JavaVMInitArgs* args, bool* canTryAgain) {
 
   // So that JDK version can be used as a discriminator when parsing arguments
   JDK_Version_init();
+
+  // Output stream module should be already initialized for error reporting during restore.
+  // JDK version should also be intialized for arguments parsing.
+  if (check_for_restore(args, restore_data) != JNI_OK) return JNI_ERR;
 
   // Update/Initialize System properties after JDK version number is known
   Arguments::init_version_specific_system_properties();

@@ -1962,10 +1962,10 @@ const int ObjectAlignmentInBytes = 8;
   product(bool, CRaCResetStartTime, true, DIAGNOSTIC | RESTORE_SETTABLE,    \
       "Reset JVM's start time and uptime on restore")                       \
                                                                             \
-  product_pd(ccstr, CREngine, RESTORE_SETTABLE,                             \
+  product_pd(ccstr, CRaCEngine, RESTORE_SETTABLE,                           \
       "Path or name of a program implementing checkpoint/restore and "      \
       "optional extra parameters as a comma-separated list: "               \
-      "-XX:CREngine=program,--key,value,--anotherkey results in calling "   \
+      "-XX:CRaCEngine=program,--key,value,--anotherkey results in calling " \
       "'program --key value --anotherkey'. Commas used as part of args "    \
       "should be escaped with a backslash character ('\\').")               \
                                                                             \
@@ -1979,31 +1979,32 @@ const int ObjectAlignmentInBytes = 8;
       "excluded automatically) not in this list are closed when the VM "    \
       "is started.")                                                        \
                                                                             \
-  product_pd(ccstrlist, CRAllowedOpenFilePrefixes, "List of path prefixes " \
-      "for files that can be open during checkpoint; CRaC won't error "     \
-      "upon detecting these and will leave the handling up to C/R engine. " \
-      "This option applies only to files opened by native code; for files " \
-      "opened by Java code use -Djdk.crac.resource-policies=...")           \
+  product_pd(ccstrlist, CRaCAllowedOpenFilePrefixes, "List of path "        \
+      "prefixes for files that can be open during checkpoint; CRaC won't "  \
+      "error upon detecting these and will leave the handling up to C/R "   \
+      "engine. This option applies only to files opened by native code; "   \
+      "for files opened by Java code use -Djdk.crac.resource-policies=...") \
                                                                             \
-  product(bool, CRAllowToSkipCheckpoint, false, DIAGNOSTIC,                 \
+  product(bool, CRaCAllowToSkipCheckpoint, false, DIAGNOSTIC,               \
       "Allow implementation to not call Checkpoint if helper not found")    \
                                                                             \
-  product(bool, CRHeapDumpOnCheckpointException, false, DIAGNOSTIC,         \
+  product(bool, CRaCHeapDumpOnCheckpointException, false, DIAGNOSTIC,       \
       "Dump heap on CheckpointException thrown because of CRaC "            \
       "precondition failed")                                                \
                                                                             \
-  product(bool, CRPrintResourcesOnCheckpoint, false, DIAGNOSTIC,            \
+  product(bool, CRaCPrintResourcesOnCheckpoint, false, DIAGNOSTIC,          \
       "Print resources to decide CheckpointException")                      \
                                                                             \
-  product(bool, CRTraceStartupTime, false, DIAGNOSTIC,                      \
+  product(bool, CRaCTraceStartupTime, false, DIAGNOSTIC,                    \
       "Trace startup time")                                                 \
                                                                             \
-  product(bool, CRDoThrowCheckpointException, true, EXPERIMENTAL,           \
+  product(bool, CRaCDoThrowCheckpointException, true, EXPERIMENTAL,         \
       "Throw CheckpointException if uncheckpointable resource handle found")\
                                                                             \
+  /* Not renaming to CRaCTrace, this should be obsoleted */                 \
   product(bool, CRTrace, true, RESTORE_SETTABLE, "Minimal C/R tracing")     \
                                                                             \
-  product(bool, CRPauseOnCheckpointError, false, DIAGNOSTIC,                \
+  product(bool, CRaCPauseOnCheckpointError, false, DIAGNOSTIC,              \
       "Pauses the checkpoint when a problem is found on VM level.")         \
                                                                             \
   product(int, LockingMode, LM_LIGHTWEIGHT,                                 \

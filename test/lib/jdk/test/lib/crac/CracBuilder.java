@@ -458,21 +458,21 @@ public class CracBuilder {
                     "," + Arrays.stream(engineArgs)
                             .map(str -> str.replace(",", "\\,"))
                             .collect(Collectors.joining(","));
-            cmd.add("-XX:CREngine=" + engine.engine + engArgs);
+            cmd.add("-XX:CRaCEngine=" + engine.engine + engArgs);
         }
         if (!isRestore) {
             cmd.add("-cp");
             cmd.add(getClassPath());
             if (printResources) {
                 cmd.add("-XX:+UnlockDiagnosticVMOptions");
-                cmd.add("-XX:+CRPrintResourcesOnCheckpoint");
+                cmd.add("-XX:+CRaCPrintResourcesOnCheckpoint");
             }
         }
         if (debug) {
             cmd.add("-agentlib:jdwp=transport=dt_socket,server=y,suspend=y,address=0.0.0.0:5005");
             if (!isRestore) {
                 cmd.add("-XX:+UnlockExperimentalVMOptions");
-                cmd.add("-XX:-CRDoThrowCheckpointException");
+                cmd.add("-XX:-CRaCDoThrowCheckpointException");
             }
         }
         cmd.addAll(vmOptions);

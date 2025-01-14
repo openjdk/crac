@@ -47,7 +47,7 @@
      public void test_fail() throws Exception {
          ProcessBuilder pb = ProcessTools.createTestJavaProcessBuilder(
                  "-XX:CRaCCheckpointTo=cr",
-                 "-XX:CREngine=" + UNKNOWN_ENGINE,
+                 "-XX:CRaCEngine=" + UNKNOWN_ENGINE,
                  "-version");
          OutputAnalyzer out = new OutputAnalyzer(pb.start());
          out.shouldHaveExitValue(1);

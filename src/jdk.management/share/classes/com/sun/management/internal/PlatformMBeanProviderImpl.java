@@ -31,8 +31,6 @@ import com.sun.management.ThreadMXBean;
 import java.lang.management.ManagementFactory;
 import java.lang.management.MemoryManagerMXBean;
 import java.lang.management.OperatingSystemMXBean;
-import java.security.AccessController;
-import java.security.PrivilegedAction;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
@@ -63,10 +61,7 @@ public final class PlatformMBeanProviderImpl extends PlatformMBeanProvider {
         "jdk.management:type=CRaC";
 
     static {
-       AccessController.doPrivileged((PrivilegedAction<Void>) () -> {
-           System.loadLibrary("management_ext");
-           return null;
-       });
+       System.loadLibrary("management_ext");
     }
 
     public PlatformMBeanProviderImpl() {

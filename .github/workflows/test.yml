@@ -186,10 +186,13 @@ jobs:
           JDK_IMAGE_DIR=${{ steps.bundles.outputs.jdk-path }}
           SYMBOLS_IMAGE_DIR=${{ steps.bundles.outputs.symbols-path }}
           TEST_IMAGE_DIR=${{ steps.bundles.outputs.tests-path }}
-          JTREG='JAVA_OPTIONS=-XX:-CreateCoredumpOnCrash;VERBOSE=fail,error,time;KEYWORDS=!headful'
+          JTREG="JAVA_OPTIONS=$JAVA_OPTIONS;VERBOSE=fail,error,time;KEYWORDS=!headful"
           && bash ./.github/scripts/gen-test-summary.sh "$GITHUB_STEP_SUMMARY" "$GITHUB_OUTPUT"
         env:
           PATH: ${{ steps.path.outputs.value }}
+          JAVA_OPTIONS: >-
+            -XX:-CreateCoredumpOnCrash
+            ${{ matrix.test-name == 'jdk/crac' && '-Djdk.test.docker.retain.image=true -Djdk.test.crac.reuse.image=true' || '' }}
 
         # This is a separate step, since if the markdown from a step gets bigger than
         # 1024 kB it is skipped, but then the short summary above is still generated

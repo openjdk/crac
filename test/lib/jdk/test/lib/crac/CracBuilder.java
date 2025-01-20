@@ -26,6 +26,13 @@ public class CracBuilder {
     private static final List<String> CRIU_CANDIDATES = Arrays.asList(Utils.TEST_JDK + "/lib/criu", "/usr/sbin/criu", "/sbin/criu");
     private static final String CRIU_PATH;
 
+    // Set this property to true to re-use an existing image.
+    // By default an image will be built from scratch.
+    // Reusing an image may be useful for running test cases with the same image,
+    // without rebuilding it.
+    public static final boolean REUSE_IMAGE_IF_EXIST =
+        Boolean.getBoolean("jdk.test.crac.reuse.image");
+
     // This dummy field is here as workaround for (possibly) a JTReg bug;
     // some tests don't build CracTestArg into their Test.d/ directory
     // (not all classes from /test/lib are built!) and the tests would fail.
@@ -307,6 +314,11 @@ public class CracBuilder {
             if (dockerImageBaseVersion != null) {
                 System.setProperty(DockerfileConfig.BASE_IMAGE_VERSION, dockerImageBaseVersion);
             }
+            if (REUSE_IMAGE_IF_EXIST) {
+                if (0 == DockerTestUtils.execute(Container.ENGINE_COMMAND, "inspect", "--type=image", dockerImageName).getExitValue()) {
+                    return;
+                }
+            }
             DockerTestUtils.buildJdkContainerImage(dockerImageName);
         } finally {
             if (previousBaseImageName != null) {
@@ -360,7 +372,9 @@ public class CracBuilder {
 
     public void ensureContainerKilled() throws Exception {
         DockerTestUtils.execute(Container.ENGINE_COMMAND, "kill", CONTAINER_NAME).getExitValue();
-        DockerTestUtils.removeDockerImage(dockerImageName);
+        if (!DockerTestUtils.RETAIN_IMAGE_AFTER_TEST) {
+            DockerTestUtils.removeDockerImage(dockerImageName);
+        }
     }
 
     public void recreateContainer(String imageName, String... options) throws Exception {

@@ -2,7 +2,6 @@ package jdk.internal.crac;
 
 import jdk.internal.crac.mirror.Context;
 import jdk.internal.crac.mirror.Resource;
-import sun.security.action.GetPropertyAction;
 
 import java.io.File;
 import java.io.IOException;
@@ -55,7 +54,7 @@ public class OpenResourcePolicies {
         // prevent loading recursively
         state = isRestore ? State.LOADED_FOR_RESTORE : State.LOADED_FOR_CHECKPOINT;
 
-        String file = GetPropertyAction.privilegedGetProperty(PROPERTY);
+        String file = System.getProperty(PROPERTY);
         if (file == null) {
             return;
         }

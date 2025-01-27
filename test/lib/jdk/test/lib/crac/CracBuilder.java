@@ -162,8 +162,9 @@ public class CracBuilder {
         return this;
     }
 
-    public void clearVmOptions() {
+    public CracBuilder clearVmOptions() {
         vmOptions.clear();
+        return this;
     }
 
     public CracBuilder printResources(boolean print) {
@@ -223,6 +224,12 @@ public class CracBuilder {
     public CracBuilder dockerOptions(String... options) {
         assertNull(dockerOptions);
         this.dockerOptions = options;
+        return this;
+    }
+
+    public CracBuilder clearDockerOptions() {
+        assertNotNull(dockerOptions);;
+        this.dockerOptions = null;
         return this;
     }
 
@@ -403,7 +410,9 @@ public class CracBuilder {
     }
 
     public CracProcess startRestore(List<String> javaPrefix) throws Exception {
-        ensureContainerStarted();
+        if (!runContainerDirectly) {
+            ensureContainerStarted();
+        }
         List<String> cmd = prepareCommand(javaPrefix, true);
         cmd.add("-XX:CRaCRestoreFrom=" + imageDir);
         log("Starting restored process:");

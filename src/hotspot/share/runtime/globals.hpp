@@ -2004,6 +2004,9 @@ const int ObjectAlignmentInBytes = 8;
   product(bool, CRaCPauseOnCheckpointError, false, DIAGNOSTIC,              \
       "Pauses the checkpoint when a problem is found on VM level.")         \
                                                                             \
+  product(size_t, CRaCMaxHeapSizeBeforeCheckpoint, 0, "Maximum size "       \
+      "of heap before checkpoint. By default equals to -Xmx.")              \
+                                                                            \
   product(int, LockingMode, LM_LIGHTWEIGHT,                                 \
           "(Deprecated) Select locking mode: "                              \
           "0: (Deprecated) monitors only (LM_MONITOR), "                    \

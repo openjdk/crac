@@ -121,6 +121,7 @@ class G1HeapRegionManager: public CHeapObj<mtGC> {
   void clear_auxiliary_data_structures(uint start, uint num_regions);
 
   G1HeapRegionTable _regions;
+  uint _max_available_regions;
   G1RegionToSpaceMapper* _heap_mapper;
   G1RegionToSpaceMapper* _bitmap_mapper;
   G1FreeRegionList _free_list;
@@ -145,7 +146,7 @@ class G1HeapRegionManager: public CHeapObj<mtGC> {
   G1HeapRegion* allocate_humongous_allow_expand(uint num_regions);
 
   // Expand helper for cases when the regions to expand are well defined.
-  void expand_exact(uint start, uint num_regions, WorkerThreads* pretouch_workers);
+  bool expand_exact(uint start, uint num_regions, WorkerThreads* pretouch_workers);
   // Expand helper activating inactive regions rather than committing new ones.
   uint expand_inactive(uint num_regions);
   // Expand helper finding new regions to commit.
@@ -230,7 +231,7 @@ public:
   }
 
   // Return the number of regions available (uncommitted) regions.
-  uint available() const { return max_length() - length(); }
+  uint available() const { return _max_available_regions - length(); }
 
   // Return the number of regions currently active and available for use.
   uint length() const { return _committed_map.num_active(); }
@@ -287,6 +288,8 @@ public:
 
   // Do some sanity checking.
   void verify_optional() PRODUCT_RETURN;
+
+  void after_restore(void);
 };
 
 // The G1HeapRegionClaimer is used during parallel iteration over heap regions,

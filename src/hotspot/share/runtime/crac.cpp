@@ -473,6 +473,8 @@ Handle crac::checkpoint(jarray fd_arr, jobjectArray obj_arr, bool dry_run, jlong
     VMThread::execute(&cr);
   }
 
+  Universe::heap()->after_restore();
+
   LogConfiguration::reopen();
   if (aio_writer) {
     aio_writer->resume();

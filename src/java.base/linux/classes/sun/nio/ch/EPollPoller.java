@@ -24,6 +24,7 @@
  */
 package sun.nio.ch;
 
+import java.io.FileDescriptor;
 import java.io.IOException;
 import static sun.nio.ch.EPoll.*;
 
@@ -38,6 +39,7 @@ class EPollPoller extends Poller {
     private final int event;
     private final int maxEvents;
     private final long address;
+    private long stopPipe;
 
     EPollPoller(boolean subPoller, boolean read) throws IOException {
         this.epfd = EPoll.create();
@@ -49,6 +51,24 @@ class EPollPoller extends Poller {
     @Override
     int fdVal() {
         return epfd;
+    }
+
+    @Override
+    protected void stop() throws IOException {
+        super.stop();
+        stopPipe = IOUtil.makePipe(true);
+        int err = EPoll.ctl(epfd, EPOLL_CTL_ADD, (int)(stopPipe >> 32), EPOLLIN | EPOLLONESHOT);
+        if (err != 0) {
+            throw new IOException("epoll_ctl failed: " + err);
+        }
+        IOUtil.write1((int) stopPipe, (byte) 0);
+    }
+
+    @Override
+    protected void closeFds() throws IOException {
+        Poller.nd.close(IOUtil.newFD((int) (stopPipe >> 32)));
+        Poller.nd.close(IOUtil.newFD((int) stopPipe));
+        super.closeFds();
     }
 
     @Override

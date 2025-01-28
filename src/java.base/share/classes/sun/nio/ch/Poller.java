@@ -24,17 +24,20 @@
  */
 package sun.nio.ch;
 
+import java.io.FileDescriptor;
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.Executor;
-import java.util.concurrent.Executors;
-import java.util.concurrent.ThreadFactory;
+import java.util.concurrent.*;
 import java.util.concurrent.locks.LockSupport;
 import java.util.function.BooleanSupplier;
+import jdk.internal.crac.JDKResource;
+import jdk.internal.crac.Core;
+import jdk.internal.crac.mirror.Context;
+import jdk.internal.crac.mirror.Resource;
 import jdk.internal.misc.InnocuousThread;
 
 /**
@@ -42,6 +45,8 @@ import jdk.internal.misc.InnocuousThread;
  * until a given file descriptor is ready for I/O.
  */
 public abstract class Poller {
+    static final NativeDispatcher nd = new SocketDispatcher();
+
     private static final Pollers POLLERS;
     static {
         try {
@@ -55,6 +60,7 @@ public abstract class Poller {
 
     // maps file descriptors to parked Thread
     private final Map<Integer, Thread> map = new ConcurrentHashMap<>();
+    private volatile boolean stop = false;
 
     /**
      * Poller mode.
@@ -121,6 +127,18 @@ public abstract class Poller {
      */
     final void polled(int fdVal) {
         wakeup(fdVal);
+    }
+
+    /**
+     * Implementation is expected to override this method adding wakeup
+     * code for the thread (natively) waiting in {@link #poll(int)}.
+     */
+    protected void stop() throws IOException {
+        stop = true;
+    }
+
+    protected void closeFds() throws IOException {
+        nd.close(IOUtil.newFD(fdVal()));
     }
 
     /**
@@ -239,7 +257,7 @@ public abstract class Poller {
      */
     private void pollerLoop() {
         try {
-            for (;;) {
+            while (!stop) {
                 poll(-1);
             }
         } catch (Exception e) {
@@ -260,13 +278,15 @@ public abstract class Poller {
         assert Thread.currentThread().isVirtual();
         try {
             int polled = 0;
-            for (;;) {
+            while (!stop) {
                 if (polled == 0) {
                     masterPoller.poll(fdVal(), 0, () -> true);  // park
                 } else {
                     Thread.yield();
                 }
-                polled = poll(0);
+                if (!stop) {
+                    polled = poll(0);
+                }
             }
         } catch (Exception e) {
             e.printStackTrace();
@@ -288,15 +308,16 @@ public abstract class Poller {
     /**
      * The Pollers used for read and write events.
      */
-    private static class Pollers {
+    private static class Pollers implements JDKResource {
         private final PollerProvider provider;
         private final Poller.Mode pollerMode;
-        private final Poller masterPoller;
+        private Poller masterPoller;
         private final Poller[] readPollers;
         private final Poller[] writePollers;
+        private final List<Thread> threads = new ArrayList<>();
 
         // used by start method to executor is kept alive
-        private Executor executor;
+        private ExecutorService executor;
 
         /**
          * Creates the Poller instances based on configuration.
@@ -341,6 +362,8 @@ public abstract class Poller {
             this.masterPoller = masterPoller;
             this.readPollers = readPollers;
             this.writePollers = writePollers;
+
+            Core.Priority.EPOLLSELECTOR.getContext().register(this);
         }
 
         /**
@@ -437,9 +460,66 @@ public abstract class Poller {
                 thread.setDaemon(true);
                 thread.setUncaughtExceptionHandler((t, e) -> e.printStackTrace());
                 thread.start();
+                threads.add(thread);
             } catch (Exception e) {
                 throw new InternalError(e);
             }
+        }
+
+        @Override
+        public void beforeCheckpoint(Context<? extends Resource> context) throws Exception {
+            for (int i = 0; i < readPollers.length; i++) {
+                if (masterPoller != null) {
+                    masterPoller.wakeup(readPollers[i].fdVal());
+                }
+                readPollers[i].stop();
+            }
+            for (int i = 0; i < writePollers.length; i++) {
+                if (masterPoller != null) {
+                    masterPoller.wakeup(writePollers[i].fdVal());
+                }
+                writePollers[i].stop();
+            }
+            if (masterPoller != null) {
+                masterPoller.stop();
+            }
+            if (executor != null) {
+                executor.shutdownNow();
+                if (!executor.awaitTermination(10, TimeUnit.SECONDS)) {
+                    throw new TimeoutException("Poller executor did not complete");
+                }
+            }
+            for (Thread t : threads) {
+                t.interrupt();
+                t.join();
+            }
+            threads.clear();
+            for (int i = 0; i < readPollers.length; i++) {
+                readPollers[i].closeFds();
+                readPollers[i] = null;
+            }
+            for (int i = 0; i < writePollers.length; i++) {
+                writePollers[i].closeFds();
+                writePollers[i] = null;
+            }
+            if (masterPoller != null) {
+                masterPoller.closeFds();
+                masterPoller = null;
+            }
+        }
+
+        @Override
+        public void afterRestore(Context<? extends Resource> context) throws Exception {
+            if (pollerMode == Mode.VTHREAD_POLLERS) {
+                masterPoller = provider.readPoller(false);
+            }
+            for (int i = 0; i < readPollers.length; i++) {
+                readPollers[i] = provider.readPoller(pollerMode == Mode.VTHREAD_POLLERS);
+            }
+            for (int i = 0; i < writePollers.length; i++) {
+                writePollers[i] = provider.writePoller(pollerMode == Mode.VTHREAD_POLLERS);
+            }
+            start();
         }
     }
 }

@@ -393,7 +393,7 @@ void PosixAttachOperation::effectively_complete_raw(jint result, bufferedStream*
   // write operation result
   Thread* thread = Thread::current();
   if (thread->is_Java_thread()) {
-    ThreadBlockInVM((JavaThread* )thread);
+    ThreadBlockInVM tbivm(JavaThread::cast(thread));
     write_operation_result(result, st);
   } else {
     write_operation_result(result, st);

@@ -1155,8 +1155,9 @@ void VM_Version::glibc_not_using(uint64_t shouldnotuse_CPU, uint64_t shouldnotus
       disable(kind, value, tunables);
     }
   };
-#define EXCESSIVE(kind, tunables) \
-    shouldnotuse(PASTE_TOKENS(KIND_, kind), PASTE_TOKENS3(kind, _, tunables), STR(kind), STR(tunables), FEATURE_ACTIVE(tunables))
+#define EXCESSIVE3(kind, hotspot, tunables) \
+    shouldnotuse(PASTE_TOKENS(KIND_, kind), PASTE_TOKENS3(kind, _, hotspot), STR(kind), STR(tunables), FEATURE_ACTIVE(tunables))
+#define EXCESSIVE(kind, tunables) EXCESSIVE3(kind, tunables, tunables)
 
   EXCESSIVE(CPU  , AVX     );
   EXCESSIVE(CPU  , CX8     );

@@ -1155,9 +1155,8 @@ void VM_Version::glibc_not_using(uint64_t shouldnotuse_CPU, uint64_t shouldnotus
       disable(kind, value, tunables);
     }
   };
-#define EXCESSIVE3(kind, hotspot, tunables) \
-    shouldnotuse(PASTE_TOKENS(KIND_, kind), PASTE_TOKENS3(kind, _, hotspot), STR(kind), STR(tunables), FEATURE_ACTIVE(tunables))
-#define EXCESSIVE(kind, tunables) EXCESSIVE3(kind, tunables, tunables)
+#define EXCESSIVE(kind, tunables) \
+    shouldnotuse(PASTE_TOKENS(KIND_, kind), PASTE_TOKENS3(kind, _, tunables), STR(kind), STR(tunables), FEATURE_ACTIVE(tunables))
 
   EXCESSIVE(CPU  , AVX     );
   EXCESSIVE(CPU  , CX8     );
@@ -1181,10 +1180,10 @@ void VM_Version::glibc_not_using(uint64_t shouldnotuse_CPU, uint64_t shouldnotus
   EXCESSIVE(CPU  , AVX512ER);
   EXCESSIVE(CPU  , AVX512PF);
   EXCESSIVE(CPU  , AVX512VL);
-  EXCESSIVE3(CPU , CET_IBT , IBT  );
-  EXCESSIVE3(CPU , CET_SS  , SHSTK);
+  EXCESSIVE(GLIBC, IBT     );
   EXCESSIVE(GLIBC, FMA4    );
   EXCESSIVE(GLIBC, MOVBE   );
+  EXCESSIVE(GLIBC, SHSTK   );
   EXCESSIVE(GLIBC, XSAVE   );
   EXCESSIVE(GLIBC, OSXSAVE );
   EXCESSIVE(GLIBC, HTT     );
@@ -1224,7 +1223,12 @@ void VM_Version::glibc_not_using(uint64_t shouldnotuse_CPU, uint64_t shouldnotus
   GLIBC_UNSUPPORTED(CPU  , F16C             );
   GLIBC_UNSUPPORTED(CPU  , PKU              );
   GLIBC_UNSUPPORTED(CPU  , OSPKE            );
+  GLIBC_UNSUPPORTED(CPU  , CET_IBT          );
+  GLIBC_UNSUPPORTED(CPU  , CET_SS           );
   GLIBC_UNSUPPORTED(CPU  , AVX512_IFMA      );
+  GLIBC_UNSUPPORTED(CPU  , AVX_IFMA         );
+  GLIBC_UNSUPPORTED(CPU  , APX_F            );
+  GLIBC_UNSUPPORTED(CPU  , SHA512           );
   // These are handled as an exception above.
   GLIBC_UNSUPPORTED(CPU  , FXSR             );
   GLIBC_UNSUPPORTED(CPU  , MMX              );

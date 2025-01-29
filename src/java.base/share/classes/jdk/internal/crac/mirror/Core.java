@@ -240,22 +240,20 @@ public class Core {
             // Parse arguments into array, unescape spaces
             final char escChar = '\\';
             final char sepChar = ' ';
-            ArrayList<String> argList = new ArrayList<String>();
-            argList.add("");
+            final var argList = new ArrayList<String>();
+            final var curArgBuilder = new StringBuilder();
             for (int i = 0; i < newArguments.length(); ++i) {
                 final char curChar = newArguments.charAt(i);
-                final int lastIdx = argList.size() - 1;
                 switch (curChar) {
-                    case sepChar:
-                        argList.add("");
-                        break;
-                    case escChar:
-                        argList.set(lastIdx, argList.get(lastIdx) + newArguments.charAt(++i));
-                        break;
-                    default:
-                        argList.set(lastIdx, argList.get(lastIdx) + curChar);
+                    case sepChar -> {
+                        argList.add(curArgBuilder.toString());
+                        curArgBuilder.setLength(0);
+                    }
+                    case escChar -> curArgBuilder.append(newArguments.charAt(++i));
+                    default -> curArgBuilder.append(curChar);
                 }
             }
+            argList.add(curArgBuilder.toString());
 
             final String[] args = argList.toArray(new String[argList.size()]);
             if (args.length > 0) {

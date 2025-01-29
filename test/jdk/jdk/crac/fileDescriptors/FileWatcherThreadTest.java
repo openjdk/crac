@@ -37,7 +37,7 @@ import java.util.concurrent.BrokenBarrierException;
 import java.util.concurrent.CyclicBarrier;
 
 /**
- * @test Checks the different state of WatchService keys at a checkpoint moment. 
+ * @test Checks the different state of WatchService keys at a checkpoint moment.
  * @library /test/lib
  * @build FileWatcherThreadTest
  * @run driver jdk.test.lib.crac.CracTest true

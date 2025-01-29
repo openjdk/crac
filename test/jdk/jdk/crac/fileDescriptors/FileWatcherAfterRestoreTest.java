@@ -26,13 +26,13 @@
  import jdk.test.lib.crac.CracBuilder;
  import jdk.test.lib.crac.CracTest;
  import jdk.test.lib.crac.CracTestArg;
- 
+
  import java.io.File;
  import java.io.IOException;
  import java.nio.file.*;
  import java.util.Objects;
  import java.util.concurrent.TimeUnit;
- 
+
 /**
  * @test
  * @library /test/lib
@@ -56,7 +56,7 @@ public class FileWatcherAfterRestoreTest implements CracTest {
                 f.delete();
             }
             Files.delete(checkPath);
-        } 
+        }
         builder.doRestore();
     }
 

@@ -200,7 +200,6 @@ private:
   bool is_socket_from_jcmd(int sock_fd);
   void report_ok_to_jcmd_if_any();
   void print_resources(const char* msg, ...);
-  void trace_cr(const char* msg, ...);
   bool check_fds();
   bool memory_checkpoint();
   void memory_restore();

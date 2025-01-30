@@ -66,7 +66,7 @@ public class JdwpTransportTest implements CracTest {
     private static String PORT = "5555";
     private static String DEBUGEE = "Listening for transport dt_socket at address: 5555";
     private static String STARTED = "APP: Started";
-    private static String CHECKPOINT = "CR: Checkpoint";
+    private static String CHECKPOINT = "[crac] Checkpoint";
 
     private VirtualMachine attachDebugger() throws Exception {
         AttachingConnector ac = Bootstrap.virtualMachineManager().attachingConnectors()

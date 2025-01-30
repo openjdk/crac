@@ -1998,9 +1998,6 @@ const int ObjectAlignmentInBytes = 8;
   product(bool, CRaCDoThrowCheckpointException, true, EXPERIMENTAL,         \
       "Throw CheckpointException if uncheckpointable resource handle found")\
                                                                             \
-  /* Not renaming to CRaCTrace, this should be obsoleted */                 \
-  product(bool, CRTrace, true, RESTORE_SETTABLE, "Minimal C/R tracing")     \
-                                                                            \
   product(bool, CRaCPauseOnCheckpointError, false, DIAGNOSTIC,              \
       "Pauses the checkpoint when a problem is found on VM level.")         \
                                                                             \

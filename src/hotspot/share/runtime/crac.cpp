@@ -73,23 +73,6 @@ jlong crac::uptime_since_restore() {
   return os::javaTimeNanos() - _restore_start_nanos;
 }
 
-void VM_Crac::trace_cr(const char* msg, ...) {
-  if (CRTrace) {
-    va_list ap;
-    va_start(ap, msg);
-    _ostream->print("CR: ");
-#ifdef __clang__
-#pragma clang diagnostic push
-#pragma clang diagnostic ignored "-Wformat-nonliteral"
-#endif
-    _ostream->vprint_cr(msg, ap);
-#ifdef __clang__
-#pragma clang diagnostic pop
-#endif
-    va_end(ap);
-  }
-}
-
 void VM_Crac::print_resources(const char* msg, ...) {
   if (CRaCPrintResourcesOnCheckpoint) {
     va_list ap;
@@ -353,9 +336,9 @@ void VM_Crac::doit() {
 
   int shmid = 0;
   if (CRaCAllowToSkipCheckpoint) {
-    trace_cr("Skip Checkpoint");
+    log_info(crac)("Skip Checkpoint");
   } else {
-    trace_cr("Checkpoint ...");
+    log_info(crac)("Checkpoint ...");
     report_ok_to_jcmd_if_any();
     int ret = checkpoint_restore(&shmid);
     if (ret == JVM_CHECKPOINT_ERROR) {
@@ -393,6 +376,9 @@ void VM_Crac::doit() {
 
 
 bool crac::prepare_checkpoint() {
+  // Automatically configure log level for 'crac' to Info
+  LogTagSetMapping<LOG_TAGS(crac)>::tagset().set_output_level(LogConfiguration::StdoutLog, LogLevelType::Info);
+
   struct stat st;
 
   if (0 == os::stat(CRaCCheckpointTo, &st)) {
@@ -459,7 +445,7 @@ Handle crac::checkpoint(jarray fd_arr, jobjectArray obj_arr, bool dry_run, jlong
       if (sc.after != SIZE_MAX) {
         const size_t delta = sc.after < sc.before ? (sc.before - sc.after) : (sc.after - sc.before);
         const char sign = sc.after < sc.before ? '-' : '+';
-        log_info(crac)("Trim native heap before checkpoint: " PROPERFMT "->" PROPERFMT " (%c" PROPERFMT ")",
+        log_debug(crac)("Trim native heap before checkpoint: " PROPERFMT "->" PROPERFMT " (%c" PROPERFMT ")",
                         PROPERFMTARGS(sc.before), PROPERFMTARGS(sc.after), sign, PROPERFMTARGS(delta));
       }
     }

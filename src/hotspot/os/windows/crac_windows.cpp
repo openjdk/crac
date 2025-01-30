@@ -43,13 +43,6 @@ bool VM_Crac::memory_checkpoint() {
 void VM_Crac::memory_restore() {
 }
 
-int CracSHM::open(int mode) {
-  return -1;
-}
-
-void CracSHM::unlink() {
-}
-
 bool crac::read_bootid(char *dest) {
   return true;
 }

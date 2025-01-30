@@ -269,6 +269,7 @@ bool VM_Crac::read_shm(int shmid) {
   int shmfd = shm.open(O_RDONLY);
   shm.unlink();
   if (shmfd < 0) {
+    log_error(crac)("Cannot read restore parameters (JVM flags, env vars, system properties, arguments...)");
     return false;
   }
   bool ret = _restore_parameters.read_from(shmfd);
@@ -366,9 +367,12 @@ void VM_Crac::doit() {
   // It needs to check CPU features before any other code (such as VM_Crac::read_shm) depends on them.
   VM_Version::crac_restore();
   Arguments::reset_for_crac_restore();
-  if (shmid <= 0 || !VM_Crac::read_shm(shmid)) {
+  if (shmid <= 0) {
     _restore_start_time = os::javaTimeMillis();
     _restore_start_nanos = os::javaTimeNanos();
+  } else if (!VM_Crac::read_shm(shmid)) {
+    vm_direct_exit(1, "Restore cannot continue, VM will exit.");
+    ShouldNotReachHere();
   } else {
     _restore_start_nanos += crac::monotonic_time_offset();
   }
@@ -545,8 +549,10 @@ void crac::restore(crac_restore_data& restore_data) {
   const int id = os::current_process_id();
 
   CracSHM shm(id);
-  int shmfd = shm.open(O_RDWR | O_CREAT);
-  if (0 <= shmfd) {
+  int shmfd = shm.open(O_RDWR | O_CREAT | O_TRUNC);
+  if (shmfd < 0) {
+    log_error(crac)("Cannot pass parameters (JVM flags, env vars, system properties, arguments...) to the restored process.");
+  } else {
     if (CracRestoreParameters::write_to(
           shmfd,
           Arguments::jvm_flags_array(), Arguments::num_jvm_flags(),

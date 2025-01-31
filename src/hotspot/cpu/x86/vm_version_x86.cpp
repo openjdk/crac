@@ -933,7 +933,7 @@ bool VM_Version::glibc_env_set(char *disable_str) {
 #define REEXEC_NAME "HOTSPOT_GLIBC_TUNABLES_REEXEC"
   char *env_val = disable_str;
   const char *env = getenv(TUNABLES_NAME);
-  if (env && (strcmp(env, env_val) == 0 || !INCLUDE_CPU_FEATURE_ACTIVE && getenv(REEXEC_NAME))) {
+  if (env && (strcmp(env, env_val) == 0 || (!INCLUDE_CPU_FEATURE_ACTIVE && getenv(REEXEC_NAME)))) {
     if (!INCLUDE_CPU_FEATURE_ACTIVE) {
       if (ShowCPUFeatures) {
         tty->print_cr("Environment variable already set, glibc CPU_FEATURE_ACTIVE is unavailable - re-exec suppressed: " TUNABLES_NAME "=%s", env);

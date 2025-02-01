@@ -62,27 +62,33 @@ WinMain(HINSTANCE inst, HINSTANCE previnst, LPSTR cmdline, int cmdshow)
 #else /* JAVAW */
 
 #ifndef _WIN32
+#include <stdbool.h>
 #include <sys/wait.h>
 
-static int is_checkpoint = 0;
+static bool is_checkpoint = false;
+static bool is_restore = false;
 static const int crac_min_pid_default = 128;
 static int crac_min_pid = 0;
-static int is_min_pid_set = 0;
+static bool is_min_pid_set = false;
 
-static void parse_checkpoint(const char *arg) {
-    if (!is_checkpoint) {
-        const char *checkpoint_arg = "-XX:CRaCCheckpointTo";
-        const int len = strlen(checkpoint_arg);
-        if (0 == strncmp(arg, checkpoint_arg, len)) {
-            is_checkpoint = 1;
-        }
+static inline const char *find_option(const char *arg, const char *vmoption) {
+    const int len = strlen(vmoption);
+    if (0 == strncmp(arg, vmoption, len)) {
+        return arg + len;
     }
-    if (!is_min_pid_set) {
-        const char *checkpoint_arg = "-XX:CRaCMinPid=";
-        const int len = strlen(checkpoint_arg);
-        if (0 == strncmp(arg, checkpoint_arg, len)) {
-            crac_min_pid = atoi(arg + len);
-            is_min_pid_set = 1;
+    return NULL;
+}
+
+static void parse_crac(const char *arg) {
+    if (!is_checkpoint && find_option(arg, "-XX:CRaCCheckpointTo")) {
+        is_checkpoint = true;
+    } else if (!is_restore && find_option(arg, "-XX:CRaCRestoreFrom")) {
+        is_restore = true;
+    } else if (!is_min_pid_set) {
+        const char *value = find_option(arg, "-XX:CRaCMinPid=");
+        if (value != NULL) {
+            crac_min_pid = atoi(value);
+            is_min_pid_set = true;
         }
     }
 }
@@ -311,7 +317,7 @@ main(int argc, char **argv)
         }
         // Iterate the rest of command line
         for (i = 1; i < argc; i++) {
-            parse_checkpoint(argv[i]);
+            parse_crac(argv[i]);
             JLI_List argsInFile = JLI_PreprocessArg(argv[i], JNI_TRUE);
             if (NULL == argsInFile) {
                 JLI_List_add(args, JLI_StringDup(argv[i]));
@@ -371,7 +377,35 @@ main(int argc, char **argv)
             exit(status);
         }
     }
-#endif /* WIN32 */
+#ifdef LINUX
+    // /proc filesystem is only on LINUX/*NIX - rseq is not relevant elsewhere anyway
+    if (is_checkpoint || is_restore) {
+        const char *GLIBC_TUNABLES = "GLIBC_TUNABLES";
+        const char *tunables = getenv(GLIBC_TUNABLES);
+        // do not try overwrite an existing tunable setting
+        if (!tunables || !strstr(tunables, "glibc.pthread.rseq")) {
+            char tunables_buf[4096];
+            const char *new_tunables = "glibc.pthread.rseq=0";
+            if (tunables) {
+                int sz = snprintf(tunables_buf, sizeof(tunables_buf), "%s:%s", tunables, new_tunables);
+                if (sz < 0 || (int)sizeof(tunables_buf) <= sz) {
+                    fprintf(stderr, "Cannot update GLIBC_TUNABLES: does not fit\n");
+                    return 1;
+                }
+                new_tunables = tunables_buf;
+            }
+
+            if (setenv(GLIBC_TUNABLES, new_tunables, 1) < 0) {
+                perror("setenv GLIBC_TUNABLES");
+                return 1;
+            }
+            execv("/proc/self/exe", argv);
+            perror("re-exec");
+            return 1;
+        }
+    }
+#endif /* LINUX */
+#endif /* not WIN32 */
     return JLI_Launch(margc, margv,
                    jargc, (const char**) jargv,
                    0, NULL,

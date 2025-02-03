@@ -464,16 +464,18 @@ void crac::vm_create_start() {
   _vm_inited_fds.initialize();
 }
 
-static bool read_all(int fd, char *dest, size_t n) {
+static bool read_all(int fd, const char *filename, char *dest, size_t n) {
   size_t rd = 0;
   do {
     ssize_t r = ::read(fd, dest + rd, n - rd);
     if (r == 0) {
+      log_error(crac)("Unexpected end of file %s (read %zu/%zu bytes)", filename, rd, n);
       return false;
     } else if (r < 0) {
       if (errno == EINTR) {
         continue;
       }
+      log_error(crac)("I/O error reading %s: %s", filename, os::strerror(errno));
       return false;
     }
     rd += r;
@@ -481,23 +483,47 @@ static bool read_all(int fd, char *dest, size_t n) {
   return true;
 }
 
+// RAII object to close file descriptor
+class FDGuard {
+private:
+  const char *_what;
+  int _fd;
+public:
+  FDGuard(const char *what, int fd): _what(what), _fd(fd) {}
+  ~FDGuard() {
+    if (_fd >= 0 && ::close(_fd) != 0) {
+      log_error(crac)("Cannot close %s: %s", _what, os::strerror(errno));
+    }
+  }
+};
+
 bool crac::read_bootid(char *dest) {
-  int fd = ::open("/proc/sys/kernel/random/boot_id", O_RDONLY);
-  if (fd < 0 || !read_all(fd, dest, UUID_LENGTH)) {
-    perror("CRaC: Cannot read system boot ID");
+  const char *boot_id_file = "/proc/sys/kernel/random/boot_id";
+  int fd = ::open(boot_id_file, O_RDONLY);
+  FDGuard guard("system boot ID file", fd);
+  if (fd < 0 || !read_all(fd, boot_id_file, dest, UUID_LENGTH)) {
+    log_error(crac)("Cannot read system boot ID");
     return false;
   }
   char c;
-  if (!read_all(fd, &c, 1) || c != '\n') {
-    perror("CRaC: system boot ID does not end with newline");
+  ssize_t r = ::read(fd, &c, 1);
+  if (r == 0) {
+    // Some systems don't end boot-id with a newline
+    return true;
+  } else if (r < 0) {
+    log_error(crac)("Failure reading system boot ID: %s", os::strerror(errno));
+    return false;
+  } else if (c != '\n') {
+    log_error(crac)("System boot ID does not end with a newline");
     return false;
   }
-  if (::read(fd, &c, 1) != 0) {
-    perror("CRaC: Unexpected data/error reading system boot ID");
-    return false;
+  r = ::read(fd, &c, 1);
+  if (r == 0) {
+    return true;
+  } else if (r < 0) {
+    log_error(crac)("Error reading system boot ID: %s", os::strerror(errno));
+  } else { // r > 0
+    log_error(crac)("Unexpected data in system boot ID");
   }
-  if (::close(fd) != 0) {
-    perror("CRaC: Cannot close system boot ID file");
-  }
-  return true;
+  return false;
 }

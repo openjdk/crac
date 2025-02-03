@@ -151,6 +151,8 @@ int CallJavaMainInNewThread(jlong stack_size, void* args);
 /* sun.java.launcher.* platform properties. */
 void SetJavaCommandLineProp(char* what, int argc, char** argv);
 
+void SetJavaCommandLinePropCrac(char *what, int argc, char **argv);
+
 /*
  * Functions defined in java.c and used in java_md.c.
  */

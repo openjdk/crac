@@ -90,6 +90,7 @@ char** Arguments::_jvm_args_array               = nullptr;
 int    Arguments::_num_jvm_args                 = 0;
 unsigned int Arguments::_addmods_count          = 0;
 char*  Arguments::_java_command                 = nullptr;
+char*  Arguments::_java_command_crac            = nullptr;
 SystemProperty* Arguments::_system_properties   = nullptr;
 size_t Arguments::_conservative_max_heap_alignment = 0;
 Arguments::Mode Arguments::_mode                = _mixed;
@@ -2205,9 +2206,9 @@ bool Arguments::parse_options_for_restore(const JavaVMInitArgs* args) {
 
       get_key_value(tail, &key, &value);
 
-      if (strcmp(key, "sun.java.command") == 0) {
-        char *old_java_command = _java_command;
-        _java_command = os::strdup_check_oom(value, mtArguments);
+      if (strcmp(key, "sun.java.crac_command") == 0) {
+        char *old_java_command = _java_command_crac;
+        _java_command_crac = os::strdup_check_oom(value, mtArguments);
         if (old_java_command != NULL) {
           os::free(old_java_command);
         }
@@ -2250,6 +2251,7 @@ jint Arguments::parse_each_vm_init_arg(const JavaVMInitArgs* args, bool* patch_m
 
     if (!match_option(option, "-Djava.class.path", &tail) &&
         !match_option(option, "-Dsun.java.command", &tail) &&
+        !match_option(option, "-Dsun.java.crac_command", &tail) &&
         !match_option(option, "-Dsun.java.launcher", &tail)) {
 
         // add all jvm options to the jvm_args string. This string

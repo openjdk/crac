@@ -196,6 +196,7 @@ class Arguments : AllStatic {
   static int    _num_jvm_args;
   // string containing all java command (class/jarfile name and app args)
   static char* _java_command;
+  static char* _java_command_crac;
   // number of unique modules specified in the --add-modules option
   static unsigned int _addmods_count;
 
@@ -399,6 +400,7 @@ class Arguments : AllStatic {
   static int num_jvm_args()                { return _num_jvm_args; }
   // return the arguments passed to the Java application
   static const char* java_command()        { return _java_command; }
+  static const char* java_command_crac()        { return _java_command_crac; }
 
   // print jvm_flags, jvm_args and java_command
   static void print_on(outputStream* st);

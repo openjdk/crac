@@ -543,7 +543,7 @@ void crac::restore(crac_restore_data& restore_data) {
           shmfd,
           Arguments::jvm_flags_array(), Arguments::num_jvm_flags(),
           Arguments::system_properties(),
-          Arguments::java_command() ? Arguments::java_command() : "",
+          Arguments::java_command_crac() ? Arguments::java_command_crac() : "",
           restore_data.restore_time,
           restore_data.restore_nanos)) {
       char strid[32];

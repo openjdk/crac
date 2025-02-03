@@ -41,6 +41,7 @@ import java.security.AccessController;
 import java.security.PrivilegedAction;
 import java.security.PrivilegedActionException;
 import java.security.PrivilegedExceptionAction;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.function.Consumer;
@@ -236,7 +237,25 @@ public class Core {
         }
 
         if (newArguments != null && newArguments.length() > 0) {
-            String[] args = newArguments.split(" ");
+            // Parse arguments into array, unescape spaces
+            final char escChar = '\\';
+            final char sepChar = ' ';
+            final var argList = new ArrayList<String>();
+            final var curArgBuilder = new StringBuilder();
+            for (int i = 0; i < newArguments.length(); ++i) {
+                final char curChar = newArguments.charAt(i);
+                switch (curChar) {
+                    case sepChar -> {
+                        argList.add(curArgBuilder.toString());
+                        curArgBuilder.setLength(0);
+                    }
+                    case escChar -> curArgBuilder.append(newArguments.charAt(++i));
+                    default -> curArgBuilder.append(curChar);
+                }
+            }
+            argList.add(curArgBuilder.toString());
+
+            final String[] args = argList.toArray(new String[argList.size()]);
             if (args.length > 0) {
                 try {
                     Method newMain = AccessController.doPrivileged(new PrivilegedExceptionAction<Method>() {

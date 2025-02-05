@@ -819,6 +819,27 @@ void ClassLoader::add_to_boot_append_entries(ClassPathEntry *new_entry) {
   }
 }
 
+GrowableArray<int> ClassLoader::get_classpath_entry_fds() {
+  log_info(crac)("Listing classpath FDS");
+  GrowableArray<int> fds;
+  assert(Thread::current()->is_VM_thread(), "should be called from VM op");
+  // we don't use mutexes here because it is called from VM op
+  for (ClassPathEntry *entry = first_append_entry(); entry != nullptr; entry = entry->next()) {
+    if (entry->is_jar_file()) {
+      fds.append(((ClassPathZipEntry *) entry)->get_fd());
+    }
+  }
+#if INCLUDE_CDS
+  // Probably not needed as _app_classpath_entries is filled only when dumping CDS classes
+  for (ClassPathEntry *entry = _app_classpath_entries; entry != nullptr; entry = entry->next()) {
+    if (entry->is_jar_file()) {
+      fds.append(((ClassPathZipEntry *) entry)->get_fd());
+    }
+  }
+#endif // INCLUDE_CDS
+  return fds;
+}
+
 // Record the path entries specified in -cp during dump time. The recorded
 // information will be used at runtime for loading the archived app classes.
 //

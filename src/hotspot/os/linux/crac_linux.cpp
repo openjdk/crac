@@ -302,6 +302,7 @@ bool VM_Crac::check_fds() {
 
   bool ok = true;
 
+  ResourceMark rm;
   GrowableArray<int> boot_classpath_fds = ClassLoader::get_classpath_entry_fds();
 
   for (int i = 0; i < fds.len(); ++i) {

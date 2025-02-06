@@ -820,7 +820,6 @@ void ClassLoader::add_to_boot_append_entries(ClassPathEntry *new_entry) {
 }
 
 GrowableArray<int> ClassLoader::get_classpath_entry_fds() {
-  log_info(crac)("Listing classpath FDS");
   GrowableArray<int> fds;
   assert(Thread::current()->is_VM_thread(), "should be called from VM op");
   // we don't use mutexes here because it is called from VM op

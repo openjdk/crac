@@ -281,6 +281,9 @@ ZIP_FreeEntry(jzfile *zip, jzentry *ze);
 jlong ZIP_GetEntryDataOffset(jzfile *zip, jzentry *entry);
 jzentry * ZIP_GetEntry2(jzfile *zip, char *name, jint ulen, jboolean addSlash);
 
+JNIEXPORT int
+ZIP_GetFD(jzfile *zip);
+
 JNIEXPORT jboolean
 ZIP_InflateFully(void *inBuf, jlong inLen, void *outBuf, jlong outLen, char **pmsg);
 

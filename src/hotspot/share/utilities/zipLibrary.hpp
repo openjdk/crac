@@ -50,6 +50,7 @@ class ZipLibrary : AllStatic {
   static const char* init_params(size_t block_size, size_t* needed_out_size, size_t* needed_tmp_size, int level);
   static size_t compress(char* in, size_t in_size, char* out, size_t out_size, char* tmp, size_t tmp_size, int level, char* buf, const char** pmsg);
   static void* handle();
+  static int get_fd(jzfile *zip);
 };
 
 #endif // SHARE_UTILITIES_ZIPLIBRARY_HPP

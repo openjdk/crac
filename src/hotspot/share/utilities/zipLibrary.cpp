@@ -39,6 +39,7 @@ typedef jboolean(*ZIP_ReadEntry_t)(jzfile* zip, jzentry* entry, unsigned char* b
 typedef jint(*ZIP_CRC32_t)(jint crc, const jbyte* buf, jint len);
 typedef const char* (*ZIP_GZip_InitParams_t)(size_t, size_t*, size_t*, int);
 typedef size_t(*ZIP_GZip_Fully_t)(char*, size_t, char*, size_t, char*, size_t, int, char*, char const**);
+typedef int(*ZIP_GetFD_t)(jzfile *zip);
 
 static ZIP_Open_t ZIP_Open = nullptr;
 static ZIP_Close_t ZIP_Close = nullptr;
@@ -47,6 +48,7 @@ static ZIP_ReadEntry_t ZIP_ReadEntry = nullptr;
 static ZIP_CRC32_t ZIP_CRC32 = nullptr;
 static ZIP_GZip_InitParams_t ZIP_GZip_InitParams = nullptr;
 static ZIP_GZip_Fully_t ZIP_GZip_Fully = nullptr;
+static ZIP_GetFD_t ZIP_GetFD = nullptr;
 
 static void* _zip_handle = nullptr;
 static bool _loaded = false;
@@ -82,6 +84,7 @@ static void store_function_pointers(const char* path, bool vm_exit_on_failure) {
   // and if possible, streamline setting all entry points consistently.
   ZIP_GZip_InitParams = CAST_TO_FN_PTR(ZIP_GZip_InitParams_t, dll_lookup("ZIP_GZip_InitParams", path, false));
   ZIP_GZip_Fully = CAST_TO_FN_PTR(ZIP_GZip_Fully_t, dll_lookup("ZIP_GZip_Fully", path, false));
+  ZIP_GetFD = CAST_TO_FN_PTR(ZIP_GetFD_t, dll_lookup("ZIP_GetFD", path, false));
 }
 
 static void load_zip_library(bool vm_exit_on_failure) {
@@ -194,4 +197,8 @@ void* ZipLibrary::handle() {
   assert(is_loaded(), "invariant");
   assert(_zip_handle != nullptr, "invariant");
   return _zip_handle;
+}
+
+int ZipLibrary::get_fd(jzfile *zip) {
+  return ZIP_GetFD ? ZIP_GetFD(zip) : -1;
 }

@@ -99,6 +99,7 @@ class ClassPathZipEntry: public ClassPathEntry {
   virtual ~ClassPathZipEntry();
   u1* open_entry(JavaThread* current, const char* name, jint* filesize, bool nul_terminate);
   ClassFileStream* open_stream(JavaThread* current, const char* name);
+  int get_fd() const { return ZipLibrary::get_fd(_zip); }
 };
 
 
@@ -411,6 +412,9 @@ class ClassLoader: AllStatic {
 
   // adds a class path to the boot append entries
   static void add_to_boot_append_entries(ClassPathEntry* new_entry);
+
+  // returns list of file descriptors used for both boot and app classpath entries
+  static GrowableArray<int> get_classpath_entry_fds();
 
   // creates a class path zip entry (returns null if JAR file cannot be opened)
   static ClassPathZipEntry* create_class_path_zip_entry(const char *apath, bool is_boot_append);

@@ -302,6 +302,9 @@ bool VM_Crac::check_fds() {
 
   bool ok = true;
 
+  ResourceMark rm;
+  GrowableArray<int> boot_classpath_fds = ClassLoader::get_classpath_entry_fds();
+
   for (int i = 0; i < fds.len(); ++i) {
     if (fds.get_state(i) == FdsInfo::CLOSED) {
       continue;
@@ -338,6 +341,11 @@ bool VM_Crac::check_fds() {
         print_resources("OK: jcmd socket\n");
         continue;
       }
+    }
+
+    if (boot_classpath_fds.contains(fd)) {
+      print_resources("OK: claimed by classloader\n");
+      continue;
     }
 
     if (CRaCAllowedOpenFilePrefixes != nullptr) {

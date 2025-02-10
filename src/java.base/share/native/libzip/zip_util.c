@@ -1692,3 +1692,13 @@ ZIP_GZip_Fully(char* inBuf, size_t inLen, char* outBuf, size_t outLen, char* tmp
 
   return result;
 }
+
+JNIEXPORT int
+ZIP_GetFD(jzfile *zip) {
+#ifdef WIN32
+    // File descriptors not applicable on Windows
+    return -1;
+#else
+    return (int) zip->zfd;
+#endif // !WIN32
+}

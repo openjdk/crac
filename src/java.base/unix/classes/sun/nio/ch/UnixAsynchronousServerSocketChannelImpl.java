@@ -43,7 +43,7 @@ class UnixAsynchronousServerSocketChannelImpl
     private static final NativeDispatcher nd = new SocketDispatcher();
 
     private final Port port;
-    private final int fdVal;
+    private int fdVal;
 
     // flag to indicate an accept is outstanding
     private final AtomicBoolean accepting = new AtomicBoolean();
@@ -110,6 +110,12 @@ class UnixAsynchronousServerSocketChannelImpl
             // invoke by submitting task rather than directly
             Invoker.invokeIndirectly(this, handler, att, null, x);
         }
+    }
+
+    @Override
+    protected void implReopen() {
+        fdVal = IOUtil.fdVal(fd);
+        port.register(fdVal, this);
     }
 
     @Override

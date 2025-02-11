@@ -70,6 +70,9 @@ abstract class AsynchronousServerSocketChannelImpl
     // set true when exclusive binding is on and SO_REUSEADDR is emulated
     private boolean isReuseAddress;
 
+    // last backlog used for bind(...)
+    private int backlog;
+
     AsynchronousServerSocketChannelImpl(AsynchronousChannelGroupImpl group) {
         super(group.provider());
         this.fd = Net.serverSocket(true);
@@ -90,8 +93,27 @@ abstract class AsynchronousServerSocketChannelImpl
             }
 
             @Override
+            protected boolean isListening() {
+                return true;
+            }
+
+            @Override
             protected void closeBeforeCheckpoint() throws IOException {
                 close();
+            }
+
+            @Override
+            protected void reopenAfterRestore() throws IOException {
+                FileDescriptor newfd = Net.serverSocket(true);
+                IOUtil.setfdVal(fd, IOUtil.fdVal(newfd));
+                reopen();
+                synchronized (stateLock) {
+                    SocketAddress local = localAddress;
+                    if (local != null) {
+                        localAddress = null;
+                        bind(local, backlog);
+                    }
+                }
             }
         };
     }
@@ -134,6 +156,20 @@ abstract class AsynchronousServerSocketChannelImpl
             closeLock.writeLock().unlock();
         }
         implClose();
+    }
+
+    private void reopen() {
+        closeLock.writeLock().lock();
+        try {
+            assert(closed);
+            closed = false;
+        } finally {
+            closeLock.writeLock().unlock();
+        }
+        implReopen();
+    }
+
+    protected void implReopen() {
     }
 
     /**
@@ -182,7 +218,8 @@ abstract class AsynchronousServerSocketChannelImpl
                     throw new AlreadyBoundException();
                 NetHooks.beforeTcpBind(fd, isa.getAddress(), isa.getPort());
                 Net.bind(fd, isa.getAddress(), isa.getPort());
-                Net.listen(fd, backlog < 1 ? 50 : backlog);
+                this.backlog = backlog < 1 ? 50 : backlog;
+                Net.listen(fd, this.backlog);
                 localAddress = Net.localAddress(fd);
             }
         } finally {

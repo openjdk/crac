@@ -75,8 +75,9 @@ class ServerSocketChannelImpl
 
     // Our file descriptor
     private final FileDescriptor fd;
-    private final int fdVal;
+    private int fdVal;
     private final Resource resource = new Resource();
+    private int backlog;
 
     // Lock held by thread currently blocked on this channel
     private final ReentrantLock acceptLock = new ReentrantLock();
@@ -298,6 +299,8 @@ class ServerSocketChannelImpl
             } else {
                 localAddress = netBind(local, backlog);
             }
+            // Persisting the backlog since there's no way to query that before close
+            this.backlog = backlog < 1 ? 50 : backlog;
         }
         return this;
     }
@@ -759,8 +762,37 @@ class ServerSocketChannelImpl
         }
 
         @Override
+        protected boolean isListening() {
+            return true;
+        }
+
+        @Override
         protected void closeBeforeCheckpoint() throws IOException {
             close();
+        }
+
+        @Override
+        protected void reopenAfterRestore() throws IOException {
+            FileDescriptor newFd;
+            if (family == UNIX) {
+                newFd = UnixDomainSockets.socket();
+            } else {
+                newFd = Net.serverSocket(family, true);
+            }
+            // We could avoid making fdVal non-final and dup2(...) to the original
+            // value but that could accidentally conflict with another FD created
+            // during restore.
+            fdVal = IOUtil.fdVal(newFd);
+            IOUtil.setfdVal(fd, fdVal);
+            synchronized (stateLock) {
+                state = ST_INUSE;
+                if (isUnixSocket()) {
+                    localAddress = unixBind(localAddress, backlog);
+                } else {
+                    localAddress = netBind(localAddress, backlog);
+                }
+            }
+            setReopened();
         }
     }
 }

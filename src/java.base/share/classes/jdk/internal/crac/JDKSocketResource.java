@@ -4,6 +4,8 @@ import jdk.internal.crac.mirror.impl.CheckpointOpenSocketException;
 
 import java.io.IOException;
 import java.net.*;
+import java.util.Map;
+import java.util.function.Predicate;
 
 public abstract class JDKSocketResource extends JDKSocketResourceBase {
 
@@ -16,6 +18,7 @@ public abstract class JDKSocketResource extends JDKSocketResourceBase {
 
     protected abstract SocketAddress localAddress() throws IOException;
     protected abstract SocketAddress remoteAddress() throws IOException;
+    protected abstract boolean isListening();
 
     @Override
     protected OpenResourcePolicies.Policy findPolicy(boolean isRestore) throws CheckpointOpenSocketException {
@@ -33,8 +36,15 @@ public abstract class JDKSocketResource extends JDKSocketResourceBase {
         }
         var localMatcher = getMatcher(local, "localAddress", "localPort", "localPath");
         var remoteMatcher = getMatcher(remote, "remoteAddress", "remotePort", "remotePath");
+        Predicate<Map<String, String>> listenMatcher = params -> {
+            String cfgListening = params.get("listening");
+            if (cfgListening == null || "*".equals(cfgListening)) {
+                return true;
+            }
+            return Boolean.parseBoolean(cfgListening) == isListening();
+        };
         return OpenResourcePolicies.find(isRestore, OpenResourcePolicies.SOCKET,
-                params -> localMatcher.test(params) && remoteMatcher.test(params));
+                params -> localMatcher.test(params) && remoteMatcher.test(params) && listenMatcher.test(params));
     }
 
     @Override

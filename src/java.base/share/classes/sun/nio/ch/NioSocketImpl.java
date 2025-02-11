@@ -126,6 +126,9 @@ public final class NioSocketImpl extends SocketImpl implements PlatformSocketImp
     private boolean readEOF;
     private boolean connectionReset;
 
+    // last backlog used for listen() invocation
+    private int backlog;
+
     static {
         // trigger eager initialization
         new FileDispatcherImpl();
@@ -451,6 +454,35 @@ public final class NioSocketImpl extends SocketImpl implements PlatformSocketImp
         }
     }
 
+    @Override
+    protected boolean isListening() {
+        return server;
+    }
+
+    @Override
+    protected void reopenAfterRestore() throws IOException {
+        if (!server) {
+            throw new UnsupportedOperationException("Reopen not implemented for non-server sockets");
+        }
+        synchronized (stateLock) {
+            FileDescriptor fd;
+            fd = Net.serverSocket(true);
+            Runnable closer = closerFor(fd, true);
+            IOUtil.setfdVal(NioSocketImpl.this.fd, IOUtil.fdVal(fd));
+            NioSocketImpl.this.cleaner = CleanerFactory.cleaner().register(NioSocketImpl.this, closer);
+            state = ST_UNCONNECTED;
+
+            if (localport != 0) {
+                int port = localport;
+                localport = 0;
+                bind(address, port);
+            }
+            if (backlog > 0) {
+                Net.listen(fd, backlog);
+            }
+        }
+    }
+
     /**
      * Creates the socket.
      * @param stream {@code true} for a streams socket
@@ -648,7 +680,8 @@ public final class NioSocketImpl extends SocketImpl implements PlatformSocketImp
             ensureOpen();
             if (localport == 0)
                 throw new SocketException("Not bound");
-            Net.listen(fd, backlog < 1 ? 50 : backlog);
+            this.backlog = backlog < 1 ? 50 : backlog;
+            Net.listen(fd, this.backlog);
         }
     }
 

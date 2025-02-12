@@ -428,19 +428,17 @@ class EPollSelectorImpl extends SelectorImpl implements JDKResource {
                 }
             }
             if (checkpointState == CheckpointRestoreState.CHECKPOINT_ERROR) {
-                JavaIOFileDescriptorAccess access = SharedSecrets.getJavaIOFileDescriptorAccess();
                 var ex = new BusySelectorException("Selector " + this + " has registered keys from channels: " + currentChannels, null);
-                ex.epollFds.add(claimFd(access, this.epfd, "EPoll FD "));
-                ex.epollFds.add(claimFd(access, this.eventfd.efd(), "EPoll Event FD "));
+                ex.epollFds.add(claimFd(this.epfd, "EPoll FD "));
+                ex.epollFds.add(claimFd(this.eventfd.efd(), "EPoll Event FD "));
                 currentChannels = null;
                 throw ex;
             }
         }
     }
 
-    private FileDescriptor claimFd(JavaIOFileDescriptorAccess access, int fdval, String type) {
-        FileDescriptor fd = new FileDescriptor();
-        access.set(fd, fdval);
+    private FileDescriptor claimFd(int fdval, String type) {
+        FileDescriptor fd = IOUtil.newFD(fdval);
         Core.getClaimedFDs().claimFd(fd, this,
                 () -> new CheckpointOpenSocketException(type + fdval + " left open in " + this + " with registered keys.", null));
         return fd;

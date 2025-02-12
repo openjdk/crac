@@ -363,7 +363,7 @@ public abstract class Poller {
             this.readPollers = readPollers;
             this.writePollers = writePollers;
 
-            Core.Priority.EPOLLSELECTOR.getContext().register(this);
+            Core.Priority.NORMAL.getContext().register(this);
         }
 
         /**

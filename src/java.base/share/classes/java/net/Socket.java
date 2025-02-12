@@ -455,6 +455,7 @@ public class Socket implements java.io.Closeable {
         throws IOException
     {
         Objects.requireNonNull(address);
+        assert address instanceof InetSocketAddress;
 
         // create the SocketImpl and the underlying socket
         SocketImpl impl = createImpl();
@@ -464,16 +465,13 @@ public class Socket implements java.io.Closeable {
         this.state = SOCKET_CREATED;
 
         try {
-            if (localAddr != null)
+            if (localAddr != null) {
                 bind(localAddr);
-            connect(address);
-        } catch (IOException | IllegalArgumentException e) {
-            try {
-                close();
-            } catch (IOException ce) {
-                e.addSuppressed(ce);
             }
-            throw e;
+            connect(address);
+        } catch (Throwable throwable) {
+            closeSuppressingExceptions(throwable);
+            throw throwable;
         }
     }
 
@@ -572,6 +570,10 @@ public class Socket implements java.io.Closeable {
     /**
      * Connects this socket to the server.
      *
+     * <p> If the endpoint is an unresolved {@link InetSocketAddress}, or the
+     * connection cannot be established, then the socket is closed, and an
+     * {@link IOException} is thrown.
+     *
      * <p> This method is {@linkplain Thread#interrupt() interruptible} in the
      * following circumstances:
      * <ol>
@@ -590,6 +592,8 @@ public class Socket implements java.io.Closeable {
      * @param   endpoint the {@code SocketAddress}
      * @throws  IOException if an error occurs during the connection, the socket
      *          is already connected or the socket is closed
+     * @throws  UnknownHostException if the endpoint is an unresolved
+     *          {@link InetSocketAddress}
      * @throws  java.nio.channels.IllegalBlockingModeException
      *          if this socket has an associated channel,
      *          and the channel is in non-blocking mode
@@ -605,6 +609,11 @@ public class Socket implements java.io.Closeable {
      * Connects this socket to the server with a specified timeout value.
      * A timeout of zero is interpreted as an infinite timeout. The connection
      * will then block until established or an error occurs.
+     *
+     * <p> If the endpoint is an unresolved {@link InetSocketAddress}, the
+     * connection cannot be established, or the timeout expires before the
+     * connection is established, then the socket is closed, and an
+     * {@link IOException} is thrown.
      *
      * <p> This method is {@linkplain Thread#interrupt() interruptible} in the
      * following circumstances:
@@ -626,6 +635,8 @@ public class Socket implements java.io.Closeable {
      * @throws  IOException if an error occurs during the connection, the socket
      *          is already connected or the socket is closed
      * @throws  SocketTimeoutException if timeout expires before connecting
+     * @throws  UnknownHostException if the endpoint is an unresolved
+     *          {@link InetSocketAddress}
      * @throws  java.nio.channels.IllegalBlockingModeException
      *          if this socket has an associated channel,
      *          and the channel is in non-blocking mode
@@ -645,26 +656,25 @@ public class Socket implements java.io.Closeable {
         if (isClosed(s))
             throw new SocketException("Socket is closed");
         if (isConnected(s))
-            throw new SocketException("already connected");
+            throw new SocketException("Already connected");
 
         if (!(endpoint instanceof InetSocketAddress epoint))
             throw new IllegalArgumentException("Unsupported address type");
 
+        if (epoint.isUnresolved()) {
+            var uhe = new UnknownHostException(epoint.getHostName());
+            closeSuppressingExceptions(uhe);
+            throw uhe;
+        }
+
         InetAddress addr = epoint.getAddress();
-        int port = epoint.getPort();
         checkAddress(addr, "connect");
 
         try {
             getImpl().connect(epoint, timeout);
-        } catch (SocketTimeoutException e) {
-            throw e;
-        } catch (InterruptedIOException e) {
-            Thread thread = Thread.currentThread();
-            if (thread.isVirtual() && thread.isInterrupted()) {
-                close();
-                throw new SocketException("Closed by interrupt");
-            }
-            throw e;
+        } catch (IOException error) {
+            closeSuppressingExceptions(error);
+            throw error;
         }
 
         // connect will bind the socket if not previously bound
@@ -1588,6 +1598,14 @@ public class Socket implements java.io.Closeable {
         if (isClosed())
             throw new SocketException("Socket is closed");
         return ((Boolean) (getImpl().getOption(SocketOptions.SO_REUSEADDR))).booleanValue();
+    }
+
+    private void closeSuppressingExceptions(Throwable parentException) {
+        try {
+            close();
+        } catch (IOException exception) {
+            parentException.addSuppressed(exception);
+        }
     }
 
     /**

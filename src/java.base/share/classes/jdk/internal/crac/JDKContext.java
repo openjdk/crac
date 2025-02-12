@@ -32,7 +32,6 @@ import jdk.internal.crac.mirror.Resource;
 import jdk.internal.crac.mirror.RestoreException;
 import jdk.internal.access.JavaIOFileDescriptorAccess;
 import jdk.internal.access.SharedSecrets;
-import sun.security.action.GetBooleanAction;
 
 import java.io.File;
 import java.io.FileDescriptor;
@@ -50,7 +49,7 @@ public class JDKContext implements JDKResource {
     // JDKContext by itself is initialized too early when system properties are not set yet
     public static class Properties {
         public static final boolean COLLECT_FD_STACKTRACES =
-                GetBooleanAction.privilegedGetProperty(JDKContext.COLLECT_FD_STACKTRACES_PROPERTY);
+                Boolean.getBoolean(JDKContext.COLLECT_FD_STACKTRACES_PROPERTY);
     }
 
     private WeakHashMap<FileDescriptor, Object> claimedFds;

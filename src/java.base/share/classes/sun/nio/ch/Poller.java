@@ -39,6 +39,7 @@ import jdk.internal.crac.Core;
 import jdk.internal.crac.mirror.Context;
 import jdk.internal.crac.mirror.Resource;
 import jdk.internal.misc.InnocuousThread;
+import jdk.internal.vm.annotation.Stable;
 
 /**
  * Polls file descriptors. Virtual threads invoke the poll method to park
@@ -57,6 +58,9 @@ public abstract class Poller {
             throw new ExceptionInInitializerError(ioe);
         }
     }
+
+    // the poller or sub-poller thread
+    private @Stable Thread owner;
 
     // maps file descriptors to parked Thread
     private final Map<Integer, Thread> map = new ConcurrentHashMap<>();
@@ -256,6 +260,7 @@ public abstract class Poller {
      * descriptor that is polled.
      */
     private void pollerLoop() {
+        owner = Thread.currentThread();
         try {
             while (!stop) {
                 poll(-1);
@@ -276,6 +281,7 @@ public abstract class Poller {
      */
     private void subPollerLoop(Poller masterPoller) {
         assert Thread.currentThread().isVirtual();
+        owner = Thread.currentThread();
         try {
             int polled = 0;
             while (!stop) {
@@ -302,7 +308,8 @@ public abstract class Poller {
 
     @Override
     public String toString() {
-        return Objects.toIdentityString(this) + " [registered = " + registered() + "]";
+        return String.format("%s [registered = %d, owner = %s]",
+                Objects.toIdentityString(this), registered(), owner);
     }
 
     /**
@@ -521,5 +528,26 @@ public abstract class Poller {
             }
             start();
         }
+    }
+
+    /**
+     * Return the master poller or null if there is no master poller.
+     */
+    public static Poller masterPoller() {
+        return POLLERS.masterPoller();
+    }
+
+    /**
+     * Return the list of read pollers.
+     */
+    public static List<Poller> readPollers() {
+        return POLLERS.readPollers();
+    }
+
+    /**
+     * Return the list of write pollers.
+     */
+    public static List<Poller> writePollers() {
+        return POLLERS.writePollers();
     }
 }

@@ -31,7 +31,6 @@ import jdk.internal.crac.ClaimedFDs;
 import jdk.internal.crac.JDKResource;
 import jdk.internal.crac.LoggerContainer;
 import jdk.internal.crac.mirror.impl.*;
-import sun.security.action.GetBooleanAction;
 
 import java.io.PrintWriter;
 import java.io.StringWriter;
@@ -69,7 +68,7 @@ public class Core {
     private static class FlagsHolder {
         private FlagsHolder() {}
         public static final boolean TRACE_STARTUP_TIME =
-            GetBooleanAction.privilegedGetProperty("jdk.crac.trace-startup-time");
+            Boolean.getBoolean("jdk.crac.trace-startup-time");
     }
 
     private static final Context<Resource> globalContext = GlobalContext.createGlobalContextImpl();

@@ -2,7 +2,6 @@ package jdk.internal.crac;
 
 import jdk.internal.crac.mirror.Context;
 import jdk.internal.crac.mirror.Resource;
-import sun.security.action.GetBooleanAction;
 
 import java.util.function.Supplier;
 
@@ -12,7 +11,7 @@ public abstract class JDKFdResource implements JDKResource {
         "Use -D" + COLLECT_FD_STACKTRACES_PROPERTY + "=true to find the source.";
 
     private static final boolean COLLECT_FD_STACKTRACES =
-        GetBooleanAction.privilegedGetProperty(COLLECT_FD_STACKTRACES_PROPERTY);
+        Boolean.getBoolean(COLLECT_FD_STACKTRACES_PROPERTY);
 
     // No lambdas during clinit...
     protected static Supplier<Exception> NO_EXCEPTION = new Supplier<Exception>() {

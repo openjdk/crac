@@ -4,7 +4,6 @@ import jdk.internal.crac.mirror.Context;
 import jdk.internal.crac.mirror.Resource;
 import jdk.internal.crac.mirror.impl.CheckpointOpenFileException;
 import jdk.internal.crac.mirror.impl.CheckpointOpenResourceException;
-import sun.security.action.GetPropertyAction;
 
 import java.io.File;
 import java.io.FileDescriptor;
@@ -21,7 +20,7 @@ public abstract class JDKFileResource extends JDKFdResource {
     private static final Path[] CLASSPATH_ENTRIES;
 
     static {
-        String[] items = GetPropertyAction.privilegedGetProperty("java.class.path")
+        String[] items = System.getProperty("java.class.path")
                 .split(File.pathSeparator);
         CLASSPATH_ENTRIES = new Path[items.length];
         for (int i = 0; i < items.length; i++) {

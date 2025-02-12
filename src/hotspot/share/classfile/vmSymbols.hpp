@@ -743,10 +743,15 @@ class SerializeClosure;
   template(checkpointRestoreInternal_name,         "checkpointRestoreInternal")                                   \
   template(checkpointRestoreInternal_signature,    "(J)Ljava/lang/String;")                                       \
                                                                                                                   \
-  /* Thread.dump_to_file jcmd */                                                                                  \
+  /* jcmd Thread.dump_to_file */                                                                                  \
   template(jdk_internal_vm_ThreadDumper,           "jdk/internal/vm/ThreadDumper")                                \
   template(dumpThreads_name,                       "dumpThreads")                                                 \
   template(dumpThreadsToJson_name,                 "dumpThreadsToJson")                                           \
+                                                                                                                  \
+  /* jcmd Thread.vthread_scheduler and Thread.vthread_pollers */                                                  \
+  template(jdk_internal_vm_JcmdVThreadCommands,    "jdk/internal/vm/JcmdVThreadCommands")                         \
+  template(printScheduler_name,                    "printScheduler")                                              \
+  template(printPollers_name,                      "printPollers")                                                \
 
   /*end*/
 

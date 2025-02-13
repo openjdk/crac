@@ -26,8 +26,12 @@ public abstract class JDKFdResource implements JDKResource {
     static volatile boolean stacktraceHintPrinted = false;
     static volatile boolean warningSuppressionHintPrinted = false;
 
-    @SuppressWarnings("this-escape")
     public JDKFdResource() {
+        this(Core.Priority.FILE_DESCRIPTORS);
+    }
+
+    @SuppressWarnings("this-escape")
+    public JDKFdResource(Core.Priority priority) {
         stackTraceHolder = COLLECT_FD_STACKTRACES ?
             // About the timestamp: we cannot format it nicely since this
             // exception is sometimes created too early in the VM lifecycle
@@ -36,7 +40,7 @@ public abstract class JDKFdResource implements JDKResource {
                 + " at epoch:" + System.currentTimeMillis() + " here") :
             null;
 
-        Core.Priority.FILE_DESCRIPTORS.getContext().register(this);
+        priority.getContext().register(this);
         OpenResourcePolicies.ensureRegistered();
     }
 

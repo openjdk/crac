@@ -65,6 +65,7 @@ public class Core {
         SECURE_RANDOM(new BlockingOrderedContext<>()),
         NATIVE_PRNG(new BlockingOrderedContext<>()),
         EPOLLSELECTOR(new BlockingOrderedContext<>()),
+        SOCKETS(new BlockingOrderedContext<>()),
         NORMAL(new BlockingOrderedContext<>());
 
         private final Context<JDKResource> context;

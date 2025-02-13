@@ -32,19 +32,20 @@ import jdk.internal.access.JavaIOFileDescriptorAccess;
 import jdk.internal.access.SharedSecrets;
 import jdk.internal.crac.Core;
 import jdk.internal.crac.JDKResource;
+import jdk.internal.crac.mirror.impl.CheckpointOpenResourceException;
+import jdk.internal.crac.mirror.impl.CheckpointOpenSocketException;
 
 import java.io.FileDescriptor;
 import java.io.IOException;
-import java.nio.channels.IllegalSelectorException;
+import java.io.Serial;
+import java.nio.channels.SelectableChannel;
 import java.nio.channels.SelectionKey;
 import java.nio.channels.Selector;
 import java.nio.channels.spi.SelectorProvider;
-import java.util.ArrayDeque;
-import java.util.Deque;
-import java.util.HashMap;
-import java.util.Map;
+import java.util.*;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
+import java.util.stream.Collectors;
 
 import static sun.nio.ch.EPoll.EPOLLIN;
 import static sun.nio.ch.EPoll.EPOLL_CTL_ADD;
@@ -111,6 +112,7 @@ class EPollSelectorImpl extends SelectorImpl implements JDKResource {
     private boolean interruptTriggered;
 
     private volatile CheckpointRestoreState checkpointState = CheckpointRestoreState.NORMAL_OPERATION;;
+    private Set<SelectableChannel> currentChannels;
 
     private void initFDs() throws IOException {
         epfd = EPoll.create();
@@ -157,6 +159,7 @@ class EPollSelectorImpl extends SelectorImpl implements JDKResource {
                 thisState = CheckpointRestoreState.CHECKPOINTED;
             } else {
                 thisState = CheckpointRestoreState.CHECKPOINT_ERROR;
+                currentChannels = fdToKey.values().stream().map(SelectionKey::channel).collect(Collectors.toSet());
             }
 
             checkpointState = thisState;
@@ -425,9 +428,20 @@ class EPollSelectorImpl extends SelectorImpl implements JDKResource {
                 }
             }
             if (checkpointState == CheckpointRestoreState.CHECKPOINT_ERROR) {
-                throw new IllegalSelectorException();
+                var ex = new BusySelectorException("Selector " + this + " has registered keys from channels: " + currentChannels, null);
+                ex.epollFds.add(claimFd(this.epfd, "EPoll FD "));
+                ex.epollFds.add(claimFd(this.eventfd.efd(), "EPoll Event FD "));
+                currentChannels = null;
+                throw ex;
             }
         }
+    }
+
+    private FileDescriptor claimFd(int fdval, String type) {
+        FileDescriptor fd = IOUtil.newFD(fdval);
+        Core.getClaimedFDs().claimFd(fd, this,
+                () -> new CheckpointOpenSocketException(type + fdval + " left open in " + this + " with registered keys.", null));
+        return fd;
     }
 
     @Override
@@ -445,6 +459,19 @@ class EPollSelectorImpl extends SelectorImpl implements JDKResource {
                 } catch (InterruptedException e) {
                 }
             }
+        }
+    }
+
+    private static class BusySelectorException extends CheckpointOpenResourceException {
+        @Serial
+        private static final long serialVersionUID = 5615481252774343456L;
+        // We need to keep the FileDescriptors around until the checkpoint completes
+        // as ClaimedFDs use WeakHashMap. Transient because exception is serializable
+        // and FileDescriptor is not.
+        transient List<FileDescriptor> epollFds = new ArrayList<>();
+
+        public BusySelectorException(String details, Throwable cause) {
+            super(details, cause);
         }
     }
 }

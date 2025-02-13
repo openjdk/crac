@@ -18,6 +18,7 @@ public abstract class JDKSocketResourceBase extends JDKFdResource {
     private boolean error;
 
     public JDKSocketResourceBase(Object owner) {
+        super(Core.Priority.SOCKETS);
         this.owner = owner;
     }
 

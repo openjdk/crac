@@ -177,7 +177,7 @@ module java.base {
         jdk.crypto.cryptoki;
     exports jdk.internal.crac to
         java.rmi,
-        jdk.jfr.internal,
+        jdk.jfr,
         jdk.management.agent,
         jdk.sctp;
     exports jdk.internal.classfile.components to
@@ -421,7 +421,7 @@ module java.base {
     exports jdk.internal.crac.mirror to
         java.rmi,
         jdk.crac,
-        jdk.jfr.internal,
+        jdk.jfr,
         jdk.management.agent;
 
     exports jdk.internal.crac.mirror.impl to

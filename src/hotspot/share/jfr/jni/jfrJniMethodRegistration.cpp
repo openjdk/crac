@@ -101,7 +101,8 @@ JfrJniMethodRegistration::JfrJniMethodRegistration(JNIEnv* env) {
       (char*)"emitDataLoss", (char*)"(J)V", (void*)jfr_emit_data_loss,
       (char*)"registerStackFilter", (char*)"([Ljava/lang/String;[Ljava/lang/String;)J", (void*)jfr_register_stack_filter,
       (char*)"unregisterStackFilter", (char*)"(J)V", (void*)jfr_unregister_stack_filter,
-      (char*)"nanosNow", (char*)"()J", (void*)jfr_nanos_now
+      (char*)"nanosNow", (char*)"()J", (void*)jfr_nanos_now,
+      (char*)"startFlightRecorderAfterRestore", (char*)"()V", (void*)jfr_start_after_restore,
     };
 
     const size_t method_array_length = sizeof(method) / sizeof(JNINativeMethod);

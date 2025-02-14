@@ -463,3 +463,9 @@ bool JfrRecorder::is_recording() {
 void JfrRecorder::stop_recording() {
   _post_box->post(MSG_STOP);
 }
+
+void JfrRecorder::start_after_restore() {
+  JavaThread* const thread = JavaThread::current();
+  validate_recording_options(thread);
+  launch_command_line_recordings(thread);
+}

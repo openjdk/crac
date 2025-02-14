@@ -69,6 +69,8 @@ class JfrRecorder : public JfrCHeapObj {
   static void start_recording();
   static bool is_recording();
   static void stop_recording();
+
+  static void start_after_restore();
 };
 
 #endif // SHARE_JFR_RECORDER_JFRRECORDER_HPP

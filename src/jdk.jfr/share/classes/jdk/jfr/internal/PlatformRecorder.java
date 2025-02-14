@@ -47,7 +47,12 @@ import java.util.Set;
 import java.util.Timer;
 import java.util.TimerTask;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.stream.Collectors;
 
+import jdk.internal.crac.Core;
+import jdk.internal.crac.JDKResource;
+import jdk.internal.crac.mirror.Context;
+import jdk.internal.crac.mirror.Resource;
 import jdk.jfr.FlightRecorder;
 import jdk.jfr.FlightRecorderListener;
 import jdk.jfr.Recording;
@@ -73,6 +78,64 @@ public final class PlatformRecorder {
     private RepositoryChunk currentChunk;
     private boolean inShutdown;
     private boolean runPeriodicTask;
+    private JDKResource resource = new JDKResource() {
+        private List<PlatformRecording> futureRecordings;
+
+        @Override
+        public void beforeCheckpoint(Context<? extends Resource> context) throws Exception {
+            synchronized (PlatformRecorder.this) {
+                ArrayList<PlatformRecording> copy = new ArrayList<>(recordings);
+                futureRecordings = copy.stream().map(r -> {
+                    // PlatformRecording has to have a matching Recording - otherwise we could not control those
+                    // through jcmd
+                    Recording rec = new Recording(r.getSettings());
+                    PlatformRecording pr = PrivateAccess.getInstance().getPlatformRecording(rec);
+                    if (r.getName().equals(String.valueOf(r.getId()))) {
+                        // default name == id, use the new id as name as well
+                        rec.setName(String.valueOf(rec.getId()));
+                    } else {
+                        // custom name, keep it
+                        rec.setName(r.getName());
+                    }
+                    rec.setToDisk(r.isToDisk());
+                    rec.setSettings(r.getSettings());
+                    pr.setDumpDirectory(r.getDumpDirectory());
+                    try {
+                        pr.setDestination(r.getDestination());
+                    } catch (IOException e) {
+                        // never thrown
+                        Logger.log(JFR, ERROR, "Cannot copy destination: " + e.getMessage());
+                    }
+                    rec.setMaxAge(r.getMaxAge());
+                    rec.setMaxSize(r.getMaxSize());
+                    pr.setInternalDuration(r.getDuration());
+                    rec.setDumpOnExit(r.getDumpOnExit());
+                    pr.setFlushInterval(r.getFlushInterval());
+                    return pr;
+                }).collect(Collectors.toList());
+                recordings.removeAll(futureRecordings);
+                copy.forEach(r -> r.stop("Checkpoint"));
+                assert recordings.isEmpty();
+            }
+        }
+
+        @Override
+        public void afterRestore(Context<? extends Resource> context) throws Exception {
+            synchronized (PlatformRecorder.this) {
+                futureRecordings.forEach(r -> {
+                    recordings.add(r);
+                    try {
+                        // We need to invoke WritableUserPath after restore to create the dump file.
+                        // Since we're creating another WritableUserPath we can use the original specification
+                        r.setDestination(new WriteableUserPath(r.getDestination().getPotentiallyMaliciousOriginal()));
+                    } catch (IOException e) {
+                        Logger.log(JFR, ERROR, "Cannot reset recording destination: " + e);
+                    }
+                    r.start();
+                });
+            }
+        }
+    };
 
     public PlatformRecorder() throws Exception {
         repository = Repository.getRepository();
@@ -86,6 +149,8 @@ public final class PlatformRecorder {
         shutdownHook = SecuritySupport.createThreadWitNoPermissions("JFR Shutdown Hook", new ShutdownHook(this));
         SecuritySupport.setUncaughtExceptionHandler(shutdownHook, new ShutdownHook.ExceptionHandler());
         SecuritySupport.registerShutdownHook(shutdownHook);
+
+        Core.Priority.JFR.getContext().register(resource);
     }
 
 

@@ -56,6 +56,8 @@ class JfrOSInterface: public JfrCHeapObj {
   static int generate_initial_environment_variable_events();
   static int system_processes(SystemProcess** system_processes, int* no_of_sys_processes);
   static int network_utilization(NetworkInterface** network_interfaces);
+
+  static void before_checkpoint();
 };
 
 #endif // SHARE_JFR_PERIODIC_JFROSINTERFACE_HPP

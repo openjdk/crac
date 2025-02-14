@@ -1932,7 +1932,7 @@ const int ObjectAlignmentInBytes = 8;
   JFR_ONLY(product(ccstr, FlightRecorderOptions, nullptr,                   \
           "Flight Recorder options"))                                       \
                                                                             \
-  JFR_ONLY(product(ccstr, StartFlightRecording, nullptr,                    \
+  JFR_ONLY(product(ccstr, StartFlightRecording, nullptr, RESTORE_SETTABLE,  \
           "Start flight recording with options"))                           \
                                                                             \
   product(bool, UseFastUnorderedTimeStamps, false, EXPERIMENTAL,            \

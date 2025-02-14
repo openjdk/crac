@@ -10,6 +10,7 @@ import java.nio.file.*;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
 import java.util.function.Predicate;
 import java.util.stream.Stream;
@@ -127,15 +128,25 @@ public class CracProcess {
     }
 
     public void waitForStdout(String str) throws InterruptedException {
+        waitForStdout(str, true);
+    }
+
+    public void waitForStdout(String str, boolean failOnUnexpected) throws InterruptedException {
         CountDownLatch latch = new CountDownLatch(1);
+        AtomicReference<String> unexpected = new AtomicReference<>();
         watch(line -> {
             if (line.equals(str)) {
                 latch.countDown();
-            } else {
-                throw new IllegalArgumentException("Unexpected input");
+            } else if (failOnUnexpected) {
+                unexpected.set(line);
+                latch.countDown();
             }
         }, System.err::println);
         assertTrue(latch.await(10, TimeUnit.SECONDS));
+        String unexpectedLine = unexpected.get();
+        if (unexpectedLine != null) {
+            throw new IllegalArgumentException(unexpectedLine);
+        }
     }
 
     private static void pump(InputStream stream, Consumer<String> consumer) {

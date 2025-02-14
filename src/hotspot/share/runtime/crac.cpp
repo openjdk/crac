@@ -24,6 +24,7 @@
 #include "precompiled.hpp"
 
 #include "classfile/classLoader.hpp"
+#include "jfr/jfr.hpp"
 #include "jvm.h"
 #include "logging/logAsyncWriter.hpp"
 #include "logging/logConfiguration.hpp"
@@ -451,6 +452,8 @@ Handle crac::checkpoint(jarray fd_arr, jobjectArray obj_arr, bool dry_run, jlong
     }
   }
 
+  JFR_ONLY(Jfr::before_checkpoint();)
+
   AsyncLogWriter* aio_writer = AsyncLogWriter::instance();
   if (aio_writer) {
     aio_writer->stop();
@@ -469,6 +472,8 @@ Handle crac::checkpoint(jarray fd_arr, jobjectArray obj_arr, bool dry_run, jlong
   if (aio_writer) {
     aio_writer->resume();
   }
+
+  JFR_ONLY(Jfr::after_restore();)
 
 #if INCLUDE_JVMTI
   JvmtiExport::post_crac_after_restore();

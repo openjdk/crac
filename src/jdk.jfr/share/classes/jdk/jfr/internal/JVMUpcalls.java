@@ -26,6 +26,7 @@ package jdk.jfr.internal;
 
 import java.lang.reflect.Modifier;
 
+import jdk.internal.crac.Core;
 import jdk.jfr.internal.event.EventConfiguration;
 import jdk.jfr.internal.util.Bytecode;
 import jdk.jfr.internal.util.Utils;
@@ -156,5 +157,12 @@ final class JVMUpcalls {
      */
     static Thread createRecorderThread(ThreadGroup systemThreadGroup, ClassLoader contextClassLoader) {
         return SecuritySupport.createRecorderThread(systemThreadGroup, contextClassLoader);
+    }
+
+    /**
+     * Called by the JVM when it is restored with a new -XX:StartFlightRecorder
+     */
+    static void requestStartAfterRestore() {
+        Core.setStartFlightRecorder(JVM::startFlightRecorderAfterRestore);
     }
 }

@@ -430,3 +430,7 @@ JVM_END
 NO_TRANSITION(jlong, jfr_nanos_now(JNIEnv* env, jclass jvm))
   return JfrChunk::nanos_now();
 NO_TRANSITION_END
+
+JVM_ENTRY_NO_ENV(void, jfr_start_after_restore(JNIEnv* env, jclass jvm))
+  return JfrRecorder::start_after_restore();
+JVM_END

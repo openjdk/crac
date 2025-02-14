@@ -675,4 +675,9 @@ public final class JVM {
      * @param value
      */
     public static native void setMiscellaneous(long eventTypeId, long value);
+
+    /**
+     * Starts recording based on -XX:StartFlightRecorder passed on restore.
+     */
+    public static native void startFlightRecorderAfterRestore();
 }

@@ -312,7 +312,6 @@ void VM_Crac::doit() {
   DefaultStreamHandler defStreamHandler;
 
   Decoder::before_checkpoint();
-  JFR_ONLY(Jfr::before_checkpoint();)
   if (!check_fds()) {
     ok = false;
   }
@@ -453,6 +452,8 @@ Handle crac::checkpoint(jarray fd_arr, jobjectArray obj_arr, bool dry_run, jlong
     }
   }
 
+  JFR_ONLY(Jfr::before_checkpoint();)
+
   AsyncLogWriter* aio_writer = AsyncLogWriter::instance();
   if (aio_writer) {
     aio_writer->stop();
@@ -472,7 +473,6 @@ Handle crac::checkpoint(jarray fd_arr, jobjectArray obj_arr, bool dry_run, jlong
     aio_writer->resume();
   }
 
-  // after_restore should run outside VM thread
   JFR_ONLY(Jfr::after_restore();)
 
 #if INCLUDE_JVMTI

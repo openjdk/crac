@@ -168,10 +168,9 @@ void Jfr::after_restore() {
     ResourceMark rm;
     char *buf = NEW_RESOURCE_ARRAY(char, buf_len);
     snprintf(buf, buf_len, "-XX:%s=%s", jfr_flag, flag->get_ccstr());
-    JavaVMOption option = {
-      .optionString = buf,
-      .extraInfo = nullptr,
-    };
+    JavaVMOption option;
+    option.optionString = buf;
+    option.extraInfo = nullptr;
     const JavaVMOption *option_ptr = &option;
     JfrOptionSet::parse_start_flight_recording_option(&option_ptr, buf + 4 + strlen(jfr_flag));
     // We cannot invoke this directly now as DCmdStart command would be blocked

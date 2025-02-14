@@ -139,9 +139,8 @@ public abstract class JDKSocketResourceBase extends JDKFdResource {
             OpenResourcePolicies.Policy policy = findPolicy(true);
             String action = policy == null ? "error" : policy.action;
             try {
-                // FIXME: implement
                 if (action.equals("reopen")) {
-                    throw new UnsupportedOperationException("Policy " + policy.type + " not implemented");
+                    reopenAfterRestore();
                 }
             } finally {
                 reset();
@@ -150,4 +149,8 @@ public abstract class JDKSocketResourceBase extends JDKFdResource {
     }
 
     protected abstract void reset();
+
+    protected void reopenAfterRestore() throws IOException {
+        throw new UnsupportedOperationException("Reopen not implemented on sockets");
+    }
 }

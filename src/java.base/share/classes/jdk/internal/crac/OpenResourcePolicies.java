@@ -75,7 +75,7 @@ public class OpenResourcePolicies {
         try {
             for (String line : Files.readAllLines(f.toPath())) {
                 line = line.trim();
-                if (line.startsWith("#")) {
+                if (line.startsWith("#") || line.isEmpty()) {
                     continue;
                 } else if ("---".equals(line)) {
                     if (type == null && action == null && params.isEmpty()) {

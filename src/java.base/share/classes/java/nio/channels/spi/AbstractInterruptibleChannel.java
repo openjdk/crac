@@ -131,6 +131,16 @@ public abstract class AbstractInterruptibleChannel
     }
 
     /**
+     * Used only internally by CRaC
+     */
+    protected final void setReopened() {
+        synchronized (closeLock) {
+            assert closed;
+            closed = false;
+        }
+    }
+
+    /**
      * Closes this channel.
      *
      * <p> This method is invoked by the {@link #close close} method in order

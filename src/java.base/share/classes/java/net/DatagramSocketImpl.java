@@ -76,6 +76,11 @@ public abstract class DatagramSocketImpl implements SocketOptions {
         }
 
         @Override
+        protected boolean isListening() {
+            return false;
+        }
+
+        @Override
         protected void closeBeforeCheckpoint() {
             disconnect();
         }

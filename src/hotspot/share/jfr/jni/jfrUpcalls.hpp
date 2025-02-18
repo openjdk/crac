@@ -56,7 +56,7 @@ class JfrUpcalls : AllStatic {
                              TRAPS);
 
   static bool unhide_internal_types(TRAPS);
-  static void request_start_after_restore(TRAPS);
+  static void request_start_after_restore();
 };
 
 #endif // SHARE_JFR_JNI_JFRUPCALLS_HPP

@@ -213,7 +213,8 @@ bool JfrUpcalls::unhide_internal_types(TRAPS) {
   return true;
 }
 
-void JfrUpcalls::request_start_after_restore(TRAPS) {
+void JfrUpcalls::request_start_after_restore() {
+  JavaThread * const THREAD = JavaThread::current();
   DEBUG_ONLY(JfrJavaSupport::check_java_thread_in_vm(THREAD));
   if (!initialize(THREAD)) {
     log_error(jfr, system)("JfrUpcall could not be initialized.");

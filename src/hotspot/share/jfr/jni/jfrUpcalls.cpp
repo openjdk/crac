@@ -220,7 +220,14 @@ void JfrUpcalls::request_start_after_restore(TRAPS) {
     return;
   }
   JavaValue result(T_VOID);
-  const Klass* klass = SystemDictionary::resolve_or_fail(jvm_upcalls_class_sym, true, CHECK);
+  const Klass* klass = SystemDictionary::resolve_or_fail(jvm_upcalls_class_sym, true, THREAD);
+  if (HAS_PENDING_EXCEPTION) {
+    CLEAR_PENDING_EXCEPTION;
+    ResourceMark rm(THREAD);
+    log_error(jfr, system)("JfrUpcall cannot resolve class %s, flight recording won't be started",
+      jvm_upcalls_class_sym->as_C_string());
+    return;
+  }
   assert(klass != nullptr, "invariant");
   JfrJavaArguments args(&result, klass, request_start_after_restore_sym, request_start_after_restore_sig_sym);
   JfrJavaSupport::call_static(&args, THREAD);

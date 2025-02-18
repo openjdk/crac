@@ -176,6 +176,8 @@ void Jfr::after_restore() {
     // We cannot invoke this directly now as DCmdStart command would be blocked
     // trying to register new file descriptors. Instead we just record a request and
     // the recording will be started at the right moment from JDKResource.
-    JfrUpcalls::request_start_after_restore(JavaThread::current());
+    JavaThread *const THREAD = JavaThread::current();
+    JfrUpcalls::request_start_after_restore(THREAD);
+    assert(!HAS_PENDING_EXCEPTION, "pending exception");
   }
 }

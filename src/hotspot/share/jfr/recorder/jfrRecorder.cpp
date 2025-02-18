@@ -465,7 +465,8 @@ void JfrRecorder::stop_recording() {
 }
 
 void JfrRecorder::start_after_restore() {
-  JavaThread* const thread = JavaThread::current();
-  validate_recording_options(thread);
-  launch_command_line_recordings(thread);
+  JavaThread* const THREAD = JavaThread::current();
+  validate_recording_options(THREAD);
+  launch_command_line_recordings(THREAD);
+  assert(!HAS_PENDING_EXCEPTION, "pending exception");
 }

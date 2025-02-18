@@ -32,7 +32,7 @@ import jdk.internal.crac.mirror.impl.OrderedContext;
 
 public class Core {
     private static ClaimedFDs claimedFDs;
-    private static JfrResource jfrResource = new JfrResource();
+    private static final JfrResource jfrResource = new JfrResource();
 
     /**
      * Called by JDK FD resources

@@ -227,7 +227,6 @@ void JfrUpcalls::request_start_after_restore(TRAPS) {
   if (HAS_PENDING_EXCEPTION) {
     CLEAR_PENDING_EXCEPTION;
     ResourceMark rm(THREAD);
-    log_error(jfr, system)("JfrUpcall failed for %s", unhide_internal_types_sym->as_C_string());
-    return;
+    log_error(jfr, system)("JfrUpcall failed for %s", request_start_after_restore_sym->as_C_string());
   }
 }

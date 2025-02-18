@@ -32,7 +32,10 @@ import static jdk.jfr.internal.LogLevel.WARN;
 import static jdk.jfr.internal.LogTag.JFR;
 import static jdk.jfr.internal.LogTag.JFR_SYSTEM;
 
+import java.io.File;
 import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.security.AccessControlContext;
 import java.security.AccessController;
 import java.time.Duration;
@@ -80,6 +83,7 @@ public final class PlatformRecorder {
     private boolean runPeriodicTask;
     private JDKResource resource = new JDKResource() {
         private List<PlatformRecording> futureRecordings;
+        private static int MAX_BACKUPS = Integer.getInteger("jdk.jfr.max_backups", 20);
 
         @Override
         public void beforeCheckpoint(Context<? extends Resource> context) throws Exception {
@@ -124,10 +128,43 @@ public final class PlatformRecorder {
             synchronized (PlatformRecorder.this) {
                 futureRecordings.forEach(r -> {
                     recordings.add(r);
+                    WriteableUserPath destination = r.getDestination();
+                    // The backup recording has to be moved before creating WriteableUserPath
+                    // (and touching the recording output file)
+                    try {
+                        destination.doPrivilegedIO(() -> {
+                            File destFile = destination.getReal().toFile();
+                            if (!destFile.exists()) {
+                                return null;
+                            }
+                            Path backup = null;
+                            for (int i = 0; backup == null && i < MAX_BACKUPS; ++i) {
+                                String name = destFile.getName();
+                                // Mission Control has issues opening recording files
+                                // that don't end with .jfr
+                                if (name.endsWith(".jfr")) {
+                                    name = name.substring(0, name.length() - 4) + "." + i + ".jfr";
+                                } else {
+                                    name = name + "." + i;
+                                }
+                                backup = destination.getReal().getParent().resolve(name);
+                                if (backup.toFile().exists()) {
+                                    backup = null;
+                                }
+                            }
+                            if (backup != null) {
+                                Files.move(destFile.toPath(), backup);
+                                Logger.log(JFR, INFO, "Backed up " + destFile + " to " + backup);
+                            }
+                            return null;
+                        });
+                    } catch (IOException e) {
+                        Logger.log(JFR, ERROR, "Cannot backup previous recording: " + e);
+                    }
                     try {
                         // We need to invoke WritableUserPath after restore to create the dump file.
                         // Since we're creating another WritableUserPath we can use the original specification
-                        r.setDestination(new WriteableUserPath(r.getDestination().getPotentiallyMaliciousOriginal()));
+                        r.setDestination(new WriteableUserPath(destination.getPotentiallyMaliciousOriginal()));
                     } catch (IOException e) {
                         Logger.log(JFR, ERROR, "Cannot reset recording destination: " + e);
                     }

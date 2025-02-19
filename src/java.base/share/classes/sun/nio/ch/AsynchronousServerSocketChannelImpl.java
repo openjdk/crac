@@ -169,8 +169,7 @@ abstract class AsynchronousServerSocketChannelImpl
         implReopen();
     }
 
-    protected void implReopen() throws IOException {
-    }
+    protected abstract void implReopen() throws IOException;
 
     /**
      * Invoked by accept to accept connection

@@ -35,7 +35,6 @@ import java.util.concurrent.Future;
  * @test
  * @library /test/lib
  * @modules java.base/jdk.internal.crac:+open
- * @requires (os.family == "linux")
  * @build FDPolicyTestBase
  * @build ReopenListeningTestBase
  * @build ReopenListeningAsynchronousSocketChannelTest

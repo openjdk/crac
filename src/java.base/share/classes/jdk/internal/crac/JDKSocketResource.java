@@ -38,10 +38,7 @@ public abstract class JDKSocketResource extends JDKSocketResourceBase {
         var remoteMatcher = getMatcher(remote, "remoteAddress", "remotePort", "remotePath");
         Predicate<Map<String, String>> listenMatcher = params -> {
             String cfgListening = params.get("listening");
-            if (cfgListening == null || "*".equals(cfgListening)) {
-                return true;
-            }
-            return Boolean.parseBoolean(cfgListening) == isListening();
+            return cfgListening == null || Boolean.parseBoolean(cfgListening) == isListening();
         };
         return OpenResourcePolicies.find(isRestore, OpenResourcePolicies.SOCKET,
                 params -> localMatcher.test(params) && remoteMatcher.test(params) && listenMatcher.test(params));

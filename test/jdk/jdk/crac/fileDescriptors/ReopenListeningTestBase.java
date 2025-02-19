@@ -24,6 +24,7 @@
 import jdk.crac.Core;
 import jdk.internal.crac.OpenResourcePolicies;
 import jdk.test.lib.crac.CracBuilder;
+import jdk.test.lib.crac.CracEngine;
 import jdk.test.lib.crac.CracTest;
 
 import java.io.IOException;
@@ -34,7 +35,6 @@ import java.nio.file.Path;
 public abstract class ReopenListeningTestBase<ServerType> extends FDPolicyTestBase implements CracTest {
     @Override
     public void test() throws Exception {
-        String loopback = InetAddress.getLoopbackAddress().getHostAddress();
         Path config = writeConfig("""
                 type: SOCKET
                 family: ip
@@ -44,12 +44,13 @@ public abstract class ReopenListeningTestBase<ServerType> extends FDPolicyTestBa
                 type: SOCKET
                 family: ip
                 action: close
-                """.replace("$loopback", loopback));
+                """);
         try {
             new CracBuilder()
+                    .engine(CracEngine.SIMULATE)
                     .javaOption(OpenResourcePolicies.PROPERTY, config.toString())
                     .javaOption("jdk.crac.collect-fd-stacktraces", "true")
-                    .doCheckpointAndRestore();
+                    .startCheckpoint().waitForSuccess();
         } finally {
             Files.deleteIfExists(config);
         }

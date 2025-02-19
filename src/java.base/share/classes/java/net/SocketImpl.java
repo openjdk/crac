@@ -75,7 +75,7 @@ public abstract class SocketImpl implements SocketOptions {
     protected int localport;
 
     @SuppressWarnings("unused")
-    private final JDKSocketResource resource = new JDKSocketResource(SocketImpl.this) {
+    private final JDKSocketResource resource = new JDKSocketResource(this) {
         @Override
         protected FileDescriptor getFD() {
             return fd;

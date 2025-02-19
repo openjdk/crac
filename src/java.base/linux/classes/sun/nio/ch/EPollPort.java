@@ -95,7 +95,11 @@ final class EPollPort
     private final CRaCResource resource = new CRaCResource();
 
     private class CRaCResource implements JDKResource {
+        // The field is volatile since it's accessed in isCheckpoint() which might be called
+        // after a wakeup, without any guarantees for memory barriers.
         private volatile Phaser phaser;
+        // Not volatile as it's accessed only after receiving CHECKPOINT event through the
+        // queue which establishes a happens-after relation.
         private AtomicInteger counter;
         private IOException restoreException;
 
@@ -113,6 +117,7 @@ final class EPollPort
             }
             // we call wakeup only once since there's only one thread actually polling
             wakeup();
+            // synchronization 1: wait until other threads enter processCheckpoint
             phaser.arriveAndAwaitAdvance();
         }
 
@@ -126,7 +131,9 @@ final class EPollPort
                 try { FileDispatcherImpl.closeIntFD(sp[0]); } catch (IOException ioe) { }
                 try { FileDispatcherImpl.closeIntFD(sp[1]); } catch (IOException ioe) { }
             }
+            // synchronization 1: threads entering processCheckpoint()
             phaser.arriveAndAwaitAdvance();
+            // synchronization 2: block threads until afterRestore()
             phaser.arriveAndAwaitAdvance();
             if (isLast) {
                 try {
@@ -138,12 +145,15 @@ final class EPollPort
                     restoreException = e;
                 }
             }
-            phaser.arriveAndAwaitAdvance();
+            // synchronization 3: notify that FDs have been re-created
+            phaser.arrive();
         }
 
         @Override
         public void afterRestore(Context<? extends Resource> context) throws Exception {
+            // synchronization 2: unblock threads waiting until restore
             phaser.arriveAndAwaitAdvance();
+            // synchronization 3: wait until all threads re-create the FDs
             phaser.arriveAndAwaitAdvance();
             counter = null;
             phaser = null;

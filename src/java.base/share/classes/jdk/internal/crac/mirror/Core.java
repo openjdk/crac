@@ -64,14 +64,11 @@ public class Core {
     private static native Object[] checkpointRestore0(int[] fdArr, Object[] objArr, boolean dryRun, long jcmdStream);
     private static final Object checkpointRestoreLock = new Object();
     private static boolean checkpointInProgress = false;
-    private static int dryRunsCounter = -1;
 
     private static class FlagsHolder {
         private FlagsHolder() {}
         public static final boolean TRACE_STARTUP_TIME =
             Boolean.getBoolean("jdk.crac.trace-startup-time");
-        public static final boolean DRY_RUNS_INTERRUPTED = Boolean.getBoolean("jdk.crac.dry-runs.interrupted");
-        public static final int DRY_RUNS = Integer.getInteger("jdk.crac.dry-runs", 0);
     }
 
     private static final Context<Resource> globalContext = GlobalContext.createGlobalContextImpl();
@@ -152,31 +149,6 @@ public class Core {
         // - FileDescriptors for resources (sun.util.calendar.ZoneInfoFile)
         LoggerContainer.info("Starting checkpoint");
         LoggerContainer.debug("at epoch:{0}", System.currentTimeMillis());
-
-        if (dryRunsCounter < 0) {
-            dryRunsCounter = FlagsHolder.DRY_RUNS;
-        }
-        while (dryRunsCounter > 0) {
-            jdk.internal.crac.Core.setClaimedFDs(new ClaimedFDs());
-            try {
-                globalContext.beforeCheckpoint(null);
-            } catch (CheckpointException ce) {
-                checkpointException.handle(ce);
-            }
-            jdk.internal.crac.Core.setClaimedFDs(null);
-            try {
-                globalContext.afterRestore(null);
-            } catch (RestoreException re) {
-                checkpointException.resuppress(re);
-            }
-            dryRunsCounter--;
-            if (FlagsHolder.DRY_RUNS_INTERRUPTED) {
-                checkpointException.get().addSuppressed(new RuntimeException("Dry-run executed, not continuing with checkpoint"));
-            }
-            // We use only checkpoint exception type because effectively even afterRestore() runs
-            // before checkpoint. The exact source is clear from stack trace
-            checkpointException.throwIfAny();
-        }
 
         ClaimedFDs claimedFDs = new ClaimedFDs();
 

@@ -25,9 +25,15 @@
 
 package sun.nio.ch;
 
+import jdk.internal.crac.Core;
+import jdk.internal.crac.JDKResource;
+import jdk.internal.crac.mirror.Context;
+import jdk.internal.crac.mirror.Resource;
+
 import java.nio.channels.spi.AsynchronousChannelProvider;
 import java.io.IOException;
 import java.util.concurrent.ArrayBlockingQueue;
+import java.util.concurrent.Phaser;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -51,7 +57,7 @@ final class EPollPort
     private static final int ENOENT     = 2;
 
     // epoll file descriptor
-    private final int epfd;
+    private int epfd;
 
     // address of the poll array passed to epoll_wait
     private final long address;
@@ -84,6 +90,84 @@ final class EPollPort
     private final ArrayBlockingQueue<Event> queue;
     private final Event NEED_TO_POLL = new Event(null, 0);
     private final Event EXECUTE_TASK_OR_SHUTDOWN = new Event(null, 0);
+    private final Event CHECKPOINT = new Event(null, 0);
+
+    private final CRaCResource resource = new CRaCResource();
+
+    private class CRaCResource implements JDKResource {
+        // The field is volatile since it's accessed in isCheckpoint() which might be called
+        // after a wakeup, without any guarantees for memory barriers.
+        private volatile Phaser phaser;
+        // Not volatile as it's accessed only after receiving CHECKPOINT event through the
+        // queue which establishes a happens-after relation.
+        private AtomicInteger counter;
+        private IOException restoreException;
+
+        @Override
+        public void beforeCheckpoint(Context<? extends Resource> context) throws Exception {
+            int threads = threadCount();
+            if (threads == 0) {
+                throw new IllegalStateException();
+            }
+            phaser = new Phaser(threadCount() + 1);
+            counter = new AtomicInteger(threads);
+            for (int i = 0; i < threads; ++i) {
+                // cannot use executeOnHandlerTask as taskQueue is null in a non-fixed threadpool
+                queue.offer(CHECKPOINT);
+            }
+            // we call wakeup only once since there's only one thread actually polling
+            wakeup();
+            // synchronization 1: wait until other threads enter processCheckpoint
+            phaser.arriveAndAwaitAdvance();
+        }
+
+        private void processCheckpoint() {
+            boolean isLast = counter.decrementAndGet() == 0;
+            if (isLast) {
+                // This code is closing epfd even if there are FDs registered in that; the existence
+                // of these FDs will cause their own exceptions on checkpoint.
+                // If these are ignored by FD policies it's up to the user to deal with missed registrations.
+                try { FileDispatcherImpl.closeIntFD(epfd); } catch (IOException ioe) { }
+                try { FileDispatcherImpl.closeIntFD(sp[0]); } catch (IOException ioe) { }
+                try { FileDispatcherImpl.closeIntFD(sp[1]); } catch (IOException ioe) { }
+            }
+            // synchronization 1: threads entering processCheckpoint()
+            phaser.arriveAndAwaitAdvance();
+            // synchronization 2: block threads until afterRestore()
+            phaser.arriveAndAwaitAdvance();
+            if (isLast) {
+                try {
+                    epfd = EPoll.create();
+                    long fds = IOUtil.makePipe(true);
+                    sp[0] = (int) (fds >>> 32);
+                    sp[1] = (int) fds;
+                } catch (IOException e) {
+                    restoreException = e;
+                }
+            }
+            // synchronization 3: notify that FDs have been re-created
+            phaser.arrive();
+        }
+
+        @Override
+        public void afterRestore(Context<? extends Resource> context) throws Exception {
+            // synchronization 2: unblock threads waiting until restore
+            phaser.arriveAndAwaitAdvance();
+            // synchronization 3: wait until all threads re-create the FDs
+            phaser.arriveAndAwaitAdvance();
+            counter = null;
+            phaser = null;
+            if (restoreException != null) {
+                Exception e = restoreException;
+                restoreException = null;
+                throw e;
+            }
+        }
+
+        public boolean isCheckpoint() {
+            return phaser != null;
+        }
+    }
 
     EPollPort(AsynchronousChannelProvider provider, ThreadPool pool)
         throws IOException
@@ -110,6 +194,8 @@ final class EPollPort
         // threads polls
         this.queue = new ArrayBlockingQueue<>(MAX_EPOLL_EVENTS);
         this.queue.offer(NEED_TO_POLL);
+
+        Core.Priority.EPOLLSELECTOR.getContext().register(resource);
     }
 
     EPollPort start() {
@@ -289,6 +375,11 @@ final class EPollPort
 
                     // handle wakeup to execute task or shutdown
                     if (ev == EXECUTE_TASK_OR_SHUTDOWN) {
+                        if (resource.isCheckpoint()) {
+                            // the wakeup was caused by checkpoint, but there might not be any taskQueue
+                            // and no task. It is not a shutdown, though.
+                            continue;
+                        }
                         Runnable task = pollTask();
                         if (task == null) {
                             // shutdown request
@@ -297,6 +388,9 @@ final class EPollPort
                         // run task (may throw error/exception)
                         replaceMe = true;
                         task.run();
+                        continue;
+                    } else if (ev == CHECKPOINT) {
+                        resource.processCheckpoint();
                         continue;
                     }
 

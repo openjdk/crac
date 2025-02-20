@@ -91,11 +91,39 @@ public abstract class SocketImpl implements SocketOptions {
             return new InetSocketAddress(address, port);
         }
 
+        // We cannot override this in subclass because SocketImpl is public and resource factory method
+        // would expose JDKSocketResource outside JDK.
+        @Override
+        protected boolean isListening() {
+            return SocketImpl.this.isListening();
+        }
+
         @Override
         protected void closeBeforeCheckpoint() throws IOException {
             close();
         }
+
+        @Override
+        protected void reopenAfterRestore() throws IOException {
+            SocketImpl.this.reopenAfterRestore();
+        }
     };
+
+    /**
+     * Is this socket listening (server)?
+     * @return True if listening
+     */
+    protected boolean isListening() {
+        return false;
+    }
+
+    /**
+     * Used only by CRaC
+     * @throws IOException When cannot be reopened
+     */
+    protected void reopenAfterRestore() throws IOException {
+        throw new UnsupportedOperationException("Reopen not implemented");
+    }
 
     /**
      * Initialize a new instance of this class

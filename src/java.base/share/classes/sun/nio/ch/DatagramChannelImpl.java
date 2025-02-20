@@ -1985,6 +1985,11 @@ class DatagramChannelImpl
         }
 
         @Override
+        protected boolean isListening() {
+            return false;
+        }
+
+        @Override
         protected void closeBeforeCheckpoint() throws IOException {
             close();
         }

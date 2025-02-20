@@ -44,8 +44,8 @@ class WindowsAsynchronousServerSocketChannelImpl
     // 2 * (sizeof(SOCKET_ADDRESS) + 16)
     private static final int DATA_BUFFER_SIZE = 88;
 
-    private final long handle;
-    private final int completionKey;
+    private long handle;
+    private int completionKey;
     private final Iocp iocp;
 
     // typically there will be zero, or one I/O operations pending. In rare
@@ -53,7 +53,7 @@ class WindowsAsynchronousServerSocketChannelImpl
     // operations complete immediately and handled by the initiating thread.
     // The corresponding OVERLAPPED cannot be reused/released until the completion
     // event has been posted.
-    private final PendingIoCache ioCache;
+    private PendingIoCache ioCache;
 
     // the data buffer to receive the local/remote socket address
     private final long dataBuffer;
@@ -100,6 +100,18 @@ class WindowsAsynchronousServerSocketChannelImpl
 
         // release other resources
         unsafe.freeMemory(dataBuffer);
+    }
+
+    @Override
+    protected void implReopen() throws IOException {
+        handle = IOUtil.fdVal(fd);
+        ioCache = new PendingIoCache();
+        try {
+            completionKey = iocp.associate(this, handle);
+        } catch (IOException x) {
+            closesocket0(handle);
+            throw x;
+        }
     }
 
     @Override

@@ -89,6 +89,14 @@ class JfrOSInterface::JfrOSInterfaceImpl : public JfrCHeapObj {
   int system_processes(SystemProcess** system_processes, int* no_of_sys_processes);
 
   int network_utilization(NetworkInterface** network_interfaces);
+
+  void before_checkpoint() {
+    // SystemProcessInterface::SystemProcesses::ProcessIterator has an open FD
+    // to /proc directory - we need to close this before checkpoint.
+    // _system_process_interfaces will be re-created on demand
+    delete _system_process_interface;
+    _system_process_interface = nullptr;
+  }
 };
 
 JfrOSInterface::JfrOSInterfaceImpl::JfrOSInterfaceImpl() : _cpu_info_interface(nullptr),
@@ -311,4 +319,10 @@ int JfrOSInterface::system_processes(SystemProcess** sys_processes, int* no_of_s
 
 int JfrOSInterface::network_utilization(NetworkInterface** network_interfaces) {
   return instance()._impl->network_utilization(network_interfaces);
+}
+
+void JfrOSInterface::before_checkpoint() {
+  if (_instance != nullptr && _instance->_impl != nullptr) {
+    return _instance->_impl->before_checkpoint();
+  }
 }

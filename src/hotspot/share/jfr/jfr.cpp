@@ -25,15 +25,19 @@
 #include "precompiled.hpp"
 #include "jfr/jfr.hpp"
 #include "jfr/jni/jfrJavaSupport.hpp"
+#include "jfr/jni/jfrUpcalls.hpp"
 #include "jfr/leakprofiler/leakProfiler.hpp"
 #include "jfr/recorder/jfrRecorder.hpp"
 #include "jfr/recorder/checkpoint/jfrCheckpointManager.hpp"
+#include "jfr/periodic/jfrOSInterface.hpp"
 #include "jfr/recorder/repository/jfrEmergencyDump.hpp"
 #include "jfr/recorder/service/jfrOptionSet.hpp"
 #include "jfr/recorder/service/jfrOptionSet.hpp"
 #include "jfr/recorder/repository/jfrRepository.hpp"
 #include "jfr/support/jfrResolution.hpp"
 #include "jfr/support/jfrThreadLocal.hpp"
+#include "memory/resourceArea.hpp"
+#include "runtime/flags/jvmFlag.hpp"
 #include "runtime/java.hpp"
 
 bool Jfr::is_enabled() {
@@ -148,4 +152,30 @@ bool Jfr::on_flight_recorder_option(const JavaVMOption** option, char* delimiter
 
 bool Jfr::on_start_flight_recording_option(const JavaVMOption** option, char* delimiter) {
   return JfrOptionSet::parse_start_flight_recording_option(option, delimiter);
+}
+
+void Jfr::before_checkpoint() {
+  JfrOSInterface::before_checkpoint();
+}
+
+void Jfr::after_restore() {
+  const char *jfr_flag = "StartFlightRecording";
+  JVMFlag *flag = JVMFlag::find_flag(jfr_flag);
+  if (flag->get_origin() == JVMFlagOrigin::CRAC_RESTORE) {
+    // -XX:StartFlightRecording passed on restore
+    assert(JfrOptionSet::start_flight_recording_options() == nullptr, "should have been released");
+    size_t buf_len = 4 + strlen(jfr_flag) + 1 + strlen(flag->get_ccstr()) + 1;
+    ResourceMark rm;
+    char *buf = NEW_RESOURCE_ARRAY(char, buf_len);
+    snprintf(buf, buf_len, "-XX:%s=%s", jfr_flag, flag->get_ccstr());
+    JavaVMOption option;
+    option.optionString = buf;
+    option.extraInfo = nullptr;
+    const JavaVMOption *option_ptr = &option;
+    JfrOptionSet::parse_start_flight_recording_option(&option_ptr, buf + 4 + strlen(jfr_flag));
+    // We cannot invoke this directly now as DCmdStart command would be blocked
+    // trying to register new file descriptors. Instead we just record a request and
+    // the recording will be started at the right moment from JDKResource.
+    JfrUpcalls::request_start_after_restore();
+  }
 }

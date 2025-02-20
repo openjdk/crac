@@ -854,6 +854,10 @@ public final class PlatformRecording implements AutoCloseable {
         return result;
     }
 
+    SafePath getDumpDirectory() {
+        return dumpDirectory;
+    }
+
     /**
      * Sets the dump directory.
      * <p>

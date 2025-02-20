@@ -48,6 +48,8 @@ static Symbol* bytes_for_eager_instrumentation_sym = nullptr;
 static Symbol* bytes_for_eager_instrumentation_sig_sym = nullptr;
 static Symbol* unhide_internal_types_sym = nullptr;
 static Symbol* unhide_internal_types_sig_sym = nullptr;
+static Symbol* request_start_after_restore_sym = nullptr;
+static Symbol* request_start_after_restore_sig_sym = nullptr;
 
 static bool initialize(TRAPS) {
   static bool initialized = false;
@@ -60,6 +62,8 @@ static bool initialize(TRAPS) {
     bytes_for_eager_instrumentation_sig_sym = SymbolTable::new_permanent_symbol("(JZZLjava/lang/Class;[B)[B");
     unhide_internal_types_sym = SymbolTable::new_permanent_symbol("unhideInternalTypes");
     unhide_internal_types_sig_sym = SymbolTable::new_permanent_symbol("()V");
+    request_start_after_restore_sym = SymbolTable::new_permanent_symbol("requestStartAfterRestore");
+    request_start_after_restore_sig_sym = SymbolTable::new_permanent_symbol("()V");
     initialized = unhide_internal_types_sig_sym != nullptr;
   }
   return initialized;
@@ -207,4 +211,30 @@ bool JfrUpcalls::unhide_internal_types(TRAPS) {
     return false;
   }
   return true;
+}
+
+void JfrUpcalls::request_start_after_restore() {
+  JavaThread * const THREAD = JavaThread::current();
+  DEBUG_ONLY(JfrJavaSupport::check_java_thread_in_vm(THREAD));
+  if (!initialize(THREAD)) {
+    log_error(jfr, system)("JfrUpcall could not be initialized.");
+    return;
+  }
+  JavaValue result(T_VOID);
+  const Klass* klass = SystemDictionary::resolve_or_fail(jvm_upcalls_class_sym, true, THREAD);
+  if (HAS_PENDING_EXCEPTION) {
+    CLEAR_PENDING_EXCEPTION;
+    ResourceMark rm(THREAD);
+    log_error(jfr, system)("JfrUpcall cannot resolve class %s, flight recording won't be started",
+      jvm_upcalls_class_sym->as_C_string());
+    return;
+  }
+  assert(klass != nullptr, "invariant");
+  JfrJavaArguments args(&result, klass, request_start_after_restore_sym, request_start_after_restore_sig_sym);
+  JfrJavaSupport::call_static(&args, THREAD);
+  if (HAS_PENDING_EXCEPTION) {
+    CLEAR_PENDING_EXCEPTION;
+    ResourceMark rm(THREAD);
+    log_error(jfr, system)("JfrUpcall failed for %s", request_start_after_restore_sym->as_C_string());
+  }
 }

@@ -28,9 +28,11 @@ package jdk.internal.crac;
 
 import jdk.internal.crac.mirror.Context;
 import jdk.internal.crac.mirror.impl.BlockingOrderedContext;
+import jdk.internal.crac.mirror.impl.OrderedContext;
 
 public class Core {
     private static ClaimedFDs claimedFDs;
+    private static final JfrResource jfrResource = new JfrResource();
 
     /**
      * Called by JDK FD resources
@@ -48,6 +50,14 @@ public class Core {
     }
 
     /**
+     * Called by jdk.jfr.internal.JVMUpcalls when native code requests to start flight recording
+     * @param runnable
+     */
+    public static void setStartFlightRecorder(Runnable runnable) {
+        jfrResource.setStartFlightRecorder(runnable);
+    }
+
+    /**
      * Priorities are defined in the order of registration to the global context.
      * Checkpoint notification will be processed in the order from the bottom to the top of the list.
      * Restore will be done in reverse order: from the top to the bottom.
@@ -59,6 +69,9 @@ public class Core {
     public enum Priority {
         FILE_DESCRIPTORS(new BlockingOrderedContext<>()),
         PRE_FILE_DESCRIPTORS(new BlockingOrderedContext<>()),
+        // We use OrderedContext to not cause failure when PlatformRecorder tries to
+        // register itself when the recording is started from JfrResource.
+        JFR(new OrderedContext<>()),
         CLEANERS(new BlockingOrderedContext<>()),
         REFERENCE_HANDLER(new BlockingOrderedContext<>()),
         SEEDER_HOLDER(new BlockingOrderedContext<>()),

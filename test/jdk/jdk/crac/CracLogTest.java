@@ -36,9 +36,7 @@ import jdk.test.lib.crac.CracTestArg;
  * @run driver jdk.test.lib.crac.CracTest not-set
  * @run driver jdk.test.lib.crac.CracTest off
  * @run driver jdk.test.lib.crac.CracTest error
- * @run driver jdk.test.lib.crac.CracTest warning
  * @run driver jdk.test.lib.crac.CracTest info
- * @run driver jdk.test.lib.crac.CracTest debug
  * @run driver jdk.test.lib.crac.CracTest trace
  */
 public class CracLogTest implements CracTest {

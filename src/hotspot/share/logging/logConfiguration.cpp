@@ -120,6 +120,10 @@ void LogConfiguration::initialize(jlong vm_start_time) {
   for (LogTagSet* ts = LogTagSet::first(); ts != nullptr; ts = ts->next()) {
     ts->set_output_level(StdoutLog, LogLevel::Default);
   }
+
+  // Default log level for 'crac' is Info
+  precond(!log_is_enabled(Info, crac)); // If this fails, the below can be removed
+  LogTagSetMapping<LOG_TAGS(crac)>::tagset().set_output_level(StdoutLog, LogLevel::Info);
 }
 
 void LogConfiguration::finalize() {

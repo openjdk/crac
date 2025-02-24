@@ -58,9 +58,9 @@ public class CracLogTest implements CracTest {
         }
         final var out = builder.startCheckpoint().waitForSuccess().outputAnalyzer();
 
-        final var checkpointLogMsgLevel = logLevelStrToInt(CHECKPOINT_LOG_LEVEL);
+        final var checkpointLogLevel = logLevelStrToInt(CHECKPOINT_LOG_LEVEL);
         final var selectedLogLevel = logLevelStrToInt(logLevelStr);
-        if (checkpointLogMsgLevel <= selectedLogLevel) {
+        if (checkpointLogLevel <= selectedLogLevel) {
             out.shouldContain(CHECKPOINT_LOG_MSG);
         } else {
             out.shouldNotContain(CHECKPOINT_LOG_MSG);

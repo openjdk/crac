@@ -81,7 +81,7 @@ public class Test implements Resource, CracTest {
             // Expected Exception
         } catch (RestoreException e) {
             if (exception == null)
-                exception = new RuntimeException("Restore ERROR " + e);
+                exception = new RuntimeException("Restore ERROR", e);
         }
     }
 
@@ -101,7 +101,7 @@ public class Test implements Resource, CracTest {
             // Expected Exception
         } catch (RestoreException e) {
             if (exception == null)
-                exception = new RuntimeException("Restore ERROR " + e);
+                exception = new RuntimeException("Restore ERROR", e);
         } finally {
             counter.decrementAndGet();
         }
@@ -121,9 +121,9 @@ public class Test implements Resource, CracTest {
         try {
             jdk.crac.Core.checkpointRestore();
         } catch (CheckpointException e) {
-            throw new RuntimeException("Checkpoint ERROR " + e);
+            throw new RuntimeException("Checkpoint ERROR", e);
         } catch (RestoreException e) {
-            throw new RuntimeException("Restore ERROR " + e);
+            throw new RuntimeException("Restore ERROR", e);
         }
 
         for (int i = 0; i < numThreads; i++) {

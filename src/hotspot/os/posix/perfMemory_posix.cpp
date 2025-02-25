@@ -1369,15 +1369,20 @@ bool PerfMemoryLinux::checkpoint() {
   }
 
   remove_file(backing_store_file_name);
+  // We cannot keep the filename because some C/R engines might not preserve PID numbers
+  // Also, username might change.
+  FREE_C_HEAP_ARRAY(char, backing_store_file_name);
+  backing_store_file_name = nullptr;
 
   return true;
 }
 
 bool PerfMemoryLinux::restore() {
-  if (!backing_store_file_name) {
+  assert(backing_store_file_name == nullptr, "Should be nil'ed on checkpoint");
+  // With -XX:-UsePerfData the capacity is zero
+  if (PerfDisableSharedMem || PerfMemory::capacity() == 0) {
     return true;
   }
-
   int vmid = os::current_process_id();
   char* user_name = get_user_name(geteuid());
   if (!user_name) {
@@ -1387,6 +1392,7 @@ bool PerfMemoryLinux::restore() {
   if (!make_user_tmp_dir(dirname)) {
     return false;
   }
+  backing_store_file_name = get_sharedmem_filename(dirname, vmid, -1);
 
   int fd;
   RESTARTABLE(::open(backing_store_file_name, O_RDWR|O_CREAT|O_NOFOLLOW, S_IRUSR|S_IWUSR), fd);

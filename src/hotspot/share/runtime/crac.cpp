@@ -24,8 +24,11 @@
 #include "precompiled.hpp"
 
 #include "classfile/classLoader.hpp"
+#include "crlib/crlib.h"
+#include "crlib/crlib_restore_data.h"
 #include "jfr/jfr.hpp"
 #include "jvm.h"
+#include "logging/log.hpp"
 #include "logging/logAsyncWriter.hpp"
 #include "logging/logConfiguration.hpp"
 #include "memory/oopFactory.hpp"
@@ -33,22 +36,19 @@
 #include "prims/jvmtiExport.hpp"
 #include "runtime/crac_structs.hpp"
 #include "runtime/crac.hpp"
+#include "runtime/globals.hpp"
 #include "runtime/interfaceSupport.inline.hpp"
 #include "runtime/jniHandles.hpp"
 #include "runtime/jniHandles.inline.hpp"
 #include "runtime/threads.hpp"
-#include "runtime/vm_version.hpp"
 #include "runtime/vmThread.hpp"
 #include "services/heapDumper.hpp"
 #include "services/writeableFlags.hpp"
 #include "utilities/decoder.hpp"
 #include "os.inline.hpp"
 #include "utilities/defaultStream.hpp"
+#include "utilities/globalDefinitions.hpp"
 
-static const char* _crengine = NULL;
-static char* _crengine_arg_str = NULL;
-static unsigned int _crengine_argc = 0;
-static const char* _crengine_args[32];
 static jlong _restore_start_time;
 static jlong _restore_start_nanos;
 
@@ -97,130 +97,314 @@ static char * strchrnul(char * str, char c) {
 }
 #endif //__APPLE__ || _WINDOWS
 
-static size_t cr_util_path(char* path, int len) {
-  os::jvm_path(path, len);
-  // path is ".../lib/server/libjvm.so", or "...\bin\server\libjvm.dll"
-  assert(1 == strlen(os::file_separator()), "file separator must be a single-char, not a string");
-  char *after_elem = NULL;
-  for (int i = 0; i < 2; ++i) {
-    after_elem = strrchr(path, *os::file_separator());
-    *after_elem = '\0';
+#ifdef _WINDOWS
+static char *strsep(char **strp, const char *delim) {
+  char *str = *strp;
+  if (str == nullptr) {
+    return nullptr;
   }
-  return after_elem - path;
+  size_t len = strcspn(str, delim);
+  if (str[len] == '\0') {
+    *strp = nullptr;
+    return str;
+  }
+  str[len] = '\0';
+  *strp += len + 1;
+  return str;
 }
+#endif // _WINDOWS
 
-static bool compute_crengine() {
-  // release possible old copies
-  os::free((char *) _crengine); // NULL is allowed
-  _crengine = NULL;
-  os::free((char *) _crengine_arg_str);
-  _crengine_arg_str = NULL;
+class EngineHandle {
+private:
+  void * const lib = nullptr;
+public:
+  crlib_api_t * const api = nullptr;
+  crlib_conf_t * const conf = nullptr;
 
-  if (!CRaCEngine) {
-    return true;
-  }
-  char *exec = os::strdup_check_oom(CRaCEngine);
-  char *comma = strchr(exec, ',');
-  if (comma != NULL) {
-    *comma = '\0';
-    _crengine_arg_str = os::strdup_check_oom(comma + 1);
-  }
-  if (os::is_path_absolute(exec)) {
-    _crengine = exec;
-  } else {
-    char path[JVM_MAXPATHLEN];
-    size_t pathlen = cr_util_path(path, sizeof(path));
-    strcat(path + pathlen, os::file_separator());
-    strcat(path + pathlen, exec);
-    WINDOWS_ONLY(strcat(path + pathlen, ".exe"));
+  static EngineHandle create(bool checkpoint);
+  ~EngineHandle();
 
-    struct stat st;
-    if (0 != os::stat(path, &st)) {
-      warning("Could not find CRaCEngine %s: %s", path, os::strerror(errno));
+  bool is_initialized() const { return lib != nullptr; }
+
+private:
+  EngineHandle() = default;
+  EngineHandle(void *lib, crlib_api_t *api, crlib_conf_t *conf) : lib(lib), api(api), conf(conf) {}
+};
+
+// CRaC engine configuration options JVM sets directly, not taking from the user
+#define ENGINE_OPT_IMAGE_LOCATION "image_location"
+#define ENGINE_OPT_EXEC_LOCATION "exec_location"
+
+static bool find_crac_engine(const char *dll_dir, char *path, size_t path_size, bool *is_library) {
+  // Try to interpret as a file path
+  if (os::is_path_absolute(CRaCEngine)) {
+    const size_t path_len = strlen(CRaCEngine);
+    if (path_len + 1 > path_size) {
+      log_error(crac)("CRaCEngine file path is too long: %s", CRaCEngine);
       return false;
     }
-    _crengine = os::strdup_check_oom(path);
-    // we have read and duplicated args from exec, now we can release
-    os::free(exec);
-  }
-  _crengine_args[0] = _crengine;
-  _crengine_argc = 2;
 
-  if (_crengine_arg_str != NULL) {
-    char *arg = _crengine_arg_str;
-    char *target = _crengine_arg_str;
-    bool escaped = false;
-    for (char *c = arg; *c != '\0'; ++c) {
-      if (_crengine_argc >= ARRAY_SIZE(_crengine_args) - 2) {
-        warning("Too many options to CRaCEngine; cannot proceed with these: %s", arg);
-        return false;
-      }
-      if (!escaped) {
-        switch(*c) {
-        case '\\':
-          escaped = true;
-          continue; // for
-        case ',':
-          *target++ = '\0';
-          _crengine_args[_crengine_argc++] = arg;
-          arg = target;
-          continue; // for
-        }
-      }
-      escaped = false;
-      *target++ = *c;
+    if (!os::file_exists(CRaCEngine)) {
+      log_error(crac)("CRaCEngine file does not exist: %s", CRaCEngine);
+      return false;
     }
-    *target = '\0';
-    _crengine_args[_crengine_argc++] = arg;
-    _crengine_args[_crengine_argc] = NULL;
+
+    strcpy(path, CRaCEngine);
+
+    const char *last_slash = strrchr(CRaCEngine, *os::file_separator());
+    const char *basename;
+    if (last_slash == nullptr) {
+      basename = CRaCEngine;
+    } else {
+      basename = last_slash + strlen(os::file_separator());
+    }
+    *is_library = strncmp(basename, JNI_LIB_PREFIX, strlen(JNI_LIB_PREFIX)) == 0 &&
+      strcmp(path + path_len - strlen(JNI_LIB_SUFFIX), JNI_LIB_SUFFIX) == 0;
+    log_debug(crac)("CRaCEngine path %s is %s library", CRaCEngine, *is_library ? "a" : "not a");
+
+    return true;
   }
-  return true;
+
+  // Try to interpret as a library name
+  if (os::dll_locate_lib(path, path_size, dll_dir, CRaCEngine)) {
+    *is_library = true;
+    log_debug(crac)("Found CRaCEngine %s as a library in %s", CRaCEngine, path);
+    return true;
+  }
+
+  *is_library = false;
+  log_debug(crac)("CRaCEngine %s is not a library in %s", CRaCEngine, dll_dir);
+
+#ifdef _WINDOWS
+  const char *suffix = ".exe";
+#else
+  const char *suffix = "";
+#endif // ! _WINDOWS
+#ifndef S_ISREG
+# define S_ISREG(__mode) ((__mode & S_IFMT) == S_IFREG)
+#endif // S_ISREG
+  struct stat st;
+
+  // Try to interpret as an executable name with "engine" suffix omitted
+  size_t path_len = strlen(dll_dir) + strlen(os::file_separator()) + strlen(CRaCEngine) + strlen("engine") + strlen(suffix);
+  if (path_len + 1 <= path_size) {
+    os::snprintf_checked(path, path_size, "%s%s%sengine%s", dll_dir, os::file_separator(), CRaCEngine, suffix);
+    if (os::stat(path, &st) == 0 && S_ISREG(st.st_mode)) {
+      log_debug(crac)("Found CRaCEngine %s as %s", CRaCEngine, path);
+      return true;
+    }
+  } else {
+    log_debug(crac)("Not looking for CRaCEngine an executable name with 'engine' omitted: path is too long");
+  }
+
+  // Try to interpret as an executable name
+  precond(path_len > strlen("engine"));
+  path_len -= strlen("engine");
+  if (path_len + 1 <= path_size) {
+    os::snprintf_checked(path, path_size, "%s%s%s%s", dll_dir, os::file_separator(), CRaCEngine, suffix);
+    if (os::stat(path, &st) == 0 && S_ISREG(st.st_mode)) {
+      log_debug(crac)("Found CRaCEngine %s as %s", CRaCEngine, path);
+      return true;
+    }
+  } else {
+    log_debug(crac)("Not looking for CRaCEngine as an executable name: path is too long");
+  }
+
+  return false;
 }
 
-static void add_crengine_arg(const char *arg) {
-  if (_crengine_argc >= ARRAY_SIZE(_crengine_args) - 1) {
-      warning("Too many options to CRaCEngine; cannot add %s", arg);
-      return;
+crlib_conf_t *create_crlib_conf(
+    const crlib_api_t &api, const char *image_location, const char *exec_location) {
+  crlib_conf_t * const conf = api.create_conf();
+  if (conf == nullptr) {
+    log_error(crac)("CRaC engine failed to create its configuration");
+    return nullptr;
   }
-  _crengine_args[_crengine_argc++] = arg;
-  _crengine_args[_crengine_argc] = NULL;
+
+  precond(image_location != nullptr && image_location[0] != '\0');
+  if (!api.can_configure(conf, ENGINE_OPT_IMAGE_LOCATION)) {
+    log_error(crac)("CRaC engine does not support mandatory option: " ENGINE_OPT_IMAGE_LOCATION);
+    api.destroy_conf(conf);
+    return nullptr;
+  }
+  if (!api.configure(conf, ENGINE_OPT_IMAGE_LOCATION, image_location)) {
+    log_error(crac)("CRaC engine failed to configure: '" ENGINE_OPT_IMAGE_LOCATION "' = '%s'", image_location);
+    api.destroy_conf(conf);
+    return nullptr;
+  }
+
+  if (exec_location != nullptr) { // Only passed when using crexec
+    guarantee(api.can_configure(conf, ENGINE_OPT_EXEC_LOCATION),
+              "crexec does not support an internal option: " ENGINE_OPT_EXEC_LOCATION);
+    if (!api.configure(conf, ENGINE_OPT_EXEC_LOCATION, exec_location)) {
+      log_error(crac)("crexec failed to configure: '" ENGINE_OPT_EXEC_LOCATION "' = '%s'", exec_location);
+      api.destroy_conf(conf);
+    return nullptr;
+    }
+  }
+
+  if (CRaCEngineOptions == nullptr || CRaCEngineOptions[0] == '\0' /* possible for ccstrlist */) {
+    return conf;
+  }
+
+  char *engine_options = os::strdup_check_oom(CRaCEngineOptions, mtInternal);
+  char *const engine_options_start = engine_options;
+  do {
+    char *key_value = strsep(&engine_options, ",");
+    const char *key = strsep(&key_value, "=");
+    const char *value = key_value != nullptr ? key_value : "";
+    assert(key != nullptr, "Should have terminated before");
+    if (strcmp(key, ENGINE_OPT_IMAGE_LOCATION) == 0 ||
+        (exec_location != nullptr && strcmp(key, ENGINE_OPT_EXEC_LOCATION) == 0)) {
+      log_warning(crac)("Internal CRaC engine option provided, skipping: %s", key);
+      continue;
+    }
+    if (!api.can_configure(conf, key)) {
+      log_error(crac)("CRaC engine does not support provided option: %s", key);
+      os::free(engine_options_start);
+      api.destroy_conf(conf);
+      return nullptr;
+    }
+    if (!api.configure(conf, key, value)) {
+      log_error(crac)("CRaC engine failed to configure: '%s' = '%s'", key, value);
+      os::free(engine_options_start);
+      api.destroy_conf(conf);
+      return nullptr;
+    }
+    log_debug(crac)("CRaC engine option: '%s' = '%s'", key, value);
+  } while (engine_options != nullptr);
+  os::free(engine_options_start);
+
+  return conf;
 }
 
-static int call_crengine() {
-  if (!_crengine) {
-    return -1;
+EngineHandle EngineHandle::create(bool checkpoint) {
+  if (CRaCEngine == nullptr) {
+    log_error(crac)("CRaCEngine must not be empty");
+    return {};
   }
-  _crengine_args[1] = "checkpoint";
-  add_crengine_arg(CRaCCheckpointTo);
-  return os::exec_child_process_and_wait(_crengine, _crengine_args);
+
+  // Arguments::get_dll_dir() might not have been initialized yet
+  char dll_dir[JVM_MAXPATHLEN];
+  os::jvm_path(dll_dir, sizeof(dll_dir));
+  // path is ".../lib/server/libjvm.so", or "...\bin\server\libjvm.dll"
+  char *after_elem = nullptr;
+  for (int i = 0; i < 2; ++i) {
+    after_elem = strrchr(dll_dir, *os::file_separator());
+    *after_elem = '\0';
+  }
+
+  char path[JVM_MAXPATHLEN];
+  bool is_library;
+  if (!find_crac_engine(dll_dir, path, sizeof(path), &is_library)) {
+    log_error(crac)("Cannot find CRaC engine %s", CRaCEngine);
+    return {};
+  }
+  postcond(path[0] != '\0');
+
+  char exec_path[JVM_MAXPATHLEN] = "\0";
+  if (!is_library) {
+    strcpy(exec_path, path); // Save to later pass it to crexec
+    if (!os::dll_locate_lib(path, sizeof(path), dll_dir, "crexec")) {
+      log_error(crac)("Cannot find crexec library to use CRaCEngine executable");
+      return {};
+    }
+  }
+
+  char error_buf[1024];
+  void * const lib = os::dll_load(path, error_buf, sizeof(error_buf));
+  if (lib == nullptr) {
+    log_error(crac)("Cannot load CRaC engine library from %s: %s", path, error_buf);
+    return {};
+  }
+
+  using api_func_t = decltype(&CRLIB_API);
+  const auto api_func = reinterpret_cast<api_func_t>(os::dll_lookup(lib, CRLIB_API_FUNC));
+  if (api_func == nullptr) {
+    log_error(crac)("Cannot load CRaC engine library entrypoint '" CRLIB_API_FUNC "' from %s", path);
+    os::dll_unload(lib);
+    return {};
+  }
+
+  crlib_api_t * const api = api_func(CRLIB_API_VERSION, sizeof(crlib_api_t));
+  if (api == nullptr) {
+    log_error(crac)("CRaC engine failed to initialize its API (version %i). "
+                    "Maybe this version is not supported?", CRLIB_API_VERSION);
+    os::dll_unload(lib);
+    return {};
+  }
+  if (api->create_conf == nullptr || api->destroy_conf == nullptr ||
+      api->checkpoint == nullptr || api->restore == nullptr ||
+      api->can_configure == nullptr || api->configure == nullptr ||
+      api->get_extension == nullptr) {
+    log_error(crac)("CRaC engine failed to fully initialize its API");
+    os::dll_unload(lib);
+    return {};
+  }
+
+  const char *image_location = checkpoint ? CRaCCheckpointTo : CRaCRestoreFrom;
+  const char *exec_location = exec_path[0] != '\0' ? exec_path : nullptr;
+  crlib_conf_t * const conf = create_crlib_conf(*api, image_location, exec_location);
+  if (conf == nullptr) {
+    os::dll_unload(lib);
+    return {};
+  }
+
+  return { lib, api, conf };
 }
 
-static int checkpoint_restore(int *shmid) {
+EngineHandle::~EngineHandle() {
+  if (api != nullptr) {
+    assert(lib != nullptr, "must be");
+    api->destroy_conf(conf); // Accepts null
+  }
+  if (lib != nullptr) {
+    os::dll_unload(lib);
+  }
+}
+
+static crlib_restore_data_t *get_restore_data_api(const EngineHandle &engine) {
+  crlib_restore_data_t *restore_data_api = CRLIB_EXTENSION_RESTORE_DATA(engine.api);
+  if (restore_data_api == nullptr) {
+    log_debug(crac)("CRaC engine does not support extension: " CRLIB_EXTENSION_RESTORE_DATA_NAME);
+    return nullptr;
+  }
+  if (restore_data_api->set_restore_data == nullptr || restore_data_api->get_restore_data == nullptr) {
+    log_debug(crac)("CRaC engine failed to fully initialize API extension: %s", CRLIB_EXTENSION_RESTORE_DATA_NAME);
+    return nullptr;
+  }
+  return restore_data_api;
+}
+
+int crac::checkpoint_restore(int *shmid) {
   crac::record_time_before_checkpoint();
 
-  int cres = call_crengine();
-  if (cres < 0) {
-    tty->print_cr("CRaC error executing: %s\n", _crengine);
-    return JVM_CHECKPOINT_ERROR;
+  // CRaCEngine, CRaCEngineOptions, CRaCCheckpointTo are restore-settable,
+  // which implies managable, so they could've been changed by the application
+  // at any time and we cannot initialize until the application has been stopped
+  {
+    const EngineHandle engine = EngineHandle::create(true);
+    if (!engine.is_initialized()) {
+      return JVM_CHECKPOINT_ERROR;
+    }
+
+    if (!engine.api->checkpoint(engine.conf)) {
+      log_error(crac)("CRaC engine failed to checkpoint to %s", CRaCCheckpointTo);
+      return JVM_CHECKPOINT_ERROR;
+    }
+
+    const auto *restore_data_api = get_restore_data_api(engine);
+    if (restore_data_api != nullptr &&
+        restore_data_api->get_restore_data(engine.conf, shmid, sizeof(*shmid)) < sizeof(*shmid)) {
+      log_warning(crac)("CRaC engine failed to provide restore data");
+      *shmid = 0;
+    }
   }
 
 #ifdef LINUX
-  sigset_t waitmask;
-  sigemptyset(&waitmask);
-  sigaddset(&waitmask, RESTORE_SIGNAL);
-
-  siginfo_t info;
-  int sig;
-  do {
-    sig = sigwaitinfo(&waitmask, &info);
-  } while (sig == -1 && errno == EINTR);
-  assert(sig == RESTORE_SIGNAL, "got what requested");
-
   if (CRaCCPUCountInit) {
     os::Linux::initialize_cpu_count();
   }
-#else
-  // TODO add sync processing
 #endif //LINUX
 
   crac::update_javaTimeNanos_offset();
@@ -229,22 +413,6 @@ static int checkpoint_restore(int *shmid) {
     tty->print_cr("STARTUPTIME " JLONG_FORMAT " restore-native", os::javaTimeNanos());
   }
 
-#ifdef LINUX
-  if (info.si_code != SI_QUEUE || info.si_int < 0) {
-    tty->print("JVM: invalid info for restore provided: %s", info.si_code == SI_QUEUE ? "queued" : "not queued");
-    if (info.si_code == SI_QUEUE) {
-      tty->print(" code %d", info.si_int);
-    }
-    tty->cr();
-    return JVM_CHECKPOINT_ERROR;
-  }
-
-  if (0 < info.si_int) {
-    *shmid = info.si_int;
-  }
-#else
-  *shmid = 0;
-#endif //LINUX
   return JVM_CHECKPOINT_OK;
 }
 
@@ -305,7 +473,6 @@ public:
   }
 };
 
-
 void VM_Crac::doit() {
   // dry-run fails checkpoint
   bool ok = true;
@@ -341,7 +508,7 @@ void VM_Crac::doit() {
   } else {
     log_info(crac)("Checkpoint ...");
     report_ok_to_jcmd_if_any();
-    int ret = checkpoint_restore(&shmid);
+    int ret = crac::checkpoint_restore(&shmid);
     if (ret == JVM_CHECKPOINT_ERROR) {
       memory_restore();
       return;
@@ -351,6 +518,7 @@ void VM_Crac::doit() {
   // It needs to check CPU features before any other code (such as VM_Crac::read_shm) depends on them.
   VM_Version::crac_restore();
   Arguments::reset_for_crac_restore();
+
   if (shmid <= 0) {
     _restore_start_time = os::javaTimeMillis();
     _restore_start_nanos = os::javaTimeNanos();
@@ -375,28 +543,34 @@ void VM_Crac::doit() {
   _ok = true;
 }
 
-
 bool crac::prepare_checkpoint() {
-  struct stat st;
+  precond(CRaCCheckpointTo != nullptr);
 
+  struct stat st;
   if (0 == os::stat(CRaCCheckpointTo, &st)) {
     if ((st.st_mode & S_IFMT) != S_IFDIR) {
-      warning("%s: not a directory", CRaCCheckpointTo);
+      log_error(crac)("CRaCCheckpointTo=%s is not a directory", CRaCCheckpointTo);
       return false;
     }
   } else {
     if (-1 == os::mkdir(CRaCCheckpointTo)) {
-      warning("cannot create %s: %s", CRaCCheckpointTo, os::strerror(errno));
+      log_error(crac)("Cannot create CRaCCheckpointTo=%s: %s", CRaCCheckpointTo, os::strerror(errno));
       return false;
     }
     if (-1 == os::rmdir(CRaCCheckpointTo)) {
-      warning("cannot cleanup after check: %s", os::strerror(errno));
+      log_warning(crac)("Cannot cleanup after CRaCCheckpointTo check: %s", os::strerror(errno));
       // not fatal
     }
   }
 
-  if (!compute_crengine()) {
-    return false;
+  // Try lo initialize CRaC engine now to check all the related VM options. The
+  // engine will be initialized again just before checkpoint because the
+  // options can be changed by then because they are managable.
+  {
+    const EngineHandle engine = EngineHandle::create(true);
+    if (!engine.is_initialized()) {
+      return false;
+    }
   }
 
   return true;
@@ -419,12 +593,15 @@ static Handle ret_cr(int ret, Handle new_args, Handle new_props, Handle err_code
 /** Checkpoint main entry.
  */
 Handle crac::checkpoint(jarray fd_arr, jobjectArray obj_arr, bool dry_run, jlong jcmd_stream, TRAPS) {
-  if (!CRaCCheckpointTo) {
+  log_debug(crac)("Checkpoint %i requested (dry run=%s)", os::current_process_id(), BOOL_TO_STR(dry_run));
+
+  if (CRaCCheckpointTo == nullptr) {
+    log_error(crac)("CRaCCheckpointTo is not specified");
     return ret_cr(JVM_CHECKPOINT_NONE, Handle(), Handle(), Handle(), Handle(), THREAD);
   }
 
   if (-1 == os::mkdir(CRaCCheckpointTo) && errno != EEXIST) {
-    warning("cannot create %s: %s", CRaCCheckpointTo, os::strerror(errno));
+    log_error(crac)("Cannot create CRaCCheckpointTo=%s: %s", CRaCCheckpointTo, os::strerror(errno));
     return ret_cr(JVM_CHECKPOINT_NONE, Handle(), Handle(), Handle(), Handle(), THREAD);
   }
 
@@ -521,46 +698,52 @@ void crac::prepare_restore(crac_restore_data& restore_data) {
 }
 
 void crac::restore(crac_restore_data& restore_data) {
+  precond(CRaCRestoreFrom != nullptr);
+
   struct stat statbuf;
   if (os::stat(CRaCRestoreFrom, &statbuf) != 0) {
-    fprintf(stderr, "Cannot open restore directory of the -XX:CRaCRestoreFrom parameter: ");
-    perror(CRaCRestoreFrom);
+    log_error(crac)("Cannot open CRaCRestoreFrom=%s: %s", CRaCRestoreFrom, os::strerror(errno));
     return;
   }
   if ((statbuf.st_mode & S_IFMT) != S_IFDIR) {
-    fprintf(stderr, "-XX:CRaCRestoreFrom parameter is not a directory: %s\n", CRaCRestoreFrom);
+    log_error(crac)("CRaCRestoreFrom=%s is not a directory", CRaCRestoreFrom);
     return;
   }
 
-  compute_crengine();
+  const EngineHandle engine = EngineHandle::create(false);
+  if (!engine.is_initialized()) {
+    return;
+  }
 
-  const int id = os::current_process_id();
-
-  CracSHM shm(id);
-  int shmfd = shm.open(O_RDWR | O_CREAT | O_TRUNC);
-  if (shmfd < 0) {
-    log_error(crac)("Cannot pass parameters (JVM flags, env vars, system properties, arguments...) to the restored process.");
-  } else {
-    if (CracRestoreParameters::write_to(
-          shmfd,
-          Arguments::jvm_flags_array(), Arguments::num_jvm_flags(),
-          Arguments::system_properties(),
-          Arguments::java_command_crac() ? Arguments::java_command_crac() : "",
-          restore_data.restore_time,
-          restore_data.restore_nanos)) {
-      char strid[32];
-      snprintf(strid, sizeof(strid), "%d", id);
-      LINUX_ONLY(setenv("CRAC_NEW_ARGS_ID", strid, true));
+  const auto *restore_data_api = get_restore_data_api(engine);
+  if (restore_data_api != nullptr) {
+    const int shmid = os::current_process_id();
+    CracSHM shm(shmid);
+    const int shmfd = shm.open(O_RDWR | O_CREAT | O_TRUNC);
+    if (shmfd < 0) {
+      log_error(crac)("Failed to open a space shared with restored process");
+      return;
     }
+    const bool write_success = CracRestoreParameters::write_to(
+      shmfd,
+      Arguments::jvm_flags_array(), Arguments::num_jvm_flags(),
+      Arguments::system_properties(),
+      Arguments::java_command_crac() ? Arguments::java_command_crac() : "",
+      restore_data.restore_time,
+      restore_data.restore_nanos
+    );
     close(shmfd);
+    if (!write_success) {
+      log_error(crac)("Failed to write to a space shared with restored process");
+      return;
+    }
+    if (!restore_data_api->set_restore_data(engine.conf, &shmid, sizeof(shmid))) {
+      log_error(crac)("CRaC engine failed to receive restore data");
+      return;
+    }
   }
 
-  if (_crengine) {
-    _crengine_args[1] = "restore";
-    add_crengine_arg(CRaCRestoreFrom);
-    os::execv(_crengine, _crengine_args);
-    warning("cannot execute \"%s restore ...\" (%s)", _crengine, os::strerror(errno));
-  }
+  engine.api->restore(engine.conf);
 }
 
 bool CracRestoreParameters::read_from(int fd) {
@@ -594,6 +777,13 @@ bool CracRestoreParameters::read_from(int fd) {
       name = cursor + 1;
       result = WriteableFlags::set_flag(name, *cursor == '+' ? "true" : "false",
         JVMFlagOrigin::CRAC_RESTORE, err_msg);
+      cursor += strlen(cursor) + 1;
+    } else if (strncmp(name, "CRaCEngine", ARRAY_SIZE("CRaCEngine") - 1) == 0) {
+      // CRaCEngine and CRaCEngineOptions are not updated from the restoring process
+      assert(strncmp(name, "CRaCEngine=", strlen("CRaCEngine=")) == 0 ||
+             strncmp(name, "CRaCEngineOptions=", strlen("CRaCEngineOptions=")) == 0,
+             "unexpected CRaCEngine* flag: %s", name);
+      result = JVMFlag::Error::SUCCESS;
       cursor += strlen(cursor) + 1;
     } else {
       char* eq = strchrnul(cursor, '=');

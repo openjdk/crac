@@ -676,6 +676,7 @@ CallJavaMainInNewThread(jlong stack_size, void* args) {
     size_t adjusted_stack_size;
 
     {
+      // TODO: this should depend on CRaCEngine!
       const int restore_signal = SIGRTMIN + 2;
       // block restore_signal in launcher thread to allow JVM handle it
       sigset_t block_sig;

@@ -200,3 +200,17 @@ ifeq ($(call isTargetOs, linux)+$(call isTargetCpu, x86_64)+$(INCLUDE_COMPILER2)
 
   TARGETS += $(BUILD_LIBSIMD_SORT)
 endif
+
+################################################################################
+# Build checkpoint/restore exec library
+################################################################################
+
+# CFLAGS_windows from make/autoconf/flags-cflags.m4#FLAGS_SETUP_CFLAGS_HELPER
+$(eval $(call SetupJdkLibrary, BUILD_LIBCREXEC, \
+    NAME := crexec, \
+    EXTRA_HEADER_DIRS := libjvm, \
+    CFLAGS := $(CFLAGS_JDKLIB) -DCRLIB_IS_IMPL, \
+    CFLAGS_windows := -D_WINDOWS -DWIN32, \
+    LDFLAGS := $(LDFLAGS_JDKLIB), \
+))
+TARGETS += $(BUILD_LIBCREXEC)

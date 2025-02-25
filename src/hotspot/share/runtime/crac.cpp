@@ -377,9 +377,6 @@ void VM_Crac::doit() {
 
 
 bool crac::prepare_checkpoint() {
-  // Automatically configure log level for 'crac' to Info
-  LogTagSetMapping<LOG_TAGS(crac)>::tagset().set_output_level(LogConfiguration::StdoutLog, LogLevelType::Info);
-
   struct stat st;
 
   if (0 == os::stat(CRaCCheckpointTo, &st)) {

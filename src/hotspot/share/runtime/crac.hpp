@@ -32,9 +32,8 @@
 #define UUID_LENGTH 36
 
 class crac: AllStatic {
-public:
   friend class VM_Crac;
-
+public:
   static void vm_create_start();
   static bool prepare_checkpoint();
   static Handle checkpoint(jarray fd_arr, jobjectArray obj_arr, bool dry_run, jlong jcmd_stream, TRAPS);
@@ -60,6 +59,9 @@ private:
   static jlong checkpoint_nanos;
   static char checkpoint_bootid[UUID_LENGTH];
   static jlong javaTimeNanos_offset;
+
+  class EngineHandle;
+  static const EngineHandle *_engine;
 
   static bool read_bootid(char *dest);
 

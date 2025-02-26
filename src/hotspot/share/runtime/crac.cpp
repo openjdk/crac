@@ -31,6 +31,7 @@
 #include "logging/log.hpp"
 #include "logging/logAsyncWriter.hpp"
 #include "logging/logConfiguration.hpp"
+#include "memory/allocation.hpp"
 #include "memory/oopFactory.hpp"
 #include "oops/typeArrayOop.inline.hpp"
 #include "prims/jvmtiExport.hpp"
@@ -52,6 +53,7 @@
 static jlong _restore_start_time;
 static jlong _restore_start_nanos;
 
+const crac::EngineHandle *crac::_engine = nullptr;
 // Timestamps recorded before checkpoint
 jlong crac::checkpoint_millis;
 jlong crac::checkpoint_nanos;
@@ -114,26 +116,26 @@ static char *strsep(char **strp, const char *delim) {
 }
 #endif // _WINDOWS
 
-class EngineHandle {
+class crac::EngineHandle : public CHeapObj<mtInternal> {
 private:
-  void * const lib = nullptr;
-public:
-  crlib_api_t * const api = nullptr;
-  crlib_conf_t * const conf = nullptr;
+  void *_lib = nullptr;
+  crlib_api_t *_api = nullptr;
+  crlib_conf_t *_conf = nullptr;
 
-  static EngineHandle create(bool checkpoint);
+public:
+  // Use is_initialized() to check whether the constructor succeeded.
+  explicit EngineHandle(bool checkpoint);
   ~EngineHandle();
 
-  bool is_initialized() const { return lib != nullptr; }
+  crlib_api_t *api() const   { return _api; }
+  crlib_conf_t *conf() const { return _conf; }
 
-private:
-  EngineHandle() = default;
-  EngineHandle(void *lib, crlib_api_t *api, crlib_conf_t *conf) : lib(lib), api(api), conf(conf) {}
+  bool is_initialized() const {
+    assert((_lib == nullptr && _api == nullptr && _conf == nullptr) ||
+           (_lib != nullptr && _api != nullptr && _conf != nullptr), "invariant");
+    return _lib != nullptr;
+  }
 };
-
-// CRaC engine configuration options JVM sets directly, not taking from the user
-#define ENGINE_OPT_IMAGE_LOCATION "image_location"
-#define ENGINE_OPT_EXEC_LOCATION "exec_location"
 
 static bool find_crac_engine(const char *dll_dir, char *path, size_t path_size, bool *is_library) {
   // Try to interpret as a file path
@@ -213,7 +215,24 @@ static bool find_crac_engine(const char *dll_dir, char *path, size_t path_size, 
   return false;
 }
 
-crlib_conf_t *create_crlib_conf(
+// CRaC engine configuration options JVM sets directly, not taking from the user
+#define ENGINE_OPT_IMAGE_LOCATION "image_location"
+#define ENGINE_OPT_EXEC_LOCATION "exec_location"
+
+static bool configure_image_location(const crlib_api_t &api, crlib_conf_t *conf, const char *image_location) {
+  precond(image_location != nullptr && image_location[0] != '\0');
+  if (!api.can_configure(conf, ENGINE_OPT_IMAGE_LOCATION)) {
+    log_error(crac)("CRaC engine does not support mandatory option: " ENGINE_OPT_IMAGE_LOCATION);
+    return false;
+  }
+  if (!api.configure(conf, ENGINE_OPT_IMAGE_LOCATION, image_location)) {
+    log_error(crac)("CRaC engine failed to configure: '" ENGINE_OPT_IMAGE_LOCATION "' = '%s'", image_location);
+    return false;
+  }
+  return true;
+}
+
+static crlib_conf_t *create_engine_conf(
     const crlib_api_t &api, const char *image_location, const char *exec_location) {
   crlib_conf_t * const conf = api.create_conf();
   if (conf == nullptr) {
@@ -221,14 +240,7 @@ crlib_conf_t *create_crlib_conf(
     return nullptr;
   }
 
-  precond(image_location != nullptr && image_location[0] != '\0');
-  if (!api.can_configure(conf, ENGINE_OPT_IMAGE_LOCATION)) {
-    log_error(crac)("CRaC engine does not support mandatory option: " ENGINE_OPT_IMAGE_LOCATION);
-    api.destroy_conf(conf);
-    return nullptr;
-  }
-  if (!api.configure(conf, ENGINE_OPT_IMAGE_LOCATION, image_location)) {
-    log_error(crac)("CRaC engine failed to configure: '" ENGINE_OPT_IMAGE_LOCATION "' = '%s'", image_location);
+  if (!configure_image_location(api, conf, image_location)) {
     api.destroy_conf(conf);
     return nullptr;
   }
@@ -278,10 +290,10 @@ crlib_conf_t *create_crlib_conf(
   return conf;
 }
 
-EngineHandle EngineHandle::create(bool checkpoint) {
+crac::EngineHandle::EngineHandle(bool checkpoint) {
   if (CRaCEngine == nullptr) {
     log_error(crac)("CRaCEngine must not be empty");
-    return {};
+    return;
   }
 
   // Arguments::get_dll_dir() might not have been initialized yet
@@ -298,7 +310,7 @@ EngineHandle EngineHandle::create(bool checkpoint) {
   bool is_library;
   if (!find_crac_engine(dll_dir, path, sizeof(path), &is_library)) {
     log_error(crac)("Cannot find CRaC engine %s", CRaCEngine);
-    return {};
+    return;
   }
   postcond(path[0] != '\0');
 
@@ -307,7 +319,7 @@ EngineHandle EngineHandle::create(bool checkpoint) {
     strcpy(exec_path, path); // Save to later pass it to crexec
     if (!os::dll_locate_lib(path, sizeof(path), dll_dir, "crexec")) {
       log_error(crac)("Cannot find crexec library to use CRaCEngine executable");
-      return {};
+      return;
     }
   }
 
@@ -315,7 +327,7 @@ EngineHandle EngineHandle::create(bool checkpoint) {
   void * const lib = os::dll_load(path, error_buf, sizeof(error_buf));
   if (lib == nullptr) {
     log_error(crac)("Cannot load CRaC engine library from %s: %s", path, error_buf);
-    return {};
+    return;
   }
 
   using api_func_t = decltype(&CRLIB_API);
@@ -323,7 +335,7 @@ EngineHandle EngineHandle::create(bool checkpoint) {
   if (api_func == nullptr) {
     log_error(crac)("Cannot load CRaC engine library entrypoint '" CRLIB_API_FUNC "' from %s", path);
     os::dll_unload(lib);
-    return {};
+    return;
   }
 
   crlib_api_t * const api = api_func(CRLIB_API_VERSION, sizeof(crlib_api_t));
@@ -331,7 +343,7 @@ EngineHandle EngineHandle::create(bool checkpoint) {
     log_error(crac)("CRaC engine failed to initialize its API (version %i). "
                     "Maybe this version is not supported?", CRLIB_API_VERSION);
     os::dll_unload(lib);
-    return {};
+    return;
   }
   if (api->create_conf == nullptr || api->destroy_conf == nullptr ||
       api->checkpoint == nullptr || api->restore == nullptr ||
@@ -339,32 +351,32 @@ EngineHandle EngineHandle::create(bool checkpoint) {
       api->get_extension == nullptr) {
     log_error(crac)("CRaC engine failed to fully initialize its API");
     os::dll_unload(lib);
-    return {};
+    return;
   }
 
   const char *image_location = checkpoint ? CRaCCheckpointTo : CRaCRestoreFrom;
   const char *exec_location = exec_path[0] != '\0' ? exec_path : nullptr;
-  crlib_conf_t * const conf = create_crlib_conf(*api, image_location, exec_location);
+  crlib_conf_t * const conf = create_engine_conf(*api, image_location, exec_location);
   if (conf == nullptr) {
     os::dll_unload(lib);
-    return {};
+    return;
   }
 
-  return { lib, api, conf };
+  _lib = lib;
+  _api = api;
+  _conf = conf;
 }
 
-EngineHandle::~EngineHandle() {
-  if (api != nullptr) {
-    assert(lib != nullptr, "must be");
-    api->destroy_conf(conf); // Accepts null
-  }
-  if (lib != nullptr) {
-    os::dll_unload(lib);
+crac::EngineHandle::~EngineHandle() {
+  if (is_initialized()) {
+    _api->destroy_conf(_conf);
+    os::dll_unload(_lib);
   }
 }
 
-static crlib_restore_data_t *get_restore_data_api(const EngineHandle &engine) {
-  crlib_restore_data_t *restore_data_api = CRLIB_EXTENSION_RESTORE_DATA(engine.api);
+static crlib_restore_data_t *get_restore_data_api(const crlib_api_t *api) {
+  precond(api != nullptr);
+  crlib_restore_data_t * const restore_data_api = CRLIB_EXTENSION_RESTORE_DATA(api);
   if (restore_data_api == nullptr) {
     log_debug(crac)("CRaC engine does not support extension: " CRLIB_EXTENSION_RESTORE_DATA_NAME);
     return nullptr;
@@ -377,28 +389,30 @@ static crlib_restore_data_t *get_restore_data_api(const EngineHandle &engine) {
 }
 
 int crac::checkpoint_restore(int *shmid) {
+  precond(_engine != nullptr);
+
   crac::record_time_before_checkpoint();
 
-  // CRaCEngine, CRaCEngineOptions, CRaCCheckpointTo are restore-settable,
-  // which implies managable, so they could've been changed by the application
-  // at any time and we cannot initialize until the application has been stopped
-  {
-    const EngineHandle engine = EngineHandle::create(true);
-    if (!engine.is_initialized()) {
-      return JVM_CHECKPOINT_ERROR;
-    }
+  // CRaCCheckpointTo can be changed on restore so we need to re-init the conf
+  // to account for that.
+  // Note that CRaCEngine and CRaCEngineOptions can't be updated (as documented)
+  // so we don't need to re-init the whole engine handle.
+  // TODO: do this only if there has been at least one restore (cannot check via
+  //  CRaCRestoreFrom != nullptr because it can remain unset even after restore)
+  if (!configure_image_location(*_engine->api(), _engine->conf(), CRaCCheckpointTo)) {
+    return JVM_CHECKPOINT_ERROR;
+  }
 
-    if (!engine.api->checkpoint(engine.conf)) {
-      log_error(crac)("CRaC engine failed to checkpoint to %s", CRaCCheckpointTo);
-      return JVM_CHECKPOINT_ERROR;
-    }
+  if (!_engine->api()->checkpoint(_engine->conf())) {
+    log_error(crac)("CRaC engine failed to checkpoint to %s", CRaCCheckpointTo);
+    return JVM_CHECKPOINT_ERROR;
+  }
 
-    const auto *restore_data_api = get_restore_data_api(engine);
-    if (restore_data_api != nullptr &&
-        restore_data_api->get_restore_data(engine.conf, shmid, sizeof(*shmid)) < sizeof(*shmid)) {
-      log_warning(crac)("CRaC engine failed to provide restore data");
-      *shmid = 0;
-    }
+  const auto *restore_data_api = get_restore_data_api(_engine->api());
+  if (restore_data_api != nullptr &&
+      restore_data_api->get_restore_data(_engine->conf(), shmid, sizeof(*shmid)) < sizeof(*shmid)) {
+    log_warning(crac)("CRaC engine failed to provide restore data");
+    *shmid = 0;
   }
 
 #ifdef LINUX
@@ -563,17 +577,14 @@ bool crac::prepare_checkpoint() {
     }
   }
 
-  // Try lo initialize CRaC engine now to check all the related VM options. The
-  // engine will be initialized again just before checkpoint because the
-  // options can be changed by then because they are managable.
-  {
-    const EngineHandle engine = EngineHandle::create(true);
-    if (!engine.is_initialized()) {
-      return false;
-    }
+  // Initialize CRaC engine now to verify all the related VM options
+  assert(_engine == nullptr, "CRaC engine should be initialized only once");
+  _engine = new EngineHandle(true);
+  if (!_engine->is_initialized()) {
+    delete _engine;
+    _engine = nullptr;
   }
-
-  return true;
+  return _engine != nullptr;
 }
 
 static Handle ret_cr(int ret, Handle new_args, Handle new_props, Handle err_codes, Handle err_msgs, TRAPS) {
@@ -710,12 +721,12 @@ void crac::restore(crac_restore_data& restore_data) {
     return;
   }
 
-  const EngineHandle engine = EngineHandle::create(false);
+  const EngineHandle engine = EngineHandle(false);
   if (!engine.is_initialized()) {
     return;
   }
 
-  const auto *restore_data_api = get_restore_data_api(engine);
+  const auto *restore_data_api = get_restore_data_api(engine.api());
   if (restore_data_api != nullptr) {
     const int shmid = os::current_process_id();
     CracSHM shm(shmid);
@@ -737,13 +748,13 @@ void crac::restore(crac_restore_data& restore_data) {
       log_error(crac)("Failed to write to a space shared with restored process");
       return;
     }
-    if (!restore_data_api->set_restore_data(engine.conf, &shmid, sizeof(shmid))) {
+    if (!restore_data_api->set_restore_data(engine.conf(), &shmid, sizeof(shmid))) {
       log_error(crac)("CRaC engine failed to receive restore data");
       return;
     }
   }
 
-  engine.api->restore(engine.conf);
+  engine.api()->restore(engine.conf());
 }
 
 bool CracRestoreParameters::read_from(int fd) {

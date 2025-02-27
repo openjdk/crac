@@ -390,14 +390,14 @@ static char **add_criu_option(char **env, const char *opt) {
   return env;
 }
 
-static bool checkpoint(crlib_conf_t *conf) {
+static int checkpoint(crlib_conf_t *conf) {
   if (conf->argv[ARGV_EXEC_LOCATION] == NULL) {
     fprintf(stderr, CREXEC "%s must be set before checkpoint\n", opt_exec_location);
-    return false;
+    return -1;
   }
   if (conf->argv[ARGV_IMAGE_LOCATION] == NULL) {
     fprintf(stderr, CREXEC "%s must be set before checkpoint\n", opt_image_location);
-    return false;
+    return -1;
   }
   conf->argv[ARGV_ACTION] = "checkpoint";
 
@@ -407,13 +407,13 @@ static bool checkpoint(crlib_conf_t *conf) {
 
   char **env = copy_environ(get_environ());
   if (env == NULL) {
-    return false;
+    return -1;
   }
   if (conf->keep_running) {
     char ** const new_env = set_env_var(env, "CRAC_CRIU_LEAVE_RUNNING", "");
     if (new_env == NULL) {
       free_environ(env);
-      return false;
+      return -1;
     }
     env = new_env;
   }
@@ -422,7 +422,7 @@ static bool checkpoint(crlib_conf_t *conf) {
                                               (char **) conf->argv, env);
   free_environ(env);
   if (!ok) {
-    return false;
+    return -1;
   }
 
 #ifdef LINUX
@@ -442,17 +442,17 @@ static bool checkpoint(crlib_conf_t *conf) {
   conf->restore_data = info.si_int;
 #endif // LINUX
 
-  return true;
+  return 0;
 }
 
-static void restore(crlib_conf_t *conf) {
+static int restore(crlib_conf_t *conf) {
   if (conf->argv[ARGV_EXEC_LOCATION] == NULL) {
     fprintf(stderr, CREXEC "%s must be set before restore\n", opt_exec_location);
-    return;
+    return -1;
   }
   if (conf->argv[ARGV_IMAGE_LOCATION] == NULL) {
     fprintf(stderr, CREXEC "%s must be set before restore\n", opt_image_location);
-    return;
+    return -1;
   }
   conf->argv[ARGV_ACTION] = "restore";
 
@@ -462,14 +462,14 @@ static void restore(crlib_conf_t *conf) {
 
   char **env = copy_environ(get_environ());
   if (env == NULL) {
-    return;
+    return -1;
   }
 
   {
     char ** const new_env = set_env_var(env, "CRAC_CRIU_LEAVE_RUNNING", "");
     if (new_env == NULL) {
       free_environ(env);
-      return;
+      return -1;
     }
     env = new_env;
   }
@@ -479,13 +479,13 @@ static void restore(crlib_conf_t *conf) {
       (int) sizeof(restore_data_str) - 1) {
     perror(CREXEC "snprintf restore data");
     free_environ(env);
-    return;
+    return -1;
   }
   {
     char ** const new_env = set_env_var(env, "CRAC_NEW_ARGS_ID", restore_data_str);
     if (new_env == NULL) {
       free_environ(env);
-      return;
+      return -1;
     }
     env = new_env;
   }
@@ -494,7 +494,7 @@ static void restore(crlib_conf_t *conf) {
     char ** const new_env = add_criu_option(env, "--no-mmap-page-image");
     if (new_env == NULL) {
       free_environ(env);
-      return;
+      return -1;
     }
     env = new_env;
   }
@@ -503,6 +503,7 @@ static void restore(crlib_conf_t *conf) {
 
   free_environ(env); // shouldn't be needed
   fprintf(stderr, CREXEC "restore failed\n");
+  return -1;
 }
 
 static struct crlib_api api = {

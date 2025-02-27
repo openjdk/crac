@@ -42,10 +42,10 @@ struct crlib_restore_data {
   // The engine may impose limits on the data size and return false if it is not accepted.
   bool (*set_restore_data)(crlib_conf_t *, const void *data, size_t size);
 
-  // Called by the restored application to retrieve the data passed by the restoring process.
+  // Called by the restored application to retrieve the data passed by the restoring application.
   // Copies up to 'size' > 0 bytes of the data into 'buf' != null.
-  // Returns the size of the data the engine has, in bytes. Can be more, equal or less than 'size'.
-  // Returned value of 0 represents an error.
+  // Returns the size of the data the engine has, in bytes — it can be more, equal to or less than
+  // 'size'. Returned value of 0 represents an error.
   size_t (*get_restore_data)(crlib_conf_t *, void *buf, size_t size);
 };
 typedef const struct crlib_restore_data crlib_restore_data_t;

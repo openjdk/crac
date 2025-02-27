@@ -77,9 +77,6 @@ public class CracEngineOptionsTest {
         test("simengine", "help", 0,
                 "CRaC engine option: 'help' = ''",
                 "Configuration options:"); // A line from the help message
-        test("simengine", "help=true", 0,
-                "CRaC engine option: 'help' = 'true'",
-                "Configuration options:");
         test("simengine", "image_location=cr", 0,
                 "Internal CRaC engine option provided, skipping: image_location");
         if ("linux".equals(System.getProperty("os.family"))) {
@@ -90,19 +87,23 @@ public class CracEngineOptionsTest {
         }
 
         test("simengine", "unknown=123", 1,
-                "CRaC engine does not support provided option: unknown");
-        test("simengine", "help,unknown=123", 1,
-                "CRaC engine does not support provided option: unknown");
+                "unknown configure option: unknown",
+                "CRaC engine failed to configure: 'unknown' = '123'");
         test("simengine", "unknown=", 1,
-                "CRaC engine does not support provided option: unknown");
+                "unknown configure option: unknown",
+                "CRaC engine failed to configure: 'unknown' = ''");
         test("simengine", "=", 1,
-                "CRaC engine does not support provided option: \n"); // \n to check there's nothing more
+                "unknown configure option: \n",
+                "CRaC engine failed to configure: '' = ''");
         test("simengine", "=,", 1,
-                "CRaC engine does not support provided option: \n");
+                "unknown configure option: \n",
+                "CRaC engine failed to configure: '' = ''");
         test("simengine", ",=", 1,
-                "CRaC engine does not support provided option: \n");
+                "unknown configure option: \n",
+                "CRaC engine failed to configure: '' = ''");
         test("simengine", ",", 1,
-                "CRaC engine does not support provided option: \n");
+                "unknown configure option: \n",
+                "CRaC engine failed to configure: '' = ''");
 
         if ("linux".equals(System.getProperty("os.family"))) {
             test("criuengine", "direct_map=not a bool", 1,

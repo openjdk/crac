@@ -54,21 +54,23 @@ struct crlib_api {
   // Destroys a configuration structure. The argument can be null.
   void (*destroy_conf)(crlib_conf_t *);
 
-  // Triggers a checkpoint. Returns true on success.
-  bool (*checkpoint)(crlib_conf_t *);
-  // Triggers a restore. Returns only on failure.
-  void (*restore)(crlib_conf_t *);
+  // Triggers a checkpoint. Returns zero on success.
+  int (*checkpoint)(crlib_conf_t *);
+  // Triggers a restore. Does not normally return, but if it does returns a error code.
+  int (*restore)(crlib_conf_t *);
 
   // Returns true if the given configuration key is supported by the engine, false otherwise.
-  // Key is a C-string.
+  // Key is a valid C-string.
+  // Use of this before configuring is not a requirement.
   bool (*can_configure)(crlib_conf_t *, const char *key);
   // Sets a configuration option. Returns true on success.
-  // Key and value are C-strings.
+  // Key and value are valid C-strings.
   bool (*configure)(crlib_conf_t *, const char *key, const char *value);
 
   // Returns an API extension with the given name (C-string) and size, or null if an extension with
   // such name is not present or its size is lower than requested.
-  // The application is supposed to cast the returned value to the actual extension type.
+  // The extension should have static storage duration. The application is supposed to cast it to
+  // the actual extension type.
   const crlib_extension_t *(*get_extension)(const char *name, size_t size);
 };
 typedef const struct crlib_api crlib_api_t;
@@ -90,6 +92,7 @@ typedef const struct crlib_api crlib_api_t;
 
 // Returns a CRaC API of the given version and size, or null if such API version is not supported
 // or its size is lower than requested.
+// The API should have static storage duration.
 extern IMPORTEXPORT crlib_api_t *CRLIB_API(int api_version, size_t api_size);
 
 #define CRLIB_EXTENSION(api, type, name) ((type *) (api)->get_extension(name, sizeof(type)))

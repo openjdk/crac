@@ -221,10 +221,6 @@ static bool find_crac_engine(const char *dll_dir, char *path, size_t path_size, 
 
 static bool configure_image_location(const crlib_api_t &api, crlib_conf_t *conf, const char *image_location) {
   precond(image_location != nullptr && image_location[0] != '\0');
-  if (!api.can_configure(conf, ENGINE_OPT_IMAGE_LOCATION)) {
-    log_error(crac)("CRaC engine does not support mandatory option: " ENGINE_OPT_IMAGE_LOCATION);
-    return false;
-  }
   if (!api.configure(conf, ENGINE_OPT_IMAGE_LOCATION, image_location)) {
     log_error(crac)("CRaC engine failed to configure: '" ENGINE_OPT_IMAGE_LOCATION "' = '%s'", image_location);
     return false;
@@ -270,12 +266,6 @@ static crlib_conf_t *create_engine_conf(
         (exec_location != nullptr && strcmp(key, ENGINE_OPT_EXEC_LOCATION) == 0)) {
       log_warning(crac)("Internal CRaC engine option provided, skipping: %s", key);
       continue;
-    }
-    if (!api.can_configure(conf, key)) {
-      log_error(crac)("CRaC engine does not support provided option: %s", key);
-      os::free(engine_options_start);
-      api.destroy_conf(conf);
-      return nullptr;
     }
     if (!api.configure(conf, key, value)) {
       log_error(crac)("CRaC engine failed to configure: '%s' = '%s'", key, value);
@@ -403,8 +393,9 @@ int crac::checkpoint_restore(int *shmid) {
     return JVM_CHECKPOINT_ERROR;
   }
 
-  if (!_engine->api()->checkpoint(_engine->conf())) {
-    log_error(crac)("CRaC engine failed to checkpoint to %s", CRaCCheckpointTo);
+  const int ret = _engine->api()->checkpoint(_engine->conf());
+  if (ret != 0) {
+    log_error(crac)("CRaC engine failed to checkpoint to %s: error %i", CRaCCheckpointTo, ret);
     return JVM_CHECKPOINT_ERROR;
   }
 
@@ -754,7 +745,10 @@ void crac::restore(crac_restore_data& restore_data) {
     }
   }
 
-  engine.api()->restore(engine.conf());
+  const int ret = engine.api()->restore(engine.conf());
+  if (ret != 0) {
+    log_error(crac)("CRaC engine failed to restore from %s: error %i", CRaCRestoreFrom, ret);
+  }
 }
 
 bool CracRestoreParameters::read_from(int fd) {

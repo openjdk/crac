@@ -22,7 +22,10 @@
  */
 
 import org.junit.Test;
+import org.junit.BeforeClass;
+import static org.junit.Assert.*;
 
+import jdk.test.lib.Platform;
 import jdk.test.lib.Utils;
 import jdk.test.lib.process.OutputAnalyzer;
 import jdk.test.lib.process.ProcessTools;
@@ -37,6 +40,12 @@ import java.nio.file.Path;
 * @run junit/othervm CracEngineOptionsTest
 */
 public class CracEngineOptionsTest {
+    @BeforeClass
+    public static void checkCriu() {
+        final boolean hasCriu = Path.of(Utils.TEST_JDK, "lib", "criuengine").toFile().exists();
+        assertEquals("CRIU exists iff we are on Linux", Platform.isLinux(), hasCriu);
+    }
+
     @Test
     public void test_default() throws Exception {
         ProcessBuilder pb = ProcessTools.createTestJavaProcessBuilder(
@@ -52,17 +61,14 @@ public class CracEngineOptionsTest {
         test("simengine");
         test("pause");
         test("pauseengine");
-        if ("linux".equals(System.getProperty("os.family"))) {
+        if (Platform.isLinux()) {
             test("criu");
             test("criuengine");
         }
 
-        final String absolute;
-        if ("windows".equals(System.getProperty("os.family"))) {
-            absolute = Path.of(Utils.TEST_JDK, "bin", "simengine.exe").toString();
-        } else {
-            absolute = Path.of(Utils.TEST_JDK, "lib", "simengine").toString();
-        }
+        final String absolute = Platform.isWindows() ?
+            Path.of(Utils.TEST_JDK, "bin", "simengine.exe").toString() :
+            Path.of(Utils.TEST_JDK, "lib", "simengine").toString();
         test(absolute);
 
         test("unknown", null, 1, "Cannot find CRaC engine unknown");
@@ -79,7 +85,7 @@ public class CracEngineOptionsTest {
                 "Configuration options:"); // A line from the help message
         test("simengine", "image_location=cr", 0,
                 "Internal CRaC engine option provided, skipping: image_location");
-        if ("linux".equals(System.getProperty("os.family"))) {
+        if (Platform.isLinux()) {
             test("criuengine", "keep_running=true,args=-v -v -v -v,keep_running=false", 0,
                     "CRaC engine option: 'keep_running' = 'true'",
                     "CRaC engine option: 'args' = '-v -v -v -v'",
@@ -105,7 +111,7 @@ public class CracEngineOptionsTest {
                 "unknown configure option: \n",
                 "CRaC engine failed to configure: '' = ''");
 
-        if ("linux".equals(System.getProperty("os.family"))) {
+        if (Platform.isLinux()) {
             test("criuengine", "direct_map=not a bool", 1,
                     "CRaC engine failed to configure: 'direct_map' = 'not a bool'");
         }

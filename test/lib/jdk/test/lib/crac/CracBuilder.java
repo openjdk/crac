@@ -48,7 +48,7 @@ public class CracBuilder {
     final Map<String, String> javaOptions = new HashMap<>();
     String imageDir = DEFAULT_IMAGE_DIR;
     CracEngine engine;
-    String[] engineArgs;
+    String[] engineOptions;
     boolean printResources;
     Class<?> main;
     String[] args;
@@ -91,7 +91,7 @@ public class CracBuilder {
         other.javaOptions.putAll(javaOptions);
         other.imageDir = imageDir;
         other.engine = engine;
-        other.engineArgs = engineArgs == null ? null : Arrays.copyOf(engineArgs, engineArgs.length);
+        other.engineOptions = engineOptions == null ? null : Arrays.copyOf(engineOptions, engineOptions.length);
         other.printResources = printResources;
         other.main = main;
         other.args = args == null ? null : Arrays.copyOf(args, args.length);
@@ -140,10 +140,14 @@ public class CracBuilder {
         return this;
     }
 
-    public CracBuilder engine(CracEngine engine, String... args) {
-        assertTrue(this.engine == null || this.engine.equals(engine)); // allow overwriting args
+    public CracBuilder engine(CracEngine engine) {
+        assertTrue(this.engine == null || this.engine.equals(engine));
         this.engine = engine;
-        this.engineArgs = args;
+        return this;
+    }
+
+    public CracBuilder engineOptions(String... options) {
+        this.engineOptions = options;
         return this;
     }
 
@@ -484,11 +488,10 @@ public class CracBuilder {
         }
         cmd.add("-ea");
         if (engine != null) {
-            String engArgs = engineArgs == null || engineArgs.length == 0 ? "" :
-                    "," + Arrays.stream(engineArgs)
-                            .map(str -> str.replace(",", "\\,"))
-                            .collect(Collectors.joining(","));
-            cmd.add("-XX:CRaCEngine=" + engine.engine + engArgs);
+            cmd.add("-XX:CRaCEngine=" + engine.engine);
+        }
+        if (engineOptions != null) {
+            cmd.add("-XX:CRaCEngineOptions=" + String.join(",", engineOptions));
         }
         if (!isRestore) {
             cmd.add("-cp");

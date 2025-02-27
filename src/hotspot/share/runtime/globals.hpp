@@ -1960,11 +1960,18 @@ const int ObjectAlignmentInBytes = 8;
       "Reset JVM's start time and uptime on restore")                       \
                                                                             \
   product_pd(ccstr, CRaCEngine, RESTORE_SETTABLE,                           \
-      "Path or name of a program implementing checkpoint/restore and "      \
-      "optional extra parameters as a comma-separated list: "               \
-      "-XX:CRaCEngine=program,--key,value,--anotherkey results in calling " \
-      "'program --key value --anotherkey'. Commas used as part of args "    \
-      "should be escaped with a backslash character ('\\').")               \
+      "Path or name of a program or a shared library implementing "         \
+      "checkpoint and restore. On restore this value applies only to the "  \
+      "restoring VM, i.e. the restored VM keeps the value it had before "   \
+      "the checkpoint.")                                                    \
+                                                                            \
+  product(ccstrlist, CRaCEngineOptions, nullptr, RESTORE_SETTABLE,          \
+      "Options passed to CRaCEngine, in the form of 'key1=value,key2'. "    \
+      "The list of supported options is engine-dependent. Engines are "     \
+      "encouraged to recognize 'help' option for printing information "     \
+      "about supported options. On restore this value applies only to the " \
+      "restoring VM, i.e. the restored VM keeps the value it had before "   \
+      "the checkpoint.")                                                    \
                                                                             \
   product(bool, CRaCIgnoreRestoreIfUnavailable, false, RESTORE_SETTABLE,    \
       "Ignore -XX:CRaCRestoreFrom and continue initialization if restore "  \

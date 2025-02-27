@@ -1,10 +1,12 @@
 /*
- * Copyright (c) 2022, Azul Systems, Inc. All rights reserved.
+ * Copyright (c) 2025, Azul Systems, Inc. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 2 only, as
- * published by the Free Software Foundation.
+ * published by the Free Software Foundation.  Oracle designates this
+ * particular file as subject to the "Classpath" exception as provided
+ * by Oracle in the LICENSE file that accompanied this code.
  *
  * This code is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
@@ -20,38 +22,24 @@
  * or visit www.oracle.com if you need additional information or have any
  * questions.
  */
+#ifndef HASHTABLE_H
+#define HASHTABLE_H
 
+#include <stdbool.h>
+#include <stddef.h>
 
-import jdk.crac.*;
-import jdk.test.lib.Asserts;
-import jdk.test.lib.crac.CracBuilder;
-import jdk.test.lib.crac.CracTest;
+typedef struct hashtable {
+  size_t length;
+  const char **keys;
+  void **values;
+} hashtable_t;
 
-import java.io.File;
-import java.io.IOException;
-import java.nio.channels.Pipe;
-import java.nio.file.*;
-import java.util.Objects;
-import java.util.concurrent.TimeUnit;
+hashtable_t *hashtable_create(const char **keys, size_t length);
+void hashtable_destroy(hashtable_t *ht);
 
-/**
- * @test CracOptionTest
- * @library /test/lib
- * @build CracOptionTest
- * @run driver jdk.test.lib.crac.CracTest
- * @requires (os.family == "linux")
- */
+bool hashtable_contains(hashtable_t *ht, const char *key);
 
-public class CracOptionTest implements CracTest {
-    @Override
-    public void test() throws Exception {
-        CracBuilder builder = new CracBuilder();
-        builder.javaOption("k","v");
-        builder.doCheckpointAndRestore();
-    }
+void *hashtable_get(hashtable_t *ht, const char *key);
+bool hashtable_put(hashtable_t *ht, const char *key, void *value);
 
-    @Override
-    public void exec() throws Exception {
-        Core.checkpointRestore();
-    }
-}
+#endif // HASHTABLE_H

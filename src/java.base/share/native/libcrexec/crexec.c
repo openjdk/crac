@@ -171,19 +171,25 @@ static bool configure_direct_map(crlib_conf_t *conf, const char *direct_map_str)
 
 static bool configure_args(crlib_conf_t *conf, const char *args) {
   free((char *) conf->argv[ARGV_FREE]);
-  char *args_copy = strdup_checked(args);
-  if (args_copy == NULL) {
+  char *arg = strdup_checked(args);
+  if (arg == NULL) {
     conf->argv[ARGV_FREE] = NULL;
     return false;
   }
 
   assert(ARGV_FREE <= ARGV_LAST);
-  for (int i = ARGV_FREE; i <= ARGV_LAST && args_copy != NULL; i++) {
-    const char *arg = strsep(&args_copy, " ");
+  for (int i = ARGV_FREE; i <= ARGV_LAST && arg[0] != '\0'; i++) {
     conf->argv[i] = arg;
+    char * const delim = strchr(arg, ' ');
+    if (delim != NULL) {
+      *delim = '\0';
+      arg = delim + 1;
+    } else {
+      arg = "\0";
+    }
   }
 
-  if (args_copy != NULL) {
+  if (arg[0] != '\0') {
     fprintf(stderr, CREXEC "too many free arguments, at most %i are allowed\n",
             (ARGV_LAST - ARGV_FREE) + 1);
     free((char *) conf->argv[ARGV_FREE]);

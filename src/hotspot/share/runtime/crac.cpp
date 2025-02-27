@@ -215,7 +215,7 @@ static bool find_crac_engine(const char *dll_dir, char *path, size_t path_size, 
   return false;
 }
 
-// CRaC engine configuration options JVM sets directly, not taking from the user
+// CRaC engine configuration options JVM sets directly instead of relaying from the user
 #define ENGINE_OPT_IMAGE_LOCATION "image_location"
 #define ENGINE_OPT_EXEC_LOCATION "exec_location"
 
@@ -247,7 +247,7 @@ static crlib_conf_t *create_engine_conf(
     if (!api.configure(conf, ENGINE_OPT_EXEC_LOCATION, exec_location)) {
       log_error(crac)("crexec failed to configure: '" ENGINE_OPT_EXEC_LOCATION "' = '%s'", exec_location);
       api.destroy_conf(conf);
-    return nullptr;
+      return nullptr;
     }
   }
 
@@ -379,13 +379,13 @@ static crlib_restore_data_t *get_restore_data_api(const crlib_api_t *api) {
 }
 
 int crac::checkpoint_restore(int *shmid) {
-  precond(_engine != nullptr);
+  guarantee(_engine != nullptr, "CRaC engine is not initialized");
 
   crac::record_time_before_checkpoint();
 
-  // CRaCCheckpointTo can be changed on restore so we need to re-init the conf
+  // CRaCCheckpointTo can be changed on restore so we need to update the conf
   // to account for that.
-  // Note that CRaCEngine and CRaCEngineOptions can't be updated (as documented)
+  // Note that CRaCEngine and CRaCEngineOptions are not updated (as documented)
   // so we don't need to re-init the whole engine handle.
   // TODO: do this only if there has been at least one restore (cannot check via
   //  CRaCRestoreFrom != nullptr because it can remain unset even after restore)
@@ -400,10 +400,11 @@ int crac::checkpoint_restore(int *shmid) {
   }
 
   const auto *restore_data_api = get_restore_data_api(_engine->api());
-  if (restore_data_api != nullptr &&
-      restore_data_api->get_restore_data(_engine->conf(), shmid, sizeof(*shmid)) < sizeof(*shmid)) {
-    log_warning(crac)("CRaC engine failed to provide restore data");
-    *shmid = 0;
+  if (restore_data_api == nullptr) {
+    *shmid = 0; // Not an error, just no restore data
+  } else if (restore_data_api->get_restore_data(_engine->conf(), shmid, sizeof(*shmid)) < sizeof(*shmid)) {
+    log_error(crac)("CRaC engine failed to provide restore data");
+    *shmid = -1; // Error
   }
 
 #ifdef LINUX
@@ -422,11 +423,12 @@ int crac::checkpoint_restore(int *shmid) {
 }
 
 bool VM_Crac::read_shm(int shmid) {
+  precond(shmid > 0);
   CracSHM shm(shmid);
   int shmfd = shm.open(O_RDONLY);
   shm.unlink();
   if (shmfd < 0) {
-    log_error(crac)("Cannot read restore parameters (JVM flags, env vars, system properties, arguments...)");
+    log_error(crac)("Cannot read restore parameters");
     return false;
   }
   bool ret = _restore_parameters.read_from(shmfd);
@@ -507,9 +509,10 @@ void VM_Crac::doit() {
     return;
   }
 
-  int shmid = 0;
+  int shmid = -1;
   if (CRaCAllowToSkipCheckpoint) {
     log_info(crac)("Skip Checkpoint");
+    shmid = 0;
   } else {
     log_info(crac)("Checkpoint ...");
     report_ok_to_jcmd_if_any();
@@ -524,13 +527,15 @@ void VM_Crac::doit() {
   VM_Version::crac_restore();
   Arguments::reset_for_crac_restore();
 
-  if (shmid <= 0) {
+  if (shmid == 0) { // E.g. engine does not support restore data
+    log_debug(crac)("Restore parameters (JVM flags, env vars, system properties, arguments...) not provided");
     _restore_start_time = os::javaTimeMillis();
     _restore_start_nanos = os::javaTimeNanos();
-  } else if (!VM_Crac::read_shm(shmid)) {
-    vm_direct_exit(1, "Restore cannot continue, VM will exit.");
-    ShouldNotReachHere();
   } else {
+    if (shmid < 0 || !VM_Crac::read_shm(shmid)) {
+      vm_direct_exit(1, "Restore cannot continue, VM will exit."); // More info in logs
+      ShouldNotReachHere();
+    }
     _restore_start_nanos += crac::monotonic_time_offset();
   }
 
@@ -712,6 +717,7 @@ void crac::restore(crac_restore_data& restore_data) {
     return;
   }
 
+  // Note that this is a local, i.e. the handle will be destroyed if we fail to restore
   const EngineHandle engine = EngineHandle(false);
   if (!engine.is_initialized()) {
     return;
@@ -740,9 +746,12 @@ void crac::restore(crac_restore_data& restore_data) {
       return;
     }
     if (!restore_data_api->set_restore_data(engine.conf(), &shmid, sizeof(shmid))) {
-      log_error(crac)("CRaC engine failed to receive restore data");
+      log_error(crac)("CRaC engine failed to record restore data");
       return;
     }
+  } else {
+    log_warning(crac)("Cannot pass restore parameters (JVM flags, env vars, system properties, arguments...) "
+                      "with the selected CRaC engine");
   }
 
   const int ret = engine.api()->restore(engine.conf());

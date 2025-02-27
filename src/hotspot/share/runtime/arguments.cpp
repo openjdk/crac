@@ -2196,7 +2196,7 @@ bool Arguments::is_restore_option_set(const JavaVMInitArgs* args) {
     }
     // ccstr is never set to an empty string by the parser so we should not
     // treat an empty string value as the option being set. If it ever becomes
-    // ccstrlist or the parser changes this value check will need to be removed.
+    // ccstrlist or the parser changes, the value check will need to be removed.
     static_assert(std::is_same<ccstr, decltype(CRaCRestoreFrom)>(), "expected ccstr");
     const char* eq = strchr(tail, '=');
     if (eq != nullptr && eq[1] != '\0') {

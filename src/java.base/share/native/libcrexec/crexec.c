@@ -247,16 +247,16 @@ static crlib_restore_data_t restore_data_extension = {
 static const crlib_extension_t *extensions[] = { &restore_data_extension.header };
 
 static const crlib_extension_t *get_extension(const char *name, size_t size) {
-	for (size_t i = 0; i < ARRAY_SIZE(extensions); i++) {
+  for (size_t i = 0; i < ARRAY_SIZE(extensions); i++) {
     const crlib_extension_t *ext = extensions[i];
-		if (strcmp(name, ext->name) == 0) {
+    if (strcmp(name, ext->name) == 0) {
       if (size <= ext->size) {
         return ext;
       }
       return NULL;
-		}
-	}
-	return NULL;
+    }
+  }
+  return NULL;
 }
 
 static void destroy_conf(crlib_conf_t *conf) {

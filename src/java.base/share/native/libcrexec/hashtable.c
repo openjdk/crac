@@ -56,7 +56,7 @@ hashtable_t *hashtable_create(const char **keys, size_t length) {
     return NULL;
   }
 
-  memset(ht->keys, 0, length * sizeof(const char **));
+  memset((char **) ht->keys, 0, length * sizeof(const char **)); // Cast silences MSVC warning C4090
   memset(ht->values, 0, length * sizeof(void **));
 
   for (size_t i = 0; i < length; i++) {
@@ -86,7 +86,7 @@ void hashtable_destroy(hashtable_t *ht) {
   if (ht == NULL) {
     return;
   }
-  free(ht->keys);
+  free((char **) ht->keys); // Cast silences MSVC warning C4090
   free(ht->values);
   free(ht);
 }

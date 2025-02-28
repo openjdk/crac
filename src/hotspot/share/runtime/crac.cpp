@@ -137,6 +137,26 @@ public:
   }
 };
 
+static bool is_engine_api_valid(const crlib_api_t &api) {
+  return api.create_conf != nullptr && api.destroy_conf != nullptr &&
+    api.checkpoint != nullptr && api.restore != nullptr &&
+    api.can_configure != nullptr && api.configure != nullptr &&
+    api.get_extension != nullptr;
+}
+
+static crlib_restore_data_t *get_restore_data_api(const crlib_api_t *api) {
+  precond(api != nullptr);
+  crlib_restore_data_t * const restore_data_api = CRLIB_EXTENSION_RESTORE_DATA(api);
+  if (restore_data_api == nullptr) {
+    log_debug(crac)("CRaC engine does not support extension: " CRLIB_EXTENSION_RESTORE_DATA_NAME);
+  }
+  return restore_data_api;
+}
+
+static bool is_restore_data_api_valid(const crlib_restore_data_t &api) {
+  return api.set_restore_data != nullptr && api.get_restore_data != nullptr;
+}
+
 static bool find_crac_engine(const char *dll_dir, char *path, size_t path_size, bool *is_library) {
   // Try to interpret as a file path
   if (os::is_path_absolute(CRaCEngine)) {
@@ -258,7 +278,7 @@ static crlib_conf_t *create_engine_conf(
   char *engine_options = os::strdup_check_oom(CRaCEngineOptions, mtInternal);
   char *const engine_options_start = engine_options;
   do {
-    char *key_value = strsep(&engine_options, ",");
+    char *key_value = strsep(&engine_options, ",\n"); // '\n' appears when ccstrlist is appended to
     const char *key = strsep(&key_value, "=");
     const char *value = key_value != nullptr ? key_value : "";
     assert(key != nullptr, "Should have terminated before");
@@ -335,11 +355,8 @@ crac::EngineHandle::EngineHandle(bool checkpoint) {
     os::dll_unload(lib);
     return;
   }
-  if (api->create_conf == nullptr || api->destroy_conf == nullptr ||
-      api->checkpoint == nullptr || api->restore == nullptr ||
-      api->can_configure == nullptr || api->configure == nullptr ||
-      api->get_extension == nullptr) {
-    log_error(crac)("CRaC engine failed to fully initialize its API");
+  if (!is_engine_api_valid(*api)) {
+    log_error(crac)("CRaC engine provided invalid API");
     os::dll_unload(lib);
     return;
   }
@@ -362,20 +379,6 @@ crac::EngineHandle::~EngineHandle() {
     _api->destroy_conf(_conf);
     os::dll_unload(_lib);
   }
-}
-
-static crlib_restore_data_t *get_restore_data_api(const crlib_api_t *api) {
-  precond(api != nullptr);
-  crlib_restore_data_t * const restore_data_api = CRLIB_EXTENSION_RESTORE_DATA(api);
-  if (restore_data_api == nullptr) {
-    log_debug(crac)("CRaC engine does not support extension: " CRLIB_EXTENSION_RESTORE_DATA_NAME);
-    return nullptr;
-  }
-  if (restore_data_api->set_restore_data == nullptr || restore_data_api->get_restore_data == nullptr) {
-    log_debug(crac)("CRaC engine failed to fully initialize API extension: %s", CRLIB_EXTENSION_RESTORE_DATA_NAME);
-    return nullptr;
-  }
-  return restore_data_api;
 }
 
 int crac::checkpoint_restore(int *shmid) {
@@ -402,6 +405,9 @@ int crac::checkpoint_restore(int *shmid) {
   const auto *restore_data_api = get_restore_data_api(_engine->api());
   if (restore_data_api == nullptr) {
     *shmid = 0; // Not an error, just no restore data
+  } else if (!is_restore_data_api_valid(*restore_data_api)) {
+    log_error(crac)("CRaC engine provided invalid restore data API");
+    *shmid = -1; // Error
   } else if (restore_data_api->get_restore_data(_engine->conf(), shmid, sizeof(*shmid)) < sizeof(*shmid)) {
     log_error(crac)("CRaC engine failed to provide restore data");
     *shmid = -1; // Error
@@ -724,7 +730,13 @@ void crac::restore(crac_restore_data& restore_data) {
   }
 
   const auto *restore_data_api = get_restore_data_api(engine.api());
-  if (restore_data_api != nullptr) {
+  if (restore_data_api == nullptr) {
+    log_warning(crac)("Cannot pass restore parameters (JVM flags, env vars, system properties, arguments...) "
+                      "with the selected CRaC engine");
+  } else if (!is_restore_data_api_valid(*restore_data_api)) {
+    log_error(crac)("CRaC engine provided invalid restore data API");
+    return;
+  } else {
     const int shmid = os::current_process_id();
     CracSHM shm(shmid);
     const int shmfd = shm.open(O_RDWR | O_CREAT | O_TRUNC);
@@ -749,9 +761,6 @@ void crac::restore(crac_restore_data& restore_data) {
       log_error(crac)("CRaC engine failed to record restore data");
       return;
     }
-  } else {
-    log_warning(crac)("Cannot pass restore parameters (JVM flags, env vars, system properties, arguments...) "
-                      "with the selected CRaC engine");
   }
 
   const int ret = engine.api()->restore(engine.conf());

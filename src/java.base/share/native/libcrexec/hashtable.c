@@ -45,19 +45,19 @@ hashtable_t *hashtable_create(const char **keys, size_t length) {
   }
 
   ht->length = length;
-  ht->keys = (const char **) malloc(length * sizeof(const char **));
+  ht->keys = (const char **) malloc(length * sizeof(const char *));
   if (ht->keys == NULL) {
     hashtable_destroy(ht);
     return NULL;
   }
-  ht->values = (void **) malloc(length * sizeof(void **));
+  ht->values = (void **) malloc(length * sizeof(void *));
   if (ht->values == NULL) {
     hashtable_destroy(ht);
     return NULL;
   }
 
-  memset((char **) ht->keys, 0, length * sizeof(const char **)); // Cast silences MSVC warning C4090
-  memset(ht->values, 0, length * sizeof(void **));
+  memset((char **) ht->keys, 0, length * sizeof(const char *)); // Cast silences MSVC warning C4090
+  memset(ht->values, 0, length * sizeof(void *));
 
   for (size_t i = 0; i < length; i++) {
     const char *key = keys[i];

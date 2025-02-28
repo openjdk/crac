@@ -44,25 +44,24 @@
 
 #define CREXEC "crexec: "
 
-// When adding a new option also add its description into the help message and
-// ensure the proper default value is set for it on configuration init. Also
-// consider checking for its inappropriate use on checkpoint/restore.
+// When adding a new option also add its description into the help message,
+// ensure the proper default value is set for it on configuration init and
+// consider checking for inappropriate use on checkpoint/restore.
 //
-// More frequently used options should go first: this means they'll be the first
-// to be placed in the options hash table which is implemented so that the keys
-// added first are faster to find.
+// Place more frequently used options first — this will make them faster to find
+// in the options hash table.
 #define CONFIGURE_OPTIONS(OPT) \
-  OPT(exec_location, "exec_location") \
-  OPT(image_location, "image_location") \
-  OPT(keep_running, "keep_running") \
-  OPT(direct_map, "direct_map") \
-  OPT(args, "args") \
-  OPT(help, "help") \
+  OPT(image_location) \
+  OPT(exec_location) \
+  OPT(keep_running) \
+  OPT(direct_map) \
+  OPT(args) \
+  OPT(help) \
 
-#define DEFINE_OPT(id, str) static const char opt_##id[] = str;
+#define DEFINE_OPT(id) static const char opt_##id[] = #id;
 CONFIGURE_OPTIONS(DEFINE_OPT)
 #undef DEFINE_OPT
-#define ADD_ARR_ELEM(id, str) opt_##id,
+#define ADD_ARR_ELEM(id) opt_##id,
 static const char *configure_options[] = { CONFIGURE_OPTIONS(ADD_ARR_ELEM) };
 #undef ADD_ARR_ELEM
 
@@ -142,6 +141,12 @@ static bool parse_bool(const char *str, bool *result) {
   return false;
 }
 
+static bool configure_image_location(crlib_conf_t *conf, const char *image_location) {
+  free((char *) conf->argv[ARGV_IMAGE_LOCATION]);
+  conf->argv[ARGV_IMAGE_LOCATION] = strdup_checked(image_location);
+  return conf->argv[ARGV_IMAGE_LOCATION] != NULL;
+}
+
 static bool configure_exec_location(crlib_conf_t *conf, const char *exec_location) {
   if (!is_path_absolute(exec_location)) {
     fprintf(stderr, CREXEC "expected absolute path: %s\n", exec_location);
@@ -153,12 +158,6 @@ static bool configure_exec_location(crlib_conf_t *conf, const char *exec_locatio
     return false;
   }
   return true;
-}
-
-static bool configure_image_location(crlib_conf_t *conf, const char *image_location) {
-  free((char *) conf->argv[ARGV_IMAGE_LOCATION]);
-  conf->argv[ARGV_IMAGE_LOCATION] = strdup_checked(image_location);
-  return conf->argv[ARGV_IMAGE_LOCATION] != NULL;
 }
 
 static bool configure_keep_running(crlib_conf_t *conf, const char *keep_running_str) {
@@ -286,7 +285,7 @@ static crlib_conf_t *create_conf() {
     destroy_conf(conf);
     return NULL;
   }
-#define PUT_HANDLER(id, str) hashtable_put(conf->options, opt_##id, configure_##id);
+#define PUT_HANDLER(id) hashtable_put(conf->options, opt_##id, configure_##id);
   CONFIGURE_OPTIONS(PUT_HANDLER)
 #undef PUT_HANDLER
 

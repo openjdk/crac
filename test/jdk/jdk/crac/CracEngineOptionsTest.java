@@ -31,6 +31,7 @@ import jdk.test.lib.process.OutputAnalyzer;
 import jdk.test.lib.process.ProcessTools;
 
 import java.nio.file.Path;
+import java.util.*;
 
 /*
 * @test
@@ -71,10 +72,10 @@ public class CracEngineOptionsTest {
             Path.of(Utils.TEST_JDK, "lib", "simengine").toString();
         test(absolute);
 
-        test("unknown", null, 1, "Cannot find CRaC engine unknown");
-        test("simengine,--arg", null, 1, "Cannot find CRaC engine simengine,--arg");
-        test("one two", null, 1, "Cannot find CRaC engine one two");
-        test("", null, 1, "CRaCEngine must not be empty");
+        test("unknown", Collections.emptyList(), 1, "Cannot find CRaC engine unknown");
+        test("simengine,--arg", Collections.emptyList(), 1, "Cannot find CRaC engine simengine,--arg");
+        test("one two", Collections.emptyList(), 1, "Cannot find CRaC engine one two");
+        test("", Collections.emptyList(), 1, "CRaCEngine must not be empty");
     }
 
     @Test
@@ -117,22 +118,49 @@ public class CracEngineOptionsTest {
         }
     }
 
+    @Test
+    public void test_options_separated() throws Exception {
+        test("simengine",
+                Arrays.asList(
+                    "args=simengine ignores this",
+                    "args=another arg,help,args=and another",
+                    "args=this is also ignored"
+                ),
+                0,
+                "CRaC engine option: 'args' = 'simengine ignores this'",
+                "CRaC engine option: 'args' = 'another arg'",
+                "CRaC engine option: 'help' = ''",
+                "CRaC engine option: 'args' = 'and another'",
+                "CRaC engine option: 'args' = 'this is also ignored'");
+
+        test("simengine",
+                Arrays.asList("args=--arg1 --arg2", "--arg3"),
+                1,
+                "CRaC engine option: 'args' = '--arg1 --arg2'",
+                "unknown configure option: --arg3",
+                "CRaC engine failed to configure: '--arg3' = ''");
+    }
+
     private void test(String engine) throws Exception {
-        test(engine, null, 0);
+        test(engine, Collections.emptyList(), 0);
     }
 
     private void test(String engine, String opts) throws Exception {
-        test(engine, opts, 0);
+        test(engine, Arrays.asList(opts), 0);
     }
 
     private void test(String engine, String opts, int expectedExitValue, String... expectedTexts) throws Exception {
+        test(engine, Arrays.asList(opts), expectedExitValue, expectedTexts);
+    }
+
+    private void test(String engine, List<String> opts, int expectedExitValue, String... expectedTexts) throws Exception {
         ProcessBuilder pb = ProcessTools.createTestJavaProcessBuilder(
                 "-XX:CRaCCheckpointTo=cr",
                 "-XX:CRaCEngine=" + engine,
                 "-Xlog:crac=debug",
                 "-version");
-        if (opts != null) {
-            pb.command().add(pb.command().size() - 2, "-XX:CRaCEngineOptions=" + opts);
+        for (String opt : opts) {
+            pb.command().add(pb.command().size() - 2, "-XX:CRaCEngineOptions=" + opt);
         }
         OutputAnalyzer out = new OutputAnalyzer(pb.start());
         out.shouldHaveExitValue(expectedExitValue);

@@ -25,8 +25,9 @@
 #define SHARE_RUNTIME_CRAC_HPP
 
 #include "memory/allStatic.hpp"
+#include "runtime/crac_engine.hpp"
 #include "runtime/handles.hpp"
-#include "utilities/macros.hpp"
+#include "utilities/exceptions.hpp"
 
 // xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
 #define UUID_LENGTH 36
@@ -60,8 +61,7 @@ private:
   static char checkpoint_bootid[UUID_LENGTH];
   static jlong javaTimeNanos_offset;
 
-  class EngineHandle;
-  static const EngineHandle *_engine;
+  static CracEngine *_engine;
 
   static bool read_bootid(char *dest);
 

@@ -30,6 +30,7 @@
 #include <string.h>
 
 #include "crlib/crlib.h"
+#include "crlib/crlib_description.h"
 #include "crlib/crlib_restore_data.h"
 #include "hashtable.h"
 #include "jni.h"
@@ -56,13 +57,12 @@
   OPT(keep_running) \
   OPT(direct_map) \
   OPT(args) \
-  OPT(help) \
 
 #define DEFINE_OPT(id) static const char opt_##id[] = #id;
 CONFIGURE_OPTIONS(DEFINE_OPT)
 #undef DEFINE_OPT
 #define ADD_ARR_ELEM(id) opt_##id,
-static const char *configure_options[] = { CONFIGURE_OPTIONS(ADD_ARR_ELEM) };
+static const char *configure_options[] = { CONFIGURE_OPTIONS(ADD_ARR_ELEM) NULL };
 #undef ADD_ARR_ELEM
 
 // Indices of argv arrag members
@@ -93,32 +93,6 @@ char **get_environ(void);
 void exec_in_this_process(const char *path, const char *argv[], const char *env[]);
 
 typedef bool (*configure_func)(crlib_conf_t *, const char *value);
-
-static bool configure_help(crlib_conf_t *conf, const char *ignored) {
-  // Internal options which are expected to be set by the program crexec is linked against are
-  // omitted from the print since users are not supposed to pass them directly:
-  // * image_location=<path> — path to a directory with checkpoint/restore files.
-  // * exec_location=<path> — path to the engine executable.
-  const int ret = printf(
-    "\n"
-    "crexec — pseudo-CRaC-engine used to relay data from JVM to a \"real\" engine implemented as "
-    "an executable (instead of a library).\n"
-    "The engine executable is expected to have CRaC-CRIU-like CLI. Support of the options below "
-    "also depends on the engine executable.\n"
-    "\n"
-    "Configuration options:\n"
-    "* keep_running=<true/false> (default: false) — keep the process running after the checkpoint "
-    "or kill it.\n"
-    "* direct_map=<true/false> (default: false) — on restore, map process data directly from saved "
-    "files. This may speedup the restore but the resulting process will not be the same as before "
-    "the checkpoint.\n"
-    "* args=<string> (default: \"\") — free space-separated arguments passed directly to the "
-    "engine executable, e.g. \"--arg1 --arg2 --arg3\".\n"
-    "* help — print this message.\n"
-    "\n"
-  );
-  return ret > 0;
-}
 
 static char *strdup_checked(const char *src) {
   char *res = strdup(src);
@@ -214,6 +188,51 @@ static bool configure(crlib_conf_t *conf, const char *key, const char *value) {
   return false;
 }
 
+static const char *identity(crlib_conf_t *conf) {
+  return "crexec";
+}
+
+static const char *description(crlib_conf_t *conf) {
+  return
+    "crexec — pseudo-CRaC-engine used to relay data from JVM to a \"real\" engine implemented as "
+    "an executable (instead of a library). The engine executable is expected to have "
+    "CRaC-CRIU-like CLI. Support of the configuration options also depends on the engine "
+    "executable.";
+}
+
+static const char *configuration_doc(crlib_conf_t *conf) {
+  // Internal options which are expected to be set by the program crexec is linked to are omitted
+  // since users are not supposed to pass them directly:
+  // * image_location=<path> (no default) — path to a directory with checkpoint/restore files.
+  // * exec_location=<path> (no default) — path to the engine executable.
+  return
+    "* keep_running=<true/false> (default: false) — keep the process running after the checkpoint "
+    "or kill it.\n"
+    "* direct_map=<true/false> (default: false) — on restore, map process data directly from saved "
+    "files. This may speedup the restore but the resulting process will not be the same as before "
+    "the checkpoint.\n"
+    "* args=<string> (default: \"\") — free space-separated arguments passed directly to the "
+    "engine executable, e.g. \"--arg1 --arg2 --arg3\".";
+}
+
+static const char * const *configurable_keys(crlib_conf_t *conf) {
+  return configure_options;
+}
+
+static crlib_extension_t * const *supported_extensions(crlib_conf_t *conf);
+
+static crlib_description_t description_extension = {
+  .header = {
+    .name = CRLIB_EXTENSION_DESCRIPTION_NAME,
+    .size = sizeof(description_extension)
+  },
+  .identity = identity,
+  .description = description,
+  .configuration_doc = configuration_doc,
+  .configurable_keys = configurable_keys,
+  .supported_extensions = supported_extensions,
+};
+
 static bool set_restore_data(crlib_conf_t *conf, const void *data, size_t size) {
   if (size != sizeof(conf->restore_data)) {
     fprintf(stderr, CREXEC "unsupported size of restore data: %zu — only %zu is supported\n",
@@ -237,16 +256,25 @@ static size_t get_restore_data(crlib_conf_t *conf, void *buf, size_t size) {
 static crlib_restore_data_t restore_data_extension = {
   .header = {
     .name = CRLIB_EXTENSION_RESTORE_DATA_NAME,
-    .size = sizeof(crlib_restore_data_t)
+    .size = sizeof(restore_data_extension)
   },
   .set_restore_data = set_restore_data,
-  .get_restore_data = get_restore_data
+  .get_restore_data = get_restore_data,
 };
 
-static const crlib_extension_t *extensions[] = { &restore_data_extension.header };
+static const crlib_extension_t *extensions[] = {
+  &restore_data_extension.header,
+  &description_extension.header,
+  NULL
+};
+
+static crlib_extension_t * const *supported_extensions(crlib_conf_t *conf) {
+  return extensions;
+}
+
 
 static const crlib_extension_t *get_extension(const char *name, size_t size) {
-  for (size_t i = 0; i < ARRAY_SIZE(extensions); i++) {
+  for (size_t i = 0; i < ARRAY_SIZE(extensions) - 1 /* omit NULL */; i++) {
     const crlib_extension_t *ext = extensions[i];
     if (strcmp(name, ext->name) == 0) {
       if (size <= ext->size) {
@@ -279,7 +307,7 @@ static crlib_conf_t *create_conf() {
   }
   memset(conf, 0, sizeof(*conf));
 
-  conf->options = hashtable_create(configure_options, ARRAY_SIZE(configure_options));
+  conf->options = hashtable_create(configure_options, ARRAY_SIZE(configure_options) - 1 /* omit NULL */);
   if (conf->options == NULL) {
     fprintf(stderr, CREXEC "out of memory\n");
     destroy_conf(conf);

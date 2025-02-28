@@ -35,7 +35,9 @@
 class crac: AllStatic {
   friend class VM_Crac;
 public:
+  static void print_engine_info_and_exit();
   static void vm_create_start();
+
   static bool prepare_checkpoint();
   static Handle checkpoint(jarray fd_arr, jobjectArray obj_arr, bool dry_run, jlong jcmd_stream, TRAPS);
 

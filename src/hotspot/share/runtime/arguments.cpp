@@ -3088,6 +3088,10 @@ jint Arguments::finalize_vm_init_args() {
   UNSUPPORTED_OPTION(ShowRegistersOnAssert);
 #endif // CAN_SHOW_REGISTERS_ON_ASSERT
 
+  if (CRaCEngineOptions && strcmp(CRaCEngineOptions, "help") == 0) {
+    crac::print_engine_info_and_exit(); // Does not return on success
+    return JNI_ERR;
+  }
   if (CRaCCheckpointTo && !crac::prepare_checkpoint()) {
     return JNI_ERR;
   }

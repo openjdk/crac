@@ -25,6 +25,7 @@
 #define SHARE_RUNTIME_CRAC_ENGINE_HPP
 
 #include "crlib/crlib.h"
+#include "crlib/crlib_description.h"
 #include "crlib/crlib_restore_data.h"
 #include "memory/allocation.hpp"
 #include "nmt/memTag.hpp"
@@ -34,7 +35,7 @@
 // CRaC engine library wrapper.
 class CracEngine : public CHeapObj<mtInternal> {
 public:
-  explicit CracEngine(const char *image_location);
+  explicit CracEngine(const char *image_location = nullptr);
   ~CracEngine();
 
   // Use this to check whether the constructor succeeded.
@@ -54,12 +55,17 @@ public:
   bool set_restore_data(const void *data, size_t size) const;
   size_t get_restore_data(void *buf, size_t size) const;
 
+  ApiStatus prepare_description_api();
+  const char *description() const;
+  const char *configuration_doc() const;
+
 private:
   void *_lib = nullptr;
   crlib_api_t *_api = nullptr;
   crlib_conf_t *_conf = nullptr;
 
   crlib_restore_data_t *_restore_data_api = nullptr;
+  crlib_description_t *_description_api = nullptr;
 };
 
 #endif // SHARE_RUNTIME_CRAC_ENGINE_HPP

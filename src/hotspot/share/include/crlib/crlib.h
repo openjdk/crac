@@ -34,7 +34,7 @@ extern "C" {
 typedef struct crlib_conf crlib_conf_t;
 
 // The first member in an actual structure defining an extension of CRaC engine API.
-typedef struct crlib_extension {
+struct crlib_extension {
   // Name of the extension.
   // If there is a non-backwards compatible change in the extension (from API point of view) the
   // name should be changed, e.g. foo -> foo:v2.
@@ -42,7 +42,8 @@ typedef struct crlib_extension {
   // Size of the full extension structure, in bytes.
   // Adding members to the end of the full structure is considered a backwards-compatible change.
   size_t size;
-} crlib_extension_t;
+};
+typedef const struct crlib_extension crlib_extension_t;
 
 // CRaC engine API.
 //

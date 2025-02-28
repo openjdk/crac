@@ -1961,17 +1961,17 @@ const int ObjectAlignmentInBytes = 8;
                                                                             \
   product_pd(ccstr, CRaCEngine, RESTORE_SETTABLE,                           \
       "Path or name of a program or a shared library implementing "         \
-      "checkpoint and restore. On restore this value applies only to the "  \
-      "restoring VM, i.e. the restored VM keeps the value it had before "   \
-      "the checkpoint.")                                                    \
+      "checkpoint and restore. On restore this option applies only to "     \
+      "the restoring VM, i.e. the restored VM keeps the value it had "      \
+      "before the checkpoint.")                                             \
                                                                             \
   product(ccstrlist, CRaCEngineOptions, nullptr, RESTORE_SETTABLE,          \
       "Options passed to CRaCEngine, in the form of 'key1=value,key2'. "    \
-      "The list of supported options is engine-dependent. Engines are "     \
-      "encouraged to recognize 'help' option for printing information "     \
-      "about supported options. On restore this value applies only to the " \
-      "restoring VM, i.e. the restored VM keeps the value it had before "   \
-      "the checkpoint.")                                                    \
+      "The list of supported options is engine-dependent, use "             \
+      "'-XX:CRaCEngineOptions=help' to make the VM print the information "  \
+      "about the engine, including its supported options, and exit. On "    \
+      "restore this option applies only to the restoring VM, i.e. the "     \
+      "restored VM keeps the value it had before the checkpoint.")          \
                                                                             \
   product(bool, CRaCIgnoreRestoreIfUnavailable, false, RESTORE_SETTABLE,    \
       "Ignore -XX:CRaCRestoreFrom and continue initialization if restore "  \

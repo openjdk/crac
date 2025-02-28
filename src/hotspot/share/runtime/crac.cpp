@@ -38,12 +38,14 @@
 #include "runtime/crac.hpp"
 #include "runtime/globals.hpp"
 #include "runtime/interfaceSupport.inline.hpp"
+#include "runtime/java.hpp"
 #include "runtime/jniHandles.hpp"
 #include "runtime/jniHandles.inline.hpp"
 #include "runtime/threads.hpp"
 #include "runtime/vmThread.hpp"
 #include "services/heapDumper.hpp"
 #include "services/writeableFlags.hpp"
+#include "utilities/debug.hpp"
 #include "utilities/decoder.hpp"
 #include "os.inline.hpp"
 #include "utilities/defaultStream.hpp"
@@ -281,6 +283,45 @@ void VM_Crac::doit() {
   wakeup_threads_in_timedwait_vm();
 
   _ok = true;
+}
+
+void crac::print_engine_info_and_exit() {
+  auto engine = CracEngine();
+  if (!engine.is_initialized()) {
+    return;
+  }
+
+  const CracEngine::ApiStatus status = engine.prepare_description_api();
+  if (status == CracEngine::ApiStatus::ERROR) {
+    return;
+  }
+  if (status == CracEngine::ApiStatus::UNSUPPORTED) {
+    if (printf("Selected CRaC engine does not provide information about itself.\n") < 0) {
+      log_error(crac)("printf failed");
+      return;
+    }
+    vm_exit(0);
+    ShouldNotReachHere();
+  }
+  postcond(status == CracEngine::ApiStatus::OK);
+
+  const char *description = engine.description();
+  if (description == nullptr) {
+    log_error(crac)("CRaC engine failed to provide its textual description");
+    return;
+  }
+  const char *conf_doc = engine.configuration_doc();
+  if (conf_doc == nullptr) {
+    log_error(crac)("CRaC engine failed to provide documentation of its configuration options");
+    return;
+  }
+  if (printf("%s\n\nConfiguration options:\n%s\n", description, conf_doc) < 0) {
+    log_error(crac)("printf failed");
+    return;
+  }
+
+  vm_exit(0);
+  ShouldNotReachHere();
 }
 
 bool crac::prepare_checkpoint() {

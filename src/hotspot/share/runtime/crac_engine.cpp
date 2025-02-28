@@ -126,7 +126,11 @@ static crlib_conf_t *create_conf(const crlib_api_t &api, const char *image_locat
     return nullptr;
   }
 
-  if (!configure_image_location(api, conf, image_location)) {
+  if (CRaCEngineOptions != nullptr && strcmp(CRaCEngineOptions, "help") == 0) {
+    return conf;
+  }
+
+  if (image_location != nullptr && !configure_image_location(api, conf, image_location)) {
     api.destroy_conf(conf);
     return nullptr;
   }
@@ -301,4 +305,36 @@ bool CracEngine::set_restore_data(const void *data, size_t size) const {
 size_t CracEngine::get_restore_data(void *buf, size_t size) const {
   precond(_restore_data_api != nullptr);
   return _restore_data_api->get_restore_data(_conf, buf, size);
+}
+
+CracEngine::ApiStatus CracEngine::prepare_description_api() {
+  precond(is_initialized());
+  if (_description_api != nullptr) {
+    return ApiStatus::OK;
+  }
+
+  crlib_description_t * const description_api = CRLIB_EXTENSION_DESCRIPTION(_api);
+  if (description_api == nullptr) {
+    log_debug(crac)("CRaC engine does not support extension: " CRLIB_EXTENSION_DESCRIPTION_NAME);
+    return ApiStatus::UNSUPPORTED;
+  }
+  if (description_api->identity == nullptr || description_api->description == nullptr ||
+      description_api->configuration_doc == nullptr ||
+      description_api->configurable_keys == nullptr ||
+      description_api->supported_extensions == nullptr) {
+    log_error(crac)("CRaC engine provided invalid restore data API");
+    return ApiStatus::ERROR;
+  }
+  _description_api = description_api;
+  return ApiStatus::OK;
+}
+
+const char *CracEngine::description() const {
+  precond(_description_api != nullptr);
+  return _description_api->description(_conf);
+}
+
+const char *CracEngine::configuration_doc() const {
+  precond(_description_api != nullptr);
+  return _description_api->configuration_doc(_conf);
 }

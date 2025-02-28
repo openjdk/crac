@@ -81,9 +81,6 @@ public class CracEngineOptionsTest {
     @Test
     public void test_options() throws Exception {
         test("simengine", "");
-        test("simengine", "help", 0,
-                "CRaC engine option: 'help' = ''",
-                "Configuration options:"); // A line from the help message
         test("simengine", "image_location=cr", 0,
                 "Internal CRaC engine option provided, skipping: image_location");
         if (Platform.isLinux()) {
@@ -93,6 +90,9 @@ public class CracEngineOptionsTest {
                     "CRaC engine option: 'keep_running' = 'false'");
         }
 
+        test("simengine", "help=true", 1,
+                "unknown configure option: help",
+                "CRaC engine failed to configure: 'help' = 'true'");
         test("simengine", "unknown=123", 1,
                 "unknown configure option: unknown",
                 "CRaC engine failed to configure: 'unknown' = '123'");
@@ -123,13 +123,13 @@ public class CracEngineOptionsTest {
         test("simengine",
                 Arrays.asList(
                     "args=simengine ignores this",
-                    "args=another arg,help,args=and another",
+                    "args=another arg,keep_running=true,args=and another",
                     "args=this is also ignored"
                 ),
                 0,
                 "CRaC engine option: 'args' = 'simengine ignores this'",
                 "CRaC engine option: 'args' = 'another arg'",
-                "CRaC engine option: 'help' = ''",
+                "CRaC engine option: 'keep_running' = 'true'",
                 "CRaC engine option: 'args' = 'and another'",
                 "CRaC engine option: 'args' = 'this is also ignored'");
 
@@ -139,6 +139,15 @@ public class CracEngineOptionsTest {
                 "CRaC engine option: 'args' = '--arg1 --arg2'",
                 "unknown configure option: --arg3",
                 "CRaC engine failed to configure: '--arg3' = ''");
+    }
+
+    @Test
+    public void test_options_help() throws Exception {
+        ProcessBuilder pb = ProcessTools.createTestJavaProcessBuilder(
+                "-XX:CRaCEngineOptions=help");
+        OutputAnalyzer out = new OutputAnalyzer(pb.start());
+        out.shouldHaveExitValue(0);
+        out.shouldContain("Configuration options:");
     }
 
     private void test(String engine) throws Exception {

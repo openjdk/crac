@@ -41,7 +41,6 @@
 #include "jvm.h"
 #endif // LINUX
 
-// Not using lambdas in the API since there is no way to request C linkage for them
 extern "C" {
 
 JNIEXPORT crlib_api_t *CRLIB_API(int api_version, size_t api_size);
@@ -66,34 +65,34 @@ static size_t get_restore_data(crlib_conf_t *conf, void *buf, size_t size);
 } // extern "C"
 
 static crlib_api_t api = {
-  .create_conf = create_conf,
-  .destroy_conf = destroy_conf,
-  .checkpoint = checkpoint,
-  .restore = restore,
-  .can_configure = can_configure,
-  .configure = configure,
-  .get_extension = get_extension,
+  create_conf,
+  destroy_conf,
+  checkpoint,
+  restore,
+  can_configure,
+  configure,
+  get_extension,
 };
 
 static crlib_description_t description_extension = {
-  .header = {
-    .name = CRLIB_EXTENSION_DESCRIPTION_NAME,
-    .size = sizeof(description_extension)
+  {
+    CRLIB_EXTENSION_DESCRIPTION_NAME,
+    sizeof(description_extension)
   },
-  .identity = identity,
-  .description = description,
-  .configuration_doc = configuration_doc,
-  .configurable_keys = configurable_keys,
-  .supported_extensions = supported_extensions,
+  identity,
+  description,
+  configuration_doc,
+  configurable_keys,
+  supported_extensions,
 };
 
 static crlib_restore_data_t restore_data_extension = {
-  .header = {
-    .name = CRLIB_EXTENSION_RESTORE_DATA_NAME,
-    .size = sizeof(restore_data_extension)
+  {
+    CRLIB_EXTENSION_RESTORE_DATA_NAME,
+    sizeof(restore_data_extension)
   },
-  .set_restore_data = set_restore_data,
-  .get_restore_data = get_restore_data,
+  set_restore_data,
+  get_restore_data,
 };
 
 static const crlib_extension_t *extensions[] = {
@@ -127,7 +126,7 @@ JNIEXPORT crlib_api_t *CRLIB_API(int api_version, size_t api_size) {
 // ensure the proper default value is set for it in the configuration struct and
 // consider checking for inappropriate use on checkpoint/restore.
 //
-// Place more frequently used options first — this will make them faster to find
+// Place more frequently used options first - this will make them faster to find
 // in the options hash table.
 #define CONFIGURE_OPTIONS(OPT) \
   OPT(image_location) \
@@ -232,7 +231,7 @@ public:
 
   bool set_restore_data(const void *data, size_t size) {
     if (size != sizeof(_restore_data)) {
-      fprintf(stderr, CREXEC "unsupported size of restore data: %zu — only %zu is supported\n",
+      fprintf(stderr, CREXEC "unsupported size of restore data: %zu - only %zu is supported\n",
               size, sizeof(_restore_data));
       return false;
     }
@@ -335,7 +334,7 @@ static const char *identity(crlib_conf_t *conf) {
 
 static const char *description(crlib_conf_t *conf) {
   return
-    "crexec — pseudo-CRaC-engine used to relay data from JVM to a \"real\" engine implemented as "
+    "crexec - pseudo-CRaC-engine used to relay data from JVM to a \"real\" engine implemented as "
     "an executable (instead of a library). The engine executable is expected to have "
     "CRaC-CRIU-like CLI. Support of the configuration options also depends on the engine "
     "executable.";
@@ -344,15 +343,15 @@ static const char *description(crlib_conf_t *conf) {
 static const char *configuration_doc(crlib_conf_t *conf) {
   // Internal options which are expected to be set by the program crexec is linked to are omitted
   // since users are not supposed to pass them directly:
-  // * image_location=<path> (no default) — path to a directory with checkpoint/restore files.
-  // * exec_location=<path> (no default) — path to the engine executable.
+  // * image_location=<path> (no default) - path to a directory with checkpoint/restore files.
+  // * exec_location=<path> (no default) - path to the engine executable.
   return
-    "* keep_running=<true/false> (default: false) — keep the process running after the checkpoint "
+    "* keep_running=<true/false> (default: false) - keep the process running after the checkpoint "
     "or kill it.\n"
-    "* direct_map=<true/false> (default: false) — on restore, map process data directly from saved "
+    "* direct_map=<true/false> (default: false) - on restore, map process data directly from saved "
     "files. This may speedup the restore but the resulting process will not be the same as before "
     "the checkpoint.\n"
-    "* args=<string> (default: \"\") — free space-separated arguments passed directly to the "
+    "* args=<string> (default: \"\") - free space-separated arguments passed directly to the "
     "engine executable, e.g. \"--arg1 --arg2 --arg3\".";
 }
 
@@ -546,7 +545,10 @@ static int checkpoint(crlib_conf_t *conf) {
     return false;
   }
   {
-    const bool ok = conf->set_restore_data(&info.si_int, sizeof(info.si_int));
+#ifndef NDEBUG
+    const bool ok =
+#endif // NDEBUG
+    conf->set_restore_data(&info.si_int, sizeof(info.si_int));
     assert(ok);
   }
 #endif // LINUX

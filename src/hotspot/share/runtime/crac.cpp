@@ -135,7 +135,7 @@ int crac::checkpoint_restore(int *shmid) {
       log_error(crac)("CRaC engine failed to provide restore data");
       // fallthrough
     }
-    case CracEngine::ApiStatus::ERROR:       *shmid = -1; break; // Indicates error to the caller
+    case CracEngine::ApiStatus::ERR:         *shmid = -1; break; // Indicates error to the caller
     case CracEngine::ApiStatus::UNSUPPORTED: *shmid = 0;  break; // Not an error, just no restore data
   }
 
@@ -292,7 +292,7 @@ void crac::print_engine_info_and_exit() {
   }
 
   const CracEngine::ApiStatus status = engine.prepare_description_api();
-  if (status == CracEngine::ApiStatus::ERROR) {
+  if (status == CracEngine::ApiStatus::ERR) {
     return;
   }
   if (status == CracEngine::ApiStatus::UNSUPPORTED) {
@@ -522,7 +522,7 @@ void crac::restore(crac_restore_data& restore_data) {
       }
       break;
     }
-    case CracEngine::ApiStatus::ERROR: break;
+    case CracEngine::ApiStatus::ERR: break;
     case CracEngine::ApiStatus::UNSUPPORTED:
       log_warning(crac)("Cannot pass restore parameters (JVM flags, env vars, system properties, arguments...) "
         "with the selected CRaC engine");

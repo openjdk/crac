@@ -7,6 +7,7 @@
 #include "runtime/globals.hpp"
 #include "runtime/os.hpp"
 #include "utilities/debug.hpp"
+#include "utilities/macros.hpp"
 
 #include <cstddef>
 #include <cstring>
@@ -72,11 +73,7 @@ static bool find_engine(const char *dll_dir, char *path, size_t path_size, bool 
   *is_library = false;
   log_debug(crac)("CRaCEngine %s is not a library in %s", CRaCEngine, dll_dir);
 
-#ifdef _WINDOWs
-  const char *suffix = ".exe";
-#else
-  const char *suffix = "";
-#endif // ! _WINDOWS
+  constexpr const char suffix[] = WINDOWS_ONLY(".exe") NOT_WINDOWS("");
 #ifndef S_ISREG
 # define S_ISREG(__mode) ((__mode & S_IFMT) == S_IFREG)
 #endif // S_ISREG
@@ -291,7 +288,7 @@ CracEngine::ApiStatus CracEngine::prepare_restore_data_api() {
   }
   if (restore_data_api->set_restore_data == nullptr || restore_data_api->get_restore_data == nullptr) {
     log_error(crac)("CRaC engine provided invalid restore data API");
-    return ApiStatus::ERROR;
+    return ApiStatus::ERR;
   }
   _restore_data_api = restore_data_api;
   return ApiStatus::OK;
@@ -323,7 +320,7 @@ CracEngine::ApiStatus CracEngine::prepare_description_api() {
       description_api->configurable_keys == nullptr ||
       description_api->supported_extensions == nullptr) {
     log_error(crac)("CRaC engine provided invalid restore data API");
-    return ApiStatus::ERROR;
+    return ApiStatus::ERR;
   }
   _description_api = description_api;
   return ApiStatus::OK;

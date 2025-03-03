@@ -49,7 +49,7 @@ public:
 
   // Optionally-supported operations
 
-  enum class ApiStatus { OK, ERROR, UNSUPPORTED };
+  enum class ApiStatus { OK, ERR, UNSUPPORTED };
 
   ApiStatus prepare_restore_data_api();
   bool set_restore_data(const void *data, size_t size) const;

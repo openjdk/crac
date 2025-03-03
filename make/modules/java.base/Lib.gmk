@@ -210,8 +210,8 @@ $(eval $(call SetupJdkLibrary, BUILD_LIBCREXEC, \
     NAME := crexec, \
     LINK_TYPE := C++, \
     EXTRA_HEADER_DIRS := libjvm, \
-    CFLAGS := $(CFLAGS_JDKLIB) -DCRLIB_IS_IMPL, \
-    CFLAGS_windows := -D_WINDOWS -DWIN32, \
+    CXXFLAGS := $(CXXFLAGS_JDKLIB) -DCRLIB_IS_IMPL, \
+    CXXFLAGS_windows := -D_WINDOWS -DWIN32, \
     LDFLAGS := $(LDFLAGS_JDKLIB), \
 ))
 TARGETS += $(BUILD_LIBCREXEC)

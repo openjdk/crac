@@ -23,24 +23,22 @@
  * or visit www.oracle.com if you need additional information or have any
  * questions.
  */
-#include <errno.h>
+#include <cerrno>
+#include <cstdio>
 #include <spawn.h>
-#include <stdbool.h>
-#include <stdio.h>
-#include <string.h>
 #include <sys/types.h>
-#include <sys/stat.h>
 #include <sys/wait.h>
 #include <unistd.h>
 
-#define slash '/'
+static constexpr char SLASH = '/';
+static constexpr const char SEP[] = { SLASH, '\0' };
 
 const char *file_separator() {
-  return "/";
+  return SEP;
 }
 
 bool is_path_absolute(const char* path) {
-  return path[0] == slash;
+  return path[0] == SLASH;
 }
 
 // Darwin has no "environ" in a dynamic library.
@@ -57,7 +55,7 @@ char **get_environ() {
 
 bool exec_child_process_and_wait(const char *path, char * const argv[], char * const env[]) {
   pid_t pid;
-  if (posix_spawn(&pid, path, NULL, NULL, argv, env)) {
+  if (posix_spawn(&pid, path, nullptr, nullptr, argv, env) != 0) {
     perror("Cannot spawn cracengine");
     return false;
   }
@@ -75,5 +73,5 @@ bool exec_child_process_and_wait(const char *path, char * const argv[], char * c
 }
 
 void exec_in_this_process(const char *path, const char *argv[], const char *env[]) {
-  execve(path, (char **) argv, (char **) env);
+  execve(path, const_cast<char **>(argv), const_cast<char **>(env));
 }

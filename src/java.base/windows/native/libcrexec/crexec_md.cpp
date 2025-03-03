@@ -23,46 +23,46 @@
  * or visit www.oracle.com if you need additional information or have any
  * questions.
  */
+#include <cstdlib>
+#include <cstring>
 #include <direct.h>
 #include <process.h>
-#include <stdbool.h>
-#include <stdlib.h>
-#include <string.h>
 #include <windows.h>
 
-#define slash '\\'
+static constexpr char SLASH = '\\';
+static constexpr const char SEP[] = { SLASH, '\0' };
 
 const char *file_separator() {
-    return "\\";
+  return SEP;
 }
 
 static inline int isLetter(char c) {
-    return ((c >= 'a') && (c <= 'z')) || ((c >= 'A') && (c <= 'Z'));
+  return ((c >= 'a') && (c <= 'z')) || ((c >= 'A') && (c <= 'Z'));
 }
 
 // Copy from FileSystemSupport_md.c
-static int prefix_length(const char* path) {
-    char c0, c1;
+static int prefixLength(const char* path) {
+  char c0, c1;
 
-    int n = (int)strlen(path);
-    if (n == 0) return 0;
-    c0 = path[0];
-    c1 = (n > 1) ? path[1] : 0;
-    if (c0 == slash) {
-        if (c1 == slash) return 2;      /* Absolute UNC pathname "\\\\foo" */
-        return 1;                       /* Drive-relative "\\foo" */
-    }
-    if (isLetter(c0) && (c1 == ':')) {
-        if ((n > 2) && (path[2] == slash))
-            return 3;           /* Absolute local pathname "z:\\foo" */
-        return 2;                       /* Directory-relative "z:foo" */
-    }
-    return 0;                   /* Completely relative */
+  int n = (int)strlen(path);
+  if (n == 0) return 0;
+  c0 = path[0];
+  c1 = (n > 1) ? path[1] : 0;
+  if (c0 == SLASH) {
+    if (c1 == SLASH) return 2;      /* Absolute UNC pathname "\\\\foo" */
+    return 1;                       /* Drive-relative "\\foo" */
+  }
+  if (isLetter(c0) && (c1 == ':')) {
+    if ((n > 2) && (path[2] == SLASH))
+      return 3;           /* Absolute local pathname "z:\\foo" */
+    return 2;                       /* Directory-relative "z:foo" */
+  }
+  return 0;                   /* Completely relative */
 }
 
 bool is_path_absolute(const char* path) {
-    int pl = prefix_length(path);
-    return (((pl == 2) && (path[0] == slash)) || (pl == 3));
+  int pl = prefixLength(path);
+  return (((pl == 2) && (path[0] == SLASH)) || (pl == 3));
 }
 
 char **get_environ() {

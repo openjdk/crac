@@ -208,6 +208,7 @@ endif
 # CFLAGS_windows from make/autoconf/flags-cflags.m4#FLAGS_SETUP_CFLAGS_HELPER
 $(eval $(call SetupJdkLibrary, BUILD_LIBCREXEC, \
     NAME := crexec, \
+    LINK_TYPE := C++, \
     EXTRA_HEADER_DIRS := libjvm, \
     CFLAGS := $(CFLAGS_JDKLIB) -DCRLIB_IS_IMPL, \
     CFLAGS_windows := -D_WINDOWS -DWIN32, \

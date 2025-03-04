@@ -184,6 +184,9 @@ private:
   int _restore_data = 0;
   const char *_argv[ARGV_LAST + 2] = {}; // Last element is required to be null
 
+  bool _is_keep_running_configured = false;
+  bool _is_direct_map_configured = false;
+
 public:
   crlib_conf() {
     if (!_options.is_initialized()) {
@@ -250,59 +253,92 @@ public:
   }
 
 private:
+  static void warn_if_already_configured(bool is_configured, const char *option_name) {
+    if (!is_configured) {
+      return;
+    }
+    fprintf(stderr,
+            CREXEC "'%s' configured multiple times, only the last value will be used\n",
+            option_name);
+  }
+
   bool configure_image_location(const char *image_location) {
+    // Don't warn if already configured: this is not intended to be set by a user
+    const char *copy = strdup_checked(image_location);
+    if (copy == nullptr) {
+      return false;
+    }
     free(const_cast<char *>(_argv[ARGV_IMAGE_LOCATION]));
-    _argv[ARGV_IMAGE_LOCATION] = strdup_checked(image_location);
-    return _argv[ARGV_IMAGE_LOCATION] != nullptr;
+    _argv[ARGV_IMAGE_LOCATION] = copy;
+    return true;
   }
 
   bool configure_exec_location(const char *exec_location) {
+    // Don't warn if already configured: this is not intended to be set by a user
     if (!is_path_absolute(exec_location)) {
       fprintf(stderr, CREXEC "expected absolute path: %s\n", exec_location);
       return false;
     }
-    free(const_cast<char *>(_argv[ARGV_EXEC_LOCATION]));
-    _argv[ARGV_EXEC_LOCATION] = strdup_checked(exec_location);
-    if (_argv[ARGV_EXEC_LOCATION] == nullptr) {
+    const char *copy = strdup_checked(exec_location);
+    if (copy == nullptr) {
       return false;
     }
+    free(const_cast<char *>(_argv[ARGV_EXEC_LOCATION]));
+    _argv[ARGV_EXEC_LOCATION] = copy;
     return true;
   }
 
   bool configure_keep_running(const char *keep_running_str) {
-    return parse_bool(keep_running_str, &_keep_running);
+    warn_if_already_configured(_is_keep_running_configured, opt_keep_running);
+    if (!parse_bool(keep_running_str, &_keep_running)) {
+      return false;
+    }
+    _is_keep_running_configured = true;
+    return true;
   }
 
   bool configure_direct_map(const char *direct_map_str) {
-    return parse_bool(direct_map_str, &_direct_map);
+    warn_if_already_configured(_is_direct_map_configured, opt_direct_map);
+    if (!parse_bool(direct_map_str, &_direct_map)) {
+      return false;
+    }
+    _is_direct_map_configured = true;
+    return true;
   }
 
-  bool configure_args(const char *args) {
-    free(const_cast<char *>(_argv[ARGV_FREE]));
-    char *arg = strdup_checked(args);
+  bool configure_args(const char *args_str) {
+    warn_if_already_configured(_argv[ARGV_FREE] != nullptr, opt_args);
+
+    char *arg = strdup_checked(args_str);
     if (arg == nullptr) {
-      _argv[ARGV_FREE] = nullptr;
       return false;
     }
 
-    assert(ARGV_FREE <= ARGV_LAST);
+    static constexpr int MAX_ARGS_NUM = ARGV_LAST - ARGV_FREE + 1;
+    static_assert(MAX_ARGS_NUM >= 0, "sanity check");
+    const char *args[MAX_ARGS_NUM];
+
+    int args_num = 0;
     static constexpr char SEP = ' ';
-    for (int i = ARGV_FREE; i <= ARGV_LAST && arg[0] != '\0'; i++) {
-      _argv[i] = arg;
+    for (; args_num < MAX_ARGS_NUM; args_num++) {
+      args[args_num] = arg;
       for (; arg[0] != SEP && arg[0] != '\0'; arg++) {}
-      if (arg[0] == SEP) {
-        *(arg++) = '\0';
+      if (arg[0] == '\0') {
+        break;
       }
+      assert(arg[0] == SEP);
+      *(arg++) = '\0';
     }
 
     if (arg[0] != '\0') {
-      fprintf(stderr, CREXEC "too many free arguments, at most %i are allowed\n",
-              (ARGV_LAST - ARGV_FREE) + 1);
-      free(const_cast<char *>(_argv[ARGV_FREE]));
-      _argv[ARGV_FREE] = nullptr;
+      assert(args_num == MAX_ARGS_NUM);
+      fprintf(stderr, CREXEC "too many free arguments, at most %i allowed\n", MAX_ARGS_NUM);
+      free(const_cast<char *>(args[0]));
       return false;
     }
 
+    free(const_cast<char *>(_argv[ARGV_FREE]));
+    memcpy(&_argv[ARGV_FREE], args, args_num * sizeof(const char *));
     return true;
   }
 };

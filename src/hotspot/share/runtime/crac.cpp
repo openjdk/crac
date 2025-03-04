@@ -50,6 +50,7 @@
 #include "os.inline.hpp"
 #include "utilities/defaultStream.hpp"
 #include "utilities/globalDefinitions.hpp"
+#include "utilities/ostream.hpp"
 
 static jlong _restore_start_time;
 static jlong _restore_start_nanos;
@@ -109,9 +110,8 @@ int crac::checkpoint_restore(int *shmid) {
   // to account for that.
   // Note that CRaCEngine and CRaCEngineOptions are not updated (as documented)
   // so we don't need to re-init the whole engine handle.
-  // TODO: do this only if there has been at least one restore (cannot check via
-  //  CRaCRestoreFrom != nullptr because it can remain unset even after restore)
-  if (!_engine->configure_image_location(CRaCCheckpointTo)) {
+  if (restore_start_time() != -1 && // A way to detect we've restored at least once
+      !_engine->configure_image_location(CRaCCheckpointTo)) {
     return JVM_CHECKPOINT_ERROR;
   }
 
@@ -286,7 +286,7 @@ void VM_Crac::doit() {
 }
 
 void crac::print_engine_info_and_exit() {
-  auto engine = CracEngine();
+  CracEngine engine;
   if (!engine.is_initialized()) {
     return;
   }
@@ -296,10 +296,7 @@ void crac::print_engine_info_and_exit() {
     return;
   }
   if (status == CracEngine::ApiStatus::UNSUPPORTED) {
-    if (printf("Selected CRaC engine does not provide information about itself.\n") < 0) {
-      log_error(crac)("printf failed");
-      return;
-    }
+    tty->print_cr("Selected CRaC engine does not provide information about itself");
     vm_exit(0);
     ShouldNotReachHere();
   }
@@ -315,10 +312,7 @@ void crac::print_engine_info_and_exit() {
     log_error(crac)("CRaC engine failed to provide documentation of its configuration options");
     return;
   }
-  if (printf("%s\n\nConfiguration options:\n%s\n", description, conf_doc) < 0) {
-    log_error(crac)("printf failed");
-    return;
-  }
+  tty->print_cr("%s\n\nConfiguration options:\n%s", description, conf_doc);
 
   vm_exit(0);
   ShouldNotReachHere();
@@ -489,7 +483,7 @@ void crac::restore(crac_restore_data& restore_data) {
   }
 
   // Note that this is a local, i.e. the handle will be destroyed if we fail to restore
-  auto engine = CracEngine(CRaCRestoreFrom);
+  CracEngine engine(CRaCRestoreFrom);
   if (!engine.is_initialized()) {
     return;
   }

@@ -72,10 +72,10 @@ public class CracEngineOptionsTest {
             Path.of(Utils.TEST_JDK, "lib", "simengine").toString();
         test(absolute);
 
-        test("unknown", Collections.emptyList(), 1, "Cannot find CRaC engine unknown");
-        test("simengine,--arg", Collections.emptyList(), 1, "Cannot find CRaC engine simengine,--arg");
-        test("one two", Collections.emptyList(), 1, "Cannot find CRaC engine one two");
-        test("", Collections.emptyList(), 1, "CRaCEngine must not be empty");
+        test("unknown", null, 1, "Cannot find CRaC engine unknown");
+        test("simengine,--arg", null, 1, "Cannot find CRaC engine simengine,--arg");
+        test("one two", null, 1, "Cannot find CRaC engine one two");
+        test("", null, 1, "CRaCEngine must not be empty");
     }
 
     @Test
@@ -84,10 +84,17 @@ public class CracEngineOptionsTest {
         test("simengine", "image_location=cr", 0,
                 "Internal CRaC engine option provided, skipping: image_location");
         if (Platform.isLinux()) {
+            test("criuengine", Arrays.asList("keep_running=true,args=-v -v -v -v"), 0,
+                    Arrays.asList(
+                        "CRaC engine option: 'keep_running' = 'true'",
+                        "CRaC engine option: 'args' = '-v -v -v -v'"
+                    ),
+                    Arrays.asList("configured multiple times"));
             test("criuengine", "keep_running=true,args=-v -v -v -v,keep_running=false", 0,
                     "CRaC engine option: 'keep_running' = 'true'",
                     "CRaC engine option: 'args' = '-v -v -v -v'",
-                    "CRaC engine option: 'keep_running' = 'false'");
+                    "CRaC engine option: 'keep_running' = 'false'",
+                    "'keep_running' configured multiple times");
         }
 
         test("simengine", "help=true", 1,
@@ -127,18 +134,25 @@ public class CracEngineOptionsTest {
                     "args=this is also ignored"
                 ),
                 0,
-                "CRaC engine option: 'args' = 'simengine ignores this'",
-                "CRaC engine option: 'args' = 'another arg'",
-                "CRaC engine option: 'keep_running' = 'true'",
-                "CRaC engine option: 'args' = 'and another'",
-                "CRaC engine option: 'args' = 'this is also ignored'");
+                Arrays.asList(
+                    "CRaC engine option: 'args' = 'simengine ignores this'",
+                    "CRaC engine option: 'args' = 'another arg'",
+                    "CRaC engine option: 'keep_running' = 'true'",
+                    "CRaC engine option: 'args' = 'and another'",
+                    "CRaC engine option: 'args' = 'this is also ignored'",
+                    "'args' configured multiple times"
+                ),
+                Collections.emptyList());
 
         test("simengine",
                 Arrays.asList("args=--arg1 --arg2", "--arg3"),
                 1,
-                "CRaC engine option: 'args' = '--arg1 --arg2'",
-                "unknown configure option: --arg3",
-                "CRaC engine failed to configure: '--arg3' = ''");
+                Arrays.asList(
+                    "CRaC engine option: 'args' = '--arg1 --arg2'",
+                    "unknown configure option: --arg3",
+                    "CRaC engine failed to configure: '--arg3' = ''"
+                ),
+                Arrays.asList("configured multiple times"));
     }
 
     @Test
@@ -147,22 +161,28 @@ public class CracEngineOptionsTest {
                 "-XX:CRaCEngineOptions=help");
         OutputAnalyzer out = new OutputAnalyzer(pb.start());
         out.shouldHaveExitValue(0);
-        out.shouldContain("Configuration options:");
+        out.stdoutShouldContain("Configuration options:");
+        out.stderrShouldBeEmpty();
+        out.shouldNotContain("CRaC engine option:");
     }
 
     private void test(String engine) throws Exception {
-        test(engine, Collections.emptyList(), 0);
+        test(engine, Collections.emptyList(), 0, Collections.emptyList(), Collections.emptyList());
     }
 
     private void test(String engine, String opts) throws Exception {
-        test(engine, Arrays.asList(opts), 0);
+        test(engine, opts != null ? Arrays.asList(opts) : Collections.emptyList(),
+            0, Collections.emptyList(), Collections.emptyList());
     }
 
-    private void test(String engine, String opts, int expectedExitValue, String... expectedTexts) throws Exception {
-        test(engine, Arrays.asList(opts), expectedExitValue, expectedTexts);
+    private void test(String engine, String opts, int expectedExitValue,
+            String... expectedTexts) throws Exception {
+        test(engine, opts != null ? Arrays.asList(opts) : Collections.emptyList(),
+                expectedExitValue, Arrays.asList(expectedTexts), Collections.emptyList());
     }
 
-    private void test(String engine, List<String> opts, int expectedExitValue, String... expectedTexts) throws Exception {
+    private void test(String engine, List<String> opts, int expectedExitValue,
+            List<String> expectedTexts, List<String> notExpectedTexts) throws Exception {
         ProcessBuilder pb = ProcessTools.createTestJavaProcessBuilder(
                 "-XX:CRaCCheckpointTo=cr",
                 "-XX:CRaCEngine=" + engine,
@@ -175,6 +195,9 @@ public class CracEngineOptionsTest {
         out.shouldHaveExitValue(expectedExitValue);
         for (String text : expectedTexts) {
             out.shouldContain(text);
+        }
+        for (String text : notExpectedTexts) {
+            out.shouldNotContain(text);
         }
     }
 }

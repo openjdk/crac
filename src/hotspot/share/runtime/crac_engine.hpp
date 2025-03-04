@@ -38,6 +38,9 @@ public:
   explicit CracEngine(const char *image_location = nullptr);
   ~CracEngine();
 
+  CracEngine(const CracEngine &) = delete;
+  CracEngine &operator=(const CracEngine &) = delete;
+
   // Use this to check whether the constructor succeeded.
   bool is_initialized() const;
 

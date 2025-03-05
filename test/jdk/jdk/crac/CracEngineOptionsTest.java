@@ -89,12 +89,12 @@ public class CracEngineOptionsTest {
                         "CRaC engine option: 'keep_running' = 'true'",
                         "CRaC engine option: 'args' = '-v -v -v -v'"
                     ),
-                    Arrays.asList("configured multiple times"));
+                    Arrays.asList("specified multiple times"));
             test("criuengine", "keep_running=true,args=-v -v -v -v,keep_running=false", 0,
                     "CRaC engine option: 'keep_running' = 'true'",
                     "CRaC engine option: 'args' = '-v -v -v -v'",
                     "CRaC engine option: 'keep_running' = 'false'",
-                    "'keep_running' configured multiple times");
+                    "CRaC engine option 'keep_running' specified multiple times");
         }
 
         test("simengine", "help=true", 1,
@@ -140,7 +140,7 @@ public class CracEngineOptionsTest {
                     "CRaC engine option: 'keep_running' = 'true'",
                     "CRaC engine option: 'args' = 'and another'",
                     "CRaC engine option: 'args' = 'this is also ignored'",
-                    "'args' configured multiple times"
+                    "CRaC engine option 'args' specified multiple times"
                 ),
                 Collections.emptyList());
 
@@ -152,7 +152,7 @@ public class CracEngineOptionsTest {
                     "unknown configure option: --arg3",
                     "CRaC engine failed to configure: '--arg3' = ''"
                 ),
-                Arrays.asList("configured multiple times"));
+                Arrays.asList("specified multiple times"));
     }
 
     @Test

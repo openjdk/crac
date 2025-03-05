@@ -8,6 +8,7 @@
 #include "runtime/os.hpp"
 #include "utilities/debug.hpp"
 #include "utilities/macros.hpp"
+#include "utilities/resourceHash.hpp"
 
 #include <cstddef>
 #include <cstring>
@@ -116,6 +117,20 @@ static bool configure_image_location(const crlib_api_t &api, crlib_conf_t *conf,
   return true;
 }
 
+static unsigned int cstring_hash(const char * const &s) {
+  unsigned int h = 0;
+  for (const char *p = s; *p != '\0'; p++) {
+    h = 31 * h + *p;
+  }
+  return h;
+}
+static bool cstring_equals(const char * const &s0, const char * const &s1) {
+  return strcmp(s0, s1) == 0;
+}
+// Have to use C-heap because resource area may yet be unavailable when this is used
+using CStringSet = ResourceHashtable<const char *, bool, 256, AnyObj::C_HEAP, MemTag::mtInternal,
+                                     cstring_hash, cstring_equals>;
+
 static crlib_conf_t *create_conf(const crlib_api_t &api, const char *image_location, const char *exec_location) {
   crlib_conf_t * const conf = api.create_conf();
   if (conf == nullptr) {
@@ -148,6 +163,7 @@ static crlib_conf_t *create_conf(const crlib_api_t &api, const char *image_locat
 
   char *engine_options = os::strdup_check_oom(CRaCEngineOptions, mtInternal);
   char *const engine_options_start = engine_options;
+  CStringSet keys;
   do {
     char *key_value = strsep(&engine_options, ",\n"); // '\n' appears when ccstrlist is appended to
     const char *key = strsep(&key_value, "=");
@@ -157,6 +173,13 @@ static crlib_conf_t *create_conf(const crlib_api_t &api, const char *image_locat
         (exec_location != nullptr && strcmp(key, ENGINE_OPT_EXEC_LOCATION) == 0)) {
       log_warning(crac)("Internal CRaC engine option provided, skipping: %s", key);
       continue;
+    }
+    {
+      bool is_new_key;
+      keys.put_if_absent(key, &is_new_key);
+      if (!is_new_key) {
+        log_warning(crac)("CRaC engine option '%s' specified multiple times", key);
+      }
     }
     if (!api.configure(conf, key, value)) {
       log_error(crac)("CRaC engine failed to configure: '%s' = '%s'", key, value);

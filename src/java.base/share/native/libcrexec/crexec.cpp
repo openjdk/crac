@@ -184,9 +184,6 @@ private:
   int _restore_data = 0;
   const char *_argv[ARGV_LAST + 2] = {}; // Last element is required to be null
 
-  bool _is_keep_running_configured = false;
-  bool _is_direct_map_configured = false;
-
 public:
   crlib_conf() {
     if (!_options.is_initialized()) {
@@ -253,17 +250,7 @@ public:
   }
 
 private:
-  static void warn_if_already_configured(bool is_configured, const char *option_name) {
-    if (!is_configured) {
-      return;
-    }
-    fprintf(stderr,
-            CREXEC "'%s' configured multiple times, only the last value will be used\n",
-            option_name);
-  }
-
   bool configure_image_location(const char *image_location) {
-    // Don't warn if already configured: this is not intended to be set by a user
     const char *copy = strdup_checked(image_location);
     if (copy == nullptr) {
       return false;
@@ -274,7 +261,6 @@ private:
   }
 
   bool configure_exec_location(const char *exec_location) {
-    // Don't warn if already configured: this is not intended to be set by a user
     if (!is_path_absolute(exec_location)) {
       fprintf(stderr, CREXEC "expected absolute path: %s\n", exec_location);
       return false;
@@ -289,26 +275,14 @@ private:
   }
 
   bool configure_keep_running(const char *keep_running_str) {
-    warn_if_already_configured(_is_keep_running_configured, opt_keep_running);
-    if (!parse_bool(keep_running_str, &_keep_running)) {
-      return false;
-    }
-    _is_keep_running_configured = true;
-    return true;
+    return parse_bool(keep_running_str, &_keep_running);
   }
 
   bool configure_direct_map(const char *direct_map_str) {
-    warn_if_already_configured(_is_direct_map_configured, opt_direct_map);
-    if (!parse_bool(direct_map_str, &_direct_map)) {
-      return false;
-    }
-    _is_direct_map_configured = true;
-    return true;
+    return parse_bool(direct_map_str, &_direct_map);
   }
 
   bool configure_args(const char *args_str) {
-    warn_if_already_configured(_argv[ARGV_FREE] != nullptr, opt_args);
-
     char *arg = strdup_checked(args_str);
     if (arg == nullptr) {
       return false;

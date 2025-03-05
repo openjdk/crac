@@ -318,10 +318,10 @@ private:
     static_assert(MAX_ARGS_NUM >= 0, "sanity check");
     const char *args[MAX_ARGS_NUM];
 
-    int args_num = 0;
+    int arg_i = 0;
     static constexpr char SEP = ' ';
-    for (; args_num < MAX_ARGS_NUM; args_num++) {
-      args[args_num] = arg;
+    for (; arg_i < MAX_ARGS_NUM; arg_i++) {
+      args[arg_i] = arg;
       for (; arg[0] != SEP && arg[0] != '\0'; arg++) {}
       if (arg[0] == '\0') {
         break;
@@ -331,14 +331,14 @@ private:
     }
 
     if (arg[0] != '\0') {
-      assert(args_num == MAX_ARGS_NUM);
+      assert(arg_i == MAX_ARGS_NUM);
       fprintf(stderr, CREXEC "too many free arguments, at most %i allowed\n", MAX_ARGS_NUM);
       free(const_cast<char *>(args[0]));
       return false;
     }
 
     free(const_cast<char *>(_argv[ARGV_FREE]));
-    memcpy(&_argv[ARGV_FREE], args, args_num * sizeof(const char *));
+    memcpy(&_argv[ARGV_FREE], args, (arg_i + 1) * sizeof(const char *));
     return true;
   }
 };

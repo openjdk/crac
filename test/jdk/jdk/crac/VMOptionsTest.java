@@ -32,7 +32,7 @@ import jdk.test.lib.crac.CracTest;
 import java.lang.management.ManagementFactory;
 import java.nio.file.Path;
 
-import static jdk.test.lib.Asserts.assertEquals;
+import static jdk.test.lib.Asserts.*;
 
 /**
  * @test
@@ -42,21 +42,30 @@ import static jdk.test.lib.Asserts.assertEquals;
  * @requires (os.family == "linux")
  */
 public class VMOptionsTest implements CracTest {
+    private static final String LOG_FILE_NAME = "custom-log-file.log";
+
     @Override
     public void test() throws Exception {
         final String enginePath = Path.of(Utils.TEST_JDK, "lib", "criuengine").toString();
 
         CracBuilder builder = new CracBuilder();
+
         builder.vmOption("-XX:CRaCEngine=criuengine");
-        builder.vmOption("-XX:CRaCEngineOptions=args=-v1");
+        builder.vmOption("-XX:CRaCEngineOptions=args=-o " + LOG_FILE_NAME);
         builder.vmOption("-XX:NativeMemoryTracking=off");
         builder.doCheckpoint();
+
+        // Checking whether CRaCEngineOptions had an effect
+        final Path logFilePath = Path.of("cr", LOG_FILE_NAME);
+        assertTrue(logFilePath.toFile().exists(), logFilePath.toAbsolutePath() + " must exist");
+
         builder.clearVmOptions();
         builder.vmOption("-XX:CRaCEngine=" + enginePath);
         builder.vmOption("-XX:CRaCEngineOptions=args=-v2");
         builder.vmOption("-XX:CRaCCheckpointTo=another");
         builder.vmOption("-XX:CRaCIgnoredFileDescriptors=42,43");
         builder.doRestore();
+
         // Setting non-manageable option
         builder.vmOption("-XX:NativeMemoryTracking=summary");
         assertEquals(1, builder.startRestore().waitFor());
@@ -72,7 +81,7 @@ public class VMOptionsTest implements CracTest {
             assertEquals(VMOption.Origin.VM_CREATION, engine1.getOrigin());
 
             VMOption engineOptions1 = bean.getVMOption("CRaCEngineOptions");
-            assertEquals("args=-v1", engineOptions1.getValue());
+            assertEquals("args=-o " + LOG_FILE_NAME, engineOptions1.getValue());
             assertEquals(VMOption.Origin.VM_CREATION, engineOptions1.getOrigin());
 
             VMOption checkpointTo1 = bean.getVMOption("CRaCCheckpointTo");
@@ -100,7 +109,7 @@ public class VMOptionsTest implements CracTest {
             assertEquals(VMOption.Origin.VM_CREATION, engine2.getOrigin());
 
             VMOption engineOptions2 = bean.getVMOption("CRaCEngineOptions");
-            assertEquals("args=-v1", engineOptions2.getValue());
+            assertEquals("args=-o " + LOG_FILE_NAME, engineOptions2.getValue());
             assertEquals(VMOption.Origin.VM_CREATION, engineOptions2.getOrigin());
 
             // Should change

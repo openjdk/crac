@@ -24,6 +24,7 @@
  * questions.
  */
 #include <cassert>
+#include <cstdint>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -164,7 +165,7 @@ static bool parse_bool(const char *str, bool *result) {
 }
 
 // Indices of argv array members.
-enum Argv {
+enum Argv : std::uint8_t {
   ARGV_EXEC_LOCATION,
   ARGV_ACTION,
   ARGV_IMAGE_LOCATION,

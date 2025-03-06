@@ -73,7 +73,7 @@ bool exec_child_process_and_wait(const char *path, char * const argv[], char * c
   // Avoid crashing in _spawnve(), https://bugs.python.org/issue29908
   SetEnvironmentVariable(TEXT("=CRAC_DUMMY"), TEXT("dummy"));
   intptr_t status = _spawnve(_P_WAIT, path, argv, env); // env is inherited by a child process
-  return !status;
+  return status == 0;
 }
 
 void exec_in_this_process(const char *path, const char *argv[], const char *env[]) {

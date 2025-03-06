@@ -76,7 +76,7 @@ static bool find_engine(const char *dll_dir, char *path, size_t path_size, bool 
 
   constexpr const char suffix[] = WINDOWS_ONLY(".exe") NOT_WINDOWS("");
 #ifndef S_ISREG
-# define S_ISREG(__mode) ((__mode & S_IFMT) == S_IFREG)
+# define S_ISREG(__mode) (((__mode) & S_IFMT) == S_IFREG)
 #endif // S_ISREG
   struct stat st;
 

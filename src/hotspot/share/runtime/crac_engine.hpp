@@ -31,6 +31,7 @@
 #include "nmt/memTag.hpp"
 
 #include <cstddef>
+#include <cstdint>
 
 // CRaC engine library wrapper.
 class CracEngine : public CHeapObj<mtInternal> {
@@ -52,7 +53,7 @@ public:
 
   // Optionally-supported operations
 
-  enum class ApiStatus { OK, ERR, UNSUPPORTED };
+  enum class ApiStatus : uint8_t { OK, ERR, UNSUPPORTED };
 
   ApiStatus prepare_restore_data_api();
   bool set_restore_data(const void *data, size_t size) const;

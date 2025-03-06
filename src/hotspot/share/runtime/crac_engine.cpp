@@ -3,6 +3,7 @@
 #include "crlib/crlib.h"
 #include "crlib/crlib_restore_data.h"
 #include "logging/log.hpp"
+#include "memory/allStatic.hpp"
 #include "runtime/crac_engine.hpp"
 #include "runtime/globals.hpp"
 #include "runtime/os.hpp"
@@ -117,19 +118,26 @@ static bool configure_image_location(const crlib_api_t &api, crlib_conf_t *conf,
   return true;
 }
 
-static unsigned int cstring_hash(const char * const &s) {
-  unsigned int h = 0;
-  for (const char *p = s; *p != '\0'; p++) {
-    h = 31 * h + *p;
+// These functions are used in a template instantiation and need to have external linkage. Otherwise
+// Windows-debug build fails with linkage errors for the instantiation's symbols.
+class CStringUtils : public AllStatic {
+public:
+  static unsigned int hash(const char * const &s) {
+    unsigned int h = 0;
+    for (const char *p = s; *p != '\0'; p++) {
+      h = 31 * h + *p;
+    }
+    return h;
   }
-  return h;
-}
-static bool cstring_equals(const char * const &s0, const char * const &s1) {
-  return strcmp(s0, s1) == 0;
-}
+
+  static bool equals(const char * const &s0, const char * const &s1) {
+    return strcmp(s0, s1) == 0;
+  }
+};
+
 // Have to use C-heap because resource area may yet be unavailable when this is used
 using CStringSet = ResourceHashtable<const char *, bool, 256, AnyObj::C_HEAP, MemTag::mtInternal,
-                                     cstring_hash, cstring_equals>;
+                                     CStringUtils::hash, CStringUtils::equals>;
 
 static crlib_conf_t *create_conf(const crlib_api_t &api, const char *image_location, const char *exec_location) {
   crlib_conf_t * const conf = api.create_conf();

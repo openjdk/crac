@@ -78,6 +78,7 @@
 #endif
 
 #include <limits>
+#include <type_traits>
 
 static const char _default_java_launcher[] = "generic";
 
@@ -2190,8 +2191,16 @@ bool Arguments::is_restore_option_set(const JavaVMInitArgs* args) {
   // iterate over arguments
   for (int index = 0; index < args->nOptions; index++) {
     const JavaVMOption* option = args->options + index;
-    if (match_option(option, "-XX:CRaCRestoreFrom", &tail)) {
-      return true;
+    if (!match_option(option, "-XX:CRaCRestoreFrom", &tail)) {
+      continue;
+    }
+    // ccstr is never set to an empty string by the parser so we should not
+    // treat an empty string value as the option being set. If it ever becomes
+    // ccstrlist or the parser changes, the value check will need to be removed.
+    static_assert(std::is_same<ccstr, decltype(CRaCRestoreFrom)>(), "expected ccstr");
+    const char* eq = strchr(tail, '=');
+    if (eq != nullptr && eq[1] != '\0') {
+      return true; // the value is not an empty string
     }
   }
   return false;
@@ -2226,9 +2235,11 @@ bool Arguments::parse_options_for_restore(const JavaVMInitArgs* args) {
       } else {
         add_property(tail);
       }
+
+      if (key != tail) { // key was copied
+        FreeHeap(const_cast<char *>(key));
+      }
     } else if (match_option(option, "-XX:", &tail)) { // -XX:xxxx
-      // Skip -XX:Flags= and -XX:VMOptionsFile= since those cases have
-      // already been handled
       if (!process_argument(tail, args->ignoreUnrecognized, JVMFlagOrigin::COMMAND_LINE)) {
         return false;
       }
@@ -2247,6 +2258,9 @@ bool Arguments::parse_options_for_restore(const JavaVMInitArgs* args) {
       }
     }
   }
+
+  postcond(CRaCRestoreFrom != nullptr);
+
   return true;
 }
 
@@ -3074,6 +3088,10 @@ jint Arguments::finalize_vm_init_args() {
   UNSUPPORTED_OPTION(ShowRegistersOnAssert);
 #endif // CAN_SHOW_REGISTERS_ON_ASSERT
 
+  if (CRaCEngineOptions && strcmp(CRaCEngineOptions, "help") == 0) {
+    crac::print_engine_info_and_exit(); // Does not return on success
+    return JNI_ERR;
+  }
   if (CRaCCheckpointTo && !crac::prepare_checkpoint()) {
     return JNI_ERR;
   }

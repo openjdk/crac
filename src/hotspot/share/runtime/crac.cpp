@@ -26,32 +26,36 @@
 #include "classfile/classLoader.hpp"
 #include "jfr/jfr.hpp"
 #include "jvm.h"
+#include "logging/log.hpp"
 #include "logging/logAsyncWriter.hpp"
 #include "logging/logConfiguration.hpp"
+#include "memory/allocation.hpp"
 #include "memory/oopFactory.hpp"
 #include "oops/typeArrayOop.inline.hpp"
 #include "prims/jvmtiExport.hpp"
+#include "runtime/crac_engine.hpp"
 #include "runtime/crac_structs.hpp"
 #include "runtime/crac.hpp"
+#include "runtime/globals.hpp"
 #include "runtime/interfaceSupport.inline.hpp"
+#include "runtime/java.hpp"
 #include "runtime/jniHandles.hpp"
 #include "runtime/jniHandles.inline.hpp"
 #include "runtime/threads.hpp"
-#include "runtime/vm_version.hpp"
 #include "runtime/vmThread.hpp"
 #include "services/heapDumper.hpp"
 #include "services/writeableFlags.hpp"
+#include "utilities/debug.hpp"
 #include "utilities/decoder.hpp"
 #include "os.inline.hpp"
 #include "utilities/defaultStream.hpp"
+#include "utilities/globalDefinitions.hpp"
+#include "utilities/ostream.hpp"
 
-static const char* _crengine = NULL;
-static char* _crengine_arg_str = NULL;
-static unsigned int _crengine_argc = 0;
-static const char* _crengine_args[32];
 static jlong _restore_start_time;
 static jlong _restore_start_nanos;
 
+CracEngine *crac::_engine = nullptr;
 // Timestamps recorded before checkpoint
 jlong crac::checkpoint_millis;
 jlong crac::checkpoint_nanos;
@@ -97,130 +101,48 @@ static char * strchrnul(char * str, char c) {
 }
 #endif //__APPLE__ || _WINDOWS
 
-static size_t cr_util_path(char* path, int len) {
-  os::jvm_path(path, len);
-  // path is ".../lib/server/libjvm.so", or "...\bin\server\libjvm.dll"
-  assert(1 == strlen(os::file_separator()), "file separator must be a single-char, not a string");
-  char *after_elem = NULL;
-  for (int i = 0; i < 2; ++i) {
-    after_elem = strrchr(path, *os::file_separator());
-    *after_elem = '\0';
-  }
-  return after_elem - path;
-}
+int crac::checkpoint_restore(int *shmid) {
+  guarantee(_engine != nullptr, "CRaC engine is not initialized");
 
-static bool compute_crengine() {
-  // release possible old copies
-  os::free((char *) _crengine); // NULL is allowed
-  _crengine = NULL;
-  os::free((char *) _crengine_arg_str);
-  _crengine_arg_str = NULL;
-
-  if (!CRaCEngine) {
-    return true;
-  }
-  char *exec = os::strdup_check_oom(CRaCEngine);
-  char *comma = strchr(exec, ',');
-  if (comma != NULL) {
-    *comma = '\0';
-    _crengine_arg_str = os::strdup_check_oom(comma + 1);
-  }
-  if (os::is_path_absolute(exec)) {
-    _crengine = exec;
-  } else {
-    char path[JVM_MAXPATHLEN];
-    size_t pathlen = cr_util_path(path, sizeof(path));
-    strcat(path + pathlen, os::file_separator());
-    strcat(path + pathlen, exec);
-    WINDOWS_ONLY(strcat(path + pathlen, ".exe"));
-
-    struct stat st;
-    if (0 != os::stat(path, &st)) {
-      warning("Could not find CRaCEngine %s: %s", path, os::strerror(errno));
-      return false;
-    }
-    _crengine = os::strdup_check_oom(path);
-    // we have read and duplicated args from exec, now we can release
-    os::free(exec);
-  }
-  _crengine_args[0] = _crengine;
-  _crengine_argc = 2;
-
-  if (_crengine_arg_str != NULL) {
-    char *arg = _crengine_arg_str;
-    char *target = _crengine_arg_str;
-    bool escaped = false;
-    for (char *c = arg; *c != '\0'; ++c) {
-      if (_crengine_argc >= ARRAY_SIZE(_crengine_args) - 2) {
-        warning("Too many options to CRaCEngine; cannot proceed with these: %s", arg);
-        return false;
-      }
-      if (!escaped) {
-        switch(*c) {
-        case '\\':
-          escaped = true;
-          continue; // for
-        case ',':
-          *target++ = '\0';
-          _crengine_args[_crengine_argc++] = arg;
-          arg = target;
-          continue; // for
-        }
-      }
-      escaped = false;
-      *target++ = *c;
-    }
-    *target = '\0';
-    _crengine_args[_crengine_argc++] = arg;
-    _crengine_args[_crengine_argc] = NULL;
-  }
-  return true;
-}
-
-static void add_crengine_arg(const char *arg) {
-  if (_crengine_argc >= ARRAY_SIZE(_crengine_args) - 1) {
-      warning("Too many options to CRaCEngine; cannot add %s", arg);
-      return;
-  }
-  _crengine_args[_crengine_argc++] = arg;
-  _crengine_args[_crengine_argc] = NULL;
-}
-
-static int call_crengine() {
-  if (!_crengine) {
-    return -1;
-  }
-  _crengine_args[1] = "checkpoint";
-  add_crengine_arg(CRaCCheckpointTo);
-  return os::exec_child_process_and_wait(_crengine, _crengine_args);
-}
-
-static int checkpoint_restore(int *shmid) {
   crac::record_time_before_checkpoint();
 
-  int cres = call_crengine();
-  if (cres < 0) {
-    tty->print_cr("CRaC error executing: %s\n", _crengine);
+  // CRaCCheckpointTo can be changed on restore so we need to update the conf
+  // to account for that.
+  // Note that CRaCEngine and CRaCEngineOptions are not updated (as documented)
+  // so we don't need to re-init the whole engine handle.
+  if (restore_start_time() != -1 && // A way to detect we've restored at least once
+      !_engine->configure_image_location(CRaCCheckpointTo)) {
     return JVM_CHECKPOINT_ERROR;
   }
 
+  const int ret = _engine->checkpoint();
+  if (ret != 0) {
+    log_error(crac)("CRaC engine failed to checkpoint to %s: error %i", CRaCCheckpointTo, ret);
+    return JVM_CHECKPOINT_ERROR;
+  }
+
+  switch (_engine->prepare_restore_data_api()) {
+    case CracEngine::ApiStatus::OK: {
+      constexpr size_t required_size = sizeof(*shmid);
+      const size_t available_size = _engine->get_restore_data(shmid, sizeof(*shmid));
+      if (available_size == required_size) {
+        break;
+      }
+      if (available_size > required_size) {
+        log_debug(crac)("CRaC engine has more restore data than expected");
+        break;
+      }
+      log_error(crac)("CRaC engine failed to provide restore data");
+      // fallthrough
+    }
+    case CracEngine::ApiStatus::ERR:         *shmid = -1; break; // Indicates error to the caller
+    case CracEngine::ApiStatus::UNSUPPORTED: *shmid = 0;  break; // Not an error, just no restore data
+  }
+
 #ifdef LINUX
-  sigset_t waitmask;
-  sigemptyset(&waitmask);
-  sigaddset(&waitmask, RESTORE_SIGNAL);
-
-  siginfo_t info;
-  int sig;
-  do {
-    sig = sigwaitinfo(&waitmask, &info);
-  } while (sig == -1 && errno == EINTR);
-  assert(sig == RESTORE_SIGNAL, "got what requested");
-
   if (CRaCCPUCountInit) {
     os::Linux::initialize_cpu_count();
   }
-#else
-  // TODO add sync processing
 #endif //LINUX
 
   crac::update_javaTimeNanos_offset();
@@ -229,31 +151,16 @@ static int checkpoint_restore(int *shmid) {
     tty->print_cr("STARTUPTIME " JLONG_FORMAT " restore-native", os::javaTimeNanos());
   }
 
-#ifdef LINUX
-  if (info.si_code != SI_QUEUE || info.si_int < 0) {
-    tty->print("JVM: invalid info for restore provided: %s", info.si_code == SI_QUEUE ? "queued" : "not queued");
-    if (info.si_code == SI_QUEUE) {
-      tty->print(" code %d", info.si_int);
-    }
-    tty->cr();
-    return JVM_CHECKPOINT_ERROR;
-  }
-
-  if (0 < info.si_int) {
-    *shmid = info.si_int;
-  }
-#else
-  *shmid = 0;
-#endif //LINUX
   return JVM_CHECKPOINT_OK;
 }
 
 bool VM_Crac::read_shm(int shmid) {
+  precond(shmid > 0);
   CracSHM shm(shmid);
   int shmfd = shm.open(O_RDONLY);
   shm.unlink();
   if (shmfd < 0) {
-    log_error(crac)("Cannot read restore parameters (JVM flags, env vars, system properties, arguments...)");
+    log_error(crac)("Cannot read restore parameters");
     return false;
   }
   bool ret = _restore_parameters.read_from(shmfd);
@@ -305,7 +212,6 @@ public:
   }
 };
 
-
 void VM_Crac::doit() {
   // dry-run fails checkpoint
   bool ok = true;
@@ -335,13 +241,14 @@ void VM_Crac::doit() {
     return;
   }
 
-  int shmid = 0;
+  int shmid = -1;
   if (CRaCAllowToSkipCheckpoint) {
     log_info(crac)("Skip Checkpoint");
+    shmid = 0;
   } else {
     log_info(crac)("Checkpoint ...");
     report_ok_to_jcmd_if_any();
-    int ret = checkpoint_restore(&shmid);
+    int ret = crac::checkpoint_restore(&shmid);
     if (ret == JVM_CHECKPOINT_ERROR) {
       memory_restore();
       return;
@@ -351,13 +258,16 @@ void VM_Crac::doit() {
   // It needs to check CPU features before any other code (such as VM_Crac::read_shm) depends on them.
   VM_Version::crac_restore();
   Arguments::reset_for_crac_restore();
-  if (shmid <= 0) {
+
+  if (shmid == 0) { // E.g. engine does not support restore data
+    log_debug(crac)("Restore parameters (JVM flags, env vars, system properties, arguments...) not provided");
     _restore_start_time = os::javaTimeMillis();
     _restore_start_nanos = os::javaTimeNanos();
-  } else if (!VM_Crac::read_shm(shmid)) {
-    vm_direct_exit(1, "Restore cannot continue, VM will exit.");
-    ShouldNotReachHere();
   } else {
+    if (shmid < 0 || !VM_Crac::read_shm(shmid)) {
+      vm_direct_exit(1, "Restore cannot continue, VM will exit."); // More info in logs
+      ShouldNotReachHere();
+    }
     _restore_start_nanos += crac::monotonic_time_offset();
   }
 
@@ -375,31 +285,67 @@ void VM_Crac::doit() {
   _ok = true;
 }
 
+void crac::print_engine_info_and_exit() {
+  CracEngine engine;
+  if (!engine.is_initialized()) {
+    return;
+  }
+
+  const CracEngine::ApiStatus status = engine.prepare_description_api();
+  if (status == CracEngine::ApiStatus::ERR) {
+    return;
+  }
+  if (status == CracEngine::ApiStatus::UNSUPPORTED) {
+    tty->print_cr("Selected CRaC engine does not provide information about itself");
+    vm_exit(0);
+    ShouldNotReachHere();
+  }
+  postcond(status == CracEngine::ApiStatus::OK);
+
+  const char *description = engine.description();
+  if (description == nullptr) {
+    log_error(crac)("CRaC engine failed to provide its textual description");
+    return;
+  }
+  const char *conf_doc = engine.configuration_doc();
+  if (conf_doc == nullptr) {
+    log_error(crac)("CRaC engine failed to provide documentation of its configuration options");
+    return;
+  }
+  tty->print_cr("%s\n\nConfiguration options:\n%s", description, conf_doc);
+
+  vm_exit(0);
+  ShouldNotReachHere();
+}
 
 bool crac::prepare_checkpoint() {
-  struct stat st;
+  precond(CRaCCheckpointTo != nullptr);
 
+  struct stat st;
   if (0 == os::stat(CRaCCheckpointTo, &st)) {
     if ((st.st_mode & S_IFMT) != S_IFDIR) {
-      warning("%s: not a directory", CRaCCheckpointTo);
+      log_error(crac)("CRaCCheckpointTo=%s is not a directory", CRaCCheckpointTo);
       return false;
     }
   } else {
     if (-1 == os::mkdir(CRaCCheckpointTo)) {
-      warning("cannot create %s: %s", CRaCCheckpointTo, os::strerror(errno));
+      log_error(crac)("Cannot create CRaCCheckpointTo=%s: %s", CRaCCheckpointTo, os::strerror(errno));
       return false;
     }
     if (-1 == os::rmdir(CRaCCheckpointTo)) {
-      warning("cannot cleanup after check: %s", os::strerror(errno));
+      log_warning(crac)("Cannot cleanup after CRaCCheckpointTo check: %s", os::strerror(errno));
       // not fatal
     }
   }
 
-  if (!compute_crengine()) {
-    return false;
+  // Initialize CRaC engine now to verify all the related VM options
+  assert(_engine == nullptr, "CRaC engine should be initialized only once");
+  _engine = new CracEngine(CRaCCheckpointTo);
+  if (!_engine->is_initialized()) {
+    delete _engine;
+    _engine = nullptr;
   }
-
-  return true;
+  return _engine != nullptr;
 }
 
 static Handle ret_cr(int ret, Handle new_args, Handle new_props, Handle err_codes, Handle err_msgs, TRAPS) {
@@ -419,12 +365,15 @@ static Handle ret_cr(int ret, Handle new_args, Handle new_props, Handle err_code
 /** Checkpoint main entry.
  */
 Handle crac::checkpoint(jarray fd_arr, jobjectArray obj_arr, bool dry_run, jlong jcmd_stream, TRAPS) {
-  if (!CRaCCheckpointTo) {
+  log_debug(crac)("Checkpoint %i requested (dry run=%s)", os::current_process_id(), BOOL_TO_STR(dry_run));
+
+  if (CRaCCheckpointTo == nullptr) {
+    log_error(crac)("CRaCCheckpointTo is not specified");
     return ret_cr(JVM_CHECKPOINT_NONE, Handle(), Handle(), Handle(), Handle(), THREAD);
   }
 
   if (-1 == os::mkdir(CRaCCheckpointTo) && errno != EEXIST) {
-    warning("cannot create %s: %s", CRaCCheckpointTo, os::strerror(errno));
+    log_error(crac)("Cannot create CRaCCheckpointTo=%s: %s", CRaCCheckpointTo, os::strerror(errno));
     return ret_cr(JVM_CHECKPOINT_NONE, Handle(), Handle(), Handle(), Handle(), THREAD);
   }
 
@@ -521,45 +470,62 @@ void crac::prepare_restore(crac_restore_data& restore_data) {
 }
 
 void crac::restore(crac_restore_data& restore_data) {
+  precond(CRaCRestoreFrom != nullptr);
+
   struct stat statbuf;
   if (os::stat(CRaCRestoreFrom, &statbuf) != 0) {
-    fprintf(stderr, "Cannot open restore directory of the -XX:CRaCRestoreFrom parameter: ");
-    perror(CRaCRestoreFrom);
+    log_error(crac)("Cannot open CRaCRestoreFrom=%s: %s", CRaCRestoreFrom, os::strerror(errno));
     return;
   }
   if ((statbuf.st_mode & S_IFMT) != S_IFDIR) {
-    fprintf(stderr, "-XX:CRaCRestoreFrom parameter is not a directory: %s\n", CRaCRestoreFrom);
+    log_error(crac)("CRaCRestoreFrom=%s is not a directory", CRaCRestoreFrom);
     return;
   }
 
-  compute_crengine();
-
-  const int id = os::current_process_id();
-
-  CracSHM shm(id);
-  int shmfd = shm.open(O_RDWR | O_CREAT | O_TRUNC);
-  if (shmfd < 0) {
-    log_error(crac)("Cannot pass parameters (JVM flags, env vars, system properties, arguments...) to the restored process.");
-  } else {
-    if (CracRestoreParameters::write_to(
-          shmfd,
-          Arguments::jvm_flags_array(), Arguments::num_jvm_flags(),
-          Arguments::system_properties(),
-          Arguments::java_command_crac() ? Arguments::java_command_crac() : "",
-          restore_data.restore_time,
-          restore_data.restore_nanos)) {
-      char strid[32];
-      snprintf(strid, sizeof(strid), "%d", id);
-      LINUX_ONLY(setenv("CRAC_NEW_ARGS_ID", strid, true));
-    }
-    close(shmfd);
+  // Note that this is a local, i.e. the handle will be destroyed if we fail to restore
+  CracEngine engine(CRaCRestoreFrom);
+  if (!engine.is_initialized()) {
+    return;
   }
 
-  if (_crengine) {
-    _crengine_args[1] = "restore";
-    add_crengine_arg(CRaCRestoreFrom);
-    os::execv(_crengine, _crengine_args);
-    warning("cannot execute \"%s restore ...\" (%s)", _crengine, os::strerror(errno));
+  switch (engine.prepare_restore_data_api()) {
+    case CracEngine::ApiStatus::OK: {
+      const int shmid = os::current_process_id();
+      CracSHM shm(shmid);
+      const int shmfd = shm.open(O_RDWR | O_CREAT | O_TRUNC);
+      if (shmfd < 0) {
+        log_error(crac)("Failed to open a space shared with restored process");
+        return;
+      }
+      const bool write_success = CracRestoreParameters::write_to(
+        shmfd,
+        Arguments::jvm_flags_array(), Arguments::num_jvm_flags(),
+        Arguments::system_properties(),
+        Arguments::java_command_crac() ? Arguments::java_command_crac() : "",
+        restore_data.restore_time,
+        restore_data.restore_nanos
+      );
+      close(shmfd);
+      if (!write_success) {
+        log_error(crac)("Failed to write to a space shared with restored process");
+        return;
+      }
+      if (!engine.set_restore_data(&shmid, sizeof(shmid))) {
+        log_error(crac)("CRaC engine failed to record restore data");
+        return;
+      }
+      break;
+    }
+    case CracEngine::ApiStatus::ERR: break;
+    case CracEngine::ApiStatus::UNSUPPORTED:
+      log_warning(crac)("Cannot pass restore parameters (JVM flags, env vars, system properties, arguments...) "
+        "with the selected CRaC engine");
+      break;
+  }
+
+  const int ret = engine.restore();
+  if (ret != 0) {
+    log_error(crac)("CRaC engine failed to restore from %s: error %i", CRaCRestoreFrom, ret);
   }
 }
 
@@ -594,6 +560,13 @@ bool CracRestoreParameters::read_from(int fd) {
       name = cursor + 1;
       result = WriteableFlags::set_flag(name, *cursor == '+' ? "true" : "false",
         JVMFlagOrigin::CRAC_RESTORE, err_msg);
+      cursor += strlen(cursor) + 1;
+    } else if (strncmp(name, "CRaCEngine", ARRAY_SIZE("CRaCEngine") - 1) == 0) {
+      // CRaCEngine and CRaCEngineOptions are not updated from the restoring process
+      assert(strncmp(name, "CRaCEngine=", strlen("CRaCEngine=")) == 0 ||
+             strncmp(name, "CRaCEngineOptions=", strlen("CRaCEngineOptions=")) == 0,
+             "unexpected CRaCEngine* flag: %s", name);
+      result = JVMFlag::Error::SUCCESS;
       cursor += strlen(cursor) + 1;
     } else {
       char* eq = strchrnul(cursor, '=');

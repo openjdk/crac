@@ -315,6 +315,9 @@ AC_DEFUN_ONCE([LIB_SETUP_HARFBUZZ],
   AC_SUBST(HARFBUZZ_LIBS)
 ])
 
+################################################################################
+# Setup CRaC CRIU
+################################################################################
 AC_DEFUN_ONCE([LIB_SETUP_CRIU_CRAC],
 [
   AC_ARG_WITH(criu-crac, [AS_HELP_STRING([--with-criu-crac],

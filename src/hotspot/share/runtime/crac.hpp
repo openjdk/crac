@@ -25,15 +25,19 @@
 #define SHARE_RUNTIME_CRAC_HPP
 
 #include "memory/allStatic.hpp"
+#include "runtime/crac_engine.hpp"
 #include "runtime/handles.hpp"
-#include "utilities/macros.hpp"
+#include "utilities/exceptions.hpp"
 
 // xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
 #define UUID_LENGTH 36
 
 class crac: AllStatic {
+  friend class VM_Crac;
 public:
+  static void print_engine_info_and_exit();
   static void vm_create_start();
+
   static bool prepare_checkpoint();
   static Handle checkpoint(jarray fd_arr, jobjectArray obj_arr, bool dry_run, jlong jcmd_stream, TRAPS);
 
@@ -47,9 +51,6 @@ public:
   static jlong restore_start_time();
   static jlong uptime_since_restore();
 
-  static void record_time_before_checkpoint();
-  static void update_javaTimeNanos_offset();
-
   static jlong monotonic_time_offset() {
     return javaTimeNanos_offset;
   }
@@ -57,12 +58,19 @@ public:
   static void reset_time_counters();
 
 private:
-  static bool read_bootid(char *dest);
-
   static jlong checkpoint_millis;
   static jlong checkpoint_nanos;
   static char checkpoint_bootid[UUID_LENGTH];
   static jlong javaTimeNanos_offset;
+
+  static CracEngine *_engine;
+
+  static bool read_bootid(char *dest);
+
+  static void record_time_before_checkpoint();
+  static void update_javaTimeNanos_offset();
+
+  static int checkpoint_restore(int *shmid);
 };
 
 #endif //SHARE_RUNTIME_CRAC_HPP

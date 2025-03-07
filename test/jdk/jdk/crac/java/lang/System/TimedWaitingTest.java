@@ -116,9 +116,9 @@ public class TimedWaitingTest implements CracTest {
 
     private static void timedWait(Task task, List<Throwable> exceptions, boolean canReturnEarly) {
         try {
-            long before = System.currentTimeMillis();
+            long before = System.nanoTime();
             task.run();
-            long after = System.currentTimeMillis();
+            long after = System.nanoTime();
             if (after - before < WAIT_TIME_MILLIS) {
                 if (canReturnEarly) {
                     // Non-critical

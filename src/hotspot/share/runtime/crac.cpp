@@ -125,6 +125,10 @@ int crac::checkpoint_restore(int *shmid) {
     case CracEngine::ApiStatus::OK: {
       constexpr size_t required_size = sizeof(*shmid);
       const size_t available_size = _engine->get_restore_data(shmid, sizeof(*shmid));
+      if (available_size == 0) { // Possible if we were not killed by the engine and thus there is no restoring JVM
+        *shmid = 0; // Not an error, just no restore data
+        break;
+      }
       if (available_size == required_size) {
         break;
       }
@@ -132,7 +136,8 @@ int crac::checkpoint_restore(int *shmid) {
         log_debug(crac)("CRaC engine has more restore data than expected");
         break;
       }
-      log_error(crac)("CRaC engine failed to provide restore data");
+      log_error(crac)("CRaC engine provided not enough restore data: need %zu bytes, got %zu",
+                      required_size, available_size);
       // fallthrough
     }
     case CracEngine::ApiStatus::ERR:         *shmid = -1; break; // Indicates error to the caller

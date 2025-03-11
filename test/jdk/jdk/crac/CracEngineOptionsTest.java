@@ -157,13 +157,9 @@ public class CracEngineOptionsTest {
 
     @Test
     public void test_options_help() throws Exception {
-        ProcessBuilder pb = ProcessTools.createTestJavaProcessBuilder(
-                "-XX:CRaCEngineOptions=help");
-        OutputAnalyzer out = new OutputAnalyzer(pb.start());
-        out.shouldHaveExitValue(0);
-        out.stdoutShouldContain("Configuration options:");
-        out.stderrShouldBeEmpty();
-        out.shouldNotContain("CRaC engine option:");
+        testHelp();
+        testHelp("-XX:CRaCCheckpointTo=cr");
+        testHelp("-XX:CRaCRestoreFrom=cr");
     }
 
     private void test(String engine) throws Exception {
@@ -199,5 +195,18 @@ public class CracEngineOptionsTest {
         for (String text : notExpectedTexts) {
             out.shouldNotContain(text);
         }
+    }
+
+    private static void testHelp(String... opts) throws Exception {
+        List<String> optsList = new ArrayList(Arrays.asList(opts));
+        optsList.add("-XX:CRaCEngineOptions=help");
+        optsList.add("-Xlog:crac=debug");
+        // Limited to not get non-restore-settable flags with CRaCRestoreFrom
+        ProcessBuilder pb = ProcessTools.createLimitedTestJavaProcessBuilder(optsList);
+        OutputAnalyzer out = new OutputAnalyzer(pb.start());
+        out.shouldHaveExitValue(0);
+        out.stdoutShouldContain("Configuration options:");
+        out.stderrShouldBeEmpty();
+        out.shouldNotContain("CRaC engine option:");
     }
 }

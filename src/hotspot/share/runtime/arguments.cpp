@@ -2261,6 +2261,11 @@ bool Arguments::parse_options_for_restore(const JavaVMInitArgs* args) {
 
   postcond(CRaCRestoreFrom != nullptr);
 
+  if (CRaCEngineOptions && strcmp(CRaCEngineOptions, "help") == 0) {
+    crac::print_engine_info_and_exit(); // Does not return on success
+    return false;
+  }
+
   return true;
 }
 

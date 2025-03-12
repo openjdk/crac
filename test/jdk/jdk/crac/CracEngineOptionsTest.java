@@ -120,6 +120,9 @@ public class CracEngineOptionsTest {
                 "CRaC engine failed to configure: '' = ''");
 
         if (Platform.isLinux()) {
+            test("criuengine", "help,keep_running=true", 1,
+                    "unknown configure option: help",
+                    "CRaC engine failed to configure: 'help' = ''");
             test("criuengine", "direct_map=not a bool", 1,
                     "CRaC engine failed to configure: 'direct_map' = 'not a bool'");
         }
@@ -153,6 +156,17 @@ public class CracEngineOptionsTest {
                     "CRaC engine failed to configure: '--arg3' = ''"
                 ),
                 Arrays.asList("specified multiple times"));
+
+        if (Platform.isLinux()) {
+            test("criuengine",
+                    Arrays.asList("help", "args=-v4"),
+                    1,
+                    Arrays.asList(
+                        "unknown configure option: help",
+                        "CRaC engine failed to configure: 'help' = ''"
+                    ),
+                    Collections.emptyList());
+        }
     }
 
     @Test

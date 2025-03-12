@@ -120,6 +120,9 @@ public class CracEngineOptionsTest {
                 "CRaC engine failed to configure: '' = ''");
 
         if (Platform.isLinux()) {
+            test("criuengine", "help,keep_running=true", 1,
+                    "unknown configure option: help",
+                    "CRaC engine failed to configure: 'help' = ''");
             test("criuengine", "direct_map=not a bool", 1,
                     "CRaC engine failed to configure: 'direct_map' = 'not a bool'");
         }
@@ -153,17 +156,24 @@ public class CracEngineOptionsTest {
                     "CRaC engine failed to configure: '--arg3' = ''"
                 ),
                 Arrays.asList("specified multiple times"));
+
+        if (Platform.isLinux()) {
+            test("criuengine",
+                    Arrays.asList("help", "args=-v4"),
+                    1,
+                    Arrays.asList(
+                        "unknown configure option: help",
+                        "CRaC engine failed to configure: 'help' = ''"
+                    ),
+                    Collections.emptyList());
+        }
     }
 
     @Test
     public void test_options_help() throws Exception {
-        ProcessBuilder pb = ProcessTools.createTestJavaProcessBuilder(
-                "-XX:CRaCEngineOptions=help");
-        OutputAnalyzer out = new OutputAnalyzer(pb.start());
-        out.shouldHaveExitValue(0);
-        out.stdoutShouldContain("Configuration options:");
-        out.stderrShouldBeEmpty();
-        out.shouldNotContain("CRaC engine option:");
+        testHelp();
+        testHelp("-XX:CRaCCheckpointTo=cr");
+        testHelp("-XX:CRaCRestoreFrom=cr");
     }
 
     private void test(String engine) throws Exception {
@@ -199,5 +209,18 @@ public class CracEngineOptionsTest {
         for (String text : notExpectedTexts) {
             out.shouldNotContain(text);
         }
+    }
+
+    private static void testHelp(String... opts) throws Exception {
+        List<String> optsList = new ArrayList(Arrays.asList(opts));
+        optsList.add("-XX:CRaCEngineOptions=help");
+        optsList.add("-Xlog:crac=debug");
+        // Limited to not get non-restore-settable flags with CRaCRestoreFrom
+        ProcessBuilder pb = ProcessTools.createLimitedTestJavaProcessBuilder(optsList);
+        OutputAnalyzer out = new OutputAnalyzer(pb.start());
+        out.shouldHaveExitValue(0);
+        out.stdoutShouldContain("Configuration options:");
+        out.stderrShouldBeEmpty();
+        out.shouldNotContain("CRaC engine option:");
     }
 }

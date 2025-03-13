@@ -312,12 +312,16 @@ void crac::print_engine_info_and_exit() {
     log_error(crac)("CRaC engine failed to provide its textual description");
     return;
   }
+  tty->print_raw_cr(description);
+
   const char *conf_doc = engine.configuration_doc();
   if (conf_doc == nullptr) {
     log_error(crac)("CRaC engine failed to provide documentation of its configuration options");
     return;
   }
-  tty->print_cr("%s\n\nConfiguration options:\n%s", description, conf_doc);
+  tty->cr();
+  tty->print_raw_cr("Configuration options:");
+  tty->print_raw(conf_doc); // Doc string ends with CR by convention
 
   vm_exit(0);
   ShouldNotReachHere();

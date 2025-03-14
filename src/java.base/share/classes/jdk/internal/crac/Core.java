@@ -65,21 +65,25 @@ public class Core {
      * Resources of the same priority will be handled according the context supplied to the priority.
      *
      * Most resources should use priority NORMAL (the lowest priority).
+     *
+     * Note: this is not a enum class to workaround CDS's inability to archive Reference objects,
+     * reachable from some of these contexts, which leads to failures when CDS's AOTClassLinking is
+     * enabled (see JDK-XXXXXXX).
      */
-    public enum Priority {
-        FILE_DESCRIPTORS(new BlockingOrderedContext<>()),
-        PRE_FILE_DESCRIPTORS(new BlockingOrderedContext<>()),
+    public static class Priority {
+        public static final Priority FILE_DESCRIPTORS = new Priority(new BlockingOrderedContext<>());
+        public static final Priority PRE_FILE_DESCRIPTORS = new Priority(new BlockingOrderedContext<>());
         // We use OrderedContext to not cause failure when PlatformRecorder tries to
         // register itself when the recording is started from JfrResource.
-        JFR(new OrderedContext<>()),
-        CLEANERS(new BlockingOrderedContext<>()),
-        REFERENCE_HANDLER(new BlockingOrderedContext<>()),
-        SEEDER_HOLDER(new BlockingOrderedContext<>()),
-        SECURE_RANDOM(new BlockingOrderedContext<>()),
-        NATIVE_PRNG(new BlockingOrderedContext<>()),
-        EPOLLSELECTOR(new BlockingOrderedContext<>()),
-        SOCKETS(new BlockingOrderedContext<>()),
-        NORMAL(new BlockingOrderedContext<>());
+        public static final Priority JFR = new Priority(new OrderedContext<>());
+        public static final Priority CLEANERS = new Priority(new BlockingOrderedContext<>());
+        public static final Priority REFERENCE_HANDLER = new Priority(new BlockingOrderedContext<>());
+        public static final Priority SEEDER_HOLDER = new Priority(new BlockingOrderedContext<>());
+        public static final Priority SECURE_RANDOM = new Priority(new BlockingOrderedContext<>());
+        public static final Priority NATIVE_PRNG = new Priority(new BlockingOrderedContext<>());
+        public static final Priority EPOLLSELECTOR = new Priority(new BlockingOrderedContext<>());
+        public static final Priority SOCKETS = new Priority(new BlockingOrderedContext<>());
+        public static final Priority NORMAL = new Priority(new BlockingOrderedContext<>());
 
         private final Context<JDKResource> context;
         Priority(Context<JDKResource> context) {

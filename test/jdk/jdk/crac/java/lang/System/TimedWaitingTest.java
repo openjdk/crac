@@ -116,16 +116,19 @@ public class TimedWaitingTest implements CracTest {
 
     private static void timedWait(Task task, List<Throwable> exceptions, boolean canReturnEarly) {
         try {
-            long before = System.currentTimeMillis();
+            long before = System.nanoTime();
             task.run();
-            long after = System.currentTimeMillis();
-            if (after - before < WAIT_TIME_MILLIS) {
+            long after = System.nanoTime();
+            if (after - before < TimeUnit.MILLISECONDS.toNanos(WAIT_TIME_MILLIS)) {
+                long actualWaitTimeMillis = TimeUnit.NANOSECONDS.toMillis(after - before); // Rounds down
+                long nanosRemainder = (after - before) - TimeUnit.MILLISECONDS.toNanos(actualWaitTimeMillis);
+                String actualWaitTimeStr = actualWaitTimeMillis + " ms + " + nanosRemainder + " ns";
                 if (canReturnEarly) {
                     // Non-critical
-                    System.err.println(Thread.currentThread().getName() + " took: " + (after - before) + " ms");
+                    System.err.println(Thread.currentThread().getName() + " took: " + actualWaitTimeStr);
                 } else {
                     exceptions.add(new IllegalStateException(
-                            Thread.currentThread().getName() + " was too short: " + (after - before) + " ms"));
+                            Thread.currentThread().getName() + " was too short: " + actualWaitTimeStr));
                 }
             }
         } catch (InterruptedException e) {

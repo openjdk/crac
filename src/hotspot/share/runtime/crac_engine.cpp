@@ -318,7 +318,7 @@ CracEngine::ApiStatus CracEngine::prepare_restore_data_api() {
     return ApiStatus::UNSUPPORTED;
   }
   if (restore_data_api->set_restore_data == nullptr || restore_data_api->get_restore_data == nullptr) {
-    log_error(crac)("CRaC engine provided invalid restore data API");
+    log_error(crac)("CRaC engine provided invalid API for extension: " CRLIB_EXTENSION_RESTORE_DATA_NAME);
     return ApiStatus::ERR;
   }
   _restore_data_api = restore_data_api;
@@ -350,7 +350,7 @@ CracEngine::ApiStatus CracEngine::prepare_description_api() {
       description_api->configuration_doc == nullptr ||
       description_api->configurable_keys == nullptr ||
       description_api->supported_extensions == nullptr) {
-    log_error(crac)("CRaC engine provided invalid restore data API");
+    log_error(crac)("CRaC engine provided invalid API for extension: " CRLIB_EXTENSION_DESCRIPTION_NAME);
     return ApiStatus::ERR;
   }
   _description_api = description_api;

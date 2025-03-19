@@ -231,23 +231,27 @@ public:
   void set_argv_action(const char *action) { _argv[ARGV_ACTION] = action; }
 
   bool set_restore_data(const void *data, size_t size) {
-    if (size != sizeof(_restore_data)) {
-      fprintf(stderr, CREXEC "unsupported size of restore data: %zu - only %zu is supported\n",
-              size, sizeof(_restore_data));
+    constexpr const size_t supported_size = sizeof(_restore_data);
+    if (size > 0 && size != supported_size) {
+      fprintf(stderr,
+              CREXEC "unsupported size of restore data: %zu was requested but only %zu is supported\n",
+              size, supported_size);
       return false;
     }
-    _restore_data = *static_cast<const int *>(data);
+    if (size > 0) {
+      memcpy(&_restore_data, data, size);
+    } else {
+      _restore_data = 0;
+    }
     return true;
   }
 
   size_t get_restore_data(void *buf, size_t size) {
-    if (size < sizeof(_restore_data)) {
-      fprintf(stderr, CREXEC "can only provide >= %zu bytes of restore data but %zu was requested\n",
-              sizeof(_restore_data), size);
-      return 0;
+    constexpr const size_t available_size = sizeof(_restore_data);
+    if (size > 0) {
+      memcpy(buf, &_restore_data, size < available_size ? size : available_size);
     }
-    *static_cast<int *>(buf) = _restore_data;
-    return sizeof(_restore_data);
+    return available_size;
   }
 
 private:

@@ -37,13 +37,14 @@ extern "C" {
 struct crlib_restore_data {
   crlib_extension_t header;
 
-  // Called by the restoring application to pass data to the restored application.
-  // 'data' must not be null, size must be greater than 0.
-  // The engine may impose limits on the data size and return false if it is not accepted.
+  // Called by the restoring application to pass data to the restored application, returns true on
+  // success.
+  // If 'size' is positive 'data' must reference 'size' bytes of data. If 'size' is 0 any previously
+  // recorded restore data is cleared.
   bool (*set_restore_data)(crlib_conf_t *, const void *data, size_t size);
 
   // Called by the restored application to retrieve the data passed by the restoring application.
-  // Copies up to 'size' > 0 bytes of the data into 'buf' != null.
+  // Copies up to 'size' bytes of the data into 'buf' of appropriate size.
   // Returns the size of the data the engine has, in bytes — it can be more, equal to or less than
   // 'size'. Returned value of 0 represents an error.
   size_t (*get_restore_data)(crlib_conf_t *, void *buf, size_t size);

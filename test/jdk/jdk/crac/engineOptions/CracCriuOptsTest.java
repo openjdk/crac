@@ -90,9 +90,10 @@ public class CracCriuOptsTest implements CracTest {
             s.matches("\\(\\d+.\\d+\\) pie: \\d+: Preadv 0x\\p{XDigit}+:\\d+\\.\\.\\. \\(\\d+ iovs\\) \\(mmap [01]\\)")
         ).toList();
         assertFalse(lines.isEmpty(), "At least one log line must match the expected pattern");
+
+        final var end = "(mmap " + (directMap ? "1" : "0") + ")";
         for (var s : lines) {
             // If this fails it means that direct_map is on when it should be off or vise-versa
-            final var end = "(mmap " + (directMap ? "1" : "0") + ")";
             assertTrue(s.endsWith(end), "Log line \"" + s + "\" must end with \"" + end + "\"");
         }
     }

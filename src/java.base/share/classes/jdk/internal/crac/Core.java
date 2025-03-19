@@ -68,7 +68,7 @@ public class Core {
      *
      * Note: this is not a enum class to workaround CDS's inability to archive Reference objects,
      * reachable from some of these contexts, which leads to failures when CDS's AOTClassLinking is
-     * enabled (see JDK-XXXXXXX).
+     * enabled (see JDK-8352394).
      */
     public static class Priority {
         public static final Priority FILE_DESCRIPTORS = new Priority(new BlockingOrderedContext<>());

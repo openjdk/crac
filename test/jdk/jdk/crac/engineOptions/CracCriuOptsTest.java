@@ -65,7 +65,7 @@ public class CracCriuOptsTest implements CracTest {
         // "direct_map=false" engine option is expected to add "--no-mmap-page-image" to
         // CRAC_CRIU_OPTS — this is what we'll check.
         // PREREQ_CHECK checks that the test's pre-requisite has not changed: when neither
-        // direct_map=true nor --no-mmap-page-image is specified direct mapping IS performed.
+        // direct_map=false nor --no-mmap-page-image is specified direct mapping IS performed.
         final boolean disableDirectMap = variant != Variant.PREREQ_CHECK;
         if (variant == Variant.ENVVAR_USED) {
             builder.env(CRAC_CRIU_OPTS, "-v");

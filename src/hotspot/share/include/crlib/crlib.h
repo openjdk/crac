@@ -51,7 +51,7 @@ typedef const struct crlib_extension crlib_extension_t;
 // configuration storage if it needs to keep it.
 struct crlib_api {
   // Initializes a configuration structure.
-  crlib_conf_t *(*create_conf)();
+  crlib_conf_t *(*create_conf)(void);
   // Destroys a configuration structure. The argument can be null.
   void (*destroy_conf)(crlib_conf_t *);
 

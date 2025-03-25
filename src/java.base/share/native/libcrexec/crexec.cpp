@@ -490,7 +490,8 @@ public:
     bool opts_found = false;
     size_t opts_index = 0;
     for (; _env[opts_index] != nullptr; opts_index++) {
-      if (strcmp(_env[opts_index], CRAC_CRIU_OPTS) == 0 && _env[opts_index][CRAC_CRIU_OPTS_LEN] == '=') {
+      if (strncmp(_env[opts_index], CRAC_CRIU_OPTS, CRAC_CRIU_OPTS_LEN) == 0 &&
+          _env[opts_index][CRAC_CRIU_OPTS_LEN] == '=') {
         opts_found = true;
         break;
       }
@@ -540,7 +541,7 @@ static int checkpoint(crlib_conf_t *conf) {
 
   {
     Environment env;
-    if (!env.is_initialized()||
+    if (!env.is_initialized() ||
         (conf->keep_running().value && !env.append("CRAC_CRIU_LEAVE_RUNNING", ""))) {
       return -1;
     }

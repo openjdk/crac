@@ -151,13 +151,19 @@ static char *strdup_checked(const char *src) {
   return res;
 }
 
-static bool parse_bool(const char *str, bool *result) {
+// Value of a boolean configuration option.
+struct BoolOption {
+  bool value;
+  bool is_default = true;
+};
+
+static bool parse_bool(const char *str, BoolOption *result) {
   if (strcmp(str, "true") == 0) {
-    *result = true;
+    *result = {true, false};
     return true;
   }
   if (strcmp(str, "false") == 0) {
-    *result = false;
+    *result = {false, false};
     return true;
   }
   fprintf(stderr, CREXEC "expected '%s' to be either 'true' or 'false'\n", str);
@@ -180,8 +186,8 @@ private:
     configure_options, ARRAY_SIZE(configure_options) - 1 /* omit nullptr */
   };
 
-  bool _keep_running = false;
-  bool _direct_map = false;
+  BoolOption _keep_running{false};
+  BoolOption _direct_map{true};
   int _restore_data = 0;
   const char *_argv[ARGV_LAST + 2] = {}; // Last element is required to be null
 
@@ -208,8 +214,8 @@ public:
   // Use this to check whether the constructor succeeded.
   bool is_initialized() const { return _options.is_initialized(); }
 
-  bool keep_running() const { return _keep_running; }
-  bool direct_map() const { return _direct_map; }
+  BoolOption keep_running() const { return _keep_running; }
+  BoolOption direct_map() const { return _direct_map; }
   int restore_data() const { return _restore_data; }
   const char * const *argv() const { return _argv; }
 
@@ -363,7 +369,7 @@ static const char *configuration_doc(crlib_conf_t *conf) {
   return
     "* keep_running=<true/false> (default: false) - keep the process running after the checkpoint "
     "or kill it.\n"
-    "* direct_map=<true/false> (default: false) - on restore, map process data directly from saved "
+    "* direct_map=<true/false> (default: true) - on restore, map process data directly from saved "
     "files. This may speedup the restore but the resulting process will not be the same as before "
     "the checkpoint.\n"
     "* args=<string> (default: \"\") - free space-separated arguments passed directly to the "
@@ -528,14 +534,14 @@ static int checkpoint(crlib_conf_t *conf) {
   }
   conf->set_argv_action("checkpoint");
 
-  if (conf->direct_map()) {
+  if (!conf->direct_map().is_default) {
     fprintf(stderr, CREXEC "%s has no effect on checkpoint\n", opt_direct_map);
   }
 
   {
     Environment env;
     if (!env.is_initialized()||
-        (conf->keep_running() && !env.append("CRAC_CRIU_LEAVE_RUNNING", ""))) {
+        (conf->keep_running().value && !env.append("CRAC_CRIU_LEAVE_RUNNING", ""))) {
       return -1;
     }
 
@@ -582,7 +588,7 @@ static int restore(crlib_conf_t *conf) {
   }
   conf->set_argv_action("restore");
 
-  if (conf->keep_running()) {
+  if (!conf->keep_running().is_default) {
     fprintf(stderr, CREXEC "%s has no effect on restore\n", opt_keep_running);
   }
 
@@ -596,7 +602,7 @@ static int restore(crlib_conf_t *conf) {
   Environment env;
   if (!env.is_initialized() ||
       !env.append("CRAC_NEW_ARGS_ID", restore_data_str) ||
-      (!conf->direct_map() && !env.add_criu_option("--no-mmap-page-image"))) {
+      (!conf->direct_map().value && !env.add_criu_option("--no-mmap-page-image"))) {
     return -1;
   }
 

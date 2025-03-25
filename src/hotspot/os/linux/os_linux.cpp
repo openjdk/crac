@@ -1492,9 +1492,6 @@ double os::elapsedVTime() {
 }
 
 void os::Linux::fast_thread_clock_init() {
-  if (!UseLinuxPosixThreadCPUClocks) {
-    return;
-  }
   clockid_t clockid;
   struct timespec tp;
   int (*pthread_getcpuclockid_func)(pthread_t, clockid_t *) =

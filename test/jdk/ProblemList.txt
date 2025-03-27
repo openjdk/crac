@@ -513,6 +513,12 @@ java/beans/XMLEncoder/Test6570354.java 8015593 macosx-all
 
 ############################################################################
 
+# jdk_crac
+
+jdk/crac/LinkedCleanableRefTest.java                            8353064 generic-all
+
+############################################################################
+
 # jdk_lang
 
 java/lang/invoke/LFCaching/LFMultiThreadCachingTest.java        8151492 generic-all

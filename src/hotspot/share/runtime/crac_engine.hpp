@@ -29,6 +29,7 @@
 #include "crlib/crlib_restore_data.h"
 #include "memory/allocation.hpp"
 #include "nmt/memTag.hpp"
+#include "utilities/growableArray.hpp"
 
 #include <cstddef>
 #include <cstdint>
@@ -62,6 +63,7 @@ public:
   ApiStatus prepare_description_api();
   const char *description() const;
   const char *configuration_doc() const;
+  GrowableArrayCHeap<const char *, MemTag::mtInternal> *vm_controlled_options() const;
 
 private:
   void *_lib = nullptr;

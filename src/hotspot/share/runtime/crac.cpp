@@ -31,6 +31,7 @@
 #include "logging/logConfiguration.hpp"
 #include "memory/allocation.hpp"
 #include "memory/oopFactory.hpp"
+#include "nmt/memTag.hpp"
 #include "oops/typeArrayOop.inline.hpp"
 #include "prims/jvmtiExport.hpp"
 #include "runtime/crac_engine.hpp"
@@ -50,6 +51,7 @@
 #include "os.inline.hpp"
 #include "utilities/defaultStream.hpp"
 #include "utilities/globalDefinitions.hpp"
+#include "utilities/growableArray.hpp"
 #include "utilities/ostream.hpp"
 
 static jlong _restore_start_time;
@@ -322,6 +324,19 @@ void crac::print_engine_info_and_exit() {
   tty->cr();
   tty->print_raw_cr("Configuration options:");
   tty->print_raw(conf_doc); // Doc string ends with CR by convention
+
+  const GrowableArrayCHeap<const char *, MemTag::mtInternal> *controlled_opts = engine.vm_controlled_options();
+  assert(controlled_opts != nullptr, "must be");
+  if (!controlled_opts->is_empty()) {
+    tty->cr();
+    tty->print_raw("Configuration options controlled by the JVM:");
+    for (const char *opt : *controlled_opts) {
+      tty->print_raw(" ");
+      tty->print_raw(opt);
+    }
+    tty->cr();
+  }
+  delete controlled_opts;
 
   vm_exit(0);
   ShouldNotReachHere();

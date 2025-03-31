@@ -1,20 +1,48 @@
+/*
+ * Copyright (c) 2025, Azul Systems, Inc. All rights reserved.
+ * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
+ *
+ * This code is free software; you can redistribute it and/or modify it
+ * under the terms of the GNU General Public License version 2 only, as
+ * published by the Free Software Foundation.
+ *
+ * This code is distributed in the hope that it will be useful, but WITHOUT
+ * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+ * FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
+ * version 2 for more details (a copy is included in the LICENSE file that
+ * accompanied this code).
+ *
+ * You should have received a copy of the GNU General Public License version
+ * 2 along with this work; if not, write to the Free Software Foundation,
+ * Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301 USA.
+ *
+ * Please contact Oracle, 500 Oracle Parkway, Redwood Shores, CA 94065 USA
+ * or visit www.oracle.com if you need additional information or have any
+ * questions.
+ */
+
 #include "precompiled.hpp"
 
 #include "crlib/crlib.h"
 #include "crlib/crlib_restore_data.h"
 #include "logging/log.hpp"
 #include "memory/allStatic.hpp"
+#include "nmt/memTag.hpp"
 #include "runtime/crac_engine.hpp"
 #include "runtime/globals.hpp"
 #include "runtime/os.hpp"
 #include "utilities/debug.hpp"
+#include "utilities/growableArray.hpp"
 #include "utilities/macros.hpp"
 #include "utilities/resourceHash.hpp"
 
 #include <cstddef>
 #include <cstring>
 
-// CRaC engine configuration options JVM sets directly instead of relaying from the user
+// CRaC engine configuration options that JVM sets directly.
+// If an option is controlled exctusively by JVM (i.e. the user is not allowed
+// to pass the option through CRaCEngineOptions) it should be listed in
+// CracEngine::vm_controlled_options().
 #define ENGINE_OPT_IMAGE_LOCATION "image_location"
 #define ENGINE_OPT_EXEC_LOCATION "exec_location"
 
@@ -157,7 +185,7 @@ static crlib_conf_t *create_conf(const crlib_api_t &api, const char *image_locat
 
   if (exec_location != nullptr) { // Only passed when using crexec
     guarantee(api.can_configure(conf, ENGINE_OPT_EXEC_LOCATION),
-              "crexec does not support an internal option: " ENGINE_OPT_EXEC_LOCATION);
+              "crexec does not support expected option: " ENGINE_OPT_EXEC_LOCATION);
     if (!api.configure(conf, ENGINE_OPT_EXEC_LOCATION, exec_location)) {
       log_error(crac)("crexec failed to configure: '" ENGINE_OPT_EXEC_LOCATION "' = '%s'", exec_location);
       api.destroy_conf(conf);
@@ -365,4 +393,32 @@ const char *CracEngine::description() const {
 const char *CracEngine::configuration_doc() const {
   precond(_description_api != nullptr);
   return _description_api->configuration_doc(_conf);
+}
+
+GrowableArrayCHeap<const char *, MemTag::mtInternal> *CracEngine::vm_controlled_options() const {
+  precond(_description_api != nullptr);
+
+  auto * const opts = new GrowableArrayCHeap<const char *, MemTag::mtInternal>();
+
+  if (_api->can_configure(_conf, ENGINE_OPT_IMAGE_LOCATION)) {
+    opts->append(ENGINE_OPT_IMAGE_LOCATION);
+  } else {
+    log_debug(crac)("CRaC engine does not support expected option: " ENGINE_OPT_IMAGE_LOCATION);
+  }
+
+  const char *id = _description_api->identity(_conf);
+  if (id == nullptr) {
+    log_debug(crac)("CRaC engine failed to identify itself");
+    return opts;
+  }
+
+  if (strcmp(id, "crexec") == 0) {
+    if (_api->can_configure(_conf, ENGINE_OPT_EXEC_LOCATION)) {
+      opts->append(ENGINE_OPT_EXEC_LOCATION);
+    } else {
+      log_debug(crac)("CRaC engine does not support expected option: " ENGINE_OPT_EXEC_LOCATION);
+    }
+  }
+
+  return opts;
 }

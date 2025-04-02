@@ -176,18 +176,9 @@ public class BasicImageReader implements AutoCloseable {
             return;
         }
         try {
-            Object[] priorities = priorityClass.getEnumConstants();
-            if (priorities == null) {
-                return;
-            }
-            Object normalPriority = null;
-            for (int i = 0; i < priorities.length; ++i) {
-                if ("NORMAL".equals(priorities[i].toString())) {
-                    normalPriority = priorities[i];
-                }
-            }
+            Object normalPriority = priorityClass.getDeclaredField("NORMAL").get(null);
             if (normalPriority == null) {
-                throw new IllegalStateException();
+                throw new IllegalStateException("CRaC resource priority NORMAL is null");
             }
             Class<?> resourceClass = Class.forName("jdk.internal.crac.mirror.Resource");
             Method getContextMethod = priorityClass.getMethod("getContext");
@@ -198,7 +189,7 @@ public class BasicImageReader implements AutoCloseable {
         } catch (IllegalAccessException e) {
             // try to register via public API
             registerIfPublicCracPresent();
-        } catch (NoSuchMethodException | InvocationTargetException | ClassNotFoundException e) {
+        } catch (NoSuchFieldException | NoSuchMethodException | InvocationTargetException | ClassNotFoundException e) {
             throw new IllegalStateException(e);
         }
     }

@@ -31,6 +31,7 @@
 #include "logging/logConfiguration.hpp"
 #include "memory/allocation.hpp"
 #include "memory/oopFactory.hpp"
+#include "nmt/memTracker.hpp"
 #include "oops/typeArrayOop.inline.hpp"
 #include "prims/jvmtiExport.hpp"
 #include "runtime/crac_engine.hpp"

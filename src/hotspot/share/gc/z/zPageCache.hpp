@@ -58,7 +58,7 @@ public:
   void free_page(ZPage* page);
 
   void flush_for_allocation(size_t requested, ZList<ZPage>* to);
-  size_t flush_for_uncommit(size_t requested, ZList<ZPage>* to, uint64_t* timeout);
+  size_t flush_for_uncommit(size_t requested, ZList<ZPage>* to, uint64_t* timeout, uintx delay);
 
   void set_last_commit();
 };

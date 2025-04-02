@@ -120,7 +120,7 @@ private:
 
   void satisfy_stalled();
 
-  size_t uncommit(uint64_t* timeout);
+  size_t uncommit(uint64_t* timeout, uintx delay);
 
   void notify_out_of_memory();
   void restart_gc() const;
@@ -169,6 +169,8 @@ public:
   void handle_alloc_stalling_for_old(bool cleared_soft_refs);
 
   void threads_do(ThreadClosure* tc) const;
+
+  void cleanup_unused();
 };
 
 class ZPageAllocatorStats {

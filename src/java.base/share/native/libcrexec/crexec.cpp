@@ -362,18 +362,16 @@ static const char *description(crlib_conf_t *conf) {
 }
 
 static const char *configuration_doc(crlib_conf_t *conf) {
-  // Internal options which are expected to be set by the program crexec is linked to are omitted
-  // since users are not supposed to pass them directly:
-  // * image_location=<path> (no default) - path to a directory with checkpoint/restore files.
-  // * exec_location=<path> (no default) - path to the engine executable.
   return
+    "* image_location=<path> (no default) - path to a directory with checkpoint/restore files.\n"
+    "* exec_location=<path> (no default) - path to the engine executable.\n"
     "* keep_running=<true/false> (default: false) - keep the process running after the checkpoint "
     "or kill it.\n"
     "* direct_map=<true/false> (default: true) - on restore, map process data directly from saved "
     "files. This may speedup the restore but the resulting process will not be the same as before "
     "the checkpoint.\n"
     "* args=<string> (default: \"\") - free space-separated arguments passed directly to the "
-    "engine executable, e.g. \"--arg1 --arg2 --arg3\".";
+    "engine executable, e.g. \"--arg1 --arg2 --arg3\".\n";
 }
 
 static const char * const *configurable_keys(crlib_conf_t *conf) {

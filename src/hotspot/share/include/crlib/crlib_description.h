@@ -50,13 +50,10 @@ struct crlib_description {
   // Returns a valid C-string with a formatted list of configuration keys supported by the engine
   // with their descriptions, or null on error.
   //
-  // Some keys can be excluded if they are not supposed to be set by a user but rather by the
-  // application the engine is linked to.
-  //
   // Example:
   // "
   // * do_stuff=<true/false> (default: true) — whether to do stuff.\n
-  // * args=<string> (default: \"\") — other arguments.
+  // * args=<string> (default: \"\") — other arguments.\n
   // "
   const char *(*configuration_doc)(crlib_conf_t *);
 

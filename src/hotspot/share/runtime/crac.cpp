@@ -327,12 +327,14 @@ void crac::print_engine_info_and_exit() {
 
   const GrowableArrayCHeap<const char *, MemTag::mtInternal> *controlled_opts = engine.vm_controlled_options();
   assert(controlled_opts != nullptr, "must be");
-  if (!controlled_opts->is_empty()) {
+  if (controlled_opts->is_nonempty()) {
     tty->cr();
-    tty->print_raw("Configuration options controlled by the JVM:");
-    for (const char *opt : *controlled_opts) {
-      tty->print_raw(" ");
-      tty->print_raw(opt);
+    tty->print_raw("Configuration options controlled by the JVM: ");
+    for (int i = 0; i < controlled_opts->length(); i++) {
+      tty->print_raw(controlled_opts->at(i));
+      if (i != controlled_opts->length() - 1) {
+        tty->print_raw(", ");
+      }
     }
     tty->cr();
   }

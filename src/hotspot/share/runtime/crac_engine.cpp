@@ -400,24 +400,22 @@ GrowableArrayCHeap<const char *, MemTag::mtInternal> *CracEngine::vm_controlled_
 
   auto * const opts = new GrowableArrayCHeap<const char *, MemTag::mtInternal>();
 
+  // We expect all engines to support this but the error is to be shown when configuring checkpoint
   if (_api->can_configure(_conf, ENGINE_OPT_IMAGE_LOCATION)) {
     opts->append(ENGINE_OPT_IMAGE_LOCATION);
-  } else {
-    log_debug(crac)("CRaC engine does not support expected option: " ENGINE_OPT_IMAGE_LOCATION);
   }
 
+  // ID-based checks are not fully robust as engines are free to use any ID (e.g. external engines
+  // can try to "impersonate" themselves as crexec) but in reality engines are expected to use
+  // destinct IDs so this shouldn't cause problems
   const char *id = _description_api->identity(_conf);
   if (id == nullptr) {
     log_debug(crac)("CRaC engine failed to identify itself");
     return opts;
   }
 
-  if (strcmp(id, "crexec") == 0) {
-    if (_api->can_configure(_conf, ENGINE_OPT_EXEC_LOCATION)) {
-      opts->append(ENGINE_OPT_EXEC_LOCATION);
-    } else {
-      log_debug(crac)("CRaC engine does not support expected option: " ENGINE_OPT_EXEC_LOCATION);
-    }
+  if (strcmp(id, "crexec") == 0 && _api->can_configure(_conf, ENGINE_OPT_EXEC_LOCATION)) {
+    opts->append(ENGINE_OPT_EXEC_LOCATION);
   }
 
   return opts;

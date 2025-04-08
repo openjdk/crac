@@ -36,6 +36,8 @@
 // CRaC engine library wrapper.
 class CracEngine : public CHeapObj<mtInternal> {
 public:
+  static const char * const *vm_controlled_options();
+
   explicit CracEngine(const char *image_location = nullptr);
   ~CracEngine();
 

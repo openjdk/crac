@@ -663,4 +663,5 @@ void crac::update_javaTimeNanos_offset() {
       javaTimeNanos_offset -= diff;
     }
   }
+  postcond(os::javaTimeNanos() >= checkpoint_nanos);
 }

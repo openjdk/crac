@@ -29,7 +29,6 @@
 #include "crlib/crlib_restore_data.h"
 #include "memory/allocation.hpp"
 #include "nmt/memTag.hpp"
-#include "utilities/growableArray.hpp"
 
 #include <cstddef>
 #include <cstdint>
@@ -37,6 +36,8 @@
 // CRaC engine library wrapper.
 class CracEngine : public CHeapObj<mtInternal> {
 public:
+  static const char * const *vm_controlled_options();
+
   explicit CracEngine(const char *image_location = nullptr);
   ~CracEngine();
 
@@ -63,7 +64,6 @@ public:
   ApiStatus prepare_description_api();
   const char *description() const;
   const char *configuration_doc() const;
-  GrowableArrayCHeap<const char *, MemTag::mtInternal> *vm_controlled_options() const;
 
 private:
   void *_lib = nullptr;

@@ -81,7 +81,7 @@ public class ParsingTest {
     public void test_options() throws Exception {
         test("simengine", "");
         test("simengine", "image_location=cr", 0,
-                "Internal CRaC engine option provided, skipping: image_location");
+                "VM-controlled CRaC engine option provided, skipping: image_location");
         if (Platform.isLinux()) {
             test("criuengine", Arrays.asList("keep_running=true,args=-v -v -v -v"), 0,
                     Arrays.asList(

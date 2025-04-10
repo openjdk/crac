@@ -348,6 +348,11 @@ bool VM_Crac::check_fds() {
       continue;
     }
 
+    if (!strncmp(details, "/memfd:", 7)) {
+      print_resources("OK: memfd\n");
+      continue;
+    }
+
     if (CRaCAllowedOpenFilePrefixes != nullptr) {
       const char *prefix = CRaCAllowedOpenFilePrefixes;
       // JDK appends to ccstrlist using newline, on command line that would be comma

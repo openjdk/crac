@@ -32,6 +32,7 @@
 #include "memory/allocation.hpp"
 #include "memory/oopFactory.hpp"
 #include "nmt/memTag.hpp"
+#include "nmt/memTracker.hpp"
 #include "oops/typeArrayOop.inline.hpp"
 #include "prims/jvmtiExport.hpp"
 #include "runtime/crac_engine.hpp"
@@ -421,6 +422,10 @@ Handle crac::checkpoint(jarray fd_arr, jobjectArray obj_arr, bool dry_run, jlong
   }
 
   JFR_ONLY(Jfr::before_checkpoint();)
+
+  if (PrintNMTStatistics) {
+    MemTracker::final_report(tty);
+  }
 
   AsyncLogWriter* aio_writer = AsyncLogWriter::instance();
   if (aio_writer) {

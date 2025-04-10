@@ -68,7 +68,7 @@ void ZUncommitter::run_thread() {
 
     while (should_continue()) {
       // Uncommit chunk
-      const size_t flushed = _page_allocator->uncommit(&timeout);
+      const size_t flushed = _page_allocator->uncommit(&timeout, ZUncommitDelay);
       if (flushed == 0) {
         // Done
         break;

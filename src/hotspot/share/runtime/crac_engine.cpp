@@ -1,9 +1,33 @@
+/*
+ * Copyright (c) 2025, Azul Systems, Inc. All rights reserved.
+ * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
+ *
+ * This code is free software; you can redistribute it and/or modify it
+ * under the terms of the GNU General Public License version 2 only, as
+ * published by the Free Software Foundation.
+ *
+ * This code is distributed in the hope that it will be useful, but WITHOUT
+ * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+ * FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
+ * version 2 for more details (a copy is included in the LICENSE file that
+ * accompanied this code).
+ *
+ * You should have received a copy of the GNU General Public License version
+ * 2 along with this work; if not, write to the Free Software Foundation,
+ * Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301 USA.
+ *
+ * Please contact Oracle, 500 Oracle Parkway, Redwood Shores, CA 94065 USA
+ * or visit www.oracle.com if you need additional information or have any
+ * questions.
+ */
+
 #include "precompiled.hpp"
 
 #include "crlib/crlib.h"
 #include "crlib/crlib_restore_data.h"
 #include "logging/log.hpp"
 #include "memory/allStatic.hpp"
+#include "nmt/memTag.hpp"
 #include "runtime/crac_engine.hpp"
 #include "runtime/globals.hpp"
 #include "runtime/os.hpp"
@@ -15,8 +39,19 @@
 #include <cstring>
 
 // CRaC engine configuration options JVM sets directly instead of relaying from the user
-#define ENGINE_OPT_IMAGE_LOCATION "image_location"
-#define ENGINE_OPT_EXEC_LOCATION "exec_location"
+#define VM_CONTROLLED_ENGINE_OPTS(OPT) \
+  OPT(image_location) \
+  OPT(exec_location) \
+
+#define ARRAY_ELEM(opt) #opt,
+static constexpr const char * const vm_controlled_engine_opts[] = {
+  VM_CONTROLLED_ENGINE_OPTS(ARRAY_ELEM) nullptr
+};
+#undef ARRAY_ELEM
+
+#define DEFINE_OPT_VAR(opt) static constexpr const char engine_opt_##opt[] = #opt;
+VM_CONTROLLED_ENGINE_OPTS(DEFINE_OPT_VAR)
+#undef DEFINE_OPT_VAR
 
 #ifdef _WINDOWS
 static char *strsep(char **strp, const char *delim) {
@@ -34,6 +69,10 @@ static char *strsep(char **strp, const char *delim) {
   return str;
 }
 #endif // _WINDOWS
+
+const char * const *CracEngine::vm_controlled_options() {
+  return vm_controlled_engine_opts;
+}
 
 static bool find_engine(const char *dll_dir, char *path, size_t path_size, bool *is_library) {
   // Try to interpret as a file path
@@ -111,8 +150,8 @@ static bool find_engine(const char *dll_dir, char *path, size_t path_size, bool 
 
 static bool configure_image_location(const crlib_api_t &api, crlib_conf_t *conf, const char *image_location) {
   precond(image_location != nullptr && image_location[0] != '\0');
-  if (!api.configure(conf, ENGINE_OPT_IMAGE_LOCATION, image_location)) {
-    log_error(crac)("CRaC engine failed to configure: '" ENGINE_OPT_IMAGE_LOCATION "' = '%s'", image_location);
+  if (!api.configure(conf, engine_opt_image_location, image_location)) {
+    log_error(crac)("CRaC engine failed to configure: '%s' = '%s'", engine_opt_image_location, image_location);
     return false;
   }
   return true;
@@ -156,10 +195,10 @@ static crlib_conf_t *create_conf(const crlib_api_t &api, const char *image_locat
   }
 
   if (exec_location != nullptr) { // Only passed when using crexec
-    guarantee(api.can_configure(conf, ENGINE_OPT_EXEC_LOCATION),
-              "crexec does not support an internal option: " ENGINE_OPT_EXEC_LOCATION);
-    if (!api.configure(conf, ENGINE_OPT_EXEC_LOCATION, exec_location)) {
-      log_error(crac)("crexec failed to configure: '" ENGINE_OPT_EXEC_LOCATION "' = '%s'", exec_location);
+    guarantee(api.can_configure(conf, engine_opt_exec_location),
+              "crexec does not support expected option: %s", engine_opt_exec_location);
+    if (!api.configure(conf, engine_opt_exec_location, exec_location)) {
+      log_error(crac)("crexec failed to configure: '%s' = '%s'", engine_opt_exec_location, exec_location);
       api.destroy_conf(conf);
       return nullptr;
     }
@@ -169,6 +208,11 @@ static crlib_conf_t *create_conf(const crlib_api_t &api, const char *image_locat
     return conf;
   }
 
+  CStringSet vm_controlled_keys;
+#define PUT_CONTROLLED_KEY(opt) vm_controlled_keys.put_when_absent(engine_opt_##opt, false);
+  VM_CONTROLLED_ENGINE_OPTS(PUT_CONTROLLED_KEY)
+#undef PUT_CONTROLLED_KEY
+
   char *engine_options = os::strdup_check_oom(CRaCEngineOptions, mtInternal);
   char *const engine_options_start = engine_options;
   CStringSet keys;
@@ -177,9 +221,8 @@ static crlib_conf_t *create_conf(const crlib_api_t &api, const char *image_locat
     const char *key = strsep(&key_value, "=");
     const char *value = key_value != nullptr ? key_value : "";
     assert(key != nullptr, "Should have terminated before");
-    if (strcmp(key, ENGINE_OPT_IMAGE_LOCATION) == 0 ||
-        (exec_location != nullptr && strcmp(key, ENGINE_OPT_EXEC_LOCATION) == 0)) {
-      log_warning(crac)("Internal CRaC engine option provided, skipping: %s", key);
+    if (vm_controlled_keys.contains(key)) {
+      log_warning(crac)("VM-controlled CRaC engine option provided, skipping: %s", key);
       continue;
     }
     {

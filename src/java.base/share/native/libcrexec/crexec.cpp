@@ -362,18 +362,16 @@ static const char *description(crlib_conf_t *conf) {
 }
 
 static const char *configuration_doc(crlib_conf_t *conf) {
-  // Internal options which are expected to be set by the program crexec is linked to are omitted
-  // since users are not supposed to pass them directly:
-  // * image_location=<path> (no default) - path to a directory with checkpoint/restore files.
-  // * exec_location=<path> (no default) - path to the engine executable.
   return
+    "* image_location=<path> (no default) - path to a directory with checkpoint/restore files.\n"
+    "* exec_location=<path> (no default) - path to the engine executable.\n"
     "* keep_running=<true/false> (default: false) - keep the process running after the checkpoint "
     "or kill it.\n"
     "* direct_map=<true/false> (default: true) - on restore, map process data directly from saved "
     "files. This may speedup the restore but the resulting process will not be the same as before "
     "the checkpoint.\n"
     "* args=<string> (default: \"\") - free space-separated arguments passed directly to the "
-    "engine executable, e.g. \"--arg1 --arg2 --arg3\".";
+    "engine executable, e.g. \"--arg1 --arg2 --arg3\".\n";
 }
 
 static const char * const *configurable_keys(crlib_conf_t *conf) {
@@ -490,7 +488,8 @@ public:
     bool opts_found = false;
     size_t opts_index = 0;
     for (; _env[opts_index] != nullptr; opts_index++) {
-      if (strcmp(_env[opts_index], CRAC_CRIU_OPTS) == 0 && _env[opts_index][CRAC_CRIU_OPTS_LEN] == '=') {
+      if (strncmp(_env[opts_index], CRAC_CRIU_OPTS, CRAC_CRIU_OPTS_LEN) == 0 &&
+          _env[opts_index][CRAC_CRIU_OPTS_LEN] == '=') {
         opts_found = true;
         break;
       }
@@ -540,7 +539,7 @@ static int checkpoint(crlib_conf_t *conf) {
 
   {
     Environment env;
-    if (!env.is_initialized()||
+    if (!env.is_initialized() ||
         (conf->keep_running().value && !env.append("CRAC_CRIU_LEAVE_RUNNING", ""))) {
       return -1;
     }

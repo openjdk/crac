@@ -35,12 +35,11 @@ import java.util.*;
 
 /*
 * @test
-* @summary Testing CRaCEngine and CRaCEngineOptions VM options.
+* @summary Testing parsing of CRaCEngine and CRaCEngineOptions VM options.
 * @library /test/lib
-* @build CracEngineOptionsTest
-* @run junit/othervm CracEngineOptionsTest
+* @run junit/othervm ParsingTest
 */
-public class CracEngineOptionsTest {
+public class ParsingTest {
     @BeforeClass
     public static void checkCriu() {
         final boolean hasCriu = Path.of(Utils.TEST_JDK, "lib", "criuengine").toFile().exists();
@@ -82,7 +81,7 @@ public class CracEngineOptionsTest {
     public void test_options() throws Exception {
         test("simengine", "");
         test("simengine", "image_location=cr", 0,
-                "Internal CRaC engine option provided, skipping: image_location");
+                "VM-controlled CRaC engine option provided, skipping: image_location");
         if (Platform.isLinux()) {
             test("criuengine", Arrays.asList("keep_running=true,args=-v -v -v -v"), 0,
                     Arrays.asList(
@@ -169,13 +168,6 @@ public class CracEngineOptionsTest {
         }
     }
 
-    @Test
-    public void test_options_help() throws Exception {
-        testHelp();
-        testHelp("-XX:CRaCCheckpointTo=cr");
-        testHelp("-XX:CRaCRestoreFrom=cr");
-    }
-
     private void test(String engine) throws Exception {
         test(engine, Collections.emptyList(), 0, Collections.emptyList(), Collections.emptyList());
     }
@@ -209,18 +201,5 @@ public class CracEngineOptionsTest {
         for (String text : notExpectedTexts) {
             out.shouldNotContain(text);
         }
-    }
-
-    private static void testHelp(String... opts) throws Exception {
-        List<String> optsList = new ArrayList(Arrays.asList(opts));
-        optsList.add("-XX:CRaCEngineOptions=help");
-        optsList.add("-Xlog:crac=debug");
-        // Limited to not get non-restore-settable flags with CRaCRestoreFrom
-        ProcessBuilder pb = ProcessTools.createLimitedTestJavaProcessBuilder(optsList);
-        OutputAnalyzer out = new OutputAnalyzer(pb.start());
-        out.shouldHaveExitValue(0);
-        out.stdoutShouldContain("Configuration options:");
-        out.stderrShouldBeEmpty();
-        out.shouldNotContain("CRaC engine option:");
     }
 }

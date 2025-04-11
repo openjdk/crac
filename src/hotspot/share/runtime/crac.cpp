@@ -59,8 +59,9 @@ static jlong _restore_start_nanos;
 
 CracEngine *crac::_engine = nullptr;
 // Timestamps recorded before checkpoint
-jlong crac::checkpoint_millis;
-jlong crac::checkpoint_nanos;
+jlong crac::checkpoint_wallclock_seconds; // Wall clock time, full seconds
+jlong crac::checkpoint_wallclock_nanos;   // Wall clock time, nanoseconds remainder [0, 999999999]
+jlong crac::checkpoint_monotonic_nanos;   // Monotonic time
 char crac::checkpoint_bootid[UUID_LENGTH];
 // Value based on wall clock time difference that will guarantee monotonic
 // System.nanoTime() close to actual wall-clock time difference.
@@ -630,8 +631,8 @@ bool CracRestoreParameters::read_from(int fd) {
 }
 
 void crac::record_time_before_checkpoint() {
-  checkpoint_millis = os::javaTimeMillis();
-  checkpoint_nanos = os::javaTimeNanos();
+  os::javaTimeSystemUTC(checkpoint_wallclock_seconds, checkpoint_wallclock_nanos);
+  checkpoint_monotonic_nanos = os::javaTimeNanos();
   memset(checkpoint_bootid, 0, UUID_LENGTH);
   read_bootid(checkpoint_bootid);
 }
@@ -646,19 +647,25 @@ void crac::update_javaTimeNanos_offset() {
   // won't offset the time based on wall-clock time as this change in monotonic
   // time is likely intentional.
   if (!read_bootid(buf) || memcmp(buf, checkpoint_bootid, UUID_LENGTH) != 0) {
-    assert(checkpoint_millis >= 0, "Restore without a checkpoint?");
-    long diff_millis = os::javaTimeMillis() - checkpoint_millis;
+    jlong current_wallclock_seconds;
+    jlong current_wallclock_nanos;
+    os::javaTimeSystemUTC(current_wallclock_seconds, current_wallclock_nanos);
+
+    jlong diff_wallclock =
+      (current_wallclock_seconds - checkpoint_wallclock_seconds) * NANOSECS_PER_SEC +
+      current_wallclock_nanos - checkpoint_wallclock_nanos;
     // If the wall clock has gone backwards we won't add it to the offset
-    if (diff_millis < 0) {
-      diff_millis = 0;
+    if (diff_wallclock < 0) {
+      diff_wallclock = 0;
     }
+
     // javaTimeNanos() call on the second line below uses the *_offset, so we will zero
     // it to make the call return true monotonic time rather than the adjusted value.
     javaTimeNanos_offset = 0;
-    javaTimeNanos_offset = checkpoint_nanos - os::javaTimeNanos() + diff_millis * 1000000L;
+    javaTimeNanos_offset = checkpoint_monotonic_nanos - os::javaTimeNanos() + diff_wallclock;
   } else {
     // ensure monotonicity even if this looks like the same boot
-    jlong diff = os::javaTimeNanos() - checkpoint_nanos;
+    jlong diff = os::javaTimeNanos() - checkpoint_monotonic_nanos;
     if (diff < 0) {
       javaTimeNanos_offset -= diff;
     }

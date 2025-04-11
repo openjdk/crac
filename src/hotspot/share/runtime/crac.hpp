@@ -58,8 +58,9 @@ public:
   static void reset_time_counters();
 
 private:
-  static jlong checkpoint_millis;
-  static jlong checkpoint_nanos;
+  static jlong checkpoint_wallclock_seconds;
+  static jlong checkpoint_wallclock_nanos;
+  static jlong checkpoint_monotonic_nanos;
   static char checkpoint_bootid[UUID_LENGTH];
   static jlong javaTimeNanos_offset;
 

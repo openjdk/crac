@@ -45,10 +45,6 @@
 #if INCLUDE_SERVICES
 #ifndef AIX
 
-#ifndef UNIX_PATH_MAX
-#define UNIX_PATH_MAX   sizeof(((struct sockaddr_un *)0)->sun_path)
-#endif
-
 // The attach mechanism on Linux and BSD uses a UNIX domain socket. An attach
 // listener thread is created at startup or is created on-demand via a signal
 // from the client tool. The attach listener creates a socket and binds it to a
@@ -71,35 +67,6 @@ bool PosixAttachListener::_has_path;
 volatile int PosixAttachListener::_listener = -1;
 bool PosixAttachListener::_atexit_registered = false;
 PosixAttachOperation* PosixAttachListener::_current_op = nullptr;
-
-// Supporting class to help split a buffer into individual components
-class ArgumentIterator : public StackObj {
- private:
-  char* _pos;
-  char* _end;
- public:
-  ArgumentIterator(char* arg_buffer, size_t arg_size) {
-    _pos = arg_buffer;
-    _end = _pos + arg_size - 1;
-  }
-  char* next() {
-    if (*_pos == '\0') {
-      // advance the iterator if possible (null arguments)
-      if (_pos < _end) {
-        _pos += 1;
-      }
-      return nullptr;
-    }
-    char* res = _pos;
-    char* next_pos = strchr(_pos, '\0');
-    if (next_pos < _end)  {
-      next_pos++;
-    }
-    _pos = next_pos;
-    return res;
-  }
-};
-
 
 // atexit hook to stop listener and unlink the file that it is
 // bound too.
@@ -186,103 +153,6 @@ int PosixAttachListener::init() {
   return 0;
 }
 
-// Given a socket that is connected to a peer we read the request and
-// create an AttachOperation. As the socket is blocking there is potential
-// for a denial-of-service if the peer does not response. However this happens
-// after the peer credentials have been checked and in the worst case it just
-// means that the attach listener thread is blocked.
-//
-PosixAttachOperation* PosixAttachListener::read_request(int s) {
-  char ver_str[8];
-  os::snprintf_checked(ver_str, sizeof(ver_str), "%d", ATTACH_PROTOCOL_VER);
-
-  // The request is a sequence of strings so we first figure out the
-  // expected count and the maximum possible length of the request.
-  // The request is:
-  //   <ver>0<cmd>0<arg>0<arg>0<arg>0
-  // where <ver> is the protocol version (1), <cmd> is the command
-  // name ("load", "datadump", ...), and <arg> is an argument
-  int expected_str_count = 2 + AttachOperation::arg_count_max;
-  const size_t max_len = (sizeof(ver_str) + 1) + (AttachOperation::name_length_max + 1) +
-    AttachOperation::arg_count_max*(AttachOperation::arg_length_max + 1);
-
-  char buf[max_len];
-  int str_count = 0;
-
-  // Read until all (expected) strings have been read, the buffer is
-  // full, or EOF.
-
-  size_t off = 0;
-  size_t left = max_len;
-
-  do {
-    ssize_t n;
-    RESTARTABLE(read(s, buf+off, left), n);
-    assert(n <= checked_cast<ssize_t>(left), "buffer was too small, impossible!");
-    buf[max_len - 1] = '\0';
-    if (n == -1) {
-      return nullptr;      // reset by peer or other error
-    }
-    if (n == 0) {
-      break;
-    }
-    for (ssize_t i=0; i<n; i++) {
-      if (buf[off+i] == 0) {
-        // EOS found
-        str_count++;
-
-        // The first string is <ver> so check it now to
-        // check for protocol mismatch
-        if (str_count == 1) {
-          if ((strlen(buf) != strlen(ver_str)) ||
-              (atoi(buf) != ATTACH_PROTOCOL_VER)) {
-            char msg[32];
-            os::snprintf_checked(msg, sizeof(msg), "%d\n", ATTACH_ERROR_BADVERSION);
-            write_fully(s, msg, strlen(msg));
-            return nullptr;
-          }
-        }
-      }
-    }
-    off += n;
-    left -= n;
-  } while (left > 0 && str_count < expected_str_count);
-
-  if (str_count != expected_str_count) {
-    return nullptr;        // incomplete request
-  }
-
-  // parse request
-
-  ArgumentIterator args(buf, (max_len)-left);
-
-  // version already checked
-  char* v = args.next();
-
-  char* name = args.next();
-  if (name == nullptr || strlen(name) > AttachOperation::name_length_max) {
-    return nullptr;
-  }
-
-  PosixAttachOperation* op = new PosixAttachOperation(name);
-
-  for (int i=0; i<AttachOperation::arg_count_max; i++) {
-    char* arg = args.next();
-    if (arg == nullptr) {
-      op->set_arg(i, nullptr);
-    } else {
-      if (strlen(arg) > AttachOperation::arg_length_max) {
-        delete op;
-        return nullptr;
-      }
-      op->set_arg(i, arg);
-    }
-  }
-
-  op->set_socket(s);
-  return op;
-}
-
 // Dequeue an operation
 //
 // In the Linux and BSD implementations, there is only a single operation and
@@ -337,30 +207,15 @@ PosixAttachOperation* PosixAttachListener::dequeue() {
 #endif
 
     // peer credential look okay so we read the request
-    PosixAttachOperation* op = read_request(s);
-    if (op == nullptr) {
-      ::close(s);
+    PosixAttachOperation* op = new PosixAttachOperation(s);
+    if (!op->read_request()) {
+      delete op;
       continue;
     } else {
       _current_op = op;
       return op;
     }
   }
-}
-
-// write the given buffer to the socket
-int PosixAttachListener::write_fully(int s, char* buf, size_t len) {
-  do {
-    ssize_t n = ::write(s, buf, len);
-    if (n == -1) {
-      if (errno != EINTR) return -1;
-    } else {
-      buf += n;
-      len -= n;
-    }
-  }
-  while (len > 0);
-  return 0;
 }
 
 // An operation completion is splitted into two parts.
@@ -402,18 +257,9 @@ void PosixAttachOperation::effectively_complete_raw(jint result, bufferedStream*
 }
 
 void PosixAttachOperation::write_operation_result(jint result, bufferedStream* st) {
-  char msg[32];
-  os::snprintf_checked(msg, sizeof(msg), "%d\n", result);
-  int rc = PosixAttachListener::write_fully(this->socket(), msg, strlen(msg));
+  write_reply(&_socket_channel, result, st);
 
-  // write any result data
-  if (rc == 0) {
-    PosixAttachListener::write_fully(this->socket(), (char*) st->base(), st->size());
-    ::shutdown(this->socket(), SHUT_RDWR);
-  }
-
-  // done
-  ::close(this->socket());
+  _socket_channel.close();
   st->reset();
 }
 
@@ -469,6 +315,8 @@ void AttachListener::vm_start() {
 }
 
 int AttachListener::pd_init() {
+  AttachListener::set_supported_version(ATTACH_API_V2);
+
   JavaThread* thread = JavaThread::current();
   ThreadBlockInVM tbivm(thread);
 

@@ -36,7 +36,7 @@ class PosixAttachListener;
 #include <sys/un.h>
 
 #ifndef UNIX_PATH_MAX
-#define UNIX_PATH_MAX   sizeof(((struct sockaddr_un *)0)->sun_path)
+#define UNIX_PATH_MAX   sizeof(sockaddr_un::sun_path)
 #endif
 
 class PosixAttachListener: AllStatic {
@@ -53,17 +53,7 @@ class PosixAttachListener: AllStatic {
   // this is for proper reporting JDK.Chekpoint processing to jcmd peer
   static PosixAttachOperation* _current_op;
 
-  // reads a request from the given connected socket
-  static PosixAttachOperation* read_request(int s);
-
  public:
-  enum {
-    ATTACH_PROTOCOL_VER = 1                     // protocol version
-  };
-  enum {
-    ATTACH_ERROR_BADVERSION     = 101           // error codes
-  };
-
   static void set_path(char* path) {
     if (path == nullptr) {
       _path[0] = '\0';
@@ -83,9 +73,6 @@ class PosixAttachListener: AllStatic {
   static char* path()                   { return _path; }
   static bool has_path()                { return _has_path; }
   static int listener()                 { return _listener; }
-
-  // write the given buffer to a socket
-  static int write_fully(int s, char* buf, size_t len);
 
   static PosixAttachOperation* dequeue();
   static PosixAttachOperation* get_current_op();

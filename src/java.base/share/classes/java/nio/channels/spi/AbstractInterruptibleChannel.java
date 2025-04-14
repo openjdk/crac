@@ -31,6 +31,7 @@ import java.nio.channels.Channel;
 import java.nio.channels.ClosedByInterruptException;
 import java.nio.channels.InterruptibleChannel;
 
+import jdk.internal.access.JavaNioChannelsSpiAccess;
 import jdk.internal.access.SharedSecrets;
 import jdk.internal.misc.Unsafe;
 import sun.nio.ch.Interruptible;
@@ -92,6 +93,15 @@ public abstract class AbstractInterruptibleChannel
     // invoked if a Thread is interrupted when blocked in an I/O op
     private final Interruptible interruptor;
 
+    static {
+        SharedSecrets.setJavaNioChannelsSpiAccess(new JavaNioChannelsSpiAccess() {
+            @Override
+            public void setChannelReopened(AbstractInterruptibleChannel channel) {
+                channel.setReopened();
+            }
+        });
+    }
+
     /**
      * Initializes a new instance of this class.
      */
@@ -133,7 +143,7 @@ public abstract class AbstractInterruptibleChannel
     /**
      * Used only internally by CRaC
      */
-    protected final void setReopened() {
+    private void setReopened() {
         synchronized (closeLock) {
             assert closed;
             closed = false;

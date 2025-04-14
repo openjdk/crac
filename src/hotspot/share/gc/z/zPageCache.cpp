@@ -22,7 +22,6 @@
  */
 
 #include "precompiled.hpp"
-#include "gc/shared/gcLogPrecious.hpp"
 #include "gc/z/zGlobals.hpp"
 #include "gc/z/zList.inline.hpp"
 #include "gc/z/zNUMA.hpp"
@@ -30,7 +29,6 @@
 #include "gc/z/zPageCache.hpp"
 #include "gc/z/zStat.hpp"
 #include "gc/z/zValue.inline.hpp"
-#include "logging/log.hpp"
 #include "memory/allocation.hpp"
 #include "runtime/globals.hpp"
 #include "runtime/os.hpp"
@@ -289,7 +287,7 @@ public:
       _timeout(timeout),
       _delay(delay) {
     // Set initial timeout
-    *_timeout = ZUncommitDelay;
+    *_timeout = delay;
   }
 
   virtual bool do_page(const ZPage* page) {

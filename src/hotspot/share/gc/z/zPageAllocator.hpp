@@ -170,7 +170,7 @@ public:
 
   void threads_do(ThreadClosure* tc) const;
 
-  void cleanup_unused();
+  void uncommit_unused_memory();
 };
 
 class ZPageAllocatorStats {

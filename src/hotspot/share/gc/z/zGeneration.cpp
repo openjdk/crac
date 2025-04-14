@@ -1060,7 +1060,7 @@ void ZGenerationOld::collect(ConcurrentGCTimer* timer) {
   concurrent_relocate();
 
   if (Universe::heap()->do_cleanup_unused()) {
-    _page_allocator->cleanup_unused();
+    _page_allocator->uncommit_unused_memory();
   }
 }
 

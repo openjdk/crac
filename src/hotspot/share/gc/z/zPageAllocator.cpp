@@ -1051,7 +1051,7 @@ void ZPageAllocator::threads_do(ThreadClosure* tc) const {
   tc->do_thread(_uncommitter);
 }
 
-void ZPageAllocator::cleanup_unused() {
+void ZPageAllocator::uncommit_unused_memory() {
   uint64_t timeout;
   size_t flushed, uncommitted = 0;
   do {

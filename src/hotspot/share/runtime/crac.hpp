@@ -52,18 +52,22 @@ public:
   static jlong uptime_since_restore();
 
   static jlong monotonic_time_offset() {
-    return javaTimeNanos_offset;
+    return _javaTimeNanos_offset;
   }
 
   static void reset_time_counters();
 
 private:
-  static jlong checkpoint_millis;
-  static jlong checkpoint_nanos;
-  static char checkpoint_bootid[UUID_LENGTH];
-  static jlong javaTimeNanos_offset;
-
   static CracEngine *_engine;
+
+  static char _checkpoint_bootid[UUID_LENGTH];
+  // Timestamps recorded before checkpoint.
+  static jlong _checkpoint_wallclock_seconds; // Wall-clock time, full seconds
+  static jlong _checkpoint_wallclock_nanos;   // Wall-clock time, nanoseconds remainder [0, 999999999]
+  static jlong _checkpoint_monotonic_nanos;   // Monotonic time, nanoseconds
+  // Value based on wall clock time difference that will guarantee monotonic
+  // System.nanoTime() close to actual wall-clock time difference.
+  static jlong _javaTimeNanos_offset;
 
   static bool read_bootid(char *dest);
 

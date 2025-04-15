@@ -278,18 +278,20 @@ class ZPageCacheFlushForUncommitClosure : public ZPageCacheFlushClosure {
 private:
   const uint64_t _now;
   uint64_t*      _timeout;
+  uintx          _delay;
 
 public:
-  ZPageCacheFlushForUncommitClosure(size_t requested, uint64_t now, uint64_t* timeout)
+  ZPageCacheFlushForUncommitClosure(size_t requested, uint64_t now, uint64_t* timeout, uintx delay)
     : ZPageCacheFlushClosure(requested),
       _now(now),
-      _timeout(timeout) {
+      _timeout(timeout),
+      _delay(delay) {
     // Set initial timeout
-    *_timeout = ZUncommitDelay;
+    *_timeout = delay;
   }
 
   virtual bool do_page(const ZPage* page) {
-    const uint64_t expires = page->last_used() + ZUncommitDelay;
+    const uint64_t expires = page->last_used() + _delay;
     if (expires > _now) {
       // Don't flush page, record shortest non-expired timeout
       *_timeout = MIN2(*_timeout, expires - _now);
@@ -307,9 +309,9 @@ public:
   }
 };
 
-size_t ZPageCache::flush_for_uncommit(size_t requested, ZList<ZPage>* to, uint64_t* timeout) {
+size_t ZPageCache::flush_for_uncommit(size_t requested, ZList<ZPage>* to, uint64_t* timeout, uintx delay) {
   const uint64_t now = (uint64_t)os::elapsedTime();
-  const uint64_t expires = _last_commit + ZUncommitDelay;
+  const uint64_t expires = _last_commit + delay;
   if (expires > now) {
     // Delay uncommit, set next timeout
     *timeout = expires - now;
@@ -318,11 +320,11 @@ size_t ZPageCache::flush_for_uncommit(size_t requested, ZList<ZPage>* to, uint64
 
   if (requested == 0) {
     // Nothing to flush, set next timeout
-    *timeout = ZUncommitDelay;
+    *timeout = delay;
     return 0;
   }
 
-  ZPageCacheFlushForUncommitClosure cl(requested, now, timeout);
+  ZPageCacheFlushForUncommitClosure cl(requested, now, timeout, delay);
   flush(&cl, to);
 
   return cl._flushed;

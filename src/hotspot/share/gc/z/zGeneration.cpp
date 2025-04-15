@@ -1058,6 +1058,10 @@ void ZGenerationOld::collect(ConcurrentGCTimer* timer) {
 
   // Phase 10: Concurrent Relocate
   concurrent_relocate();
+
+  if (Universe::heap()->do_cleanup_unused()) {
+    _page_allocator->uncommit_unused_memory();
+  }
 }
 
 void ZGenerationOld::flip_mark_start() {

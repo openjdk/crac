@@ -911,7 +911,7 @@ void ZPageAllocator::free_pages_alloc_failed(ZPageAllocation* allocation) {
   satisfy_stalled();
 }
 
-size_t ZPageAllocator::uncommit(uint64_t* timeout) {
+size_t ZPageAllocator::uncommit(uint64_t* timeout, uintx delay) {
   // We need to join the suspendible thread set while manipulating capacity and
   // used, to make sure GC safepoints will have a consistent view.
   ZList<ZPage> pages;
@@ -930,7 +930,7 @@ size_t ZPageAllocator::uncommit(uint64_t* timeout) {
     const size_t flush = MIN2(release, limit);
 
     // Flush pages to uncommit
-    flushed = _cache.flush_for_uncommit(flush, &pages, timeout);
+    flushed = _cache.flush_for_uncommit(flush, &pages, timeout, delay);
     if (flushed == 0) {
       // Nothing flushed
       return 0;
@@ -1049,4 +1049,19 @@ void ZPageAllocator::handle_alloc_stalling_for_old(bool cleared_all_soft_refs) {
 void ZPageAllocator::threads_do(ThreadClosure* tc) const {
   tc->do_thread(_unmapper);
   tc->do_thread(_uncommitter);
+}
+
+void ZPageAllocator::uncommit_unused_memory() {
+  uint64_t timeout;
+  size_t flushed, uncommitted = 0;
+  do {
+    flushed = uncommit(&timeout, 0);
+    uncommitted += flushed;
+  } while (flushed > 0);
+  if (uncommitted > 0) {
+    EventZUncommit event;
+    log_info(gc, heap)("Uncommitted (cleanup): " SIZE_FORMAT "M(%.0f%%)",
+      uncommitted / M, percent_of(uncommitted, ZHeap::heap()->max_capacity()));
+    event.commit(uncommitted);
+  }
 }

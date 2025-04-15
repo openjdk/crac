@@ -93,9 +93,10 @@ public abstract class SocketImpl implements SocketOptions {
 
         // We cannot override this in subclass because SocketImpl is public and resource factory method
         // would expose JDKSocketResource outside JDK.
+        // We cannot expose any public overridable methods either in order to pass JCK.
         @Override
         protected boolean isListening() {
-            return SocketImpl.this.isListening();
+            return (SocketImpl.this instanceof NioSocketImpl) && ((NioSocketImpl) SocketImpl.this).isListening();
         }
 
         @Override
@@ -105,25 +106,13 @@ public abstract class SocketImpl implements SocketOptions {
 
         @Override
         protected void reopenAfterRestore() throws IOException {
-            SocketImpl.this.reopenAfterRestore();
+            if (SocketImpl.this instanceof NioSocketImpl) {
+                ((NioSocketImpl) SocketImpl.this).reopenAfterRestore();
+            } else {
+                throw new UnsupportedOperationException("Reopen not implemented");
+            }
         }
     };
-
-    /**
-     * Is this socket listening (server)?
-     * @return True if listening
-     */
-    protected boolean isListening() {
-        return false;
-    }
-
-    /**
-     * Used only by CRaC
-     * @throws IOException When cannot be reopened
-     */
-    protected void reopenAfterRestore() throws IOException {
-        throw new UnsupportedOperationException("Reopen not implemented");
-    }
 
     /**
      * Initialize a new instance of this class

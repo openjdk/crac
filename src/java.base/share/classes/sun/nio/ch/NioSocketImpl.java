@@ -454,13 +454,11 @@ public final class NioSocketImpl extends SocketImpl implements PlatformSocketImp
         }
     }
 
-    @Override
-    protected boolean isListening() {
+    public boolean isListening() {
         return server;
     }
 
-    @Override
-    protected void reopenAfterRestore() throws IOException {
+    public void reopenAfterRestore() throws IOException {
         if (!server) {
             throw new UnsupportedOperationException("Reopen not implemented for non-server sockets");
         }

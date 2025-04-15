@@ -80,6 +80,7 @@ public class SharedSecrets {
     private static JavaNetUriAccess javaNetUriAccess;
     private static JavaNetURLAccess javaNetURLAccess;
     private static JavaNioAccess javaNioAccess;
+    private static JavaNioChannelsSpiAccess javaNioChannelsSpiAccess;
     private static JavaUtilCollectionAccess javaUtilCollectionAccess;
     private static JavaUtilConcurrentTLRAccess javaUtilConcurrentTLRAccess;
     private static JavaUtilConcurrentFJPAccess javaUtilConcurrentFJPAccess;
@@ -266,6 +267,19 @@ public class SharedSecrets {
             // shared secret.
             ensureClassInitialized(java.nio.Buffer.class);
             access = javaNioAccess;
+        }
+        return access;
+    }
+
+    public static void setJavaNioChannelsSpiAccess(JavaNioChannelsSpiAccess a) {
+        javaNioChannelsSpiAccess = a;
+    }
+
+    public static JavaNioChannelsSpiAccess getJavaNioChannelsSpiAccess() {
+        var access = javaNioChannelsSpiAccess;
+        if (access == null) {
+            ensureClassInitialized(java.nio.channels.spi.AbstractInterruptibleChannel.class);
+            access = javaNioChannelsSpiAccess;
         }
         return access;
     }

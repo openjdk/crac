@@ -55,6 +55,8 @@ import static java.net.StandardProtocolFamily.INET;
 import static java.net.StandardProtocolFamily.INET6;
 import static java.net.StandardProtocolFamily.UNIX;
 
+import jdk.internal.access.JavaNioChannelsSpiAccess;
+import jdk.internal.access.SharedSecrets;
 import jdk.internal.crac.JDKSocketResource;
 import sun.net.NetHooks;
 import sun.net.ext.ExtendedSocketOptions;
@@ -69,6 +71,7 @@ class ServerSocketChannelImpl
 {
     // Used to make native close and configure calls
     private static final NativeDispatcher nd = new SocketDispatcher();
+    private static final JavaNioChannelsSpiAccess SPI_ACCESS = SharedSecrets.getJavaNioChannelsSpiAccess();
 
     // The protocol family of the socket
     private final ProtocolFamily family;
@@ -792,7 +795,7 @@ class ServerSocketChannelImpl
                     localAddress = netBind(localAddress, backlog);
                 }
             }
-            setReopened();
+            SPI_ACCESS.setChannelReopened(ServerSocketChannelImpl.this);
         }
     }
 }

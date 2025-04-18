@@ -414,8 +414,10 @@ class VM_Version: public Abstract_VM_Version {
   static void initialize();
   static void print_features();
   static bool is_determine_features_test_running() { return _is_determine_features_test_running; }
-  static void crac_restore() {}
-  static void crac_restore_finalize() {}
+  struct CPUFeaturesBinary {};
+  static bool cpu_features_binary(CPUFeaturesBinary *data) { return false; }
+  static bool cpu_features_binary_check(const CPUFeaturesBinary *data) { return data == nullptr; }
+  static bool ignore_cpu_features() { return true; }
 
   // Override Abstract_VM_Version implementation
   static void print_platform_virtualization_info(outputStream*);

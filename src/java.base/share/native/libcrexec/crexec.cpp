@@ -33,6 +33,7 @@
 #include "crlib/crlib.h"
 #include "crlib/crlib_description.h"
 #include "crlib/crlib_restore_data.h"
+#include "crlib/crlib_user_data.h"
 #include "hashtable.hpp"
 #include "jni.h"
 
@@ -521,6 +522,178 @@ public:
     return true;
   }
 };
+
+static bool set_user_data(crlib_conf_t *conf, const char *name, const void *data, size_t size) {
+  if (!conf->image_location) {
+    fprintf(stderr, CREXEC "set_image_location has not been called\n");
+    return false;
+  }
+  char fname[PATH_MAX];
+  if (snprintf(fname, sizeof(fname), "%s/%s", conf->image_location, name) >= (int) sizeof(fname) - 1) {
+    fprintf(stderr, CREXEC "filename too long: %s/%s\n", conf->image_location, name);
+    return false;
+  }
+  FILE *f = fopen(fname, "w");
+  if (f == NULL) {
+    fprintf(stderr, CREXEC "cannot create %s: %s\n", fname, strerror(errno));
+    return false;
+  }
+  while (size--) {
+    uint8_t byte = *(const uint8_t *) data;
+    data = (const void *) ((uintptr_t) data + 1);
+    if (fprintf(f, "%02x", byte) != 2) {
+      fclose(f);
+      fprintf(stderr, CREXEC "cannot write to %s: %s\n", fname, strerror(errno));
+      return false;
+    }
+  }
+  if (fputc('\n', f) != '\n') {
+    fclose(f);
+    fprintf(stderr, CREXEC "cannot write to %s: %s\n", fname, strerror(errno));
+    return false;
+  }
+  if (fclose(f)) {
+    fprintf(stderr, CREXEC "cannot write to %s: %s\n", fname, strerror(errno));
+    return false;
+  }
+  return true;
+}
+
+struct user_data_chunk {
+  struct user_data_chunk *next;
+  size_t size;
+  uint8_t *data;
+};
+
+struct crlib_user_data_list {
+  crlib_conf_t *conf;
+  struct user_data_chunk *chunk;
+};
+
+static crlib_user_data_list_t *load_user_data(crlib_conf_t *conf) {
+  crlib_user_data_list_t *user_data = malloc(sizeof(*user_data));
+  if (user_data == NULL) {
+    fprintf(stderr, CREXEC "cannot allocate memory\n");
+    return NULL;
+  }
+  user_data->conf = conf;
+  user_data->chunk = NULL;
+  return user_data;
+}
+
+static bool lookup_user_data(crlib_user_data_list_t *user_data, const char *name, const void **data_p, size_t *size_p) {
+  const crlib_conf_t *conf = user_data->conf;
+  if (!conf->image_location) {
+    fprintf(stderr, CREXEC "set_image_location has not been called\n");
+    return false;
+  }
+  char fname[PATH_MAX];
+  if (snprintf(fname, sizeof(fname), "%s/%s", conf->image_location, name) >= (int) sizeof(fname) - 1) {
+    fprintf(stderr, CREXEC "filename is too long: %s/%s\n", conf->image_location, name);
+    return false;
+  }
+  FILE *f = fopen(fname, "r");
+  if (f == NULL) {
+    if (errno != ENOENT) {
+      fprintf(stderr, CREXEC "cannot open %s: %s\n", fname, strerror(errno));
+    }
+    return false;
+  }
+  uint8_t *data = NULL;
+  size_t data_used = 0;
+  size_t data_allocated = 0;
+  int nibble = -1;
+  for (;;) {
+    int gotc = fgetc(f);
+    if (gotc == EOF) {
+      fclose(f);
+      free(data);
+      fprintf(stderr, CREXEC "unexpected EOF or error in %s after %zu parsed bytes\n", fname, data_used);
+      return false;
+    }
+    if (gotc == '\n' && nibble == -1) {
+      break;
+    }
+    if (gotc >= '0' && gotc <= '9') {
+      gotc += -'0';
+    } else if (gotc >= 'a' && gotc <= 'f') {
+      gotc += -'a' + 0xa;
+    } else {
+      fclose(f);
+      free(data);
+      fprintf(stderr, CREXEC "unexpected character 0x%02x in %s after %zu parsed bytes\n", gotc, fname, data_used);
+      return false;
+    }
+    if (nibble == -1) {
+      nibble = gotc;
+      continue;
+    }
+    if (data_used == data_allocated) {
+      data_allocated *= 2;
+      if (!data_allocated) {
+        data_allocated = 0x100;
+      }
+      uint8_t *data_new = realloc(data, data_allocated);
+      if (data_new == NULL) {
+        fclose(f);
+        free(data);
+        fprintf(stderr, CREXEC "cannot allocate memory for %s after %zu parsed bytes\n", fname, data_used);
+        return false;
+      }
+      data = data_new;
+    }
+    assert(data_used < data_allocated);
+    data[data_used++] = (nibble << 4) | gotc;
+    nibble = -1;
+  }
+  if (fgetc(f) != EOF || !feof(f) || ferror(f)) {
+    fclose(f);
+    free(data);
+    fprintf(stderr, CREXEC "EOF expected after newline in %s after %zu parsed bytes\n", fname, data_used);
+    return false;
+  }
+  if (fclose(f)) {
+    free(data);
+    fprintf(stderr, CREXEC "error closing %s after %zu parsed bytes\n", fname, data_used);
+    return false;
+  }
+  *data_p = data;
+  *size_p = data_used;
+  struct user_data_chunk *chunk = malloc(sizeof(*chunk));
+  if (chunk == NULL) {
+    free(data);
+    fprintf(stderr, CREXEC "cannot allocate memory\n");
+    return false;
+  }
+  chunk->next = user_data->chunk;
+  user_data->chunk = chunk;
+  chunk->size = data_used;
+  chunk->data = data;
+  return true;
+}
+
+static void free_user_data(crlib_user_data_list_t *user_data) {
+  while (user_data->chunk) {
+    struct user_data_chunk *chunk = user_data->chunk;
+    user_data->chunk = chunk->next;
+    free(chunk->data);
+    free(chunk);
+  }
+  free(user_data);
+}
+
+static crlib_user_data_t user_data = {
+  .header = {
+    .name = CRLIB_FEATURE_USER_DATA_NAME,
+    .size = sizeof(crlib_user_data_t)
+  },
+  .set_user_data = set_user_data,
+  .load_user_data = load_user_data,
+  .lookup_user_data = lookup_user_data,
+  .free_user_data = free_user_data,
+};
+
+static const crlib_feature_t *features[] = { &compression.header, &user_data.header, NULL };
 
 static int checkpoint(crlib_conf_t *conf) {
   if (conf->argv()[ARGV_EXEC_LOCATION] == nullptr) {

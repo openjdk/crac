@@ -75,6 +75,9 @@ private:
   static void update_javaTimeNanos_offset();
 
   static int checkpoint_restore(int *shmid);
+
+  static bool cpufeatures_store();
+  static bool cpufeatures_restore();
 };
 
 #endif //SHARE_RUNTIME_CRAC_HPP

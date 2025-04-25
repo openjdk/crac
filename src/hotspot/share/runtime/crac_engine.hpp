@@ -27,6 +27,7 @@
 #include "crlib/crlib.h"
 #include "crlib/crlib_description.h"
 #include "crlib/crlib_restore_data.h"
+#include "crlib/crlib_user_data.h"
 #include "memory/allocation.hpp"
 #include "nmt/memTag.hpp"
 
@@ -65,6 +66,9 @@ public:
   const char *description() const;
   const char *configuration_doc() const;
 
+  bool cpufeatures_store();
+  bool cpufeatures_restore();
+
 private:
   void *_lib = nullptr;
   crlib_api_t *_api = nullptr;
@@ -72,6 +76,10 @@ private:
 
   crlib_restore_data_t *_restore_data_api = nullptr;
   crlib_description_t *_description_api = nullptr;
+
+  static const char userdata_name[];
+
+  crlib_user_data_t *user_data_api_get();
 };
 
 #endif // SHARE_RUNTIME_CRAC_ENGINE_HPP

@@ -64,6 +64,11 @@ static crlib_extension_t * const *supported_extensions(crlib_conf_t *conf);
 static bool set_restore_data(crlib_conf_t *conf, const void *data, size_t size);
 static size_t get_restore_data(crlib_conf_t *conf, void *buf, size_t size);
 
+static bool set_user_data(crlib_conf_t *conf, const char *name, const void *data, size_t size);
+static crlib_user_data_storage_t *load_user_data(crlib_conf_t *conf);
+static bool lookup_user_data(crlib_user_data_storage_t *user_data, const char *name, const void **data_p, size_t *size_p);
+static void destroy_user_data(crlib_user_data_storage_t *user_data);
+
 } // extern "C"
 
 static crlib_api_t api = {
@@ -97,9 +102,21 @@ static crlib_restore_data_t restore_data_extension = {
   get_restore_data,
 };
 
+static crlib_user_data_t user_data_extension = {
+  {
+    CRLIB_EXTENSION_USER_DATA_NAME,
+    sizeof(user_data_extension)
+  },
+  set_user_data,
+  load_user_data,
+  lookup_user_data,
+  destroy_user_data,
+};
+
 static const crlib_extension_t *extensions[] = {
   &restore_data_extension.header,
   &description_extension.header,
+  &user_data_extension.header,
   nullptr
 };
 
@@ -524,13 +541,13 @@ public:
 };
 
 static bool set_user_data(crlib_conf_t *conf, const char *name, const void *data, size_t size) {
-  if (!conf->image_location) {
-    fprintf(stderr, CREXEC "set_image_location has not been called\n");
+  if (!conf->argv()[ARGV_IMAGE_LOCATION]) {
+    fprintf(stderr, CREXEC "configure_image_location has not been called\n");
     return false;
   }
   char fname[PATH_MAX];
-  if (snprintf(fname, sizeof(fname), "%s/%s", conf->image_location, name) >= (int) sizeof(fname) - 1) {
-    fprintf(stderr, CREXEC "filename too long: %s/%s\n", conf->image_location, name);
+  if (snprintf(fname, sizeof(fname), "%s/%s", conf->argv()[ARGV_IMAGE_LOCATION], name) >= (int) sizeof(fname) - 1) {
+    fprintf(stderr, CREXEC "filename too long: %s/%s\n", conf->argv()[ARGV_IMAGE_LOCATION], name);
     return false;
   }
   FILE *f = fopen(fname, "w");
@@ -565,13 +582,13 @@ struct user_data_chunk {
   uint8_t *data;
 };
 
-struct crlib_user_data_list {
+struct crlib_user_data_storage {
   crlib_conf_t *conf;
   struct user_data_chunk *chunk;
 };
 
-static crlib_user_data_list_t *load_user_data(crlib_conf_t *conf) {
-  crlib_user_data_list_t *user_data = malloc(sizeof(*user_data));
+static crlib_user_data_storage_t *load_user_data(crlib_conf_t *conf) {
+  crlib_user_data_storage_t *user_data = static_cast<crlib_user_data_storage_t *>(malloc(sizeof(*user_data)));
   if (user_data == NULL) {
     fprintf(stderr, CREXEC "cannot allocate memory\n");
     return NULL;
@@ -581,15 +598,15 @@ static crlib_user_data_list_t *load_user_data(crlib_conf_t *conf) {
   return user_data;
 }
 
-static bool lookup_user_data(crlib_user_data_list_t *user_data, const char *name, const void **data_p, size_t *size_p) {
+static bool lookup_user_data(crlib_user_data_storage_t *user_data, const char *name, const void **data_p, size_t *size_p) {
   const crlib_conf_t *conf = user_data->conf;
-  if (!conf->image_location) {
-    fprintf(stderr, CREXEC "set_image_location has not been called\n");
+  if (!conf->argv()[ARGV_IMAGE_LOCATION]) {
+    fprintf(stderr, CREXEC "configure_image_location has not been called\n");
     return false;
   }
   char fname[PATH_MAX];
-  if (snprintf(fname, sizeof(fname), "%s/%s", conf->image_location, name) >= (int) sizeof(fname) - 1) {
-    fprintf(stderr, CREXEC "filename is too long: %s/%s\n", conf->image_location, name);
+  if (snprintf(fname, sizeof(fname), "%s/%s", conf->argv()[ARGV_IMAGE_LOCATION], name) >= (int) sizeof(fname) - 1) {
+    fprintf(stderr, CREXEC "filename is too long: %s/%s\n", conf->argv()[ARGV_IMAGE_LOCATION], name);
     return false;
   }
   FILE *f = fopen(fname, "r");
@@ -633,7 +650,7 @@ static bool lookup_user_data(crlib_user_data_list_t *user_data, const char *name
       if (!data_allocated) {
         data_allocated = 0x100;
       }
-      uint8_t *data_new = realloc(data, data_allocated);
+      uint8_t *data_new = static_cast<uint8_t *>(realloc(data, data_allocated));
       if (data_new == NULL) {
         fclose(f);
         free(data);
@@ -659,7 +676,7 @@ static bool lookup_user_data(crlib_user_data_list_t *user_data, const char *name
   }
   *data_p = data;
   *size_p = data_used;
-  struct user_data_chunk *chunk = malloc(sizeof(*chunk));
+  struct user_data_chunk *chunk = static_cast<struct user_data_chunk *>(malloc(sizeof(*chunk)));
   if (chunk == NULL) {
     free(data);
     fprintf(stderr, CREXEC "cannot allocate memory\n");
@@ -672,7 +689,7 @@ static bool lookup_user_data(crlib_user_data_list_t *user_data, const char *name
   return true;
 }
 
-static void free_user_data(crlib_user_data_list_t *user_data) {
+static void destroy_user_data(crlib_user_data_storage_t *user_data) {
   while (user_data->chunk) {
     struct user_data_chunk *chunk = user_data->chunk;
     user_data->chunk = chunk->next;
@@ -681,19 +698,6 @@ static void free_user_data(crlib_user_data_list_t *user_data) {
   }
   free(user_data);
 }
-
-static crlib_user_data_t user_data = {
-  .header = {
-    .name = CRLIB_FEATURE_USER_DATA_NAME,
-    .size = sizeof(crlib_user_data_t)
-  },
-  .set_user_data = set_user_data,
-  .load_user_data = load_user_data,
-  .lookup_user_data = lookup_user_data,
-  .free_user_data = free_user_data,
-};
-
-static const crlib_feature_t *features[] = { &compression.header, &user_data.header, NULL };
 
 static int checkpoint(crlib_conf_t *conf) {
   if (conf->argv()[ARGV_EXEC_LOCATION] == nullptr) {

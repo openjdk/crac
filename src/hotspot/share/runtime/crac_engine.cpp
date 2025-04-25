@@ -25,6 +25,7 @@
 
 #include "crlib/crlib.h"
 #include "crlib/crlib_restore_data.h"
+#include "crlib/crlib_user_data.h"
 #include "logging/log.hpp"
 #include "memory/allStatic.hpp"
 #include "nmt/memTag.hpp"
@@ -409,3 +410,64 @@ const char *CracEngine::configuration_doc() const {
   precond(_description_api != nullptr);
   return _description_api->configuration_doc(_conf);
 }
+
+const char CracEngine::userdata_name[] = "cpufeatures";
+
+crlib_user_data_t *CracEngine::user_data_api_get() {
+  crlib_user_data_t *api = CRLIB_EXTENSION_USER_DATA(_api);
+  if (!api) {
+    log_error(crac)("Installed CRaC engine does not support user_data");
+  }
+  return api;
+}
+
+// Return success.
+bool CracEngine::cpufeatures_store() {
+  VM_Version::CPUFeaturesBinary data;
+  if (!VM_Version::cpu_features_binary(&data)) {
+    // This backend does not use CPUFeatures. That is OK.
+    return true;
+  }
+  crlib_user_data_t *user_data_api = user_data_api_get();
+  if (!user_data_api) {
+    return false;
+  }
+  return user_data_api->set_user_data(_conf, userdata_name, &data, sizeof(data));
+}
+
+// Return success.
+bool CracEngine::cpufeatures_restore() {
+  static const char s3method[] = "s3://";
+  if (strncasecmp(CRaCRestoreFrom, s3method, sizeof(s3method) - 1) == 0) {
+    // s3->set_image_bitmask did handle it already, load_user_data() is too expensive for S3.
+    return true;
+  }
+  crlib_user_data_t *user_data_api = user_data_api_get();
+  if (!user_data_api) {
+    return false;
+  }
+  crlib_user_data_storage_t *user_data;
+  if (!(user_data = user_data_api->load_user_data(_conf))) {
+    return false;
+  }
+  const VM_Version::CPUFeaturesBinary *datap;
+  size_t size;
+  if (user_data_api->lookup_user_data(user_data, userdata_name, (const void **) &datap, &size)) {
+    if (size != sizeof(VM_Version::CPUFeaturesBinary)) {
+      user_data_api->destroy_user_data(user_data);
+      log_error(crac)("User data %s in %s has unexpected size %zu (expected %zu)", userdata_name, CRaCRestoreFrom, size, sizeof(VM_Version::CPUFeaturesBinary));
+      return false;
+    }
+    assert(datap, "lookup_user_data should return non-null data pointer");
+  } else {
+    datap = nullptr;
+  }
+  if (!VM_Version::cpu_features_binary_check(datap)) {
+    user_data_api->destroy_user_data(user_data);
+    log_error(crac)("Image %s has incompatible CPU features in its user data %s", CRaCRestoreFrom, userdata_name);
+    return false;
+  }
+  user_data_api->destroy_user_data(user_data);
+  return true;
+}
+

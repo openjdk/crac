@@ -53,9 +53,6 @@
 #include "utilities/globalDefinitions.hpp"
 #include "utilities/growableArray.hpp"
 #include "utilities/ostream.hpp"
-#ifndef _WINDOWS
-# include <sys/uio.h>
-#endif
 
 static jlong _restore_start_time;
 static jlong _restore_start_nanos;
@@ -118,7 +115,7 @@ int crac::checkpoint_restore(int *shmid) {
     return JVM_CHECKPOINT_ERROR;
   }
 
-  if (!cpufeatures_store()) {
+  if (!_engine->cpufeatures_store()) {
     return JVM_CHECKPOINT_ERROR;
   }
 
@@ -384,66 +381,6 @@ static Handle ret_cr(int ret, Handle new_args, Handle new_props, Handle err_code
   return bundle;
 }
 
-static const char userdata_name[] = "cpufeatures";
-
-static crlib_user_data_t *user_data_api_get() {
-  crlib_user_data_t *api = CRLIB_FEATURE_USER_DATA(_crlib_api);
-  if (!api) {
-    log_error(crac)("Installed CRaC engine does not support user_data");
-  }
-  return api;
-}
-
-// Return success.
-bool crac::cpufeatures_store() {
-  VM_Version::CPUFeaturesBinary data;
-  if (!VM_Version::cpu_features_binary(&data)) {
-    // This backend does not use CPUFeatures. That is OK.
-    return true;
-  }
-  crlib_user_data_t *user_data_api = user_data_api_get();
-  if (!user_data_api) {
-    return false;
-  }
-  return user_data_api->set_user_data(_crlib_conf, userdata_name, &data, sizeof(data));
-}
-
-// Return success.
-bool crac::cpufeatures_restore() {
-  static const char s3method[] = "s3://";
-  if (strncasecmp(CRaCRestoreFrom, s3method, sizeof(s3method) - 1) == 0) {
-    // s3->set_image_bitmask did handle it already, load_user_data() is too expensive for S3.
-    return true;
-  }
-  crlib_user_data_t *user_data_api = user_data_api_get();
-  if (!user_data_api) {
-    return false;
-  }
-  crlib_user_data_list_t *user_data;
-  if (!(user_data = user_data_api->load_user_data(_crlib_conf))) {
-    return false;
-  }
-  const VM_Version::CPUFeaturesBinary *datap;
-  size_t size;
-  if (user_data_api->lookup_user_data(user_data, userdata_name, (const void **) &datap, &size)) {
-    if (size != sizeof(VM_Version::CPUFeaturesBinary)) {
-      user_data_api->free_user_data(user_data);
-      log_error(crac)("User data %s in %s has unexpected size %zu (expected %zu)", userdata_name, CRaCRestoreFrom, size, sizeof(VM_Version::CPUFeaturesBinary));
-      return false;
-    }
-    assert(datap, "lookup_user_data should return non-null data pointer");
-  } else {
-    datap = nullptr;
-  }
-  if (!VM_Version::cpu_features_binary_check(datap)) {
-    user_data_api->free_user_data(user_data);
-    log_error(crac)("Image %s has incompatible CPU features in its user data %s", CRaCRestoreFrom, userdata_name);
-    return false;
-  }
-  user_data_api->free_user_data(user_data);
-  return true;
-}
-
 /** Checkpoint main entry.
  */
 Handle crac::checkpoint(jarray fd_arr, jobjectArray obj_arr, bool dry_run, jlong jcmd_stream, TRAPS) {
@@ -454,7 +391,7 @@ Handle crac::checkpoint(jarray fd_arr, jobjectArray obj_arr, bool dry_run, jlong
     return ret_cr(JVM_CHECKPOINT_NONE, Handle(), Handle(), Handle(), Handle(), THREAD);
   }
 
-  if (is_local_fs(CRaCCheckpointTo) && -1 == os::mkdir(CRaCCheckpointTo) && errno != EEXIST) {
+  if (-1 == os::mkdir(CRaCCheckpointTo) && errno != EEXIST) {
     log_error(crac)("Cannot create CRaCCheckpointTo=%s: %s", CRaCCheckpointTo, os::strerror(errno));
     return ret_cr(JVM_CHECKPOINT_NONE, Handle(), Handle(), Handle(), Handle(), THREAD);
   }
@@ -570,7 +507,7 @@ void crac::restore(crac_restore_data& restore_data) {
     return;
   }
 
-  if (!VM_Version::ignore_cpu_features() && !cpufeatures_restore()) {
+  if (!VM_Version::ignore_cpu_features() && !engine.cpufeatures_restore()) {
     return;
   }
 

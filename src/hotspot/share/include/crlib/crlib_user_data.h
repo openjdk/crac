@@ -22,40 +22,52 @@
  */
 #ifndef CRLIB_USER_DATA_H
 #define CRLIB_USER_DATA_H
+
 #include "crlib.h"
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-#define CRLIB_FEATURE_USER_DATA_NAME "user_data"
-#define CRLIB_FEATURE_USER_DATA(api) CRLIB_FEATURE(api, crlib_user_data_t, CRLIB_FEATURE_USER_DATA_NAME)
+#define CRLIB_EXTENSION_USER_DATA_NAME "user data"
+#define CRLIB_EXTENSION_USER_DATA(api) \
+  CRLIB_EXTENSION(api, crlib_user_data_t, CRLIB_EXTENSION_USER_DATA_NAME)
 
-typedef const struct crlib_user_data crlib_user_data_t;
-typedef struct crlib_user_data_list crlib_user_data_list_t;
+typedef struct crlib_user_data_storage crlib_user_data_storage_t;
 
-// API for recording of USER_DATA-aware information
+// API for storing additional arbitrary data (user data) in checkpoint image.
 struct crlib_user_data {
-    crlib_feature_t header;
+  crlib_extension_t header;
 
-    // Optionally sets arbitrary user data to store in an ELF note during checkpoint. Returns success.
-    // Passed memory is no longer referenced. Caller has to call checkpoint afterwards which will free the memory.
-    bool (*set_user_data)(crlib_conf_t *, const char *name, const void *data, size_t size);
+  // Records data to be stored under the specified name in a checkpoint image. Returns true on
+  // success.
+  // 'name' must be a valid non-empty C-string; if 'size' is positive 'data' must reference 'size'
+  // bytes of data, if 'size' is 0 any data previously recorded under this name is cleared.
+  bool (*set_user_data)(crlib_conf_t *, const char *name, const void *data, size_t size);
 
-    // Optionally loads user data from conf's image location.
-    // Returns NULL on error.
-    // Caller has to call free_user_data afterwards; even if it returned false.
-    crlib_user_data_list_t *(*load_user_data)(crlib_conf_t *);
+  // Prepares user data to be looked-up from a previously created and configured checkpoint image.
+  // Returning a pointer to a managing structure or null on error.
+  //
+  // The other methods of this API can be used to interact with the returned structure.
+  // 
+  // The caller should destroy the structure after they are done using it. This should be done
+  // before destroying the engine configuration that was used to create it.
+  crlib_user_data_storage_t *(*load_user_data)(crlib_conf_t *);
 
-    // Find user data of name and store it to *data_p and *size_p. Returns success.
-    // Stored memory must not be freed. It is no longer valid after free_user_data.
-    bool (*lookup_user_data)(crlib_user_data_list_t *user_data, const char *name, const void **data_p, size_t *size_p);
+  // Finds data with the specified name and writes a pointer to it to '*data_p' and the size of the
+  // data to '*size_p'. Returns true on success.
+  // 'user_data', 'data_p' and 'size_p' must not be null. 'name' must be a valid C-string.
+  // Stored data should not be freed directly - destroy the managing structure instead.
+  bool (*lookup_user_data)(crlib_user_data_storage_t *storage,
+                           const char *name, const void **data_p, size_t *size_p);
 
-    // Free memory allocated by load_user_data.
-    void (*free_user_data)(crlib_user_data_list_t *user_data);
+  // Destroys the managing structure.
+  void (*destroy_user_data)(crlib_user_data_storage_t *storage);
 };
+typedef const struct crlib_user_data crlib_user_data_t;
 
 #ifdef __cplusplus
 } // extern "C"
 #endif
+
 #endif // CRLIB_USER_DATA_H

@@ -23,7 +23,7 @@
 # @test
 # @compile CPUFeatures.java
 # @comment It will be always skipped unless you use jtreg option "-manual" which conflicts with JDK's default option "-automatic".
-# @comment Therefore either change it in openjdk/make/RunTests.gmk or run jtreg by hand.
+# @comment Therefore either change it in make/RunTests.gmk or run jtreg by hand.
 # @run shell/manual CPUFeatures.sh
 
 set -ex -o pipefail

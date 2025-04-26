@@ -56,7 +56,6 @@ struct crlib_api {
   void (*destroy_conf)(crlib_conf_t *);
 
   // Triggers a checkpoint. Returns zero on success.
-  // It frees any memory used for set_user_data.
   int (*checkpoint)(crlib_conf_t *);
   // Triggers a restore. Does not normally return, but if it does returns a error code.
   int (*restore)(crlib_conf_t *);

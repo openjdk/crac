@@ -2699,7 +2699,6 @@ static bool _vm_version_initialized = false;
 
 void VM_Version::initialize() {
   ResourceMark rm;
-
   // Making this stub must be FIRST use of assembler
   stub_blob = BufferBlob::create("VM_Version stub", stub_size);
   if (stub_blob == nullptr) {

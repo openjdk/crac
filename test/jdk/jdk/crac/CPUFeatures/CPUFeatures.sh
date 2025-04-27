@@ -33,6 +33,9 @@ JAVA_HOME=$TESTJAVA
 javafiles="{bin/{java,jcmd},lib/{jvm.cfg,lib{crexec,java,jimage,jli,jsvml,net,nio,attach,zip}.so,modules,tzdb.dat,server/{classes.jsa,libjvm.so},criuengine,criu,libwarp.so},conf/security/java.security}"
 qemuimgurl=https://download.fedoraproject.org/pub/fedora/linux/releases/41/Cloud/x86_64/images/Fedora-Cloud-Base-Generic-41-1.4.x86_64.qcow2
 qemuimgsumurl=https://download.fedoraproject.org/pub/fedora/linux/releases/41/Cloud/x86_64/images/Fedora-Cloud-41-1.4-x86_64-CHECKSUM
+# FIXME: warp+criu need an update for new kernels:
+#qemuimgurl=https://download.fedoraproject.org/pub/fedora/linux/releases/42/Cloud/x86_64/images/Fedora-Cloud-Base-Generic-42-1.1.x86_64.qcow2
+#qemuimgsumurl=https://download.fedoraproject.org/pub/fedora/linux/releases/42/Cloud/x86_64/images/Fedora-Cloud-42-1.1-x86_64-CHECKSUM
 qemuimgdir=/tmp
 qemuimgfile=$qemuimgdir/$(basename $qemuimgurl)
 qemuimgsumfile=$qemuimgdir/$(basename $qemuimgsumurl)

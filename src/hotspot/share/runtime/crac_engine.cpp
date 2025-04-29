@@ -483,7 +483,10 @@ bool CracEngine::cpufeatures_restore() {
       log_error(crac)("User data %s in %s has unexpected size %zu (expected %zu)", cpufeatures_userdata_name, CRaCRestoreFrom, size, sizeof(VM_Version::CPUFeaturesBinary));
       return false;
     }
-    assert(datap, "lookup_user_data should return non-null data pointer");
+    if (datap == nullptr) {
+      log_error(crac)("lookup_user_data %s should return non-null data pointer", cpufeatures_userdata_name);
+      return false;
+    }
   } else {
     datap = nullptr;
   }

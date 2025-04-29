@@ -26,9 +26,9 @@ public class CPUFeatures {
     for (int i = 0;; ++i) {
       System.out.println("CPUFeaturesCheck " + i);
       try {
-	Thread.sleep(1000);
+        Thread.sleep(1000);
       } catch (InterruptedException e) {
-	Thread.currentThread().interrupt();
+        Thread.currentThread().interrupt();
       }
     }
   }

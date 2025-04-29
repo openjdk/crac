@@ -49,7 +49,7 @@ struct crlib_user_data {
   // Returning a pointer to a managing structure or null on error.
   //
   // The other methods of this API can be used to interact with the returned structure.
-  // 
+  //
   // The caller should destroy the structure after they are done using it. This should be done
   // before destroying the engine configuration that was used to create it.
   crlib_user_data_storage_t *(*load_user_data)(crlib_conf_t *);

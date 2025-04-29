@@ -67,7 +67,7 @@ public:
   const char *configuration_doc() const;
 
   bool cpufeatures_store();
-  bool cpufeatures_restore();
+  bool cpufeatures_check();
 
 private:
   ApiStatus prepare_user_data_api();

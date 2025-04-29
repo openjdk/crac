@@ -454,7 +454,7 @@ bool CracEngine::cpufeatures_store() {
 }
 
 // Return success.
-bool CracEngine::cpufeatures_restore() {
+bool CracEngine::cpufeatures_check() {
   static const char s3method[] = "s3://";
   if (strncasecmp(CRaCRestoreFrom, s3method, sizeof(s3method) - 1) == 0) {
     // s3->set_image_bitmask did handle it already, load_user_data() is too expensive for S3.

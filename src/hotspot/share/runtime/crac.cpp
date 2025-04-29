@@ -507,7 +507,7 @@ void crac::restore(crac_restore_data& restore_data) {
     return;
   }
 
-  if (!VM_Version::ignore_cpu_features() && !engine.cpufeatures_restore()) {
+  if (!VM_Version::ignore_cpu_features() && !engine.cpufeatures_check()) {
     return;
   }
 

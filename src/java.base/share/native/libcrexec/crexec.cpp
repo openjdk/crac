@@ -43,6 +43,10 @@
 #include "jvm.h"
 #endif // LINUX
 
+#ifndef PATH_MAX
+# define PATH_MAX 1024
+#endif
+
 extern "C" {
 
 JNIEXPORT crlib_api_t *CRLIB_API(int api_version, size_t api_size);

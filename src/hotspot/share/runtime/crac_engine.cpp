@@ -472,6 +472,7 @@ bool CracEngine::cpufeatures_restore() {
   }
   crlib_user_data_storage_t *user_data;
   if (!(user_data = _user_data_api->load_user_data(_conf))) {
+    log_error(crac)("CRaC engine failed to load user data %s", cpufeatures_userdata_name);
     return false;
   }
   const VM_Version::CPUFeaturesBinary *datap;

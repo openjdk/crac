@@ -476,8 +476,6 @@ jint Threads::create_vm(JavaVMInitArgs* args, bool* canTryAgain) {
   // So that JDK version can be used as a discriminator when parsing arguments
   JDK_Version_init();
 
-  // Output stream module should be already initialized for error reporting during restore.
-  // JDK version should also be intialized for arguments parsing.
   if (check_for_restore(args) != JNI_OK) return JNI_ERR;
 
   // Update/Initialize System properties after JDK version number is known
@@ -603,7 +601,8 @@ jint Threads::create_vm(JavaVMInitArgs* args, bool* canTryAgain) {
   }
 
   // Output stream module should be already initialized for error reporting during restore.
-  // JDK version should also be intialized.
+  // JDK version should also be intialized. There is lot of initializations needed to read
+  // the current machine's CPUFeatures.
   if (CRaCRestoreFrom) {
     crac::restore(restore_data);
     if (!CRaCIgnoreRestoreIfUnavailable) {

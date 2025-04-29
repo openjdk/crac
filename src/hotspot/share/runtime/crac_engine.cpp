@@ -411,7 +411,7 @@ const char *CracEngine::configuration_doc() const {
   return _description_api->configuration_doc(_conf);
 }
 
-const char CracEngine::userdata_name[] = "cpufeatures";
+static constexpr char cpufeatures_userdata_name[] = "cpufeatures";
 
 CracEngine::ApiStatus CracEngine::prepare_user_data_api() {
   precond(is_initialized());
@@ -450,7 +450,7 @@ bool CracEngine::cpufeatures_store() {
         "with the selected CRaC engine");
       return false;
   }
-  return _user_data_api->set_user_data(_conf, userdata_name, &data, sizeof(data));
+  return _user_data_api->set_user_data(_conf, cpufeatures_userdata_name, &data, sizeof(data));
 }
 
 // Return success.
@@ -476,10 +476,10 @@ bool CracEngine::cpufeatures_restore() {
   }
   const VM_Version::CPUFeaturesBinary *datap;
   size_t size;
-  if (_user_data_api->lookup_user_data(user_data, userdata_name, (const void **) &datap, &size)) {
+  if (_user_data_api->lookup_user_data(user_data, cpufeatures_userdata_name, (const void **) &datap, &size)) {
     if (size != sizeof(VM_Version::CPUFeaturesBinary)) {
       _user_data_api->destroy_user_data(user_data);
-      log_error(crac)("User data %s in %s has unexpected size %zu (expected %zu)", userdata_name, CRaCRestoreFrom, size, sizeof(VM_Version::CPUFeaturesBinary));
+      log_error(crac)("User data %s in %s has unexpected size %zu (expected %zu)", cpufeatures_userdata_name, CRaCRestoreFrom, size, sizeof(VM_Version::CPUFeaturesBinary));
       return false;
     }
     assert(datap, "lookup_user_data should return non-null data pointer");
@@ -488,7 +488,7 @@ bool CracEngine::cpufeatures_restore() {
   }
   if (!VM_Version::cpu_features_binary_check(datap)) {
     _user_data_api->destroy_user_data(user_data);
-    log_error(crac)("Image %s has incompatible CPU features in its user data %s", CRaCRestoreFrom, userdata_name);
+    log_error(crac)("Image %s has incompatible CPU features in its user data %s", CRaCRestoreFrom, cpufeatures_userdata_name);
     return false;
   }
   _user_data_api->destroy_user_data(user_data);

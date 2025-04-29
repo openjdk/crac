@@ -70,16 +70,17 @@ public:
   bool cpufeatures_restore();
 
 private:
+  ApiStatus prepare_user_data_api();
+
   void *_lib = nullptr;
   crlib_api_t *_api = nullptr;
   crlib_conf_t *_conf = nullptr;
 
   crlib_restore_data_t *_restore_data_api = nullptr;
   crlib_description_t *_description_api = nullptr;
+  crlib_user_data_t *_user_data_api = nullptr;
 
   static const char userdata_name[];
-
-  crlib_user_data_t *user_data_api_get();
 };
 
 #endif // SHARE_RUNTIME_CRAC_ENGINE_HPP

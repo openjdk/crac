@@ -413,12 +413,24 @@ const char *CracEngine::configuration_doc() const {
 
 const char CracEngine::userdata_name[] = "cpufeatures";
 
-crlib_user_data_t *CracEngine::user_data_api_get() {
-  crlib_user_data_t *api = CRLIB_EXTENSION_USER_DATA(_api);
-  if (!api) {
-    log_error(crac)("Installed CRaC engine does not support user_data");
+CracEngine::ApiStatus CracEngine::prepare_user_data_api() {
+  precond(is_initialized());
+  if (_user_data_api != nullptr) {
+    return ApiStatus::OK;
   }
-  return api;
+
+  crlib_user_data_t * const user_data_api = CRLIB_EXTENSION_USER_DATA(_api);
+  if (user_data_api == nullptr) {
+    log_debug(crac)("CRaC engine does not support extension: " CRLIB_EXTENSION_USER_DATA_NAME);
+    return ApiStatus::UNSUPPORTED;
+  }
+  if (user_data_api->set_user_data == nullptr || user_data_api->load_user_data == nullptr
+      || user_data_api->lookup_user_data == nullptr || user_data_api->destroy_user_data == nullptr) {
+    log_error(crac)("CRaC engine provided invalid API for extension: " CRLIB_EXTENSION_USER_DATA_NAME);
+    return ApiStatus::ERR;
+  }
+  _user_data_api = user_data_api;
+  return ApiStatus::OK;
 }
 
 // Return success.
@@ -428,11 +440,17 @@ bool CracEngine::cpufeatures_store() {
     // This backend does not use CPUFeatures. That is OK.
     return true;
   }
-  crlib_user_data_t *user_data_api = user_data_api_get();
-  if (!user_data_api) {
-    return false;
+  switch (prepare_user_data_api()) {
+    case CracEngine::ApiStatus::OK:
+      break;
+    case CracEngine::ApiStatus::ERR:
+      return false;
+    case CracEngine::ApiStatus::UNSUPPORTED:
+      log_warning(crac)("Cannot store CPUFeatures for checkpoint "
+        "with the selected CRaC engine");
+      return false;
   }
-  return user_data_api->set_user_data(_conf, userdata_name, &data, sizeof(data));
+  return _user_data_api->set_user_data(_conf, userdata_name, &data, sizeof(data));
 }
 
 // Return success.
@@ -442,19 +460,25 @@ bool CracEngine::cpufeatures_restore() {
     // s3->set_image_bitmask did handle it already, load_user_data() is too expensive for S3.
     return true;
   }
-  crlib_user_data_t *user_data_api = user_data_api_get();
-  if (!user_data_api) {
-    return false;
+  switch (prepare_user_data_api()) {
+    case CracEngine::ApiStatus::OK:
+      break;
+    case CracEngine::ApiStatus::ERR:
+      return false;
+    case CracEngine::ApiStatus::UNSUPPORTED:
+      log_warning(crac)("Cannot verify CPUFeatures for restore "
+        "with the selected CRaC engine");
+      return false;
   }
   crlib_user_data_storage_t *user_data;
-  if (!(user_data = user_data_api->load_user_data(_conf))) {
+  if (!(user_data = _user_data_api->load_user_data(_conf))) {
     return false;
   }
   const VM_Version::CPUFeaturesBinary *datap;
   size_t size;
-  if (user_data_api->lookup_user_data(user_data, userdata_name, (const void **) &datap, &size)) {
+  if (_user_data_api->lookup_user_data(user_data, userdata_name, (const void **) &datap, &size)) {
     if (size != sizeof(VM_Version::CPUFeaturesBinary)) {
-      user_data_api->destroy_user_data(user_data);
+      _user_data_api->destroy_user_data(user_data);
       log_error(crac)("User data %s in %s has unexpected size %zu (expected %zu)", userdata_name, CRaCRestoreFrom, size, sizeof(VM_Version::CPUFeaturesBinary));
       return false;
     }
@@ -463,11 +487,11 @@ bool CracEngine::cpufeatures_restore() {
     datap = nullptr;
   }
   if (!VM_Version::cpu_features_binary_check(datap)) {
-    user_data_api->destroy_user_data(user_data);
+    _user_data_api->destroy_user_data(user_data);
     log_error(crac)("Image %s has incompatible CPU features in its user data %s", CRaCRestoreFrom, userdata_name);
     return false;
   }
-  user_data_api->destroy_user_data(user_data);
+  _user_data_api->destroy_user_data(user_data);
   return true;
 }
 

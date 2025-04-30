@@ -2651,8 +2651,9 @@ bool VM_Version::cpu_features_binary_check(const CPUFeaturesBinary *data) {
         _features =   CPUFeatures_x64;
   _glibc_features = GLIBCFeatures_x64;
 
-  if (ShowCPUFeatures && !CRaCRestoreFrom)
+  if (ShowCPUFeatures && !CRaCRestoreFrom) {
     print_using_features_cr();
+  }
 
 #ifdef LINUX
   if (!glibc_not_using()) {
@@ -2747,8 +2748,9 @@ void VM_Version::initialize() {
         _features =   CPUFeatures_x64;
   _glibc_features = GLIBCFeatures_x64;
 
-  if (ShowCPUFeatures && !CRaCRestoreFrom)
+  if (ShowCPUFeatures && !CRaCRestoreFrom) {
     print_using_features_cr();
+  }
 
 #ifdef LINUX
   if (!glibc_not_using())

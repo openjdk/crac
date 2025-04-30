@@ -948,7 +948,8 @@ bool VM_Version::glibc_env_set(char *disable_str) {
   }
   {
     ResourceMark rm;
-    char *env_buf = NEW_RESOURCE_ARRAY(char, strlen(disable_str) + (!env ? 0 : strlen(env) + 100));
+    size_t env_buf_size = strlen(disable_str) + (!env ? 0 : strlen(env) + 100);
+    char *env_buf = NEW_RESOURCE_ARRAY(char, env_buf_size);
     if (env) {
       if (ShowCPUFeatures) {
         tty->print_cr("Original environment variable: " TUNABLES_NAME "=%s", env);
@@ -963,8 +964,8 @@ bool VM_Version::glibc_env_set(char *disable_str) {
           strcpy(env_buf, env);
           strcat(env_buf, disable_str + glibc_prefix_len);
         } else {
-          int err = jio_snprintf(env_buf, sizeof(env_buf), "%.*s%s%s", (int)(colon - env), env, disable_str + glibc_prefix_len, colon);
-          assert(err >= 0 && (unsigned)err < sizeof(env_buf), "internal error: " TUNABLES_NAME " buffer overflow");
+          int err = jio_snprintf(env_buf, env_buf_size, "%.*s%s%s", (int)(colon - env), env, disable_str + glibc_prefix_len, colon);
+          assert(err >= 0 && (unsigned) err < env_buf_size, "internal error: " TUNABLES_NAME " buffer overflow");
         }
       }
       env_val = env_buf;

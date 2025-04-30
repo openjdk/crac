@@ -38,4 +38,12 @@ $JAVA_HOME/bin/java -XX:CPUFeatures=generic -XX:+ShowCPUFeatures -version 2>&1 |
 export GLIBC_TUNABLES=glibc.pthread.rseq=0
 $JAVA_HOME/bin/java -XX:CPUFeatures=generic -XX:+ShowCPUFeatures -version 2>&1 | tee /proc/self/fd/2 | grep -q 'openjdk version'
 
+for GLIBC_TUNABLES in \
+                       glibc.cpu.hwcaps=-AVX                      \
+  glibc.pthread.rseq=0:glibc.cpu.hwcaps=-AVX                      \
+                       glibc.cpu.hwcaps=-AVX:glibc.pthread.rseq=0 \
+  ; do
+  $JAVA_HOME/bin/java -XX:CPUFeatures=generic -XX:+ShowCPUFeatures -version 2>&1 | tee /proc/self/fd/2 | grep -q 'openjdk version'
+done
+
 exit 0

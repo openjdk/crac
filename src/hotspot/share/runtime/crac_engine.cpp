@@ -411,7 +411,7 @@ const char *CracEngine::configuration_doc() const {
   return _description_api->configuration_doc(_conf);
 }
 
-static constexpr char cpufeatures_userdata_name[] = "cpufeatures";
+constexpr char CracEngine::cpufeatures_userdata_name[];
 
 CracEngine::ApiStatus CracEngine::prepare_user_data_api() {
   precond(is_initialized());
@@ -434,17 +434,12 @@ CracEngine::ApiStatus CracEngine::prepare_user_data_api() {
 }
 
 // Return success.
-bool CracEngine::cpufeatures_store() const {
-  VM_Version::CPUFeaturesBinary data;
-  if (!VM_Version::cpu_features_binary(&data)) {
-    // This backend does not use CPUFeatures. That is OK.
-    return true;
-  }
-  return _user_data_api->set_user_data(_conf, cpufeatures_userdata_name, &data, sizeof(data));
+bool CracEngine::cpufeatures_store(const VM_Version::CPUFeaturesBinary *datap) const {
+  return _user_data_api->set_user_data(_conf, cpufeatures_userdata_name, datap, sizeof(*datap));
 }
 
 // Return success.
-bool CracEngine::cpufeatures_check() const {
+bool CracEngine::cpufeatures_load(VM_Version::CPUFeaturesBinary *datap, bool *presentp) const {
   static const char s3method[] = "s3://";
   if (strncasecmp(CRaCRestoreFrom, s3method, sizeof(s3method) - 1) == 0) {
     // s3->set_image_bitmask did handle it already, load_user_data() is too expensive for S3.
@@ -455,27 +450,24 @@ bool CracEngine::cpufeatures_check() const {
     log_error(crac)("CRaC engine failed to load user data %s", cpufeatures_userdata_name);
     return false;
   }
-  const VM_Version::CPUFeaturesBinary *datap;
+  const VM_Version::CPUFeaturesBinary *cdatap;
   size_t size;
-  if (_user_data_api->lookup_user_data(user_data, cpufeatures_userdata_name, (const void **) &datap, &size)) {
+  if (_user_data_api->lookup_user_data(user_data, cpufeatures_userdata_name, (const void **) &cdatap, &size)) {
     if (size != sizeof(VM_Version::CPUFeaturesBinary)) {
       _user_data_api->destroy_user_data(user_data);
       log_error(crac)("User data %s in %s has unexpected size %zu (expected %zu)", cpufeatures_userdata_name, CRaCRestoreFrom, size, sizeof(VM_Version::CPUFeaturesBinary));
       return false;
     }
-    if (datap == nullptr) {
+    if (cdatap == nullptr) {
+      _user_data_api->destroy_user_data(user_data);
       log_error(crac)("lookup_user_data %s should return non-null data pointer", cpufeatures_userdata_name);
       return false;
     }
+    *datap = *cdatap;
+    *presentp = true;
   } else {
-    datap = nullptr;
-  }
-  if (!VM_Version::cpu_features_binary_check(datap)) {
-    _user_data_api->destroy_user_data(user_data);
-    log_error(crac)("Image %s has incompatible CPU features in its user data %s", CRaCRestoreFrom, cpufeatures_userdata_name);
-    return false;
+    *presentp = false;
   }
   _user_data_api->destroy_user_data(user_data);
   return true;
 }
-

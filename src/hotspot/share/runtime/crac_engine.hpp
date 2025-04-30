@@ -30,6 +30,7 @@
 #include "crlib/crlib_user_data.h"
 #include "memory/allocation.hpp"
 #include "nmt/memTag.hpp"
+#include "runtime/vm_version.hpp"
 
 #include <cstddef>
 #include <cstdint>
@@ -67,8 +68,9 @@ public:
   const char *configuration_doc() const;
 
   ApiStatus prepare_user_data_api();
-  bool cpufeatures_store() const;
-  bool cpufeatures_check() const;
+  bool cpufeatures_store(const VM_Version::CPUFeaturesBinary *datap) const;
+  bool cpufeatures_load(VM_Version::CPUFeaturesBinary *datap, bool *presentp) const;
+  static constexpr char cpufeatures_userdata_name[] = "cpufeatures";
 
 private:
   void *_lib = nullptr;

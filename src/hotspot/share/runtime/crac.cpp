@@ -116,11 +116,14 @@ int crac::checkpoint_restore(int *shmid) {
   }
 
   switch (_engine->prepare_user_data_api()) {
-    case CracEngine::ApiStatus::OK:
-      if (!_engine->cpufeatures_store()) {
+    case CracEngine::ApiStatus::OK: {
+      VM_Version::CPUFeaturesBinary data;
+      if (!VM_Version::cpu_features_binary(&data)) {
+	// This backend does not use CPUFeatures. That is OK.
+      } else if (!_engine->cpufeatures_store(&data)) {
         return JVM_CHECKPOINT_ERROR;
       }
-      break;
+      } break;
     case CracEngine::ApiStatus::ERR:
       return JVM_CHECKPOINT_ERROR;
     case CracEngine::ApiStatus::UNSUPPORTED:
@@ -519,11 +522,17 @@ void crac::restore(crac_restore_data& restore_data) {
 
   if (!VM_Version::ignore_cpu_features()) {
     switch (engine.prepare_user_data_api()) {
-      case CracEngine::ApiStatus::OK:
-        if (!engine.cpufeatures_check()) {
+      case CracEngine::ApiStatus::OK: {
+        VM_Version::CPUFeaturesBinary data;
+        bool present;
+        if (!engine.cpufeatures_load(&data, &present)) {
           return;
         }
-        break;
+        if (!VM_Version::cpu_features_binary_check(present ? &data : nullptr)) {
+          log_error(crac)("Image %s has incompatible CPU features in its user data %s", CRaCRestoreFrom, engine.cpufeatures_userdata_name);
+          return;
+        }
+        } break;
       case CracEngine::ApiStatus::ERR:
         return;
       case CracEngine::ApiStatus::UNSUPPORTED:

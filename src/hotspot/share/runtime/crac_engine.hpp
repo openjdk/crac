@@ -66,12 +66,11 @@ public:
   const char *description() const;
   const char *configuration_doc() const;
 
-  bool cpufeatures_store();
-  bool cpufeatures_check();
+  ApiStatus prepare_user_data_api();
+  bool cpufeatures_store() const;
+  bool cpufeatures_check() const;
 
 private:
-  ApiStatus prepare_user_data_api();
-
   void *_lib = nullptr;
   crlib_api_t *_api = nullptr;
   crlib_conf_t *_conf = nullptr;

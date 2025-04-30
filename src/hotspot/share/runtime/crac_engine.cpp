@@ -434,41 +434,21 @@ CracEngine::ApiStatus CracEngine::prepare_user_data_api() {
 }
 
 // Return success.
-bool CracEngine::cpufeatures_store() {
+bool CracEngine::cpufeatures_store() const {
   VM_Version::CPUFeaturesBinary data;
   if (!VM_Version::cpu_features_binary(&data)) {
     // This backend does not use CPUFeatures. That is OK.
     return true;
   }
-  switch (prepare_user_data_api()) {
-    case CracEngine::ApiStatus::OK:
-      break;
-    case CracEngine::ApiStatus::ERR:
-      return false;
-    case CracEngine::ApiStatus::UNSUPPORTED:
-      log_warning(crac)("Cannot store CPUFeatures for checkpoint "
-        "with the selected CRaC engine");
-      return false;
-  }
   return _user_data_api->set_user_data(_conf, cpufeatures_userdata_name, &data, sizeof(data));
 }
 
 // Return success.
-bool CracEngine::cpufeatures_check() {
+bool CracEngine::cpufeatures_check() const {
   static const char s3method[] = "s3://";
   if (strncasecmp(CRaCRestoreFrom, s3method, sizeof(s3method) - 1) == 0) {
     // s3->set_image_bitmask did handle it already, load_user_data() is too expensive for S3.
     return true;
-  }
-  switch (prepare_user_data_api()) {
-    case CracEngine::ApiStatus::OK:
-      break;
-    case CracEngine::ApiStatus::ERR:
-      return false;
-    case CracEngine::ApiStatus::UNSUPPORTED:
-      log_warning(crac)("Cannot verify CPUFeatures for restore "
-        "with the selected CRaC engine");
-      return false;
   }
   crlib_user_data_storage_t *user_data;
   if (!(user_data = _user_data_api->load_user_data(_conf))) {

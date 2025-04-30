@@ -118,14 +118,14 @@ int crac::checkpoint_restore(int *shmid) {
   switch (_engine->prepare_user_data_api()) {
     case CracEngine::ApiStatus::OK:
       if (!_engine->cpufeatures_store()) {
-	return JVM_CHECKPOINT_ERROR;
+        return JVM_CHECKPOINT_ERROR;
       }
       break;
     case CracEngine::ApiStatus::ERR:
       return JVM_CHECKPOINT_ERROR;
     case CracEngine::ApiStatus::UNSUPPORTED:
       log_warning(crac)("Cannot store CPUFeatures for checkpoint "
-	"with the selected CRaC engine");
+        "with the selected CRaC engine");
       break;
   }
 
@@ -520,16 +520,16 @@ void crac::restore(crac_restore_data& restore_data) {
   if (!VM_Version::ignore_cpu_features()) {
     switch (engine.prepare_user_data_api()) {
       case CracEngine::ApiStatus::OK:
-	if (!engine.cpufeatures_check()) {
-	  return;
-	}
-	break;
+        if (!engine.cpufeatures_check()) {
+          return;
+        }
+        break;
       case CracEngine::ApiStatus::ERR:
-	return;
+        return;
       case CracEngine::ApiStatus::UNSUPPORTED:
-	log_warning(crac)("Cannot verify CPUFeatures for restore "
-	  "with the selected CRaC engine");
-	break;
+        log_warning(crac)("Cannot verify CPUFeatures for restore "
+          "with the selected CRaC engine");
+        break;
     }
   }
 

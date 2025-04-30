@@ -2656,10 +2656,9 @@ bool VM_Version::cpu_features_binary_check(const CPUFeaturesBinary *data) {
   }
 
 #ifdef LINUX
-  if (!glibc_not_using()) {
-    // glibc_not_using() has done setenv(TUNABLES_NAME) and it expects us to re-exec ourselves.
-    // But we were only checking the cpufeatures file before restoring the process so we ignore it.
-  }
+  // glibc_not_using() has done setenv(TUNABLES_NAME) and it expects us to re-exec ourselves.
+  // But we were only checking the cpufeatures file before restoring the process so we ignore the result.
+  glibc_not_using();
 #endif
 
   return true;

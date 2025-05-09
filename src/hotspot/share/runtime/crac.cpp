@@ -119,7 +119,7 @@ int crac::checkpoint_restore(int *shmid) {
     case CracEngine::ApiStatus::OK: {
       VM_Version::CPUFeaturesBinary data;
       if (!VM_Version::cpu_features_binary(&data)) {
-	// This backend does not use CPUFeatures. That is OK.
+        // This backend does not use CPUFeatures. That is OK.
       } else if (!_engine->cpufeatures_store(&data)) {
         return JVM_CHECKPOINT_ERROR;
       }

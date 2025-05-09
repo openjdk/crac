@@ -54,13 +54,19 @@ int VM_Version::_model;
 int VM_Version::_stepping;
 bool VM_Version::_has_intel_jcc_erratum;
 VM_Version::CpuidInfo VM_Version::_cpuid_info = { 0, };
+#if 0
+FIXME:CPUFeatures1
 uint64_t VM_Version::_glibc_features;
 uint64_t VM_Version::_features_saved;
 uint64_t VM_Version::_glibc_features_saved;
+#endif
 
 #define DECLARE_CPU_FEATURE_NAME(id, name, bit) name,
 const char* VM_Version::      _features_names[] = {   CPU_FEATURE_FLAGS(DECLARE_CPU_FEATURE_NAME)};
+#if 0
+FIXME:CPUFeatures1
 const char* VM_Version::_glibc_features_names[] = { GLIBC_FEATURE_FLAGS(DECLARE_CPU_FEATURE_NAME)};
+#endif
 #undef DECLARE_CPU_FEATURE_FLAG
 
 // Address of instruction which causes SEGV
@@ -74,6 +80,11 @@ address VM_Version::_cpuinfo_cont_addr_apx = nullptr;
 
 static BufferBlob* stub_blob;
 static const int stub_size = 2000;
+
+int VM_Version::VM_Features::_features_bitmap_size = sizeof(VM_Version::VM_Features::_features_bitmap) / BytesPerLong;
+
+VM_Version::VM_Features VM_Version::_features;
+VM_Version::VM_Features VM_Version::_cpu_features;
 
 extern "C" {
   typedef void (*get_cpu_info_stub_t)(void*);
@@ -97,13 +108,13 @@ bool VM_Version::supports_clflush() {
   if (!Universe::is_fully_initialized()) {
     return true;
   }
-  if ((_features & CPU_FLUSH) != 0) {
+  if (_features.supports_feature(CPU_FLUSH)) {
     return true;
   }
   if (FLAG_IS_DEFAULT(CPUFeatures)) {
     vm_exit_during_initialization("clflush should be available");
   }
-  vm_exit_during_initialization(err_msg("-XX:CPUFeatures option requires FLUSH flag to be set: " UINT64_FORMAT_X, CPU_FLUSH));
+  vm_exit_during_initialization(err_msg("-XX:CPUFeatures option requires FLUSH flag to be set: 0x%llx", 1ULL << CPU_FLUSH));
   return false;
 }
 
@@ -154,7 +165,7 @@ class VM_Version_StubGenerator: public StubCodeGenerator {
     const uint32_t CPU_FAMILY_486 = (4 << CPU_FAMILY_SHIFT);
     bool use_evex = FLAG_IS_DEFAULT(UseAVX) || (UseAVX > 2);
 
-    Label detect_486, cpu486, detect_586, std_cpuid1, std_cpuid4;
+    Label detect_486, cpu486, detect_586, std_cpuid1, std_cpuid4, std_cpuid24;
     Label sef_cpuid, sefsl1_cpuid, ext_cpuid, ext_cpuid1, ext_cpuid5, ext_cpuid7;
     Label ext_cpuid8, done, wrapup, vector_save_restore, apx_save_restore_warning;
     Label legacy_setup, save_restore_except, legacy_save_restore, start_simd_check;
@@ -354,6 +365,17 @@ class VM_Version_StubGenerator: public StubCodeGenerator {
     __ movl(Address(rsi, 4), rdx);
 
     //
+    // cpuid(0x24) Converged Vector ISA Main Leaf (EAX = 24H, ECX = 0).
+    //
+    __ bind(std_cpuid24);
+    __ movl(rax, 0x24);
+    __ movl(rcx, 0);
+    __ cpuid();
+    __ lea(rsi, Address(rbp, in_bytes(VM_Version::std_cpuid24_offset())));
+    __ movl(Address(rsi, 0), rax);
+    __ movl(Address(rsi, 4), rbx);
+
+    //
     // Extended cpuid(0x80000000)
     //
     __ bind(ext_cpuid);
@@ -439,13 +461,11 @@ class VM_Version_StubGenerator: public StubCodeGenerator {
     __ lea(rsi, Address(rbp, in_bytes(VM_Version::sefsl1_cpuid7_offset())));
     __ movl(rax, 0x200000);
     __ andl(rax, Address(rsi, 4));
-    __ cmpl(rax, 0x200000);
-    __ jcc(Assembler::notEqual, vector_save_restore);
+    __ jcc(Assembler::equal, vector_save_restore);
     // check _cpuid_info.xem_xcr0_eax.bits.apx_f
     __ movl(rax, 0x80000);
     __ andl(rax, Address(rbp, in_bytes(VM_Version::xem_xcr0_offset()))); // xcr0 bits apx_f
-    __ cmpl(rax, 0x80000);
-    __ jcc(Assembler::notEqual, vector_save_restore);
+    __ jcc(Assembler::equal, vector_save_restore);
 
 #ifndef PRODUCT
     bool save_apx = UseAPX;
@@ -498,11 +518,15 @@ class VM_Version_StubGenerator: public StubCodeGenerator {
     // If UseAVX is uninitialized or is set by the user to include EVEX
     if (use_evex) {
       // check _cpuid_info.sef_cpuid7_ebx.bits.avx512f
+      // OR check _cpuid_info.sefsl1_cpuid7_edx.bits.avx10
       __ lea(rsi, Address(rbp, in_bytes(VM_Version::sef_cpuid7_offset())));
       __ movl(rax, 0x10000);
-      __ andl(rax, Address(rsi, 4)); // xcr0 bits sse | ymm
-      __ cmpl(rax, 0x10000);
-      __ jccb(Assembler::notEqual, legacy_setup); // jump if EVEX is not supported
+      __ andl(rax, Address(rsi, 4));
+      __ lea(rsi, Address(rbp, in_bytes(VM_Version::sefsl1_cpuid7_offset())));
+      __ movl(rbx, 0x80000);
+      __ andl(rbx, Address(rsi, 4));
+      __ orl(rax, rbx);
+      __ jccb(Assembler::equal, legacy_setup); // jump if EVEX is not supported
       // check _cpuid_info.xem_xcr0_eax.bits.opmask
       // check _cpuid_info.xem_xcr0_eax.bits.zmm512
       // check _cpuid_info.xem_xcr0_eax.bits.zmm32
@@ -583,8 +607,7 @@ class VM_Version_StubGenerator: public StubCodeGenerator {
       __ lea(rsi, Address(rbp, in_bytes(VM_Version::sef_cpuid7_offset())));
       __ movl(rax, 0x10000);
       __ andl(rax, Address(rsi, 4));
-      __ cmpl(rax, 0x10000);
-      __ jcc(Assembler::notEqual, legacy_save_restore);
+      __ jcc(Assembler::equal, legacy_save_restore);
       // check _cpuid_info.xem_xcr0_eax.bits.opmask
       // check _cpuid_info.xem_xcr0_eax.bits.zmm512
       // check _cpuid_info.xem_xcr0_eax.bits.zmm32
@@ -851,6 +874,8 @@ class VM_Version_StubGenerator: public StubCodeGenerator {
   };
 };
 
+#if 0
+FIXME:CPUFeatures1
 uint64_t VM_Version::CPUFeatures_parse(const char *str, uint64_t &glibc_features) {
   glibc_features = _glibc_features;
 #ifndef LINUX
@@ -1260,13 +1285,21 @@ void VM_Version::print_using_features_cr() {
     tty->print_cr("CPU features being used are: -XX:CPUFeatures=" UINT64_FORMAT_X "," UINT64_FORMAT_X, _features, _glibc_features);
   }
 }
+#endif
 
 void VM_Version::get_processor_features_hardware() {
   _cpu = 4; // 486 by default
   _model = 0;
   _stepping = 0;
+#if 0
+FIXME:CPUFeatures1
   _features = 0;
   _glibc_features = 0;
+FIXME:CPUFeatures2
+  _features = 0;
+FIXME:CPUFeatures3
+#endif
+//FIXME:CPUFeatures4
   _logical_processors_per_package = 1;
   // i486 internal cache is both I&D and has a 16-byte line size
   _L1_data_cache_line_size = 16;
@@ -1282,8 +1315,16 @@ void VM_Version::get_processor_features_hardware() {
 
   if (cpu_family() > 4) { // it supports CPUID
     _features = _cpuid_info.feature_flags(); // These can be changed by VM settings
+#if 0
+FIXME:CPUFeatures1
     _cpu_features = _features;   // Preserve features
     LINUX_ONLY(_glibc_features = _cpuid_info.glibc_flags();)
+FIXME:CPUFeatures2
+    _cpu_features = _features;   // Preserve features
+FIXME:CPUFeatures3
+#endif
+    _cpu_features = _features; // Preserve features
+//FIXME:CPUFeatures4
     // Logical processors are only available on P4s and above,
     // and only if hyperthreading is available.
     _logical_processors_per_package = logical_processor_count();
@@ -1297,7 +1338,10 @@ void VM_Version::get_processor_features_hardware() {
   _supports_atomic_getadd8 = true;
 
   if (ShowCPUFeatures) {
+#if 0
+FIXME:CPUFeatures1
     tty->print_cr("This machine's CPU features are: -XX:CPUFeatures=" UINT64_FORMAT_X "," UINT64_FORMAT_X, _features, _glibc_features);
+#endif
   }
 }
 
@@ -1305,7 +1349,7 @@ void VM_Version::get_processor_features_hotspot() {
   // OS should support SSE for x64 and hardware should support at least SSE2.
   if (!VM_Version::supports_sse2()) {
     if (!FLAG_IS_DEFAULT(CPUFeatures))
-      vm_exit_during_initialization(err_msg("-XX:CPUFeatures option requires SSE2 flag to be set: " UINT64_FORMAT_X "," UINT64_FORMAT_X, CPU_SSE2, (uint64_t)0));
+      vm_exit_during_initialization(err_msg("-XX:CPUFeatures option requires SSE2 flag to be set: 0x%llx", 1ULL << CPU_SSE2));
     vm_exit_during_initialization("Unknown x64 processor: SSE2 not supported");
   }
   // in 64 bit the use of SSE2 is the minimum
@@ -1340,21 +1384,21 @@ void VM_Version::get_processor_features_hotspot() {
   }
 
   if (UseSSE < 4) {
-    _features &= ~CPU_SSE4_1;
-    _features &= ~CPU_SSE4_2;
+    _features.clear_feature(CPU_SSE4_1);
+    _features.clear_feature(CPU_SSE4_2);
   }
 
   if (UseSSE < 3) {
-    _features &= ~CPU_SSE3;
-    _features &= ~CPU_SSSE3;
-    _features &= ~CPU_SSE4A;
+    _features.clear_feature(CPU_SSE3);
+    _features.clear_feature(CPU_SSSE3);
+    _features.clear_feature(CPU_SSE4A);
   }
 
   if (UseSSE < 2)
-    _features &= ~CPU_SSE2;
+    _features.clear_feature(CPU_SSE2);
 
   if (UseSSE < 1)
-    _features &= ~CPU_SSE;
+    _features.clear_feature(CPU_SSE);
 
   //since AVX instructions is slower than SSE in some ZX cpus, force USEAVX=0.
   if (is_zx() && ((cpu_family() == 6) || (cpu_family() == 7))) {
@@ -1420,21 +1464,25 @@ void VM_Version::get_processor_features_hotspot() {
   }
 
   if (UseAVX < 3) {
-    _features &= ~CPU_AVX512F;
-    _features &= ~CPU_AVX512DQ;
-    _features &= ~CPU_AVX512CD;
-    _features &= ~CPU_AVX512BW;
-    _features &= ~CPU_AVX512VL;
-    _features &= ~CPU_AVX512_VPOPCNTDQ;
-    _features &= ~CPU_AVX512_VPCLMULQDQ;
-    _features &= ~CPU_AVX512_VAES;
-    _features &= ~CPU_AVX512_VNNI;
-    _features &= ~CPU_AVX512_VBMI;
-    _features &= ~CPU_AVX512_VBMI2;
-    _features &= ~CPU_AVX512_BITALG;
-    _features &= ~CPU_AVX512_IFMA;
-    _features &= ~CPU_APX_F;
-    _features &= ~CPU_AVX512_FP16;
+    _features.clear_feature(CPU_AVX512F);
+    _features.clear_feature(CPU_AVX512DQ);
+    _features.clear_feature(CPU_AVX512CD);
+    _features.clear_feature(CPU_AVX512BW);
+    _features.clear_feature(CPU_AVX512ER);
+    _features.clear_feature(CPU_AVX512PF);
+    _features.clear_feature(CPU_AVX512VL);
+    _features.clear_feature(CPU_AVX512_VPOPCNTDQ);
+    _features.clear_feature(CPU_AVX512_VPCLMULQDQ);
+    _features.clear_feature(CPU_AVX512_VAES);
+    _features.clear_feature(CPU_AVX512_VNNI);
+    _features.clear_feature(CPU_AVX512_VBMI);
+    _features.clear_feature(CPU_AVX512_VBMI2);
+    _features.clear_feature(CPU_AVX512_BITALG);
+    _features.clear_feature(CPU_AVX512_IFMA);
+    _features.clear_feature(CPU_APX_F);
+    _features.clear_feature(CPU_AVX512_FP16);
+    _features.clear_feature(CPU_AVX10_1);
+    _features.clear_feature(CPU_AVX10_2);
   }
 
   // Currently APX support is only enabled for targets supporting AVX512VL feature.
@@ -1447,45 +1495,47 @@ void VM_Version::get_processor_features_hotspot() {
   }
 
   if (!UseAPX) {
-    _features &= ~CPU_APX_F;
+    _features.clear_feature(CPU_APX_F);
   }
 
   if (UseAVX < 2) {
-    _features &= ~CPU_AVX2;
-    _features &= ~CPU_AVX_IFMA;
+    _features.clear_feature(CPU_AVX2);
+    _features.clear_feature(CPU_AVX_IFMA);
   }
 
   if (UseAVX < 1) {
-    _features &= ~CPU_AVX;
-    _features &= ~CPU_VZEROUPPER;
-    _features &= ~CPU_F16C;
-    _features &= ~CPU_SHA512;
+    _features.clear_feature(CPU_AVX);
+    _features.clear_feature(CPU_VZEROUPPER);
+    _features.clear_feature(CPU_F16C);
+    _features.clear_feature(CPU_SHA512);
   }
 
   if (logical_processors_per_package() == 1) {
     // HT processor could be installed on a system which doesn't support HT.
-    _features &= ~CPU_HT;
+    _features.clear_feature(CPU_HT);
   }
 
   if (is_intel()) { // Intel cpus specific settings
     if (is_knights_family()) {
-      _features &= ~CPU_VZEROUPPER;
-      _features &= ~CPU_AVX512BW;
-      _features &= ~CPU_AVX512VL;
-      _features &= ~CPU_AVX512DQ;
-      _features &= ~CPU_AVX512_VNNI;
-      _features &= ~CPU_AVX512_VAES;
-      _features &= ~CPU_AVX512_VPOPCNTDQ;
-      _features &= ~CPU_AVX512_VPCLMULQDQ;
-      _features &= ~CPU_AVX512_VBMI;
-      _features &= ~CPU_AVX512_VBMI2;
-      _features &= ~CPU_CLWB;
-      _features &= ~CPU_FLUSHOPT;
-      _features &= ~CPU_GFNI;
-      _features &= ~CPU_AVX512_BITALG;
-      _features &= ~CPU_AVX512_IFMA;
-      _features &= ~CPU_AVX_IFMA;
-      _features &= ~CPU_AVX512_FP16;
+      _features.clear_feature(CPU_VZEROUPPER);
+      _features.clear_feature(CPU_AVX512BW);
+      _features.clear_feature(CPU_AVX512VL);
+      _features.clear_feature(CPU_AVX512DQ);
+      _features.clear_feature(CPU_AVX512_VNNI);
+      _features.clear_feature(CPU_AVX512_VAES);
+      _features.clear_feature(CPU_AVX512_VPOPCNTDQ);
+      _features.clear_feature(CPU_AVX512_VPCLMULQDQ);
+      _features.clear_feature(CPU_AVX512_VBMI);
+      _features.clear_feature(CPU_AVX512_VBMI2);
+      _features.clear_feature(CPU_CLWB);
+      _features.clear_feature(CPU_FLUSHOPT);
+      _features.clear_feature(CPU_GFNI);
+      _features.clear_feature(CPU_AVX512_BITALG);
+      _features.clear_feature(CPU_AVX512_IFMA);
+      _features.clear_feature(CPU_AVX_IFMA);
+      _features.clear_feature(CPU_AVX512_FP16);
+      _features.clear_feature(CPU_AVX10_1);
+      _features.clear_feature(CPU_AVX10_2);
     }
   }
 
@@ -1495,7 +1545,6 @@ void VM_Version::get_processor_features_hotspot() {
     _has_intel_jcc_erratum = IntelJccErratumMitigation;
   }
 
-  assert(supports_cpuid(), "Always present");
   assert(supports_clflush(), "Always present");
   if (X86ICacheSync == -1) {
     // Auto-detect, choosing the best performant one that still flushes
@@ -1519,15 +1568,24 @@ void VM_Version::get_processor_features_hotspot() {
     }
   }
 
-  char buf[1024];
-  int cpu_info_size = jio_snprintf(
+  char buf[2048];
+  size_t cpu_info_size = jio_snprintf(
               buf, sizeof(buf),
               "(%u cores per cpu, %u threads per core) family %d model %d stepping %d microcode 0x%x",
               cores_per_cpu(), threads_per_core(),
               cpu_family(), _model, _stepping, os::cpu_microcode_revision());
 
   assert(cpu_info_size > 0, "not enough temporary space allocated");
+#if 0
+FIXME:CPUFeatures1
   insert_features_names(buf + cpu_info_size, sizeof(buf) - cpu_info_size);
+FIXME:CPUFeatures2
+  insert_features_names(buf + cpu_info_size, sizeof(buf) - cpu_info_size, _features_names);
+FIXME:CPUFeatures3
+#endif
+
+  insert_features_names(_features, buf + cpu_info_size, sizeof(buf) - cpu_info_size);
+//FIXME:CPUFeatures4
 
   _cpu_info_string = os::strdup(buf);
 
@@ -2500,10 +2558,13 @@ void VM_Version::check_virtualizations() {
 void VM_Version::missing_features(uint64_t features_missing, uint64_t glibc_features_missing) {
   tty->print("; missing features of this CPU are " UINT64_FORMAT_X "," UINT64_FORMAT_X " =", features_missing, glibc_features_missing);
   char buf[512] = "";
+#if 0
+FIXME:CPUFeatures1
   // insert_features_names() does crash for undefined too high-numbered features.
   insert_features_names(buf, sizeof(buf)          ,       features_missing & (  MAX_CPU - 1));
   char *s = buf + strlen(buf);
   insert_features_names(s  , buf + sizeof(buf) - s, glibc_features_missing & (MAX_GLIBC - 1));
+#endif
   tty->print_cr(
     "%s\n"
     "If you are sure it will not crash you can override this check by -XX:+UnlockExperimentalVMOptions -XX:+IgnoreCPUFeatures .",
@@ -2513,12 +2574,17 @@ void VM_Version::missing_features(uint64_t features_missing, uint64_t glibc_feat
 
 static_assert(sizeof(VM_Version::CPUFeaturesBinary) == 2 * 8, "unexpected sizeof");
 bool VM_Version::cpu_features_binary(VM_Version::CPUFeaturesBinary *data) {
+#if 0
+FIXME:CPUFeatures1
   data->cpu = _features;
   data->glibc = _glibc_features;
+#endif
   return true;
 }
 
 bool VM_Version::cpu_features_binary_check(const CPUFeaturesBinary *data) {
+#if 0
+FIXME:CPUFeatures1
   assert(CPUFeatures == nullptr, "This should only be called on restore and CPUFeatures is not restore-settable");
 
   if (!data) {
@@ -2566,6 +2632,7 @@ bool VM_Version::cpu_features_binary_check(const CPUFeaturesBinary *data) {
   glibc_not_using();
 #endif
 
+#endif
   return true;
 }
 
@@ -2602,6 +2669,7 @@ static bool _vm_version_initialized = false;
 
 void VM_Version::initialize() {
   ResourceMark rm;
+
   // Making this stub must be FIRST use of assembler
   stub_blob = BufferBlob::create("VM_Version stub", stub_size);
   if (stub_blob == nullptr) {
@@ -2617,10 +2685,15 @@ void VM_Version::initialize() {
   clear_apx_test_state_stub = CAST_TO_FN_PTR(clear_apx_test_state_t,
                                      g.clear_apx_test_state());
 
+#if 0
+FIXME:CPUFeatures1
   assert(      _features == 0,       "_features should be zero at startup");
   assert(_glibc_features == 0, "_glibc_features should be zero at startup");
+#endif
   get_processor_features_hardware();
 
+#if 0
+FIXME:CPUFeatures1
   assert(!CPUFeatures == FLAG_IS_DEFAULT(CPUFeatures), "CPUFeatures parsing");
 
   uint64_t GLIBCFeatures_x64;
@@ -2655,6 +2728,7 @@ void VM_Version::initialize() {
 #ifdef LINUX
   if (!glibc_not_using())
     glibc_reexec();
+#endif
 #endif
 
   get_processor_features_hotspot();
@@ -3418,185 +3492,212 @@ int64_t VM_Version::maximum_qualified_cpu_frequency(void) {
   return _max_qualified_cpu_frequency;
 }
 
-uint64_t VM_Version::CpuidInfo::feature_flags() const {
-  uint64_t result = 0;
+VM_Version::VM_Features VM_Version::CpuidInfo::feature_flags() const {
+  VM_Features vm_features;
   if (std_cpuid1_edx.bits.cmpxchg8 != 0)
-    result |= CPU_CX8;
+    vm_features.set_feature(CPU_CX8);
   if (std_cpuid1_edx.bits.cmov != 0)
-    result |= CPU_CMOV;
+    vm_features.set_feature(CPU_CMOV);
   if (std_cpuid1_edx.bits.clflush != 0)
-    result |= CPU_FLUSH;
+    vm_features.set_feature(CPU_FLUSH);
   // clflush should always be available on x86_64
   // if not we are in real trouble because we rely on it
   // to flush the code cache.
-  assert ((result & CPU_FLUSH) != 0, "clflush should be available");
+  assert (vm_features.supports_feature(CPU_FLUSH), "clflush should be available");
   if (std_cpuid1_edx.bits.fxsr != 0 || (is_amd_family() &&
       ext_cpuid1_edx.bits.fxsr != 0))
-    result |= CPU_FXSR;
+    vm_features.set_feature(CPU_FXSR);
   // HT flag is set for multi-core processors also.
   if (threads_per_core() > 1)
-    result |= CPU_HT;
+    vm_features.set_feature(CPU_HT);
   if (std_cpuid1_edx.bits.mmx != 0 || (is_amd_family() &&
       ext_cpuid1_edx.bits.mmx != 0))
-    result |= CPU_MMX;
+    vm_features.set_feature(CPU_MMX);
   if (std_cpuid1_edx.bits.sse != 0)
-    result |= CPU_SSE;
+    vm_features.set_feature(CPU_SSE);
   if (std_cpuid1_edx.bits.sse2 != 0)
-    result |= CPU_SSE2;
+    vm_features.set_feature(CPU_SSE2);
   if (std_cpuid1_ecx.bits.sse3 != 0)
-    result |= CPU_SSE3;
+    vm_features.set_feature(CPU_SSE3);
   if (std_cpuid1_ecx.bits.ssse3 != 0)
-    result |= CPU_SSSE3;
+    vm_features.set_feature(CPU_SSSE3);
   if (std_cpuid1_ecx.bits.sse4_1 != 0)
-    result |= CPU_SSE4_1;
+    vm_features.set_feature(CPU_SSE4_1);
   if (std_cpuid1_ecx.bits.sse4_2 != 0)
-    result |= CPU_SSE4_2;
+    vm_features.set_feature(CPU_SSE4_2);
   if (std_cpuid1_ecx.bits.popcnt != 0)
-    result |= CPU_POPCNT;
+    vm_features.set_feature(CPU_POPCNT);
   if (sefsl1_cpuid7_edx.bits.apx_f != 0 &&
       xem_xcr0_eax.bits.apx_f != 0) {
-    result |= CPU_APX_F;
+    vm_features.set_feature(CPU_APX_F);
   }
   if (std_cpuid1_ecx.bits.avx != 0 &&
       std_cpuid1_ecx.bits.osxsave != 0 &&
       xem_xcr0_eax.bits.sse != 0 &&
       xem_xcr0_eax.bits.ymm != 0) {
-    result |= CPU_AVX;
-    result |= CPU_VZEROUPPER;
+    vm_features.set_feature(CPU_AVX);
+    vm_features.set_feature(CPU_VZEROUPPER);
     if (sefsl1_cpuid7_eax.bits.sha512 != 0)
-      result |= CPU_SHA512;
+      vm_features.set_feature(CPU_SHA512);
     if (std_cpuid1_ecx.bits.f16c != 0)
-      result |= CPU_F16C;
+      vm_features.set_feature(CPU_F16C);
     if (sef_cpuid7_ebx.bits.avx2 != 0) {
-      result |= CPU_AVX2;
+      vm_features.set_feature(CPU_AVX2);
       if (sefsl1_cpuid7_eax.bits.avx_ifma != 0)
-        result |= CPU_AVX_IFMA;
+        vm_features.set_feature(CPU_AVX_IFMA);
     }
     if (sef_cpuid7_ecx.bits.gfni != 0)
-        result |= CPU_GFNI;
+        vm_features.set_feature(CPU_GFNI);
     if (sef_cpuid7_ebx.bits.avx512f != 0 &&
         xem_xcr0_eax.bits.opmask != 0 &&
         xem_xcr0_eax.bits.zmm512 != 0 &&
         xem_xcr0_eax.bits.zmm32 != 0) {
-      result |= CPU_AVX512F;
+      vm_features.set_feature(CPU_AVX512F);
       if (sef_cpuid7_ebx.bits.avx512cd != 0)
-        result |= CPU_AVX512CD;
+        vm_features.set_feature(CPU_AVX512CD);
       if (sef_cpuid7_ebx.bits.avx512dq != 0)
-        result |= CPU_AVX512DQ;
+        vm_features.set_feature(CPU_AVX512DQ);
       if (sef_cpuid7_ebx.bits.avx512ifma != 0)
-        result |= CPU_AVX512_IFMA;
+        vm_features.set_feature(CPU_AVX512_IFMA);
       if (sef_cpuid7_ebx.bits.avx512pf != 0)
-        result |= CPU_AVX512PF;
+        vm_features.set_feature(CPU_AVX512PF);
       if (sef_cpuid7_ebx.bits.avx512er != 0)
-        result |= CPU_AVX512ER;
+        vm_features.set_feature(CPU_AVX512ER);
       if (sef_cpuid7_ebx.bits.avx512bw != 0)
-        result |= CPU_AVX512BW;
+        vm_features.set_feature(CPU_AVX512BW);
       if (sef_cpuid7_ebx.bits.avx512vl != 0)
-        result |= CPU_AVX512VL;
+        vm_features.set_feature(CPU_AVX512VL);
       if (sef_cpuid7_ecx.bits.avx512_vpopcntdq != 0)
-        result |= CPU_AVX512_VPOPCNTDQ;
+        vm_features.set_feature(CPU_AVX512_VPOPCNTDQ);
       if (sef_cpuid7_ecx.bits.avx512_vpclmulqdq != 0)
-        result |= CPU_AVX512_VPCLMULQDQ;
+        vm_features.set_feature(CPU_AVX512_VPCLMULQDQ);
       if (sef_cpuid7_ecx.bits.vaes != 0)
-        result |= CPU_AVX512_VAES;
+        vm_features.set_feature(CPU_AVX512_VAES);
       if (sef_cpuid7_ecx.bits.avx512_vnni != 0)
-        result |= CPU_AVX512_VNNI;
+        vm_features.set_feature(CPU_AVX512_VNNI);
       if (sef_cpuid7_ecx.bits.avx512_bitalg != 0)
-        result |= CPU_AVX512_BITALG;
+        vm_features.set_feature(CPU_AVX512_BITALG);
       if (sef_cpuid7_ecx.bits.avx512_vbmi != 0)
-        result |= CPU_AVX512_VBMI;
+        vm_features.set_feature(CPU_AVX512_VBMI);
       if (sef_cpuid7_ecx.bits.avx512_vbmi2 != 0)
-        result |= CPU_AVX512_VBMI2;
+        vm_features.set_feature(CPU_AVX512_VBMI2);
+    }
+    if (is_intel()) {
+      if (sefsl1_cpuid7_edx.bits.avx10 != 0 &&
+          std_cpuid24_ebx.bits.avx10_vlen_512 !=0 &&
+          std_cpuid24_ebx.bits.avx10_converged_isa_version >= 1 &&
+          xem_xcr0_eax.bits.opmask != 0 &&
+          xem_xcr0_eax.bits.zmm512 != 0 &&
+          xem_xcr0_eax.bits.zmm32 != 0) {
+        vm_features.set_feature(CPU_AVX10_1);
+        vm_features.set_feature(CPU_AVX512F);
+        vm_features.set_feature(CPU_AVX512CD);
+        vm_features.set_feature(CPU_AVX512DQ);
+        vm_features.set_feature(CPU_AVX512PF);
+        vm_features.set_feature(CPU_AVX512ER);
+        vm_features.set_feature(CPU_AVX512BW);
+        vm_features.set_feature(CPU_AVX512VL);
+        vm_features.set_feature(CPU_AVX512_VPOPCNTDQ);
+        vm_features.set_feature(CPU_AVX512_VPCLMULQDQ);
+        vm_features.set_feature(CPU_AVX512_VAES);
+        vm_features.set_feature(CPU_AVX512_VNNI);
+        vm_features.set_feature(CPU_AVX512_BITALG);
+        vm_features.set_feature(CPU_AVX512_VBMI);
+        vm_features.set_feature(CPU_AVX512_VBMI2);
+        if (std_cpuid24_ebx.bits.avx10_converged_isa_version >= 2) {
+          vm_features.set_feature(CPU_AVX10_2);
+        }
+      }
     }
   }
+
   if (std_cpuid1_ecx.bits.hv != 0)
-    result |= CPU_HV;
+    vm_features.set_feature(CPU_HV);
   if (sef_cpuid7_ebx.bits.bmi1 != 0)
-    result |= CPU_BMI1;
+    vm_features.set_feature(CPU_BMI1);
   if (std_cpuid1_edx.bits.tsc != 0)
-    result |= CPU_TSC;
+    vm_features.set_feature(CPU_TSC);
   if (ext_cpuid7_edx.bits.tsc_invariance != 0)
-    result |= CPU_TSCINV_BIT;
+    vm_features.set_feature(CPU_TSCINV_BIT);
   if (std_cpuid1_ecx.bits.aes != 0)
-    result |= CPU_AES;
+    vm_features.set_feature(CPU_AES);
   if (ext_cpuid1_ecx.bits.lzcnt != 0)
-    result |= CPU_LZCNT;
+    vm_features.set_feature(CPU_LZCNT);
   if (ext_cpuid1_ecx.bits.prefetchw != 0)
-    result |= CPU_3DNOW_PREFETCH;
+    vm_features.set_feature(CPU_3DNOW_PREFETCH);
   if (sef_cpuid7_ebx.bits.erms != 0)
-    result |= CPU_ERMS;
+    vm_features.set_feature(CPU_ERMS);
   if (sef_cpuid7_edx.bits.fast_short_rep_mov != 0)
-    result |= CPU_FSRM;
+    vm_features.set_feature(CPU_FSRM);
   if (std_cpuid1_ecx.bits.clmul != 0)
-    result |= CPU_CLMUL;
+    vm_features.set_feature(CPU_CLMUL);
   if (sef_cpuid7_ebx.bits.rtm != 0)
-    result |= CPU_RTM;
+    vm_features.set_feature(CPU_RTM);
   if (sef_cpuid7_ebx.bits.adx != 0)
-     result |= CPU_ADX;
+     vm_features.set_feature(CPU_ADX);
   if (sef_cpuid7_ebx.bits.bmi2 != 0)
-    result |= CPU_BMI2;
+    vm_features.set_feature(CPU_BMI2);
   if (sef_cpuid7_ebx.bits.sha != 0)
-    result |= CPU_SHA;
+    vm_features.set_feature(CPU_SHA);
   if (std_cpuid1_ecx.bits.fma != 0)
-    result |= CPU_FMA;
+    vm_features.set_feature(CPU_FMA);
   if (sef_cpuid7_ebx.bits.clflushopt != 0)
-    result |= CPU_FLUSHOPT;
+    vm_features.set_feature(CPU_FLUSHOPT);
   if (sef_cpuid7_ebx.bits.clwb != 0)
-    result |= CPU_CLWB;
+    vm_features.set_feature(CPU_CLWB);
   if (ext_cpuid1_edx.bits.rdtscp != 0)
-    result |= CPU_RDTSCP;
+    vm_features.set_feature(CPU_RDTSCP);
   if (sef_cpuid7_ecx.bits.rdpid != 0)
-    result |= CPU_RDPID;
+    vm_features.set_feature(CPU_RDPID);
 
   // AMD|Hygon additional features.
   if (is_amd_family()) {
     // PREFETCHW was checked above, check TDNOW here.
     if ((ext_cpuid1_edx.bits.tdnow != 0))
-      result |= CPU_3DNOW_PREFETCH;
+      vm_features.set_feature(CPU_3DNOW_PREFETCH);
     if (ext_cpuid1_ecx.bits.sse4a != 0)
-      result |= CPU_SSE4A;
+      vm_features.set_feature(CPU_SSE4A);
   }
 
   // Intel additional features.
   if (is_intel()) {
     if (sef_cpuid7_edx.bits.serialize != 0)
-      result |= CPU_SERIALIZE;
+      vm_features.set_feature(CPU_SERIALIZE);
     if (_cpuid_info.sef_cpuid7_edx.bits.avx512_fp16 != 0)
-      result |= CPU_AVX512_FP16;
+      vm_features.set_feature(CPU_AVX512_FP16);
   }
 
   // ZX additional features.
   if (is_zx()) {
     // We do not know if these are supported by ZX, so we cannot trust
     // common CPUID bit for them.
-    assert((result & CPU_CLWB) == 0, "Check if it is supported?");
-    result &= ~CPU_CLWB;
+    assert(vm_features.supports_feature(CPU_CLWB), "Check if it is supported?");
+    vm_features.clear_feature(CPU_CLWB);
   }
 
   // Protection key features.
   if (sef_cpuid7_ecx.bits.pku != 0) {
-    result |= CPU_PKU;
+    vm_features.set_feature(CPU_PKU);
   }
   if (sef_cpuid7_ecx.bits.ospke != 0) {
-    result |= CPU_OSPKE;
+    vm_features.set_feature(CPU_OSPKE);
   }
 
   // Control flow enforcement (CET) features.
   if (sef_cpuid7_ecx.bits.cet_ss != 0) {
-    result |= CPU_CET_SS;
+    vm_features.set_feature(CPU_CET_SS);
   }
   if (sef_cpuid7_edx.bits.cet_ibt != 0) {
-    result |= CPU_CET_IBT;
+    vm_features.set_feature(CPU_CET_IBT);
   }
 
   // Composite features.
   if (supports_tscinv_bit() &&
       ((is_amd_family() && !is_amd_Barcelona()) ||
        is_intel_tsc_synched_at_init())) {
-    result |= CPU_TSCINV;
+    vm_features.set_feature(CPU_TSCINV);
   }
-
-  return result;
+  return vm_features;
 }
 
 bool VM_Version::os_supports_avx_vectors() {
@@ -3785,4 +3886,15 @@ bool VM_Version::is_intrinsic_supported(vmIntrinsicID id) {
     break;
   }
   return true;
+}
+
+void VM_Version::insert_features_names(VM_Version::VM_Features features, char* buf, size_t buflen) {
+  for (int i = 0; i < MAX_CPU_FEATURES; i++) {
+    if (features.supports_feature((VM_Version::Feature_Flag)i)) {
+      int res = jio_snprintf(buf, buflen, ", %s", _features_names[i]);
+      assert(res > 0, "not enough temporary space allocated");
+      buf += res;
+      buflen -= res;
+    }
+  }
 }

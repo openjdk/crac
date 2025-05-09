@@ -64,8 +64,10 @@ protected:
 public:
   // Initialization
   static void initialize();
-  static void crac_restore() {}
-  static void crac_restore_finalize() {}
+  struct CPUFeaturesBinary {};
+  static bool cpu_features_binary(CPUFeaturesBinary *data) { return false; }
+  static bool cpu_features_binary_check(const CPUFeaturesBinary *data) { return data == nullptr; }
+  static bool ignore_cpu_features() { return true; }
   static void check_virtualizations();
 
   static void print_platform_virtualization_info(outputStream*);

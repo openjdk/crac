@@ -27,8 +27,10 @@
 #include "crlib/crlib.h"
 #include "crlib/crlib_description.h"
 #include "crlib/crlib_restore_data.h"
+#include "crlib/crlib_user_data.h"
 #include "memory/allocation.hpp"
 #include "nmt/memTag.hpp"
+#include "runtime/vm_version.hpp"
 
 #include <cstddef>
 #include <cstdint>
@@ -65,6 +67,11 @@ public:
   const char *description() const;
   const char *configuration_doc() const;
 
+  ApiStatus prepare_user_data_api();
+  bool cpufeatures_store(const VM_Version::CPUFeaturesBinary *datap) const;
+  bool cpufeatures_load(VM_Version::CPUFeaturesBinary *datap, bool *presentp) const;
+  static constexpr char cpufeatures_userdata_name[] = "cpufeatures";
+
 private:
   void *_lib = nullptr;
   crlib_api_t *_api = nullptr;
@@ -72,6 +79,7 @@ private:
 
   crlib_restore_data_t *_restore_data_api = nullptr;
   crlib_description_t *_description_api = nullptr;
+  crlib_user_data_t *_user_data_api = nullptr;
 };
 
 #endif // SHARE_RUNTIME_CRAC_ENGINE_HPP

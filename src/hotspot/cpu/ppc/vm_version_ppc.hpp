@@ -87,8 +87,10 @@ public:
   // Initialization
   static void initialize();
   static void check_virtualizations();
-  static void crac_restore() {}
-  static void crac_restore_finalize() {}
+  struct CPUFeaturesBinary {};
+  static bool cpu_features_binary(CPUFeaturesBinary *data) { return false; }
+  static bool cpu_features_binary_check(const CPUFeaturesBinary *data) { return data == nullptr; }
+  static bool ignore_cpu_features() { return true; }
 
   // Override Abstract_VM_Version implementation
   static void print_platform_virtualization_info(outputStream*);

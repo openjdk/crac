@@ -70,7 +70,6 @@ public:
   ApiStatus prepare_user_data_api();
   bool cpufeatures_store(const VM_Version::CPUFeaturesBinary *datap) const;
   bool cpufeatures_load(VM_Version::CPUFeaturesBinary *datap, bool *presentp) const;
-  static constexpr char cpufeatures_userdata_name[] = "cpufeatures";
 
 private:
   void *_lib = nullptr;

@@ -411,7 +411,7 @@ const char *CracEngine::configuration_doc() const {
   return _description_api->configuration_doc(_conf);
 }
 
-constexpr char CracEngine::cpufeatures_userdata_name[];
+static constexpr char cpufeatures_userdata_name[] = "cpufeatures";
 
 CracEngine::ApiStatus CracEngine::prepare_user_data_api() {
   precond(is_initialized());
@@ -435,6 +435,7 @@ CracEngine::ApiStatus CracEngine::prepare_user_data_api() {
 
 // Return success.
 bool CracEngine::cpufeatures_store(const VM_Version::CPUFeaturesBinary *datap) const {
+  log_debug(crac)("cpufeatures_store user data %s to %s...", cpufeatures_userdata_name, CRaCRestoreFrom);
   return _user_data_api->set_user_data(_conf, cpufeatures_userdata_name, datap, sizeof(*datap));
 }
 
@@ -445,6 +446,7 @@ bool CracEngine::cpufeatures_load(VM_Version::CPUFeaturesBinary *datap, bool *pr
     // s3->set_image_bitmask did handle it already, load_user_data() is too expensive for S3.
     return true;
   }
+  log_debug(crac)("cpufeatures_load user data %s from %s...", cpufeatures_userdata_name, CRaCRestoreFrom);
   crlib_user_data_storage_t *user_data;
   if (!(user_data = _user_data_api->load_user_data(_conf))) {
     log_error(crac)("CRaC engine failed to load user data %s", cpufeatures_userdata_name);

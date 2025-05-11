@@ -529,7 +529,7 @@ void crac::restore(crac_restore_data& restore_data) {
           return;
         }
         if (!VM_Version::cpu_features_binary_check(present ? &data : nullptr)) {
-          log_error(crac)("Image %s has incompatible CPU features in its user data %s", CRaCRestoreFrom, engine.cpufeatures_userdata_name);
+          log_error(crac)("Image %s has incompatible CPU features in its user data", CRaCRestoreFrom);
           return;
         }
         } break;

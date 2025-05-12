@@ -709,11 +709,25 @@ static int checkpoint(crlib_conf_t *conf) {
     fprintf(stderr, CREXEC "%s must be set before checkpoint\n", opt_exec_location);
     return -1;
   }
-  if (conf->argv()[ARGV_IMAGE_LOCATION] == nullptr) {
+  const char *to = conf->argv()[ARGV_IMAGE_LOCATION];
+  if (to == nullptr) {
     fprintf(stderr, CREXEC "%s must be set before checkpoint\n", opt_image_location);
     return -1;
   }
   conf->set_argv_action("checkpoint");
+
+  struct stat st;
+  if (0 == stat(to, &st)) {
+    if ((st.st_mode & S_IFMT) != S_IFDIR) {
+      fprintf(stderr, CREXEC "CRaCCheckpointTo=%s is not a directory", to);
+      return false;
+    }
+  } else {
+    if (-1 == mkdir(to, 0700)) {
+      fprintf(stderr, CREXEC "Cannot create CRaCCheckpointTo=%s: %s", to, strerror(errno));
+      return false;
+    }
+  }
 
   if (!conf->direct_map().is_default) {
     fprintf(stderr, CREXEC "%s has no effect on checkpoint\n", opt_direct_map);

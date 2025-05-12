@@ -353,23 +353,6 @@ void crac::print_engine_info_and_exit() {
 bool crac::prepare_checkpoint() {
   precond(CRaCCheckpointTo != nullptr);
 
-  struct stat st;
-  if (0 == os::stat(CRaCCheckpointTo, &st)) {
-    if ((st.st_mode & S_IFMT) != S_IFDIR) {
-      log_error(crac)("CRaCCheckpointTo=%s is not a directory", CRaCCheckpointTo);
-      return false;
-    }
-  } else {
-    if (-1 == os::mkdir(CRaCCheckpointTo)) {
-      log_error(crac)("Cannot create CRaCCheckpointTo=%s: %s", CRaCCheckpointTo, os::strerror(errno));
-      return false;
-    }
-    if (-1 == os::rmdir(CRaCCheckpointTo)) {
-      log_warning(crac)("Cannot cleanup after CRaCCheckpointTo check: %s", os::strerror(errno));
-      // not fatal
-    }
-  }
-
   // Initialize CRaC engine now to verify all the related VM options
   assert(_engine == nullptr, "CRaC engine should be initialized only once");
   _engine = new CracEngine(CRaCCheckpointTo);
@@ -401,11 +384,6 @@ Handle crac::checkpoint(jarray fd_arr, jobjectArray obj_arr, bool dry_run, jlong
 
   if (CRaCCheckpointTo == nullptr) {
     log_error(crac)("CRaCCheckpointTo is not specified");
-    return ret_cr(JVM_CHECKPOINT_NONE, Handle(), Handle(), Handle(), Handle(), THREAD);
-  }
-
-  if (-1 == os::mkdir(CRaCCheckpointTo) && errno != EEXIST) {
-    log_error(crac)("Cannot create CRaCCheckpointTo=%s: %s", CRaCCheckpointTo, os::strerror(errno));
     return ret_cr(JVM_CHECKPOINT_NONE, Handle(), Handle(), Handle(), Handle(), THREAD);
   }
 

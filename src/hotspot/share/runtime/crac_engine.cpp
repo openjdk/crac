@@ -466,7 +466,7 @@ bool CracEngine::cpufeatures_s3_configure(const VM_Version::CPUFeaturesBinary *d
 
 // Return success.
 bool CracEngine::cpufeatures_store(const VM_Version::CPUFeaturesBinary *datap) const {
-  log_debug(crac)("cpufeatures_store user data %s to %s...", cpufeatures_userdata_name, CRaCRestoreFrom);
+  log_debug(crac)("cpufeatures_store user data %s to %s...", cpufeatures_userdata_name, CRaCCheckpointTo);
   if (cpufeatures_s3_configure(datap)) {
     return true;
   }

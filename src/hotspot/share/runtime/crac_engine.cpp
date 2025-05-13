@@ -441,11 +441,6 @@ bool CracEngine::cpufeatures_store(const VM_Version::CPUFeaturesBinary *datap) c
 
 // Return success.
 bool CracEngine::cpufeatures_load(VM_Version::CPUFeaturesBinary *datap, bool *presentp) const {
-  static const char s3method[] = "s3://";
-  if (strncasecmp(CRaCRestoreFrom, s3method, sizeof(s3method) - 1) == 0) {
-    // s3->set_image_bitmask did handle it already, load_user_data() is too expensive for S3.
-    return true;
-  }
   log_debug(crac)("cpufeatures_load user data %s from %s...", cpufeatures_userdata_name, CRaCRestoreFrom);
   crlib_user_data_storage_t *user_data;
   if (!(user_data = _user_data_api->load_user_data(_conf))) {

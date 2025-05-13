@@ -79,8 +79,6 @@ private:
   crlib_restore_data_t *_restore_data_api = nullptr;
   crlib_description_t *_description_api = nullptr;
   crlib_user_data_t *_user_data_api = nullptr;
-
-  bool cpufeatures_s3_configure(const VM_Version::CPUFeaturesBinary *datap) const;
 };
 
 #endif // SHARE_RUNTIME_CRAC_ENGINE_HPP

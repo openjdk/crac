@@ -433,50 +433,17 @@ CracEngine::ApiStatus CracEngine::prepare_user_data_api() {
   return ApiStatus::OK;
 }
 
-static uint8_t to_hex(uint8_t nibble) {
-  if (nibble < 0xa) {
-    return nibble + '0';
-  } else if (nibble < 0x10) {
-    return nibble - 10 + 'a';
-  } else {
-    assert(false, "notreached");
-    return -1;
-  }
-}
-
-// Return success.
-bool CracEngine::cpufeatures_s3_configure(const VM_Version::CPUFeaturesBinary *datap) const {
-  size_t data_size = datap ? sizeof(*datap) : 0;
-  if (!_api->can_configure(_conf, "s3.image_bitmask")) {
-    return false;
-  }
-  char hex[data_size * 2 + 1];
-  const uint8_t *src = (const uint8_t *) datap;
-  for (size_t ix = 0; ix < data_size; ++ix) {
-    hex[2 * ix + 0] = to_hex(src[ix] >> 4);
-    hex[2 * ix + 1] = to_hex(src[ix] & 0x0f);
-  }
-  hex[2 * data_size] = 0;
-  if (!_api->configure(_conf, "s3.image_bitmask", hex)) {
-    log_error(crac)("CRaC engine cannot set s3.image_bitmask to %s", hex);
-    return false;
-  }
-  return true;
-}
-
 // Return success.
 bool CracEngine::cpufeatures_store(const VM_Version::CPUFeaturesBinary *datap) const {
   log_debug(crac)("cpufeatures_store user data %s to %s...", cpufeatures_userdata_name, CRaCRestoreFrom);
-  if (cpufeatures_s3_configure(datap)) {
-    return true;
-  }
-  size_t data_size = datap ? sizeof(*datap) : 0;
-  return _user_data_api->set_user_data(_conf, cpufeatures_userdata_name, datap, data_size);
+  return _user_data_api->set_user_data(_conf, cpufeatures_userdata_name, datap, sizeof(*datap));
 }
 
 // Return success.
 bool CracEngine::cpufeatures_load(VM_Version::CPUFeaturesBinary *datap, bool *presentp) const {
-  if (cpufeatures_s3_configure(datap)) {
+  static const char s3method[] = "s3://";
+  if (strncasecmp(CRaCRestoreFrom, s3method, sizeof(s3method) - 1) == 0) {
+    // s3->set_image_bitmask did handle it already, load_user_data() is too expensive for S3.
     return true;
   }
   log_debug(crac)("cpufeatures_load user data %s from %s...", cpufeatures_userdata_name, CRaCRestoreFrom);

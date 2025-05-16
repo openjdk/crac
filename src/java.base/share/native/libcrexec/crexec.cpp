@@ -556,7 +556,7 @@ static bool set_user_data(crlib_conf_t *conf, const char *name, const void *data
     return false;
   }
   FILE *f = fopen(fname, "w");
-  if (f == NULL) {
+  if (f == nullptr) {
     fprintf(stderr, CREXEC "cannot create %s: %s\n", fname, strerror(errno));
     return false;
   }
@@ -594,12 +594,12 @@ struct crlib_user_data_storage {
 
 static crlib_user_data_storage_t *load_user_data(crlib_conf_t *conf) {
   crlib_user_data_storage_t *user_data = static_cast<crlib_user_data_storage_t *>(malloc(sizeof(*user_data)));
-  if (user_data == NULL) {
+  if (user_data == nullptr) {
     fprintf(stderr, CREXEC "cannot allocate memory\n");
-    return NULL;
+    return nullptr;
   }
   user_data->conf = conf;
-  user_data->chunk = NULL;
+  user_data->chunk = nullptr;
   return user_data;
 }
 
@@ -615,13 +615,13 @@ static bool lookup_user_data(crlib_user_data_storage_t *user_data, const char *n
     return false;
   }
   FILE *f = fopen(fname, "r");
-  if (f == NULL) {
+  if (f == nullptr) {
     if (errno != ENOENT) {
       fprintf(stderr, CREXEC "cannot open %s: %s\n", fname, strerror(errno));
     }
     return false;
   }
-  uint8_t *data = NULL;
+  uint8_t *data = nullptr;
   size_t data_used = 0;
   size_t data_allocated = 0;
   int nibble = -1;
@@ -656,7 +656,7 @@ static bool lookup_user_data(crlib_user_data_storage_t *user_data, const char *n
         data_allocated = 0x100;
       }
       uint8_t *data_new = static_cast<uint8_t *>(realloc(data, data_allocated));
-      if (data_new == NULL) {
+      if (data_new == nullptr) {
         fclose(f);
         free(data);
         fprintf(stderr, CREXEC "cannot allocate memory for %s after %zu parsed bytes\n", fname, data_used);
@@ -682,7 +682,7 @@ static bool lookup_user_data(crlib_user_data_storage_t *user_data, const char *n
   *data_p = data;
   *size_p = data_used;
   struct user_data_chunk *chunk = static_cast<struct user_data_chunk *>(malloc(sizeof(*chunk)));
-  if (chunk == NULL) {
+  if (chunk == nullptr) {
     free(data);
     fprintf(stderr, CREXEC "cannot allocate memory\n");
     return false;

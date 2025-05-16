@@ -886,7 +886,7 @@ uint64_t VM_Version::CPUFeatures_parse(const char *str, uint64_t &glibc_features
   _ignore_glibc_not_using = true;
   return _features;
 #endif
-  if (str == NULL || strcmp(str, "native") == 0) {
+  if (str == nullptr || strcmp(str, "native") == 0) {
     return _features;
   }
   if (strcmp(str, "ignore") == 0) {
@@ -989,7 +989,7 @@ bool VM_Version::glibc_env_set(char *disable_str) {
 }
 
 void VM_Version::glibc_reexec() {
-  char *buf = NULL;
+  char *buf = nullptr;
   size_t buf_allocated = 0;
   size_t buf_used = 0;
 #define CMDLINE "/proc/self/cmdline"
@@ -1001,7 +1001,7 @@ void VM_Version::glibc_reexec() {
     if (buf_used == buf_allocated) {
       buf_allocated = MAX2(size_t(4096), 2 * buf_allocated);
       buf = (char *)os::realloc(buf, buf_allocated, mtOther);
-      if (buf == NULL)
+      if (buf == nullptr)
         vm_exit_during_initialization(err_msg(CMDLINE " reading failed allocating %zu bytes", buf_allocated));
     }
     got = read(fd, buf + buf_used, buf_allocated - buf_used);
@@ -1011,7 +1011,7 @@ void VM_Version::glibc_reexec() {
   } while (got);
   if (close(fd))
     vm_exit_during_initialization(err_msg("Cannot close " CMDLINE ": %m"));
-  char **argv = NULL;
+  char **argv = nullptr;
   size_t argv_allocated = 0;
   size_t argv_used = 0;
   char *s = buf;
@@ -1019,7 +1019,7 @@ void VM_Version::glibc_reexec() {
     if (argv_used == argv_allocated) {
       argv_allocated = MAX2(size_t(256), 2 * argv_allocated);
       argv = (char **)os::realloc(argv, argv_allocated * sizeof(*argv), mtOther);
-      if (argv == NULL)
+      if (argv == nullptr)
         vm_exit_during_initialization(err_msg(CMDLINE " reading failed allocating %zu pointers", argv_allocated));
     }
     if (s == buf + buf_used) {
@@ -1031,7 +1031,7 @@ void VM_Version::glibc_reexec() {
       vm_exit_during_initialization("Missing end of string zero while parsing " CMDLINE);
     ++s;
   }
-  argv[argv_used] = NULL;
+  argv[argv_used] = nullptr;
 #undef CMDLINE
 
 #define EXEC "/proc/self/exe"

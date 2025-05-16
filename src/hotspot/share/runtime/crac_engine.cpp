@@ -436,7 +436,11 @@ CracEngine::ApiStatus CracEngine::prepare_user_data_api() {
 // Return success.
 bool CracEngine::cpufeatures_store(const VM_Version::CPUFeaturesBinary *datap) const {
   log_debug(crac)("cpufeatures_store user data %s to %s...", cpufeatures_userdata_name, CRaCRestoreFrom);
-  return _user_data_api->set_user_data(_conf, cpufeatures_userdata_name, datap, sizeof(*datap));
+  const bool ok = _user_data_api->set_user_data(_conf, cpufeatures_userdata_name, datap, sizeof(*datap));
+  if (!ok) {
+    log_error(crac)("CRaC engine failed to store user data %s", cpufeatures_userdata_name);
+  }
+  return ok;
 }
 
 // Return success.

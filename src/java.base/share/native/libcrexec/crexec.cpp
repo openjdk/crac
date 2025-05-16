@@ -120,8 +120,8 @@ static crlib_user_data_t user_data_extension = {
 
 static const crlib_extension_t *extensions[] = {
   &restore_data_extension.header,
-  &description_extension.header,
   &user_data_extension.header,
+  &description_extension.header,
   nullptr
 };
 

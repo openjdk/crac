@@ -575,7 +575,7 @@ static bool set_user_data(crlib_conf_t *conf, const char *name, const void *data
     return false;
   }
   if (fclose(f)) {
-    fprintf(stderr, CREXEC "cannot write to %s: %s\n", fname, strerror(errno));
+    fprintf(stderr, CREXEC "cannot close %s: %s\n", fname, strerror(errno));
     return false;
   }
   return true;

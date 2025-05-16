@@ -2612,10 +2612,7 @@ bool VM_Version::cpu_features_binary(VM_Version::CPUFeaturesBinary *data) {
 bool VM_Version::cpu_features_binary_check(const CPUFeaturesBinary *data) {
   ResourceMark rm;
 
-  if (CPUFeatures) {
-    warning("-XX:CRaCRestoreFrom is mutually exclusive with -XX:CPUFeatures; specify -XX:CPUFeatures during -XX:CRaCCheckpointTo");
-    return false;
-  }
+  assert(CPUFeatures == nullptr, "This should only be called on restore and CPUFeatures is not restore-settable");
 
   if (!data) {
     return false;

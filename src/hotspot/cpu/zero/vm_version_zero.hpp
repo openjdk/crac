@@ -32,8 +32,10 @@
 class VM_Version : public Abstract_VM_Version {
  public:
   static void initialize();
-  static void crac_restore() {}
-  static void crac_restore_finalize() {}
+  struct CPUFeaturesBinary {};
+  static bool cpu_features_binary(CPUFeaturesBinary *data) { return false; }
+  static bool cpu_features_binary_check(const CPUFeaturesBinary *data) { return data == nullptr; }
+  static bool ignore_cpu_features() { return true; }
 
   // No _features_names[] available on this CPU.
   static void insert_features_names(char* buf, size_t buflen, uint64_t features = _features) {}

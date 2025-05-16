@@ -2642,7 +2642,7 @@ bool VM_Version::cpu_features_binary_check(const CPUFeaturesBinary *data) {
       CPUFeatures_x64, GLIBCFeatures_x64);
     missing_features(features_missing, glibc_features_missing);
     if (!IgnoreCPUFeatures) {
-      vm_exit_during_initialization();
+      return false;
     }
   }
 

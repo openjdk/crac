@@ -30,10 +30,10 @@ set -ex -o pipefail
 exec >&2
 
 JAVA_HOME=$TESTJAVA
-javafiles="{bin/{java,jcmd},lib/{jvm.cfg,lib{crexec,java,jimage,jli,jsvml,net,nio,attach,zip}.so,modules,tzdb.dat,server/{classes.jsa,libjvm.so},criuengine,criu,libwarp.so},conf/security/java.security}"
+javafiles="{bin/{java,jcmd},lib/{jvm.cfg,lib{crexec,java,jimage,jli,jsvml,net,nio,attach,zip}.so,modules,tzdb.dat,server/{classes.jsa,libjvm.so},criuengine,criu},conf/security/java.security}"
 qemuimgurl=https://download.fedoraproject.org/pub/fedora/linux/releases/41/Cloud/x86_64/images/Fedora-Cloud-Base-Generic-41-1.4.x86_64.qcow2
 qemuimgsumurl=https://download.fedoraproject.org/pub/fedora/linux/releases/41/Cloud/x86_64/images/Fedora-Cloud-41-1.4-x86_64-CHECKSUM
-# FIXME: warp+criu need an update for new kernels:
+# FIXME: criu need an update for new kernels:
 #qemuimgurl=https://download.fedoraproject.org/pub/fedora/linux/releases/42/Cloud/x86_64/images/Fedora-Cloud-Base-Generic-42-1.1.x86_64.qcow2
 #qemuimgsumurl=https://download.fedoraproject.org/pub/fedora/linux/releases/42/Cloud/x86_64/images/Fedora-Cloud-42-1.1-x86_64-CHECKSUM
 qemuimgdir=/tmp
@@ -185,16 +185,16 @@ function checkpoint {
   runssh "$javasetup;rm -rf cr || exit 1; \
     $(: 'Prevent on CRIU: Error (criu/pie/restorer.c:2057): Unable to create a thread: -17') \
     for i in \$(seq 1 1000);do /bin/true;done; \
-    bin/java $warp -XX:CRaCCheckpointTo=cr -XX:+ShowCPUFeatures $checkpoint_args CPUFeatures&p=\$!;sleep $[3*$timeoutmultiply];bin/jcmd CPUFeatures JDK.checkpoint; \
+    bin/java -XX:CRaCCheckpointTo=cr -XX:+ShowCPUFeatures $checkpoint_args CPUFeatures&p=\$!;sleep $[3*$timeoutmultiply];bin/jcmd CPUFeatures JDK.checkpoint; \
     wait \$p;true"
 }
 function restore {
   restore_args="$1"
-  restore="$(runssh "$javasetup;bin/java $warp -XX:CRaCRestoreFrom=cr $restore_args&p=\$!;(sleep $[6*$timeoutmultiply];kill \$p)&wait \$p;echo RC=\$?" 2>&1|tee /proc/self/fd/2)"
+  restore="$(runssh "$javasetup;bin/java -XX:CRaCRestoreFrom=cr $restore_args&p=\$!;(sleep $[6*$timeoutmultiply];kill \$p)&wait \$p;echo RC=\$?" 2>&1|tee /proc/self/fd/2)"
 }
 failfile=$tmpdir/failfile
 rm -f $failfile
-function checkpoint_restore_one {
+function checkpoint_restore {
   kind_checkpoint="$1"
   kind_restore="$2"
   check="${3:-CPUFeaturesCheck }"
@@ -207,17 +207,6 @@ function checkpoint_restore_one {
   restore "$restore_args"
   if [ "$check" != - ];then
     (set +e;echo $restore|grep "$check";checkpoint_restore_result)
-  fi
-}
-# FIXME: Make both snapshots first and both restores second to better reuse the VMs.
-function checkpoint_restore {
-  checkpoint_restore="criu: $*"
-  warp=""
-  checkpoint_restore_one "$@"
-  if ! echo "$*"|grep -q "x86: FPU xsave area present, but host cpu doesn't support it";then
-    checkpoint_restore="warp: $*"
-    warp="-XX:CRaCEngine=warp"
-    checkpoint_restore_one "$@"
   fi
 }
 # SIGTERM+128; see 'kill \$p' above
@@ -235,7 +224,7 @@ function checkpoint_restore_result {
     echo -n "FAIL"
     touch $failfile
   fi
-  echo ": $checkpoint_restore"
+  echo ": criu: "
   set -x
 }
 function get_features {

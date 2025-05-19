@@ -2610,8 +2610,6 @@ bool VM_Version::cpu_features_binary(VM_Version::CPUFeaturesBinary *data) {
 }
 
 bool VM_Version::cpu_features_binary_check(const CPUFeaturesBinary *data) {
-  ResourceMark rm;
-
   assert(CPUFeatures == nullptr, "This should only be called on restore and CPUFeatures is not restore-settable");
 
   if (!data) {

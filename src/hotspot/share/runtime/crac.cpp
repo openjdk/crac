@@ -116,21 +116,21 @@ int crac::checkpoint_restore(int *shmid) {
   }
 
   if (!VM_Version::ignore_cpu_features()) {
-    switch (_engine->prepare_user_data_api()) {
-      case CracEngine::ApiStatus::OK: {
-        VM_Version::CPUFeaturesBinary data;
-        if (!VM_Version::cpu_features_binary(&data)) {
-          // This backend does not use CPUFeatures. That is OK.
-        } else if (!_engine->cpufeatures_store(&data)) {
+    VM_Version::CPUFeaturesBinary data;
+    if (VM_Version::cpu_features_binary(&data)) {
+      switch (_engine->prepare_user_data_api()) {
+        case CracEngine::ApiStatus::OK:
+          if (!_engine->cpufeatures_store(&data)) {
+            return JVM_CHECKPOINT_ERROR;
+          }
+          break;
+        case CracEngine::ApiStatus::ERR:
           return JVM_CHECKPOINT_ERROR;
-        }
-        } break;
-      case CracEngine::ApiStatus::ERR:
-        return JVM_CHECKPOINT_ERROR;
-      case CracEngine::ApiStatus::UNSUPPORTED:
-        log_warning(crac)("Cannot store CPUFeatures for checkpoint "
-          "with the selected CRaC engine");
-        break;
+        case CracEngine::ApiStatus::UNSUPPORTED:
+          log_warning(crac)("Cannot store CPUFeatures for checkpoint "
+            "with the selected CRaC engine");
+          break;
+      }
     }
   }
 

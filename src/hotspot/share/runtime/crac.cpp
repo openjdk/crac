@@ -115,6 +115,25 @@ int crac::checkpoint_restore(int *shmid) {
     return JVM_CHECKPOINT_ERROR;
   }
 
+  if (!VM_Version::ignore_cpu_features()) {
+    VM_Version::CPUFeaturesBinary data;
+    if (VM_Version::cpu_features_binary(&data)) {
+      switch (_engine->prepare_user_data_api()) {
+        case CracEngine::ApiStatus::OK:
+          if (!_engine->cpufeatures_store(&data)) {
+            return JVM_CHECKPOINT_ERROR;
+          }
+          break;
+        case CracEngine::ApiStatus::ERR:
+          return JVM_CHECKPOINT_ERROR;
+        case CracEngine::ApiStatus::UNSUPPORTED:
+          log_warning(crac)("Cannot store CPUFeatures for checkpoint "
+            "with the selected CRaC engine");
+          break;
+      }
+    }
+  }
+
   const int ret = _engine->checkpoint();
   if (ret != 0) {
     log_error(crac)("CRaC engine failed to checkpoint to %s: error %i", CRaCCheckpointTo, ret);
@@ -260,8 +279,6 @@ void VM_Crac::doit() {
     }
   }
 
-  // It needs to check CPU features before any other code (such as VM_Crac::read_shm) depends on them.
-  VM_Version::crac_restore();
   Arguments::reset_for_crac_restore();
 
   if (shmid == 0) { // E.g. engine does not support restore data
@@ -279,9 +296,6 @@ void VM_Crac::doit() {
   if (CRaCResetStartTime) {
     crac::reset_time_counters();
   }
-
-  // VM_Crac::read_shm needs to be already called to read RESTORE_SETTABLE parameters.
-  VM_Version::crac_restore_finalize();
 
   memory_restore();
 
@@ -506,6 +520,28 @@ void crac::restore(crac_restore_data& restore_data) {
   CracEngine engine(CRaCRestoreFrom);
   if (!engine.is_initialized()) {
     return;
+  }
+
+  if (!VM_Version::ignore_cpu_features()) {
+    switch (engine.prepare_user_data_api()) {
+      case CracEngine::ApiStatus::OK: {
+        VM_Version::CPUFeaturesBinary data;
+        bool present;
+        if (!engine.cpufeatures_load(&data, &present)) {
+          return;
+        }
+        if (!VM_Version::cpu_features_binary_check(present ? &data : nullptr)) {
+          log_error(crac)("Image %s has incompatible CPU features in its user data", CRaCRestoreFrom);
+          return;
+        }
+        } break;
+      case CracEngine::ApiStatus::ERR:
+        return;
+      case CracEngine::ApiStatus::UNSUPPORTED:
+        log_warning(crac)("Cannot verify CPUFeatures for restore "
+          "with the selected CRaC engine");
+        break;
+    }
   }
 
   switch (engine.prepare_restore_data_api()) {

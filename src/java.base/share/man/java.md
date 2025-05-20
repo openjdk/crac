@@ -1836,16 +1836,20 @@ performed by the Java HotSpot VM.
     compilation while values greater than 1.0 delay compilation. Setting
     `CompileThresholdScaling` to 0 is equivalent to disabling compilation.
 
-`-XX:CPUFeatures=`*0xnumber*
-:   CPU feature set, use `-XX:CPUFeatures=`*0xnumber* with `-XX:CRaCCheckpointTo` when
-    you get an error during `-XX:CRaCRestoreFrom` on a different machine.
-    `-XX:CPUFeatures=native` is the default.
-    `-XX:CPUFeatures=generic` is compatible with any CPU but not as slow
-    as `-XX:CPUFeatures=0`.
+`-XX:CPUFeatures=`*0xnumber,0xnumber*
+:   CPU feature set, use `-XX:CPUFeatures=`*0xnumber,0xnumber* with
+    `-XX:CRaCCheckpointTo` when you get an error during `-XX:CRaCRestoreFrom`
+    on a different machine. `-XX:CPUFeatures=native` is the default.
+    `-XX:CPUFeatures=generic` is compatible with any CPU.
 
 `-XX:+DoEscapeAnalysis`
 :   Enables the use of escape analysis. This option is enabled by default. To
     disable the use of escape analysis, specify `-XX:-DoEscapeAnalysis`.
+
+`-XX:+IgnoreCPUFeatures`
+:   Skip any verifications of `-XX:CPUFeatures`. It may lead to a crash
+    if `-XX:CRaCRestoreFrom` is used on a CPU with less features than the CPU
+    where `-XX:CRaCCheckpointTo` was made.
 
 `-XX:InitialCodeCacheSize=`*size*
 :   Sets the initial code cache size (in bytes). Append the letter `k` or `K`

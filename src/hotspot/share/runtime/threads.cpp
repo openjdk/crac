@@ -426,15 +426,9 @@ void Threads::initialize_jsr292_core_classes(TRAPS) {
   }
 }
 
-static jint check_for_restore(JavaVMInitArgs* args, crac::crac_restore_data& restore_data) {
+static jint check_for_restore(JavaVMInitArgs* args) {
   if (Arguments::is_restore_option_set(args)) {
     if (!Arguments::parse_options_for_restore(args)) {
-      return JNI_ERR;
-    }
-    crac::restore(restore_data);
-    if (!CRaCIgnoreRestoreIfUnavailable) {
-      // FIXME switch to unified hotspot logging
-      warning("cannot restore");
       return JNI_ERR;
     }
   }
@@ -482,9 +476,7 @@ jint Threads::create_vm(JavaVMInitArgs* args, bool* canTryAgain) {
   // So that JDK version can be used as a discriminator when parsing arguments
   JDK_Version_init();
 
-  // Output stream module should be already initialized for error reporting during restore.
-  // JDK version should also be intialized for arguments parsing.
-  if (check_for_restore(args, restore_data) != JNI_OK) return JNI_ERR;
+  if (check_for_restore(args) != JNI_OK) return JNI_ERR;
 
   // Update/Initialize System properties after JDK version number is known
   Arguments::init_version_specific_system_properties();
@@ -606,6 +598,17 @@ jint Threads::create_vm(JavaVMInitArgs* args, bool* canTryAgain) {
     main_thread->smr_delete();
     *canTryAgain = false; // don't let caller call JNI_CreateJavaVM again
     return status;
+  }
+
+  // Output stream module should be already initialized for error reporting during restore.
+  // JDK version should also be intialized. There is lot of initializations needed to read
+  // the current machine's CPUFeatures.
+  if (CRaCRestoreFrom) {
+    crac::restore(restore_data);
+    if (!CRaCIgnoreRestoreIfUnavailable) {
+      log_error(crac)("Failed to restore %s", CRaCRestoreFrom);
+      return JNI_ERR;
+    }
   }
 
   // Create WatcherThread as soon as we can since we need it in case

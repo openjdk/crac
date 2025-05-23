@@ -220,6 +220,8 @@ typedef int (*malloc_info_func_t)(int options, FILE *stream);
 static malloc_info_func_t g_malloc_info = nullptr;
 #endif // __GLIBC__
 
+static int cached_pid = 0;
+
 static int clock_tics_per_sec = 100;
 
 // If the VM might have been created on the primordial thread, we need to resolve the
@@ -1516,8 +1518,16 @@ void os::Linux::fast_thread_clock_init() {
 
 // thread_id is kernel thread id (similar to Solaris LWP id)
 intx os::current_thread_id() { return os::Linux::gettid(); }
+
 int os::current_process_id() {
-  return ::getpid();
+  // GLIBC < 2.25 caches pid in ::getpid(); we need to be able to reset this
+  // on CRaC restore, therefore we will use our own caching.
+  return cached_pid ? cached_pid : syscall(SYS_getpid);
+}
+
+void os::reset_cached_process_id() {
+  cached_pid = 0;
+  cached_pid = current_process_id();
 }
 
 // DLL functions
@@ -4415,6 +4425,7 @@ static void check_pax(void) {
 // this is called _before_ most of the global arguments have been parsed
 void os::init(void) {
   char dummy;   // used to get a guess on initial stack address
+  cached_pid = current_process_id();
 
   clock_tics_per_sec = checked_cast<int>(sysconf(_SC_CLK_TCK));
   int sys_pg_size = checked_cast<int>(sysconf(_SC_PAGESIZE));

@@ -49,8 +49,6 @@ import java.nio.charset.StandardCharsets;
 
 public abstract class HotSpotVirtualMachine extends VirtualMachine {
 
-    private static final long CURRENT_PID = pid();
-
     @SuppressWarnings("removal")
     private static long pid() {
         return ProcessHandle.current().pid();
@@ -76,7 +74,7 @@ public abstract class HotSpotVirtualMachine extends VirtualMachine {
 
         // The tool should be a different VM to the target. This check will
         // eventually be enforced by the target VM.
-        if (!ALLOW_ATTACH_SELF && (pid == 0 || pid == CURRENT_PID)) {
+        if (!ALLOW_ATTACH_SELF && (pid == 0 || pid == pid())) {
             throw new IOException("Can not attach to current VM");
         }
     }

@@ -869,6 +869,9 @@ int os::current_process_id() {
   return (int)(getpid());
 }
 
+void os::reset_cached_process_id() {
+}
+
 // DLL functions
 static int local_dladdr(const void* addr, Dl_info* info) {
 #ifdef __APPLE__

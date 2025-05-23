@@ -26,6 +26,9 @@
 /* Posix threads */
 
 #include <unistd.h>
+#ifdef LINUX
+#include <sys/syscall.h>
+#endif
 #include <sys/wait.h>
 #include <time.h>
 #include <sys/time.h>
@@ -38,7 +41,11 @@
 #define GET_THREAD_ID() pthread_self()
 #define THREAD_T pthread_t
 #define PID_T pid_t
-#define GETPID() getpid()
+#ifdef LINUX
+#   define GETPID() syscall(SYS_getpid)
+#else
+#   define GETPID() getpid()
+#endif // !LINUX
 #define GETMILLSECS(millisecs)                                  \
         {                                                       \
                 struct timeval tval;                            \

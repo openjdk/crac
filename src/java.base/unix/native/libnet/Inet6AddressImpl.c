@@ -26,6 +26,9 @@
 #include <errno.h>
 #include <stdlib.h>
 #include <string.h>
+#ifdef LINUX
+#include <sys/syscall.h>
+#endif
 #include <sys/time.h>
 #include <sys/types.h>
 #include <netinet/in.h>
@@ -587,7 +590,11 @@ ping6(JNIEnv *env, jint fd, SOCKETADDRESS *sa, SOCKETADDRESS *netif,
     }
 
     // icmp_id is a 16 bit data type, therefore down cast the pid
+#ifdef LINUX
+    pid = (jchar)syscall(SYS_getpid);
+#else
     pid = (jchar)getpid();
+#endif // !LINUX
 
     // Make the socket non blocking so we can use select
     SET_NONBLOCKING(fd);

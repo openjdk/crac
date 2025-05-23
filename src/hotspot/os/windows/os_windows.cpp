@@ -3951,6 +3951,9 @@ int os::current_process_id() {
   return (_initial_pid ? _initial_pid : _getpid());
 }
 
+void os::reset_cached_process_id() {
+}
+
 int    os::win32::_processor_type            = 0;
 // Processor level is not available on non-NT systems, use vm_version instead
 int    os::win32::_processor_level           = 0;

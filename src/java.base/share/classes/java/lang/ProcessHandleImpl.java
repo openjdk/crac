@@ -24,6 +24,10 @@
  */
 package java.lang;
 
+import jdk.internal.crac.Core;
+import jdk.internal.crac.JDKResource;
+import jdk.internal.crac.mirror.Context;
+import jdk.internal.crac.mirror.Resource;
 import jdk.internal.misc.InnocuousThread;
 
 import java.lang.annotation.Native;
@@ -73,10 +77,22 @@ final class ProcessHandleImpl implements ProcessHandle {
     private static final ConcurrentMap<Long, ExitCompletion>
             completions = new ConcurrentHashMap<>();
 
+    private static JDKResource cracResource = new JDKResource() {
+        @Override
+        public void beforeCheckpoint(Context<? extends Resource> context) {
+        }
+
+        @Override
+        public void afterRestore(Context<? extends Resource> context) {
+            current.pid = getCurrentPid0();
+        }
+    };
+
     static {
         initNative();
         long pid = getCurrentPid0();
         current = new ProcessHandleImpl(pid, isAlive0(pid));
+        Core.Priority.NORMAL.getContext().register(cracResource);
     }
 
     private static native void initNative();
@@ -206,7 +222,7 @@ final class ProcessHandleImpl implements ProcessHandle {
     /**
      * The pid of this ProcessHandle.
      */
-    private final long pid;
+    private long pid;
 
     /**
      * The start time of this process.

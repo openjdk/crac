@@ -59,6 +59,7 @@ jobs:
       matrix:
         test-name:
           - 'jdk/crac'
+          - 'jdk/since checks'
           - 'jdk/tier1 part 1'
           - 'jdk/tier1 part 2'
           - 'jdk/tier1 part 3'
@@ -75,6 +76,9 @@ jobs:
         include:
           - test-name: 'jdk/crac'
             test-suite: 'test/jdk/jdk/crac/'
+
+          - test-name: 'jdk/since checks'
+            test-suite: 'test/jdk/:jdk_since_checks'
 
           - test-name: 'jdk/tier1 part 1'
             test-suite: 'test/jdk/:tier1_part1'

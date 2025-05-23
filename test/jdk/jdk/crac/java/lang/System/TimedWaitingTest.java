@@ -22,6 +22,7 @@
  */
 
 import jdk.test.lib.Container;
+import jdk.test.lib.Platform;
 import jdk.test.lib.containers.docker.Common;
 import jdk.test.lib.containers.docker.DockerTestUtils;
 import jdk.test.lib.crac.CracBuilder;
@@ -66,7 +67,8 @@ public class TimedWaitingTest implements CracTest {
         CracBuilder builder = new CracBuilder();
         Path bootIdFile = Files.createTempFile("TimedWaitingTest-", "-boot_id");
         try {
-            builder.withBaseImage("ghcr.io/crac/test-base", "latest")
+            String baseImage = Platform.isMusl() ? "ghcr.io/crac/test-base-musl" : "ghcr.io/crac/test-base";
+            builder.withBaseImage(baseImage, "latest")
                     .dockerOptions("-v", bootIdFile + ":/fake_boot_id")
                     .inDockerImage(imageName);
             builder.captureOutput(true);

@@ -838,12 +838,6 @@ jint Threads::create_vm(JavaVMInitArgs* args, bool* canTryAgain) {
   }
 #endif
 
-#if INCLUDE_JVMCI
-  if (force_JVMCI_initialization) {
-    JVMCI::initialize_compiler(CHECK_JNI_ERR);
-  }
-#endif
-
   if (NativeHeapTrimmer::enabled()) {
     NativeHeapTrimmer::initialize();
   }
@@ -857,6 +851,12 @@ jint Threads::create_vm(JavaVMInitArgs* args, bool* canTryAgain) {
 
   // Notify JVMTI agents that VM initialization is complete - nop if no agents.
   JvmtiExport::post_vm_initialized();
+
+#if INCLUDE_JVMCI
+  if (force_JVMCI_initialization) {
+    JVMCI::initialize_compiler(CHECK_JNI_ERR);
+  }
+#endif
 
   JFR_ONLY(Jfr::on_create_vm_3();)
 

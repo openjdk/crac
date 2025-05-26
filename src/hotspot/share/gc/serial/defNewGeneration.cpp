@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2001, 2024, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2001, 2025, Oracle and/or its affiliates. All rights reserved.
  * Copyright (c) 2019, 2021, Azul Systems, Inc. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
@@ -487,11 +487,11 @@ void DefNewGeneration::compute_new_size() {
     gch->rem_set()->resize_covered_region(cmr);
 
     log_debug(gc, ergo, heap)(
-        "New generation size " SIZE_FORMAT "K->" SIZE_FORMAT "K [eden=" SIZE_FORMAT "K,survivor=" SIZE_FORMAT "K]",
+        "New generation size %zuK->%zuK [eden=%zuK,survivor=%zuK]",
         new_size_before/K, _virtual_space.committed_size()/K,
         eden()->capacity()/K, from()->capacity()/K);
     log_trace(gc, ergo, heap)(
-        "  [allowed " SIZE_FORMAT "K extra for %d threads]",
+        "  [allowed %zuK extra for %d threads]",
           thread_increase_size/K, threads_count);
       }
 }
@@ -722,7 +722,7 @@ void DefNewGeneration::remove_forwarding_pointers() {
 }
 
 void DefNewGeneration::handle_promotion_failure(oop old) {
-  log_debug(gc, promotion)("Promotion failure size = " SIZE_FORMAT ") ", old->size());
+  log_debug(gc, promotion)("Promotion failure size = %zu) ", old->size());
 
   _promotion_failed = true;
   _promotion_failed_info.register_copy_failure(old->size());
@@ -847,7 +847,7 @@ void DefNewGeneration::verify() {
 void DefNewGeneration::print_on(outputStream* st) const {
   st->print(" %-10s", name());
 
-  st->print(" total " SIZE_FORMAT "K, used " SIZE_FORMAT "K",
+  st->print(" total %zuK, used %zuK",
             capacity()/K, used()/K);
   st->print_cr(" [" PTR_FORMAT ", " PTR_FORMAT ", " PTR_FORMAT ")",
                p2i(_virtual_space.low_boundary()),

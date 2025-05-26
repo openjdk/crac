@@ -21,6 +21,7 @@
  * have any questions.
  */
 
+import jdk.test.lib.Platform;
 import jdk.test.lib.containers.docker.Common;
 import jdk.test.lib.containers.docker.DockerTestUtils;
 import jdk.test.lib.crac.CracBuilder;
@@ -103,9 +104,14 @@ public class ContainerPidAdjustmentTest implements CracTest {
                 // and force spinning the last pid running checkpoint under the user.
                 String setupLastPidCmd = "export LAST_PID=" + createLastPidValue(lastPidSetup)
                         + " && echo ${LAST_PID} >/proc/sys/kernel/ns_last_pid";
-                builder
-                    .containerSetup(Arrays.asList("bash", "-x", "-c", "useradd the_user && cat /proc/sys/kernel/pid_max && " + setupLastPidCmd))
-                    .dockerCheckpointOptions(Arrays.asList("-u", "the_user"));
+                if (Platform.isMusl()) {
+                    builder.containerSetup(Arrays.asList("sh", "-x", "-c",
+                            "adduser -D the_user && cat /proc/sys/kernel/pid_max && " + setupLastPidCmd));
+                } else {
+                    builder.containerSetup(Arrays.asList("bash", "-x", "-c",
+                            "useradd the_user && cat /proc/sys/kernel/pid_max && " + setupLastPidCmd));
+                }
+                builder.dockerCheckpointOptions(Arrays.asList("-u", "the_user"));
             }
 
             if (0 < expectedLastPid) {

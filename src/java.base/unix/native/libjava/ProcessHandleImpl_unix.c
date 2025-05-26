@@ -44,6 +44,10 @@
 #include <sys/stat.h>
 #include <sys/wait.h>
 
+#ifdef LINUX
+  #include <sys/syscall.h>
+#endif
+
 #include <pwd.h>
 
 #if defined(_AIX)
@@ -274,7 +278,11 @@ Java_java_lang_ProcessHandleImpl_waitForProcessExit0(JNIEnv* env,
  */
 JNIEXPORT jlong JNICALL
 Java_java_lang_ProcessHandleImpl_getCurrentPid0(JNIEnv *env, jclass clazz) {
+#ifdef LINUX
+    pid_t pid = syscall(SYS_getpid);
+#else
     pid_t pid = getpid();
+#endif
     return (jlong) pid;
 }
 
@@ -383,7 +391,12 @@ Java_java_lang_ProcessHandleImpl_parent0(JNIEnv *env,
     pid_t pid = (pid_t) jpid;
     pid_t ppid;
 
-    if (pid == getpid()) {
+#ifdef LINUX
+    pid_t mypid = syscall(SYS_getpid);
+#else
+    pid_t mypid = getpid();
+#endif
+    if (pid == mypid) {
         ppid = getppid();
     } else {
         jlong start = 0L;

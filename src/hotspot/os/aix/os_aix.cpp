@@ -916,6 +916,9 @@ int os::current_process_id() {
   return getpid();
 }
 
+void os::reset_cached_process_id() {
+}
+
 // DLL functions
 
 // This must be hard coded because it's the system's temporary

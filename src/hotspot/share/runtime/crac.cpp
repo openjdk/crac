@@ -280,6 +280,7 @@ void VM_Crac::doit() {
   }
 
   Arguments::reset_for_crac_restore();
+  os::reset_cached_process_id();
 
   if (shmid == 0) { // E.g. engine does not support restore data
     log_debug(crac)("Restore parameters (JVM flags, env vars, system properties, arguments...) not provided");

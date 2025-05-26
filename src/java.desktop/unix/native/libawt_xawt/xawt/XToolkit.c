@@ -46,6 +46,9 @@
 #include "java_awt_TrayIcon.h"
 #include <X11/extensions/XTest.h>
 
+#ifdef LINUX
+#include <sys/syscall.h>
+#endif
 #include <unistd.h>
 
 uint32_t awt_NumLockMask = 0;
@@ -862,7 +865,11 @@ JNIEXPORT jint JNICALL Java_sun_awt_X11_XWindowPeer_getJvmPID
 (JNIEnv *env, jclass cls)
 {
     /* Return the JVM's PID. */
+#ifdef LINUX
+    return syscall(SYS_getpid);
+#else
     return getpid();
+#endif // !LINUX
 }
 
 #ifndef HOST_NAME_MAX

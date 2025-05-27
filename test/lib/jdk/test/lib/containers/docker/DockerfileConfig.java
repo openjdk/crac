@@ -51,6 +51,10 @@ public class DockerfileConfig {
             return name;
         }
 
+        if (Platform.isMusl()) {
+            return "alpine";
+        }
+
         switch (Platform.getOsArch()) {
             case "aarch64":
                 return "arm64v8/ubuntu";

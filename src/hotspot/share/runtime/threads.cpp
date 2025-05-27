@@ -1,5 +1,6 @@
+
 /*
- * Copyright (c) 1997, 2024, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 1997, 2025, Oracle and/or its affiliates. All rights reserved.
  * Copyright (c) 2021, Azul Systems, Inc. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
@@ -23,7 +24,6 @@
  *
  */
 
-#include "precompiled.hpp"
 #include "cds/aotLinkedClassBulkLoader.hpp"
 #include "cds/cds_globals.hpp"
 #include "cds/cdsConfig.hpp"
@@ -426,15 +426,9 @@ void Threads::initialize_jsr292_core_classes(TRAPS) {
   }
 }
 
-static jint check_for_restore(JavaVMInitArgs* args, crac::crac_restore_data& restore_data) {
+static jint check_for_restore(JavaVMInitArgs* args) {
   if (Arguments::is_restore_option_set(args)) {
     if (!Arguments::parse_options_for_restore(args)) {
-      return JNI_ERR;
-    }
-    crac::restore(restore_data);
-    if (!CRaCIgnoreRestoreIfUnavailable) {
-      // FIXME switch to unified hotspot logging
-      warning("cannot restore");
       return JNI_ERR;
     }
   }
@@ -482,9 +476,7 @@ jint Threads::create_vm(JavaVMInitArgs* args, bool* canTryAgain) {
   // So that JDK version can be used as a discriminator when parsing arguments
   JDK_Version_init();
 
-  // Output stream module should be already initialized for error reporting during restore.
-  // JDK version should also be intialized for arguments parsing.
-  if (check_for_restore(args, restore_data) != JNI_OK) return JNI_ERR;
+  if (check_for_restore(args) != JNI_OK) return JNI_ERR;
 
   // Update/Initialize System properties after JDK version number is known
   Arguments::init_version_specific_system_properties();
@@ -572,6 +564,8 @@ jint Threads::create_vm(JavaVMInitArgs* args, bool* canTryAgain) {
   JavaThread* main_thread = new JavaThread();
   main_thread->set_thread_state(_thread_in_vm);
   main_thread->initialize_thread_current();
+  // Once mutexes and main_thread are ready, we can use NmtVirtualMemoryLocker.
+  MemTracker::NmtVirtualMemoryLocker::set_safe_to_use();
   // must do this before set_active_handles
   main_thread->record_stack_base_and_size();
   main_thread->register_thread_stack_with_NMT();
@@ -606,6 +600,17 @@ jint Threads::create_vm(JavaVMInitArgs* args, bool* canTryAgain) {
     main_thread->smr_delete();
     *canTryAgain = false; // don't let caller call JNI_CreateJavaVM again
     return status;
+  }
+
+  // Output stream module should be already initialized for error reporting during restore.
+  // JDK version should also be intialized. There is lot of initializations needed to read
+  // the current machine's CPUFeatures.
+  if (CRaCRestoreFrom) {
+    crac::restore(restore_data);
+    if (!CRaCIgnoreRestoreIfUnavailable) {
+      log_error(crac)("Failed to restore %s", CRaCRestoreFrom);
+      return JNI_ERR;
+    }
   }
 
   // Create WatcherThread as soon as we can since we need it in case
@@ -836,12 +841,6 @@ jint Threads::create_vm(JavaVMInitArgs* args, bool* canTryAgain) {
   }
 #endif
 
-#if INCLUDE_JVMCI
-  if (force_JVMCI_initialization) {
-    JVMCI::initialize_compiler(CHECK_JNI_ERR);
-  }
-#endif
-
   if (NativeHeapTrimmer::enabled()) {
     NativeHeapTrimmer::initialize();
   }
@@ -855,6 +854,12 @@ jint Threads::create_vm(JavaVMInitArgs* args, bool* canTryAgain) {
 
   // Notify JVMTI agents that VM initialization is complete - nop if no agents.
   JvmtiExport::post_vm_initialized();
+
+#if INCLUDE_JVMCI
+  if (force_JVMCI_initialization) {
+    JVMCI::initialize_compiler(CHECK_JNI_ERR);
+  }
+#endif
 
   JFR_ONLY(Jfr::on_create_vm_3();)
 
@@ -1197,8 +1202,8 @@ void Threads::change_thread_claim_token() {
 static void assert_thread_claimed(const char* kind, Thread* t, uintx expected) {
   const uintx token = t->threads_do_token();
   assert(token == expected,
-         "%s " PTR_FORMAT " has incorrect value " UINTX_FORMAT " != "
-         UINTX_FORMAT, kind, p2i(t), token, expected);
+         "%s " PTR_FORMAT " has incorrect value %zu != %zu",
+         kind, p2i(t), token, expected);
 }
 
 void Threads::assert_all_threads_claimed() {

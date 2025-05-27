@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1997, 2024, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 1997, 2025, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -280,7 +280,9 @@ class VM_Version : public Abstract_VM_Version {
                  serialize : 1,
                            : 5,
                    cet_ibt : 1,
-                           : 11;
+                           : 2,
+              avx512_fp16  : 1,
+                           : 8;
     } bits;
   };
 
@@ -420,8 +422,9 @@ protected:
     decl(CET_SS,            "cet_ss",            57) /* Control Flow Enforcement - Shadow Stack */ \
     decl(AVX512_IFMA,       "avx512_ifma",       58) /* Integer Vector FMA instructions*/ \
     decl(AVX_IFMA,          "avx_ifma",          59) /* 256-bit VEX-coded variant of AVX512-IFMA*/ \
-    decl(APX_F,             "apx_f",             60) /* Intel Advanced Performance Extensions*/\
-    decl(SHA512,            "sha512",            61) /* SHA512 instructions*/
+    decl(APX_F,             "apx_f",             60) /* Intel Advanced Performance Extensions*/ \
+    decl(SHA512,            "sha512",            61) /* SHA512 instructions*/ \
+    decl(AVX512_FP16,       "avx512_fp16",       62) /* AVX512 FP16 ISA support*/
 
 #define DECLARE_CPU_FEATURE_FLAG(id, name, bit) CPU_##id = (1ULL << bit),
     CPU_FEATURE_FLAGS(DECLARE_CPU_FEATURE_FLAG)
@@ -451,6 +454,8 @@ protected:
 
   // glibc feature flags.
   static uint64_t _glibc_features;
+
+  static uint64_t _features_saved, _glibc_features_saved;
 
   static const char* _features_names[];
   static const char* _glibc_features_names[];
@@ -653,9 +658,9 @@ private:
   static void get_processor_features_hardware();
   static void get_processor_features_hotspot();
 
-  static uint64_t CPUFeatures_parse(uint64_t &glibc_features);
+  static uint64_t CPUFeatures_parse(const char *str, uint64_t &glibc_features);
 #ifdef LINUX
-  static void glibc_not_using(uint64_t excessive_CPU, uint64_t excessive_GLIBC);
+  static bool glibc_not_using();
   static bool glibc_env_set(char *disable_str);
   /*[[noreturn]]*/ static void glibc_reexec();
   // C++17: Make glibc_prefix and glibc_prefix_len constexpr.
@@ -664,9 +669,6 @@ private:
 #endif //LINUX
   // C++17: Make _ignore_glibc_not_using inline.
   static bool _ignore_glibc_not_using;
-  static bool _crac_restore_missing_features;
-  static void nonlibc_tty_print_uint64(uint64_t num);
-  static void nonlibc_tty_print_uint64_comma_uint64(uint64_t num1, uint64_t num2);
   static void print_using_features_cr();
   /*[[noreturn]]*/ static void missing_features(uint64_t features_missing, uint64_t glibc_features_missing);
 
@@ -726,8 +728,13 @@ public:
 
   // Initialization
   static void initialize();
-  static void crac_restore();
-  static void crac_restore_finalize();
+  struct CPUFeaturesBinary {
+    uint64_t cpu, glibc;
+  };
+  static bool cpu_features_binary(CPUFeaturesBinary *data);
+  static bool cpu_features_binary_check(const CPUFeaturesBinary *data);
+  static bool ignore_cpu_features() { return _ignore_glibc_not_using; }
+  static void restore_check(const char* str, const char* msg_prefix);
 
   // Override Abstract_VM_Version implementation
   static void print_platform_virtualization_info(outputStream*);
@@ -834,6 +841,7 @@ public:
   static bool supports_avx512_bitalg()  { return (_features & CPU_AVX512_BITALG) != 0; }
   static bool supports_avx512_vbmi()  { return (_features & CPU_AVX512_VBMI) != 0; }
   static bool supports_avx512_vbmi2() { return (_features & CPU_AVX512_VBMI2) != 0; }
+  static bool supports_avx512_fp16()  { return (_features & CPU_AVX512_FP16) != 0; }
   static bool supports_hv()           { return (_features & CPU_HV) != 0; }
   static bool supports_serialize()    { return (_features & CPU_SERIALIZE) != 0; }
   static bool supports_f16c()         { return (_features & CPU_F16C) != 0; }
@@ -921,7 +929,7 @@ public:
 
   // For AVX CPUs only. f16c support is disabled if UseAVX == 0.
   static bool supports_float16() {
-    return supports_f16c() || supports_avx512vl();
+    return supports_f16c() || supports_avx512vl() || supports_avx512_fp16();
   }
 
   // Check intrinsic support

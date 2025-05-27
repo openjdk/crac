@@ -608,6 +608,7 @@ class os: AllStatic {
   // thread id on Linux/64bit is 64bit, on Windows it's 32bit
   static intx current_thread_id();
   static int current_process_id();
+  static void reset_cached_process_id();
 
   // Short standalone OS sleep routines suitable for slow path spin loop.
   // Ignores safepoints/suspension/Thread.interrupt() (so keep it short).
@@ -824,6 +825,7 @@ class os: AllStatic {
   static void print_summary_info(outputStream* st, char* buf, size_t buflen);
   static void print_memory_info(outputStream* st);
   static void print_dll_info(outputStream* st);
+  static void print_jvmti_agent_info(outputStream* st);
   static void print_environment_variables(outputStream* st, const char** env_list);
   static void print_context(outputStream* st, const void* context);
   static void print_tos_pc(outputStream* st, const void* context);

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998, 2024, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 1998, 2025, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -22,7 +22,6 @@
  *
  */
 
-#include "precompiled.hpp"
 #include "cds/cdsConfig.hpp"
 #include "compiler/compilerDefinitions.hpp"
 #include "jvm_io.h"
@@ -308,16 +307,10 @@ void Abstract_VM_Version::insert_features_names(char* buf, size_t buflen, const 
 
   while (features != 0) {
     if (features & 1) {
-      // Do not use any libc string functions. Our caller VM_Version::fatal_missing_features may have GNU_IFUNC-misconfigured glibc.
-      if (buflen-- > 0)
-        *buf++ = ',';
-      if (buflen-- > 0)
-        *buf++ = ' ';
-      for (const char *src = features_names[features_names_index]; *src; ++src)
-      if (buflen-- > 0)
-        *buf++ = *src;
-      assert(buflen > 0, "not enough temporary space allocated");
-      *buf = 0;
+      int res = jio_snprintf(buf, buflen, ", %s", features_names[features_names_index]);
+      assert(res > 0, "not enough temporary space allocated");
+      buf += res;
+      buflen -= res;
     }
     features >>= 1;
     ++features_names_index;

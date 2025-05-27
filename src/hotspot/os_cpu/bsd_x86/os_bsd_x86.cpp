@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1999, 2024, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 1999, 2025, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -22,7 +22,6 @@
  *
  */
 
-// no precompiled headers
 #include "asm/macroAssembler.hpp"
 #include "classfile/vmSymbols.hpp"
 #include "code/codeCache.hpp"
@@ -399,15 +398,6 @@ bool PosixSignals::pd_hotspot_signal_handler(int sig, siginfo_t* info,
   address stub = nullptr;
 
   address pc          = nullptr;
-
-  // VM_Version::crac_restore()->VM_Version::get_processor_features_hardware()
-  // executes cpuinfo without a started Java thread.
-  if (info != nullptr && uc != nullptr && thread == nullptr && sig == SIGSEGV) {
-    pc = (address) os::Posix::ucontext_get_pc(uc);
-    if ((sig == SIGSEGV) && VM_Version::is_cpuinfo_segv_addr(pc)) {
-      stub = VM_Version::cpuinfo_cont_addr();
-    }
-  }
 
   //%note os_trap_1
   if (info != nullptr && uc != nullptr && thread != nullptr) {

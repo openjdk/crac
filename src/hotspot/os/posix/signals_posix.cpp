@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020, 2024, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2020, 2025, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -22,7 +22,6 @@
  *
  */
 
-#include "precompiled.hpp"
 #include "code/codeCache.hpp"
 #include "code/nativeInst.hpp"
 #include "code/nmethod.hpp"
@@ -1169,7 +1168,7 @@ void os::print_siginfo(outputStream* os, const void* si0) {
     const pid_t pid = si->si_pid;
     os->print(", si_pid: %ld", (long) pid);
     if (IS_VALID_PID(pid)) {
-      const pid_t me = getpid();
+      const pid_t me = os::current_process_id();
       if (me == pid) {
         os->print(" (current process)");
       }

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1997, 2024, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 1997, 2025, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -22,7 +22,6 @@
  *
  */
 
-#include "precompiled.hpp"
 #include "asm/macroAssembler.hpp"
 #include "asm/macroAssembler.inline.hpp"
 #include "classfile/vmIntrinsics.hpp"
@@ -43,6 +42,10 @@
 #include "utilities/powerOfTwo.hpp"
 #include "utilities/virtualizationSupport.hpp"
 #if INCLUDE_CPU_FEATURE_ACTIVE
+# if defined(__clang__) && defined(__STRICT_ANSI__)
+// clang <stdbool.h> is missing this definition compared to gcc
+#  define _Bool bool
+# endif
 # include <sys/platform/x86.h>
 #endif
 
@@ -52,6 +55,8 @@ int VM_Version::_stepping;
 bool VM_Version::_has_intel_jcc_erratum;
 VM_Version::CpuidInfo VM_Version::_cpuid_info = { 0, };
 uint64_t VM_Version::_glibc_features;
+uint64_t VM_Version::_features_saved;
+uint64_t VM_Version::_glibc_features_saved;
 
 #define DECLARE_CPU_FEATURE_NAME(id, name, bit) name,
 const char* VM_Version::      _features_names[] = {   CPU_FEATURE_FLAGS(DECLARE_CPU_FEATURE_NAME)};
@@ -874,21 +879,21 @@ class VM_Version_StubGenerator: public StubCodeGenerator {
   };
 };
 
-uint64_t VM_Version::CPUFeatures_parse(uint64_t &glibc_features) {
+uint64_t VM_Version::CPUFeatures_parse(const char *str, uint64_t &glibc_features) {
   glibc_features = _glibc_features;
 #ifndef LINUX
   _ignore_glibc_not_using = true;
   return _features;
 #endif
-  if (CPUFeatures == NULL || strcmp(CPUFeatures, "native") == 0) {
+  if (str == nullptr || strcmp(str, "native") == 0) {
     return _features;
   }
-  if (strcmp(CPUFeatures, "ignore") == 0) {
+  if (strcmp(str, "ignore") == 0) {
     _ignore_glibc_not_using = true;
     return _features;
   }
   glibc_features = 0;
-  if (strcmp(CPUFeatures, "generic") == 0) {
+  if (strcmp(str, "generic") == 0) {
     // 32-bit x86 cannot rely on anything.
     return 0
 #ifdef AMD64
@@ -909,7 +914,7 @@ uint64_t VM_Version::CPUFeatures_parse(uint64_t &glibc_features) {
   char *endptr;
   errno = 0;
   uint64_t retval;
-  unsigned long long ull = strtoull(CPUFeatures, &endptr, 0);
+  unsigned long long ull = strtoull(str, &endptr, 0);
   retval = ull;
   if (!errno && *endptr == ',' && retval == ull) {
     ull = strtoull(endptr + 1, &endptr, 0);
@@ -918,12 +923,11 @@ uint64_t VM_Version::CPUFeatures_parse(uint64_t &glibc_features) {
       return retval;
     }
   }
-  vm_exit_during_initialization(err_msg("VM option 'CPUFeatures=%s' must be of the form: 0xnum,0xnum", CPUFeatures));
+  vm_exit_during_initialization(err_msg("VM option 'CPUFeatures=%s' must be of the form: 0xnum,0xnum", str));
   return -1;
 }
 
 bool VM_Version::_ignore_glibc_not_using = false;
-bool VM_Version::_crac_restore_missing_features;
 #ifdef LINUX
 const char VM_Version::glibc_prefix[] = ":glibc.cpu.hwcaps=";
 const size_t VM_Version::glibc_prefix_len = strlen(glibc_prefix);
@@ -941,45 +945,50 @@ bool VM_Version::glibc_env_set(char *disable_str) {
       return true;
     }
   }
-  char env_buf[strlen(disable_str) + (!env ? 0 : strlen(env) + 100)];
-  if (env) {
-    if (ShowCPUFeatures) {
-      tty->print_cr("Original environment variable: " TUNABLES_NAME "=%s", env);
-    }
-    const char *hwcaps = strstr(env, glibc_prefix + 1 /* skip ':' */);
-    if (!hwcaps) {
-      strcpy(env_buf, env);
-      strcat(env_buf, disable_str);
-    } else {
-      const char *colon = strchr(hwcaps, ':');
-      if (!colon) {
-        strcpy(env_buf, env);
-        strcat(env_buf, disable_str + glibc_prefix_len);
-      } else {
-        int err = jio_snprintf(env_buf, sizeof(env_buf), "%.*s%s%s", (int)(colon - env), env, disable_str + glibc_prefix_len, colon);
-        assert(err >= 0 && (unsigned)err < sizeof(env_buf), "internal error: " TUNABLES_NAME " buffer overflow");
+  {
+    ResourceMark rm;
+    size_t env_buf_size = strlen(disable_str) + (!env ? 0 : strlen(env) + 100);
+    char *env_buf = NEW_RESOURCE_ARRAY(char, env_buf_size);
+    if (env) {
+      if (ShowCPUFeatures) {
+        tty->print_cr("Original environment variable: " TUNABLES_NAME "=%s", env);
       }
+      const char *hwcaps = strstr(env, glibc_prefix + 1 /* skip ':' */);
+      if (!hwcaps) {
+        strcpy(env_buf, env);
+        strcat(env_buf, disable_str);
+      } else {
+        const char *colon = strchr(hwcaps, ':');
+        if (!colon) {
+          strcpy(env_buf, env);
+          strcat(env_buf, disable_str + glibc_prefix_len);
+        } else {
+          int err = jio_snprintf(env_buf, env_buf_size, "%.*s%s%s", (int)(colon - env), env, disable_str + glibc_prefix_len, colon);
+          assert(err >= 0 && (unsigned) err < env_buf_size, "internal error: " TUNABLES_NAME " buffer overflow");
+        }
+      }
+      env_val = env_buf;
     }
-    env_val = env_buf;
+    if (ShowCPUFeatures) {
+      tty->print_cr("Re-exec of java with new environment variable: " TUNABLES_NAME "=%s", env_val);
+    }
+    if (setenv(TUNABLES_NAME, env_val, 1)) {
+      vm_exit_during_initialization(err_msg("setenv " TUNABLES_NAME " error: %m"));
+    }
   }
-  if (ShowCPUFeatures) {
-    tty->print_cr("Re-exec of java with new environment variable: " TUNABLES_NAME "=%s", env_val);
-  }
-  int err = setenv(TUNABLES_NAME, env_val, 1);
-  if (err)
-    vm_exit_during_initialization(err_msg("setenv " TUNABLES_NAME " error: %m"));
 
-  if (getenv(REEXEC_NAME))
+  if (getenv(REEXEC_NAME)) {
     vm_exit_during_initialization(err_msg("internal error: " TUNABLES_NAME "=%s failed and " REEXEC_NAME " is set", disable_str));
-  if (setenv(REEXEC_NAME, "1", 1))
+  }
+  if (setenv(REEXEC_NAME, "1", 1)) {
     vm_exit_during_initialization(err_msg("setenv " REEXEC_NAME " error: %m"));
+  }
 #undef REEXEC_NAME
-#undef TUNABLES_NAME
   return false;
 }
 
 void VM_Version::glibc_reexec() {
-  char *buf = NULL;
+  char *buf = nullptr;
   size_t buf_allocated = 0;
   size_t buf_used = 0;
 #define CMDLINE "/proc/self/cmdline"
@@ -991,7 +1000,7 @@ void VM_Version::glibc_reexec() {
     if (buf_used == buf_allocated) {
       buf_allocated = MAX2(size_t(4096), 2 * buf_allocated);
       buf = (char *)os::realloc(buf, buf_allocated, mtOther);
-      if (buf == NULL)
+      if (buf == nullptr)
         vm_exit_during_initialization(err_msg(CMDLINE " reading failed allocating %zu bytes", buf_allocated));
     }
     got = read(fd, buf + buf_used, buf_allocated - buf_used);
@@ -1001,7 +1010,7 @@ void VM_Version::glibc_reexec() {
   } while (got);
   if (close(fd))
     vm_exit_during_initialization(err_msg("Cannot close " CMDLINE ": %m"));
-  char **argv = NULL;
+  char **argv = nullptr;
   size_t argv_allocated = 0;
   size_t argv_used = 0;
   char *s = buf;
@@ -1009,7 +1018,7 @@ void VM_Version::glibc_reexec() {
     if (argv_used == argv_allocated) {
       argv_allocated = MAX2(size_t(256), 2 * argv_allocated);
       argv = (char **)os::realloc(argv, argv_allocated * sizeof(*argv), mtOther);
-      if (argv == NULL)
+      if (argv == nullptr)
         vm_exit_during_initialization(err_msg(CMDLINE " reading failed allocating %zu pointers", argv_allocated));
     }
     if (s == buf + buf_used) {
@@ -1021,7 +1030,7 @@ void VM_Version::glibc_reexec() {
       vm_exit_during_initialization("Missing end of string zero while parsing " CMDLINE);
     ++s;
   }
-  argv[argv_used] = NULL;
+  argv[argv_used] = nullptr;
 #undef CMDLINE
 
 #define EXEC "/proc/self/exe"
@@ -1030,10 +1039,23 @@ void VM_Version::glibc_reexec() {
 #undef EXEC
 }
 
-void VM_Version::glibc_not_using(uint64_t shouldnotuse_CPU, uint64_t shouldnotuse_GLIBC) {
+// Returns whether we should have got set a GLIBC_TUNABLES environment variables but did not get any.
+bool VM_Version::glibc_not_using() {
+  if (_ignore_glibc_not_using)
+    return true;
+
+  uint64_t       features_expected =   MAX_CPU - 1;
+  uint64_t glibc_features_expected = MAX_GLIBC - 1;
+  if (!INCLUDE_CPU_FEATURE_ACTIVE) {
+          features_expected =       _features;
+    glibc_features_expected = _glibc_features;
+  }
+  uint64_t shouldnotuse_CPU   =       features_expected & ~      _features;
+  uint64_t shouldnotuse_GLIBC = glibc_features_expected & ~_glibc_features;
+
 #ifndef ASSERT
   if (!shouldnotuse_CPU && !shouldnotuse_GLIBC)
-    return;
+    return true;
 #endif
 
   // glibc: sysdeps/x86/get-isa-level.h:
@@ -1252,33 +1274,12 @@ void VM_Version::glibc_not_using(uint64_t shouldnotuse_CPU, uint64_t shouldnotus
 
   *disable_end = 0;
   if (disable_end == disable_str + glibc_prefix_len)
-    return;
+    return true;
   if (glibc_env_set(disable_str))
-    return;
-  glibc_reexec();
+    return true;
+  return false;
 }
 #endif //LINUX
-
-void VM_Version::nonlibc_tty_print_uint64(uint64_t num) {
-  static const char prefix[] = "0x";
-  tty->write(prefix, sizeof(prefix) - 1);
-  bool first = true;
-  for (int pos = 64 - 4; pos >= 0; pos -= 4) {
-    unsigned nibble = (num >> pos) & 0xf;
-    if (first && nibble == 0 && pos)
-      continue;
-    first = false;
-    char c = nibble >= 0xa ? 'a' + nibble - 0xa : '0' + nibble;
-    tty->write(&c, sizeof(c));
-  }
-}
-
-void VM_Version::nonlibc_tty_print_uint64_comma_uint64(uint64_t num1, uint64_t num2) {
-  nonlibc_tty_print_uint64(num1);
-  static const char comma = ',';
-  tty->print_raw(&comma, sizeof(comma));
-  nonlibc_tty_print_uint64(num2);
-}
 
 void VM_Version::print_using_features_cr() {
   if (_ignore_glibc_not_using) {
@@ -1324,10 +1325,7 @@ void VM_Version::get_processor_features_hardware() {
   LP64_ONLY(_supports_atomic_getadd8 = true);
 
   if (ShowCPUFeatures) {
-    static const char prefix[] = "This machine's CPU features are: -XX:CPUFeatures=";
-    tty->print_raw(prefix, sizeof(prefix) - 1);
-    nonlibc_tty_print_uint64_comma_uint64(_features, _glibc_features);
-    tty->cr();
+    tty->print_cr("This machine's CPU features are: -XX:CPUFeatures=" UINT64_FORMAT_X "," UINT64_FORMAT_X, _features, _glibc_features);
   }
 }
 
@@ -1469,6 +1467,7 @@ void VM_Version::get_processor_features_hotspot() {
     _features &= ~CPU_AVX512_BITALG;
     _features &= ~CPU_AVX512_IFMA;
     _features &= ~CPU_APX_F;
+    _features &= ~CPU_AVX512_FP16;
   }
 
   // Currently APX support is only enabled for targets supporting AVX512VL feature.
@@ -1519,6 +1518,7 @@ void VM_Version::get_processor_features_hotspot() {
       _features &= ~CPU_AVX512_BITALG;
       _features &= ~CPU_AVX512_IFMA;
       _features &= ~CPU_AVX_IFMA;
+      _features &= ~CPU_AVX512_FP16;
     }
   }
 
@@ -2163,9 +2163,9 @@ void VM_Version::get_processor_features_hotspot() {
       if (ArrayOperationPartialInlineSize > MaxVectorSize) {
         ArrayOperationPartialInlineSize = MaxVectorSize >= 16 ? MaxVectorSize : 0;
         if (ArrayOperationPartialInlineSize) {
-          warning("Setting ArrayOperationPartialInlineSize as MaxVectorSize" INTX_FORMAT ")", MaxVectorSize);
+          warning("Setting ArrayOperationPartialInlineSize as MaxVectorSize=%zd", MaxVectorSize);
         } else {
-          warning("Setting ArrayOperationPartialInlineSize as " INTX_FORMAT, ArrayOperationPartialInlineSize);
+          warning("Setting ArrayOperationPartialInlineSize as %zd", ArrayOperationPartialInlineSize);
         }
       }
     }
@@ -2590,74 +2590,75 @@ void VM_Version::check_virtualizations() {
 
 // Print the feature names as " = feat1, ..., featN\n";
 void VM_Version::missing_features(uint64_t features_missing, uint64_t glibc_features_missing) {
-  static const char part1[] = "; missing features of this CPU are ";
-  tty->print_raw(part1, sizeof(part1) - 1);
-  nonlibc_tty_print_uint64_comma_uint64(features_missing, glibc_features_missing);
-  static const char part2[] = " =";
-  tty->print_raw(part2, sizeof(part2) - 1);
+  tty->print("; missing features of this CPU are " UINT64_FORMAT_X "," UINT64_FORMAT_X " =", features_missing, glibc_features_missing);
   char buf[512] = "";
   // insert_features_names() does crash for undefined too high-numbered features.
   insert_features_names(buf, sizeof(buf)          ,       features_missing & (  MAX_CPU - 1));
-  char *s = buf;
-  while (*s)
-    ++s;
+  char *s = buf + strlen(buf);
   insert_features_names(s  , buf + sizeof(buf) - s, glibc_features_missing & (MAX_GLIBC - 1));
-  while (*s)
-    ++s;
-  /* +1 to skip the first ','. */
-  tty->print_raw(buf + 1, s - (buf + 1));
-  tty->cr();
-  static const char line2[] = "If you are sure it will not crash you can override this check by -XX:+UnlockExperimentalVMOptions -XX:+IgnoreCPUFeatures .";
-  tty->print_raw(line2, sizeof(line2) - 1);
-  tty->cr();
+  tty->print_cr(
+    "%s\n"
+    "If you are sure it will not crash you can override this check by -XX:+UnlockExperimentalVMOptions -XX:+IgnoreCPUFeatures .",
+    /* + 1 to skip the first ','. */
+    buf + 1);
 }
 
-void VM_Version::crac_restore() {
-  assert(CRaCCheckpointTo != NULL, "");
+static_assert(sizeof(VM_Version::CPUFeaturesBinary) == 2 * 8, "unexpected sizeof");
+bool VM_Version::cpu_features_binary(VM_Version::CPUFeaturesBinary *data) {
+  data->cpu = _features;
+  data->glibc = _glibc_features;
+  return true;
+}
+
+bool VM_Version::cpu_features_binary_check(const CPUFeaturesBinary *data) {
+  assert(CPUFeatures == nullptr, "This should only be called on restore and CPUFeatures is not restore-settable");
+
+  if (!data) {
+    return false;
+  }
 
   if (ShowCPUFeatures) {
-    static const char prefix[] = "This snapshot's stored CPU features are: -XX:CPUFeatures=";
-    tty->print_raw(prefix, sizeof(prefix) - 1);
-    nonlibc_tty_print_uint64_comma_uint64(_features, _glibc_features);
-    tty->cr();
+    tty->print_cr("This snapshot's stored CPU features are: -XX:CPUFeatures=0x%" PRIx64 ",0x%" PRIx64, data->cpu, data->glibc);
   }
 
-  VM_Version::CpuidInfo cpuid_info = { 0, };
-  get_cpu_info_stub(&cpuid_info);
-  cpuid_info.assert_is_initialized();
+  uint64_t   CPUFeatures_x64 = data->cpu;
+  uint64_t GLIBCFeatures_x64 = data->glibc;
 
-  uint64_t       new_cpu_features = 0;
-  uint64_t new_cpu_glibc_features = 0;
-  if (cpuid_info.extended_cpu_family() > 4) { // it supports CPUID
-    new_cpu_features = cpuid_info.feature_flags();
-    LINUX_ONLY(new_cpu_glibc_features = cpuid_info.glibc_flags();)
-  }
-
-  uint64_t       features_missing =       _features & ~      new_cpu_features;
-  uint64_t glibc_features_missing = _glibc_features & ~new_cpu_glibc_features;
+  uint64_t       features_missing =   CPUFeatures_x64 & ~      _features;
+  uint64_t glibc_features_missing = GLIBCFeatures_x64 & ~_glibc_features;
 
   // Workaround JDK-8311164: CPU_HT is set randomly on hybrid CPUs like Alder Lake.
   features_missing &= ~CPU_HT;
 
-  _crac_restore_missing_features = features_missing || glibc_features_missing;
-  if (_crac_restore_missing_features) {
-    static const char part1[] = "You have to specify -XX:CPUFeatures=";
-    tty->print_raw(part1, sizeof(part1) - 1);
-    nonlibc_tty_print_uint64_comma_uint64(new_cpu_features & _features, new_cpu_glibc_features & _glibc_features);
-    static const char part2[] = " together with -XX:CRaCCheckpointTo when making a checkpoint file; specified -XX:CRaCRestoreFrom file contains CPU features ";
-    tty->print_raw(part2, sizeof(part2) - 1);
-    nonlibc_tty_print_uint64_comma_uint64(_features, _glibc_features);
+  if (features_missing || glibc_features_missing) {
+    tty->print(
+      "You have to specify -XX:CPUFeatures=" UINT64_FORMAT_X "," UINT64_FORMAT_X
+      " together with -XX:CRaCCheckpointTo when making a checkpoint file; specified -XX:CRaCRestoreFrom file contains CPU features " UINT64_FORMAT_X "," UINT64_FORMAT_X,
+      CPUFeatures_x64 & _features, GLIBCFeatures_x64 & _glibc_features,
+      CPUFeatures_x64, GLIBCFeatures_x64);
     missing_features(features_missing, glibc_features_missing);
+    if (!IgnoreCPUFeatures) {
+      return false;
+    }
   }
 
-  if (ShowCPUFeatures)
+        _features_saved =       _features;
+  _glibc_features_saved = _glibc_features;
+
+        _features =   CPUFeatures_x64;
+  _glibc_features = GLIBCFeatures_x64;
+
+  if (ShowCPUFeatures && !CRaCRestoreFrom) {
     print_using_features_cr();
-}
-
-void VM_Version::crac_restore_finalize() {
-  if (_crac_restore_missing_features && !IgnoreCPUFeatures) {
-    vm_exit_during_initialization();
   }
+
+#ifdef LINUX
+  // glibc_not_using() has done setenv(TUNABLES_NAME) and it expects us to re-exec ourselves.
+  // But we were only checking the cpufeatures file before restoring the process so we ignore the result.
+  glibc_not_using();
+#endif
+
+  return true;
 }
 
 #ifdef COMPILER2
@@ -2717,8 +2718,10 @@ void VM_Version::initialize() {
   get_processor_features_hardware();
 
   assert(!CPUFeatures == FLAG_IS_DEFAULT(CPUFeatures), "CPUFeatures parsing");
+
   uint64_t GLIBCFeatures_x64;
-  uint64_t   CPUFeatures_x64 = CPUFeatures_parse(GLIBCFeatures_x64);
+  uint64_t   CPUFeatures_x64 = CPUFeatures_parse(CPUFeatures, GLIBCFeatures_x64);
+
   uint64_t       features_missing =   CPUFeatures_x64 & ~      _features;
   uint64_t glibc_features_missing = GLIBCFeatures_x64 & ~_glibc_features;
 
@@ -2726,36 +2729,28 @@ void VM_Version::initialize() {
   features_missing &= ~CPU_HT;
 
   if (features_missing || glibc_features_missing) {
-    static const char part1[] = "Specified -XX:CPUFeatures=";
-    tty->print_raw(part1, sizeof(part1) - 1);
-    nonlibc_tty_print_uint64_comma_uint64(CPUFeatures_x64, GLIBCFeatures_x64);
-    static const char part2[] = "; this machine's CPU features are ";
-    tty->print_raw(part2, sizeof(part2) - 1);
-    nonlibc_tty_print_uint64_comma_uint64(_features, _glibc_features);
+    tty->print(
+      "Specified -XX:CPUFeatures=" UINT64_FORMAT_X "," UINT64_FORMAT_X
+      "; this machine's CPU features are " UINT64_FORMAT_X "," UINT64_FORMAT_X,
+      CPUFeatures_x64, GLIBCFeatures_x64,
+      _features, _glibc_features);
     missing_features(features_missing, glibc_features_missing);
     vm_exit_during_initialization();
   }
 
-  uint64_t       features_saved =       _features;
-  uint64_t glibc_features_saved = _glibc_features;
+        _features_saved =       _features;
+  _glibc_features_saved = _glibc_features;
 
         _features =   CPUFeatures_x64;
   _glibc_features = GLIBCFeatures_x64;
 
-  if (ShowCPUFeatures)
+  if (ShowCPUFeatures && !CRaCRestoreFrom) {
     print_using_features_cr();
+  }
 
 #ifdef LINUX
-  if (!_ignore_glibc_not_using) {
-    uint64_t       features_expected =   MAX_CPU - 1;
-    uint64_t glibc_features_expected = MAX_GLIBC - 1;
-    if (!INCLUDE_CPU_FEATURE_ACTIVE) {
-            features_expected =       features_saved;
-      glibc_features_expected = glibc_features_saved;
-    }
-    glibc_not_using(      features_expected & ~      _features,
-                    glibc_features_expected & ~_glibc_features);
-  }
+  if (!glibc_not_using())
+    glibc_reexec();
 #endif
 
   get_processor_features_hotspot();
@@ -3669,6 +3664,9 @@ uint64_t VM_Version::CpuidInfo::feature_flags() const {
     }
     if (sef_cpuid7_edx.bits.serialize != 0)
       result |= CPU_SERIALIZE;
+
+    if (_cpuid_info.sef_cpuid7_edx.bits.avx512_fp16 != 0)
+      result |= CPU_AVX512_FP16;
   }
 
   // ZX features.

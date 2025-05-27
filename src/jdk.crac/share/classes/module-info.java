@@ -23,13 +23,6 @@
  * questions.
  */
 
-/**
- * CRaC (Coordinated Restore at Checkpoint) API.
- *
- * @moduleGraph
- * @since 24 (TBD)
- */
-
 module jdk.crac {
 
     exports jdk.crac;

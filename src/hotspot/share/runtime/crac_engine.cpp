@@ -21,8 +21,6 @@
  * questions.
  */
 
-#include "precompiled.hpp"
-
 #include "crlib/crlib.h"
 #include "crlib/crlib_restore_data.h"
 #include "crlib/crlib_user_data.h"

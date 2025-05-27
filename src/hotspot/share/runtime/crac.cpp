@@ -21,8 +21,6 @@
  * questions.
  */
 
-#include "precompiled.hpp"
-
 #include "classfile/classLoader.hpp"
 #include "jfr/jfr.hpp"
 #include "jvm.h"

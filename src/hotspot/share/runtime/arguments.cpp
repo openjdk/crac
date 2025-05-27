@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1997, 2024, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 1997, 2025, Oracle and/or its affiliates. All rights reserved.
  * Copyright (c) 2017, 2024, Azul Systems, Inc. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
@@ -23,7 +23,6 @@
  *
  */
 
-#include "precompiled.hpp"
 #include "cds/cds_globals.hpp"
 #include "cds/cdsConfig.hpp"
 #include "cds/filemap.hpp"
@@ -107,6 +106,7 @@ bool   Arguments::_ClipInlining                 = ClipInlining;
 size_t Arguments::_default_SharedBaseAddress    = SharedBaseAddress;
 
 bool   Arguments::_enable_preview               = false;
+bool   Arguments::_has_jdwp_agent               = false;
 
 LegacyGCLogging Arguments::_legacyGCLogging     = { nullptr, 0 };
 
@@ -1568,8 +1568,8 @@ void Arguments::set_heap_size() {
       if (!FLAG_IS_DEFAULT(HeapBaseMinAddress)) {
         if (HeapBaseMinAddress < DefaultHeapBaseMinAddress) {
           // matches compressed oops printing flags
-          log_debug(gc, heap, coops)("HeapBaseMinAddress must be at least " SIZE_FORMAT
-                                     " (" SIZE_FORMAT "G) which is greater than value given " SIZE_FORMAT,
+          log_debug(gc, heap, coops)("HeapBaseMinAddress must be at least %zu"
+                                     " (%zuG) which is greater than value given %zu",
                                      DefaultHeapBaseMinAddress,
                                      DefaultHeapBaseMinAddress/G,
                                      HeapBaseMinAddress);
@@ -1594,7 +1594,7 @@ void Arguments::set_heap_size() {
       if (reasonable_max > max_coop_heap) {
         if (FLAG_IS_ERGO(UseCompressedOops) && override_coop_limit) {
           log_info(cds)("UseCompressedOops and UseCompressedClassPointers have been disabled due to"
-            " max heap " SIZE_FORMAT " > compressed oop heap " SIZE_FORMAT ". "
+            " max heap %zu > compressed oop heap %zu. "
             "Please check the setting of MaxRAMPercentage %5.2f."
             ,(size_t)reasonable_max, (size_t)max_coop_heap, MaxRAMPercentage);
           FLAG_SET_ERGO(UseCompressedOops, false);
@@ -1605,7 +1605,7 @@ void Arguments::set_heap_size() {
     }
 #endif // _LP64
 
-    log_trace(gc, heap)("  Maximum heap size " SIZE_FORMAT, (size_t) reasonable_max);
+    log_trace(gc, heap)("  Maximum heap size %zu", (size_t) reasonable_max);
     FLAG_SET_ERGO(MaxHeapSize, (size_t)reasonable_max);
   }
 
@@ -1626,13 +1626,13 @@ void Arguments::set_heap_size() {
       reasonable_initial = MIN2(reasonable_initial, (julong)MaxHeapSize);
 
       FLAG_SET_ERGO(InitialHeapSize, (size_t)reasonable_initial);
-      log_trace(gc, heap)("  Initial heap size " SIZE_FORMAT, InitialHeapSize);
+      log_trace(gc, heap)("  Initial heap size %zu", InitialHeapSize);
     }
     // If the minimum heap size has not been set (via -Xms or -XX:MinHeapSize),
     // synchronize with InitialHeapSize to avoid errors with the default value.
     if (MinHeapSize == 0) {
       FLAG_SET_ERGO(MinHeapSize, MIN2((size_t)reasonable_minimum, InitialHeapSize));
-      log_trace(gc, heap)("  Minimum heap size " SIZE_FORMAT, MinHeapSize);
+      log_trace(gc, heap)("  Minimum heap size %zu", MinHeapSize);
     }
   }
 }
@@ -1767,7 +1767,7 @@ jint Arguments::set_aggressive_opts_flags() {
     }
     // Feed the cache size setting into the JDK
     char buffer[1024];
-    jio_snprintf(buffer, 1024, "java.lang.Integer.IntegerCache.high=" INTX_FORMAT, AutoBoxCacheMax);
+    jio_snprintf(buffer, 1024, "java.lang.Integer.IntegerCache.high=%zd", AutoBoxCacheMax);
     if (!add_property(buffer)) {
       return JNI_ENOMEM;
     }
@@ -1821,7 +1821,7 @@ bool Arguments::check_vm_args_consistency() {
   if (TLABRefillWasteFraction == 0) {
     jio_fprintf(defaultStream::error_stream(),
                 "TLABRefillWasteFraction should be a denominator, "
-                "not " SIZE_FORMAT "\n",
+                "not %zu\n",
                 TLABRefillWasteFraction);
     status = false;
   }
@@ -2044,7 +2044,7 @@ jint Arguments::parse_vm_init_args(const JavaVMInitArgs *vm_options_args,
   return JNI_OK;
 }
 
-#if !INCLUDE_JVMTI
+#if !INCLUDE_JVMTI || INCLUDE_CDS
 // Checks if name in command-line argument -agent{lib,path}:name[=options]
 // represents a valid JDWP agent.  is_path==true denotes that we
 // are dealing with -agentpath (case where name is a path), otherwise with
@@ -2425,6 +2425,10 @@ jint Arguments::parse_each_vm_init_arg(const JavaVMInitArgs* args, JVMFlagOrigin
           jio_fprintf(defaultStream::error_stream(),
             "Debugging agents are not supported in this VM\n");
           return JNI_ERR;
+        }
+#elif INCLUDE_CDS
+        if (valid_jdwp_agent(name, is_absolute_path)) {
+          _has_jdwp_agent = true;
         }
 #endif // !INCLUDE_JVMTI
         JvmtiAgentList::add(name, options, is_absolute_path);

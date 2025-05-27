@@ -21,8 +21,6 @@
  * questions.
  */
 
-#include "precompiled.hpp"
-
 #include "jvm.h"
 #include "runtime/crac_structs.hpp"
 

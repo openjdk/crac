@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2016, 2024, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2016, 2025, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -36,8 +36,6 @@ import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.security.AccessControlContext;
-import java.security.AccessController;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -49,7 +47,6 @@ import java.util.Map;
 import java.util.Set;
 import java.util.Timer;
 import java.util.TimerTask;
-import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.stream.Collectors;
 
 import jdk.internal.crac.Core;
@@ -62,8 +59,6 @@ import jdk.jfr.Recording;
 import jdk.jfr.RecordingState;
 import jdk.jfr.events.ActiveRecordingEvent;
 import jdk.jfr.events.ActiveSettingEvent;
-import jdk.jfr.internal.SecuritySupport.SafePath;
-import jdk.jfr.internal.SecuritySupport.SecureRecorderListener;
 import jdk.jfr.internal.consumer.EventLog;
 import jdk.jfr.internal.periodic.PeriodicEvents;
 import jdk.jfr.internal.util.Utils;
@@ -72,7 +67,7 @@ public final class PlatformRecorder {
 
 
     private final ArrayList<PlatformRecording> recordings = new ArrayList<>();
-    private static final List<SecureRecorderListener> changeListeners = new ArrayList<>();
+    private static final List<FlightRecorderListener> changeListeners = new ArrayList<>();
     private final Repository repository;
     private final Thread shutdownHook;
 
@@ -128,15 +123,12 @@ public final class PlatformRecorder {
             synchronized (PlatformRecorder.this) {
                 futureRecordings.forEach(r -> {
                     recordings.add(r);
-                    WriteableUserPath destination = r.getDestination();
-                    // The backup recording has to be moved before creating WriteableUserPath
+                    WriteablePath destination = r.getDestination();
+                    // The backup recording has to be moved before creating WriteablePath
                     // (and touching the recording output file)
                     try {
-                        destination.doPrivilegedIO(() -> {
-                            File destFile = destination.getReal().toFile();
-                            if (!destFile.exists()) {
-                                return null;
-                            }
+                        File destFile = destination.getReal().toFile();
+                        if (destFile.exists()) {
                             Path backup = null;
                             for (int i = 0; backup == null && i < MAX_BACKUPS; ++i) {
                                 String name = destFile.getName();
@@ -156,15 +148,14 @@ public final class PlatformRecorder {
                                 Files.move(destFile.toPath(), backup);
                                 Logger.log(JFR, INFO, "Backed up " + destFile + " to " + backup);
                             }
-                            return null;
-                        });
+                        }
                     } catch (IOException e) {
                         Logger.log(JFR, ERROR, "Cannot backup previous recording: " + e);
                     }
                     try {
-                        // We need to invoke WritableUserPath after restore to create the dump file.
-                        // Since we're creating another WritableUserPath we can use the original specification
-                        r.setDestination(new WriteableUserPath(destination.getPotentiallyMaliciousOriginal()));
+                        // We need to invoke WriteablePath after restore to create the dump file.
+                        // Since we're creating another WriteablePath we can use the original specification
+                        r.setDestination(new WriteablePath(destination.getPath()));
                     } catch (IOException e) {
                         Logger.log(JFR, ERROR, "Cannot reset recording destination: " + e);
                     }
@@ -183,27 +174,11 @@ public final class PlatformRecorder {
         JDKEvents.initialize();
         Logger.log(JFR_SYSTEM, INFO, "Registered JDK events");
         startDiskMonitor();
-        shutdownHook = SecuritySupport.createThreadWitNoPermissions("JFR Shutdown Hook", new ShutdownHook(this));
-        SecuritySupport.setUncaughtExceptionHandler(shutdownHook, new ShutdownHook.ExceptionHandler());
-        SecuritySupport.registerShutdownHook(shutdownHook);
+        shutdownHook = new ShutdownHook(this);
+        shutdownHook.setUncaughtExceptionHandler(new ShutdownHook.ExceptionHandler());
+        Runtime.getRuntime().addShutdownHook(shutdownHook);
 
         Core.Priority.JFR.getContext().register(resource);
-    }
-
-
-    private static Timer createTimer() {
-        try {
-            List<Timer> result = new CopyOnWriteArrayList<>();
-            Thread t = SecuritySupport.createThreadWitNoPermissions("Permissionless thread", ()-> {
-                result.add(new Timer("JFR Recording Scheduler", true));
-            });
-            JVM.exclude(t);
-            t.start();
-            t.join();
-            return result.getFirst();
-        } catch (InterruptedException e) {
-            throw new IllegalStateException("Not able to create timer task. " + e.getMessage(), e);
-        }
     }
 
     public synchronized PlatformRecording newRecording(Map<String, String> settings) {
@@ -240,27 +215,18 @@ public final class PlatformRecorder {
     }
 
     public static synchronized void addListener(FlightRecorderListener changeListener) {
-        @SuppressWarnings("removal")
-        AccessControlContext context = AccessController.getContext();
-        SecureRecorderListener sl = new SecureRecorderListener(context, changeListener);
         boolean runInitialized;
         synchronized (PlatformRecorder.class) {
             runInitialized = FlightRecorder.isInitialized();
-            changeListeners.add(sl);
+            changeListeners.add(changeListener);
         }
         if (runInitialized) {
-            sl.recorderInitialized(FlightRecorder.getFlightRecorder());
+            changeListener.recorderInitialized(FlightRecorder.getFlightRecorder());
         }
     }
 
     public static synchronized boolean removeListener(FlightRecorderListener changeListener) {
-        for (SecureRecorderListener s : new ArrayList<>(changeListeners)) {
-            if (s.getChangeListener() == changeListener) {
-                changeListeners.remove(s);
-                return true;
-            }
-        }
-        return false;
+        return changeListeners.remove(changeListener);
     }
 
     static synchronized List<FlightRecorderListener> getListeners() {
@@ -269,7 +235,7 @@ public final class PlatformRecorder {
 
     synchronized Timer getTimer() {
         if (timer == null) {
-            timer = createTimer();
+            timer = new Timer("JFR Recording Scheduler", true);
         }
         return timer;
     }
@@ -468,7 +434,7 @@ public final class PlatformRecorder {
     }
 
     private Instant dumpMemoryToDestination(PlatformRecording recording)  {
-        WriteableUserPath dest = recording.getDestination();
+        WriteablePath dest = recording.getDestination();
         if (dest != null) {
             Instant t = MetadataRepository.getInstance().setOutput(dest.getRealPathText());
             recording.clearDestination();
@@ -543,8 +509,8 @@ public final class PlatformRecorder {
     }
 
     private void startDiskMonitor() {
-        Thread t = SecuritySupport.createThreadWitNoPermissions("JFR Periodic Tasks", () -> periodicTask());
-        SecuritySupport.setDaemonThread(t, true);
+        Thread t = new Thread(() -> periodicTask(), "JFR Periodic Tasks");
+        t.setDaemon(true);
         t.start();
     }
 
@@ -574,7 +540,7 @@ public final class PlatformRecorder {
         if (ActiveRecordingEvent.enabled()) {
             for (PlatformRecording r : getRecordings()) {
                 if (r.getState() == RecordingState.RUNNING && r.shouldWriteMetadataEvent()) {
-                    WriteableUserPath path = r.getDestination();
+                    WriteablePath path = r.getDestination();
                     Duration age = r.getMaxAge();
                     Duration flush = r.getFlushInterval();
                     Long size = r.getMaxSize();
@@ -621,7 +587,7 @@ public final class PlatformRecorder {
                 wait = Math.min(minDelta, Options.getWaitInterval());
             } catch (Throwable t) {
                 // Catch everything and log, but don't allow it to end the periodic task
-                Logger.log(JFR_SYSTEM, ERROR, "Error in Periodic task: " + t.getClass().getName());
+                Logger.log(JFR_SYSTEM, WARN, "Error in Periodic task: " + t.getMessage());
             } finally {
                 takeNap(wait);
             }
@@ -762,7 +728,7 @@ public final class PlatformRecorder {
         target.setInternalDuration(startTime.until(endTime));
     }
 
-    public synchronized void migrate(SafePath repo) throws IOException {
+    public synchronized void migrate(Path repo) throws IOException {
         // Must set repository while holding recorder lock so
         // the final chunk in repository gets marked correctly
         Repository.getRepository().setBasePath(repo);
@@ -780,5 +746,9 @@ public final class PlatformRecorder {
 
     public RepositoryChunk getCurrentChunk() {
         return currentChunk;
+    }
+
+    public synchronized void flush() {
+        MetadataRepository.getInstance().flush();
     }
 }

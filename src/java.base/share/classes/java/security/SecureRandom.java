@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1996, 2024, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 1996, 2025, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -144,7 +144,7 @@ import java.util.regex.Pattern;
  *      RFC 4086: Randomness Requirements for Security
  * @spec https://nvlpubs.nist.gov/nistpubs/FIPS/NIST.FIPS.140-2.pdf
  *      Security Requirements for Cryptographic Modules
- *
+ * @spec security/standard-names.html Java Security Standard Algorithm Names
  * @see java.security.SecureRandomSpi
  * @see java.util.Random
  *
@@ -218,6 +218,7 @@ public class SecureRandom extends java.util.Random {
      * @crac Instances created by this constructor are automatically reseeded
      * after restore from a checkpoint.
      * See {@link sun.security.provider.SecureRandom} for details.
+     * @spec security/standard-names.html Java Security Standard Algorithm Names
      */
     public SecureRandom() {
         /*
@@ -265,6 +266,7 @@ public class SecureRandom extends java.util.Random {
      * See {@link sun.security.provider.SecureRandom} for details.
      *
      * @param seed the seed.
+     * @spec security/standard-names.html Java Security Standard Algorithm Names
      * @throws NullPointerException if {@code seed} is {@code null}
      */
     public SecureRandom(byte[] seed) {
@@ -381,6 +383,7 @@ public class SecureRandom extends java.util.Random {
      * Java Security Standard Algorithm Names Specification</a>
      * for information about standard RNG algorithm names.
      *
+     * @spec security/standard-names.html Java Security Standard Algorithm Names
      * @return the new {@code SecureRandom} object
      *
      * @throws NoSuchAlgorithmException if no {@code Provider} supports a
@@ -424,6 +427,7 @@ public class SecureRandom extends java.util.Random {
      *
      * @param provider the name of the provider.
      *
+     * @spec security/standard-names.html Java Security Standard Algorithm Names
      * @return the new {@code SecureRandom} object
      *
      * @throws IllegalArgumentException if the provider name is {@code null}
@@ -470,6 +474,7 @@ public class SecureRandom extends java.util.Random {
      *
      * @param provider the provider.
      *
+     * @spec security/standard-names.html Java Security Standard Algorithm Names
      * @return the new {@code SecureRandom} object
      *
      * @throws IllegalArgumentException if the specified provider is
@@ -527,6 +532,7 @@ public class SecureRandom extends java.util.Random {
      * @param params the {@code SecureRandomParameters}
      *               the newly created {@code SecureRandom} object must support.
      *
+     * @spec security/standard-names.html Java Security Standard Algorithm Names
      * @return the new {@code SecureRandom} object
      *
      * @throws IllegalArgumentException if the specified params is
@@ -581,6 +587,7 @@ public class SecureRandom extends java.util.Random {
      *
      * @param provider the name of the provider.
      *
+     * @spec security/standard-names.html Java Security Standard Algorithm Names
      * @return the new {@code SecureRandom} object
      *
      * @throws IllegalArgumentException if the provider name is {@code null}
@@ -635,6 +642,7 @@ public class SecureRandom extends java.util.Random {
      *
      * @param provider the provider.
      *
+     * @spec security/standard-names.html Java Security Standard Algorithm Names
      * @return the new {@code SecureRandom} object
      *
      * @throws IllegalArgumentException if the specified provider or params

@@ -56,6 +56,7 @@ public interface CracTest {
     /**
      * Main method for orchestrating the test. This should be called directly by JTReg.
      */
+    @SuppressWarnings("unchecked")
     static void main(String[] args) throws Exception {
         String testClassName;
         if (args.length == 0 || !ArgsHolder.RUN_TEST.equals(args[0])) {
@@ -99,6 +100,7 @@ public interface CracTest {
      * @param args Arguments received in the main method.
      * @throws Exception
      */
+    @SuppressWarnings("unchecked")
     static void run(Class<? extends CracTest> testClass, String[] args) throws Exception {
         assertNotNull(args);
         ArgsHolder.testClass = testClass;

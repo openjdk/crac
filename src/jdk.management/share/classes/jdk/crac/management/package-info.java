@@ -25,6 +25,8 @@
 
 /**
  * This package contains management interfaces for CRaC.
+ *
+ * @since CRaC
  */
 
 package jdk.crac.management;

@@ -1,5 +1,6 @@
 /*
- * Copyright (c) 2024, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2024 Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2025, Azul Systems, Inc. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -23,8 +24,9 @@
 
 /*
  * @test
- * @bug 8343781
- * @summary Test for `@since` in jdk.management module
+ * @bug 8354679
+ * @summary Test for `@since` in jdk.crac module
  * @library /test/lib /test/jdk/tools/sincechecker
- * @run main SinceChecker jdk.management --ignoreSince CRaC
+ * @ignore 8354921 - jdk.crac is falsely detected to have existed since before JDK 10.
+ * @run main SinceChecker jdk.crac --ignoreSince CRaC
  */

@@ -91,7 +91,7 @@ restoring instances from the image.
  * </li>
  * </ul>
  *
- * @since TBD
+ * @since CRaC
  */
 
 package jdk.crac;

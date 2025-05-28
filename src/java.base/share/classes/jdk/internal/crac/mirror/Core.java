@@ -43,8 +43,6 @@ import java.security.PrivilegedExceptionAction;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
-import java.util.function.Consumer;
-import java.util.function.Function;
 import java.util.function.Supplier;
 
 /**
@@ -194,26 +192,14 @@ public class Core {
             }
         }
 
-        if (newProperties != null && newProperties.length > 0) {
-            // Do not use lambda here since lambda will introduce registration
-            // during checkpoint, which may cause dead loop.
-            Arrays.stream(newProperties).map(new Function<String, String[]>() {
-                @Override
-                public String[] apply(String propStr) {
-                    return propStr.split("=", 2);
-                }
-            }).forEach(new Consumer<String[]>() {
-                @Override
-                public void accept(String[] pair) {
-                    AccessController.doPrivileged(
-                            new PrivilegedAction<String>() {
-                                @Override
-                                public String run() {
-                                    return System.setProperty(pair[0], pair.length == 2 ? pair[1] : "");
-                                }
-                            });
-                }
-            });
+        if (newProperties != null) {
+            for (var prop : newProperties) {
+                String[] pair = prop.split("=", 2);
+                AccessController.doPrivileged((PrivilegedAction<Void>) () -> {
+                    System.setProperty(pair[0], pair[1]);
+                    return null;
+                });
+            }
         }
 
         ExceptionHolder<RestoreException> restoreException = new ExceptionHolder<>(RestoreException::new);

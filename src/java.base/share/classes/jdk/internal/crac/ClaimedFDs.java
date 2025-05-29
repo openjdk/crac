@@ -31,7 +31,6 @@ import jdk.internal.access.SharedSecrets;
 
 import java.io.FileDescriptor;
 import java.util.List;
-import java.util.Objects;
 import java.util.WeakHashMap;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;

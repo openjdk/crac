@@ -37,7 +37,6 @@ import java.io.StringWriter;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.security.AccessController;
-import java.security.PrivilegedAction;
 import java.security.PrivilegedActionException;
 import java.security.PrivilegedExceptionAction;
 import java.util.ArrayList;
@@ -194,11 +193,8 @@ public class Core {
 
         if (newProperties != null) {
             for (var prop : newProperties) {
-                String[] pair = prop.split("=", 2);
-                AccessController.doPrivileged((PrivilegedAction<Void>) () -> {
-                    System.setProperty(pair[0], pair[1]);
-                    return null;
-                });
+                String[] pair = prop.split("=", 2); // There should always be a "="
+                System.setProperty(pair[0], pair[1]);
             }
         }
 

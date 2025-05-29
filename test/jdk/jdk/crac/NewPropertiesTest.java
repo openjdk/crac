@@ -30,22 +30,38 @@ import jdk.test.lib.crac.CracTest;
  * @test
  * @requires (os.family == "linux")
  * @library /test/lib
- * @build NewPropertyTest
+ * @build NewPropertiesTest
  * @run driver jdk.test.lib.crac.CracTest
  */
-public class NewPropertyTest implements CracTest {
+public class NewPropertiesTest implements CracTest {
     @Override
     public void test() throws Exception {
         final var builder = new CracBuilder();
+
+        builder.javaOption("old", "old val");
+
         builder.doCheckpoint();
-        builder.javaOption("k", "v");
+
+        builder.javaOption("old", "new val");
+        builder.javaOption("new1", "foo=bar");
+        builder.vmOption("-Dnew2=");
+        builder.vmOption("-Dnew3");
+
         builder.doRestore();
     }
 
     @Override
     public void exec() throws Exception {
-        Asserts.assertNull(System.getProperty("k"));
+        Asserts.assertEquals(System.getProperty("old"), "old val");
+        Asserts.assertNull(System.getProperty("new1"));
+        Asserts.assertNull(System.getProperty("new2"));
+        Asserts.assertNull(System.getProperty("new3"));
+
         Core.checkpointRestore();
-        Asserts.assertEquals(System.getProperty("k"), "v");
+
+        Asserts.assertEquals(System.getProperty("old"), "new val");
+        Asserts.assertEquals(System.getProperty("new1"), "foo=bar");
+        Asserts.assertEquals(System.getProperty("new2"), "");
+        Asserts.assertEquals(System.getProperty("new3"), "");
     }
 }

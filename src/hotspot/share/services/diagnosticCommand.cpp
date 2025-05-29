@@ -67,10 +67,10 @@
 #include "utilities/formatBuffer.hpp"
 #include "utilities/macros.hpp"
 #include "utilities/parseInteger.hpp"
-#if INCLUDE_SERVICES && !defined(_WINDOWS)
+#if INCLUDE_SERVICES && !defined(_WINDOWS) && !defined(AIX)
 #include "attachListener_posix.hpp"
 #include "posixAttachOperation.hpp"
-#endif // INCLUDE_SERVICES && !defined(_WINDOWS)
+#endif // INCLUDE_SERVICES && !defined(_WINDOWS) && !defined(AIX)
 #ifdef LINUX
 #include "os_posix.hpp"
 #include "mallocInfoDcmd.hpp"
@@ -1068,12 +1068,12 @@ void CheckpointDCmd::execute(DCmdSource source, TRAPS) {
     char* out = java_lang_String::as_utf8_string(str);
     if (out[0] != '\0') {
       outputStream* stream = output();
-#if INCLUDE_SERVICES && !defined(_WINDOWS)
+#if INCLUDE_SERVICES && !defined(_WINDOWS) && !defined(AIX)
       assert(PosixAttachListener::get_current_op(), "should exist");
       if (PosixAttachListener::get_current_op()->is_effectively_completed()) {
         stream = tty;
       }
-#endif // INCLUDE_SERVICES
+#endif // INCLUDE_SERVICES && !defined(_WINDOWS) && !defined(AIX)
       stream->print_cr("An exception during a checkpoint operation:");
       stream->print("%s", out);
     }

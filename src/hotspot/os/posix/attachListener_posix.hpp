@@ -26,9 +26,8 @@
 #ifndef OS_POSIX_ATTACHLISTENER_POSIX_HPP
 #define OS_POSIX_ATTACHLISTENER_POSIX_HPP
 
-class PosixAttachListener;
-
 #if INCLUDE_SERVICES
+#ifndef AIX
 
 #include "posixAttachOperation.hpp"
 #include "services/attachListener.hpp"
@@ -79,6 +78,8 @@ class PosixAttachListener: AllStatic {
   static void reset_current_op();
 
 };
+
+#endif // !AIX
 
 #endif // INCLUDE_SERVICES
 

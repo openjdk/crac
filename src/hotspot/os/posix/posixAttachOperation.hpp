@@ -29,9 +29,8 @@
 #include "os_posix.hpp"
 #include "services/attachListener.hpp"
 
-class PosixAttachOperation;
-
 #if INCLUDE_SERVICES
+#ifndef AIX
 
 class SocketChannel : public AttachOperation::RequestReader, public AttachOperation::ReplyWriter {
 private:
@@ -100,6 +99,8 @@ class PosixAttachOperation: public AttachOperation {
     return AttachOperation::read_request(&_socket_channel, &_socket_channel);
   }
 };
+
+#endif // !AIX
 
 #endif // INCLUDE_SERVICES
 

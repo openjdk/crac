@@ -31,6 +31,7 @@
 #include "memory/allocation.hpp"
 #include "nmt/memTag.hpp"
 #include "runtime/vm_version.hpp"
+#include "utilities/growableArray.hpp"
 
 #include <cstddef>
 #include <cstdint>
@@ -38,8 +39,6 @@
 // CRaC engine library wrapper.
 class CracEngine : public CHeapObj<mtInternal> {
 public:
-  static const char * const *vm_controlled_options();
-
   explicit CracEngine(const char *image_location = nullptr);
   ~CracEngine();
 
@@ -54,6 +53,7 @@ public:
   int checkpoint() const;
   int restore() const;
   bool configure_image_location(const char *image_location) const;
+  GrowableArrayCHeap<const char *, MemTag::mtInternal> *vm_controlled_options() const;
 
   // Optionally-supported operations
 

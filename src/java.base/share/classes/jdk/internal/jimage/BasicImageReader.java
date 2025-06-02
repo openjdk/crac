@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2014, 2021, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2014, 2025, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -51,7 +51,7 @@ import jdk.internal.jimage.decompressor.Decompressor;
  * to the jimage file provided by the shipped JDK by tools running on JDK 8.
  */
 public class BasicImageReader implements AutoCloseable {
-    @SuppressWarnings("removal")
+    @SuppressWarnings({ "removal", "suppression" })
     private static boolean isSystemProperty(String key, String value, String def) {
         // No lambdas during bootstrap
         return AccessController.doPrivileged(
@@ -85,7 +85,7 @@ public class BasicImageReader implements AutoCloseable {
     private final Decompressor decompressor;
     private Object cracResource;
 
-    @SuppressWarnings("this-escape")
+    @SuppressWarnings({ "this-escape", "suppression" })
     protected BasicImageReader(Path path, ByteOrder byteOrder)
             throws IOException {
         this.imagePath = Objects.requireNonNull(path);

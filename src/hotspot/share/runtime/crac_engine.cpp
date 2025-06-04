@@ -31,6 +31,7 @@
 #include "runtime/globals.hpp"
 #include "runtime/os.hpp"
 #include "utilities/debug.hpp"
+#include "utilities/growableArray.hpp"
 #include "utilities/macros.hpp"
 #include "utilities/resourceHash.hpp"
 
@@ -44,7 +45,7 @@
 
 #define ARRAY_ELEM(opt) #opt,
 static constexpr const char * const vm_controlled_engine_opts[] = {
-  VM_CONTROLLED_ENGINE_OPTS(ARRAY_ELEM) nullptr
+  VM_CONTROLLED_ENGINE_OPTS(ARRAY_ELEM)
 };
 #undef ARRAY_ELEM
 
@@ -68,10 +69,6 @@ static char *strsep(char **strp, const char *delim) {
   return str;
 }
 #endif // _WINDOWS
-
-const char * const *CracEngine::vm_controlled_options() {
-  return vm_controlled_engine_opts;
-}
 
 static bool find_engine(const char *dll_dir, char *path, size_t path_size, bool *is_library) {
   // Try to interpret as a file path
@@ -346,6 +343,17 @@ int CracEngine::restore() const {
 bool CracEngine::configure_image_location(const char *image_location) const {
   precond(is_initialized());
   return ::configure_image_location(*_api, _conf, image_location);
+}
+
+GrowableArrayCHeap<const char *, MemTag::mtInternal> *CracEngine::vm_controlled_options() const {
+  auto * const opts = new GrowableArrayCHeap<const char *, MemTag::mtInternal>();
+  // Only list those options which the current engine actually supports
+  for (const char *opt : vm_controlled_engine_opts) {
+    if (_api->can_configure(_conf, opt)) {
+      opts->append(opt);
+    }
+  }
+  return opts;
 }
 
 CracEngine::ApiStatus CracEngine::prepare_restore_data_api() {

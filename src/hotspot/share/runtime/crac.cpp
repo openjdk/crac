@@ -347,6 +347,7 @@ void crac::print_engine_info_and_exit() {
     }
   }
   tty->cr();
+  delete controlled_opts;
 
   vm_exit(0);
   ShouldNotReachHere();

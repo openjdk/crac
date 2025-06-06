@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2022, 2025, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -57,8 +57,9 @@ abstract class UnixDispatcher extends NativeDispatcher {
     static ResourceProxy resourceProxy = new ResourceProxy();
 
 
+    @Override
     void close(FileDescriptor fd) throws IOException {
-        close0(fd);
+        closeAndMark(fd);
     }
 
     void preClose(FileDescriptor fd) throws IOException {
@@ -115,9 +116,18 @@ abstract class UnixDispatcher extends NativeDispatcher {
         fdAccess.close(fd);
     }
 
+    @Override
+    void implPreClose(FileDescriptor fd, long reader, long writer) throws IOException {
+        preClose0(fd);
+        if (NativeThread.isNativeThread(reader))
+            NativeThread.signal(reader);
+        if (NativeThread.isNativeThread(writer))
+            NativeThread.signal(writer);
+    }
+
     private static native void close0(FileDescriptor fd) throws IOException;
 
-    static native void preClose0(FileDescriptor fd) throws IOException;
+    private static native void preClose0(FileDescriptor fd) throws IOException;
 
     static native void init();
 

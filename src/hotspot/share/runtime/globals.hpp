@@ -1956,10 +1956,10 @@ const int ObjectAlignmentInBytes = 8;
              "Mark all threads after a safepoint, and clear on a modify "   \
              "fence. Add cleanliness checks.")                              \
                                                                             \
-  product(ccstr, CRaCCheckpointTo, NULL, RESTORE_SETTABLE,                  \
+  product(ccstr, CRaCCheckpointTo, nullptr, RESTORE_SETTABLE,               \
         "Path to checkpoint image directory")                               \
                                                                             \
-  product(ccstr, CRaCRestoreFrom, NULL, RESTORE_SETTABLE,                   \
+  product(ccstr, CRaCRestoreFrom, nullptr, RESTORE_SETTABLE,                \
       "Path to image for restore, replaces the initializing VM on success") \
                                                                             \
   product(uint, CRaCMinPid, 128,                                            \
@@ -1987,7 +1987,7 @@ const int ObjectAlignmentInBytes = 8;
       "Ignore -XX:CRaCRestoreFrom and continue initialization if restore "  \
       "is unavailable")                                                     \
                                                                             \
-  product(ccstr, CRaCIgnoredFileDescriptors, NULL, RESTORE_SETTABLE,        \
+  product(ccstr, CRaCIgnoredFileDescriptors, nullptr, RESTORE_SETTABLE,     \
       "Comma-separated list of file descriptor numbers or paths. "          \
       "All file descriptors greater than 2 (stdin, stdout and stderr are "  \
       "excluded automatically) not in this list are closed when the VM "    \

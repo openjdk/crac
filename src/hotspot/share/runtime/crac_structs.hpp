@@ -45,7 +45,7 @@ struct CracFailDep {
   { }
   CracFailDep() :
     _type(JVM_CR_FAIL),
-    _msg(NULL)
+    _msg(nullptr)
   { }
 };
 
@@ -77,7 +77,7 @@ class CracRestoreParameters : public CHeapObj<mtInternal> {
 
   static int system_props_length(const SystemProperty* props) {
     int len = 0;
-    while (props != NULL) {
+    while (props != nullptr) {
       ++len;
       props = props->next();
     }
@@ -97,9 +97,9 @@ class CracRestoreParameters : public CHeapObj<mtInternal> {
   GrowableArray<const char *>* properties() const { return _properties; }
 
   CracRestoreParameters() :
-    _raw_content(NULL),
+    _raw_content(nullptr),
     _properties(new (mtInternal) GrowableArray<const char *>(0, mtInternal)),
-    _args(NULL)
+    _args(nullptr)
   {}
 
   ~CracRestoreParameters() {
@@ -134,7 +134,7 @@ class CracRestoreParameters : public CHeapObj<mtInternal> {
     }
 
     const SystemProperty* p = props;
-    while (p != NULL) {
+    while (p != nullptr) {
       char prop[4096];
       int len = snprintf(prop, sizeof(prop), "%s=%s", p->key(), p->value());
       guarantee((0 < len) && ((unsigned)len < sizeof(prop)), "property does not fit temp buffer");
@@ -178,7 +178,7 @@ public:
     _restore_parameters(),
     _ostream(jcmd_stream ? jcmd_stream : tty)
 #if defined(LINUX) && INCLUDE_SERVICES
-    , _attach_op(jcmd_stream ? PosixAttachListener::get_current_op() : NULL)
+    , _attach_op(jcmd_stream ? PosixAttachListener::get_current_op() : nullptr)
 #endif // LINUX && INCLUDE_SERVICES
   { }
 

@@ -1064,7 +1064,7 @@ void CheckpointDCmd::execute(DCmdSource source, TRAPS) {
                          vmSymbols::checkpointRestoreInternal_name(),
                          vmSymbols::checkpointRestoreInternal_signature(), &args, CHECK);
   oop str = result.get_oop();
-  if (str != NULL) {
+  if (str != nullptr) {
     char* out = java_lang_String::as_utf8_string(str);
     if (out[0] != '\0') {
       outputStream* stream = output();

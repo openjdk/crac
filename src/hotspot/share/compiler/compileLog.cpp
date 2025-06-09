@@ -194,7 +194,7 @@ void CompileLog::clear_identities() {
 void CompileLog::before_checkpoint() {
   // Remove only output stream, don't destroy the CompileLog itself.
   delete _out;
-  _out = NULL;
+  _out = nullptr;
   unlink(_file); // like in CompileLog dtor
   // _file_end: do not touch, mark_file_end calculates it based on the actual file size.
 }

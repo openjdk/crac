@@ -1116,7 +1116,7 @@ static void parse_argname(const char *arg, const char **argname, size_t *arg_len
   *argname = *has_plus_minus ? arg + 1 : arg;
 
   const char* equal_sign = strchr(*argname, '=');
-  if (equal_sign == NULL) {
+  if (equal_sign == nullptr) {
     *arg_len = strlen(*argname);
   } else {
     *arg_len = equal_sign - *argname;
@@ -1267,8 +1267,8 @@ const char* Arguments::get_property(const char* key) {
 }
 
 void Arguments::get_key_value(const char* prop, const char** key, const char** value) {
-  assert(key != NULL, "key should not be NULL");
-  assert(value != NULL, "value should not be NULL");
+  assert(key != nullptr, "key should not be null");
+  assert(value != nullptr, "value should not be null");
   const char* eq = strchr(prop, '=');
 
   if (eq == nullptr) {
@@ -1289,8 +1289,8 @@ void Arguments::get_key_value(const char* prop, const char** key, const char** v
 }
 
 bool Arguments::add_property(const char* prop, PropertyWriteable writeable, PropertyInternal internal) {
-  const char* key = NULL;
-  const char* value = NULL;
+  const char* key = nullptr;
+  const char* value = nullptr;
 
   get_key_value(prop, &key, &value);
 
@@ -2202,7 +2202,7 @@ bool Arguments::is_restore_option_set(const JavaVMInitArgs* args) {
 }
 
 bool Arguments::parse_options_for_restore(const JavaVMInitArgs* args) {
-  const char *tail = NULL;
+  const char *tail = nullptr;
 
   // iterate over arguments
   for (int index = 0; index < args->nOptions; index++) {
@@ -2216,15 +2216,15 @@ bool Arguments::parse_options_for_restore(const JavaVMInitArgs* args) {
       // or even inheriting the CLASSPATH env var; therefore it's too
       // late to prohibit explicitly setting them at this point.
     } else if (match_option(option, "-D", &tail)) {
-      const char* key = NULL;
-      const char* value = NULL;
+      const char* key = nullptr;
+      const char* value = nullptr;
 
       get_key_value(tail, &key, &value);
 
       if (strcmp(key, "sun.java.crac_command") == 0) {
         char *old_java_command = _java_command_crac;
         _java_command_crac = os::strdup_check_oom(value, mtArguments);
-        if (old_java_command != NULL) {
+        if (old_java_command != nullptr) {
           os::free(old_java_command);
         }
       } else {
@@ -2243,7 +2243,7 @@ bool Arguments::parse_options_for_restore(const JavaVMInitArgs* args) {
       bool ignored_plus_minus;
       parse_argname(tail, &argname, &arg_len, &ignored_plus_minus);
       const JVMFlag* flag = JVMFlag::find_declared_flag((const char*)argname, arg_len);
-      if (flag != NULL) {
+      if (flag != nullptr) {
         if (!flag->is_restore_settable()) {
           jio_fprintf(defaultStream::error_stream(),
             "Flag %.*s cannot be set during restore: %s\n", arg_len, argname, option->optionString);

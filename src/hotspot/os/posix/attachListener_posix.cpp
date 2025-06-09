@@ -276,7 +276,7 @@ PosixAttachOperation* PosixAttachListener::get_current_op() {
 
 void PosixAttachListener::reset_current_op() {
   assert_listener_thread();
-  PosixAttachListener::_current_op = NULL;
+  PosixAttachListener::_current_op = nullptr;
 }
 
 // AttachListener functions

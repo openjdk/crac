@@ -4729,7 +4729,7 @@ static wchar_t* wide_abs_unc_path(char const* path, errno_t & err, int additiona
 int os::mkdir(const char *path) {
   errno_t err;
   wchar_t* wide_path = wide_abs_unc_path(path, err);
-  if (wide_path == NULL) {
+  if (wide_path == nullptr) {
     errno = err;
     return -1;
   }
@@ -4741,7 +4741,7 @@ int os::mkdir(const char *path) {
 int os::rmdir(const char *path) {
   errno_t err;
   wchar_t* wide_path = wide_abs_unc_path(path, err);
-  if (wide_path == NULL) {
+  if (wide_path == nullptr) {
     errno = err;
     return -1;
   }

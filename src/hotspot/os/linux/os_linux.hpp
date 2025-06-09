@@ -293,7 +293,7 @@ class os::Linux {
 
   static void initialize_cpu_count() {
     initialize_processor_count();
-    if (cpu_to_node() != NULL) {
+    if (cpu_to_node() != nullptr) {
       rebuild_cpu_to_node_map();
     }
   }

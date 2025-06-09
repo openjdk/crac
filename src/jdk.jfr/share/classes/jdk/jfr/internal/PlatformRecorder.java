@@ -61,6 +61,7 @@ import jdk.jfr.events.ActiveRecordingEvent;
 import jdk.jfr.events.ActiveSettingEvent;
 import jdk.jfr.internal.consumer.EventLog;
 import jdk.jfr.internal.periodic.PeriodicEvents;
+import jdk.jfr.internal.query.Report;
 import jdk.jfr.internal.util.Utils;
 
 public final class PlatformRecorder {
@@ -70,7 +71,6 @@ public final class PlatformRecorder {
     private static final List<FlightRecorderListener> changeListeners = new ArrayList<>();
     private final Repository repository;
     private final Thread shutdownHook;
-
     private Timer timer;
     private long recordingCounter = 0;
     private RepositoryChunk currentChunk;
@@ -251,6 +251,10 @@ public final class PlatformRecorder {
         this.inShutdown = true;
     }
 
+    synchronized boolean isInShutDown() {
+        return this.inShutdown;
+    }
+
     // called by shutdown hook
     synchronized void destroy() {
         try {
@@ -271,6 +275,7 @@ public final class PlatformRecorder {
             }
         }
 
+        writeReports();
         JDKEvents.remove();
 
         if (JVMSupport.hasJFR()) {
@@ -280,6 +285,16 @@ public final class PlatformRecorder {
             JVMSupport.destroyJFR();
         }
         repository.clear();
+    }
+
+    private void writeReports() {
+        for (PlatformRecording recording : getRecordings()) {
+            if (recording.isToDisk() && recording.getState() == RecordingState.STOPPED) {
+                for (Report report : recording.getReports()) {
+                    report.print(recording.getStartTime(), recording.getStopTime());
+                }
+            }
+        }
     }
 
     synchronized long start(PlatformRecording recording) {

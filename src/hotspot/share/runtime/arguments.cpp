@@ -3836,7 +3836,7 @@ jint Arguments::apply_ergo() {
     CompressedKlassPointers::pre_initialize();
   }
 
-  CDSConfig::initialize();
+  CDSConfig::ergo_initialize();
 
   // Initialize Metaspace flags and alignments
   Metaspace::ergo_initialize();

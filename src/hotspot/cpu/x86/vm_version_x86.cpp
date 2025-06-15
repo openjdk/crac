@@ -1846,7 +1846,7 @@ void VM_Version::get_processor_features_hotspot() {
   }
 
 #ifdef _LP64
-  if (supports_avx512ifma() && supports_avx512vlbw()) {
+  if ((supports_avx512ifma() && supports_avx512vlbw()) || supports_avxifma()) {
     if (FLAG_IS_DEFAULT(UseIntPolyIntrinsics)) {
       FLAG_SET_DEFAULT(UseIntPolyIntrinsics, true);
     }

@@ -433,3 +433,11 @@ NO_TRANSITION_END
 JVM_ENTRY_NO_ENV(void, jfr_start_after_restore(JNIEnv* env, jclass jvm))
   return JfrRecorder::start_after_restore();
 JVM_END
+
+NO_TRANSITION(jboolean, jfr_is_product(JNIEnv* env, jclass jvm))
+#ifdef PRODUCT
+  return true;
+#else
+  return false;
+#endif
+NO_TRANSITION_END

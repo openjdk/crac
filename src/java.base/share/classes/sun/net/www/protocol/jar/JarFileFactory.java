@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1999, 2024, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 1999, 2025, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -35,6 +35,7 @@ import java.util.jar.JarFile;
 
 import jdk.internal.util.OperatingSystem;
 import sun.net.util.URLUtil;
+import sun.net.www.ParseUtil;
 
 import jdk.internal.crac.Core;
 import jdk.internal.crac.mirror.Context;
@@ -99,7 +100,7 @@ class JarFileFactory implements URLJarFile.URLJarFileCloseController, jdk.intern
             return get(url, false);
         }
         URL patched = urlFor(url);
-        if (!URLJarFile.isFileURL(patched)) {
+        if (!ParseUtil.isLocalFileURL(patched)) {
             // A temporary file will be created, we can prepopulate
             // the cache in this case.
             return get(url, useCaches);
@@ -165,9 +166,10 @@ class JarFileFactory implements URLJarFile.URLJarFileCloseController, jdk.intern
             // Deal with UNC pathnames specially. See 4180841
 
             String host = url.getHost();
-            if (host != null && !host.isEmpty() &&
-                    !host.equalsIgnoreCase("localhost")) {
-
+            // Subtly different from ParseUtil.isLocalFileURL, for historical reasons
+            boolean isLocalFile = ParseUtil.isLocalFileURL(url) && !"~".equals(host);
+            // For remote hosts, change 'file://host/folder/data.xml' to 'file:////host/folder/data.xml'
+            if (!isLocalFile) {
                 @SuppressWarnings("deprecation")
                 var _unused = url = new URL("file", "", "//" + host + url.getPath());
             }

@@ -169,6 +169,8 @@ jlong JNICALL jfr_nanos_now(JNIEnv* env, jclass jvm);
 
 void JNICALL jfr_start_after_restore(JNIEnv* env, jclass jvm);
 
+jboolean JNICALL jfr_is_product(JNIEnv* env, jclass jvm);
+
 #ifdef __cplusplus
 }
 #endif

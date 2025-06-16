@@ -102,6 +102,7 @@ JfrJniMethodRegistration::JfrJniMethodRegistration(JNIEnv* env) {
       (char*)"unregisterStackFilter", (char*)"(J)V", (void*)jfr_unregister_stack_filter,
       (char*)"nanosNow", (char*)"()J", (void*)jfr_nanos_now,
       (char*)"startFlightRecorderAfterRestore", (char*)"()V", (void*)jfr_start_after_restore,
+      (char*)"isProduct", (char*)"()Z", (void*)jfr_is_product
     };
 
     const size_t method_array_length = sizeof(method) / sizeof(JNINativeMethod);

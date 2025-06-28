@@ -90,6 +90,9 @@ class PosixAttachOperation: public AttachOperation {
   void complete(jint res, bufferedStream* st) override;
   void effectively_complete_raw(jint res, bufferedStream* st);
   bool is_effectively_completed()                      { return _effectively_completed; }
+  void set_effectively_completed(bool effectively_completed) {
+    _effectively_completed = effectively_completed;
+  }
 
   int socket() const {
     return _socket_channel.socket();;

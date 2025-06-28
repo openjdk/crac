@@ -30,6 +30,9 @@
 #include "memory/universe.hpp"
 #include "oops/oop.inline.hpp"
 #include "oops/typeArrayOop.inline.hpp"
+#if INCLUDE_SERVICES && !defined(_WINDOWS) && !defined(AIX)
+#include "posixAttachOperation.hpp"
+#endif // INCLUDE_SERVICES && !defined(_WINDOWS) && !defined(AIX)
 #include "prims/jvmtiAgentList.hpp"
 #include "prims/jvmtiExport.hpp"
 #include "runtime/arguments.hpp"
@@ -641,7 +644,15 @@ void AttachListenerThread::thread_entry(JavaThread* thread, TRAPS) {
         st.set_result(JNI_ERR);
         st.print("Operation %s not recognized!", op->name());
       }
+#if INCLUDE_SERVICES && !defined(_WINDOWS) && !defined(AIX)
+      PosixAttachOperation* posix_op = static_cast<PosixAttachOperation*>(op);
+      if (!posix_op->is_effectively_completed()) {
+        st.complete();
+        posix_op->set_effectively_completed(true);
+      }
+#else
       st.complete();
+#endif // INCLUDE_SERVICES && !defined(_WINDOWS) && !defined(AIX)
     }
 
     op->complete(st.get_result(), st.get_buffered_stream());

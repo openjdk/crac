@@ -28,22 +28,18 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <signal.h>
-
-#ifdef LINUX
 #include <unistd.h>
+
+#define PAUSEENGINE "pauseengine: "
+
 #define RESTORE_SIGNAL   (SIGRTMIN + 2)
-#else
-typedef int pid_t;
-#endif //LINUX
 
 static int kickjvm(pid_t jvm, int code) {
-#ifdef LINUX
     union sigval sv = { .sival_int = code };
     if (-1 == sigqueue(jvm, RESTORE_SIGNAL, sv)) {
-        perror("sigqueue");
+        perror(PAUSEENGINE "sigqueue");
         return 1;
     }
-#endif //LINUX
     return 0;
 }
 
@@ -57,15 +53,11 @@ int main(int argc, char *argv[]) {
     }
 
     if (!strcmp(action, "checkpoint")) {
-#ifdef LINUX
         pid_t jvm = getppid();
-#else
-        pid_t jvm = -1;
-#endif //LINUX
 
         FILE *pidfile = fopen(pidpath, "w");
         if (!pidfile) {
-            perror("fopen pidfile");
+            perror(PAUSEENGINE "fopen pidfile");
             kickjvm(jvm, -1);
             return 1;
         }
@@ -73,17 +65,18 @@ int main(int argc, char *argv[]) {
         fprintf(pidfile, "%d\n", jvm);
         fclose(pidfile);
 
+        printf(PAUSEENGINE "pausing the process, restore in another process to unpause it\n");
     } else if (!strcmp(action, "restore")) {
         FILE *pidfile = fopen(pidpath, "r");
         if (!pidfile) {
-            perror("fopen pidfile");
+            perror(PAUSEENGINE "fopen pidfile");
             return 1;
         }
 
         pid_t jvm;
         if (1 != fscanf(pidfile, "%d", &jvm)) {
+            perror(PAUSEENGINE "fscanf pidfile");
             fclose(pidfile);
-            fprintf(stderr, "cannot read pid\n");
             return 1;
         }
         fclose(pidfile);
@@ -93,8 +86,9 @@ int main(int argc, char *argv[]) {
             return 1;
         }
 
+        printf(PAUSEENGINE "successfully unpaused the checkpointed process\n");
     } else {
-        fprintf(stderr, "unknown action: %s\n", action);
+        fprintf(stderr, PAUSEENGINE "unknown action: %s\n", action);
         return 1;
     }
 

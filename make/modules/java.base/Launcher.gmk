@@ -106,9 +106,20 @@ endif
 ################################################################################
 
 ifeq ($(OPENJDK_TARGET_OS), linux)
+  $(eval $(call SetupJdkExecutable, BUILD_PAUSEENGINE, \
+      NAME := pauseengine, \
+      SRC := $(TOPDIR)/src/$(MODULE)/linux/native/pauseengine, \
+      INCLUDE_FILES := pauseengine.c, \
+      OPTIMIZATION := LOW, \
+      CFLAGS := $(CFLAGS_JDKEXE), \
+      LDFLAGS := $(LDFLAGS_JDKEXE), \
+      OUTPUT_DIR := $(SUPPORT_OUTPUTDIR)/modules_libs/$(MODULE), \
+  ))
+  TARGETS += $(BUILD_PAUSEENGINE)
+
   $(eval $(call SetupJdkExecutable, BUILD_CRIUENGINE, \
       NAME := criuengine, \
-      SRC := $(TOPDIR)/src/$(MODULE)/unix/native/criuengine, \
+      SRC := $(TOPDIR)/src/$(MODULE)/linux/native/criuengine, \
       INCLUDE_FILES := criuengine.c, \
       OPTIMIZATION := HIGH, \
       CFLAGS := $(CFLAGS_JDKEXE), \
@@ -125,17 +136,6 @@ ifeq ($(call isTargetOs, macosx linux windows), true)
   else
     CRAC_ENGINE_DIR = modules_libs
   endif
-
-  $(eval $(call SetupJdkExecutable, BUILD_PAUSEENGINE, \
-      NAME := pauseengine, \
-      SRC := $(TOPDIR)/src/$(MODULE)/share/native/pauseengine, \
-      INCLUDE_FILES := pauseengine.c, \
-      OPTIMIZATION := LOW, \
-      CFLAGS := $(CFLAGS_JDKEXE), \
-      LDFLAGS := $(LDFLAGS_JDKEXE), \
-      OUTPUT_DIR := $(SUPPORT_OUTPUTDIR)/$(CRAC_ENGINE_DIR)/$(MODULE), \
-  ))
-  TARGETS += $(BUILD_PAUSEENGINE)
 
   $(eval $(call SetupJdkExecutable, BUILD_SIMENGINE, \
       NAME := simengine, \

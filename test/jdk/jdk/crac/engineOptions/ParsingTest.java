@@ -59,9 +59,9 @@ public class ParsingTest {
     public void test_engines() throws Exception {
         test("sim");
         test("simengine");
-        test("pause");
-        test("pauseengine");
         if (Platform.isLinux()) {
+            test("pause");
+            test("pauseengine");
             test("criu");
             test("criuengine");
         }

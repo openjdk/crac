@@ -223,7 +223,6 @@ PosixAttachOperation* PosixAttachListener::dequeue() {
 // The complete() gets called after restore for proper deletion the leftover object.
 
 void PosixAttachOperation::complete(jint result, bufferedStream* st) {
-  PosixAttachOperation::effectively_complete_raw(result, st);
   // reset the current op as late as possible, this happens on attach listener thread.
   PosixAttachListener::reset_current_op();
   delete this;
@@ -256,7 +255,7 @@ void PosixAttachOperation::effectively_complete_raw(jint result, bufferedStream*
 }
 
 void PosixAttachOperation::write_operation_result(jint result, bufferedStream* st) {
-  write_reply(&_socket_channel, result, st);
+  _socket_channel.write_reply(result, st);
 
   _socket_channel.close();
   st->reset();

@@ -51,6 +51,7 @@ public:
 
   void close() {
     if (opened()) {
+      ::shutdown(_socket, SHUT_RDWR);
       ::close(_socket);
       _socket = -1;
     }
@@ -69,9 +70,8 @@ public:
     RESTARTABLE(::write(_socket, buffer, size), n);
     return checked_cast<int>(n);
   }
-  // called after writing all data
+
   void flush() override {
-    ::shutdown(_socket, SHUT_RDWR);
   }
 };
 
@@ -83,20 +83,27 @@ class PosixAttachOperation: public AttachOperation {
   void write_operation_result(jint result, bufferedStream* st);
 
  public:
+  PosixAttachOperation(int socket) : AttachOperation(), _socket_channel(socket) {
+    _effectively_completed = false;
+  }
+
   void complete(jint res, bufferedStream* st) override;
   void effectively_complete_raw(jint res, bufferedStream* st);
   bool is_effectively_completed()                      { return _effectively_completed; }
+  void set_effectively_completed(bool effectively_completed) {
+    _effectively_completed = effectively_completed;
+  }
 
   int socket() const {
     return _socket_channel.socket();;
   }
 
-  PosixAttachOperation(int socket) : AttachOperation(), _socket_channel(socket) {
-    _effectively_completed = false;
+  ReplyWriter* get_reply_writer() override {
+    return &_socket_channel;
   }
 
   bool read_request() {
-    return AttachOperation::read_request(&_socket_channel, &_socket_channel);
+    return _socket_channel.read_request(this, &_socket_channel);
   }
 };
 

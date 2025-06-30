@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015, 2024, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2015, 2025, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -167,8 +167,14 @@ public final class CleanerImpl implements Runnable, JDKResource {
                 }
             }
             try {
-                // Wait for a Ref, with a timeout to avoid getting hung
-                // due to a race with clear/clean
+                // Wait for a Ref, with a timeout to avoid a potential hang.
+                // The Cleaner may become unreachable and its cleanable run,
+                // while there are registered cleanables for other objects.
+                // If the application explicitly calls clean() on all remaining
+                // Cleanables, there won't be any references enqueued to unblock
+                // this.  Using a timeout is simpler than unblocking this by
+                // having cleaning of the last registered cleanable enqueue a
+                // dummy reference.
                 Cleanable ref = (Cleanable) javaLangRefAccess.pollReferenceQueue(queue, 60 * 1000L);
                 if (ref != null) {
                     ref.clean();

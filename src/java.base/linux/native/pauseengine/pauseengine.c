@@ -65,7 +65,7 @@ int main(int argc, char *argv[]) {
         fprintf(pidfile, "%d\n", jvm);
         fclose(pidfile);
 
-        printf(PAUSEENGINE "pausing the process, restore in another process to unpause it\n");
+        fprintf(stderr, PAUSEENGINE "pausing the process, restore from another process to unpause it\n");
     } else if (!strcmp(action, "restore")) {
         FILE *pidfile = fopen(pidpath, "r");
         if (!pidfile) {
@@ -86,7 +86,7 @@ int main(int argc, char *argv[]) {
             return 1;
         }
 
-        printf(PAUSEENGINE "successfully unpaused the checkpointed process\n");
+        fprintf(stderr, PAUSEENGINE "successfully unpaused the checkpointed process\n");
     } else {
         fprintf(stderr, PAUSEENGINE "unknown action: %s\n", action);
         return 1;

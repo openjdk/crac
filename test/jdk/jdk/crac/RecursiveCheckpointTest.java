@@ -18,8 +18,13 @@
 // CA 94089 USA or visit www.azul.com if you need additional information or
 // have any questions.
 
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
+
 import jdk.crac.*;
 import jdk.test.lib.crac.*;
+import static jdk.test.lib.Asserts.*;
 
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -32,69 +37,58 @@ import java.util.concurrent.atomic.AtomicInteger;
  */
 public class RecursiveCheckpointTest implements Resource, CracTest {
     private static final AtomicInteger counter = new AtomicInteger(0);
-    private static Exception exception = null;
+    private static final List<Throwable> throwables = Collections.synchronizedList(new ArrayList<>());
 
     @CracTestArg
     int numThreads;
 
     @Override
     public void test() throws Exception {
-        CracBuilder builder = new CracBuilder().engine(CracEngine.SIMULATE);
+        final CracBuilder builder = new CracBuilder().engine(CracEngine.SIMULATE);
         builder.startCheckpoint().waitForSuccess();
     }
 
     private static class TestThread extends Thread {
+        public TestThread() {
+            setUncaughtExceptionHandler(TestThread::handleException);
+        }
+
+        private static void handleException(@SuppressWarnings("unused") Thread thread, Throwable throwable) {
+            throwables.add(throwable);
+        }
+
         @Override
         public void run() {
             try {
                 Core.checkpointRestore();
-            } catch (CheckpointException e) {
-                if (exception == null)
-                    exception = new RuntimeException("Checkpoint in thread ERROR " + e);
-            } catch (RestoreException e) {
-                if (exception == null)
-                    exception = new RuntimeException("Restore in thread ERROR " + e);
+            } catch (CheckpointException | RestoreException e) {
+                throw new IllegalStateException("C/R failed", e);
             }
         }
     };
 
     @Override
     public void beforeCheckpoint(Context<? extends Resource> context) throws Exception {
+        assertEquals(1, counter.incrementAndGet(), "Concurrent checkpoint detected");
+        Thread.sleep(100);
         try {
-            int c = counter.incrementAndGet();
-            if (c > 1) {
-                if (exception == null)
-                    exception = new RuntimeException("Parallel checkpoint");
-            }
-            Thread.sleep(100);
             Core.checkpointRestore();
-            if (exception != null)
-                exception = new RuntimeException("Checkpoint Exception should be thrown");
+            fail("Recursive checkpoint should fail");
         } catch (CheckpointException e) {
-            // Expected Exception
-        } catch (RestoreException e) {
-            if (exception == null)
-                exception = new RuntimeException("Restore ERROR", e);
+            // Expected exception
         }
     }
 
     @Override
     public void afterRestore(Context<? extends Resource> context) throws Exception {
         try {
-            int c = counter.get();
-            if (c > 1) {
-                if (exception == null)
-                    exception = new RuntimeException("Parallel checkpoint");
-            }
             Thread.sleep(100);
-            Core.checkpointRestore();
-            if (exception == null)
-                exception = new RuntimeException("Checkpoint Exception should be thrown");
-        } catch (CheckpointException e) {
-            // Expected Exception
-        } catch (RestoreException e) {
-            if (exception == null)
-                exception = new RuntimeException("Restore ERROR", e);
+            try {
+                Core.checkpointRestore();
+                fail("Recursive checkpoint should fail");
+            } catch (CheckpointException e) {
+                // Expected exception
+            }
         } finally {
             counter.decrementAndGet();
         }
@@ -104,31 +98,23 @@ public class RecursiveCheckpointTest implements Resource, CracTest {
     public void exec() throws Exception {
         Core.getGlobalContext().register(new RecursiveCheckpointTest());
 
-        TestThread[] threads = new TestThread[numThreads];
+        final var threads = new TestThread[numThreads];
         for (int i = 0; i < numThreads; i++) {
             threads[i] = new TestThread();
             threads[i].start();
         }
-
-        Thread.sleep(100);
-        try {
-            Core.checkpointRestore();
-        } catch (CheckpointException e) {
-            throw new RuntimeException("Checkpoint ERROR", e);
-        } catch (RestoreException e) {
-            throw new RuntimeException("Restore ERROR", e);
-        }
-
         for (int i = 0; i < numThreads; i++) {
             threads[i].join();
         }
 
-        long ccounter = counter.get();
-        if (ccounter != 0)
-            throw new RuntimeException("Incorrect counter after restore: " + ccounter + " instead of 0");
-        if (exception != null) {
-            throw exception;
+        if (!throwables.isEmpty()) {
+            final var aggregated = new IllegalStateException("" + throwables.size() + " test threads failed");
+            for (final var t : throwables) {
+                aggregated.addSuppressed(t);
+            }
+            throw aggregated;
         }
-        System.out.println("PASSED");
+
+        assertEquals(0, counter.get());
     }
 }

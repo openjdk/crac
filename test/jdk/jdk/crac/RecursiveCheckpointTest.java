@@ -1,4 +1,4 @@
-// Copyright 2019-2021 Azul Systems, Inc.  All Rights Reserved.
+// Copyright 2019, 2025, Azul Systems, Inc.  All Rights Reserved.
 // DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
 //
 // This code is free software; you can redistribute it and/or modify it under
@@ -26,12 +26,11 @@ import java.util.concurrent.atomic.AtomicInteger;
 /*
  * @test
  * @summary check that the recursive checkpoint is not allowed
- * @requires (os.family == "linux")
  * @library /test/lib
- * @build Test
+ * @build RecursiveCheckpointTest
  * @run driver/timeout=60 jdk.test.lib.crac.CracTest 10
  */
-public class Test implements Resource, CracTest {
+public class RecursiveCheckpointTest implements Resource, CracTest {
     private static final AtomicInteger counter = new AtomicInteger(0);
     private static Exception exception = null;
 
@@ -40,22 +39,15 @@ public class Test implements Resource, CracTest {
 
     @Override
     public void test() throws Exception {
-        CracBuilder builder = new CracBuilder().engine(CracEngine.PAUSE);
-        CracProcess process = builder.startCheckpoint();
-        process.waitForPausePid();
-        for (int i = 1; i <= numThreads + 1; ++i) {
-            System.err.printf("Restore #%d%n", i);
-            builder.doRestore();
-        }
-        process.waitForSuccess();
+        CracBuilder builder = new CracBuilder().engine(CracEngine.SIMULATE);
+        builder.startCheckpoint().waitForSuccess();
     }
 
     private static class TestThread extends Thread {
-
         @Override
         public void run() {
             try {
-                jdk.crac.Core.checkpointRestore();
+                Core.checkpointRestore();
             } catch (CheckpointException e) {
                 if (exception == null)
                     exception = new RuntimeException("Checkpoint in thread ERROR " + e);
@@ -75,7 +67,7 @@ public class Test implements Resource, CracTest {
                     exception = new RuntimeException("Parallel checkpoint");
             }
             Thread.sleep(100);
-            jdk.crac.Core.checkpointRestore();
+            Core.checkpointRestore();
             if (exception != null)
                 exception = new RuntimeException("Checkpoint Exception should be thrown");
         } catch (CheckpointException e) {
@@ -95,7 +87,7 @@ public class Test implements Resource, CracTest {
                     exception = new RuntimeException("Parallel checkpoint");
             }
             Thread.sleep(100);
-            jdk.crac.Core.checkpointRestore();
+            Core.checkpointRestore();
             if (exception == null)
                 exception = new RuntimeException("Checkpoint Exception should be thrown");
         } catch (CheckpointException e) {
@@ -110,17 +102,17 @@ public class Test implements Resource, CracTest {
 
     @Override
     public void exec() throws Exception {
-        Core.getGlobalContext().register(new Test());
+        Core.getGlobalContext().register(new RecursiveCheckpointTest());
 
         TestThread[] threads = new TestThread[numThreads];
         for (int i = 0; i < numThreads; i++) {
             threads[i] = new TestThread();
             threads[i].start();
-        };
+        }
 
         Thread.sleep(100);
         try {
-            jdk.crac.Core.checkpointRestore();
+            Core.checkpointRestore();
         } catch (CheckpointException e) {
             throw new RuntimeException("Checkpoint ERROR", e);
         } catch (RestoreException e) {
@@ -129,7 +121,7 @@ public class Test implements Resource, CracTest {
 
         for (int i = 0; i < numThreads; i++) {
             threads[i].join();
-        };
+        }
 
         long ccounter = counter.get();
         if (ccounter != 0)

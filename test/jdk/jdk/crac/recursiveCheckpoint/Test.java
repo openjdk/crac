@@ -26,6 +26,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 /*
  * @test
  * @summary check that the recursive checkpoint is not allowed
+ * @requires (os.family == "linux")
  * @library /test/lib
  * @build Test
  * @run driver/timeout=60 jdk.test.lib.crac.CracTest 10

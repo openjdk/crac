@@ -27,43 +27,43 @@
 #include <string.h>
 #include <stdio.h>
 #include <stdlib.h>
+#ifdef LINUX
 #include <signal.h>
+#include <unistd.h>
+#endif // LINUX
+
+#define SIMENGINE "simengine: "
 
 #ifdef LINUX
-#include <unistd.h>
 #define RESTORE_SIGNAL   (SIGRTMIN + 2)
-#else
-typedef int pid_t;
-#endif //LINUX
 
 static int kickjvm(pid_t jvm, int code) {
-#ifdef LINUX
     union sigval sv = { .sival_int = code };
     if (-1 == sigqueue(jvm, RESTORE_SIGNAL, sv)) {
-        perror("sigqueue");
+        perror(SIMENGINE "sigqueue");
         return 1;
     }
-#endif //LINUX
     return 0;
 }
+#endif // LINUX
 
 int main(int argc, char *argv[]) {
     char* action = argv[1];
 
     if (!strcmp(action, "checkpoint")) {
+#ifdef LINUX
         const char* argsidstr = getenv("CRAC_NEW_ARGS_ID");
         int argsid = argsidstr ? atoi(argsidstr) : 0;
-#ifdef LINUX
         pid_t jvm = getppid();
-#else
-        pid_t jvm = -1;
-#endif //LINUX
         kickjvm(jvm, argsid);
+#endif // LINUX
     } else if (!strcmp(action, "restore")) {
-        char *strid = getenv("CRAC_NEW_ARGS_ID");
-        printf("CRAC_NEW_ARGS_ID=%s\n", strid ? strid : "0");
+        fprintf(stderr,
+            SIMENGINE "restore is not supported as a separate action by this engine, "
+            "it always restores a process immediately after checkpointing it\n");
+        return 1;
     } else {
-        fprintf(stderr, "unknown action: %s\n", action);
+        fprintf(stderr, SIMENGINE "unknown action: %s\n", action);
         return 1;
     }
 

@@ -252,13 +252,6 @@ size_t G1HeapSizingPolicy::full_collection_resize_amount(bool& expand) {
   // we'll try to make the capacity smaller than it, not greater).
   maximum_desired_capacity =  MAX2(maximum_desired_capacity, MinHeapSize);
 
-  // Handle do_cleanup_unused here to print correct capacity below.
-  if (Universe::heap()->do_cleanup_unused()) {
-    // HeapRegionManager::shrink_by do not allow remove all regions.
-    // Make sure at least one is there.
-    maximum_desired_capacity = G1HeapRegion::GrainBytes;
-  }
-
   // Don't expand unless it's significant; prefer expansion to shrinking.
   if (capacity_after_gc < minimum_desired_capacity) {
     size_t expand_bytes = minimum_desired_capacity - capacity_after_gc;

@@ -404,7 +404,7 @@ size_t DefNewGeneration::adjust_for_thread_increase(size_t new_size_candidate,
 }
 
 void DefNewGeneration::compute_new_size() {
-  if (Universe::heap()->do_cleanup_unused()) {
+  if (Universe::heap()->should_cleanup_unused()) {
     os::cleanup_memory((char*)eden()->top(), (char*)eden()->end() - (char*)eden()->top());
     os::cleanup_memory((char*)from()->top(), (char*)from()->end() - (char*)from()->top());
     os::cleanup_memory((char*)to()->top(), (char*)to()->end() - (char*)to()->top());

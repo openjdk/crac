@@ -783,7 +783,11 @@ void G1CollectedHeap::prepare_for_mutator_after_full_collection() {
   rebuild_region_sets(false /* free_list_only */);
   abort_refinement();
   resize_heap_if_necessary();
-  uncommit_regions_if_necessary();
+  if (should_cleanup_unused()) {
+    cleanup_unused_regions(); // Includes uncommitting
+  } else {
+    uncommit_regions_if_necessary();
+  }
 
   // Rebuild the code root lists for each region
   rebuild_code_roots();
@@ -883,6 +887,26 @@ void G1CollectedHeap::resize_heap_if_necessary() {
   } else {
     shrink(resize_amount);
   }
+}
+
+// The implementation of this should likely be OS-dependent. The current one is verified to have
+// the desired effect on Linux, should probably also be on BSD. On others this may mostly be a
+// useless work.
+void G1CollectedHeap::cleanup_unused_regions() {
+  assert_at_safepoint_on_vm_thread();
+
+  log_debug(gc, heap)("Cleanup unused regions");
+  const size_t orig_capacity = capacity();
+
+  // Uncommit all free regions
+  precond(orig_capacity >= G1HeapRegion::GrainBytes);
+  shrink(orig_capacity - G1HeapRegion::GrainBytes /* leave one region to pass G1HeapRegionManager's asserts */);
+  uncommit_regions(UINT_MAX);
+  assert(capacity() <= orig_capacity, "unexpectedly gained capacity: %zu -> %zu", orig_capacity, capacity());
+
+  // Commit them back
+  expand(orig_capacity - capacity());
+  assert(capacity() >= orig_capacity, "unexpectedly lost capacity: %zu -> %zu", orig_capacity, capacity());
 }
 
 HeapWord* G1CollectedHeap::satisfy_failed_allocation_helper(size_t word_size,

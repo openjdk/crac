@@ -64,7 +64,6 @@ class G1UncommitRegionTask : public G1ServiceTask {
 public:
   static void enqueue();
   virtual void execute();
-  static void finish_collection();
 };
 
 #endif

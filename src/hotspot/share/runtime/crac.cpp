@@ -419,7 +419,6 @@ Handle crac::checkpoint(jarray fd_arr, jobjectArray obj_arr, bool dry_run, jlong
   Universe::heap()->set_cleanup_unused(true);
   Universe::heap()->collect(GCCause::_full_gc_alot);
   Universe::heap()->set_cleanup_unused(false);
-  Universe::heap()->finish_collection();
 
   if (os::can_trim_native_heap()) {
     os::size_change_t sc;

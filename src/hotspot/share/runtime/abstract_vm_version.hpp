@@ -131,7 +131,6 @@ class Abstract_VM_Version: AllStatic {
 
   static uint64_t features()           { return _features; }
   static const char* features_string() { return _features_string; }
-
   static const char* cpu_info_string() { return _cpu_info_string; }
   static void insert_features_names(char* buf, size_t buflen, const char* features_names[]);
   static const char* extract_features_string(const char* cpu_info_string,

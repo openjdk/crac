@@ -216,8 +216,6 @@ static malloc_info_func_t g_malloc_info = nullptr;
 
 static int cached_pid = 0;
 
-static int clock_tics_per_sec = 100;
-
 // If the VM might have been created on the primordial thread, we need to resolve the
 // primordial thread stack bounds and check if the current thread might be the
 // primordial thread in places. If we know that the primordial thread is never used,
@@ -4397,8 +4395,6 @@ static void check_pax(void) {
 void os::init(void) {
   char dummy;   // used to get a guess on initial stack address
   cached_pid = current_process_id();
-
-  clock_tics_per_sec = checked_cast<int>(sysconf(_SC_CLK_TCK));
   int sys_pg_size = checked_cast<int>(sysconf(_SC_PAGESIZE));
   if (sys_pg_size < 0) {
     fatal("os_linux.cpp: os::init: sysconf failed (%s)",

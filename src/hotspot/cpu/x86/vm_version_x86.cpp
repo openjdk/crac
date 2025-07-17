@@ -58,9 +58,9 @@ uint64_t VM_Version::_glibc_features;
 uint64_t VM_Version::_features_saved;
 uint64_t VM_Version::_glibc_features_saved;
 
-#define DECLARE_CPU_FEATURE_NAME(id, name, bit) name,
-const char* VM_Version::      _features_names[] = {   CPU_FEATURE_FLAGS(DECLARE_CPU_FEATURE_NAME)};
-const char* VM_Version::_glibc_features_names[] = { GLIBC_FEATURE_FLAGS(DECLARE_CPU_FEATURE_NAME)};
+#define DECLARE_CPU_FEATURE_FLAG(id, name, bit) name,
+const char* VM_Version::      _features_names[] = {   CPU_FEATURE_FLAGS(DECLARE_CPU_FEATURE_FLAG)};
+const char* VM_Version::_glibc_features_names[] = { GLIBC_FEATURE_FLAGS(DECLARE_CPU_FEATURE_FLAG)};
 #undef DECLARE_CPU_FEATURE_FLAG
 
 // Address of instruction which causes SEGV

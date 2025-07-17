@@ -138,7 +138,7 @@ class ServerSocketChannelImpl
         if (family == UNIX) {
             this.fd = UnixDomainSockets.socket();
         } else {
-            this.fd = Net.serverSocket(family, true);
+            this.fd = Net.serverSocket(family);
         }
         this.fdVal = IOUtil.fdVal(fd);
     }
@@ -772,7 +772,7 @@ class ServerSocketChannelImpl
             if (family == UNIX) {
                 newFd = UnixDomainSockets.socket();
             } else {
-                newFd = Net.serverSocket(family, true);
+                newFd = Net.serverSocket(family);
             }
             // We could avoid making fdVal non-final and dup2(...) to the original
             // value but that could accidentally conflict with another FD created

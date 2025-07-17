@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2008, 2024, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2008, 2025, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -75,7 +75,7 @@ abstract class AsynchronousServerSocketChannelImpl
 
     AsynchronousServerSocketChannelImpl(AsynchronousChannelGroupImpl group) {
         super(group.provider());
-        this.fd = Net.serverSocket(true);
+        this.fd = Net.serverSocket();
         this.resource = new JDKSocketResource(this) {
             @Override
             protected FileDescriptor getFD() {
@@ -104,7 +104,7 @@ abstract class AsynchronousServerSocketChannelImpl
 
             @Override
             protected void reopenAfterRestore() throws IOException {
-                FileDescriptor newfd = Net.serverSocket(true);
+                FileDescriptor newfd = Net.serverSocket();
                 IOUtil.setfdVal(fd, IOUtil.fdVal(newfd));
                 reopen();
                 synchronized (stateLock) {

@@ -759,11 +759,9 @@ GrowableArray<int> ClassLoader::get_classpath_entry_fds() {
 
 GrowableArray<int> ClassLoader::get_patch_module_entry_fds() {
   GrowableArray<int> fds;
-  assert(Thread::current()->is_VM_thread(), "should be called from VM op");
-  if (_patch_mod_entries == NULL) {
+  if (_patch_mod_entries == nullptr) {
     return fds;
   }
-  // we don't use mutexes here because it is called from VM op
   for (int i = 0; i < _patch_mod_entries->length(); i++) {
     ModuleClassPathList* module_cpl = _patch_mod_entries->at(i);
     for (ClassPathEntry* entry = module_cpl->module_first_entry(); entry != nullptr; entry = entry->next()) {

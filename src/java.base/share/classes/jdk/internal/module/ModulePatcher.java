@@ -51,10 +51,12 @@ import java.util.Set;
 import java.util.jar.JarEntry;
 import java.util.jar.JarFile;
 import java.util.stream.Stream;
+import java.util.zip.ZipFile;
 
 import jdk.internal.loader.Resource;
 import jdk.internal.access.JavaLangModuleAccess;
 import jdk.internal.access.SharedSecrets;
+import jdk.internal.util.jar.PersistentJarFile;
 import sun.net.www.ParseUtil;
 
 
@@ -430,7 +432,7 @@ public final class ModulePatcher {
         private final URL csURL;
 
         JarResourceFinder(Path path) throws IOException {
-            this.jf = new JarFile(path.toString());
+            this.jf = new PersistentJarFile(path.toFile(), true, ZipFile.OPEN_READ, JarFile.runtimeVersion());
             this.csURL = path.toUri().toURL();
         }
 

@@ -569,6 +569,10 @@ public:
   uint uncommit_regions(uint region_limit);
   bool has_uncommittable_regions();
 
+  // Clear all free regions.
+  // The aim is to have free regions committed but not be actually physically reserved on OS-level.
+  void cleanup_unused_regions();
+
   G1NUMA* numa() const { return _numa; }
 
   // Expand the garbage-first heap by at least the given size (in bytes!).
@@ -1029,10 +1033,6 @@ public:
   // Perform a collection of the heap with the given cause.
   // Returns whether this collection actually executed.
   bool try_collect(GCCause::Cause cause, const G1GCCounters& counters_before);
-
-  virtual void finish_collection() override {
-    G1UncommitRegionTask::finish_collection();
-  }
 
   void start_concurrent_gc_for_metadata_allocation(GCCause::Cause gc_cause);
 

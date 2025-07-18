@@ -378,10 +378,7 @@ protected:
   bool is_stw_gc_active() const { return _is_stw_gc_active; }
 
   void set_cleanup_unused(bool value) { _cleanup_unused = value; }
-  bool do_cleanup_unused() const { return _cleanup_unused; }
-
-  // G1UncommitRegionTask may be still pending after collect() has returned.
-  virtual void finish_collection() {}
+  bool should_cleanup_unused() const { return _cleanup_unused; }
 
   // Total number of GC collections (started)
   unsigned int total_collections() const { return _total_collections; }

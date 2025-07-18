@@ -1146,7 +1146,7 @@ bool PSParallelCompact::invoke_no_policy(bool clear_all_soft_refs) {
       log_debug(gc, ergo)("AdaptiveSizeStop: collection: %d ", heap->total_collections());
     }
 
-    if (heap->do_cleanup_unused()) {
+    if (heap->should_cleanup_unused()) {
       zero_cap(young_gen->eden_space());
       zero_cap(young_gen->from_space());
       zero_all(young_gen->to_space());

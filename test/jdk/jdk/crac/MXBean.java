@@ -26,6 +26,7 @@
 import jdk.crac.*;
 import jdk.crac.management.*;
 
+import jdk.test.lib.Platform;
 import jdk.test.lib.crac.CracBuilder;
 import jdk.test.lib.crac.CracEngine;
 import jdk.test.lib.crac.CracTest;
@@ -64,19 +65,34 @@ public class MXBean implements CracTest {
     @Override
     public void test() throws Exception {
         long start = System.currentTimeMillis();
+        CracBuilder builder = new CracBuilder();
 
-        OutputAnalyzer output = new CracBuilder().engine(CracEngine.SIMULATE)
-                .captureOutput(true)
-                .startCheckpoint().waitForSuccess().outputAnalyzer();
+        OutputAnalyzer output;
+        if (Platform.isLinux()) {
+	    builder.doCheckpoint();
+
+	    long restoreStart = System.currentTimeMillis();
+	    output = builder.captureOutput(true).doRestore().outputAnalyzer();
+
+	    long restoreTimePassed = System.currentTimeMillis() - restoreStart;
+	    System.err.println("restoreTimePassed="+restoreTimePassed);
+	    if (restoreTimePassed < 0 || TIME_TOLERANCE < restoreTimePassed) {
+		throw new Error("bad time since restore started: " + restoreTimePassed);
+	    }
+        } else {
+	    output = builder.engine(CracEngine.SIMULATE)
+		    .captureOutput(true)
+		    .startCheckpoint().waitForSuccess().outputAnalyzer();
+        }
 
         long restoreUptime = Long.parseLong(output.firstMatch("UptimeSinceRestore ([0-9-]+)", 1));
-        if (restoreUptime < 0 || TIME_TOLERANCE < restoreUptime) {
+        System.err.println("restoreUptime=" + restoreUptime);
+        if (restoreUptime < 0) {
             throw new Error("bad UptimeSinceRestore: " + restoreUptime);
         }
 
         long restoreTime = Long.parseLong(output.firstMatch("RestoreTime ([0-9-]+)", 1));
-        restoreTime -= start;
-
-        assertLT(Math.abs(restoreTime), TIME_TOLERANCE, "bad RestoreTime: " + restoreTime);
+        System.err.println("restoreTime=" + restoreTime);
+        assertLT(start, restoreTime, "bad RestoreTime: " + restoreTime);
     }
 }

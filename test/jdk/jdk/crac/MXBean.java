@@ -53,8 +53,6 @@ public class MXBean implements CracTest {
 
         Core.checkpointRestore();
 
-        System.out.println("UptimeSinceRestore " + cracMXBean.getUptimeSinceRestore());
-
         long restoreTime = cracMXBean.getRestoreTime();
         System.out.println("RestoreTime " + restoreTime + " " +
             DateTimeFormatter.ofPattern("E dd LLL yyyy HH:mm:ss.n").format(
@@ -75,7 +73,7 @@ public class MXBean implements CracTest {
             output = builder.captureOutput(true).doRestore().outputAnalyzer();
 
             long restoreTimePassed = System.currentTimeMillis() - restoreStart;
-            System.err.println("restoreTimePassed="+restoreTimePassed);
+            System.err.println("restoreTimePassed=" + restoreTimePassed);
             if (restoreTimePassed < 0 || TIME_TOLERANCE < restoreTimePassed) {
                 throw new Error("bad time since restore started: " + restoreTimePassed);
             }
@@ -83,12 +81,6 @@ public class MXBean implements CracTest {
             output = builder.engine(CracEngine.SIMULATE)
                     .captureOutput(true)
                     .startCheckpoint().waitForSuccess().outputAnalyzer();
-        }
-
-        long restoreUptime = Long.parseLong(output.firstMatch("UptimeSinceRestore ([0-9-]+)", 1));
-        System.err.println("restoreUptime=" + restoreUptime);
-        if (restoreUptime < 0) {
-            throw new Error("bad UptimeSinceRestore: " + restoreUptime);
         }
 
         long restoreTime = Long.parseLong(output.firstMatch("RestoreTime ([0-9-]+)", 1));

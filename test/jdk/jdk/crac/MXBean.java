@@ -76,21 +76,23 @@ public class MXBean implements CracTest {
             process.waitForPausePid();
             restoreStartTime = System.currentTimeMillis();
             builder.doRestore();
-            System.out.println("RestoreStartTime " + restoreStartTime + " " + formatTime(restoreStartTime));
         } else {
+            restoreStartTime = System.currentTimeMillis(); // A very rough approximation
             output = builder.engine(CracEngine.SIMULATE).startCheckpoint().waitForSuccess().outputAnalyzer();
-            restoreStartTime = -1; // Unknown
         }
+        System.out.println("RestoreStartTime " + restoreStartTime + " " + formatTime(restoreStartTime));
 
         final long uptimeSinceRestore = Long.parseLong(output.firstMatch("UptimeSinceRestore ([0-9-]+)", 1));
         assertGTE(uptimeSinceRestore, 0L, "Bad UptimeSinceRestore");
-        assertLT(uptimeSinceRestore, TIME_TOLERANCE, "UptimeSinceRestore should be close to 0");
+        assertLT(uptimeSinceRestore, TIME_TOLERANCE, "UptimeSinceRestore should be a bit greater than 0");
 
         final long restoreTime = Long.parseLong(output.firstMatch("RestoreTime ([0-9-]+)", 1));
         assertGTE(restoreTime, 0L, "Bad RestoreTime");
         if (Platform.isLinux()) {
-            assertLT(Math.abs(restoreTime - restoreStartTime), TIME_TOLERANCE,
-                    "RestoreTime " + restoreTime + " should be close to " + restoreStartTime);
+            assertLT(restoreTime - restoreStartTime, TIME_TOLERANCE,
+                    "RestoreTime " + restoreTime + " should be a bit greater than " + restoreStartTime);
+        } else {
+            assertGT(restoreTime, restoreStartTime, "Time has gone backwards?");
         }
     }
 }

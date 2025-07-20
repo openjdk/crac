@@ -36,7 +36,7 @@ import java.time.Instant;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 
-import static jdk.test.lib.Asserts.assertLT;
+import static jdk.test.lib.Asserts.*;
 
 /**
  * @test
@@ -45,7 +45,12 @@ import static jdk.test.lib.Asserts.assertLT;
  * @run driver jdk.test.lib.crac.CracTest
  */
 public class MXBean implements CracTest {
-    static final long TIME_TOLERANCE = 10_000; // ms
+    static final long TIME_TOLERANCE = 1000; // ms
+
+    private static String formatTime(long t) {
+        return DateTimeFormatter.ofPattern("E dd LLL yyyy HH:mm:ss.n").format(
+                Instant.ofEpochMilli(t).atZone(ZoneId.systemDefault()));
+    }
 
     @Override
     public void exec() throws CheckpointException, RestoreException {
@@ -53,38 +58,39 @@ public class MXBean implements CracTest {
 
         Core.checkpointRestore();
 
+        System.out.println("UptimeSinceRestore " + cracMXBean.getUptimeSinceRestore());
+
         long restoreTime = cracMXBean.getRestoreTime();
-        System.out.println("RestoreTime " + restoreTime + " " +
-            DateTimeFormatter.ofPattern("E dd LLL yyyy HH:mm:ss.n").format(
-                Instant.ofEpochMilli(restoreTime)
-                    .atZone(ZoneId.systemDefault())));
+        System.out.println("RestoreTime " + restoreTime + " " + formatTime(restoreTime));
     }
 
     @Override
     public void test() throws Exception {
-        long start = System.currentTimeMillis();
-        CracBuilder builder = new CracBuilder();
+        final var builder = new CracBuilder().captureOutput(true);
 
-        OutputAnalyzer output;
-        if (Platform.isLinux()) {
-            builder.doCheckpoint();
-
-            long restoreStart = System.currentTimeMillis();
-            output = builder.captureOutput(true).doRestore().outputAnalyzer();
-
-            long restoreTimePassed = System.currentTimeMillis() - restoreStart;
-            System.err.println("restoreTimePassed=" + restoreTimePassed);
-            if (restoreTimePassed < 0 || TIME_TOLERANCE < restoreTimePassed) {
-                throw new Error("bad time since restore started: " + restoreTimePassed);
-            }
+        final OutputAnalyzer output;
+        final long restoreStartTime;
+        if (Platform.isLinux()) { // Linux is currently the only platform supporting non-immediate restore
+            final var process = builder.engine(CracEngine.PAUSE).startCheckpoint();
+            output = process.outputAnalyzer();
+            process.waitForPausePid();
+            restoreStartTime = System.currentTimeMillis();
+            builder.doRestore();
+            System.out.println("RestoreStartTime " + restoreStartTime + " " + formatTime(restoreStartTime));
         } else {
-            output = builder.engine(CracEngine.SIMULATE)
-                    .captureOutput(true)
-                    .startCheckpoint().waitForSuccess().outputAnalyzer();
+            output = builder.engine(CracEngine.SIMULATE).startCheckpoint().waitForSuccess().outputAnalyzer();
+            restoreStartTime = -1; // Unknown
         }
 
-        long restoreTime = Long.parseLong(output.firstMatch("RestoreTime ([0-9-]+)", 1));
-        System.err.println("restoreTime=" + restoreTime);
-        assertLT(start, restoreTime, "bad RestoreTime: " + restoreTime);
+        final long uptimeSinceRestore = Long.parseLong(output.firstMatch("UptimeSinceRestore ([0-9-]+)", 1));
+        assertGTE(uptimeSinceRestore, 0L, "Bad UptimeSinceRestore");
+        assertLT(uptimeSinceRestore, TIME_TOLERANCE, "UptimeSinceRestore should be close to 0");
+
+        final long restoreTime = Long.parseLong(output.firstMatch("RestoreTime ([0-9-]+)", 1));
+        assertGTE(restoreTime, 0L, "Bad RestoreTime");
+        if (Platform.isLinux()) {
+            assertLT(Math.abs(restoreTime - restoreStartTime), TIME_TOLERANCE,
+                    "RestoreTime " + restoreTime + " should be close to " + restoreStartTime);
+        }
     }
 }

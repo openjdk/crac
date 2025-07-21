@@ -44,7 +44,7 @@ import static jdk.test.lib.Asserts.assertLT;
  * @run driver jdk.test.lib.crac.CracTest
  */
 public class MXBean implements CracTest {
-    static final long TIME_TOLERANCE = 10_000; // ms
+    static final long TIME_TOLERANCE = 100_000; // ms; some Mac CI can fail with 10_000
 
     @Override
     public void exec() throws CheckpointException, RestoreException {

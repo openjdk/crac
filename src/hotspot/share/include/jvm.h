@@ -1184,6 +1184,12 @@ enum cr_fail_type {
 JNIEXPORT jobjectArray JNICALL
 JVM_Checkpoint(JNIEnv *env, jarray fd_arr, jobjectArray obj_arr, jboolean dry_run, jlong jcmd_stream);
 
+JNIEXPORT void JNICALL
+JVM_StartRecordingDecompilations(JNIEnv *env);
+
+JNIEXPORT void JNICALL
+JVM_FinishRecordingDecompilationsAndRecompile(JNIEnv *env);
+
 #ifdef __cplusplus
 } /* extern "C" */
 

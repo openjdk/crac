@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2017, 2021, Azul Systems, Inc. All rights reserved.
+ * Copyright (c) 2017, 2025, Azul Systems, Inc. All rights reserved.
  * Copyright (c) 2021, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
@@ -31,6 +31,7 @@ import jdk.internal.crac.ClaimedFDs;
 import jdk.internal.crac.JDKResource;
 import jdk.internal.crac.LoggerContainer;
 import jdk.internal.crac.mirror.impl.*;
+import jdk.internal.misc.InnocuousThread;
 
 import java.io.PrintWriter;
 import java.io.StringWriter;
@@ -66,6 +67,8 @@ public class Core {
         private FlagsHolder() {}
         public static final boolean TRACE_STARTUP_TIME =
             Boolean.getBoolean("jdk.crac.trace-startup-time");
+        public static final long RECOMPILATION_DELAY_MS =
+            Long.getLong("jdk.crac.recompilation-delay-ms", 100L);
     }
 
     private static final Context<Resource> globalContext = GlobalContext.createGlobalContextImpl();
@@ -301,6 +304,7 @@ public class Core {
                 throw ex;
             }
 
+            startRecordingDecompilations();
             try (@SuppressWarnings("unused") var keepAlive = new KeepAlive()) {
                 checkpointInProgress = true;
                 checkpointRestore1(jcmdStream);
@@ -309,6 +313,7 @@ public class Core {
                     System.out.println("STARTUPTIME " + System.nanoTime() + " restore-finish");
                 }
                 checkpointInProgress = false;
+                scheduleFinishRecordingDecompilationsAndRecompile();
             }
         }
     }
@@ -340,5 +345,47 @@ public class Core {
         } catch (InvocationTargetException | IllegalAccessException e) {
             LoggerContainer.error(e, "Cannot start JMX agent");
         }
+    }
+
+    private static Thread recompilerThread;
+
+    private static native void startRecordingDecompilations0();
+    private static native void finishRecordingDecompilationsAndRecompile0();
+
+    private static void startRecordingDecompilations() throws CheckpointException {
+        if (recompilerThread != null) {
+            // Finish the existing recording, if any
+            recompilerThread.interrupt();
+            try {
+                recompilerThread.join();
+            } catch (InterruptedException ie) {
+                final CheckpointException ex = new CheckpointException();
+                ex.addSuppressed(ie);
+                throw ex;
+            }
+        }
+        startRecordingDecompilations0();
+    }
+
+    private static void scheduleFinishRecordingDecompilationsAndRecompile() {
+        if (FlagsHolder.RECOMPILATION_DELAY_MS <= 0) {
+            finishRecordingDecompilationsAndRecompile0();
+            return;
+        }
+
+        // InnocuousThread not to add a thread into the user's thread group
+        final Thread t = InnocuousThread.newThread("CRaC Recompiler", () -> {
+            try {
+                Thread.sleep(FlagsHolder.RECOMPILATION_DELAY_MS);
+            } catch (InterruptedException ignored) {
+                // Finish even if interrupted by another checkpoint: asking for
+                // recompilations earlier shouldn't hurt and is also safe in
+                // case interrupted by user code somehow
+            }
+            finishRecordingDecompilationsAndRecompile0();
+        });
+        t.setDaemon(true);
+        t.start();
+        recompilerThread = t;
     }
 }

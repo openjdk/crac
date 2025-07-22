@@ -67,6 +67,7 @@
 #include "runtime/continuation.hpp"
 #include "runtime/continuationEntry.inline.hpp"
 #include "runtime/deoptimization.hpp"
+#include "runtime/cracRecompiler.hpp"
 #include "runtime/escapeBarrier.hpp"
 #include "runtime/fieldDescriptor.hpp"
 #include "runtime/fieldDescriptor.inline.hpp"
@@ -2435,6 +2436,22 @@ JRT_ENTRY(void, Deoptimization::uncommon_trap_inner(JavaThread* current, jint tr
       // for a while to exercise it more thoroughly.
       if (make_not_entrant && maybe_prior_recompile && maybe_prior_trap) {
         reprofile = true;
+      }
+    }
+
+    if (make_not_entrant) {
+      // If the deoptimization occured during checkpoint-restore we assume it
+      // was caused by a temporary application state change which will soon be
+      // reverted. CRaC will later request recompilation in such case.
+      const int entry_bci = nm->is_osr_method() ? nm->osr_entry_bci() : InvocationEntryBci;
+      if (CRaCRecompiler::record_decompilation(nm->method(), entry_bci, nm->comp_level())) {
+        // Allow CRaC to recompile the method
+        make_not_compilable = false;
+        inc_recompile_count = false;
+        // - Not setting make_not_entrant to false: there is a chance the state
+        // change is permanent, then the method will become not entrant anyway.
+        // - Not setting reprofile to false: it is OK for the method to run
+        // in interpreter for a while to gather an additional profile.
       }
     }
 

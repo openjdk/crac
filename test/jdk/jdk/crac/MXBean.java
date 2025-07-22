@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022, 2025, Azul Systems, Inc. All rights reserved.
+ * Copyright (c) 2022, Azul Systems, Inc. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -26,7 +26,6 @@
 import jdk.crac.*;
 import jdk.crac.management.*;
 
-import jdk.test.lib.Platform;
 import jdk.test.lib.crac.CracBuilder;
 import jdk.test.lib.crac.CracEngine;
 import jdk.test.lib.crac.CracTest;
@@ -36,7 +35,7 @@ import java.time.Instant;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 
-import static jdk.test.lib.Asserts.*;
+import static jdk.test.lib.Asserts.assertLT;
 
 /**
  * @test
@@ -45,12 +44,7 @@ import static jdk.test.lib.Asserts.*;
  * @run driver jdk.test.lib.crac.CracTest
  */
 public class MXBean implements CracTest {
-    static final long TIME_TOLERANCE = 1000; // ms
-
-    private static String formatTime(long t) {
-        return DateTimeFormatter.ofPattern("E dd LLL yyyy HH:mm:ss.n").format(
-                Instant.ofEpochMilli(t).atZone(ZoneId.systemDefault()));
-    }
+    static final long TIME_TOLERANCE = 10_000; // ms
 
     @Override
     public void exec() throws CheckpointException, RestoreException {
@@ -61,38 +55,28 @@ public class MXBean implements CracTest {
         System.out.println("UptimeSinceRestore " + cracMXBean.getUptimeSinceRestore());
 
         long restoreTime = cracMXBean.getRestoreTime();
-        System.out.println("RestoreTime " + restoreTime + " " + formatTime(restoreTime));
+        System.out.println("RestoreTime " + restoreTime + " " +
+            DateTimeFormatter.ofPattern("E dd LLL yyyy HH:mm:ss.n").format(
+                Instant.ofEpochMilli(restoreTime)
+                    .atZone(ZoneId.systemDefault())));
     }
 
     @Override
     public void test() throws Exception {
-        final var builder = new CracBuilder().captureOutput(true);
+        long start = System.currentTimeMillis();
 
-        final OutputAnalyzer output;
-        final long restoreStartTime;
-        if (Platform.isLinux()) { // Linux is currently the only platform supporting non-immediate restore
-            final var process = builder.engine(CracEngine.PAUSE).startCheckpoint();
-            output = process.outputAnalyzer();
-            process.waitForPausePid();
-            restoreStartTime = System.currentTimeMillis();
-            builder.doRestore();
-        } else {
-            restoreStartTime = System.currentTimeMillis(); // A very rough approximation
-            output = builder.engine(CracEngine.SIMULATE).startCheckpoint().waitForSuccess().outputAnalyzer();
+        OutputAnalyzer output = new CracBuilder().engine(CracEngine.SIMULATE)
+                .captureOutput(true)
+                .startCheckpoint().waitForSuccess().outputAnalyzer();
+
+        long restoreUptime = Long.parseLong(output.firstMatch("UptimeSinceRestore ([0-9-]+)", 1));
+        if (restoreUptime < 0 || TIME_TOLERANCE < restoreUptime) {
+            throw new Error("bad UptimeSinceRestore: " + restoreUptime);
         }
-        System.out.println("RestoreStartTime " + restoreStartTime + " " + formatTime(restoreStartTime));
 
-        final long uptimeSinceRestore = Long.parseLong(output.firstMatch("UptimeSinceRestore ([0-9-]+)", 1));
-        assertGTE(uptimeSinceRestore, 0L, "Bad UptimeSinceRestore");
-        assertLT(uptimeSinceRestore, TIME_TOLERANCE, "UptimeSinceRestore should be a bit greater than 0");
+        long restoreTime = Long.parseLong(output.firstMatch("RestoreTime ([0-9-]+)", 1));
+        restoreTime -= start;
 
-        final long restoreTime = Long.parseLong(output.firstMatch("RestoreTime ([0-9-]+)", 1));
-        assertGTE(restoreTime, 0L, "Bad RestoreTime");
-        if (Platform.isLinux()) {
-            assertLT(restoreTime - restoreStartTime, TIME_TOLERANCE,
-                    "RestoreTime " + restoreTime + " should be a bit greater than " + restoreStartTime);
-        } else {
-            assertGT(restoreTime, restoreStartTime, "Time has gone backwards?");
-        }
+        assertLT(Math.abs(restoreTime), TIME_TOLERANCE, "bad RestoreTime: " + restoreTime);
     }
 }

@@ -1369,7 +1369,7 @@ C2V_VMENTRY(void, reprofile, (JNIEnv* env, jobject, ARGUMENT_PAIR(method)))
 
   nmethod* code = method->code();
   if (code != nullptr) {
-    code->make_not_entrant("JVMCI reprofile");
+    code->make_not_entrant("JVMCI reprofile", false /* trust the compiler, ideally should be a parameter */);
   }
 
   MethodData* method_data = method->method_data();
@@ -1809,7 +1809,8 @@ C2V_VMENTRY(void, materializeVirtualObjects, (JNIEnv* env, jobject, jobject _hs_
     if (!fst.current()->is_compiled_frame()) {
       JVMCI_THROW_MSG(IllegalStateException, "compiled stack frame expected");
     }
-    fst.current()->cb()->as_nmethod()->make_not_entrant("JVMCI materialize virtual objects");
+    fst.current()->cb()->as_nmethod()->make_not_entrant("JVMCI materialize virtual objects",
+                                                        false /* likely not caused by app state change */);
   }
   Deoptimization::deoptimize(thread, *fst.current(), Deoptimization::Reason_none);
   // look for the frame again as it has been updated by deopt (pc, deopt state...)

@@ -1814,7 +1814,7 @@ void Deoptimization::deoptimize(JavaThread* thread, frame fr, DeoptReason reason
 #if INCLUDE_JVMCI
 address Deoptimization::deoptimize_for_missing_exception_handler(nmethod* nm) {
   // there is no exception handler for this pc => deoptimize
-  nm->make_not_entrant("missing exception handler");
+  nm->make_not_entrant("missing exception handler", true /* OK to recompile */);
 
   // Use Deoptimization::deoptimize for all of its side-effects:
   // gathering traps statistics, logging...
@@ -2439,27 +2439,36 @@ JRT_ENTRY(void, Deoptimization::uncommon_trap_inner(JavaThread* current, jint tr
       }
     }
 
+    // If the deoptimization occured during checkpoint-restore we assume it was
+    // caused by a temporary application state change which will soon be
+    // reverted. CRaC will later request recompilation in such case.
     if (make_not_entrant) {
-      // If the deoptimization occured during checkpoint-restore we assume it
-      // was caused by a temporary application state change which will soon be
-      // reverted. CRaC will later request recompilation in such case.
-      const int entry_bci = nm->is_osr_method() ? nm->osr_entry_bci() : InvocationEntryBci;
-      if (CRaCRecompiler::record_decompilation(nm->method(), entry_bci, nm->comp_level())) {
+      // It is possible that the decompilation recording state will switch
+      // concurrently between this query and the time we record. It is ok:
+      // - If is recording now but will stop by the time we record we will just
+      // possibly trap one more time than necessary, i.e. we'll do a bit more
+      // work
+      // - If not recording now but will start by the time we record CRaC will
+      // just possibly fail to request the recompilation, which is correct since
+      // the decompilation was triggered before the recording started
+      if (CRaCRecompiler::is_recording_decompilations()) {
         // Allow CRaC to recompile the method
         make_not_compilable = false;
         inc_recompile_count = false;
         // - Not setting make_not_entrant to false: there is a chance the state
         // change is permanent, then the method will become not entrant anyway.
-        // - Not setting reprofile to false: it is OK for the method to run
-        // in interpreter for a while to gather an additional profile.
+        // - Not setting reprofile to false: it is OK for the method to run in
+        // the interpreter for a while to gather an additional profile.
       }
+    } else {
+      assert(!make_not_compilable && !inc_recompile_count, "consistent");
     }
 
     // Take requested actions on the method:
 
     // Recompile
     if (make_not_entrant) {
-      if (!nm->make_not_entrant("uncommon trap")) {
+      if (!nm->make_not_entrant("uncommon trap", true /* OK to recompile */)) {
         return; // the call did not change nmethod's state
       }
 

@@ -24,9 +24,9 @@
 #ifndef SHARE_RUNTIME_CRACRECOMPILER_HPP
 #define SHARE_RUNTIME_CRACRECOMPILER_HPP
 
+#include "code/nmethod.hpp"
 #include "memory/allStatic.hpp"
 #include "oops/metadata.hpp"
-#include "oops/method.hpp"
 
 // During checkpoint-restore there is a high chance that application state will
 // temporarily change. This may trigger deoptimizations and make methods
@@ -37,13 +37,20 @@
 //
 // To speed up such after-restore warmup this class records decompilations
 // occuring during checkpoint-restore (and shortly after) and requests their
-// compilation immediately afterards.
+// compilation immediately afterwards.
+//
+// We don't recompile immediately because if the compilation manages to finish
+// and get executed before the restoring is over it will trip over the temporary
+// state again and get recompiled again, thus slowing the restoring.
 class CRaCRecompiler : public AllStatic {
 public:
   static void start_recording_decompilations();
-  static bool record_decompilation(Method *method, int bci, int comp_level);
   static void finish_recording_decompilations_and_recompile();
 
+  static bool is_recording_decompilations();
+  static void record_decompilation(const nmethod &nmethod);
+
+  // RedefineClasses support.
   static void metadata_do(void f(Metadata *));
 };
 

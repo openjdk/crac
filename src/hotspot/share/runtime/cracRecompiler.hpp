@@ -27,6 +27,7 @@
 #include "code/nmethod.hpp"
 #include "memory/allStatic.hpp"
 #include "oops/metadata.hpp"
+#include "runtime/handles.hpp"
 
 // During checkpoint-restore there is a high chance that application state will
 // temporarily change. This may trigger deoptimizations and make methods
@@ -49,6 +50,9 @@ public:
 
   static bool is_recording_decompilations();
   static void record_decompilation(const nmethod &nmethod);
+
+  // Whether compiling the method on this level is still needed.
+  static bool is_recompilation_relevant(const methodHandle &method, int bci, int comp_level);
 
   // RedefineClasses support.
   static void metadata_do(void f(Metadata *));

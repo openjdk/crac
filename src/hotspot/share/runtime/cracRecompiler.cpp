@@ -41,6 +41,8 @@
 #include "runtime/safepoint.hpp"
 #include "runtime/safepointVerifiers.hpp"
 #include "runtime/thread.hpp"
+#include "utilities/checkedCast.hpp"
+#include "utilities/debug.hpp"
 #include "utilities/exceptions.hpp"
 #include "utilities/globalDefinitions.hpp"
 #include "utilities/growableArray.hpp"
@@ -60,7 +62,13 @@ public:
       _klass_holder(JNIHandles::make_weak_global(Handle(Thread::current(), method->method_holder()->klass_holder()))),
       _method(method), _bci(bci), _comp_level(comp_level) {}
   ~CompilationInfo() {
-    JNIHandles::destroy_weak_global(_klass_holder);
+    if (_klass_holder != nullptr) {
+      if (JNIHandles::is_weak_global_handle(_klass_holder)) {
+        JNIHandles::destroy_weak_global(_klass_holder);
+      } else {
+        JNIHandles::destroy_global(_klass_holder);
+      }
+    }
   }
   NONCOPYABLE(CompilationInfo);
 
@@ -68,47 +76,53 @@ public:
   int bci() const { return _bci; };
   int comp_level() const { return _comp_level; };
 
-  // True if the method's holder class has not yet been unloaded.
-  bool is_method_alive() const {
-    return _klass_holder == nullptr || !JNIHandles::is_weak_global_cleared(_klass_holder);
+  bool is_method_loaded() const {
+    return _klass_holder == nullptr || // bootstrap loader is never unloaded
+           JNIHandles::is_global_handle(_klass_holder) || // Strong handle keeps it loaded
+           !JNIHandles::is_weak_global_cleared(_klass_holder); // Weak handle but still loaded
+  }
+  bool keep_method_loaded() {
+    const NoSafepointVerifier nsv; // Ensure not unloaded concurrently
+    if (!is_method_loaded()) {
+      return false; // Already unloaded
+    }
+    JNIHandles::destroy_weak_global(_klass_holder);
+    _klass_holder = JNIHandles::make_global(Handle(Thread::current(), method()->method_holder()->klass_holder()));
+    postcond(is_method_loaded());
+    return true;
   }
 
 private:
-  const jweak _klass_holder;
+  jweak _klass_holder;
   Method * const _method;
   const int _bci;
   const int _comp_level;
 };
 
-static void request_recompilation_if_alive(const CompilationInfo &info) {
-  methodHandle mh;
-  {
-    const NoSafepointVerifier nsf; // Ensure the method is not unloaded while we are putting it into the handle
-    if (!info.is_method_alive()) {
-      log_trace(crac)("Skipping requesting recompilation: <unloaded method>, bci=%i, comp_level=%i",
-                      info.bci(), info.comp_level());
-      return;
-    }
-    mh = methodHandle(Thread::current(), info.method());
+static void request_recompilation(CompilationInfo *info) {
+  if (!info->keep_method_loaded()) {
+    log_trace(crac)("Skipping recompilation: <unloaded method>, bci=%i, comp_level=%i — got unloaded",
+                    info->bci(), info->comp_level());
+    return;
   }
-  assert(Method::is_valid_method(mh()), "sanity check");
+  assert(Method::is_valid_method(info->method()), "sanity check");
 
   if (log_is_enabled(Trace, crac)) {
     ResourceMark rm;
     log_trace(crac)("Requesting recompilation: %s, bci=%i, comp_level=%i",
-                    info.method()->external_name(), info.bci(), info.comp_level());
+                    info->method()->external_name(), info->bci(), info->comp_level());
   }
 
   auto * const THREAD = JavaThread::current();
   CompileBroker::compile_method(
-    mh, info.bci(), info.comp_level(),
+    methodHandle(THREAD, info->method()), info->bci(), info->comp_level(),
     methodHandle(), 0, CompileTask::Reason_CRaC, // These are only used for logging
     THREAD);
   guarantee(!HAS_PENDING_EXCEPTION, "the method should have been successfully compiled before");
 }
 
 static Mutex *decompilations_lock;
-static volatile GrowableArrayCHeap<const CompilationInfo *, MemTag::mtInternal> *decompilations;
+static volatile GrowableArrayCHeap<CompilationInfo *, MemTag::mtInternal> *decompilations;
 
 void CRaCRecompiler::start_recording_decompilations() {
   if (decompilations_lock == nullptr) {
@@ -116,29 +130,37 @@ void CRaCRecompiler::start_recording_decompilations() {
     decompilations_lock = new Mutex(Mutex::nosafepoint - 1, "CRaCRecompiler_lock");
   }
   const MutexLocker ml(decompilations_lock, Mutex::_no_safepoint_check_flag);
-  assert(decompilations == nullptr, "previous recording has not been finished");
+  precond(!is_recording_decompilations());
   log_debug(crac)("Starting recording decompilations");
   // release to ensuree decompilations_lock has been stored before the non-locked load in record_decompilation(),
   // fence to not proceed with C/R until the recorder threads will see the recording update
-  Atomic::release_store_fence(&decompilations, new GrowableArrayCHeap<const CompilationInfo *, MemTag::mtInternal>());
+  Atomic::release_store_fence(&decompilations, new GrowableArrayCHeap<CompilationInfo *, MemTag::mtInternal>());
+  postcond(is_recording_decompilations());
 }
 
 void CRaCRecompiler::finish_recording_decompilations_and_recompile() {
-  assert(Thread::current()->is_Java_thread(), "must be called on a Java thread");
+  assert(Thread::current()->is_Java_thread(), "need a Java thread");
   assert(decompilations_lock != nullptr, "lock must be initialized when starting the recording");
 
-  const GrowableArrayCHeap<const CompilationInfo *, MemTag::mtInternal> *decomps;
+  const GrowableArrayCHeap<CompilationInfo *, MemTag::mtInternal> *decomps;
   {
     const MutexLocker ml(decompilations_lock, Mutex::_no_safepoint_check_flag);
-    decomps = const_cast<GrowableArrayCHeap<const CompilationInfo *, MemTag::mtInternal> *>(decompilations);
+    precond(is_recording_decompilations());
+    decomps = const_cast<GrowableArrayCHeap<CompilationInfo *, MemTag::mtInternal> *>(decompilations);
     assert(decomps != nullptr, "recording has not been started");
     log_debug(crac)("Finishing recording decompilations and requesting %i recompilations", decomps->length());
     // fence should allow the recorder threads to stop locking quicker
     Atomic::release_store_fence(&decompilations, static_cast<decltype(decompilations)>(nullptr));
+    postcond(!is_recording_decompilations());
   }
 
-  for (const auto *decompilation : *decomps) {
-    request_recompilation_if_alive(*decompilation);
+  // There can only be one compilation queued/in-progress for a method at a
+  // time, if there is one already for this method our request for it will just
+  // be ignored.
+  // TODO: we could optimize at least our own requests by placing requests for
+  //  the same method further away from each other.
+  for (auto * const decompilation : *decomps) {
+    request_recompilation(decompilation);
     delete decompilation;
   }
   delete decomps;
@@ -153,7 +175,7 @@ void CRaCRecompiler::record_decompilation(const nmethod &nmethod) {
     return; // Fast pass to not acquire a lock when no C/R occurs (i.e. most of the time)
   }
   const MutexLocker ml(decompilations_lock, Mutex::_no_safepoint_check_flag);
-  auto * const decomps = const_cast<GrowableArrayCHeap<const CompilationInfo *, MemTag::mtInternal> *>(decompilations);
+  auto * const decomps = const_cast<GrowableArrayCHeap<CompilationInfo *, MemTag::mtInternal> *>(decompilations);
   if (decomps != nullptr) { // Re-check under the lock to be safe from concurrent deletion
     decomps->append(new CompilationInfo(nmethod.method(),
                                         nmethod.is_osr_method() ? nmethod.osr_entry_bci() : InvocationEntryBci,
@@ -161,13 +183,36 @@ void CRaCRecompiler::record_decompilation(const nmethod &nmethod) {
   }
 }
 
+bool CRaCRecompiler::is_recompilation_relevant(const methodHandle &method, int bci, int comp_level) {
+  const nmethod *current_nmethod = bci == InvocationEntryBci ?
+      method->code() :
+      method->lookup_osr_nmethod_for(bci, CompLevel::CompLevel_any, false);
+  const CompLevel current_comp_level = current_nmethod != nullptr ?
+    checked_cast<CompLevel>(current_nmethod->comp_level()) :
+    CompLevel::CompLevel_none;
+  switch (current_comp_level) {
+    case CompLevel::CompLevel_none:
+      assert(comp_level > CompLevel::CompLevel_none, "must be compiled");
+      return true; // JIT is better than interpreter
+    case CompLevel::CompLevel_simple:
+    case CompLevel::CompLevel_full_optimization:
+      return false; // Already on a final level
+    case CompLevel::CompLevel_limited_profile:
+    case CompLevel::CompLevel_full_profile:
+      return comp_level == CompLevel::CompLevel_full_optimization; // C2 is better than C1
+    default:
+      ShouldNotReachHere();
+      return false;
+  }
+}
+
 void CRaCRecompiler::metadata_do(void f(Metadata *)) {
   assert_at_safepoint();
   // Since we are at a safepoint no synchronization is needed
-  auto * const decompilations_ = const_cast<GrowableArrayCHeap<const CompilationInfo *, MemTag::mtInternal> *>(decompilations);
-  if (decompilations_ != nullptr) {
-    for (const auto *decompilation : *decompilations_) {
-      if (decompilation->is_method_alive()) {
+  auto * const decomps = const_cast<GrowableArrayCHeap<CompilationInfo *, MemTag::mtInternal> *>(decompilations);
+  if (decomps != nullptr) {
+    for (const auto *decompilation : *decomps) {
+      if (decompilation->is_method_loaded()) {
         f(decompilation->method());
       }
     }

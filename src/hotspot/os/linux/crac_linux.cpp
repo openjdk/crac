@@ -304,6 +304,7 @@ bool VM_Crac::check_fds() {
 
   ResourceMark rm;
   GrowableArray<int> boot_classpath_fds = ClassLoader::get_classpath_entry_fds();
+  GrowableArray<int> patch_module_fds = ClassLoader::get_patch_module_entry_fds();
 
   for (int i = 0; i < fds.len(); ++i) {
     if (fds.get_state(i) == FdsInfo::CLOSED) {
@@ -345,6 +346,11 @@ bool VM_Crac::check_fds() {
 
     if (boot_classpath_fds.contains(fd)) {
       print_resources("OK: claimed by classloader\n");
+      continue;
+    }
+
+    if (patch_module_fds.contains(fd)) {
+      print_resources("OK: claimed by patch-module\n");
       continue;
     }
 

@@ -43,13 +43,17 @@
 // We don't recompile immediately because if the compilation manages to finish
 // and get executed before the restoring is over it will trip over the temporary
 // state again and get recompiled again, thus slowing the restoring.
+//
+// We don't prevent methods from becoming non-compilable during
+// checkpoint-restore because that likely means the methods had been recompiling
+// a lot even before the checkpoint started so it is reasonable to expect them
+// to continue doing so afterwards. Although having that could still help in
+// some cases so it may be implemented at some point.
 class CRaCRecompiler : public AllStatic {
 public:
   static void start_recording_decompilations();
-  static void finish_recording_decompilations_and_recompile();
-
-  static bool is_recording_decompilations();
   static void record_decompilation(const nmethod &nmethod);
+  static void finish_recording_decompilations_and_recompile();
 
   // Whether compiling the method on this level is still needed.
   static bool is_recompilation_relevant(const methodHandle &method, int bci, int comp_level);

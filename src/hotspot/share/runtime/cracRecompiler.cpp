@@ -114,6 +114,9 @@ static void request_recompilation(CompilationInfo *info) {
   }
 
   auto * const THREAD = JavaThread::current();
+  // Note: this does not guarantee the method will get compiled; e.g. there may
+  // already be compilation tasks for this method (even if on another level or
+  // OSR-BCI) or it may have gotten not-compilable since it was recorded.
   CompileBroker::compile_method(
     methodHandle(THREAD, info->method()), info->bci(), info->comp_level(),
     methodHandle(), 0, CompileTask::Reason_CRaC, // These are only used for logging
@@ -123,6 +126,10 @@ static void request_recompilation(CompilationInfo *info) {
 
 static Mutex *decompilations_lock;
 static volatile GrowableArrayCHeap<CompilationInfo *, MemTag::mtInternal> *decompilations;
+
+static bool is_recording_decompilations() {
+  return Atomic::load_acquire(&decompilations) != nullptr;
+}
 
 void CRaCRecompiler::start_recording_decompilations() {
   if (decompilations_lock == nullptr) {
@@ -136,6 +143,19 @@ void CRaCRecompiler::start_recording_decompilations() {
   // fence to not proceed with C/R until the recorder threads will see the recording update
   Atomic::release_store_fence(&decompilations, new GrowableArrayCHeap<CompilationInfo *, MemTag::mtInternal>());
   postcond(is_recording_decompilations());
+}
+
+void CRaCRecompiler::record_decompilation(const nmethod &nmethod) {
+  if (!is_recording_decompilations()) {
+    return; // Fast pass to not acquire a lock when no C/R occurs (i.e. most of the time)
+  }
+  const MutexLocker ml(decompilations_lock, Mutex::_no_safepoint_check_flag);
+  auto * const decomps = const_cast<GrowableArrayCHeap<CompilationInfo *, MemTag::mtInternal> *>(decompilations);
+  if (decomps != nullptr) { // Re-check under the lock to be safe from concurrent deletion
+    decomps->append(new CompilationInfo(nmethod.method(),
+                                        nmethod.is_osr_method() ? nmethod.osr_entry_bci() : InvocationEntryBci,
+                                        nmethod.comp_level()));
+  }
 }
 
 void CRaCRecompiler::finish_recording_decompilations_and_recompile() {
@@ -164,23 +184,6 @@ void CRaCRecompiler::finish_recording_decompilations_and_recompile() {
     delete decompilation;
   }
   delete decomps;
-}
-
-bool CRaCRecompiler::is_recording_decompilations() {
-  return Atomic::load_acquire(&decompilations) != nullptr;
-}
-
-void CRaCRecompiler::record_decompilation(const nmethod &nmethod) {
-  if (!is_recording_decompilations()) {
-    return; // Fast pass to not acquire a lock when no C/R occurs (i.e. most of the time)
-  }
-  const MutexLocker ml(decompilations_lock, Mutex::_no_safepoint_check_flag);
-  auto * const decomps = const_cast<GrowableArrayCHeap<CompilationInfo *, MemTag::mtInternal> *>(decompilations);
-  if (decomps != nullptr) { // Re-check under the lock to be safe from concurrent deletion
-    decomps->append(new CompilationInfo(nmethod.method(),
-                                        nmethod.is_osr_method() ? nmethod.osr_entry_bci() : InvocationEntryBci,
-                                        nmethod.comp_level()));
-  }
 }
 
 bool CRaCRecompiler::is_recompilation_relevant(const methodHandle &method, int bci, int comp_level) {

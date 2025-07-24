@@ -64,9 +64,9 @@ protected:
 public:
   // Initialization
   static void initialize();
-  struct CPUFeaturesBinary {};
-  static bool cpu_features_binary(CPUFeaturesBinary *data) { return false; }
-  static bool cpu_features_binary_check(const CPUFeaturesBinary *data) { return data == nullptr; }
+  struct VM_Features {};
+  static bool cpu_features_binary(VM_Features *data) { return false; }
+  static bool cpu_features_binary_check(const VM_Features *data) { return data == nullptr; }
   static bool ignore_cpu_features() { return true; }
   static void check_virtualizations();
 

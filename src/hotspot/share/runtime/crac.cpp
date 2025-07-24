@@ -114,7 +114,7 @@ int crac::checkpoint_restore(int *shmid) {
   }
 
   if (!VM_Version::ignore_cpu_features()) {
-    VM_Version::CPUFeaturesBinary data;
+    VM_Version::VM_Features data;
     if (VM_Version::cpu_features_binary(&data)) {
       switch (_engine->prepare_user_data_api()) {
         case CracEngine::ApiStatus::OK:
@@ -526,7 +526,7 @@ void crac::restore(crac_restore_data& restore_data) {
   if (!VM_Version::ignore_cpu_features()) {
     switch (engine.prepare_user_data_api()) {
       case CracEngine::ApiStatus::OK: {
-        VM_Version::CPUFeaturesBinary data;
+        VM_Version::VM_Features data;
         bool present;
         if (!engine.cpufeatures_load(&data, &present)) {
           return;

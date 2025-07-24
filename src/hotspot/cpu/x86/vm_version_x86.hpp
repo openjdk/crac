@@ -30,10 +30,13 @@
 #include "utilities/formatBuffer.hpp"
 #include "utilities/macros.hpp"
 #include "utilities/sizes.hpp"
+#include <utility>
 
 class VM_Version : public Abstract_VM_Version {
   friend class VMStructs;
   friend class JVMCIVMStructs;
+  friend class CracEngine;
+  friend class crac;
 
  public:
   // cpuid result register layouts.  These are all unions of a uint32_t
@@ -446,64 +449,31 @@ protected:
     decl(SHA512,            "sha512",            61) /* SHA512 instructions*/ \
     decl(AVX512_FP16,       "avx512_fp16",       62) /* AVX512 FP16 ISA support*/ \
     decl(AVX10_1,           "avx10_1",           63) /* AVX10 512 bit vector ISA Version 1 support*/ \
-    decl(AVX10_2,           "avx10_2",           64) /* AVX10 512 bit vector ISA Version 2 support*/
+    decl(AVX10_2,           "avx10_2",           64) /* AVX10 512 bit vector ISA Version 2 support*/ \
+    decl(FMA4,              "fma4",              65) \
+    decl(MOVBE,             "movbe",             66) \
+    decl(OSXSAVE,           "osxsave",           67) \
+    decl(IBT,               "ibt",               68) \
+    decl(SHSTK,             "shstk",             69) /* Also known as cet_ss */ \
+    decl(XSAVE,             "xsave",             70) \
+    decl(CMPXCHG16,         "cmpxchg16",         71) /* Also known in cpuinfo as cx16 and in glibc as cmpxchg16b */ \
+    decl(LAHFSAHF,          "lahfsahf",          72) /* Also known in cpuinfo as lahf_lm and in glibc as lahf64_sahf64 */ \
+    decl(HTT,               "htt",               73) /* hotspot calls it 'ht' but that is affected by threads_per_core() */
 
 #define DECLARE_CPU_FEATURE_FLAG(id, name, bit) CPU_##id = (bit),
     CPU_FEATURE_FLAGS(DECLARE_CPU_FEATURE_FLAG)
 #undef DECLARE_CPU_FEATURE_FLAG
-#if 0
-FIXME:CPUFeatures1
-    MAX_CPU = CPU_SHA512 << 1
-FIXME:CPUFeatures2
-FIXME:CPUFeatures3
-#endif
     MAX_CPU_FEATURES
-//FIXME:CPUFeatures4
   };
 
-#if 0
-FIXME:CPUFeatures1
-  /* Tracking of a CPU feature for glibc */ \
-  enum Glibc_Feature_Flag : uint64_t {
-#define GLIBC_FEATURE_FLAGS(decl) \
-    decl(FMA4,              "fma4",               0) \
-    decl(MOVBE,             "movbe",              1) \
-    decl(OSXSAVE,           "osxsave",            2) \
-    decl(IBT,               "ibt",                3) \
-    decl(SHSTK,             "shstk",              4) /* Also known as cet_ss */ \
-    decl(XSAVE,             "xsave",              5) \
-    decl(CMPXCHG16,         "cmpxchg16",          6) /* Also known in cpuinfo as cx16 and in glibc as cmpxchg16b */ \
-    decl(LAHFSAHF,          "lahfsahf",           7) /* Also known in cpuinfo as lahf_lm and in glibc as lahf64_sahf64 */ \
-    decl(F16C,              "f16c",               8) \
-    decl(HTT,               "htt",                9) /* hotspot calls it 'ht' but it is affected by threads_per_core() */
-
-#define DECLARE_GLIBC_FEATURE_FLAG(id, name, bit) GLIBC_##id = (1ULL << bit),
-    GLIBC_FEATURE_FLAGS(DECLARE_GLIBC_FEATURE_FLAG)
-#undef DECLARE_GLIBC_FEATURE_FLAG
-    MAX_GLIBC = GLIBC_HTT << 1
-  };
-
-  // glibc feature flags.
-  static uint64_t _glibc_features;
-
-  static uint64_t _features_saved, _glibc_features_saved;
-
-FIXME:CPUFeatures2
-FIXME:CPUFeatures3
-#endif
   class VM_Features {
     friend class VMStructs;
     friend class JVMCIVMStructs;
 
    private:
-    uint64_t _features_bitmap[(MAX_CPU_FEATURES / BitsPerLong) + 1];
+    uint64_t _features_bitmap[(MAX_CPU_FEATURES + BitsPerLong - 1) / BitsPerLong];
 
     STATIC_ASSERT(sizeof(_features_bitmap) * BitsPerByte >= MAX_CPU_FEATURES);
-
-    // Number of 8-byte elements in _bitmap.
-    constexpr static int features_bitmap_element_count() {
-      return sizeof(_features_bitmap) / sizeof(uint64_t);
-    }
 
     constexpr static int features_bitmap_element_shift_count() {
       return LogBitsPerLong;
@@ -524,11 +494,43 @@ FIXME:CPUFeatures3
     }
 
     static int _features_bitmap_size; // for JVMCI purposes
+
+    static uint64_t index_mask(int idx) {
+      assert(idx < features_bitmap_element_count(), "Features array index out of bounds");
+      if (idx + 1 < features_bitmap_element_count()) {
+        return -1LL;
+      }
+      // It is equivalent to 'bit_mask(MAX_CPU_FEATURES) - 1'.
+      return ((bit_mask((Feature_Flag) ((int) MAX_CPU_FEATURES - 1)) - 1) << 1) | 1;
+    }
+
+    template <typename T, typename F, typename... Args>
+    static void apply_to_all_features(T&& t, F&& func, Args&&... args) {
+      for (int idx = 0; idx < t.features_bitmap_element_count(); ++idx) {
+        std::forward<F>(func)(t._features_bitmap[idx], idx, std::forward<Args>(args)...);
+      }
+    }
+
+    template <typename F, typename... Args>
+    void apply_to_all_features(F&& func, Args&&... args) {
+      apply_to_all_features(*this, std::forward<F>(func), std::forward<Args>(args)...);
+    }
+
+    template <typename F, typename... Args>
+    void apply_to_all_features(F&& func, Args&&... args) const {
+      apply_to_all_features(*this, std::forward<F>(func), std::forward<Args>(args)...);
+    }
+
    public:
     VM_Features() {
-      for (int i = 0; i < features_bitmap_element_count(); i++) {
-        _features_bitmap[i] = 0;
-      }
+      apply_to_all_features([](uint64_t &u, int idx) {
+        u = 0;
+      });
+    }
+
+    // Number of 8-byte elements in _bitmap.
+    constexpr static int features_bitmap_element_count() {
+      return sizeof(_features_bitmap) / sizeof(uint64_t);
     }
 
     void set_feature(Feature_Flag feature) {
@@ -545,17 +547,89 @@ FIXME:CPUFeatures3
       int idx = index(feature);
       return (_features_bitmap[idx] & bit_mask(feature)) != 0;
     }
+
+    void set_all_features() {
+      apply_to_all_features([](uint64_t &u, int idx) {
+        u = index_mask(idx);
+      });
+    }
+
+    void set_feature_idx(int idx, uint64_t val) {
+      assert(idx < features_bitmap_element_count(), "Features array index out of bounds");
+      _features_bitmap[idx] = val;
+    }
+
+    VM_Features operator ~() const {
+      VM_Features retval = *this;
+      apply_to_all_features(retval, [](uint64_t &u, int idx) {
+        u ^= index_mask(idx);
+      });
+      return retval;
+    }
+
+    VM_Features operator &(const VM_Features &other) const {
+      VM_Features retval = *this;
+      apply_to_all_features(retval, [&other](uint64_t &u, int idx) {
+        u &= other._features_bitmap[idx];
+      });
+      return retval;
+    }
+
+    bool operator ==(const VM_Features &other) const {
+      bool retval = true;
+      apply_to_all_features([&other, &retval](uint64_t u, int idx) {
+        if (u != other._features_bitmap[idx]) {
+          retval = false;
+        }
+      });
+      return retval;
+    }
+
+    bool operator !=(const VM_Features &other) const {
+      return !(*this == other);
+    }
+
+    bool empty() const {
+      VM_Features empty_features;
+      return *this == empty_features;
+    }
+
+    int print_numbers(char *buf_orig, size_t buflen) const {
+      char *buf = buf_orig;
+      apply_to_all_features([&](uint64_t u, int idx) {
+        int res = jio_snprintf(buf, buflen, UINT64_FORMAT_X, u);
+        buf += res;
+        buflen -= res;
+        assert(res > 0 && buflen >= 1, "not enough temporary space allocated");
+        if (idx + 1 < features_bitmap_element_count()) {
+          *buf++ = ',';
+          --buflen;
+        }
+      });
+      *buf = 0;
+      return buf - buf_orig;
+    }
+
+    void print_numbers_and_names(char *buf, size_t buflen) const {
+      int res = print_numbers(buf, buflen);
+      buf += res;
+      buflen -= res;
+      assert(buflen >= 4, "not enough temporary space allocated");
+      *buf++ = ' ';
+      *buf++ = '=';
+      *buf++ = ' ';
+      buflen -= 3;
+      insert_features_names(*this, buf, buflen);
+    }
   };
 
   // CPU feature flags vector, can be affected by VM settings.
-  static VM_Features _features;
+  static VM_Features _features, _features_saved;
 
   // Original CPU feature flags vector, not affected by VM settings.
   static VM_Features _cpu_features;
 
-//FIXME:CPUFeatures4
   static const char* _features_names[];
-  static const char* _glibc_features_names[];
 
   static void clear_cpu_features() {
     _features = VM_Features();
@@ -705,34 +779,6 @@ FIXME:CPUFeatures3
 
     VM_Features feature_flags() const;
 
-#if 0
-FIXME:CPUFeatures1
-#ifdef LINUX
-    uint64_t glibc_flags() const {
-      uint64_t result = 0;
-      if (std_cpuid1_ecx.bits.movbe != 0)
-        result |= GLIBC_MOVBE;
-      if (std_cpuid1_ecx.bits.osxsave != 0)
-        result |= GLIBC_OSXSAVE;
-      if (std_cpuid1_ecx.bits.xsave != 0)
-        result |= GLIBC_XSAVE;
-      if (std_cpuid1_ecx.bits.cmpxchg16 != 0)
-        result |= GLIBC_CMPXCHG16;
-      if (std_cpuid1_ecx.bits.f16c != 0)
-        result |= GLIBC_F16C;
-      if (ext_cpuid1_ecx.bits.fma4 != 0)
-        result |= GLIBC_FMA4;
-      if (ext_cpuid1_ecx.bits.LahfSahf != 0)
-        result |= GLIBC_LAHFSAHF;
-      if (std_cpuid1_edx.bits.ht != 0)
-        result |= GLIBC_HTT;
-      return result;
-    }
-#else
-    uint64_t glibc_flags() const { return 0; }
-#endif //LINUX
-#endif
-
     // Asserts
     void assert_is_initialized() const {
       assert(std_cpuid1_eax.bits.family != 0, "VM_Version not initialized");
@@ -772,7 +818,7 @@ private:
   static void get_processor_features_hardware();
   static void get_processor_features_hotspot();
 
-  static uint64_t CPUFeatures_parse(const char *str, uint64_t &glibc_features);
+  static VM_Features CPUFeatures_parse(const char *str);
 #ifdef LINUX
   static bool glibc_not_using();
   static bool glibc_env_set(char *disable_str);
@@ -784,7 +830,7 @@ private:
   // C++17: Make _ignore_glibc_not_using inline.
   static bool _ignore_glibc_not_using;
   static void print_using_features_cr();
-  /*[[noreturn]]*/ static void missing_features(uint64_t features_missing, uint64_t glibc_features_missing);
+  /*[[noreturn]]*/ static void missing_features(VM_Version::VM_Features features_missing);
 
   static bool os_supports_avx_vectors();
   static bool os_supports_apx_egprs();
@@ -854,17 +900,9 @@ public:
 
   // Initialization
   static void initialize();
-  struct CPUFeaturesBinary {
-    uint64_t cpu, glibc;
-  };
-  static bool cpu_features_binary(CPUFeaturesBinary *data);
-  static bool cpu_features_binary_check(const CPUFeaturesBinary *data);
-#if 0
-FIXME:CPUFeatures1
+  static bool cpu_features_binary(VM_Features *data);
+  static bool cpu_features_binary_check(const VM_Features *data);
   static bool ignore_cpu_features() { return _ignore_glibc_not_using; }
-#else
-  static bool ignore_cpu_features() { return true; }
-#endif
   static void restore_check(const char* str, const char* msg_prefix);
 
   // Override Abstract_VM_Version implementation

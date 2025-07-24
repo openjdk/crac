@@ -902,7 +902,7 @@ VM_Version::VM_Features VM_Version::CPUFeatures_parse(const char *str) {
   int count = VM_Version::VM_Features::features_bitmap_element_count();
   VM_Version::VM_Features retval;
   for (int idx = 0;; ++idx) {
-    static_assert(sizeof(uint64_t) == sizeof(unsigned long long));
+    static_assert(sizeof(uint64_t) == sizeof(unsigned long long), "unexpected arch");
     char *endptr;
     errno = 0;
     uint64_t u64 = strtoull(str, &endptr, 0);

@@ -43,7 +43,6 @@ private:
   size_t                 _to_uncommit;
   size_t                 _uncommitted;
   bool                   _force_uncommit;
-  mutable ZConditionLock _force_uncommit_lock;
 
   bool wait(uint64_t timeout) const;
   bool should_continue() const;
@@ -67,7 +66,6 @@ private:
 
   void update_statistics(size_t uncommitted, Ticks start, Tickspan* accumulated_time) const;
 
-  void wait_for_finish_force_uncommit();
   void finish_force_uncommit();
 
 protected:

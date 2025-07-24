@@ -51,8 +51,7 @@ ZUncommitter::ZUncommitter(uint32_t id, ZPartition* partition)
     _cycle_start(0.0),
     _to_uncommit(0),
     _uncommitted(0),
-    _force_uncommit(false),
-    _force_uncommit_lock() {
+    _force_uncommit(false) {
   set_name("ZUncommitter#%u", id);
   create_and_start();
 }
@@ -82,6 +81,7 @@ bool ZUncommitter::wait(uint64_t timeout) const {
 
       // Wait
       _lock.wait(remaining_timeout_ms);
+
       now = os::elapsedTime();
     } while (!_stop && now < wait_until && !_force_uncommit);
   }
@@ -430,26 +430,19 @@ size_t ZUncommitter::uncommit() {
 }
 
 void ZUncommitter::force_uncommit() {
-  {
-    ZLocker<ZConditionLock> locker(&_lock);
-    _force_uncommit = true;
-    _lock.notify_all();
-  }
+  ZLocker<ZConditionLock> locker(&_lock);
+  _force_uncommit = true;
+  _lock.notify_all();
 
-  wait_for_finish_force_uncommit();
-}
-
-void ZUncommitter::wait_for_finish_force_uncommit() {
-  ZLocker<ZConditionLock> locker(&_force_uncommit_lock);
-  while (_force_uncommit) {
-    _force_uncommit_lock.wait();
+  while (_force_uncommit && ZUncommit && !_stop) {
+    _lock.wait();
   }
 }
 
 void ZUncommitter::finish_force_uncommit() {
+  ZLocker<ZConditionLock> locker(&_lock);
   if (_force_uncommit) {
-    ZLocker<ZConditionLock> locker(&_force_uncommit_lock);
     _force_uncommit = false;
-    _force_uncommit_lock.notify_all();
+    _lock.notify_all();
   }
 }

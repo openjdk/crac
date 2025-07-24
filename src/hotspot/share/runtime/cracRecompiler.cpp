@@ -117,10 +117,8 @@ static void request_recompilation(CompilationInfo *info) {
   // Note: this does not guarantee the method will get compiled; e.g. there may
   // already be compilation tasks for this method (even if on another level or
   // OSR-BCI) or it may have gotten not-compilable since it was recorded.
-  CompileBroker::compile_method(
-    methodHandle(THREAD, info->method()), info->bci(), info->comp_level(),
-    methodHandle(), 0, CompileTask::Reason_CRaC, // These are only used for logging
-    THREAD);
+  CompileBroker::compile_method(methodHandle(THREAD, info->method()), info->bci(), info->comp_level(),
+                                methodHandle(), 0, CompileTask::Reason_CRaC, THREAD);
   guarantee(!HAS_PENDING_EXCEPTION, "the method should have been successfully compiled before");
 }
 

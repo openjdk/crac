@@ -2670,9 +2670,9 @@ void VM_Version::initialize() {
   if (!features_missing.empty()) {
     char buf_CPUFeatures_parsed[MAX_CPU_FEATURES];
     CPUFeatures_parsed.print_numbers(buf_CPUFeatures_parsed, sizeof(buf_CPUFeatures_parsed));
-    char buf__features[MAX_CPU_FEATURES];
-    _features.print_numbers(buf__features, sizeof(buf__features));
-    tty->print("Specified -XX:CPUFeatures=%s; this machine's CPU features are %s", buf_CPUFeatures_parsed, buf__features);
+    char buf_features[MAX_CPU_FEATURES];
+    _features.print_numbers(buf_features, sizeof(buf_features));
+    tty->print("Specified -XX:CPUFeatures=%s; this machine's CPU features are %s", buf_CPUFeatures_parsed, buf_features);
     features_missing.print_missing_features();
     vm_exit_during_initialization();
   }

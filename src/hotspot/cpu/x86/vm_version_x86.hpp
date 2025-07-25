@@ -30,7 +30,6 @@
 #include "utilities/formatBuffer.hpp"
 #include "utilities/macros.hpp"
 #include "utilities/sizes.hpp"
-#include <utility>
 
 class VM_Version : public Abstract_VM_Version {
   friend class VMStructs;
@@ -504,21 +503,24 @@ protected:
       return ((bit_mask((Feature_Flag) ((int) MAX_CPU_FEATURES - 1)) - 1) << 1) | 1;
     }
 
+    // We do not use std::forward<> as we just call 'func'.
     template <typename T, typename F>
     static void apply_to_all_features(T&& t, F&& func) {
       for (int idx = 0; idx < t.features_bitmap_element_count(); ++idx) {
-        std::forward<F>(func)(t._features_bitmap[idx], idx);
+        func(t._features_bitmap[idx], idx);
       }
     }
 
+    // We do not use std::forward<> as we just call 'func'.
     template <typename F>
     void apply_to_all_features(F&& func) {
-      apply_to_all_features(*this, std::forward<F>(func));
+      apply_to_all_features(*this, func);
     }
 
+    // We do not use std::forward<> as we just call 'func'.
     template <typename F>
     void apply_to_all_features(F&& func) const {
-      apply_to_all_features(*this, std::forward<F>(func));
+      apply_to_all_features(*this, func);
     }
 
    public:

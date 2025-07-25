@@ -97,7 +97,12 @@ public class NaturalDecompilationTest implements CracTest {
             case C2_ONLY -> builder.vmOption("-XX:-TieredCompilation");
         }
 
-        final var out = builder.startCheckpoint().waitForSuccess().outputAnalyzer();
+        // Must create an output analyzer before waiting for success, otherwise
+        // on Windows PrintCompilation overflows the piping buffer and the
+        // waiting never completes
+        final var proc = builder.startCheckpoint();
+        final var out = proc.outputAnalyzer();
+        proc.waitForSuccess();
         out.shouldContain("Requesting recompilation: int " + NaturalDecompilationTest.class.getName() + "." + TEST_METHOD_NAME + "(int)");
     }
 

@@ -909,15 +909,22 @@ VM_Version::VM_Features VM_Version::CPUFeatures_parse(const char *str) {
     if (errno != 0) {
       break;
     }
-    if (*endptr != (idx + 1 == count ? 0 : ',')) {
+    bool last = idx + 1 == count;
+    if (*endptr != (last ? 0 : ',')) {
       break;
     }
     retval.set_feature_idx(idx, u64);
-    if (idx + 1 == count) {
+    if (last) {
       return retval;
     }
+    str = endptr + 1;
   }
-  vm_exit_during_initialization(err_msg("VM option 'CPUFeatures=%s' must be of the form: 0xnum,0xnum", str));
+  char buf[MAX_CPU_FEATURES];
+  char *s = buf;
+  for (int idx = 0; idx < count; ++idx) {
+    s = stpcpy(s, ",0xNUM");
+  }
+  vm_exit_during_initialization(err_msg("VM option 'CPUFeatures=%s' must be of the form: %s", str, buf + 1));
   return {};
 }
 

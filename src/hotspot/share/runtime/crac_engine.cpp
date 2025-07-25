@@ -440,7 +440,7 @@ CracEngine::ApiStatus CracEngine::prepare_user_data_api() {
 }
 
 // Return success.
-bool CracEngine::cpufeatures_store(const VM_Version::CPUFeaturesBinary *datap) const {
+bool CracEngine::cpufeatures_store(const VM_Version::VM_Features *datap) const {
   log_debug(crac)("cpufeatures_store user data %s to %s...", cpufeatures_userdata_name, CRaCRestoreFrom);
   const bool ok = _user_data_api->set_user_data(_conf, cpufeatures_userdata_name, datap, sizeof(*datap));
   if (!ok) {
@@ -450,19 +450,19 @@ bool CracEngine::cpufeatures_store(const VM_Version::CPUFeaturesBinary *datap) c
 }
 
 // Return success.
-bool CracEngine::cpufeatures_load(VM_Version::CPUFeaturesBinary *datap, bool *presentp) const {
+bool CracEngine::cpufeatures_load(VM_Version::VM_Features *datap, bool *presentp) const {
   log_debug(crac)("cpufeatures_load user data %s from %s...", cpufeatures_userdata_name, CRaCRestoreFrom);
   crlib_user_data_storage_t *user_data;
   if (!(user_data = _user_data_api->load_user_data(_conf))) {
     log_error(crac)("CRaC engine failed to load user data %s", cpufeatures_userdata_name);
     return false;
   }
-  const VM_Version::CPUFeaturesBinary *cdatap;
+  const VM_Version::VM_Features *cdatap;
   size_t size;
   if (_user_data_api->lookup_user_data(user_data, cpufeatures_userdata_name, (const void **) &cdatap, &size)) {
-    if (size != sizeof(VM_Version::CPUFeaturesBinary)) {
+    if (size != sizeof(VM_Version::VM_Features)) {
       _user_data_api->destroy_user_data(user_data);
-      log_error(crac)("User data %s in %s has unexpected size %zu (expected %zu)", cpufeatures_userdata_name, CRaCRestoreFrom, size, sizeof(VM_Version::CPUFeaturesBinary));
+      log_error(crac)("User data %s in %s has unexpected size %zu (expected %zu)", cpufeatures_userdata_name, CRaCRestoreFrom, size, sizeof(VM_Version::VM_Features));
       return false;
     }
     if (cdatap == nullptr) {

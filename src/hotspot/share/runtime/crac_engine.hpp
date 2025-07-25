@@ -68,8 +68,8 @@ public:
   const char *configuration_doc() const;
 
   ApiStatus prepare_user_data_api();
-  bool cpufeatures_store(const VM_Version::CPUFeaturesBinary *datap) const;
-  bool cpufeatures_load(VM_Version::CPUFeaturesBinary *datap, bool *presentp) const;
+  bool cpufeatures_store(const VM_Version::VM_Features *datap) const;
+  bool cpufeatures_load(VM_Version::VM_Features *datap, bool *presentp) const;
 
 private:
   void *_lib = nullptr;

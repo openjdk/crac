@@ -22,22 +22,29 @@
  *
  */
 
+#include "jfr/instrumentation/jfrEventClassTransformer.hpp"
 #include "jfr/jfr.hpp"
 #include "jfr/jni/jfrJavaSupport.hpp"
 #include "jfr/jni/jfrUpcalls.hpp"
 #include "jfr/leakprofiler/leakProfiler.hpp"
+#include "jfr/periodic/jfrOSInterface.hpp"
 #include "jfr/recorder/jfrRecorder.hpp"
 #include "jfr/recorder/checkpoint/jfrCheckpointManager.hpp"
-#include "jfr/periodic/jfrOSInterface.hpp"
 #include "jfr/recorder/repository/jfrEmergencyDump.hpp"
 #include "jfr/recorder/service/jfrOptionSet.hpp"
 #include "jfr/recorder/service/jfrOptionSet.hpp"
 #include "jfr/recorder/repository/jfrRepository.hpp"
+#include "jfr/support/jfrKlassExtension.hpp"
 #include "jfr/support/jfrResolution.hpp"
 #include "jfr/support/jfrThreadLocal.hpp"
+#include "jfr/support/methodtracer/jfrMethodTracer.hpp"
 #include "memory/resourceArea.hpp"
+#include "oops/instanceKlass.hpp"
+#include "oops/instanceKlass.inline.hpp"
+#include "oops/klass.hpp"
 #include "runtime/flags/jvmFlag.hpp"
 #include "runtime/java.hpp"
+#include "runtime/javaThread.hpp"
 
 bool Jfr::is_enabled() {
   return JfrRecorder::is_enabled();
@@ -74,6 +81,22 @@ void Jfr::on_unloading_classes() {
     JfrCheckpointManager::on_unloading_classes();
   }
 }
+
+void Jfr::on_klass_creation(InstanceKlass*& ik, ClassFileParser& parser, TRAPS) {
+  if (IS_EVENT_OR_HOST_KLASS(ik)) {
+    JfrEventClassTransformer::on_klass_creation(ik, parser, THREAD);
+    return;
+  }
+  if (JfrMethodTracer::in_use()) {
+    JfrMethodTracer::on_klass_creation(ik, parser, THREAD);
+  }
+}
+
+void Jfr::on_klass_redefinition(const InstanceKlass* ik, Thread* thread) {
+  assert(JfrMethodTracer::in_use(), "invariant");
+  JfrMethodTracer::on_klass_redefinition(ik, thread);
+}
+
 
 bool Jfr::is_excluded(Thread* t) {
   return JfrJavaSupport::is_excluded(t);

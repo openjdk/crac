@@ -194,9 +194,6 @@ enum Ampere_CPU_Model {
   static bool is_cpu_emulated();
 #endif
 
-  // No _features_names[] available on this CPU.
-  static void insert_features_names(char* buf, size_t buflen, uint64_t features = _features) {}
-
   static void initialize_cpu_information(void);
 
   static bool use_rop_protection() { return _rop_protection; }

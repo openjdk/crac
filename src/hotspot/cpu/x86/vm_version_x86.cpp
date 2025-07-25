@@ -873,7 +873,7 @@ VM_Version::VM_Features VM_Version::CPUFeatures_parse(const char *str) {
 #ifndef LINUX
   _ignore_glibc_not_using = true;
   return _features;
-#endif
+#else
   if (str == nullptr || strcmp(str, "native") == 0) {
     return _features;
   }
@@ -926,6 +926,7 @@ VM_Version::VM_Features VM_Version::CPUFeatures_parse(const char *str) {
   }
   vm_exit_during_initialization(err_msg("VM option 'CPUFeatures=%s' must be of the form: %s", str, buf + 1));
   return {};
+#endif // LINUX
 }
 
 bool VM_Version::_ignore_glibc_not_using = false;
@@ -1273,7 +1274,7 @@ bool VM_Version::glibc_not_using() {
     return true;
   return false;
 }
-#endif //LINUX
+#endif // LINUX
 
 void VM_Version::print_using_features_cr() {
   if (_ignore_glibc_not_using) {

@@ -2558,29 +2558,30 @@ bool VM_Version::cpu_features_binary(VM_Version::VM_Features *data) {
   return true;
 }
 
-bool VM_Version::cpu_features_binary_check(const VM_Version::VM_Features *data) {
+bool VM_Version::cpu_features_binary_check(const VM_Version::VM_Features *data_ptr) {
   assert(CPUFeatures == nullptr, "This should only be called on restore and CPUFeatures is not restore-settable");
 
-  if (!data) {
+  if (!data_ptr) {
     return false;
   }
+  VM_Version::VM_Features data = *data_ptr;
 
   if (ShowCPUFeatures) {
     char buf[MAX_CPU_FEATURES * 16];
-    (*data).print_numbers_and_names(buf, sizeof(buf));
+    data.print_numbers_and_names(buf, sizeof(buf));
     tty->print_cr("This snapshot's stored CPU features are: -XX:CPUFeatures=%s", buf);
   }
 
-  VM_Version::VM_Features features_missing = *data & ~_features;
+  VM_Version::VM_Features features_missing = data & ~_features;
 
   // Workaround JDK-8311164: CPU_HT is set randomly on hybrid CPUs like Alder Lake.
   features_missing.clear_feature(CPU_HT);
 
   if (!features_missing.empty()) {
     char buf_use[MAX_CPU_FEATURES];
-    (*data & _features).print_numbers(buf_use, sizeof(buf_use));
+    (data & _features).print_numbers(buf_use, sizeof(buf_use));
     char buf_have[MAX_CPU_FEATURES];
-    (*data).print_numbers(buf_have, sizeof(buf_have));
+    data.print_numbers(buf_have, sizeof(buf_have));
     tty->print("You have to specify -XX:CPUFeatures=%s together with -XX:CRaCCheckpointTo when making a checkpoint file"
                "; specified -XX:CRaCRestoreFrom file contains CPU features %s",
                buf_use, buf_have);
@@ -2591,7 +2592,7 @@ bool VM_Version::cpu_features_binary_check(const VM_Version::VM_Features *data) 
   }
 
   _features_saved = _features;
-  _features = *data;
+  _features = data;
 
   if (ShowCPUFeatures && !CRaCRestoreFrom) {
     print_using_features_cr();

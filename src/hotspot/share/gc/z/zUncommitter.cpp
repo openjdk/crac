@@ -431,11 +431,13 @@ size_t ZUncommitter::uncommit() {
 
 void ZUncommitter::force_uncommit() {
   ZLocker<ZConditionLock> locker(&_lock);
-  _force_uncommit = true;
-  _lock.notify_all();
+  if (ZUncommit) {
+    _force_uncommit = true;
+    _lock.notify_all();
 
-  while (_force_uncommit && ZUncommit && !_stop) {
-    _lock.wait();
+    while (_force_uncommit && !_stop) {
+      _lock.wait();
+    }
   }
 }
 

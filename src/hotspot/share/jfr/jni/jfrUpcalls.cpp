@@ -73,7 +73,6 @@ static bool initialize(TRAPS) {
     unhide_internal_types_sig_sym = SymbolTable::new_permanent_symbol("()V");
     request_start_after_restore_sym = SymbolTable::new_permanent_symbol("requestStartAfterRestore");
     request_start_after_restore_sig_sym = SymbolTable::new_permanent_symbol("()V");
-    initialized = unhide_internal_types_sig_sym != nullptr;
     on_method_trace_sym = SymbolTable::new_permanent_symbol("onMethodTrace");
     on_method_trace_sig_sym = SymbolTable::new_permanent_symbol("(Ljava/lang/Module;Ljava/lang/ClassLoader;Ljava/lang/String;[B[J[Ljava/lang/String;[Ljava/lang/String;[I)[B");
     publish_method_timers_for_klass_sym = SymbolTable::new_permanent_symbol("publishMethodTimersForClass");

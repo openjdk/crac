@@ -1121,7 +1121,7 @@ bool VM_Version::glibc_not_using() {
             if (shouldnotuse.supports_feature(CPU_F16C)) {
               assert(!shouldnotuse.supports_feature(CPU_MOVBE), "CPU_MOVBE in both _features and shouldnotuse cannot happen");
               // FMA is 2012+, AVX2+BMI1+BMI2+LZCNT are 2013+, MOVBE is 2015+
-              shouldnotuse.set_feature( CPU_MOVBE);
+              shouldnotuse.set_feature(CPU_MOVBE);
             }
             if (_features.supports_feature(CPU_F16C)) {
               // glibc: if (CPU_FEATURE_USABLE_P (cpu_features, AVX512F)

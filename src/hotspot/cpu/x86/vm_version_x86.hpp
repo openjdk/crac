@@ -504,21 +504,21 @@ protected:
       return ((bit_mask((Feature_Flag) ((int) MAX_CPU_FEATURES - 1)) - 1) << 1) | 1;
     }
 
-    template <typename T, typename F, typename... Args>
-    static void apply_to_all_features(T&& t, F&& func, Args&&... args) {
+    template <typename T, typename F>
+    static void apply_to_all_features(T&& t, F&& func) {
       for (int idx = 0; idx < t.features_bitmap_element_count(); ++idx) {
-        std::forward<F>(func)(t._features_bitmap[idx], idx, std::forward<Args>(args)...);
+        std::forward<F>(func)(t._features_bitmap[idx], idx);
       }
     }
 
-    template <typename F, typename... Args>
-    void apply_to_all_features(F&& func, Args&&... args) {
-      apply_to_all_features(*this, std::forward<F>(func), std::forward<Args>(args)...);
+    template <typename F>
+    void apply_to_all_features(F&& func) {
+      apply_to_all_features(*this, std::forward<F>(func));
     }
 
-    template <typename F, typename... Args>
-    void apply_to_all_features(F&& func, Args&&... args) const {
-      apply_to_all_features(*this, std::forward<F>(func), std::forward<Args>(args)...);
+    template <typename F>
+    void apply_to_all_features(F&& func) const {
+      apply_to_all_features(*this, std::forward<F>(func));
     }
 
    public:

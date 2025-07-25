@@ -21,6 +21,7 @@
  * questions.
  */
 
+import java.util.Objects;
 import java.util.function.BooleanSupplier;
 
 import jdk.crac.Context;
@@ -63,39 +64,22 @@ public class NaturalDecompilationTest implements CracTest {
 
     private static void blackhole(@SuppressWarnings("unused") Object o) {}
 
-    private static int testMethod(int arg) {
-        if (arg == 0) {
-            return 0; // Common path
+    private static int testMethod(int i) {
+        try {
+            // A compiler intrinsic which triggers decompilation in both C1 and
+            // C2 when it has to throw IndexOutOfBoundsException
+            Objects.checkIndex(i, 10);
+            return i;
+        } catch (IndexOutOfBoundsException ignored) {
+            return -1;
         }
-        // Uncommon path. The code below does has no meaning, it's just some
-        // heavy stuff which the compiler should be reluctant to handle.
-        final var arr = new String[10][10];
-        for (var row : arr) {
-            for (int i = 0; i < row.length; i++) {
-                row[i] = "aBc".toUpperCase() + Integer.toString(arg + i) + "DeF".toLowerCase();
-            }
-        }
-        double res = 0;
-        for (var row : arr) {
-            synchronized(NaturalDecompilationTest.class) {
-                for (var s : row) {
-                    final var n = switch (s.charAt(0)) {
-                        case 'a' -> Math.sqrt(s.substring("abc".length() + 1).hashCode() / (double) arg);
-                        case 'Z' -> Math.getExponent(s.lastIndexOf("Z"));
-                        default -> Math.tanh(s.charAt(1));
-                    };
-                    res += n;
-                }
-            }
-        }
-        return (int) res;
     }
 
     private static final String BLACKHOLE_NAME = "blackhole";
     private static final String TEST_METHOD_NAME = "testMethod";
 
     private static final int TEST_ARG_EXPECTED = 0;
-    private static final int TEST_ARG_UNEXPECTED = 1;
+    private static final int TEST_ARG_UNEXPECTED = -1;
 
     @Override
     public void test() throws Exception {

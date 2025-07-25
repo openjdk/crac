@@ -2545,15 +2545,12 @@ void VM_Version::check_virtualizations() {
   }
 }
 
-// Print the feature names as " = feat1, ..., featN\n";
-void VM_Version::missing_features(VM_Version::VM_Features features_missing) {
-  tty->print("; missing features of this CPU are ");
+void VM_Version::VM_Features::print_missing_features() const {
   char buf[MAX_CPU_FEATURES * 16];
-  features_missing.print_numbers_and_names(buf, sizeof(buf));
-  tty->print_cr(
-    "%s\n"
-    "If you are sure it will not crash you can override this check by -XX:+UnlockExperimentalVMOptions -XX:+IgnoreCPUFeatures .",
-    buf);
+  print_numbers_and_names(buf, sizeof(buf));
+  tty->print_cr("; missing features of this CPU are %s\n"
+                "If you are sure it will not crash you can override this check by -XX:+UnlockExperimentalVMOptions -XX:+IgnoreCPUFeatures .",
+                buf);
 }
 
 bool VM_Version::cpu_features_binary(VM_Version::VM_Features *data) {
@@ -2587,7 +2584,7 @@ bool VM_Version::cpu_features_binary_check(const VM_Version::VM_Features *data) 
     tty->print("You have to specify -XX:CPUFeatures=%s together with -XX:CRaCCheckpointTo when making a checkpoint file"
                "; specified -XX:CRaCRestoreFrom file contains CPU features %s",
                buf_use, buf_have);
-    missing_features(features_missing);
+    features_missing.print_missing_features();
     if (!IgnoreCPUFeatures) {
       return false;
     }
@@ -2675,7 +2672,7 @@ void VM_Version::initialize() {
     char buf__features[MAX_CPU_FEATURES];
     _features.print_numbers(buf__features, sizeof(buf__features));
     tty->print("Specified -XX:CPUFeatures=%s; this machine's CPU features are %s", buf_CPUFeatures_parsed, buf__features);
-    missing_features(features_missing);
+    features_missing.print_missing_features();
     vm_exit_during_initialization();
   }
 

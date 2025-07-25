@@ -623,6 +623,8 @@ protected:
       buflen -= 3;
       insert_features_names(*this, buf, buflen);
     }
+
+    void print_missing_features() const;
   };
 
   // CPU feature flags vector, can be affected by VM settings.
@@ -832,7 +834,6 @@ private:
   // C++17: Make _ignore_glibc_not_using inline.
   static bool _ignore_glibc_not_using;
   static void print_using_features_cr();
-  /*[[noreturn]]*/ static void missing_features(VM_Version::VM_Features features_missing);
 
   static bool os_supports_avx_vectors();
   static bool os_supports_apx_egprs();

@@ -68,7 +68,7 @@ public class Core {
         public static final boolean TRACE_STARTUP_TIME =
             Boolean.getBoolean("jdk.crac.trace-startup-time");
         public static final long RECOMPILATION_DELAY_MS =
-            Long.getLong("jdk.crac.recompilation-delay-ms", 100L);
+            Long.getLong("jdk.crac.recompilation-delay-ms", 10L);
     }
 
     private static final Context<Resource> globalContext = GlobalContext.createGlobalContextImpl();

@@ -901,6 +901,7 @@ VM_Version::VM_Features VM_Version::CPUFeatures_parse(const char *str) {
   }
   int count = VM_Version::VM_Features::features_bitmap_element_count();
   VM_Version::VM_Features retval;
+  const char *str_orig = str;
   for (int idx = 0;; ++idx) {
     static_assert(sizeof(uint64_t) == sizeof(unsigned long long), "unexpected arch");
     char *endptr;
@@ -924,7 +925,7 @@ VM_Version::VM_Features VM_Version::CPUFeatures_parse(const char *str) {
   for (int idx = 0; idx < count; ++idx) {
     s = stpcpy(s, ",0xNUM");
   }
-  vm_exit_during_initialization(err_msg("VM option 'CPUFeatures=%s' must be of the form: %s", str, buf + 1));
+  vm_exit_during_initialization(err_msg("VM option 'CPUFeatures=%s' must be of the form: %s", str_orig, buf + 1));
   return {};
 #endif // LINUX
 }

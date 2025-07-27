@@ -616,12 +616,16 @@ protected:
       int res = print_numbers(buf, buflen);
       buf += res;
       buflen -= res;
-      assert(buflen >= 4, "not enough temporary space allocated");
+      assert(buflen >= 3, "not enough temporary space allocated");
       *buf++ = ' ';
-      *buf++ = '=';
-      *buf++ = ' ';
-      buflen -= 3;
+      --buflen;
+      *buf = 0;
       insert_features_names(*this, buf, buflen);
+
+      // insert_features_names puts ", " at the beginning, make it " = ".
+      if (*buf) {
+        *buf = '=';
+      }
     }
 
     void print_missing_features() const;

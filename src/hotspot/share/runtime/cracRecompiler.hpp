@@ -37,23 +37,26 @@
 // before.
 //
 // To speed up such after-restore warmup this class records decompilations
-// occuring during checkpoint-restore (and shortly after) and requests their
-// compilation immediately afterwards.
+// occuring during checkpoint-restore and requests their compilation afterwards.
 //
-// We don't recompile immediately because if the compilation manages to finish
-// and get executed before the restoring is over it will trip over the temporary
-// state again and get recompiled again, thus slowing the restoring.
+// We don't recompile during checkpoint-restore because if the compilation
+// manages to finish and get executed before the restoring is over it may trip
+// over the temporary state again and get recompiled again, thus slowing the
+// restoring.
 //
-// We don't prevent methods from becoming non-compilable during
-// checkpoint-restore because that likely means the methods had been recompiling
-// a lot even before the checkpoint started so it is reasonable to expect them
-// to continue doing so afterwards. Although having that could still help in
-// some cases so it may be implemented at some point.
+// Note that we don't prevent methods from becoming non-compilable during the
+// above because that likely means the methods had been recompiling a lot even
+// before the checkpoint started so it is reasonable to expect them to continue
+// doing so afterwards. Although having that could still help in some cases so
+// it may be implemented at some point.
 class CRaCRecompiler : public AllStatic {
 public:
+  // Caller must ensure that starting a recording happens-before finishing it
+  // and finishing an old recording happens-before starting a new one.
   static void start_recording_decompilations();
-  static void record_decompilation(const nmethod &nmethod);
   static void finish_recording_decompilations_and_recompile();
+
+  static void record_decompilation(const nmethod &nmethod);
 
   // Whether compiling the method on this level is still needed.
   static bool is_recompilation_relevant(const methodHandle &method, int bci, int comp_level);

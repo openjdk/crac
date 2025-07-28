@@ -89,8 +89,8 @@ public class NaturalDecompilationTest implements CracTest {
             .vmOption("-XX:+UnlockExperimentalVMOptions")
             .vmOption("-XX:CompileCommand=blackhole," + NaturalDecompilationTest.class.getName() + "." + BLACKHOLE_NAME)
             .vmOption("-XX:CompileCommand=dontinline," + NaturalDecompilationTest.class.getName() + "." + TEST_METHOD_NAME)
-            .vmOption("-XX:+PrintCompilation")
-            .vmOption("-Xlog:crac=trace");
+            .vmOption("-XX:+PrintCompilation") // To ease debugging, not actually used by the test
+            .vmOption("-Xlog:crac*=trace");
         switch (variant) {
             case TIERED -> { /* This is the default */ }
             case C1_ONLY -> builder.vmOption("-XX:TieredStopAtLevel=1");

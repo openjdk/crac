@@ -381,8 +381,9 @@ public class Core {
                 // Finish even if interrupted by another checkpoint: asking for
                 // recompilations earlier shouldn't hurt and is also safe in
                 // case interrupted by user code somehow
+            } finally {
+                finishRecordingDecompilationsAndRecompile0();
             }
-            finishRecordingDecompilationsAndRecompile0();
         });
         t.setDaemon(true);
         t.start();

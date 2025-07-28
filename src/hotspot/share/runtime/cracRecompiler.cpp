@@ -101,16 +101,18 @@ private:
 
 static void request_recompilation(CompilationInfo *info) {
   if (!info->keep_method_loaded()) {
-    log_trace(crac)("Skipping recompilation: <unloaded method>, bci=%i, comp_level=%i — got unloaded",
-                    info->bci(), info->comp_level());
+    log_trace(crac, compilation)(
+      "Skipping recompilation: <unloaded method>, bci=%i, comp_level=%i — method got unloaded",
+      info->bci(), info->comp_level());
     return;
   }
   assert(Method::is_valid_method(info->method()), "sanity check");
 
   if (log_is_enabled(Trace, crac)) {
     ResourceMark rm;
-    log_trace(crac)("Requesting recompilation: %s, bci=%i, comp_level=%i",
-                    info->method()->external_name(), info->bci(), info->comp_level());
+    log_trace(crac, compilation)(
+      "Requesting recompilation: %s, bci=%i, comp_level=%i",
+      info->method()->external_name(), info->bci(), info->comp_level());
   }
 
   auto * const THREAD = JavaThread::current();
@@ -122,66 +124,77 @@ static void request_recompilation(CompilationInfo *info) {
   guarantee(!HAS_PENDING_EXCEPTION, "the method should have been successfully compiled before");
 }
 
+// States:
+//  ┌─> IDLE ─> RECORDING ─> COMPILING ─┐
+//  └───────────────────────────────────┘
+// - IDLE — doing nothing.
+//  - is_recording == false
+//  - decompilations == null
+// - RECORDING — recording decompilations.
+//  - is_recording == true
+//  - decompilations != null — used for concurrent writing
+// - COMPILING — recompiling the recorded decompilations.
+//  - is_recording == false
+//  - decompilations != null — used for non-concurrent reading and writing
+static volatile bool is_recording;
 static Mutex *decompilations_lock;
-static volatile GrowableArrayCHeap<CompilationInfo *, MemTag::mtInternal> *decompilations;
-
-static bool is_recording_decompilations() {
-  return Atomic::load_acquire(&decompilations) != nullptr;
-}
+static GrowableArrayCHeap<CompilationInfo *, MemTag::mtInternal> *decompilations;
 
 void CRaCRecompiler::start_recording_decompilations() {
   if (decompilations_lock == nullptr) {
     // Rank is nosafepoint - 1 because it should be acquirable when holding MDOExtraData_lock ranked nosafepoint
     decompilations_lock = new Mutex(Mutex::nosafepoint - 1, "CRaCRecompiler_lock");
   }
-  const MutexLocker ml(decompilations_lock, Mutex::_no_safepoint_check_flag);
-  precond(!is_recording_decompilations());
-  log_debug(crac)("Starting recording decompilations");
-  // release to ensuree decompilations_lock has been stored before the non-locked load in record_decompilation(),
-  // fence to not proceed with C/R until the recorder threads will see the recording update
-  Atomic::release_store_fence(&decompilations, new GrowableArrayCHeap<CompilationInfo *, MemTag::mtInternal>());
-  postcond(is_recording_decompilations());
-}
 
-void CRaCRecompiler::record_decompilation(const nmethod &nmethod) {
-  if (!is_recording_decompilations()) {
-    return; // Fast pass to not acquire a lock when no C/R occurs (i.e. most of the time)
-  }
-  const MutexLocker ml(decompilations_lock, Mutex::_no_safepoint_check_flag);
-  auto * const decomps = const_cast<GrowableArrayCHeap<CompilationInfo *, MemTag::mtInternal> *>(decompilations);
-  if (decomps != nullptr) { // Re-check under the lock to be safe from concurrent deletion
-    decomps->append(new CompilationInfo(nmethod.method(),
-                                        nmethod.is_osr_method() ? nmethod.osr_entry_bci() : InvocationEntryBci,
-                                        nmethod.comp_level()));
-  }
+  assert(!is_recording && decompilations == nullptr, "unexpected state: is_recording = %s, decompilations = %p",
+         BOOL_TO_STR(is_recording), decompilations);
+  decompilations = new GrowableArrayCHeap<CompilationInfo *, MemTag::mtInternal>();
+  Atomic::release_store_fence(&is_recording, true);
+  log_debug(crac, compilation)("CRaCRecompiler state: IDLE -> RECORDING");
 }
 
 void CRaCRecompiler::finish_recording_decompilations_and_recompile() {
-  assert(Thread::current()->is_Java_thread(), "need a Java thread");
-  assert(decompilations_lock != nullptr, "lock must be initialized when starting the recording");
+  assert(Thread::current()->is_Java_thread(), "need a Java thread to request compilations");
 
-  const GrowableArrayCHeap<CompilationInfo *, MemTag::mtInternal> *decomps;
-  {
-    const MutexLocker ml(decompilations_lock, Mutex::_no_safepoint_check_flag);
-    precond(is_recording_decompilations());
-    decomps = const_cast<GrowableArrayCHeap<CompilationInfo *, MemTag::mtInternal> *>(decompilations);
-    assert(decomps != nullptr, "recording has not been started");
-    log_debug(crac)("Finishing recording decompilations and requesting %i recompilations", decomps->length());
-    // fence should allow the recorder threads to stop locking quicker
-    Atomic::release_store_fence(&decompilations, static_cast<decltype(decompilations)>(nullptr));
-    postcond(!is_recording_decompilations());
+  assert(is_recording && decompilations != nullptr, "unexpected state: is_recording = %s, decompilations = %p",
+         BOOL_TO_STR(is_recording), decompilations);
+  Atomic::release_store_fence(&is_recording, false);
+  log_debug(crac, compilation)("CRaCRecompiler state: RECORDING -> COMPILING (recorded: %i)", decompilations->length());
+
+  // No lock because while the state is COMPILING only metadata_do() can access
+  // decompilations besides us and it does that only on safepoints. We also rely
+  // on the caller to ensure that if another recording will be started ater that
+  // thread will see all of these updates.
+  while (decompilations->is_nonempty()) {
+    // TODO: there can only be one compilation queued/in-progress for a method
+    //  at a time, if there is one already for this method our request for it
+    //  will just be ignored. We could optimize at least our own requests by
+    //  placing requests for the same method further away from each other.
+    request_recompilation(decompilations->last()); // Order should not matter
+    // Method must stay in the decompilations list until we're done processing
+    // it to let metadata_do() defend it from being deleted, so only pop now
+    delete decompilations->pop();
+  }
+  delete decompilations;
+  decompilations = nullptr;
+  log_debug(crac, compilation)("CRaCRecompiler state: COMPILING -> IDLE");
+}
+
+void CRaCRecompiler::record_decompilation(const nmethod &nmethod) {
+  assert(Thread::current()->is_Java_thread(), "need a Java thread to request compilations");
+
+  if (!Atomic::load_acquire(&is_recording)) {
+    return; // Fast pass to not acquire a lock when no C/R occurs (i.e. most of the time)
   }
 
-  // There can only be one compilation queued/in-progress for a method at a
-  // time, if there is one already for this method our request for it will just
-  // be ignored.
-  // TODO: we could optimize at least our own requests by placing requests for
-  //  the same method further away from each other.
-  for (auto * const decompilation : *decomps) {
-    request_recompilation(decompilation);
-    delete decompilation;
+  const MutexLocker ml(decompilations_lock, Mutex::_no_safepoint_check_flag);
+  if (is_recording) { // Re-check under the lock to be safe from concurrent changes
+    assert(decompilations != nullptr, "unexpected state: is_recording = %s, decompilations = %p",
+           BOOL_TO_STR(is_recording), decompilations);
+    decompilations->append(new CompilationInfo(nmethod.method(),
+                                               nmethod.is_osr_method() ? nmethod.osr_entry_bci() : InvocationEntryBci,
+                                               nmethod.comp_level()));
   }
-  delete decomps;
 }
 
 bool CRaCRecompiler::is_recompilation_relevant(const methodHandle &method, int bci, int comp_level) {
@@ -210,9 +223,8 @@ bool CRaCRecompiler::is_recompilation_relevant(const methodHandle &method, int b
 void CRaCRecompiler::metadata_do(void f(Metadata *)) {
   assert_at_safepoint();
   // Since we are at a safepoint no synchronization is needed
-  auto * const decomps = const_cast<GrowableArrayCHeap<CompilationInfo *, MemTag::mtInternal> *>(decompilations);
-  if (decomps != nullptr) {
-    for (const auto *decompilation : *decomps) {
+  if (decompilations != nullptr) {
+    for (const auto *decompilation : *decompilations) {
       if (decompilation->is_method_loaded()) {
         f(decompilation->method());
       }

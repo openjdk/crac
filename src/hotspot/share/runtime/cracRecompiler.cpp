@@ -156,15 +156,19 @@ void CRaCRecompiler::start_recording_decompilations() {
 void CRaCRecompiler::finish_recording_decompilations_and_recompile() {
   assert(Thread::current()->is_Java_thread(), "need a Java thread to request compilations");
 
-  assert(is_recording && decompilations != nullptr, "unexpected state: is_recording = %s, decompilations = %p",
-         BOOL_TO_STR(is_recording), decompilations);
-  Atomic::release_store_fence(&is_recording, false);
-  log_debug(crac, compilation)("CRaCRecompiler state: RECORDING -> COMPILING (recorded: %i)", decompilations->length());
+  {
+    // The lock ensures we do not change the state while someone is recording
+    const MutexLocker ml(decompilations_lock, Mutex::_no_safepoint_check_flag);
+    assert(is_recording && decompilations != nullptr, "unexpected state: is_recording = %s, decompilations = %p",
+           BOOL_TO_STR(is_recording), decompilations);
+    Atomic::release_store_fence(&is_recording, false);
+    log_debug(crac, compilation)("CRaCRecompiler state: RECORDING -> COMPILING (recorded: %i)", decompilations->length());
+  }
 
   // No lock because while the state is COMPILING only metadata_do() can access
   // decompilations besides us and it does that only on safepoints. We also rely
-  // on the caller to ensure that if another recording will be started ater that
-  // thread will see all of these updates.
+  // on the caller to ensure that if another recording will be started later
+  // that thread will see all of these updates.
   while (decompilations->is_nonempty()) {
     // TODO: there can only be one compilation queued/in-progress for a method
     //  at a time, if there is one already for this method our request for it

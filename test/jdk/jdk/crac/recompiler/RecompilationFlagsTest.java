@@ -33,18 +33,20 @@ import jdk.test.whitebox.WhiteBox;
 
 /*
  * @test
- * @summary Recompilation should not happen earlier than after the specified
- *          delay after the restoring finishes.
+ * @summary Tests flags that control recompilation.
  * @library /test/lib
  * @build jdk.test.whitebox.WhiteBox
  * @run driver jdk.test.lib.helpers.ClassFileInstaller -jar wb.jar jdk.test.whitebox.WhiteBox
- * @build RecompilationDelayTest
- * @run driver jdk.test.lib.crac.CracTest -1
- * @run driver jdk.test.lib.crac.CracTest 0
- * @run driver jdk.test.lib.crac.CracTest 10000
+ * @build RecompilationFlagsTest
+ * @run driver jdk.test.lib.crac.CracTest true  -1
+ * @run driver jdk.test.lib.crac.CracTest true  0
+ * @run driver jdk.test.lib.crac.CracTest true  10000
+ * @run driver jdk.test.lib.crac.CracTest false 10000
  */
-public class RecompilationDelayTest implements CracTest {
+public class RecompilationFlagsTest implements CracTest {
     @CracTestArg(0)
+    boolean enableRecompilation;
+    @CracTestArg(1)
     long delayMs;
 
     @SuppressWarnings("unused")
@@ -59,13 +61,14 @@ public class RecompilationDelayTest implements CracTest {
                 BackgroundCompilation: false
             }
         ]
-        """.formatted(RecompilationDelayTest.class.getName().replace('.', '/'), TEST_METHOD_NAME);
+        """.formatted(RecompilationFlagsTest.class.getName().replace('.', '/'), TEST_METHOD_NAME);
     private static final int TEST_METHOD_COMP_LEVEL = 4;
 
     @Override
     public void test() throws Exception {
-        new CracBuilder().engine(CracEngine.SIMULATE)
+        final var builder = new CracBuilder().engine(CracEngine.SIMULATE)
             .vmOption("-Xbootclasspath/a:wb.jar").vmOption("-XX:+UnlockDiagnosticVMOptions").vmOption("-XX:+WhiteBoxAPI")
+            .javaOption("jdk.crac.enable-recompilation", Boolean.toString(enableRecompilation))
             .javaOption("jdk.crac.recompilation-delay-ms", Long.toString(delayMs))
             .startCheckpoint().waitForSuccess();
     }
@@ -73,7 +76,7 @@ public class RecompilationDelayTest implements CracTest {
     @Override
     public void exec() throws Exception {
         final var whiteBox = WhiteBox.getWhiteBox();
-        final var testMethodRef = RecompilationDelayTest.class.getDeclaredMethod(TEST_METHOD_NAME);
+        final var testMethodRef = RecompilationFlagsTest.class.getDeclaredMethod(TEST_METHOD_NAME);
 
         assertEquals(
             1, whiteBox.addCompilerDirective(MAKE_TEST_METHOD_COMP_BLOCKING_DIRECTIVE),
@@ -125,9 +128,13 @@ public class RecompilationDelayTest implements CracTest {
             Thread.sleep(delayMs + 500);
         }
 
-        assertEquals(
-            TEST_METHOD_COMP_LEVEL, whiteBox.getMethodCompilationLevel(testMethodRef),
-            "Unexpected post-C/R compilation level"
-        );
+        if (enableRecompilation) {
+            assertEquals(
+                TEST_METHOD_COMP_LEVEL, whiteBox.getMethodCompilationLevel(testMethodRef),
+                "Unexpected post-C/R compilation level"
+            );
+        } else {
+            assertFalse(whiteBox.isMethodCompiled(testMethodRef), "Should not get recompiled");
+        }
     }
 }

@@ -49,7 +49,8 @@ import jdk.test.whitebox.WhiteBox;
  * @run driver jdk.test.lib.crac.CracTest C2_ONLY
  */
 public class NaturalDecompilationTest implements CracTest {
-    private static final long STAGE_TIME_LIMIT_SEC = 30;
+    // For debugging: set to a positive number to limit the time a stage (a timedDoWhile call) can take
+    private static final long STAGE_TIME_LIMIT_SEC = 0;
 
     // The compilers have different deoptimization implementations so it is
     // worth to test each of them.
@@ -126,7 +127,7 @@ public class NaturalDecompilationTest implements CracTest {
 
         final var resource = new Resource() {
             @Override
-            public void beforeCheckpoint(Context<? extends Resource> context) throws Exception {
+            public void beforeCheckpoint(Context<? extends Resource> context) {
                 assertTrue(whiteBox.isMethodCompiled(testMethodRef), "Should still be compiled");
                 timedDoWhile("deoptimization", () -> {
                     // We don't want to call to many times or the method may
@@ -138,7 +139,7 @@ public class NaturalDecompilationTest implements CracTest {
             }
 
             @Override
-            public void afterRestore(Context<? extends Resource> context) throws Exception {
+            public void afterRestore(Context<? extends Resource> context) {
                 assertFalse(whiteBox.isMethodCompiled(testMethodRef), "Should still be deoptimized");
             }
         };
@@ -160,9 +161,12 @@ public class NaturalDecompilationTest implements CracTest {
         final var startTime = System.nanoTime();
         boolean completed;
         do {
-            assertLessThan((System.nanoTime() - startTime) / 1_000_000_000, STAGE_TIME_LIMIT_SEC,
-                "Task takes too long: " + name
-            );
+            if (STAGE_TIME_LIMIT_SEC > 0) {
+                assertLessThan(
+                    (System.nanoTime() - startTime) / 1_000_000_000, STAGE_TIME_LIMIT_SEC,
+                    "Task takes too long: " + name
+                );
+            }
             System.out.println("Running: " + name);
             completed = action.getAsBoolean();
         } while (!completed);

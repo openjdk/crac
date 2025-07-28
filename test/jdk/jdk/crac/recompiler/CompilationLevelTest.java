@@ -100,7 +100,7 @@ public class CompilationLevelTest implements CracTest {
 
         final var resource = new Resource() {
             @Override
-            public void beforeCheckpoint(Context<? extends Resource> context) throws Exception {
+            public void beforeCheckpoint(Context<? extends Resource> context) {
                 if (preCrCompilationLevel > 0) {
                     assertEquals(
                         1, whiteBox.deoptimizeMethod(testMethodRef),
@@ -110,7 +110,7 @@ public class CompilationLevelTest implements CracTest {
             }
 
             @Override
-            public void afterRestore(Context<? extends Resource> context) throws Exception {
+            public void afterRestore(Context<? extends Resource> context) {
                 if (inCrCompilationLevel > 0) {
                     assertTrue(
                         whiteBox.enqueueMethodForCompilation(testMethodRef, inCrCompilationLevel),

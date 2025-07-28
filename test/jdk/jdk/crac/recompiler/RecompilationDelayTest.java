@@ -93,10 +93,10 @@ public class RecompilationDelayTest implements CracTest {
             public long restoreFinishTimeMs = -1;
 
             @Override
-            public void beforeCheckpoint(Context<? extends Resource> context) throws Exception {}
+            public void beforeCheckpoint(Context<? extends Resource> context) {}
 
             @Override
-            public void afterRestore(Context<? extends Resource> context) throws Exception {
+            public void afterRestore(Context<? extends Resource> context) {
                 if (delayMs <= 0) {
                     assertEquals(
                         1, whiteBox.deoptimizeMethod(testMethodRef),

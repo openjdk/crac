@@ -185,8 +185,6 @@ void CRaCRecompiler::finish_recording_decompilations_and_recompile() {
 }
 
 void CRaCRecompiler::record_decompilation(const nmethod &nmethod) {
-  assert(Thread::current()->is_Java_thread(), "need a Java thread to request compilations");
-
   if (!Atomic::load_acquire(&is_recording)) {
     return; // Fast pass to not acquire a lock when no C/R occurs (i.e. most of the time)
   }

@@ -66,7 +66,7 @@ import jdk.jfr.internal.util.Utils;
 
 public final class PlatformRecorder {
 
-
+    private static volatile boolean inShutdown;
     private final ArrayList<PlatformRecording> recordings = new ArrayList<>();
     private static final List<FlightRecorderListener> changeListeners = new ArrayList<>();
     private final Repository repository;
@@ -74,7 +74,6 @@ public final class PlatformRecorder {
     private Timer timer;
     private long recordingCounter = 0;
     private RepositoryChunk currentChunk;
-    private boolean inShutdown;
     private boolean runPeriodicTask;
     private JDKResource resource = new JDKResource() {
         private List<PlatformRecording> futureRecordings;
@@ -247,12 +246,12 @@ public final class PlatformRecorder {
         }
     }
 
-    synchronized void setInShutDown() {
-        this.inShutdown = true;
+    static void setInShutDown() {
+        inShutdown = true;
     }
 
-    synchronized boolean isInShutDown() {
-        return this.inShutdown;
+    static boolean isInShutDown() {
+        return inShutdown;
     }
 
     // called by shutdown hook

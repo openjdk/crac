@@ -414,9 +414,9 @@ class VM_Version: public Abstract_VM_Version {
   static void initialize();
   static void print_features();
   static bool is_determine_features_test_running() { return _is_determine_features_test_running; }
-  struct CPUFeaturesBinary {};
-  static bool cpu_features_binary(CPUFeaturesBinary *data) { return false; }
-  static bool cpu_features_binary_check(const CPUFeaturesBinary *data) { return data == nullptr; }
+  struct VM_Features {};
+  static bool cpu_features_binary(VM_Features *data) { return false; }
+  static bool cpu_features_binary_check(const VM_Features *data) { return data == nullptr; }
   static bool ignore_cpu_features() { return true; }
 
   // Override Abstract_VM_Version implementation
@@ -588,9 +588,6 @@ class VM_Version: public Abstract_VM_Version {
   // Sometimes helpful for debugging.
   static unsigned long z_SIGILL();
   static unsigned long z_SIGSEGV();
-
-  // No _features_names[] available on this CPU.
-  static void insert_features_names(char* buf, size_t buflen, unsigned long features[] = _features) {}
 
   static void initialize_cpu_information(void);
 };

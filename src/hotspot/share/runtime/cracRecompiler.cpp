@@ -120,7 +120,7 @@ static void request_recompilation(CompilationInfo *info) {
   // already be compilation tasks for this method (even if on another level or
   // OSR-BCI) or it may have gotten not-compilable since it was recorded.
   CompileBroker::compile_method(methodHandle(THREAD, info->method()), info->bci(), info->comp_level(),
-                                methodHandle(), 0, CompileTask::Reason_CRaC, THREAD);
+                                0, CompileTask::Reason_CRaC, THREAD);
   guarantee(!HAS_PENDING_EXCEPTION, "the method should have been successfully compiled before");
 }
 
@@ -142,8 +142,8 @@ static GrowableArrayCHeap<CompilationInfo *, MemTag::mtInternal> *decompilations
 
 void CRaCRecompiler::start_recording_decompilations() {
   if (decompilations_lock == nullptr) {
-    // Rank is nosafepoint - 1 because it should be acquirable when holding MDOExtraData_lock ranked nosafepoint
-    decompilations_lock = new Mutex(Mutex::nosafepoint - 1, "CRaCRecompiler_lock");
+    // Rank must be lower than that of MDOExtraData_lock
+    decompilations_lock = new Mutex(Mutex::nosafepoint - 2, "CRaCRecompiler_lock");
   }
 
   assert(!is_recording && decompilations == nullptr, "unexpected state: is_recording = %s, decompilations = %p",

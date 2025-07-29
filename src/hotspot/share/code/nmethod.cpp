@@ -62,6 +62,7 @@
 #include "prims/methodHandles.hpp"
 #include "runtime/continuation.hpp"
 #include "runtime/atomic.hpp"
+#include "runtime/cracRecompiler.hpp"
 #include "runtime/deoptimization.hpp"
 #include "runtime/flags/flagSetting.hpp"
 #include "runtime/frame.inline.hpp"
@@ -2006,7 +2007,7 @@ void nmethod::unlink_from_method() {
 }
 
 // Invalidate code
-bool nmethod::make_not_entrant(const char* reason) {
+bool nmethod::make_not_entrant(const char* reason, bool can_schedule_recompilation) {
   assert(reason != nullptr, "Must provide a reason");
 
   // This can be called while the system is already at a safepoint which is ok
@@ -2099,6 +2100,10 @@ bool nmethod::make_not_entrant(const char* reason) {
     assert(!found, "osr nmethod should have been invalidated");
   }
 #endif
+
+  if (can_schedule_recompilation) {
+    CRaCRecompiler::record_decompilation(*this);
+  }
 
   return true;
 }

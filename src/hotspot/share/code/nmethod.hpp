@@ -633,8 +633,13 @@ public:
   // alive.  It is used when an uncommon trap happens.  Returns true
   // if this thread changed the state of the nmethod or false if
   // another thread performed the transition.
-  bool  make_not_entrant(const char* reason);
-  bool  make_not_used()    { return make_not_entrant("not used"); }
+  //
+  // can_schedule_recompilation should be true if the decompilation
+  // is triggered by an application state change and it makes sense
+  // to request recompilation of the method as soon as the state
+  // becomes stable again.
+  bool  make_not_entrant(const char* reason, bool can_schedule_recompilation);
+  bool  make_not_used()    { return make_not_entrant("not used", false /* likely already recompiling */); }
 
   bool  is_marked_for_deoptimization() const { return deoptimization_status() != not_marked; }
   bool  has_been_deoptimized() const { return deoptimization_status() == deoptimize_done; }

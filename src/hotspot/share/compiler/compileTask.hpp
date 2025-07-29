@@ -64,6 +64,7 @@ class CompileTask : public CHeapObj<mtCompiler> {
       Reason_Whitebox,         // Whitebox API
       Reason_MustBeCompiled,   // Used for -Xcomp or AlwaysCompileLoopMethods (see CompilationPolicy::must_be_compiled())
       Reason_Bootstrap,        // JVMCI bootstrap
+      Reason_CRaC,             // CRaC-initiated recompilation
       Reason_Count
   };
 
@@ -76,7 +77,8 @@ class CompileTask : public CHeapObj<mtCompiler> {
       "replay",
       "whitebox",
       "must_be_compiled",
-      "bootstrap"
+      "bootstrap",
+      "crac"
     };
     return reason_names[compile_reason];
   }

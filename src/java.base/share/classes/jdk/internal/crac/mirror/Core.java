@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2017, 2021, Azul Systems, Inc. All rights reserved.
+ * Copyright (c) 2017, 2025, Azul Systems, Inc. All rights reserved.
  * Copyright (c) 2021, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
@@ -31,6 +31,7 @@ import jdk.internal.crac.ClaimedFDs;
 import jdk.internal.crac.JDKResource;
 import jdk.internal.crac.LoggerContainer;
 import jdk.internal.crac.mirror.impl.*;
+import jdk.internal.misc.InnocuousThread;
 
 import java.io.PrintWriter;
 import java.io.StringWriter;
@@ -62,10 +63,14 @@ public class Core {
     private static final Object checkpointRestoreLock = new Object();
     private static boolean checkpointInProgress = false;
 
+    private static final String ENABLE_RECOMPILATION_PROPERTY = "jdk.crac.enable-recompilation";
+    private static final String RECOMPILATION_DELAY_MS_PROPERTY = "jdk.crac.recompilation-delay-ms";
     private static class FlagsHolder {
         private FlagsHolder() {}
         public static final boolean TRACE_STARTUP_TIME =
             Boolean.getBoolean("jdk.crac.trace-startup-time");
+        public static final boolean ENABLE_RECOMPILATION =
+            Boolean.parseBoolean(System.getProperty(ENABLE_RECOMPILATION_PROPERTY, "true"));
     }
 
     private static final Context<Resource> globalContext = GlobalContext.createGlobalContextImpl();
@@ -301,6 +306,7 @@ public class Core {
                 throw ex;
             }
 
+            startRecordingDecompilations();
             try (@SuppressWarnings("unused") var keepAlive = new KeepAlive()) {
                 checkpointInProgress = true;
                 checkpointRestore1(jcmdStream);
@@ -309,6 +315,7 @@ public class Core {
                     System.out.println("STARTUPTIME " + System.nanoTime() + " restore-finish");
                 }
                 checkpointInProgress = false;
+                scheduleFinishRecordingDecompilationsAndRecompile();
             }
         }
     }
@@ -339,6 +346,59 @@ public class Core {
             LoggerContainer.error(e, "Cannot find JMX agent start method");
         } catch (InvocationTargetException | IllegalAccessException e) {
             LoggerContainer.error(e, "Cannot start JMX agent");
+        }
+    }
+
+    private static Thread recompilerThread;
+
+    private static native void startRecordingDecompilations0();
+    private static native void finishRecordingDecompilationsAndRecompile0();
+
+    private static void startRecordingDecompilations() throws CheckpointException {
+        if (!FlagsHolder.ENABLE_RECOMPILATION) {
+            return;
+        }
+
+        if (recompilerThread != null) {
+            // Finish the existing recording, if any
+            recompilerThread.interrupt();
+            try {
+                recompilerThread.join();
+            } catch (InterruptedException ie) {
+                final CheckpointException ex = new CheckpointException();
+                ex.addSuppressed(ie);
+                throw ex;
+            }
+        }
+        startRecordingDecompilations0();
+    }
+
+    private static void scheduleFinishRecordingDecompilationsAndRecompile() {
+        if (!FlagsHolder.ENABLE_RECOMPILATION) {
+            if (System.getProperty(RECOMPILATION_DELAY_MS_PROPERTY) != null) {
+                System.err.printf("Ignoring '%s' because '%s' is false\n",
+                        RECOMPILATION_DELAY_MS_PROPERTY, ENABLE_RECOMPILATION_PROPERTY);
+            }
+            return;
+        }
+
+        final var recompilationDelayMs = Long.getLong(RECOMPILATION_DELAY_MS_PROPERTY, 10L);
+        if (recompilationDelayMs <= 0) {
+            finishRecordingDecompilationsAndRecompile0();
+        } else {
+            // InnocuousThread not to add a thread into the user's thread group
+            final Thread t = InnocuousThread.newThread("CRaC Recompiler", () -> {
+                try {
+                    Thread.sleep(recompilationDelayMs);
+                } catch (InterruptedException ignored) {
+                    // Just finish earlier
+                } finally {
+                    finishRecordingDecompilationsAndRecompile0();
+                }
+            });
+            t.setDaemon(true);
+            t.start();
+            recompilerThread = t;
         }
     }
 }

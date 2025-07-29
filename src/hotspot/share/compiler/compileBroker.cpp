@@ -54,6 +54,7 @@
 #include "prims/nativeLookup.hpp"
 #include "prims/whitebox.hpp"
 #include "runtime/atomic.hpp"
+#include "runtime/cracRecompiler.hpp"
 #include "runtime/escapeBarrier.hpp"
 #include "runtime/globals_extension.hpp"
 #include "runtime/handles.inline.hpp"
@@ -1254,6 +1255,15 @@ void CompileBroker::compile_method_base(const methodHandle& method,
     // completed.  A previous compilation may have registered
     // some result.
     if (compilation_is_complete(method, osr_bci, comp_level)) {
+      return;
+    }
+
+    // Ensure the method has not gotten compiled on a better level since CRaC
+    // recorded its decompilation. We do it this late to ensure there is no race
+    // between the recompilation requesting thread and other threads requesting
+    // compilation through the usual routes.
+    if (compile_reason == CompileTask::Reason_CRaC &&
+        !CRaCRecompiler::is_recompilation_relevant(method, osr_bci, comp_level)) {
       return;
     }
 

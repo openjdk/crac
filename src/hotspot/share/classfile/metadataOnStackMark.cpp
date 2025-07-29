@@ -27,6 +27,7 @@
 #include "compiler/compileBroker.hpp"
 #include "oops/metadata.hpp"
 #include "prims/jvmtiImpl.hpp"
+#include "runtime/cracRecompiler.hpp"
 #include "runtime/javaThread.hpp"
 #include "runtime/synchronizer.hpp"
 #include "services/threadService.hpp"
@@ -73,6 +74,7 @@ MetadataOnStackMark::MetadataOnStackMark(bool walk_all_metadata, bool redefiniti
 #if INCLUDE_JVMCI
     JVMCI::metadata_do(Metadata::mark_on_stack);
 #endif
+    CRaCRecompiler::metadata_do(Metadata::mark_on_stack);
   }
 }
 

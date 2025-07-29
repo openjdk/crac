@@ -115,51 +115,54 @@ public interface CracTest {
             argsOffset = 2;
         }
 
+        Constructor<? extends CracTest> ctor;
         try {
-            Constructor<? extends CracTest> ctor = testClass.getConstructor();
-            CracTest testInstance = ctor.newInstance();
-            Field[] argFields = getArgFields(testClass);
-            for (int index = 0; index < argFields.length; index++) {
-                Field f = argFields[index];
-                assertFalse(Modifier.isFinal(f.getModifiers()), "@CracTestArg fields must not be final!");
-                Class<?> t = f.getType();
-                if (index + argsOffset >= args.length) {
-                    if (f.getAnnotation(CracTestArg.class).optional()) {
-                        break;
-                    } else {
-                        fail("Not enough args for field " + f.getName() + "(" + index + "): have " + (args.length - argsOffset));
-                    }
-                }
-                String arg = args[index + argsOffset];
-                Object value = arg;
-                if (t == boolean.class || t == Boolean.class) {
-                    assertTrue("true".equals(arg) || "false".equals(arg), "Argument " + index + "Boolean arg should be either 'true' or 'false', was: " + arg);
-                    value = Boolean.parseBoolean(arg);
-                } else if (t == int.class || t == Integer.class) {
-                    try {
-                        value = Integer.parseInt(arg);
-                    } catch (NumberFormatException e) {
-                        fail("Cannot parse argument '" + arg + "' as integer for @CracTestArg(" + index + ") " + f.getName());
-                    }
-                } else if (t == long.class || t == Long.class) {
-                    try {
-                        value = Long.parseLong(arg);
-                    } catch (NumberFormatException e) {
-                        fail("Cannot parse argument '" + arg + "' as long for @CracTestArg(" + index + ") " + f.getName());
-                    }
-                } else if (t.isEnum()) {
-                    value = Enum.valueOf((Class<Enum>) t, arg);
-                }
-                f.setAccessible(true);
-                f.set(testInstance, value);
-            }
-            if (argsOffset == 0) {
-                testInstance.test();
-            } else {
-                testInstance.exec();
-            }
+            ctor = testClass.getConstructor();
         } catch (NoSuchMethodException e) {
             fail("Test class " + testClass.getName() + " is expected to have a public no-arg constructor");
+            return; // Unreachable but makes the compiler sure ctor is always initialized below
+        }
+
+        CracTest testInstance = ctor.newInstance();
+        Field[] argFields = getArgFields(testClass);
+        for (int index = 0; index < argFields.length; index++) {
+            Field f = argFields[index];
+            assertFalse(Modifier.isFinal(f.getModifiers()), "@CracTestArg fields must not be final!");
+            Class<?> t = f.getType();
+            if (index + argsOffset >= args.length) {
+                if (f.getAnnotation(CracTestArg.class).optional()) {
+                    break;
+                } else {
+                    fail("Not enough args for field " + f.getName() + "(" + index + "): have " + (args.length - argsOffset));
+                }
+            }
+            String arg = args[index + argsOffset];
+            Object value = arg;
+            if (t == boolean.class || t == Boolean.class) {
+                assertTrue("true".equals(arg) || "false".equals(arg), "Argument " + index + "Boolean arg should be either 'true' or 'false', was: " + arg);
+                value = Boolean.parseBoolean(arg);
+            } else if (t == int.class || t == Integer.class) {
+                try {
+                    value = Integer.parseInt(arg);
+                } catch (NumberFormatException e) {
+                    fail("Cannot parse argument '" + arg + "' as integer for @CracTestArg(" + index + ") " + f.getName());
+                }
+            } else if (t == long.class || t == Long.class) {
+                try {
+                    value = Long.parseLong(arg);
+                } catch (NumberFormatException e) {
+                    fail("Cannot parse argument '" + arg + "' as long for @CracTestArg(" + index + ") " + f.getName());
+                }
+            } else if (t.isEnum()) {
+                value = Enum.valueOf((Class<Enum>) t, arg);
+            }
+            f.setAccessible(true);
+            f.set(testInstance, value);
+        }
+        if (argsOffset == 0) {
+            testInstance.test();
+        } else {
+            testInstance.exec();
         }
     }
 

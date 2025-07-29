@@ -64,9 +64,9 @@ protected:
 public:
   // Initialization
   static void initialize();
-  struct CPUFeaturesBinary {};
-  static bool cpu_features_binary(CPUFeaturesBinary *data) { return false; }
-  static bool cpu_features_binary_check(const CPUFeaturesBinary *data) { return data == nullptr; }
+  struct VM_Features {};
+  static bool cpu_features_binary(VM_Features *data) { return false; }
+  static bool cpu_features_binary_check(const VM_Features *data) { return data == nullptr; }
   static bool ignore_cpu_features() { return true; }
   static void check_virtualizations();
 
@@ -193,9 +193,6 @@ enum Ampere_CPU_Model {
   // Is the CPU running emulated (for example macOS Rosetta running x86_64 code on M1 ARM (aarch64)
   static bool is_cpu_emulated();
 #endif
-
-  // No _features_names[] available on this CPU.
-  static void insert_features_names(char* buf, size_t buflen, uint64_t features = _features) {}
 
   static void initialize_cpu_information(void);
 

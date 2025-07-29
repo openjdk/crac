@@ -36,6 +36,8 @@ import java.util.jar.JarFile;
 import jdk.internal.util.OperatingSystem;
 import sun.net.util.URLUtil;
 import sun.net.www.ParseUtil;
+import static jdk.internal.util.Exceptions.filterJarName;
+import static jdk.internal.util.Exceptions.formatMsg;
 
 import jdk.internal.crac.Core;
 import jdk.internal.crac.mirror.Context;
@@ -115,7 +117,7 @@ class JarFileFactory implements URLJarFile.URLJarFileCloseController, jdk.intern
             result = URLJarFile.getJarFile(patched, this);
         }
         if (result == null)
-            throw new FileNotFoundException(url.toString());
+            throw new FileNotFoundException(formatMsg("%s", filterJarName(url.toString())));
         return result;
     }
 
@@ -207,7 +209,7 @@ class JarFileFactory implements URLJarFile.URLJarFileCloseController, jdk.intern
             result = URLJarFile.getJarFile(url, this);
         }
         if (result == null)
-            throw new FileNotFoundException(url.toString());
+            throw new FileNotFoundException(formatMsg("%s", filterJarName(url.toString())));
 
         return result;
     }

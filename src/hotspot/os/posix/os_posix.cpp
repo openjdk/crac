@@ -35,7 +35,6 @@
 #include "runtime/frame.inline.hpp"
 #include "runtime/globals_extension.hpp"
 #include "runtime/interfaceSupport.inline.hpp"
-#include "runtime/crac.hpp"
 #include "runtime/java.hpp"
 #include "runtime/orderAccess.hpp"
 #include "runtime/osThread.hpp"
@@ -63,6 +62,9 @@
 #endif
 #ifdef LINUX
 #include "os_linux.hpp"
+#endif
+#if !defined(__APPLE__) && !defined(AIX)
+#include "runtime/crac.hpp"
 #endif
 
 #include <dirent.h>

@@ -38,8 +38,12 @@ public class CracProcess {
 
     public void waitForCheckpointed() throws InterruptedException {
         if (builder.engine == null || builder.engine == CracEngine.CRIU) {
-            assertEquals(137, process.waitFor(), "Checkpointed process was not killed as expected.");
-            // TODO: we could check that "CR: Checkpoint" was written out
+            final var exitValue = process.waitFor();
+            if (exitValue != 137 && builder.captureOutput) {
+                printOutput();
+            }
+            assertEquals(137, exitValue, "Checkpointed process was not killed as expected.");
+            builder.log("Process %d completed with exit value %d%n", process.pid(), exitValue);
         } else {
             fail("With engine " + builder.engine.engine + " use the async version.");
         }
@@ -106,13 +110,18 @@ public class CracProcess {
     }
 
     private void printOutput() {
+        final OutputAnalyzer oa;
         try {
-            OutputAnalyzer oa = outputAnalyzer();
-            System.err.print(oa.getStderr());
-            System.out.print(oa.getStdout());
+            oa = outputAnalyzer();
         } catch (IOException e) {
             throw new RuntimeException(e);
         }
+        // Similar to OutputAnalyzer.reportDiagnosticSummary() but a bit better formatted
+        System.err.println("stdout: [");
+        System.err.print(oa.getStdout());
+        System.err.println("]\nstderr: [");
+        System.err.print(oa.getStderr());
+        System.err.println("]\nexitValue = " + oa.getExitValue() + "\n");
     }
 
     public OutputAnalyzer outputAnalyzer() throws IOException {

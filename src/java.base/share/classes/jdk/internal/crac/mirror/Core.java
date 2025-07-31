@@ -308,7 +308,7 @@ public class Core {
                 // so the message should have a good explanation
                 final var msg = "Failed to execute the new main entry: " +
                         "new initial class = '" + newMainClassName + "', " +
-                        "new main arguments = " + Arrays.toString(newMainArgs) + "." +
+                        "new main arguments = " + Arrays.toString(newMainArgs) + ". " +
                         "Do not specify these if you just wish to continue the checkpointed execution.";
                 RestoreException ex = new RestoreException();
                 ex.addSuppressed(new Exception(msg, e));

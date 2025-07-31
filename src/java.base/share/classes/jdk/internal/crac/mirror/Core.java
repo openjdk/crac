@@ -37,9 +37,6 @@ import java.io.PrintWriter;
 import java.io.StringWriter;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
-import java.security.AccessController;
-import java.security.PrivilegedActionException;
-import java.security.PrivilegedExceptionAction;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -136,7 +133,7 @@ public class Core {
     }
 
     @SuppressWarnings("removal")
-    private static void checkpointRestore1(long jcmdStream) throws
+    private static List<String> checkpointRestore1(long jcmdStream) throws
             CheckpointException,
             RestoreException {
         final ExceptionHolder<CheckpointException> checkpointException = new ExceptionHolder<>(CheckpointException::new);
@@ -222,54 +219,30 @@ public class Core {
             tryStartManagementAgent();
         }
 
+        assert !checkpointException.hasException() || !restoreException.hasException();
+        checkpointException.throwIfAny();
+        restoreException.throwIfAny();
+
+        final var parsedNewArguments = new ArrayList<String>();
         if (newArguments != null && newArguments.length() > 0) {
-            // Parse arguments into array, unescape spaces
+            // Parse arguments, unescape spaces
             final char escChar = '\\';
             final char sepChar = ' ';
-            final var argList = new ArrayList<String>();
             final var curArgBuilder = new StringBuilder();
             for (int i = 0; i < newArguments.length(); ++i) {
                 final char curChar = newArguments.charAt(i);
                 switch (curChar) {
                     case sepChar -> {
-                        argList.add(curArgBuilder.toString());
+                        parsedNewArguments.add(curArgBuilder.toString());
                         curArgBuilder.setLength(0);
                     }
                     case escChar -> curArgBuilder.append(newArguments.charAt(++i));
                     default -> curArgBuilder.append(curChar);
                 }
             }
-            argList.add(curArgBuilder.toString());
-
-            final String[] args = argList.toArray(new String[argList.size()]);
-            if (args.length > 0) {
-                try {
-                    Method newMain = AccessController.doPrivileged(new PrivilegedExceptionAction<Method>() {
-                       @Override
-                       public Method run() throws Exception {
-                           Class < ?> newMainClass = Class.forName(args[0], false,
-                               ClassLoader.getSystemClassLoader());
-                           Method newMain = newMainClass.getDeclaredMethod("main",
-                               String[].class);
-                           newMain.setAccessible(true);
-                           return newMain;
-                       }
-                    });
-                    newMain.invoke(null,
-                        (Object)Arrays.copyOfRange(args, 1, args.length));
-                } catch (PrivilegedActionException |
-                         InvocationTargetException |
-                         IllegalAccessException e) {
-                    assert !checkpointException.hasException() :
-                        "should not have new arguments";
-                    restoreException.handle(e);
-                }
-            }
+            parsedNewArguments.add(curArgBuilder.toString());
         }
-
-        assert !checkpointException.hasException() || !restoreException.hasException();
-        checkpointException.throwIfAny();
-        restoreException.throwIfAny();
+        return parsedNewArguments;
     }
 
     /**
@@ -294,6 +267,8 @@ public class Core {
     private static void checkpointRestore(long jcmdStream) throws
             CheckpointException,
             RestoreException {
+        final List<String> newArguments;
+
         // checkpointRestoreLock protects against the simultaneous
         // call of checkpointRestore from different threads.
         synchronized (checkpointRestoreLock) {
@@ -309,13 +284,35 @@ public class Core {
             startRecordingDecompilations();
             try (@SuppressWarnings("unused") var keepAlive = new KeepAlive()) {
                 checkpointInProgress = true;
-                checkpointRestore1(jcmdStream);
+                newArguments = checkpointRestore1(jcmdStream);
             } finally {
                 if (FlagsHolder.TRACE_STARTUP_TIME) {
                     System.out.println("STARTUPTIME " + System.nanoTime() + " restore-finish");
                 }
                 checkpointInProgress = false;
                 scheduleFinishRecordingDecompilationsAndRecompile();
+            }
+        }
+
+        // Launch the new main if requested
+        if (!newArguments.isEmpty()) {
+            final var newMainClassName = newArguments.getFirst();
+            final var newMainArgs = newArguments.subList(1, newArguments.size()).toArray(String[]::new);
+            try {
+                final var newMainClass = Class.forName(newMainClassName, false, ClassLoader.getSystemClassLoader());
+                final var newMain = newMainClass.getDeclaredMethod("main", String[].class);
+                newMain.setAccessible(true);
+                newMain.invoke(null, (Object) newMainArgs);
+            } catch (ReflectiveOperationException e) {
+                // It is not uncommon for users to use this feature by accident
+                // so the message should have a good explanation
+                final var msg = "Failed to execute the new main entry: " +
+                        "new initial class = '" + newMainClassName + "', " +
+                        "new main arguments = " + Arrays.toString(newMainArgs) + "." +
+                        "Do not specify these if you just wish to continue the checkpointed execution.";
+                RestoreException ex = new RestoreException();
+                ex.addSuppressed(new Exception(msg, e));
+                throw ex;
             }
         }
     }

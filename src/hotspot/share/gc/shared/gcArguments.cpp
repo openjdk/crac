@@ -94,8 +94,8 @@ void GCArguments::assert_size_info() {
   assert(MinHeapSize % HeapAlignment == 0, "MinHeapSize alignment");
   assert(InitialHeapSize % HeapAlignment == 0, "InitialHeapSize alignment");
   assert(MaxHeapSize % HeapAlignment == 0, "MaxHeapSize alignment");
-  assert(CRaCMaxHeapSizeBeforeCheckpoint == 0 || CRaCMaxHeapSizeBeforeCheckpoint >= InitialHeapSize, "Incompatible initial and maximum heap size before checkpoint");
-  assert(CRaCMaxHeapSizeBeforeCheckpoint == 0 || CRaCMaxHeapSizeBeforeCheckpoint <= MaxHeapSize, "Incompatible initial and maximum heap size before checkpoint");
+  assert(FLAG_IS_DEFAULT(CRaCMaxHeapSizeBeforeCheckpoint) || CRaCMaxHeapSizeBeforeCheckpoint >= InitialHeapSize, "Incompatible initial and maximum heap size before checkpoint");
+  assert(FLAG_IS_DEFAULT(CRaCMaxHeapSizeBeforeCheckpoint) || CRaCMaxHeapSizeBeforeCheckpoint <= MaxHeapSize, "Incompatible initial and maximum heap size before checkpoint");
 }
 #endif // ASSERT
 

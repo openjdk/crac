@@ -1075,18 +1075,19 @@ These `java` options control the runtime behavior of the Java HotSpot VM.
 
 `-XX:CRaCCheckpointTo=`*directory*
 :   The CRaC (Coordinated Restore at Checkpoint) Project provides checkpointing of
-    a running Java program into an image directory. Restoring from the image should
-    solve some of the problematic start-up and warm-up times.
+    a running Java program into an image. Restoring from the image should have
+    lower start-up and warm-up times compared to a full re-launch.
 
-    This option defines a path to the snapshot which is currently a directory. The
+    This option defines a path to the image which is currently a directory. The
     directory will be created if it does not exist, but no parent directories are
     created.
 
 `-XX:CRaCRestoreFrom=`*directory*
-:   Restores a snapshot created by `-XX:CRaCCheckpointTo=`*directory*.
+:   Restores an image created by `-XX:CRaCCheckpointTo`.
 
 `-XX:CRaCMinPid=`*value*
-:   A desired minimal PID value for checkpoint'ed process. Ignored on restore.
+:   A desired minimal PID value for checkpointed process. Used by the launcher,
+    only on POSIX-like platforms.
 
 `-XX:ErrorFile=`*filename*
 :   Specifies the path and file name to which error data is written when an

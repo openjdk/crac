@@ -54,7 +54,6 @@ public class EngineFailureTest {
         // Make VM's internal image checks pass
         Files.createDirectory(builder.imageDir());
 
-        // simengine does not support restoring
         builder.startRestoreWithArgs(null, List.of(Main.class.getName())).outputAnalyzer()
             .shouldContain("CRaC engine failed to restore")
             .shouldContain(MAIN_MSG);

@@ -50,6 +50,7 @@ public class CracBuilder {
     CracEngine engine;
     String[] engineOptions;
     boolean printResources;
+    boolean forwardClasspathOnRestore;
     Class<?> main;
     String[] args;
     boolean captureOutput;
@@ -93,6 +94,7 @@ public class CracBuilder {
         other.engine = engine;
         other.engineOptions = engineOptions == null ? null : Arrays.copyOf(engineOptions, engineOptions.length);
         other.printResources = printResources;
+        other.forwardClasspathOnRestore = forwardClasspathOnRestore;
         other.main = main;
         other.args = args == null ? null : Arrays.copyOf(args, args.length);
         other.captureOutput = captureOutput;
@@ -173,6 +175,11 @@ public class CracBuilder {
 
     public CracBuilder printResources(boolean print) {
         this.printResources = print;
+        return this;
+    }
+
+    public CracBuilder forwardClasspathOnRestore(boolean forward) {
+        this.forwardClasspathOnRestore = forward;
         return this;
     }
 
@@ -493,13 +500,13 @@ public class CracBuilder {
         if (engineOptions != null) {
             cmd.add("-XX:CRaCEngineOptions=" + String.join(",", engineOptions));
         }
-        if (!isRestore) {
+        if (!isRestore || forwardClasspathOnRestore) {
             cmd.add("-cp");
             cmd.add(getClassPath());
-            if (printResources) {
-                cmd.add("-XX:+UnlockDiagnosticVMOptions");
-                cmd.add("-XX:+CRaCPrintResourcesOnCheckpoint");
-            }
+        }
+        if (!isRestore && printResources) {
+            cmd.add("-XX:+UnlockDiagnosticVMOptions");
+            cmd.add("-XX:+CRaCPrintResourcesOnCheckpoint");
         }
         if (debug) {
             cmd.add("-agentlib:jdwp=transport=dt_socket,server=y,suspend=y,address=0.0.0.0:5005");

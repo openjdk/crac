@@ -23,10 +23,11 @@
  * questions.
  */
 
-import java.nio.file.Files;
 import java.util.List;
 
+import jdk.crac.Core;
 import jdk.test.lib.crac.CracBuilder;
+import jdk.test.lib.crac.CracEngine;
 
 /**
  * @test
@@ -45,23 +46,30 @@ public class EngineFailureTest {
         // supposed to do that, JVM does it automatically when needed) and do
         // not provide the mandatory 'exec_location' option.
 
-        final var builder = new CracBuilder()
+        // Create an empty image which will pass VM's own checks. It may contain
+        // CPU features, for example.
+        new CracBuilder().engine(CracEngine.SIMULATE)
+            .main(Main.class).args("true")
+            .startCheckpoint().waitForSuccess();
+
+        new CracBuilder()
             .vmOption("-XX:CRaCEngine=crexec")
             .vmOption("-XX:+CRaCIgnoreRestoreIfUnavailable")
             .forwardClasspathOnRestore(true)
-            .captureOutput(true);
-
-        // Make VM's internal image checks pass
-        Files.createDirectory(builder.imageDir());
-
-        builder.startRestoreWithArgs(null, List.of(Main.class.getName())).outputAnalyzer()
+            .captureOutput(true)
+            .startRestoreWithArgs(null, List.of(Main.class.getName(), "false"))
+            .outputAnalyzer()
             .shouldContain("CRaC engine failed to restore")
             .shouldContain(MAIN_MSG);
     }
 
     public static class Main {
-        public static void main(String[] args) {
-            System.out.println(MAIN_MSG);
+        public static void main(String[] args) throws Exception {
+            if (Boolean.parseBoolean(args[0])) {
+                Core.checkpointRestore();
+            } else {
+                System.out.println(MAIN_MSG);
+            }
         }
     }
 }

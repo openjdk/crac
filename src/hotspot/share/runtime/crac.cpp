@@ -264,7 +264,7 @@ void VM_Crac::doit() {
   }
 
   int shmid = -1;
-  if (CRaCAllowToSkipCheckpoint) {
+  if (CRaCSkipCheckpoint) {
     log_info(crac)("Skip Checkpoint");
     shmid = 0;
   } else {

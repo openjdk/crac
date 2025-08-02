@@ -591,12 +591,13 @@ static AliasedFlag const aliased_jvm_flags[] = {
   { "CreateMinidumpOnCrash",    "CreateCoredumpOnCrash" },
   { "CREngine",                        "CRaCEngine" },
   { "CRAllowedOpenFilePrefixes",       "CRaCAllowedOpenFilePrefixes" },
-  { "CRAllowToSkipCheckpoint",         "CRaCAllowToSkipCheckpoint "},
+  { "CRAllowToSkipCheckpoint",         "CRaCSkipCheckpoint "},
   { "CRHeapDumpOnCheckpointException", "CRaCHeapDumpOnCheckpointException" },
   { "CRPrintResourcesOnCheckpoint",    "CRaCPrintResourcesOnCheckpoint" },
   { "CRTraceStartupTime",              "CRaCTraceStartupTime" },
   { "CRDoThrowCheckpointException",    "CRaCDoThrowCheckpointException" },
   { "CRPauseOnCheckpointError",        "CRaCPauseOnCheckpointError" },
+  { "CRaCAllowToSkipCheckpoint",       "CRaCSkipCheckpoint" },
   { nullptr, nullptr}
 };
 

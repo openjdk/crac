@@ -87,7 +87,7 @@ void G1HeapRegionManager::initialize(G1RegionToSpaceMapper* heap_storage,
   _cardtable_mapper = cardtable;
 
   _regions.initialize(heap_storage->reserved(), G1HeapRegion::GrainBytes);
-  _max_available_regions = (uint) (CRaCMaxHeapSizeBeforeCheckpoint == 0 ? _regions.length() :
+  _max_available_regions = (uint) (FLAG_IS_DEFAULT(CRaCMaxHeapSizeBeforeCheckpoint) ? _regions.length() :
     CRaCMaxHeapSizeBeforeCheckpoint / G1HeapRegion::GrainBytes);
 
   _committed_map.initialize(max_num_regions());

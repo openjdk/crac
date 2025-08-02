@@ -29,6 +29,7 @@
 #include "nmt/memTag.hpp"
 #include "runtime/crac_engine.hpp"
 #include "runtime/globals.hpp"
+#include "runtime/java.hpp"
 #include "runtime/os.hpp"
 #include "utilities/debug.hpp"
 #include "utilities/growableArray.hpp"
@@ -251,10 +252,19 @@ CracEngine::CracEngine(const char *image_location) {
   char dll_dir[JVM_MAXPATHLEN];
   os::jvm_path(dll_dir, sizeof(dll_dir));
   // path is ".../lib/server/libjvm.so", or "...\bin\server\libjvm.dll"
+  // for static JDK, the path or ".../bin/java", or "...\bin\java.exe"
   char *after_elem = nullptr;
   for (int i = 0; i < 2; ++i) {
     after_elem = strrchr(dll_dir, *os::file_separator());
     *after_elem = '\0';
+  }
+  if (is_vm_statically_linked()) {
+    strcat(dll_dir, os::file_separator());
+#ifdef _WINDOWS
+    strcat(dll_dir, "bin");
+#else
+    strcat(dll_dir, "lib");
+#endif
   }
 
   char path[JVM_MAXPATHLEN];
@@ -265,17 +275,22 @@ CracEngine::CracEngine(const char *image_location) {
   }
   postcond(path[0] != '\0');
 
+  bool is_static_crexec = false; // true when using statically linked crexec
+
   char exec_path[JVM_MAXPATHLEN] = "\0";
   if (!is_library) {
     strcpy(exec_path, path); // Save to later pass it to crexec
-    if (!os::dll_locate_lib(path, sizeof(path), dll_dir, "crexec")) {
+    if (is_vm_statically_linked()) {
+      is_static_crexec = true;
+      os::jvm_path(path, sizeof(path)); // points to bin/java for static JDK
+    } else if (!os::dll_locate_lib(path, sizeof(path), dll_dir, "crexec")) {
       log_error(crac)("Cannot find crexec library to use CRaCEngine executable");
       return;
     }
   }
 
   char error_buf[1024];
-  void * const lib = os::dll_load(path, error_buf, sizeof(error_buf));
+  void * const lib = is_static_crexec ? os::get_default_process_handle() : os::dll_load(path, error_buf, sizeof(error_buf));
   if (lib == nullptr) {
     log_error(crac)("Cannot load CRaC engine library from %s: %s", path, error_buf);
     return;

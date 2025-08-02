@@ -1086,7 +1086,7 @@ These `java` options control the runtime behavior of the Java HotSpot VM.
 :   Restores an image created by `-XX:CRaCCheckpointTo`.
 
 `-XX:CRaCMinPid=`*value*
-:   A desired minimal PID value for checkpointed process. Used by the launcher,
+:   A desired minimal PID value for checkpointed process. Applied by the launcher,
     only on POSIX-like platforms.
 
 `-XX:ErrorFile=`*filename*

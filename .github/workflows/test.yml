@@ -186,15 +186,17 @@ jobs:
         id: extra-options
         run: |
           if [[ '${{ inputs.static-suffix }}' == '-static' ]]; then
-            echo "test-jdk=JDK_UNDER_TEST=${{ steps.bundles.outputs.static-jdk-path }}" >> $GITHUB_OUTPUT
+            echo "test-jdk=${{ steps.bundles.outputs.static-jdk-path }}" >> $GITHUB_OUTPUT
             echo "compile-jdk=JDK_FOR_COMPILE=${{ steps.bundles.outputs.jdk-path }}" >> $GITHUB_OUTPUT
             echo "extra-problem-lists=EXTRA_PROBLEM_LISTS=${{ steps.path.outputs.static-hotspot-problemlist-path }}%20${{ steps.path.outputs.static-jdk-problemlist-path }}%20${{ steps.path.outputs.static-langtools-problemlist-path }}%20${{ steps.path.outputs.static-lib-test-problemlist-path }}" >> $GITHUB_OUTPUT
+          else
+            echo "test-jdk=${{ steps.bundles.outputs.jdk-path }}" >> $GITHUB_OUTPUT
           fi
 
       - name: 'Setup CRIU'
         uses: ./.github/actions/setup-criu
         with:
-          jdk-path: ${{ steps.bundles.outputs.jdk-path }}
+          jdk-path: ${{ steps.extra-options.outputs.test-jdk }}
         if: runner.os == 'Linux' && matrix.test-name == 'jdk/crac'
 
       - name: 'Run tests'
@@ -207,7 +209,7 @@ jobs:
           JDK_IMAGE_DIR=${{ steps.bundles.outputs.jdk-path }}
           SYMBOLS_IMAGE_DIR=${{ steps.bundles.outputs.symbols-path }}
           TEST_IMAGE_DIR=${{ steps.bundles.outputs.tests-path }}
-          ${{ steps.extra-options.outputs.test-jdk }}
+          JDK_UNDER_TEST=${{ steps.extra-options.outputs.test-jdk }}
           ${{ steps.extra-options.outputs.compile-jdk }}
           JTREG="JAVA_OPTIONS=$JAVA_OPTIONS;VERBOSE=fail,error,time;KEYWORDS=!headful;${{ steps.extra-options.outputs.extra-problem-lists }}"
           && bash ./.github/scripts/gen-test-summary.sh "$GITHUB_STEP_SUMMARY" "$GITHUB_OUTPUT"

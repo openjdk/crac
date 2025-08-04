@@ -12,3 +12,16 @@ java/util/ResourceBundle/modules/unnamed/UnNamedTest.java                       
 
 # Require jps
 java/util/concurrent/locks/Lock/TimedAcquireLeak.java                            8346719 generic-all
+
+# Require jcmd
+jdk/crac/DaemonAfterRestore.java                                                 8346719 generic-all
+jdk/crac/fileDescriptors/SharedLibraryTest.java                                  8346719 generic-all
+jdk/crac/jfr/FlightRecorderJcmdTest.java                                         8346719 generic-all
+jdk/crac/PerfMemoryRestoreTest.java                                              8346719 generic-all
+
+# Require container with libX11
+jdk/crac/ContainerOOMETest.java                                                  8364624 generic-all
+jdk/crac/ContainerPidAdjustmentTest.java                                         8364624 generic-all
+jdk/crac/java/lang/System/NanoTimeTest.java                                      8364624 generic-all
+jdk/crac/java/net/InetAddress/ResolveTest.java                                   8364624 generic-all
+jdk/crac/java/lang/System/TimedWaitingTest.java                                  8364624 generic-all

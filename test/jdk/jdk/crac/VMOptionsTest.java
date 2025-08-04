@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2023, Azul Systems, Inc. All rights reserved.
+ * Copyright (c) 2023, 2025, Azul Systems, Inc. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -27,10 +27,13 @@ import com.sun.management.VMOption;
 import jdk.crac.*;
 import jdk.test.lib.Utils;
 import jdk.test.lib.crac.CracBuilder;
+import jdk.test.lib.crac.CracProcess;
 import jdk.test.lib.crac.CracTest;
 
 import java.lang.management.ManagementFactory;
+import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.*;
 
 import static jdk.test.lib.Asserts.*;
 
@@ -42,27 +45,51 @@ import static jdk.test.lib.Asserts.*;
  * @requires (os.family == "linux")
  */
 public class VMOptionsTest implements CracTest {
+    private static final String RESTORE_MSG = "RESTORED";
+
     @Override
     public void test() throws Exception {
-        final String enginePath = Path.of(Utils.TEST_JDK, "lib", "criuengine").toString();
+        final var enginePath = Path.of(Utils.TEST_JDK, "lib", "criuengine").toString();
 
-        CracBuilder builder = new CracBuilder();
-
+        CracBuilder builder = new CracBuilder().captureOutput(true);
         builder.vmOption("-XX:CRaCEngine=criuengine");
         builder.vmOption("-XX:CRaCEngineOptions=args=-v1");
         builder.vmOption("-XX:NativeMemoryTracking=off");
         builder.doCheckpoint();
 
+        // 1) Only restore-settable options => should succeed
         builder.clearVmOptions();
         builder.vmOption("-XX:CRaCEngine=" + enginePath);
         builder.vmOption("-XX:CRaCEngineOptions=args=-v2");
         builder.vmOption("-XX:CRaCCheckpointTo=another");
         builder.vmOption("-XX:CRaCIgnoredFileDescriptors=42,43");
-        builder.doRestore();
+        checkRestoreOutput(builder.doRestore());
 
-        // Setting non-manageable option
+        // 2) Adding a non-restore-settable option => should fail
         builder.vmOption("-XX:NativeMemoryTracking=summary");
         assertEquals(1, builder.startRestore().waitFor());
+
+        // 3) Non-restore-settable option from before + allowing restore to fail => should succeed
+        builder.vmOption("-XX:+CRaCIgnoreRestoreIfUnavailable");
+        checkRestoreOutput(builder.doRestore());
+
+        // 4) Only restore-settable options one of which is aliased => should succeed
+        builder.clearVmOptions();
+        builder.vmOption("-XX:CREngine=" + enginePath); // Deprecated alias
+        builder.vmOption("-XX:CRaCEngineOptions=args=-v2");
+        builder.vmOption("-XX:CRaCCheckpointTo=another");
+        builder.vmOption("-XX:CRaCIgnoredFileDescriptors=42,43");
+        checkRestoreOutput(builder.doRestore());
+
+        // 5) Same as (1) but options come from a settings file => should succeed
+        builder.clearVmOptions();
+        builder.vmOption("-XX:Flags=" + createSettingsFile(enginePath));
+        checkRestoreOutput(builder.doRestore());
+
+        // 6) Same as (1) but options come from a VM options file => should succeed
+        builder.clearVmOptions();
+        builder.vmOption("-XX:VMOptionsFile=" + createVMOptionsFile(enginePath));
+        checkRestoreOutput(builder.doRestore());
     }
 
     @Override
@@ -92,6 +119,7 @@ public class VMOptionsTest implements CracTest {
         }
 
         Core.checkpointRestore();
+        System.out.println(RESTORE_MSG);
 
         {
             HotSpotDiagnosticMXBean bean = ManagementFactory.getPlatformMXBean(HotSpotDiagnosticMXBean.class);
@@ -124,5 +152,34 @@ public class VMOptionsTest implements CracTest {
             assertEquals("off", nmt.getValue());
             assertEquals(VMOption.Origin.VM_CREATION, nmt.getOrigin());
         }
+    }
+
+    private static void checkRestoreOutput(CracProcess restored) throws Exception {
+        restored.outputAnalyzer()
+            .shouldNotContain("[warning]")
+            .shouldNotContain("[error]")
+            .stdoutShouldContain(RESTORE_MSG);
+    }
+
+    private static String createSettingsFile(String enginePath) throws Exception {
+        final var path = Utils.createTempFile("settings", ".txt");
+        Files.write(path, List.of(
+            "CRaCEngine=" + enginePath,
+            "CRaCEngineOptions=args=-v2",
+            "CRaCCheckpointTo=another",
+            "CRaCIgnoredFileDescriptors=42,43"
+        ));
+        return path.toString();
+    }
+
+    private static String createVMOptionsFile(String enginePath) throws Exception {
+        final var path = Utils.createTempFile("vmoptions", ".txt");
+        Files.write(path, List.of(
+            "-XX:CRaCEngine=" + enginePath,
+            "-XX:CRaCEngineOptions=args=-v2",
+            "-XX:CRaCCheckpointTo=another",
+            "-XX:CRaCIgnoredFileDescriptors=42,43"
+        ));
+        return path.toString();
     }
 }

@@ -80,20 +80,22 @@ public class ParsingTest {
     @Test
     public void test_options() throws Exception {
         test("simengine", "");
-        test("simengine", "image_location=cr", 0,
-                "VM-controlled CRaC engine option provided, skipping: image_location");
+        test("simengine", "args=simengine ignores this", 0,
+                "CRaC engine option: 'args' = 'simengine ignores this'");
+        test("simengine", Arrays.asList("image_location=cr"), 0,
+                Arrays.asList("VM-controlled CRaC engine option provided, skipping: image_location"),
+                Arrays.asList("[error]") /* warning are expected (VM-controlled option used), errors are not */);
         if (Platform.isLinux()) {
-            test("criuengine", Arrays.asList("keep_running=true,args=-v -v -v -v"), 0,
+            test("criuengine", "keep_running=true,args=-v -v -v -v", 0,
+                    "CRaC engine option: 'keep_running' = 'true'",
+                    "CRaC engine option: 'args' = '-v -v -v -v'");
+            test("criuengine", Arrays.asList("keep_running=true,args=-v -v -v -v,keep_running=false"), 0,
                     Arrays.asList(
                         "CRaC engine option: 'keep_running' = 'true'",
-                        "CRaC engine option: 'args' = '-v -v -v -v'"
-                    ),
-                    Arrays.asList("specified multiple times"));
-            test("criuengine", "keep_running=true,args=-v -v -v -v,keep_running=false", 0,
-                    "CRaC engine option: 'keep_running' = 'true'",
-                    "CRaC engine option: 'args' = '-v -v -v -v'",
-                    "CRaC engine option: 'keep_running' = 'false'",
-                    "CRaC engine option 'keep_running' specified multiple times");
+                        "CRaC engine option: 'args' = '-v -v -v -v'",
+                        "CRaC engine option: 'keep_running' = 'false'",
+                        "CRaC engine option 'keep_running' specified multiple times"),
+                    Arrays.asList("[error]") /* warning are expected (repeated 'keep_running'), errors are not */);
         }
 
         test("simengine", "help=true", 1,
@@ -144,7 +146,7 @@ public class ParsingTest {
                     "CRaC engine option: 'args' = 'this is also ignored'",
                     "CRaC engine option 'args' specified multiple times"
                 ),
-                Collections.emptyList());
+                Arrays.asList("[error]") /* warning are expected (repeated 'args'), errors are not */);
 
         test("simengine",
                 Arrays.asList("args=--arg1 --arg2", "--arg3"),
@@ -185,6 +187,10 @@ public class ParsingTest {
 
     private void test(String engine, List<String> opts, int expectedExitValue,
             List<String> expectedTexts, List<String> notExpectedTexts) throws Exception {
+        if (expectedExitValue == 0 && notExpectedTexts.isEmpty()) {
+            notExpectedTexts = Arrays.asList("[warning]", "[error]");
+        }
+
         ProcessBuilder pb = ProcessTools.createTestJavaProcessBuilder(
                 "-XX:CRaCCheckpointTo=cr",
                 "-XX:CRaCEngine=" + engine,
@@ -193,6 +199,7 @@ public class ParsingTest {
         for (String opt : opts) {
             pb.command().add(pb.command().size() - 2, "-XX:CRaCEngineOptions=" + opt);
         }
+
         OutputAnalyzer out = new OutputAnalyzer(pb.start());
         out.shouldHaveExitValue(expectedExitValue);
         for (String text : expectedTexts) {

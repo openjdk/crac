@@ -32,7 +32,7 @@ import jdk.test.lib.crac.CracBuilder;
  * @test
  * @summary If CRaCIgnoreRestoreIfUnavailable is specified and there are no CPU
  *          features recorded in the image VM should proceed without restoring.
- * @requires (os.arch == "amd64" | os.arch == "x86_64")
+ * @requires (os.family == "linux") & (os.arch == "amd64" | os.arch == "x86_64")
  * @library /test/lib
  */
 public class NoCPUFeaturesTest {

@@ -1959,11 +1959,13 @@ const int ObjectAlignmentInBytes = 8;
              "fence. Add cleanliness checks.")                              \
                                                                             \
   product(ccstr, CRaCCheckpointTo, nullptr, RESTORE_SETTABLE,               \
-          "Path to place the checkpoint image into")                        \
+          "Path where the checkpoint image should be placed. Currently an " \
+          "image is a directory, the directory will be created if it does " \
+          "not exist (parent directories are not created) or overwritten "  \
+          "otherwise.")                                                     \
                                                                             \
   product(ccstr, CRaCRestoreFrom, nullptr, RESTORE_SETTABLE,                \
-          "Path to the image to restore from. If restore succeeds, the "    \
-          "initializing VM is replaced with the restored one.")             \
+          "Path to the image to restore from.")                             \
                                                                             \
   product(uint, CRaCMinPid, 128,                                            \
           "Mininal PID value for checkpointed process (Unix only)")         \
@@ -2014,11 +2016,7 @@ const int ObjectAlignmentInBytes = 8;
           "Print low-level resources checked by VM before checkpoint")      \
                                                                             \
   product(bool, CRaCTraceStartupTime, false, DIAGNOSTIC,                    \
-          "Trace restore startup time")                                     \
-                                                                            \
-  product(bool, CRaCDoThrowCheckpointException, true, EXPERIMENTAL,         \
-          "Throw CheckpointException if non-checkpointable low-level "      \
-          "resources were found")                                           \
+          "Print the time at which the VM-level restore starts")            \
                                                                             \
   product(bool, CRaCPauseOnCheckpointError, false, DIAGNOSTIC,              \
           "Pauses the checkpoint when a problem is found on VM level.")     \

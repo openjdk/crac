@@ -252,9 +252,7 @@ void VM_Crac::doit() {
     os::message_box("Checkpoint failed", "Errors were found during checkpoint.");
   }
 
-  if (!ok && CRaCDoThrowCheckpointException) {
-    return;
-  } else if (_dry_run) {
+  if (!ok || _dry_run) {
     _ok = ok;
     return;
   }

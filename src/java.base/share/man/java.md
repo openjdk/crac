@@ -1083,7 +1083,7 @@ These `java` options control the runtime behavior of the Java HotSpot VM.
     created.
 
 `-XX:CRaCRestoreFrom=`*directory*
-:   Restores an image created by `-XX:CRaCCheckpointTo`.
+:   Restores from the specified checkpoint image.
 
 `-XX:CRaCMinPid=`*value*
 :   A desired minimal PID value for checkpointed process. Applied by the launcher,

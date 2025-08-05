@@ -577,6 +577,7 @@ static SpecialFlag const special_jvm_flags[] = {
   { "CRDoThrowCheckpointException", JDK_Version::jdk(24), JDK_Version::undefined(), JDK_Version::undefined() },
   { "CRPauseOnCheckpointError",     JDK_Version::jdk(24), JDK_Version::undefined(), JDK_Version::undefined() },
   { "CRTrace",                      JDK_Version::undefined(), JDK_Version::jdk(24), JDK_Version::undefined() },
+  { "CRaCAllowToSkipCheckpoint",    JDK_Version::jdk(25), JDK_Version::undefined(), JDK_Version::undefined() },
   { "CRaCDoThrowCheckpointException", JDK_Version::undefined(), JDK_Version::jdk(25), JDK_Version::undefined() },
 
   { nullptr, JDK_Version(0), JDK_Version(0) }
@@ -592,7 +593,7 @@ static AliasedFlag const aliased_jvm_flags[] = {
   { "CreateMinidumpOnCrash",    "CreateCoredumpOnCrash" },
   { "CREngine",                        "CRaCEngine" },
   { "CRAllowedOpenFilePrefixes",       "CRaCAllowedOpenFilePrefixes" },
-  { "CRAllowToSkipCheckpoint",         "CRaCSkipCheckpoint "},
+  { "CRAllowToSkipCheckpoint",         "CRaCSkipCheckpoint"},
   { "CRHeapDumpOnCheckpointException", "CRaCHeapDumpOnCheckpointException" },
   { "CRPrintResourcesOnCheckpoint",    "CRaCPrintResourcesOnCheckpoint" },
   { "CRTraceStartupTime",              "CRaCTraceStartupTime" },

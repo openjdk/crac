@@ -154,7 +154,7 @@ public class RecompilationFlagsTest implements CracTest {
             recompilerThreadField.setAccessible(true);
             recompilerThread = (Thread) recompilerThreadField.get(null);
         } catch (ReflectiveOperationException ex) {
-            throw new IllegalStateException("Cannot invoke Thread.getAllThreads()", ex);
+            throw new IllegalStateException("Cannot read jdk.internal.crac.mirror.Core.recompilerThread", ex);
         }
 
         if (recompilerThread != null) {

@@ -21,10 +21,13 @@
  * questions.
  */
 
+import java.lang.reflect.Method;
+
 import jdk.crac.Context;
 import jdk.crac.Core;
 import jdk.crac.Resource;
 import static jdk.test.lib.Asserts.*;
+import jdk.test.lib.Utils;
 import jdk.test.lib.crac.CracBuilder;
 import jdk.test.lib.crac.CracEngine;
 import jdk.test.lib.crac.CracTest;
@@ -34,6 +37,7 @@ import jdk.test.whitebox.WhiteBox;
 /*
  * @test
  * @summary Tests flags that control recompilation.
+ * @modules java.base/java.lang:open
  * @library /test/lib
  * @build jdk.test.whitebox.WhiteBox
  * @run driver jdk.test.lib.helpers.ClassFileInstaller -jar wb.jar jdk.test.whitebox.WhiteBox
@@ -66,8 +70,9 @@ public class RecompilationFlagsTest implements CracTest {
 
     @Override
     public void test() throws Exception {
-        final var builder = new CracBuilder().engine(CracEngine.SIMULATE)
+        new CracBuilder().engine(CracEngine.SIMULATE)
             .vmOption("-Xbootclasspath/a:wb.jar").vmOption("-XX:+UnlockDiagnosticVMOptions").vmOption("-XX:+WhiteBoxAPI")
+            .vmOption("--add-opens=java.base/jdk.internal.crac.mirror=ALL-UNNAMED")
             .javaOption("jdk.crac.enable-recompilation", Boolean.toString(enableRecompilation))
             .javaOption("jdk.crac.recompilation-delay-ms", Long.toString(delayMs))
             .startCheckpoint().waitForSuccess();
@@ -119,22 +124,68 @@ public class RecompilationFlagsTest implements CracTest {
                 1, whiteBox.deoptimizeMethod(testMethodRef),
                 "Unexpected number of deoptimizations"
             );
-
             // Ensure the delay has not expired before we triggered the decompilation
             final var timeSinceRestoreFinishMs = Math.ceilDiv(System.nanoTime(), 1_000_000) - resource.restoreFinishTimeMs;
             assertLessThan(timeSinceRestoreFinishMs, delayMs, "Specified delay is too low for this machine");
-
-            // Wait for the delay to expire and give the concurrent compilations some time to finish
-            Thread.sleep(delayMs + 500);
         }
 
         if (enableRecompilation) {
+            if (delayMs > 0) {
+                waitUntilRecompiledIfRecorded(whiteBox, testMethodRef);
+            }
             assertEquals(
                 TEST_METHOD_COMP_LEVEL, whiteBox.getMethodCompilationLevel(testMethodRef),
                 "Unexpected post-C/R compilation level"
             );
         } else {
+            if (delayMs > 0) {
+                waitUntilRecompiledAllRecorded(whiteBox);
+            }
             assertFalse(whiteBox.isMethodCompiled(testMethodRef), "Should not get recompiled");
         }
+    }
+
+    private static void waitForRecompilerThreadToFinish() throws InterruptedException  {
+        // Can be done without reflection via ThreadGroup.enumerate(...) but would require more code
+        final Thread recompilerThread;
+        try {
+            final var coreClass = Class.forName("jdk.internal.crac.mirror.Core");
+            final var recompilerThreadField = coreClass.getDeclaredField("recompilerThread");
+            recompilerThreadField.setAccessible(true);
+            recompilerThread = (Thread) recompilerThreadField.get(null);
+        } catch (ReflectiveOperationException ex) {
+            throw new IllegalStateException("Cannot invoke Thread.getAllThreads()", ex);
+        }
+
+        if (recompilerThread != null) {
+            System.out.println("Waiting for recompiler thread");
+            recompilerThread.join();
+        } else {
+            System.out.println("Recompiler thread not set");
+        }
+    }
+
+    /**
+     * Wait for the specified method to get recompiled if has been recorded.
+     */
+    private static void waitUntilRecompiledIfRecorded(WhiteBox whiteBox, Method m) throws InterruptedException {
+        // Wait until recorded methods are put into the compilation queue
+        waitForRecompilerThreadToFinish();
+        // Wait until the method is out of the queue (if it was added there at all)
+        System.out.println("Waiting for the method to get dequeued");
+        Utils.waitForCondition(() -> !whiteBox.isMethodQueuedForCompilation(m));
+    }
+
+    /**
+     * Wait for all recorded methods to get recompiled.
+     */
+    private static void waitUntilRecompiledAllRecorded(WhiteBox whiteBox) throws InterruptedException {
+        // Wait until recorded methods are put into the compilation queue
+        waitForRecompilerThreadToFinish();
+        // Wait until the compilation queue is empty. We may wait longer than
+        // necessary because new methods may get queued along the way, but
+        // eventually it should get empty.
+        System.out.println("Waiting for all methods to get dequeued");
+        Utils.waitForCondition(() -> whiteBox.getCompileQueuesSize() == 0);
     }
 }

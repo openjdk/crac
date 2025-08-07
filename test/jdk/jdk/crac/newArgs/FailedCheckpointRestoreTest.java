@@ -36,20 +36,22 @@ import jdk.test.lib.process.OutputAnalyzer;
 /**
  * @test
  * @summary New main should run only if C/R succeeds.
+ * @requires (os.family == "linux")
  * @library /test/lib
  * @build FailedCheckpointRestoreTest
- * @run driver jdk.test.lib.crac.CracTest SUCCESS
+ * @run driver jdk.test.lib.crac.CracTest SUCCESS_CONTINUE
+ * @run driver jdk.test.lib.crac.CracTest SUCCESS_EXIT
  * @run driver jdk.test.lib.crac.CracTest CHECKPOINT_EXCEPTION
  * @run driver jdk.test.lib.crac.CracTest RESTORE_EXCEPTION
- * @requires (os.family == "linux")
  */
 public class FailedCheckpointRestoreTest implements CracTest {
     private static final String NEW_MAIN_CLASS = "FailedCheckpointRestoreTest$InternalMain";
-    private static final String RESTORE_MSG = "RESTORED";
-    private static final String NEW_MAIN_MSG = "Hello from new main!";
+    private static final String RESTORE_OLD_MSG = "RESTORED IN OLD MAIN";
+    private static final String RESTORE_NEW_MSG = "RESTORED IN NEW MAIN";
 
     public enum Variant {
-        SUCCESS,
+        SUCCESS_CONTINUE,
+        SUCCESS_EXIT,
         CHECKPOINT_EXCEPTION,
         RESTORE_EXCEPTION,
     };
@@ -65,13 +67,16 @@ public class FailedCheckpointRestoreTest implements CracTest {
             out = builder.startCheckpoint().waitForSuccess().outputAnalyzer();
         } else {
             builder.doCheckpoint();
-            out = builder.startRestoreWithArgs(null, List.of(NEW_MAIN_CLASS))
+            out = builder.startRestoreWithArgs(null, List.of(NEW_MAIN_CLASS, variant.toString()))
                 .waitForSuccess().outputAnalyzer();
         }
-        if (variant == Variant.SUCCESS) {
-            out.stdoutShouldContain(RESTORE_MSG).stdoutShouldContain(NEW_MAIN_MSG);
-        } else {
-            out.stdoutShouldNotContain(RESTORE_MSG).stdoutShouldNotContain(NEW_MAIN_MSG);
+        switch (variant) {
+            case SUCCESS_CONTINUE ->
+                out.stdoutShouldContain(RESTORE_NEW_MSG).stdoutShouldContain(RESTORE_OLD_MSG);
+            case SUCCESS_EXIT ->
+                out.stdoutShouldContain(RESTORE_NEW_MSG).stdoutShouldNotContain(RESTORE_OLD_MSG);
+            case CHECKPOINT_EXCEPTION, RESTORE_EXCEPTION ->
+                out.stdoutShouldNotContain(RESTORE_NEW_MSG).stdoutShouldNotContain(RESTORE_OLD_MSG);
         }
     }
 
@@ -99,7 +104,7 @@ public class FailedCheckpointRestoreTest implements CracTest {
 
         try {
             Core.checkpointRestore();
-            System.out.println(RESTORE_MSG);
+            System.out.println(RESTORE_OLD_MSG);
         } catch (CheckpointException ex) {
             if (variant != Variant.CHECKPOINT_EXCEPTION) {
                 throw new IllegalStateException("Unexpected checkpoint failure", ex);
@@ -125,7 +130,10 @@ public class FailedCheckpointRestoreTest implements CracTest {
 
     public static class InternalMain {
         public static void main(String[] args) {
-            System.out.println(NEW_MAIN_MSG);
+            System.out.println(RESTORE_NEW_MSG);
+            if (Variant.valueOf(args[0]) == Variant.SUCCESS_EXIT) {
+                System.exit(0);
+            }
         }
     }
 }

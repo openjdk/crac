@@ -31,10 +31,10 @@ import jdk.test.lib.crac.CracTest;
 /**
  * @test
  * @summary It should be possible to C/R in a new main.
+ * @requires (os.family == "linux")
  * @library /test/lib
  * @build CheckpointInNewMainTest
  * @run driver jdk.test.lib.crac.CracTest
- * @requires (os.family == "linux")
  */
 public class CheckpointInNewMainTest implements CracTest {
     private static final String NEW_MAIN_CLASS = "CheckpointInNewMainTest$InternalMain";

@@ -375,6 +375,9 @@ class ClassLoader: AllStatic {
   // returns list of file descriptors used for both boot and app classpath entries
   static GrowableArray<int> get_classpath_entry_fds();
 
+  // returns list of file descriptors used for patch module entries
+  static GrowableArray<int> get_patch_module_entry_fds();
+
   // creates a class path zip entry (returns null if JAR file cannot be opened)
   static ClassPathZipEntry* create_class_path_zip_entry(const char *path);
 

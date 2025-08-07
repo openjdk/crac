@@ -2945,8 +2945,8 @@ bool Arguments::process_flag_for_restore(const char *arg) {
 
   const char* name;
   size_t name_len;
-  bool ignored_plus_minus;
-  parse_argname(arg, &name, &name_len, &ignored_plus_minus);
+  bool has_plus_minus;
+  parse_argname(arg, &name, &name_len, &has_plus_minus);
 
   const JVMFlag* flag;
   {
@@ -2963,6 +2963,7 @@ bool Arguments::process_flag_for_restore(const char *arg) {
     flag = JVMFlag::find_declared_flag(real_flag_name(stripped_name));
     guarantee(flag != nullptr, "unknown JVM flag name: %s", name); // Should've been detected earlier
   }
+  assert(has_plus_minus == flag->is_bool(), "sanity check");
 
   if (flag->is_restore_settable()) {
     // Restored JVM will search for the flag using the name we record here so we
@@ -2970,12 +2971,14 @@ bool Arguments::process_flag_for_restore(const char *arg) {
     if (strncmp(name, flag->name(), name_len) == 0) {
       build_jvm_restore_flags(arg);
     } else {
-      const size_t real_tail_len = strlen(arg) + (strlen(flag->name()) - name_len);
-      char* const real_tail = AllocateHeap(real_tail_len + 1, MemTag::mtArguments);
-      const int ret = jio_snprintf(real_tail, real_tail_len + 1, "%s%s", flag->name(), arg + name_len);
-      guarantee(ret >= 0 && checked_cast<size_t>(ret) == real_tail_len, "snprintf failed: %i", ret);
-      build_jvm_restore_flags(real_tail);
-      FreeHeap(real_tail);
+      const size_t real_arg_len = strlen(arg) + (strlen(flag->name()) - name_len);
+      char* const real_arg = AllocateHeap(real_arg_len + 1, MemTag::mtArguments);
+      const int ret = has_plus_minus ?
+        jio_snprintf(real_arg, real_arg_len + 1, "%c%s", arg[0], flag->name()) :
+        jio_snprintf(real_arg, real_arg_len + 1, "%s%s", flag->name(), arg + name_len);
+      guarantee(ret >= 0 && checked_cast<size_t>(ret) == real_arg_len, "snprintf failed: %i", ret);
+      build_jvm_restore_flags(real_arg);
+      FreeHeap(real_arg);
     }
   } else if (!CRaCIgnoreRestoreIfUnavailable) {
     // Same message format as used in JVMFlag::get_locked_message() for

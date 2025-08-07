@@ -63,6 +63,7 @@ public class VMOptionsTest implements CracTest {
         builder.vmOption("-XX:CRaCEngineOptions=args=-v2");
         builder.vmOption("-XX:CRaCCheckpointTo=another");
         builder.vmOption("-XX:CRaCIgnoredFileDescriptors=42,43");
+        builder.vmOption("-XX:+UnlockExperimentalVMOptions");
         checkRestoreOutput(builder.doRestore());
 
         // 2) Adding a non-restore-settable option => should fail
@@ -74,11 +75,13 @@ public class VMOptionsTest implements CracTest {
         checkRestoreOutput(builder.doRestore());
 
         // 4) Only restore-settable options one of which is aliased => should succeed
+        // TODO: once we have aliased restore-settable boolean options include them here
         builder.clearVmOptions();
         builder.vmOption("-XX:CREngine=" + enginePath); // Deprecated alias
         builder.vmOption("-XX:CRaCEngineOptions=args=-v2");
         builder.vmOption("-XX:CRaCCheckpointTo=another");
         builder.vmOption("-XX:CRaCIgnoredFileDescriptors=42,43");
+        builder.vmOption("-XX:+UnlockExperimentalVMOptions");
         checkRestoreOutput(builder.doRestore());
 
         // 5) Same as (1) but options come from a settings file => should succeed
@@ -97,25 +100,29 @@ public class VMOptionsTest implements CracTest {
         {
             HotSpotDiagnosticMXBean bean = ManagementFactory.getPlatformMXBean(HotSpotDiagnosticMXBean.class);
 
-            VMOption engine1 = bean.getVMOption("CRaCEngine");
-            assertEquals("criuengine", engine1.getValue());
-            assertEquals(VMOption.Origin.VM_CREATION, engine1.getOrigin());
+            VMOption engine = bean.getVMOption("CRaCEngine");
+            assertEquals("criuengine", engine.getValue());
+            assertEquals(VMOption.Origin.VM_CREATION, engine.getOrigin());
 
-            VMOption engineOptions1 = bean.getVMOption("CRaCEngineOptions");
-            assertEquals("args=-v1", engineOptions1.getValue());
-            assertEquals(VMOption.Origin.VM_CREATION, engineOptions1.getOrigin());
+            VMOption engineOptions = bean.getVMOption("CRaCEngineOptions");
+            assertEquals("args=-v1", engineOptions.getValue());
+            assertEquals(VMOption.Origin.VM_CREATION, engineOptions.getOrigin());
 
-            VMOption checkpointTo1 = bean.getVMOption("CRaCCheckpointTo");
-            assertEquals("cr", checkpointTo1.getValue());
-            assertEquals(VMOption.Origin.VM_CREATION, checkpointTo1.getOrigin());
+            VMOption checkpointTo = bean.getVMOption("CRaCCheckpointTo");
+            assertEquals("cr", checkpointTo.getValue());
+            assertEquals(VMOption.Origin.VM_CREATION, checkpointTo.getOrigin());
 
-            VMOption restoreFrom1 = bean.getVMOption("CRaCRestoreFrom");
-            assertEquals("", restoreFrom1.getValue());
-            assertEquals(VMOption.Origin.DEFAULT, restoreFrom1.getOrigin());
+            VMOption nmt = bean.getVMOption("NativeMemoryTracking");
+            assertEquals("off", nmt.getValue());
+            assertEquals(VMOption.Origin.VM_CREATION, nmt.getOrigin());
 
-            VMOption nmt1 = bean.getVMOption("NativeMemoryTracking");
-            assertEquals("off", nmt1.getValue());
-            assertEquals(VMOption.Origin.VM_CREATION, nmt1.getOrigin());
+            VMOption restoreFrom = bean.getVMOption("CRaCRestoreFrom");
+            assertEquals("", restoreFrom.getValue());
+            assertEquals(VMOption.Origin.DEFAULT, restoreFrom.getOrigin());
+
+            VMOption unlockExperimentalOpts = bean.getVMOption("UnlockExperimentalVMOptions");
+            assertEquals("false", unlockExperimentalOpts.getValue());
+            assertEquals(VMOption.Origin.DEFAULT, unlockExperimentalOpts.getOrigin());
         }
 
         Core.checkpointRestore();
@@ -126,31 +133,35 @@ public class VMOptionsTest implements CracTest {
 
             // Should not change
 
-            VMOption engine2 = bean.getVMOption("CRaCEngine");
-            assertEquals("criuengine", engine2.getValue());
-            assertEquals(VMOption.Origin.VM_CREATION, engine2.getOrigin());
+            VMOption engine = bean.getVMOption("CRaCEngine");
+            assertEquals("criuengine", engine.getValue());
+            assertEquals(VMOption.Origin.VM_CREATION, engine.getOrigin());
 
-            VMOption engineOptions2 = bean.getVMOption("CRaCEngineOptions");
-            assertEquals("args=-v1", engineOptions2.getValue());
-            assertEquals(VMOption.Origin.VM_CREATION, engineOptions2.getOrigin());
+            VMOption engineOptions = bean.getVMOption("CRaCEngineOptions");
+            assertEquals("args=-v1", engineOptions.getValue());
+            assertEquals(VMOption.Origin.VM_CREATION, engineOptions.getOrigin());
+
+            VMOption nmt = bean.getVMOption("NativeMemoryTracking");
+            assertEquals("off", nmt.getValue());
+            assertEquals(VMOption.Origin.VM_CREATION, nmt.getOrigin());
 
             // Should change
 
-            VMOption checkpointTo2 = bean.getVMOption("CRaCCheckpointTo");
-            assertEquals("another", checkpointTo2.getValue());
-            assertEquals(VMOption.Origin.OTHER, checkpointTo2.getOrigin());
+            VMOption checkpointTo = bean.getVMOption("CRaCCheckpointTo");
+            assertEquals("another", checkpointTo.getValue());
+            assertEquals(VMOption.Origin.OTHER, checkpointTo.getOrigin());
 
-            VMOption restoreFrom2 = bean.getVMOption("CRaCRestoreFrom");
-            assertEquals("cr", restoreFrom2.getValue());
-            assertEquals(VMOption.Origin.OTHER, restoreFrom2.getOrigin());
+            VMOption restoreFrom = bean.getVMOption("CRaCRestoreFrom");
+            assertEquals("cr", restoreFrom.getValue());
+            assertEquals(VMOption.Origin.OTHER, restoreFrom.getOrigin());
 
             VMOption ignoredFileDescriptors = bean.getVMOption("CRaCIgnoredFileDescriptors");
             assertEquals("42,43", ignoredFileDescriptors.getValue());
             assertEquals(VMOption.Origin.OTHER, ignoredFileDescriptors.getOrigin());
 
-            VMOption nmt = bean.getVMOption("NativeMemoryTracking");
-            assertEquals("off", nmt.getValue());
-            assertEquals(VMOption.Origin.VM_CREATION, nmt.getOrigin());
+            VMOption unlockExperimentalOpts = bean.getVMOption("UnlockExperimentalVMOptions");
+            assertEquals("true", unlockExperimentalOpts.getValue());
+            assertEquals(VMOption.Origin.OTHER, unlockExperimentalOpts.getOrigin());
         }
     }
 
@@ -167,7 +178,8 @@ public class VMOptionsTest implements CracTest {
             "CRaCEngine=" + enginePath,
             "CRaCEngineOptions=args=-v2",
             "CRaCCheckpointTo=another",
-            "CRaCIgnoredFileDescriptors=42,43"
+            "CRaCIgnoredFileDescriptors=42,43",
+            "+UnlockExperimentalVMOptions"
         ));
         return path.toString();
     }
@@ -178,7 +190,8 @@ public class VMOptionsTest implements CracTest {
             "-XX:CRaCEngine=" + enginePath,
             "-XX:CRaCEngineOptions=args=-v2",
             "-XX:CRaCCheckpointTo=another",
-            "-XX:CRaCIgnoredFileDescriptors=42,43"
+            "-XX:CRaCIgnoredFileDescriptors=42,43",
+            "-XX:+UnlockExperimentalVMOptions"
         ));
         return path.toString();
     }

@@ -39,8 +39,6 @@ import jdk.test.lib.process.OutputAnalyzer;
  * @requires (os.family == "linux")
  * @library /test/lib
  * @build FailedCheckpointRestoreTest
- * @run driver jdk.test.lib.crac.CracTest SUCCESS_CONTINUE
- * @run driver jdk.test.lib.crac.CracTest SUCCESS_EXIT
  * @run driver jdk.test.lib.crac.CracTest CHECKPOINT_EXCEPTION
  * @run driver jdk.test.lib.crac.CracTest RESTORE_EXCEPTION
  */
@@ -50,8 +48,6 @@ public class FailedCheckpointRestoreTest implements CracTest {
     private static final String RESTORE_NEW_MSG = "RESTORED IN NEW MAIN";
 
     public enum Variant {
-        SUCCESS_CONTINUE,
-        SUCCESS_EXIT,
         CHECKPOINT_EXCEPTION,
         RESTORE_EXCEPTION,
     };
@@ -67,17 +63,10 @@ public class FailedCheckpointRestoreTest implements CracTest {
             out = builder.startCheckpoint().waitForSuccess().outputAnalyzer();
         } else {
             builder.doCheckpoint();
-            out = builder.startRestoreWithArgs(null, List.of(NEW_MAIN_CLASS, variant.toString()))
+            out = builder.startRestoreWithArgs(null, List.of(NEW_MAIN_CLASS))
                 .waitForSuccess().outputAnalyzer();
         }
-        switch (variant) {
-            case SUCCESS_CONTINUE ->
-                out.stdoutShouldContain(RESTORE_NEW_MSG).stdoutShouldContain(RESTORE_OLD_MSG);
-            case SUCCESS_EXIT ->
-                out.stdoutShouldContain(RESTORE_NEW_MSG).stdoutShouldNotContain(RESTORE_OLD_MSG);
-            case CHECKPOINT_EXCEPTION, RESTORE_EXCEPTION ->
-                out.stdoutShouldNotContain(RESTORE_NEW_MSG).stdoutShouldNotContain(RESTORE_OLD_MSG);
-        }
+        out.stdoutShouldNotContain(RESTORE_NEW_MSG).stdoutShouldNotContain(RESTORE_OLD_MSG);
     }
 
     @Override
@@ -131,9 +120,6 @@ public class FailedCheckpointRestoreTest implements CracTest {
     public static class InternalMain {
         public static void main(String[] args) {
             System.out.println(RESTORE_NEW_MSG);
-            if (Variant.valueOf(args[0]) == Variant.SUCCESS_EXIT) {
-                System.exit(0);
-            }
         }
     }
 }

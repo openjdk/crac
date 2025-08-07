@@ -132,10 +132,34 @@ public class Core {
         return globalContext;
     }
 
-    @SuppressWarnings("removal")
-    private static List<String> checkpointRestore1(long jcmdStream) throws
-            CheckpointException,
-            RestoreException {
+    private static List<String> parseNewArguments(String newArguments) {
+        if (newArguments == null || newArguments.length() == 0) {
+            return List.of();
+        }
+
+        final var parsedNewArguments = new ArrayList<String>();
+
+        // Spaces " " separate arguments, escaped scapes "\ " do not
+        final char escChar = '\\';
+        final char sepChar = ' ';
+        final var curArgBuilder = new StringBuilder();
+        for (int i = 0; i < newArguments.length(); ++i) {
+            final char curChar = newArguments.charAt(i);
+            switch (curChar) {
+                case sepChar -> {
+                    parsedNewArguments.add(curArgBuilder.toString());
+                    curArgBuilder.setLength(0);
+                }
+                case escChar -> curArgBuilder.append(newArguments.charAt(++i));
+                default -> curArgBuilder.append(curChar);
+            }
+        }
+        parsedNewArguments.add(curArgBuilder.toString());
+
+        return parsedNewArguments;
+    }
+
+    private static List<String> checkpointRestore1(long jcmdStream) throws CheckpointException, RestoreException {
         final ExceptionHolder<CheckpointException> checkpointException = new ExceptionHolder<>(CheckpointException::new);
 
         // Register the resource here late, to avoid early registration
@@ -223,26 +247,7 @@ public class Core {
         checkpointException.throwIfAny();
         restoreException.throwIfAny();
 
-        final var parsedNewArguments = new ArrayList<String>();
-        if (newArguments != null && newArguments.length() > 0) {
-            // Parse arguments, unescape spaces
-            final char escChar = '\\';
-            final char sepChar = ' ';
-            final var curArgBuilder = new StringBuilder();
-            for (int i = 0; i < newArguments.length(); ++i) {
-                final char curChar = newArguments.charAt(i);
-                switch (curChar) {
-                    case sepChar -> {
-                        parsedNewArguments.add(curArgBuilder.toString());
-                        curArgBuilder.setLength(0);
-                    }
-                    case escChar -> curArgBuilder.append(newArguments.charAt(++i));
-                    default -> curArgBuilder.append(curChar);
-                }
-            }
-            parsedNewArguments.add(curArgBuilder.toString());
-        }
-        return parsedNewArguments;
+        return parseNewArguments(newArguments);
     }
 
     /**
@@ -307,7 +312,7 @@ public class Core {
                 // It is not uncommon for users to use this feature by accident
                 // so the message should have a good explanation
                 final var msg = "Failed to execute the new main entry: " +
-                        "new initial class = '" + newMainClassName + "', " +
+                        "new main class = '" + newMainClassName + "', " +
                         "new main arguments = " + Arrays.toString(newMainArgs) + ". " +
                         "Do not specify these if you just wish to continue the checkpointed execution.";
                 RestoreException ex = new RestoreException();

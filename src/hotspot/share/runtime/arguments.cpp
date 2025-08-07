@@ -2968,7 +2968,7 @@ bool Arguments::process_flag_for_restore(const char *arg) {
   if (flag->is_restore_settable()) {
     // Restored JVM will search for the flag using the name we record here so we
     // must ensure the real one is recorded
-    if (strncmp(name, flag->name(), name_len) == 0) {
+    if (strcmp(flag->name(), name) == 0) {
       build_jvm_restore_flags(arg);
     } else {
       const size_t real_arg_len = strlen(arg) + (strlen(flag->name()) - name_len);

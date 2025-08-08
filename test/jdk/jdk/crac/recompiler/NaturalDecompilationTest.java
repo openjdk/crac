@@ -28,6 +28,7 @@ import jdk.crac.Context;
 import jdk.crac.Core;
 import jdk.crac.Resource;
 import static jdk.test.lib.Asserts.*;
+import jdk.test.lib.Utils;
 import jdk.test.lib.crac.CracBuilder;
 import jdk.test.lib.crac.CracEngine;
 import jdk.test.lib.crac.CracTest;
@@ -103,7 +104,12 @@ public class NaturalDecompilationTest implements CracTest {
         // waiting never completes
         final var proc = builder.startCheckpoint();
         final var out = proc.outputAnalyzer();
-        proc.waitForSuccess();
+        try {
+            proc.waitForSuccess();
+        } catch (InterruptedException ex) {
+            out.reportDiagnosticSummary();
+            throw ex;
+        }
         out.shouldContain("Requesting recompilation: int " + NaturalDecompilationTest.class.getName() + "." + TEST_METHOD_NAME + "(int)");
     }
 
@@ -112,24 +118,21 @@ public class NaturalDecompilationTest implements CracTest {
         final var whiteBox = WhiteBox.getWhiteBox();
         final var testMethodRef = NaturalDecompilationTest.class.getDeclaredMethod(TEST_METHOD_NAME, int.class);
 
-        timedDoWhile("compilation", () -> {
+        waitForCondition("compilation (enqueue)", () -> {
             for (int i = 0; i < 2000; i++) {
                 final var res = testMethod(TEST_ARG_EXPECTED);
                 blackhole(res);
             }
-            try {
-                Thread.sleep(500); // Time to compile
-            } catch (InterruptedException ex) {
-                throw new RuntimeException(ex);
-            }
-            return whiteBox.isMethodCompiled(testMethodRef);
+            return whiteBox.isMethodCompiled(testMethodRef) || whiteBox.isMethodQueuedForCompilation(testMethodRef);
         });
+        waitForCondition("compilation (dequeue)", () -> !whiteBox.isMethodQueuedForCompilation(testMethodRef));
+        assertTrue(whiteBox.isMethodCompiled(testMethodRef), "Should be compiled");
 
         final var resource = new Resource() {
             @Override
             public void beforeCheckpoint(Context<? extends Resource> context) {
-                assertTrue(whiteBox.isMethodCompiled(testMethodRef), "Should still be compiled");
-                timedDoWhile("deoptimization", () -> {
+                assertTrue(whiteBox.isMethodCompiled(testMethodRef), "Should remain compiled");
+                waitForCondition("deoptimization", () -> {
                     // We don't want to call to many times or the method may
                     // get compiled again. Normally just one call is enough
                     // to make it decompile,
@@ -140,36 +143,30 @@ public class NaturalDecompilationTest implements CracTest {
 
             @Override
             public void afterRestore(Context<? extends Resource> context) {
-                assertFalse(whiteBox.isMethodCompiled(testMethodRef), "Should still be deoptimized");
+                assertFalse(whiteBox.isMethodQueuedForCompilation(testMethodRef), "Should remain deoptimized");
+                assertFalse(whiteBox.isMethodCompiled(testMethodRef), "Should remain deoptimized");
             }
         };
         Core.getGlobalContext().register(resource);
 
         Core.checkpointRestore();
 
-        timedDoWhile("recompilation", () -> {
-            try {
-                Thread.sleep(1000); // Time to recompile
-            } catch (InterruptedException ex) {
-                throw new RuntimeException(ex);
-            }
-            return whiteBox.isMethodCompiled(testMethodRef);
-        });
+        waitForCondition("recompilation", () -> whiteBox.isMethodCompiled(testMethodRef));
     }
 
-    private static void timedDoWhile(String name, BooleanSupplier action) {
-        final var startTime = System.nanoTime();
-        boolean completed;
-        do {
-            if (STAGE_TIME_LIMIT_SEC > 0) {
-                assertLessThan(
-                    (System.nanoTime() - startTime) / 1_000_000_000, STAGE_TIME_LIMIT_SEC,
-                    "Task takes too long: " + name
-                );
-            }
-            System.out.println("Running: " + name);
-            completed = action.getAsBoolean();
-        } while (!completed);
-        System.out.println("Completed: " + name);
+    private static void waitForCondition(String name, BooleanSupplier condition) {
+        // Utils.waitForCondition() invokes its supplier argument one more time
+        // after it returns true. For our conditions that is unacceptable.
+        final var result = new Object() { boolean value = false; };
+        Utils.waitForCondition(() -> {
+                if (!result.value) {
+                    System.out.println("Running: " + name);
+                    result.value = condition.getAsBoolean();
+                }
+                return result.value;
+            },
+            STAGE_TIME_LIMIT_SEC > 0 ? STAGE_TIME_LIMIT_SEC * 1000 : -1
+        );
+        assertTrue(result.value, "Task takes too long: " + name);
     }
 }

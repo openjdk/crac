@@ -196,8 +196,12 @@ class Arguments : AllStatic {
   // an array containing all jvm arguments specified in the command line
   static char** _jvm_args_array;
   static int    _num_jvm_args;
+  // an array containing all restore-settable jvm flags specified in any way on restore
+  static char** _jvm_restore_flags_array;
+  static int    _num_jvm_restore_flags;
   // string containing all java command (class/jarfile name and app args)
   static char* _java_command;
+  // same as _java_command but with spaces inside args escaped
   static char* _java_command_crac;
   // number of unique modules specified in the --add-modules option
   static unsigned int _addmods_count;
@@ -354,6 +358,7 @@ class Arguments : AllStatic {
   // methods to build strings from individual args
   static void build_jvm_args(const char* arg);
   static void build_jvm_flags(const char* arg);
+  static void build_jvm_restore_flags(const char* arg);
   static void add_string(char*** bldarray, int* count, const char* arg);
   static const char* build_resource_string(char** args, int count);
 
@@ -406,11 +411,13 @@ class Arguments : AllStatic {
   // return a char* array containing all options
   static char** jvm_flags_array()          { return _jvm_flags_array; }
   static char** jvm_args_array()           { return _jvm_args_array; }
+  static char** jvm_restore_flags_array()  { return _jvm_restore_flags_array; }
   static int num_jvm_flags()               { return _num_jvm_flags; }
   static int num_jvm_args()                { return _num_jvm_args; }
+  static int num_jvm_restore_flags()       { return _num_jvm_restore_flags; }
   // return the arguments passed to the Java application
   static const char* java_command()        { return _java_command; }
-  static const char* java_command_crac()        { return _java_command_crac; }
+  static const char* java_command_crac()   { return _java_command_crac; }
 
   // print jvm_flags, jvm_args and java_command
   static void print_on(outputStream* st);
@@ -532,9 +539,10 @@ class Arguments : AllStatic {
 
   static bool has_jfr_option() NOT_JFR_RETURN_(false);
 
-  static bool is_restore_option_set(const JavaVMInitArgs* args);
+  static bool process_flag_for_restore(const char *arg);
+  static bool process_flags_for_restore();
 
-  static bool parse_options_for_restore(const JavaVMInitArgs* args);
+  static void free_restore_only_data();
 
   DEBUG_ONLY(static bool verify_special_jvm_flags(bool check_globals);)
 };

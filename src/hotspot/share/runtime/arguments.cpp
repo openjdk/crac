@@ -88,6 +88,8 @@ char** Arguments::_jvm_flags_array              = nullptr;
 int    Arguments::_num_jvm_flags                = 0;
 char** Arguments::_jvm_args_array               = nullptr;
 int    Arguments::_num_jvm_args                 = 0;
+char** Arguments::_jvm_restore_flags_array      = nullptr;
+int    Arguments::_num_jvm_restore_flags        = 0;
 unsigned int Arguments::_addmods_count          = 0;
 #if INCLUDE_JVMCI
 bool   Arguments::_jvmci_module_added           = false;
@@ -1041,6 +1043,10 @@ void Arguments::build_jvm_flags(const char* arg) {
   add_string(&_jvm_flags_array, &_num_jvm_flags, arg);
 }
 
+void Arguments::build_jvm_restore_flags(const char* arg) {
+  add_string(&_jvm_restore_flags_array, &_num_jvm_restore_flags, arg);
+}
+
 // utility function to return a string that concatenates all
 // strings in a given char** array
 const char* Arguments::build_resource_string(char** args, int count) {
@@ -1331,6 +1337,12 @@ bool Arguments::add_property(const char* prop, PropertyWriteable writeable, Prop
       _java_command = os::strdup_check_oom(value, mtArguments);
       if (old_java_command != nullptr) {
         os::free(old_java_command);
+      }
+    } else if (strcmp(key, "sun.java.crac_command") == 0) {
+      char *old_java_command_crac = _java_command_crac;
+      _java_command_crac = os::strdup_check_oom(value, mtArguments);
+      if (old_java_command_crac != nullptr) {
+        os::free(old_java_command_crac);
       }
     } else if (strcmp(key, "java.vendor.url.bug") == 0) {
       // If this property is set on the command line then its value will be
@@ -2168,89 +2180,6 @@ jint Arguments::parse_xss(const JavaVMOption* option, const char* tail, intx* ou
   return JNI_OK;
 }
 
-bool Arguments::is_restore_option_set(const JavaVMInitArgs* args) {
-  const char* tail;
-  // iterate over arguments
-  for (int index = 0; index < args->nOptions; index++) {
-    const JavaVMOption* option = args->options + index;
-    if (!match_option(option, "-XX:CRaCRestoreFrom", &tail)) {
-      continue;
-    }
-    // ccstr is never set to an empty string by the parser so we should not
-    // treat an empty string value as the option being set. If it ever becomes
-    // ccstrlist or the parser changes, the value check will need to be removed.
-    static_assert(std::is_same<ccstr, decltype(CRaCRestoreFrom)>(), "expected ccstr");
-    const char* eq = strchr(tail, '=');
-    if (eq != nullptr && eq[1] != '\0') {
-      return true; // the value is not an empty string
-    }
-  }
-  return false;
-}
-
-bool Arguments::parse_options_for_restore(const JavaVMInitArgs* args) {
-  const char *tail = nullptr;
-
-  // iterate over arguments
-  for (int index = 0; index < args->nOptions; index++) {
-    bool is_absolute_path = false;  // for -agentpath vs -agentlib
-
-    const JavaVMOption* option = args->options + index;
-
-    if (match_option(option, "-Djava.class.path", &tail) ||
-        match_option(option, "-Dsun.java.launcher", &tail)) {
-      // These options are already set based on -cp (and aliases), -jar
-      // or even inheriting the CLASSPATH env var; therefore it's too
-      // late to prohibit explicitly setting them at this point.
-    } else if (match_option(option, "-D", &tail)) {
-      const char* key = nullptr;
-      const char* value = nullptr;
-
-      get_key_value(tail, &key, &value);
-
-      if (strcmp(key, "sun.java.crac_command") == 0) {
-        char *old_java_command = _java_command_crac;
-        _java_command_crac = os::strdup_check_oom(value, mtArguments);
-        if (old_java_command != nullptr) {
-          os::free(old_java_command);
-        }
-      } else {
-        add_property(tail);
-      }
-
-      if (key != tail) { // key was copied
-        FreeHeap(const_cast<char *>(key));
-      }
-    } else if (match_option(option, "-XX:", &tail)) { // -XX:xxxx
-      if (!process_argument(tail, args->ignoreUnrecognized, JVMFlagOrigin::COMMAND_LINE)) {
-        return false;
-      }
-      const char *argname;
-      size_t arg_len;
-      bool ignored_plus_minus;
-      parse_argname(tail, &argname, &arg_len, &ignored_plus_minus);
-      const JVMFlag* flag = JVMFlag::find_declared_flag((const char*)argname, arg_len);
-      if (flag != nullptr) {
-        if (!flag->is_restore_settable()) {
-          jio_fprintf(defaultStream::error_stream(),
-            "Flag %.*s cannot be set during restore: %s\n", arg_len, argname, option->optionString);
-          return false;
-        }
-        build_jvm_flags(tail);
-      }
-    }
-  }
-
-  postcond(CRaCRestoreFrom != nullptr);
-
-  if (CRaCEngineOptions && strcmp(CRaCEngineOptions, "help") == 0) {
-    crac::print_engine_info_and_exit(); // Does not return on success
-    return false;
-  }
-
-  return true;
-}
-
 jint Arguments::parse_each_vm_init_arg(const JavaVMInitArgs* args, JVMFlagOrigin origin) {
   // For match_option to return remaining or value part of option string
   const char* tail;
@@ -3006,6 +2935,96 @@ void Arguments::fix_appclasspath() {
   }
 }
 
+// arg is a JVM argument without the leading "-XX:", e.g. "+BoolOpt" or "StrOpt=str"
+bool Arguments::process_flag_for_restore(const char *arg) {
+  // -XX:Flags and -XX:VMOptionsFile do not have corresponding JVMFlags
+  if ((strncmp(arg, "Flags=", ARRAY_SIZE("Flags=") - 1) == 0) ||
+      (strncmp(arg, "VMOptionsFile=", ARRAY_SIZE("VMOptionsFile=") - 1) == 0)) {
+    return true;
+  }
+
+  const char* name;
+  size_t name_len;
+  bool has_plus_minus;
+  parse_argname(arg, &name, &name_len, &has_plus_minus);
+
+  const JVMFlag* flag;
+  bool is_name_real; // false if the given name is an alias for a real flag name
+  {
+    char buf[BUFLEN + 1];
+    const char* stripped_name;
+    if (name[name_len] == '\0') {
+      stripped_name = name;
+    } else {
+      guarantee(name_len <= BUFLEN, "argument name too long: %s", name); // Should've been detected earlier
+      strncpy(buf, name, name_len);
+      buf[name_len] = '\0';
+      stripped_name = buf;
+    }
+
+    const char* real_name = real_flag_name(stripped_name);
+    is_name_real = stripped_name == real_name;
+    assert(is_name_real == (strcmp(stripped_name, real_name) == 0), "real_flag_name(s) == s if s is real");
+
+    flag = JVMFlag::find_declared_flag(real_name);
+    guarantee(flag != nullptr, "unknown JVM flag name: %s", name); // Should've been detected earlier
+  }
+  assert(has_plus_minus == flag->is_bool(), "sanity check");
+
+  if (flag->is_restore_settable()) {
+    // Restored JVM will search for the flag using the name we record here so we
+    // must ensure the real one is recorded
+    if (is_name_real) {
+      build_jvm_restore_flags(arg);
+    } else {
+      const size_t real_arg_len = strlen(arg) + (strlen(flag->name()) - name_len);
+      char* const real_arg = AllocateHeap(real_arg_len + 1, MemTag::mtArguments);
+      const int ret = has_plus_minus ?
+        jio_snprintf(real_arg, real_arg_len + 1, "%c%s", arg[0], flag->name()) :
+        jio_snprintf(real_arg, real_arg_len + 1, "%s%s", flag->name(), arg + name_len);
+      guarantee(ret >= 0 && checked_cast<size_t>(ret) == real_arg_len, "snprintf failed: %i", ret);
+      build_jvm_restore_flags(real_arg);
+      FreeHeap(real_arg);
+    }
+  } else if (!CRaCIgnoreRestoreIfUnavailable) {
+    // Same message format as used in JVMFlag::get_locked_message() for
+    // diagnostic/experimental/develop options
+    jio_fprintf(defaultStream::error_stream(),
+                "Error: VM option '%*.s' is not restore-settable and is not available on restore.\n",
+                name_len, name);
+    return false;
+  }
+
+  return true;
+}
+
+bool Arguments::process_flags_for_restore() {
+  precond(CRaCRestoreFrom != nullptr);
+
+  char** const vm_flags = Arguments::jvm_flags_array();
+  for (int i = 0; i < Arguments::num_jvm_flags(); i++) {
+    if (!process_flag_for_restore(vm_flags[i])) {
+      return false;
+    }
+  }
+
+  char** const vm_args = Arguments::jvm_args_array();
+  for (int i = 0; i < Arguments::num_jvm_args(); i++) {
+    const JavaVMOption opt{vm_args[i]};
+    const char *tail;
+    // FIXME: other kinds of arguments can also lead to VM flags being set so
+    //  ideally we would want to process those too. But there seems to be no way
+    //  to do this except highly intrusive (add processing into each special
+    //  branch of arguments parsing) or performance-costly (iterate through all
+    //  JVMFlags) ones.
+    if (match_option(&opt, "-XX:", &tail) && !process_flag_for_restore(tail)) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
 jint Arguments::finalize_vm_init_args() {
   // check if the default lib/endorsed directory exists; if so, error
   char path[JVM_MAXPATHLEN];
@@ -3088,6 +3107,9 @@ jint Arguments::finalize_vm_init_args() {
   if (CRaCEngineOptions && strcmp(CRaCEngineOptions, "help") == 0) {
     crac::print_engine_info_and_exit(); // Does not return on success
     return JNI_ERR;
+  }
+  if (CRaCRestoreFrom && !process_flags_for_restore()) {
+    return JNI_EINVAL;
   }
   if (CRaCCheckpointTo && !crac::prepare_checkpoint()) {
     return JNI_ERR;
@@ -4200,4 +4222,16 @@ void Arguments::reset_for_crac_restore() {
     FLAG_SET_DEFAULT(LogVMOutput, false);
     FLAG_SET_DEFAULT(LogFile, nullptr);
   }
+}
+
+void Arguments::free_restore_only_data() {
+  os::free(_java_command_crac);
+  _java_command_crac = nullptr;
+
+  for (int i = 0; i < _num_jvm_restore_flags; i++) {
+    os::free(_jvm_restore_flags_array[i]);
+  }
+  FREE_C_HEAP_ARRAY(char*, _jvm_restore_flags_array);
+  _num_jvm_restore_flags = 0;
+  _jvm_restore_flags_array = nullptr;
 }

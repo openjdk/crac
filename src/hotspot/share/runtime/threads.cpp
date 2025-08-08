@@ -426,15 +426,6 @@ void Threads::initialize_jsr292_core_classes(TRAPS) {
   }
 }
 
-static jint check_for_restore(JavaVMInitArgs* args) {
-  if (Arguments::is_restore_option_set(args)) {
-    if (!Arguments::parse_options_for_restore(args)) {
-      return JNI_ERR;
-    }
-  }
-  return JNI_OK;
-}
-
 // One-shot PeriodicTask subclass for reading the release file
 class ReadReleaseFileTask : public PeriodicTask {
  public:
@@ -491,8 +482,6 @@ jint Threads::create_vm(JavaVMInitArgs* args, bool* canTryAgain) {
 
   // So that JDK version can be used as a discriminator when parsing arguments
   JDK_Version_init();
-
-  if (check_for_restore(args) != JNI_OK) return JNI_ERR;
 
   // Update/Initialize System properties after JDK version number is known
   Arguments::init_version_specific_system_properties();
@@ -628,6 +617,7 @@ jint Threads::create_vm(JavaVMInitArgs* args, bool* canTryAgain) {
       return JNI_ERR;
     }
   }
+  Arguments::free_restore_only_data(); // Not needed anymore
 
   // Have the WatcherThread read the release file in the background.
   ReadReleaseFileTask* read_task = new ReadReleaseFileTask();

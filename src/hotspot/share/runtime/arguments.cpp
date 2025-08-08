@@ -568,17 +568,17 @@ static SpecialFlag const special_jvm_flags[] = {
   { "dup option",                   JDK_Version::jdk(9), JDK_Version::undefined(), JDK_Version::undefined() },
 #endif
 
-  { "CREngine",                     JDK_Version::jdk(24), JDK_Version::undefined(), JDK_Version::undefined() },
-  { "CRAllowedOpenFilePrefixes",    JDK_Version::jdk(24), JDK_Version::undefined(), JDK_Version::undefined() },
-  { "CRAllowToSkipCheckpoint",      JDK_Version::jdk(24), JDK_Version::undefined(), JDK_Version::undefined() },
-  { "CRHeapDumpOnCheckpointException", JDK_Version::jdk(24), JDK_Version::undefined(), JDK_Version::undefined() },
-  { "CRPrintResourcesOnCheckpoint", JDK_Version::jdk(24), JDK_Version::undefined(), JDK_Version::undefined() },
-  { "CRTraceStartupTime",           JDK_Version::jdk(24), JDK_Version::undefined(), JDK_Version::undefined() },
-  { "CRDoThrowCheckpointException", JDK_Version::jdk(24), JDK_Version::undefined(), JDK_Version::undefined() },
-  { "CRPauseOnCheckpointError",     JDK_Version::jdk(24), JDK_Version::undefined(), JDK_Version::undefined() },
-  { "CRTrace",                      JDK_Version::undefined(), JDK_Version::jdk(24), JDK_Version::undefined() },
-  { "CRaCAllowToSkipCheckpoint",    JDK_Version::jdk(25), JDK_Version::undefined(), JDK_Version::undefined() },
-  { "CRaCDoThrowCheckpointException", JDK_Version::undefined(), JDK_Version::jdk(25), JDK_Version::undefined() },
+  { "CREngine",                     JDK_Version::undefined(), JDK_Version::jdk(24), JDK_Version::jdk(26) },
+  { "CRAllowedOpenFilePrefixes",    JDK_Version::undefined(), JDK_Version::jdk(24), JDK_Version::jdk(26) },
+  { "CRAllowToSkipCheckpoint",      JDK_Version::undefined(), JDK_Version::jdk(24), JDK_Version::jdk(26) },
+  { "CRHeapDumpOnCheckpointException", JDK_Version::undefined(), JDK_Version::jdk(24), JDK_Version::jdk(26) },
+  { "CRPrintResourcesOnCheckpoint", JDK_Version::undefined(), JDK_Version::jdk(24), JDK_Version::jdk(26) },
+  { "CRTraceStartupTime",           JDK_Version::undefined(), JDK_Version::jdk(24), JDK_Version::jdk(26) },
+  { "CRDoThrowCheckpointException", JDK_Version::undefined(), JDK_Version::jdk(24), JDK_Version::jdk(26) },
+  { "CRPauseOnCheckpointError",     JDK_Version::undefined(), JDK_Version::jdk(24), JDK_Version::jdk(26) },
+  { "CRTrace",                      JDK_Version::undefined(), JDK_Version::jdk(24), JDK_Version::jdk(26) },
+  { "CRaCAllowToSkipCheckpoint",    JDK_Version::undefined(), JDK_Version::jdk(25), JDK_Version::jdk(26) },
+  { "CRaCDoThrowCheckpointException", JDK_Version::undefined(), JDK_Version::jdk(25), JDK_Version::jdk(26) },
 
   { nullptr, JDK_Version(0), JDK_Version(0) }
 };

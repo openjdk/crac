@@ -2949,6 +2949,7 @@ bool Arguments::process_flag_for_restore(const char *arg) {
   parse_argname(arg, &name, &name_len, &has_plus_minus);
 
   const JVMFlag* flag;
+  bool is_name_real; // false if the given name is an alias for a real flag name
   {
     char buf[BUFLEN + 1];
     const char* stripped_name;
@@ -2960,7 +2961,12 @@ bool Arguments::process_flag_for_restore(const char *arg) {
       buf[name_len] = '\0';
       stripped_name = buf;
     }
-    flag = JVMFlag::find_declared_flag(real_flag_name(stripped_name));
+
+    const char* real_name = real_flag_name(stripped_name);
+    is_name_real = stripped_name == real_name;
+    assert(is_name_real == (strcmp(stripped_name, real_name) == 0), "real_flag_name(s) == s if s is real");
+
+    flag = JVMFlag::find_declared_flag(real_name);
     guarantee(flag != nullptr, "unknown JVM flag name: %s", name); // Should've been detected earlier
   }
   assert(has_plus_minus == flag->is_bool(), "sanity check");
@@ -2968,7 +2974,7 @@ bool Arguments::process_flag_for_restore(const char *arg) {
   if (flag->is_restore_settable()) {
     // Restored JVM will search for the flag using the name we record here so we
     // must ensure the real one is recorded
-    if (strcmp(flag->name(), name) == 0) {
+    if (is_name_real) {
       build_jvm_restore_flags(arg);
     } else {
       const size_t real_arg_len = strlen(arg) + (strlen(flag->name()) - name_len);

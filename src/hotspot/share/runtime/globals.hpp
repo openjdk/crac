@@ -1968,7 +1968,7 @@ const int ObjectAlignmentInBytes = 8;
           "Path to the image to restore from.")                             \
                                                                             \
   product(uint, CRaCMinPid, 128,                                            \
-          "Mininal PID value for checkpointed process (Unix only)")         \
+          "Mininal PID value for checkpointed process (POSIX only)")        \
           range(1, UINT_MAX)                                                \
                                                                             \
   product(bool, CRaCResetStartTime, true, DIAGNOSTIC | RESTORE_SETTABLE,    \

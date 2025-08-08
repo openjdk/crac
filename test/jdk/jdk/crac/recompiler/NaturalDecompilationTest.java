@@ -106,7 +106,7 @@ public class NaturalDecompilationTest implements CracTest {
         final var out = proc.outputAnalyzer();
         try {
             proc.waitForSuccess();
-        } catch (Exception ex) {
+        } catch (InterruptedException ex) {
             out.reportDiagnosticSummary();
             throw ex;
         }
@@ -125,14 +125,13 @@ public class NaturalDecompilationTest implements CracTest {
             }
             return whiteBox.isMethodCompiled(testMethodRef) || whiteBox.isMethodQueuedForCompilation(testMethodRef);
         });
-        waitForCondition("compilation (dequeue)",
-            () -> !whiteBox.isMethodQueuedForCompilation(testMethodRef));
+        waitForCondition("compilation (dequeue)", () -> !whiteBox.isMethodQueuedForCompilation(testMethodRef));
         assertTrue(whiteBox.isMethodCompiled(testMethodRef), "Should be compiled");
 
         final var resource = new Resource() {
             @Override
             public void beforeCheckpoint(Context<? extends Resource> context) {
-                assertTrue(whiteBox.isMethodCompiled(testMethodRef), "Should still be compiled");
+                assertTrue(whiteBox.isMethodCompiled(testMethodRef), "Should remain compiled");
                 waitForCondition("deoptimization", () -> {
                     // We don't want to call to many times or the method may
                     // get compiled again. Normally just one call is enough
@@ -144,10 +143,8 @@ public class NaturalDecompilationTest implements CracTest {
 
             @Override
             public void afterRestore(Context<? extends Resource> context) {
-                assertFalse(
-                    whiteBox.isMethodCompiled(testMethodRef) || whiteBox.isMethodQueuedForCompilation(testMethodRef),
-                    "Should remain deoptimized"
-                );
+                assertFalse(whiteBox.isMethodQueuedForCompilation(testMethodRef), "Should remain deoptimized");
+                assertFalse(whiteBox.isMethodCompiled(testMethodRef), "Should remain deoptimized");
             }
         };
         Core.getGlobalContext().register(resource);

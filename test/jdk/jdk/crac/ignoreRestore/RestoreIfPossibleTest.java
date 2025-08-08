@@ -61,8 +61,9 @@ public class RestoreIfPossibleTest {
             FileUtils.deleteFileTreeWithRetry(builder.imageDir()); // Existance depends on the order of @run tags
         }
 
-        final var out = builder.startRestoreWithArgs(null, List.of(Main.class.getName(), "false")).outputAnalyzer();
-        out.stdoutShouldNotContain(WARMUP_MSG).stdoutShouldContain(MAIN_MSG);
+        builder.startRestoreWithArgs(null, List.of(Main.class.getName(), "false"))
+            .waitForSuccess().outputAnalyzer()
+            .stdoutShouldNotContain(WARMUP_MSG).stdoutShouldContain(MAIN_MSG);
     }
 
     public static class Main {

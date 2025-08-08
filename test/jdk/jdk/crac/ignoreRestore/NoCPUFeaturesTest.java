@@ -48,7 +48,8 @@ public class NoCPUFeaturesTest {
         Files.createDirectory(builder.imageDir());
 
         builder.startRestoreWithArgs(null, List.of(Main.class.getName(), "false"))
-            .outputAnalyzer().shouldContain("incompatible CPU features").shouldContain(MAIN_MSG);
+            .waitForSuccess().outputAnalyzer()
+            .shouldContain("incompatible CPU features").shouldContain(MAIN_MSG);
     }
 
     public static class Main {

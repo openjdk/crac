@@ -58,6 +58,7 @@ public class EngineFailureTest {
             .forwardClasspathOnRestore(true)
             .captureOutput(true)
             .startRestoreWithArgs(null, List.of(Main.class.getName(), "false"))
+            .waitForSuccess()
             .outputAnalyzer()
             .shouldContain("CRaC engine failed to restore")
             .shouldContain(MAIN_MSG);

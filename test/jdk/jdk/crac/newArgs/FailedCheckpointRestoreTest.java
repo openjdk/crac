@@ -28,6 +28,7 @@ import jdk.crac.Context;
 import jdk.crac.Core;
 import jdk.crac.Resource;
 import jdk.crac.RestoreException;
+import static jdk.test.lib.Asserts.*;
 import jdk.test.lib.crac.CracBuilder;
 import jdk.test.lib.crac.CracTest;
 import jdk.test.lib.crac.CracTestArg;
@@ -95,31 +96,25 @@ public class FailedCheckpointRestoreTest implements CracTest {
             Core.checkpointRestore();
             System.out.println(RESTORE_OLD_MSG);
         } catch (CheckpointException ex) {
-            if (variant != Variant.CHECKPOINT_EXCEPTION) {
-                throw new IllegalStateException("Unexpected checkpoint failure", ex);
-            }
-            if (ex.getSuppressed().length != 1) {
-                throw new IllegalStateException("Unexpected suppressions", ex);
-            }
-            if (!checkpointFail.equals(ex.getSuppressed()[0].getMessage())) {
-                throw new IllegalStateException("Unexpected suppression message", ex);
-            }
+            assertEquals(Variant.CHECKPOINT_EXCEPTION, variant, "Checkpoint failed unexpectedly", ex);
+            assertEquals(1, ex.getSuppressed().length, "Number of suppressions", ex);
+            assertEquals(checkpointFail, ex.getSuppressed()[0].getMessage(), "Suppression message", ex);
         } catch (RestoreException ex) {
-            if (variant != Variant.RESTORE_EXCEPTION) {
-                throw new IllegalStateException("Unexpected checkpoint failure", ex);
-            }
-            if (ex.getSuppressed().length != 1) {
-                throw new IllegalStateException("Unexpected suppressions", ex);
-            }
-            if (!restoreFail.equals(ex.getSuppressed()[0].getMessage())) {
-                throw new IllegalStateException("Unexpected suppression message", ex);
-            }
+            assertEquals(Variant.RESTORE_EXCEPTION, variant, "Restore failed unexpectedly", ex);
+            assertEquals(1, ex.getSuppressed().length, "Number of suppressions", ex);
+            assertEquals(restoreFail, ex.getSuppressed()[0].getMessage(), "Suppression message", ex);
         }
     }
 
     public static class InternalMain {
         public static void main(String[] args) {
             System.out.println(RESTORE_NEW_MSG);
+        }
+    }
+
+    private static void assertEquals(Object lhs, Object rhs, String msg, Throwable cause) {
+        if ((lhs != rhs) && ((lhs == null) || !(lhs.equals(rhs)))) {
+            fail(msg + " expected: " + lhs + " but was: " + rhs, cause);
         }
     }
 }

@@ -570,15 +570,17 @@ static SpecialFlag const special_jvm_flags[] = {
   { "dup option",                   JDK_Version::jdk(9), JDK_Version::undefined(), JDK_Version::undefined() },
 #endif
 
-  { "CREngine",                     JDK_Version::jdk(24), JDK_Version::undefined(), JDK_Version::undefined() },
-  { "CRAllowedOpenFilePrefixes",    JDK_Version::jdk(24), JDK_Version::undefined(), JDK_Version::undefined() },
-  { "CRAllowToSkipCheckpoint",      JDK_Version::jdk(24), JDK_Version::undefined(), JDK_Version::undefined() },
-  { "CRHeapDumpOnCheckpointException", JDK_Version::jdk(24), JDK_Version::undefined(), JDK_Version::undefined() },
-  { "CRPrintResourcesOnCheckpoint", JDK_Version::jdk(24), JDK_Version::undefined(), JDK_Version::undefined() },
-  { "CRTraceStartupTime",           JDK_Version::jdk(24), JDK_Version::undefined(), JDK_Version::undefined() },
-  { "CRDoThrowCheckpointException", JDK_Version::jdk(24), JDK_Version::undefined(), JDK_Version::undefined() },
-  { "CRPauseOnCheckpointError",     JDK_Version::jdk(24), JDK_Version::undefined(), JDK_Version::undefined() },
-  { "CRTrace",                      JDK_Version::undefined(), JDK_Version::jdk(24), JDK_Version::undefined() },
+  { "CREngine",                     JDK_Version::jdk(24), JDK_Version::jdk(26), JDK_Version::jdk(27) },
+  { "CRAllowedOpenFilePrefixes",    JDK_Version::jdk(24), JDK_Version::jdk(26), JDK_Version::jdk(27) },
+  { "CRAllowToSkipCheckpoint",      JDK_Version::jdk(24), JDK_Version::jdk(26), JDK_Version::jdk(27) },
+  { "CRHeapDumpOnCheckpointException", JDK_Version::jdk(24), JDK_Version::jdk(26), JDK_Version::jdk(27) },
+  { "CRPrintResourcesOnCheckpoint", JDK_Version::jdk(24), JDK_Version::jdk(26), JDK_Version::jdk(27) },
+  { "CRTraceStartupTime",           JDK_Version::jdk(24), JDK_Version::jdk(26), JDK_Version::jdk(27) },
+  { "CRDoThrowCheckpointException", JDK_Version::jdk(24), JDK_Version::jdk(26), JDK_Version::jdk(27) },
+  { "CRPauseOnCheckpointError",     JDK_Version::jdk(24), JDK_Version::jdk(26), JDK_Version::jdk(27) },
+  { "CRTrace",                      JDK_Version::undefined(), JDK_Version::jdk(24), JDK_Version::jdk(26) },
+  { "CRaCAllowToSkipCheckpoint",    JDK_Version::jdk(25), JDK_Version::jdk(26), JDK_Version::jdk(27) },
+  { "CRaCDoThrowCheckpointException", JDK_Version::undefined(), JDK_Version::jdk(25), JDK_Version::jdk(26) },
 
   { nullptr, JDK_Version(0), JDK_Version(0) }
 };
@@ -593,12 +595,13 @@ static AliasedFlag const aliased_jvm_flags[] = {
   { "CreateMinidumpOnCrash",    "CreateCoredumpOnCrash" },
   { "CREngine",                        "CRaCEngine" },
   { "CRAllowedOpenFilePrefixes",       "CRaCAllowedOpenFilePrefixes" },
-  { "CRAllowToSkipCheckpoint",         "CRaCAllowToSkipCheckpoint "},
+  { "CRAllowToSkipCheckpoint",         "CRaCSkipCheckpoint"},
   { "CRHeapDumpOnCheckpointException", "CRaCHeapDumpOnCheckpointException" },
   { "CRPrintResourcesOnCheckpoint",    "CRaCPrintResourcesOnCheckpoint" },
   { "CRTraceStartupTime",              "CRaCTraceStartupTime" },
   { "CRDoThrowCheckpointException",    "CRaCDoThrowCheckpointException" },
   { "CRPauseOnCheckpointError",        "CRaCPauseOnCheckpointError" },
+  { "CRaCAllowToSkipCheckpoint",       "CRaCSkipCheckpoint" },
   { nullptr, nullptr}
 };
 

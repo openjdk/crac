@@ -1959,69 +1959,70 @@ const int ObjectAlignmentInBytes = 8;
              "fence. Add cleanliness checks.")                              \
                                                                             \
   product(ccstr, CRaCCheckpointTo, nullptr, RESTORE_SETTABLE,               \
-        "Path to checkpoint image directory")                               \
+          "Path where the checkpoint image should be placed. Currently an " \
+          "image is a directory, the directory will be created if it does " \
+          "not exist (parent directories are not created) or overwritten "  \
+          "otherwise.")                                                     \
                                                                             \
   product(ccstr, CRaCRestoreFrom, nullptr, RESTORE_SETTABLE,                \
-      "Path to image for restore, replaces the initializing VM on success") \
+          "Path to the image to restore from.")                             \
                                                                             \
   product(uint, CRaCMinPid, 128,                                            \
-      "Mininal PID value for checkpoint'ed process")                        \
-      range(1, UINT_MAX)                                                    \
+          "Mininal PID value for checkpointed process (POSIX only)")        \
+          range(1, UINT_MAX)                                                \
                                                                             \
   product(bool, CRaCResetStartTime, true, DIAGNOSTIC | RESTORE_SETTABLE,    \
-      "Reset JVM's start time and uptime on restore")                       \
+          "Reset JVM's start time and uptime on restore")                   \
                                                                             \
   product_pd(ccstr, CRaCEngine, RESTORE_SETTABLE,                           \
-      "Path or name of a program or a shared library implementing "         \
-      "checkpoint and restore. On restore this option applies only to "     \
-      "the restoring VM, i.e. the restored VM keeps the value it had "      \
-      "before the checkpoint.")                                             \
+          "Path or name of a program or a shared library implementing "     \
+          "checkpoint and restore. On restore this option applies only to " \
+          "the restoring VM, i.e. the restored VM keeps the value it had "  \
+          "before the checkpoint.")                                         \
                                                                             \
   product(ccstrlist, CRaCEngineOptions, nullptr, RESTORE_SETTABLE,          \
-      "Options passed to CRaCEngine, in the form of 'key1=value,key2'. "    \
-      "The list of supported options is engine-dependent, use "             \
-      "'-XX:CRaCEngineOptions=help' to make the VM print the information "  \
-      "about the engine, including its supported options, and exit. On "    \
-      "restore this option applies only to the restoring VM, i.e. the "     \
-      "restored VM keeps the value it had before the checkpoint.")          \
+          "Options passed to CRaCEngine, in the form of 'key1=value,key2'. "\
+          "The list of supported options is engine-dependent, use "         \
+          "'-XX:CRaCEngineOptions=help' to make the VM print information "  \
+          "about the engine, including its supported options, and exit. On "\
+          "restore this option applies only to the restoring VM, i.e. the " \
+          "restored VM keeps the value it had before the checkpoint.")      \
                                                                             \
   product(bool, CRaCIgnoreRestoreIfUnavailable, false, RESTORE_SETTABLE,    \
-      "Ignore -XX:CRaCRestoreFrom and continue initialization if restore "  \
-      "is unavailable")                                                     \
+          "Ignore -XX:CRaCRestoreFrom and continue initialization if "      \
+          "restore is not possible")                                        \
                                                                             \
   product(ccstr, CRaCIgnoredFileDescriptors, nullptr, RESTORE_SETTABLE,     \
-      "Comma-separated list of file descriptor numbers or paths. "          \
-      "All file descriptors greater than 2 (stdin, stdout and stderr are "  \
-      "excluded automatically) not in this list are closed when the VM "    \
-      "is started.")                                                        \
+          "Comma-separated list of file descriptor numbers or paths. All "  \
+          "file descriptors greater than 2 (stdin, stdout and stderr are "  \
+          "excluded automatically) not in this list are closed when the VM "\
+          "is started. (Linux only)")                                       \
                                                                             \
   product_pd(ccstrlist, CRaCAllowedOpenFilePrefixes, "List of path "        \
-      "prefixes for files that can be open during checkpoint; CRaC won't "  \
-      "error upon detecting these and will leave the handling up to C/R "   \
-      "engine. This option applies only to files opened by native code; "   \
-      "for files opened by Java code use -Djdk.crac.resource-policies=...") \
+          "prefixes for files that can be open during checkpoint. CRaC "    \
+          "will not error upon detecting these and will leave the handling "\
+          "up to the engine. This option applies only to files opened by "  \
+          "native code and is Linux only; for files opened by Java code "   \
+          "use -Djdk.crac.resource-policies=...")                           \
                                                                             \
-  product(bool, CRaCAllowToSkipCheckpoint, false, DIAGNOSTIC,               \
-      "Allow implementation to not call Checkpoint if helper not found")    \
+  product(bool, CRaCSkipCheckpoint, false, DIAGNOSTIC,                      \
+          "On checkpoint, skip calling CRaC engine and restore immediately")\
                                                                             \
   product(bool, CRaCHeapDumpOnCheckpointException, false, DIAGNOSTIC,       \
-      "Dump heap on CheckpointException thrown because of CRaC "            \
-      "precondition failed")                                                \
+          "Dump heap on CheckpointException thrown because of a low-level " \
+          "CRaC precondition failing")                                      \
                                                                             \
   product(bool, CRaCPrintResourcesOnCheckpoint, false, DIAGNOSTIC,          \
-      "Print resources to decide CheckpointException")                      \
+          "Print low-level resources checked by VM before checkpoint")      \
                                                                             \
   product(bool, CRaCTraceStartupTime, false, DIAGNOSTIC,                    \
-      "Trace startup time")                                                 \
-                                                                            \
-  product(bool, CRaCDoThrowCheckpointException, true, EXPERIMENTAL,         \
-      "Throw CheckpointException if uncheckpointable resource handle found")\
+          "Print the time at which the VM-level restore starts")            \
                                                                             \
   product(bool, CRaCPauseOnCheckpointError, false, DIAGNOSTIC,              \
-      "Pauses the checkpoint when a problem is found on VM level.")         \
+          "Pauses the checkpoint when a problem is found on VM level.")     \
                                                                             \
   product(size_t, CRaCMaxHeapSizeBeforeCheckpoint, 0, "Maximum size "       \
-      "of heap before checkpoint. By default equals to -Xmx.")              \
+          "of heap before checkpoint. By default equals to -Xmx.")          \
                                                                             \
   product(int, LockingMode, LM_LIGHTWEIGHT,                                 \
           "(Deprecated) Select locking mode: "                              \

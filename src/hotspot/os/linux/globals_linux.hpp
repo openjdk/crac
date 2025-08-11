@@ -64,8 +64,8 @@
   product(bool, UseCpuAllocPath, false, DIAGNOSTIC,                     \
           "Use CPU_ALLOC code path in os::active_processor_count ")     \
                                                                         \
-  product(bool, CRaCCPUCountInit, false, "Reinitialize number of CPUs " \
-      "during -XX:CRaCRestoreFrom")                                     \
+  product(bool, CRaCCPUCountInit, false, "Reinitialize the recorded "   \
+          "number of CPUs on restore")                                  \
                                                                         \
   product(bool, DumpPerfMapAtExit, false, DIAGNOSTIC,                   \
           "Write map file for Linux perf tool at exit")                 \

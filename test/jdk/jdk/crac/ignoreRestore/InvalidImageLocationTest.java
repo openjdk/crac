@@ -66,8 +66,9 @@ public class InvalidImageLocationTest {
             case IMAGE_IS_NOT_DIR -> "CRaCRestoreFrom=" + builder.imageDir() + " is not a directory";
         };
 
-        final var out = builder.startRestoreWithArgs(null, List.of(Main.class.getName())).outputAnalyzer();
-        out.shouldContain(errMsg).shouldContain(MAIN_MSG);
+        builder.startRestoreWithArgs(null, List.of(Main.class.getName()))
+            .waitForSuccess().outputAnalyzer()
+            .shouldContain(errMsg).shouldContain(MAIN_MSG);
     }
 
     public static class Main {

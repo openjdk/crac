@@ -555,7 +555,8 @@ void crac::restore(crac_restore_data& restore_data) {
         shmfd,
         Arguments::jvm_restore_flags_array(), Arguments::num_jvm_restore_flags(),
         Arguments::system_properties(),
-        Arguments::java_command_crac() ? Arguments::java_command_crac() : "",
+        !CRaCIgnoreRestoreIfUnavailable && Arguments::java_command_crac() != nullptr ?
+          Arguments::java_command_crac() : "",
         restore_data.restore_time,
         restore_data.restore_nanos
       );

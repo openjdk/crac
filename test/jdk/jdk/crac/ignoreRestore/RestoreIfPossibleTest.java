@@ -64,7 +64,8 @@ public class RestoreIfPossibleTest {
             FileUtils.deleteFileTreeWithRetry(builder.imageDir());
         }
 
-        final var out = builder.startRestoreWithArgs(null, List.of(Main.class.getName(), "false")).outputAnalyzer();
+        final var out = builder.startRestoreWithArgs(null, List.of(Main.class.getName(), "false"))
+            .waitForSuccess().outputAnalyzer();
         out.stdoutShouldNotContain(WARMUP_MSG);
 
         // Check the count to ensure a new main is not launched on successful restore

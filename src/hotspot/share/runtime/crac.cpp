@@ -615,13 +615,6 @@ bool CracRestoreParameters::read_from(int fd) {
       result = WriteableFlags::set_flag(name, *cursor == '+' ? "true" : "false",
         JVMFlagOrigin::CRAC_RESTORE, err_msg);
       cursor += strlen(cursor) + 1;
-    } else if (strncmp(name, "CRaCEngine", ARRAY_SIZE("CRaCEngine") - 1) == 0) {
-      // CRaCEngine and CRaCEngineOptions are not updated from the restoring process
-      assert(strncmp(name, "CRaCEngine=", strlen("CRaCEngine=")) == 0 ||
-             strncmp(name, "CRaCEngineOptions=", strlen("CRaCEngineOptions=")) == 0,
-             "unexpected CRaCEngine* flag: %s", name);
-      result = JVMFlag::Error::SUCCESS;
-      cursor += strlen(cursor) + 1;
     } else {
       char* eq = strchrnul(cursor, '=');
       if (*eq == '\0') {

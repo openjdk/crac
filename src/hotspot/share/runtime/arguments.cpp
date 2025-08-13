@@ -2938,6 +2938,20 @@ void Arguments::fix_appclasspath() {
   }
 }
 
+// Some restore-settable flags should not be updated in the restored JVM.
+static bool should_record_for_restore(const JVMFlag& flag) {
+  precond(flag.is_restore_settable());
+  if (strncmp(flag.name(), "CRaCEngine", ARRAY_SIZE("CRaCEngine") - 1) == 0) {
+    assert(strcmp(flag.name(), "CRaCEngine") == 0 || strcmp(flag.name(), "CRaCEngineOptions") == 0,
+           "unexpected CRaCEngine* flag: %s", flag.name());
+    return false;
+  }
+  if (strcmp(flag.name(), "IgnoreUnrecognizedVMOptions") == 0) {
+    return false;
+  }
+  return true;
+}
+
 // arg is a JVM argument without the leading "-XX:", e.g. "+BoolOpt" or "StrOpt=str"
 bool Arguments::process_flag_for_restore(const char *arg) {
   // -XX:Flags and -XX:VMOptionsFile do not have corresponding JVMFlags
@@ -2951,15 +2965,14 @@ bool Arguments::process_flag_for_restore(const char *arg) {
   bool has_plus_minus;
   parse_argname(arg, &name, &name_len, &has_plus_minus);
 
-  const JVMFlag* flag;
+  const JVMFlag* flag = nullptr;
   bool is_name_real; // false if the given name is an alias for a real flag name
-  {
+  if (name_len <= BUFLEN) {
     char buf[BUFLEN + 1];
     const char* stripped_name;
     if (name[name_len] == '\0') {
       stripped_name = name;
     } else {
-      guarantee(name_len <= BUFLEN, "argument name too long: %s", name); // Should've been detected earlier
       strncpy(buf, name, name_len);
       buf[name_len] = '\0';
       stripped_name = buf;
@@ -2970,11 +2983,22 @@ bool Arguments::process_flag_for_restore(const char *arg) {
     assert(is_name_real == (strcmp(stripped_name, real_name) == 0), "real_flag_name(s) == s if s is real");
 
     flag = JVMFlag::find_declared_flag(real_name);
-    guarantee(flag != nullptr, "unknown JVM flag name: %s", name); // Should've been detected earlier
+  }
+  if (flag == nullptr) {
+    return true; // The argument should have been ignored by IgnoreUnrecognizedVMOptions
   }
   assert(has_plus_minus == flag->is_bool(), "sanity check");
 
-  if (flag->is_restore_settable()) {
+  if (!flag->is_restore_settable() && !CRaCIgnoreRestoreIfUnavailable) {
+    // Same message format as used in JVMFlag::get_locked_message() for
+    // diagnostic/experimental/develop options
+    jio_fprintf(defaultStream::error_stream(),
+                "Error: VM option '%.*s' is not restore-settable and is not available on restore.\n",
+                name_len, name);
+    return false;
+  }
+
+  if (flag->is_restore_settable() && should_record_for_restore(*flag)) {
     // Restored JVM will search for the flag using the name we record here so we
     // must ensure the real one is recorded
     if (is_name_real) {
@@ -2989,13 +3013,6 @@ bool Arguments::process_flag_for_restore(const char *arg) {
       build_jvm_restore_flags(real_arg);
       FreeHeap(real_arg);
     }
-  } else if (!CRaCIgnoreRestoreIfUnavailable) {
-    // Same message format as used in JVMFlag::get_locked_message() for
-    // diagnostic/experimental/develop options
-    jio_fprintf(defaultStream::error_stream(),
-                "Error: VM option '%*.s' is not restore-settable and is not available on restore.\n",
-                name_len, name);
-    return false;
   }
 
   return true;

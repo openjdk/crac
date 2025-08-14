@@ -1093,8 +1093,10 @@ These `java` options control the runtime behavior of the Java HotSpot VM.
     of its existing call stack.
 
 `-XX:+CRaCIgnoreRestoreIfUnavailable`
-:   If restoration from a checkpoint image fails, continue with the normal startup
-    instead of failing.
+:   If the checkpoint image specified for restoration is identified as being unusable,
+    continue with the normal startup instead of failing. Enabling this option does
+    not guarantee that the normal startup will follow any failed restoration attempt;
+    it only covers an early image/environment verification.
 
     When restoring with this option, you should specify a main class and its
     arguments as usual. If the restoration succeeds, they are ignored, but if it

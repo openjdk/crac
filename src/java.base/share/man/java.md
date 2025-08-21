@@ -1085,22 +1085,21 @@ These `java` options control the runtime behavior of the Java HotSpot VM.
 `-XX:CRaCRestoreFrom=`*directory*
 :   Restores from the specified checkpoint image.
 
-    When using this option, there is no requirement to specify a main class and its
-    arguments because the restored execution is based on the ones specified before
-    the checkpoint. However, it is possible to pass a new main class and new
-    arguments. After a successful restoration, the new main method will be invoked
-    with the specified arguments in the thread that started the checkpoint, on top
-    of its existing call stack.
+    You can optionally pass the name of the new main class and its arguments when
+    using this option. In such a case, the new main method will be invoked with
+    the specified arguments by the thread that initiated the checkpoint, after all
+    CRaC resources have been successfully processed.
 
 `-XX:+CRaCIgnoreRestoreIfUnavailable`
-:   If the checkpoint image specified for restoration is identified as being unusable,
-    continue with the normal startup instead of failing. Enabling this option does
-    not guarantee that the normal startup will follow any failed restoration attempt;
-    it only covers an early image/environment verification.
+:   If the checkpoint image specified for restoration is identified as being
+    unusable, continue with the normal startup instead of failing.
 
-    When restoring with this option, you should specify a main class and its
-    arguments as usual. If the restoration succeeds, they are ignored, but if it
-    fails, they are used for the normal startup process.
+    When restoring with this option, you should specify the command-line arguments
+    for the normal startup process. If the restoration succeeds, they are ignored;
+    otherwise, they are used for starting up.
+
+    If an initial image verification passes, but restoration still fails, the JVM
+    will not attempt to start normally.
 
 `-XX:CRaCMinPid=`*value*
 :   A desired minimal PID value for checkpointed process. Applied by the launcher,

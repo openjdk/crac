@@ -2946,9 +2946,6 @@ static bool should_record_for_restore(const JVMFlag& flag) {
            "unexpected CRaCEngine* flag: %s", flag.name());
     return false;
   }
-  if (strcmp(flag.name(), "IgnoreUnrecognizedVMOptions") == 0) {
-    return false;
-  }
   return true;
 }
 

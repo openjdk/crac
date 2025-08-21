@@ -183,10 +183,6 @@ public class VMOptionsTest implements CracTest {
                 assertEquals(VMOption.Origin.VM_CREATION, opt.getOrigin(), optSpec.name() + ": origin changed after restore");
             }
         }
-        {
-            final var ignoreUnrecognized = bean.getVMOption("IgnoreUnrecognizedVMOptions");
-            assertEquals(VMOption.Origin.DEFAULT, ignoreUnrecognized.getOrigin(), "IgnoreUnrecognizedVMOptions: origin changed after restore");
-        }
         for (final var optSpec : OPTIONS_RESTORE) {
             final var opt = bean.getVMOption(optSpec.name());
             if (!optSpec.canChangeOnRestore()) {

@@ -33,6 +33,8 @@ import jdk.test.lib.crac.CracEngine;
  * @test
  * @summary If CRaCIgnoreRestoreIfUnavailable is specified and the engine
  *          fails to restore for any reason VM should proceed without restoring.
+ * @comment The test needs crexec as a dynamic library.
+ * @requires !jdk.static
  * @library /test/lib
  */
 public class EngineFailureTest {

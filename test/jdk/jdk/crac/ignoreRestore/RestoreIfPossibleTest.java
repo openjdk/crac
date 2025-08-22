@@ -72,7 +72,7 @@ public class RestoreIfPossibleTest {
         final var mainMsgCount = Collections.frequency(out.stdoutAsLines(), MAIN_MSG);
         if (mainMsgCount != 1) {
             out.reportDiagnosticSummary();
-            assertEquals(1, mainMsgCount, "Main message should be printed exactly once");
+            fail("Main message should be printed exactly once, got printed " + mainMsgCount + " times instead");
         }
     }
 

@@ -1085,6 +1085,22 @@ These `java` options control the runtime behavior of the Java HotSpot VM.
 `-XX:CRaCRestoreFrom=`*directory*
 :   Restores from the specified checkpoint image.
 
+    You can optionally pass the name of the new main class and its arguments when
+    using this option. In such a case, the new main method will be invoked with
+    the specified arguments by the thread that initiated the checkpoint, after all
+    CRaC resources have been successfully processed.
+
+`-XX:+CRaCIgnoreRestoreIfUnavailable`
+:   If the checkpoint image specified for restoration is identified as being
+    unusable, continue with the normal startup instead of failing.
+
+    When restoring with this option, you should specify the command-line arguments
+    for the normal startup process. If the restoration succeeds, they are ignored;
+    otherwise, they are used for starting up.
+
+    If an initial image verification passes, but restoration still fails, the JVM
+    will not attempt to start normally.
+
 `-XX:CRaCMinPid=`*value*
 :   A desired minimal PID value for checkpointed process. Applied by the launcher,
     only on POSIX-like platforms.

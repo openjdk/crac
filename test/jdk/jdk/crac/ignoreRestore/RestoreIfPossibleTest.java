@@ -23,10 +23,13 @@
  * questions.
  */
 
+import java.nio.file.Files;
+import java.util.Collections;
 import java.util.List;
 
 import jdk.crac.Core;
 
+import static jdk.test.lib.Asserts.*;
 import jdk.test.lib.crac.CracBuilder;
 import jdk.test.lib.crac.CracEngine;
 import jdk.test.lib.util.FileUtils;
@@ -57,13 +60,20 @@ public class RestoreIfPossibleTest {
             checkpointProcess.waitForCheckpointed();
             final var out = checkpointProcess.outputAnalyzer();
             out.stdoutShouldContain(WARMUP_MSG).stdoutShouldNotContain(MAIN_MSG);
-        } else {
-            FileUtils.deleteFileTreeWithRetry(builder.imageDir()); // Existance depends on the order of @run tags
+        } else if (Files.exists(builder.imageDir())) { // Existance depends on the order of @run tags
+            FileUtils.deleteFileTreeWithRetry(builder.imageDir());
         }
 
-        builder.startRestoreWithArgs(null, List.of(Main.class.getName(), "false"))
-            .waitForSuccess().outputAnalyzer()
-            .stdoutShouldNotContain(WARMUP_MSG).stdoutShouldContain(MAIN_MSG);
+        final var out = builder.startRestoreWithArgs(null, List.of(Main.class.getName(), "false"))
+            .waitForSuccess().outputAnalyzer();
+        out.stdoutShouldNotContain(WARMUP_MSG);
+
+        // Check the count to ensure a new main is not launched on successful restore
+        final var mainMsgCount = Collections.frequency(out.stdoutAsLines(), MAIN_MSG);
+        if (mainMsgCount != 1) {
+            out.reportDiagnosticSummary();
+            fail("Main message should be printed exactly once, got printed " + mainMsgCount + " times instead");
+        }
     }
 
     public static class Main {

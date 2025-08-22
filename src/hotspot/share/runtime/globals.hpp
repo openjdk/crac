@@ -1989,8 +1989,12 @@ const int ObjectAlignmentInBytes = 8;
           "restored VM keeps the value it had before the checkpoint.")      \
                                                                             \
   product(bool, CRaCIgnoreRestoreIfUnavailable, false, RESTORE_SETTABLE,    \
-          "Ignore -XX:CRaCRestoreFrom and continue initialization if "      \
-          "restore is not possible")                                        \
+          "If the image selected via CRaCRestoreFrom is identified as "     \
+          "being unusable, continue initializing the JVM instead of "       \
+          "failing. Enabling this option does not guarantee that the "      \
+          "initialization will continue after any failed restoration "      \
+          "attempt; it only covers an early image/environment "             \
+          "verification.")                                                  \
                                                                             \
   product(ccstr, CRaCIgnoredFileDescriptors, nullptr, RESTORE_SETTABLE,     \
           "Comma-separated list of file descriptor numbers or paths. All "  \

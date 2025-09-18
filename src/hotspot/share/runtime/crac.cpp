@@ -56,6 +56,8 @@ static jlong _restore_start_time;
 static jlong _restore_start_nanos;
 
 CracEngine *crac::_engine = nullptr;
+unsigned int crac::_generation = 1;
+
 char crac::_checkpoint_bootid[UUID_LENGTH];
 jlong crac::_checkpoint_wallclock_seconds;
 jlong crac::_checkpoint_wallclock_nanos;
@@ -99,17 +101,195 @@ static char * strchrnul(char * str, char c) {
 }
 #endif //__APPLE__ || _WINDOWS
 
+static int append_time(char *buf, size_t buflen, bool iso8601, bool zero_pad, int width, long timeMillis) {
+  if (iso8601) {
+    if (width >= 0 || zero_pad) {
+      log_warning(crac)("CRaCCheckpointTo=%s cannot set zero_pad or width for ISO-8601 time", CRaCCheckpointTo);
+    }
+    // os::iso8601_time formats with dashes and colons, we want the basic version
+    time_t time = timeMillis / 1000;
+    struct tm tms;
+    if (gmtime_r(&time, &tms) == NULL) {
+      log_warning(crac)("Cannot format time %ld", timeMillis);
+      return -1;
+    }
+    return strftime(buf, buflen, "%Y%m%dT%H%M%SZ", &tms);
+  } else {
+    // width -1 works too (means 1 char left aligned => we always print at least 1 char)
+    return snprintf(buf, buflen, zero_pad ? "%0*ld" : "%*ld", width, timeMillis / 1000);
+  }
+}
+
+static int append_size(char *buf, size_t buflen, bool zero_pad, int width, size_t size) {
+  if (zero_pad) {
+    return snprintf(buf, buflen, "%0*zu", width, size);
+  } else if (width >= 0) {
+    return snprintf(buf, buflen, "%*zu", width, size);
+  } else {
+    const char *suffixes[] = { "k", "M", "G" };
+    const char *suffix = "";
+    for (size_t i = 0; i < ARRAY_SIZE(suffixes) && size != 0 && (size & 1023) == 0; ++i) {
+      suffix = suffixes[i];
+      size = size >> 10;
+    }
+    return snprintf(buf, buflen, "%zu%s", size, suffix);
+  }
+}
+
+#define check_no_width() do { \
+    if (width >= 0) { \
+      log_warning(crac)("CRaCCheckpointTo=%s cannot set width for %%%c", CRaCCheckpointTo, c); \
+    } \
+  } while (false)
+
+#define check_retval(statement) do { \
+    int ret = statement; \
+    if (ret < 0 || (size_t) ret > buflen) { \
+      log_error(crac)("Error interpolating CRaCCheckpointTo=%s (@%zu, buffer size %zu)", CRaCCheckpointTo, si, buflen); \
+      return false; \
+    } \
+    buf += ret; \
+    buflen -= ret; \
+  } while (false)
+
+bool crac::resolve_image_location(char *buf, size_t buflen, bool *fixed) {
+  *fixed = true;
+  for (size_t si = 0; ; si++) {
+    char c = CRaCCheckpointTo[si];
+    if (c == '%') {
+      si++;
+      c = CRaCCheckpointTo[si];
+      bool zero_pad = false;
+      if (c == '0') {
+        zero_pad = true;
+        si++;
+      }
+      size_t width_start = si;
+      while (CRaCCheckpointTo[si] >= '1' && CRaCCheckpointTo[si] <= '9') {
+        ++si;
+      }
+      int width = -1;
+      if (zero_pad && width_start == si) {
+        log_error(crac)("CRaCCheckpointTo=%s contains a pattern with zero padding but no length", CRaCCheckpointTo);
+        return false;
+      } else if (si > width_start) {
+        width = atoi(&CRaCCheckpointTo[width_start]);
+      }
+      c = CRaCCheckpointTo[si];
+      switch (c) {
+      case '%':
+        check_no_width();
+        *(buf++) = '%';
+        --buflen;
+        break;
+      case 'a': // CPU architecture; matches system property "os.arch"
+          check_no_width();
+#ifndef ARCHPROPNAME // defined by build scripts
+# define ARCHPROPNAME "unknown"
+#endif
+        check_retval(snprintf(buf, buflen, "%s", ARCHPROPNAME));
+        break;
+      case 'f': { // CPU features
+          struct VM_Version::VM_Features data;
+          if (VM_Version::cpu_features_binary(&data)) {
+            int ret = data.print_numbers_hexonly(buf, buflen);
+            buf += ret;
+            buflen -= ret;
+          } // otherwise just empty string
+        }
+        break;
+      case 'u': { // Random UUID (v4)
+          check_no_width();
+          *fixed = false; // FIXME?
+          u4 time_mid_high = static_cast<u4>(os::random());
+          u4 seq_and_node_low = static_cast<u4>(os::random());
+          check_retval(snprintf(buf, buflen, "%08x-%04x-4%03x-a%03x-%04x%08x",
+            static_cast<u4>(os::random()), time_mid_high >> 16, time_mid_high & 0xFFF,
+            seq_and_node_low & 0xFFF, seq_and_node_low >> 16, static_cast<u4>(os::random())));
+        }
+        break;
+      case 't': // checkpoint (current) time
+      case 'T':
+        *fixed = false;
+        check_retval(append_time(buf, buflen, c == 't', zero_pad, width, os::javaTimeMillis()));
+        break;
+      case 'b': // boot time
+      case 'B':
+        check_retval(append_time(buf, buflen, c == 'b', zero_pad, width,
+            os::javaTimeMillis() - 1000 * (os::elapsed_counter() / os::elapsed_frequency())));
+        break;
+      case 'r': // last restore time
+      case 'R':
+        check_retval(append_time(buf, buflen, c == 'r', zero_pad, width,
+            os::javaTimeMillis() - 1000 * (os::elapsed_counter_since_restore() / os::elapsed_frequency())));
+        break;
+      case 'p': // PID
+        check_retval(snprintf(buf, buflen, zero_pad ? "%0*d" : "%*d", width, os::current_process_id()));
+        break;
+      case 'c': // Number of CPUs
+        check_retval(snprintf(buf, buflen, zero_pad ? "%0*d" : "%*d", width, os::active_processor_count()));
+        break;
+      case 'm': // Max heap size
+        *fixed = false; // Heap size is not yet resolved when this is called from prepare_checkpoint()
+        check_retval(append_size(buf, buflen, zero_pad, width, Universe::heap() != nullptr ? Universe::heap()->max_capacity() : 0));
+        break;
+      case 'g': // CRaC generation
+        check_retval(snprintf(buf, buflen, zero_pad ? "%0*d" : "%*d", width, _generation));
+        break;
+      default: /* incl. terminating '\0' */
+        log_error(crac)("CRaCCheckpointTo=%s contains an invalid pattern", CRaCCheckpointTo);
+        return false;
+      }
+    } else {
+      *(buf++) = c;
+      --buflen;
+      if (!c) {
+        break;
+      }
+    }
+  }
+  return true;
+}
+
+#undef check_no_width
+#undef check_retval
+
+static bool ensure_image_location(const char *path, bool rm) {
+  struct stat st;
+  if (0 == os::stat(path, &st)) {
+    if ((st.st_mode & S_IFMT) != S_IFDIR) {
+      log_error(crac)("CRaCCheckpointTo=%s is not a directory", path);
+      return false;
+    }
+  } else {
+    if (-1 == os::mkdir(path)) {
+      log_error(crac)("Cannot create CRaCCheckpointTo=%s: %s", path, os::strerror(errno));
+      return false;
+    }
+    if (rm && -1 == os::rmdir(path)) {
+      log_warning(crac)("Cannot cleanup after CRaCCheckpointTo check: %s", os::strerror(errno));
+      // not fatal
+    }
+  }
+  return true;
+}
+
 int crac::checkpoint_restore(int *shmid) {
   guarantee(_engine != nullptr, "CRaC engine is not initialized");
 
   crac::record_time_before_checkpoint();
 
-  // CRaCCheckpointTo can be changed on restore so we need to update the conf
-  // to account for that.
+  // CRaCCheckpointTo can be changed on restore, and if this contains a pattern
+  // it might not have been configured => we need to update the conf.
+  char image_location[PATH_MAX];
+  bool ignored;
+  if (!resolve_image_location(image_location, sizeof(image_location), &ignored) ||
+      !ensure_image_location(image_location, false)) {
+    return JVM_CHECKPOINT_ERROR;
+  }
   // Note that CRaCEngine and CRaCEngineOptions are not updated (as documented)
   // so we don't need to re-init the whole engine handle.
-  if (restore_start_time() != -1 && // A way to detect we've restored at least once
-      !_engine->configure_image_location(CRaCCheckpointTo)) {
+  if (!_engine->configure_image_location(image_location)) {
     return JVM_CHECKPOINT_ERROR;
   }
 
@@ -134,7 +314,7 @@ int crac::checkpoint_restore(int *shmid) {
 
   const int ret = _engine->checkpoint();
   if (ret != 0) {
-    log_error(crac)("CRaC engine failed to checkpoint to %s: error %i", CRaCCheckpointTo, ret);
+    log_error(crac)("CRaC engine failed to checkpoint to %s: error %i", image_location, ret);
     return JVM_CHECKPOINT_ERROR;
   }
 
@@ -275,6 +455,7 @@ void VM_Crac::doit() {
     }
   }
 
+  crac::_generation++;
   Arguments::reset_for_crac_restore();
   os::reset_cached_process_id();
 
@@ -351,34 +532,45 @@ void crac::print_engine_info_and_exit() {
   ShouldNotReachHere();
 }
 
+template<class T> class FutureRef {
+private:
+  T *_t;
+public:
+  FutureRef(T *t): _t(t) {}
+  ~FutureRef() {
+    delete _t;
+  }
+  T *operator->() {
+    return _t;
+  }
+  T *extract() {
+    T *tmp = _t;
+    _t = nullptr;
+    return tmp;
+  }
+};
+
 bool crac::prepare_checkpoint() {
   precond(CRaCCheckpointTo != nullptr);
 
-  struct stat st;
-  if (0 == os::stat(CRaCCheckpointTo, &st)) {
-    if ((st.st_mode & S_IFMT) != S_IFDIR) {
-      log_error(crac)("CRaCCheckpointTo=%s is not a directory", CRaCCheckpointTo);
-      return false;
-    }
-  } else {
-    if (-1 == os::mkdir(CRaCCheckpointTo)) {
-      log_error(crac)("Cannot create CRaCCheckpointTo=%s: %s", CRaCCheckpointTo, os::strerror(errno));
-      return false;
-    }
-    if (-1 == os::rmdir(CRaCCheckpointTo)) {
-      log_warning(crac)("Cannot cleanup after CRaCCheckpointTo check: %s", os::strerror(errno));
-      // not fatal
-    }
-  }
-
   // Initialize CRaC engine now to verify all the related VM options
   assert(_engine == nullptr, "CRaC engine should be initialized only once");
-  _engine = new CracEngine(CRaCCheckpointTo);
-  if (!_engine->is_initialized()) {
-    delete _engine;
-    _engine = nullptr;
+  FutureRef<CracEngine> engine(new CracEngine());
+  if (!engine->is_initialized()) {
+    return false;
   }
-  return _engine != nullptr;
+
+  char image_location[PATH_MAX];
+  bool fixed_path;
+  if (!resolve_image_location(image_location, PATH_MAX, &fixed_path)) {
+    return false;
+  }
+  if (fixed_path && (!ensure_image_location(image_location, true) || !engine->configure_image_location(image_location))) {
+    return false;
+  }
+
+  _engine = engine.extract();
+  return true;
 }
 
 static Handle ret_cr(int ret, Handle new_args, Handle new_props, Handle err_codes, Handle err_msgs, TRAPS) {
@@ -402,11 +594,6 @@ Handle crac::checkpoint(jarray fd_arr, jobjectArray obj_arr, bool dry_run, jlong
 
   if (CRaCCheckpointTo == nullptr) {
     log_error(crac)("CRaCCheckpointTo is not specified");
-    return ret_cr(JVM_CHECKPOINT_NONE, Handle(), Handle(), Handle(), Handle(), THREAD);
-  }
-
-  if (-1 == os::mkdir(CRaCCheckpointTo) && errno != EEXIST) {
-    log_error(crac)("Cannot create CRaCCheckpointTo=%s: %s", CRaCCheckpointTo, os::strerror(errno));
     return ret_cr(JVM_CHECKPOINT_NONE, Handle(), Handle(), Handle(), Handle(), THREAD);
   }
 
@@ -515,8 +702,8 @@ void crac::restore(crac_restore_data& restore_data) {
   }
 
   // Note that this is a local, i.e. the handle will be destroyed if we fail to restore
-  CracEngine engine(CRaCRestoreFrom);
-  if (!engine.is_initialized()) {
+  CracEngine engine;
+  if (!engine.is_initialized() || !engine.configure_image_location(CRaCRestoreFrom)) {
     return;
   }
 

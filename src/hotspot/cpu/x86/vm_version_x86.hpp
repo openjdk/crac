@@ -612,6 +612,18 @@ protected:
       return buf - buf_orig;
     }
 
+    int print_numbers_hexonly(char *buf_orig, size_t buflen) const {
+      char *buf = buf_orig;
+      apply_to_all_features([&](uint64_t u, int idx) {
+        int res = jio_snprintf(buf, buflen, UINT64_FORMAT_0, u);
+        buf += res;
+        buflen -= res;
+        assert(res > 0 && buflen >= 1, "not enough temporary space allocated");
+      });
+      *buf = 0;
+      return buf - buf_orig;
+    }
+
     void print_numbers_and_names(char *buf, size_t buflen) const {
       int res = print_numbers(buf, buflen);
       buf += res;

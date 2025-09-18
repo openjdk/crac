@@ -59,6 +59,7 @@ public:
 
 private:
   static CracEngine *_engine;
+  static unsigned int _generation;
 
   static char _checkpoint_bootid[UUID_LENGTH];
   // Timestamps recorded before checkpoint.
@@ -75,6 +76,8 @@ private:
   static void update_javaTimeNanos_offset();
 
   static int checkpoint_restore(int *shmid);
+
+  static bool resolve_image_location(char *buf, size_t buflen, bool *fixed);
 };
 
 #endif //SHARE_RUNTIME_CRAC_HPP

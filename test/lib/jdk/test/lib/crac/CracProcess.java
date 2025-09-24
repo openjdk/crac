@@ -3,8 +3,10 @@ package jdk.test.lib.crac;
 import jdk.test.lib.process.OutputAnalyzer;
 import jdk.test.lib.process.StreamPumper;
 
+import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.InputStreamReader;
 import java.io.OutputStream;
 import java.nio.file.*;
 import java.util.concurrent.CountDownLatch;
@@ -192,4 +194,71 @@ public class CracProcess {
     public void destroyForcibly() {
         process.destroyForcibly();
     }
+
+    public static void printThreadDump(long pid) throws IOException {
+        boolean isAlive = ProcessHandle.of(pid).map(ProcessHandle::isAlive).orElse(false);
+        if (!isAlive) {
+            System.err.println("Process " + pid + " is not alive.");
+        } else {
+            System.err.println("Running: jcmd " + pid + " Thread.print");
+            Process jcmdProc = new ProcessBuilder(jdk.test.lib.Utils.TEST_JDK + "/bin/jcmd", String.valueOf(pid), "Thread.print")
+                    .redirectErrorStream(true)
+                    .start();
+            try (BufferedReader reader = new BufferedReader(new InputStreamReader(jcmdProc.getInputStream()))) {
+                for (String line = reader.readLine(); null != line; line = reader.readLine()) {
+                    System.err.println("JCMD: " + line);
+                }
+            }
+        }
+    }
+
+    private static boolean checkGcoreAvailable() {
+        ProcessBuilder builder = new ProcessBuilder("which", "gcore");
+        builder.redirectErrorStream(true);
+        try {
+            Process process = builder.start();
+            BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()));
+            String line = reader.readLine();
+            int exitCode = process.waitFor();
+            if (exitCode == 0 && line != null && !line.trim().isEmpty()) {
+                System.out.println("gcore is available.");
+                return true;
+            } else {
+                System.out.println("gcore is NOT available.");
+                return false;
+            }
+        } catch (IOException | InterruptedException e) {
+            System.out.println("Could not run 'which gcore' or was interrupted");
+            return false;
+        }
+    }
+
+    public static void dumpProcess(long pid) throws IOException, InterruptedException {
+        // For gcore, it's required 'sudo sysctl -w kernel.yama.ptrace_scope=0'
+        // For kill, it's required 'ulimit -c unlimited && echo core.%p | sudo tee /proc/sys/kernel/core_pattern'
+        ProcessBuilder builder = checkGcoreAvailable() ? new ProcessBuilder("gcore", String.valueOf(pid))
+                : new ProcessBuilder("kill", "-ABRT", String.valueOf(pid));
+        builder.redirectErrorStream(true);
+        try {
+            Process process = builder.start();
+            var reader = new AsyncStreamReader(process.getInputStream());
+            int exitCode = process.waitFor();
+            try {
+                while (true) {
+                    System.out.println("dumpProcess: " + reader.readLine(100));
+                }
+            } catch (Exception e) {
+                // do nothing
+            }
+            if (exitCode == 0) {
+                System.out.println("Core dump seems created successfully for pid=" + pid);
+            } else {
+                System.out.println("Something went wrong while dumping the app");
+            }
+        } catch (IOException | InterruptedException e) {
+            System.out.println("Exception thrown while dumping the app");
+            e.printStackTrace();
+        }
+    }
+
 }

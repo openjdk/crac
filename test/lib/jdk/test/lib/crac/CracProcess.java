@@ -195,7 +195,8 @@ public class CracProcess {
         process.destroyForcibly();
     }
 
-    public static void printThreadDump(long pid) throws IOException {
+    public void printThreadDump() throws IOException {
+        final long pid = this.pid();
         boolean isAlive = ProcessHandle.of(pid).map(ProcessHandle::isAlive).orElse(false);
         if (!isAlive) {
             System.err.println("Process " + pid + " is not alive.");
@@ -233,9 +234,10 @@ public class CracProcess {
         }
     }
 
-    public static void dumpProcess(long pid) throws IOException, InterruptedException {
+    public void dumpProcess() throws IOException, InterruptedException {
         // For gcore, it's required 'sudo sysctl -w kernel.yama.ptrace_scope=0'
         // For kill, it's required 'ulimit -c unlimited && echo core.%p | sudo tee /proc/sys/kernel/core_pattern'
+        final long pid = this.pid();
         ProcessBuilder builder = checkGcoreAvailable() ? new ProcessBuilder("gcore", String.valueOf(pid))
                 : new ProcessBuilder("kill", "-ABRT", String.valueOf(pid));
         builder.redirectErrorStream(true);

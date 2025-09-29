@@ -146,8 +146,8 @@ public class JdwpTransportTest implements CracTest {
             process.waitForSuccess();
         } catch (TimeoutException e) {
             System.err.println("reader.isRunning()=" + reader.isRunning());
-            CracProcess.printThreadDump(process.pid());
-            CracProcess.dumpProcess(process.pid());
+            process.printThreadDump();
+            process.dumpProcess();
             throw e;
         } finally {
             try {
@@ -165,7 +165,6 @@ public class JdwpTransportTest implements CracTest {
     @Override
     public void exec() throws Exception {
         System.out.println(STARTED + ", pid=" + ProcessHandle.current().pid());
-        System.out.flush();
         Core.checkpointRestore();
         System.out.println("APP: Restored");
         System.in.read(); // Wait for debugger is attached and done

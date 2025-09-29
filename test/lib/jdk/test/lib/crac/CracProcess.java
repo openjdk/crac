@@ -251,7 +251,7 @@ public class CracProcess {
                 // do nothing
             }
             if (exitCode == 0) {
-                System.out.println("Core dump seems created successfully for pid=" + pid);
+                System.out.println("Core dump seems to be created successfully for pid=" + pid);
             } else {
                 System.out.println("Something went wrong while dumping the app");
             }

@@ -158,6 +158,8 @@ public class JdwpTransportTest implements CracTest {
             } catch (TimeoutException e) {
                 // do nothing
             }
+            reader.close();
+            errReader.close();
             process.destroyForcibly();
         }
     }

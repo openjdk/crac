@@ -234,7 +234,7 @@ public class CracProcess {
         }
     }
 
-    public void dumpProcess() throws IOException, InterruptedException {
+    public void dumpProcess() {
         // For gcore, it's required 'sudo sysctl -w kernel.yama.ptrace_scope=0'
         // For kill, it's required 'ulimit -c unlimited && echo core.%p | sudo tee /proc/sys/kernel/core_pattern'
         final long pid = this.pid();

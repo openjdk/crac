@@ -1086,7 +1086,8 @@ These `java` options control the runtime behavior of the Java HotSpot VM.
     these placeholders:
     -   `%%`: single % character
     -   `%a`: architecture (x86_64 or aarch64)
-    -   `%f`: CPU features hex string
+    -   `%f`: CPU features hex string. Empty string if the architecture does not
+              use optional CPU features.
     -   `%u`: UUID (version 4 = random)
     -   `%t`: checkpoint date & time in ISO-8601 in UTC, basic format (without
               separators) with second precision, e.g. `20250909T141711Z`

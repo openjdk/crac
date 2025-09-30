@@ -29,6 +29,7 @@
 #include <cstddef>
 #include <cstring>
 #include <new>
+#include <utility>
 
 template<class T>
 class Hashtable {
@@ -43,7 +44,7 @@ public:
 
   bool contains(const char *key) const;
   T *get(const char *key) const;
-  bool put(const char *key, T value);
+  bool put(const char *key, T&& value);
 
 private:
   size_t _length;
@@ -113,6 +114,9 @@ bool Hashtable<T>::contains(const char *key) const {
 
 template<class T>
 T *Hashtable<T>::get(const char *key) const {
+  if (_length == 0) {
+    return nullptr;
+  }
   assert(key != nullptr);
   const unsigned int hash = string_hash(key) % _length;
   for (size_t i = hash; i < _length; i++) {
@@ -129,12 +133,12 @@ T *Hashtable<T>::get(const char *key) const {
 }
 
 template<class T>
-bool Hashtable<T>::put(const char *key, T value) {
+bool Hashtable<T>::put(const char *key, T&& value) {
   T * const value_ptr = get(key);
   if (value_ptr == nullptr) {
     return false;
   }
-  *value_ptr = value;
+  *value_ptr = std::forward<T>(value);
   return true;
 }
 

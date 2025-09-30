@@ -23,7 +23,6 @@
 
 #include "crlib/crlib.h"
 #include "crlib/crlib_restore_data.h"
-#include "crlib/crlib_user_data.h"
 #include "logging/log.hpp"
 #include "memory/allStatic.hpp"
 #include "nmt/memTag.hpp"
@@ -432,64 +431,46 @@ const char *CracEngine::configuration_doc() const {
   return _description_api->configuration_doc(_conf);
 }
 
-static constexpr char cpufeatures_userdata_name[] = "cpufeatures";
+static constexpr char cpuarch_name[] = "cpu.arch";
+static constexpr char cpufeatures_name[] = "cpu.features";
 
-CracEngine::ApiStatus CracEngine::prepare_user_data_api() {
+CracEngine::ApiStatus CracEngine::prepare_image_constraints_api() {
   precond(is_initialized());
-  if (_user_data_api != nullptr) {
+  if (_image_constraints_api != nullptr) {
     return ApiStatus::OK;
   }
 
-  crlib_user_data_t * const user_data_api = CRLIB_EXTENSION_USER_DATA(_api);
-  if (user_data_api == nullptr) {
-    log_debug(crac)("CRaC engine does not support extension: " CRLIB_EXTENSION_USER_DATA_NAME);
+  crlib_image_constraints_t * const ic_api = CRLIB_EXTENSION_IMAGE_CONSTRAINTS(_api);
+  if (ic_api == nullptr) {
+    log_debug(crac)("CRaC engine does not support extension: " CRLIB_EXTENSION_IMAGE_CONSTRAINTS_NAME);
     return ApiStatus::UNSUPPORTED;
   }
-  if (user_data_api->set_user_data == nullptr || user_data_api->load_user_data == nullptr
-      || user_data_api->lookup_user_data == nullptr || user_data_api->destroy_user_data == nullptr) {
-    log_error(crac)("CRaC engine provided invalid API for extension: " CRLIB_EXTENSION_USER_DATA_NAME);
+  if (ic_api->set_label == nullptr || ic_api->set_bitmap == nullptr
+      || ic_api->require_label == nullptr || ic_api->require_bitmap == nullptr) {
+    log_error(crac)("CRaC engine provided invalid API for extension: " CRLIB_EXTENSION_IMAGE_CONSTRAINTS_NAME);
     return ApiStatus::ERR;
   }
-  _user_data_api = user_data_api;
+  _image_constraints_api = ic_api;
   return ApiStatus::OK;
 }
 
 // Return success.
-bool CracEngine::cpufeatures_store(const VM_Version::VM_Features *datap) const {
-  log_debug(crac)("cpufeatures_store user data %s to %s...", cpufeatures_userdata_name, CRaCRestoreFrom);
-  const bool ok = _user_data_api->set_user_data(_conf, cpufeatures_userdata_name, datap, sizeof(*datap));
-  if (!ok) {
-    log_error(crac)("CRaC engine failed to store user data %s", cpufeatures_userdata_name);
-  }
-  return ok;
-}
-
-// Return success.
-bool CracEngine::cpufeatures_load(VM_Version::VM_Features *datap, bool *presentp) const {
-  log_debug(crac)("cpufeatures_load user data %s from %s...", cpufeatures_userdata_name, CRaCRestoreFrom);
-  crlib_user_data_storage_t *user_data;
-  if (!(user_data = _user_data_api->load_user_data(_conf))) {
-    log_error(crac)("CRaC engine failed to load user data %s", cpufeatures_userdata_name);
+bool CracEngine::store_cpuinfo(const VM_Version::VM_Features *datap) const {
+  log_debug(crac)("store cpu.arch & cpu.features to %s...", CRaCRestoreFrom);
+  if (!_image_constraints_api->set_label(_conf, cpuarch_name, ARCHPROPNAME)) {
+    log_error(crac)("CRaC engine failed to record label %s", cpuarch_name);
     return false;
   }
-  const VM_Version::VM_Features *cdatap;
-  size_t size;
-  if (_user_data_api->lookup_user_data(user_data, cpufeatures_userdata_name, (const void **) &cdatap, &size)) {
-    if (size != sizeof(VM_Version::VM_Features)) {
-      _user_data_api->destroy_user_data(user_data);
-      log_error(crac)("User data %s in %s has unexpected size %zu (expected %zu)", cpufeatures_userdata_name, CRaCRestoreFrom, size, sizeof(VM_Version::VM_Features));
-      return false;
-    }
-    if (cdatap == nullptr) {
-      _user_data_api->destroy_user_data(user_data);
-      log_error(crac)("lookup_user_data %s should return non-null data pointer", cpufeatures_userdata_name);
-      return false;
-    }
-    *datap = *cdatap;
-    *presentp = true;
-  } else {
-    *presentp = false;
+  if (!_image_constraints_api->set_bitmap(_conf, cpufeatures_name, reinterpret_cast<const unsigned char *>(datap), sizeof(*datap))) {
+    log_error(crac)("CRaC engine failed to record bitmap %s", cpufeatures_name);
+    return false;
   }
-  _user_data_api->destroy_user_data(user_data);
   return true;
+}
+
+void CracEngine::require_cpuinfo(const VM_Version::VM_Features *datap) const {
+  log_debug(crac)("cpufeatures_load user data %s from %s...", cpufeatures_name, CRaCRestoreFrom);
+  _image_constraints_api->require_label(_conf, cpuarch_name, ARCHPROPNAME);
+  _image_constraints_api->require_bitmap(_conf, cpufeatures_name,
+    reinterpret_cast<const unsigned char *>(datap), sizeof(*datap), SUBSET);
 }

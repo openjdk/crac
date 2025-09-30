@@ -85,45 +85,45 @@ static inline unsigned char from_hex(char c, bool *err) {
 }
 
 static inline bool check_zeroes(const unsigned char *mem, size_t length) {
-	for (const unsigned char *end = mem + length; mem < end; ++mem) {
-		if (*mem) {
-			return false;
-		}
-	}
-	return true;
+  for (const unsigned char *end = mem + length; mem < end; ++mem) {
+    if (*mem) {
+      return false;
+    }
+  }
+  return true;
 }
 
 bool ImageConstraints::Constraint::compare_bitmaps(const unsigned char *bitmap, size_t length) const {
-	size_t common_length = data_length < length ? data_length : length;
-	if (comparison == EQUALS) {
-		if (memcmp(data, bitmap, common_length)) {
-			return false;
-		}
-		if (data_length > length && !check_zeroes(static_cast<const unsigned char *>(data) + common_length, data_length - common_length)) {
-			return false;
-		} else if (!check_zeroes(bitmap + common_length, length - common_length)) {
-			return false;
-		}
-		return true;
-	}
-	const unsigned char *bm1 = bitmap, *bm2 = static_cast<const unsigned char *>(data);
-	size_t l1 = length, l2 = data_length;
-	if (comparison == SUPERSET) {
-		bm1 = bm2;
-		bm2 = bitmap;
-		l1 = l2;
-		l2 = length;
-	}
-	// Now test bm1 is subset of bm2
-	for (size_t i = 0; i < common_length; ++i) {
-		if ((bm1[i] & bm2[i]) != bm1[i]) {
-			return false;
-		}
-	}
-	if (l1 > l2) {
-		return check_zeroes(bm1 + common_length, l1 - common_length);
-	}
-	return true;
+  size_t common_length = data_length < length ? data_length : length;
+  if (comparison == EQUALS) {
+    if (memcmp(data, bitmap, common_length)) {
+      return false;
+    }
+    if (data_length > length && !check_zeroes(static_cast<const unsigned char *>(data) + common_length, data_length - common_length)) {
+      return false;
+    } else if (!check_zeroes(bitmap + common_length, length - common_length)) {
+      return false;
+    }
+    return true;
+  }
+  const unsigned char *bm1 = bitmap, *bm2 = static_cast<const unsigned char *>(data);
+  size_t l1 = length, l2 = data_length;
+  if (comparison == SUPERSET) {
+    bm1 = bm2;
+    bm2 = bitmap;
+    l1 = l2;
+    l2 = length;
+  }
+  // Now test bm1 is subset of bm2
+  for (size_t i = 0; i < common_length; ++i) {
+    if ((bm1[i] & bm2[i]) != bm1[i]) {
+      return false;
+    }
+  }
+  if (l1 > l2) {
+    return check_zeroes(bm1 + common_length, l1 - common_length);
+  }
+  return true;
 }
 
 static void print_bitmap(const char *name, const unsigned char *data, size_t length) {

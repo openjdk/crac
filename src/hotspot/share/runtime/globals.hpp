@@ -1962,7 +1962,8 @@ const int ObjectAlignmentInBytes = 8;
           "Path where the checkpoint image should be placed. Currently an " \
           "image is a directory, the directory will be created if it does " \
           "not exist (parent directories are not created) or overwritten "  \
-          "otherwise.")                                                     \
+          "otherwise. The path can contain placeholders (e.g. %p for PID);" \
+          "check documentation for pattern format." )                       \
                                                                             \
   product(ccstr, CRaCRestoreFrom, nullptr, RESTORE_SETTABLE,                \
           "Path to the image to restore from.")                             \

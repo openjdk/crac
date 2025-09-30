@@ -1082,6 +1082,27 @@ These `java` options control the runtime behavior of the Java HotSpot VM.
     directory will be created if it does not exist, but no parent directories are
     created.
 
+    It is possible to use a pattern with automatically inferred values, using
+    these placeholders:
+    -   `%%`: single % character
+    -   `%a`: architecture (x86_64 or aarch64)
+    -   `%f`: CPU features hex string
+    -   `%u`: UUID (version 4 = random)
+    -   `%t`: checkpoint date & time in ISO-8601 in UTC, basic format (without
+              separators) with second precision, e.g. `20250909T141711Z`
+    -   `%T`: checkpoint epoch time (second precision)
+    -   `%b` and `%B`: process boot time (generation 1), same format as `%t` or `%T`
+    -   `%r` and `%R`: last restore time, same format as `%t` or `%T`. In case
+                       of generation 1 this is is the same as process boot time.
+    -   `%p`: PID of checkpointed process
+    -   `%c`: number of CPU cores
+    -   `%m`: max heap size (`-Xmx`) in a user-friendly format - using G or M suffix
+    -   `%g`: checkpoint generation (starting with 1, 0 is reserved for ‘unknown’)
+
+    Numeric placeholders (`%T`, `%B`, `%R`, `%p`, `%c`, `%m` and `%g`) support
+    an optional prefix with minimum width, padded with spaces or zeroes if the prefix
+    starts with zero, e.g. `%3g` -> `  1`, `%03g` -> `001`.
+
 `-XX:CRaCRestoreFrom=`*directory*
 :   Restores from the specified checkpoint image.
 

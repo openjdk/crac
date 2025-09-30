@@ -23,9 +23,11 @@
 
 import jdk.crac.Core;
 import jdk.test.lib.Platform;
+import jdk.test.lib.Unit;
 import jdk.test.lib.crac.CracBuilder;
 import jdk.test.lib.crac.CracEngine;
 import jdk.test.lib.crac.CracTest;
+import jdk.test.lib.util.FileUtils;
 
 import java.io.File;
 import java.io.IOException;
@@ -69,20 +71,24 @@ public class PathPatternTest implements CracTest {
 
     @Override
     public void test() throws Exception {
+        Path foo = Path.of("foo");
         //noinspection ResultOfMethodCallIgnored
-        new File("foo").mkdirs();
+        foo.toFile().mkdirs();
 
         // Fixed fields only, no-timestamps
         long pid = runCheckpoints("foo/cr_%%_%a_%p_%05c_%3m_%m_%g", false);
         File f = new File(String.format("foo/cr_%%_%s_%d_%05d_%d_1G_1",
-                Platform.getOsArch(), pid, Runtime.getRuntime().availableProcessors(), 1024 * 1024 * 1024));
-        assertTrue(f.exists(), "Expect" + f);
+                Platform.getOsArch(), pid, Runtime.getRuntime().availableProcessors(), Unit.G.size()));
+        assertTrue(f.exists(), "Expect " + f);
         assertTrue(f.isDirectory());
-        deleteDir("foo");
+
+        FileUtils.deleteFileTreeWithRetry(foo);
+        //noinspection ResultOfMethodCallIgnored
+        foo.toFile().mkdirs();
 
         // Pattern-based checks
         runCheckpoints("foo/%u_%f_", false);
-        try (var stream = Files.list(Path.of("foo"))) {
+        try (var stream = Files.list(foo)) {
             AtomicInteger count = new AtomicInteger(0);
             assertTrue(stream.allMatch(d -> {
                 count.incrementAndGet();
@@ -93,13 +99,15 @@ public class PathPatternTest implements CracTest {
             }));
             assertEquals(count.intValue(), 2);
         }
-        deleteDir("foo");
+        FileUtils.deleteFileTreeWithRetry(foo);
+        //noinspection ResultOfMethodCallIgnored
+        foo.toFile().mkdirs();
 
         // Timestamps and generation
         runCheckpoints("foo/%T_%t_%015B_%b_%15R_%r_%02g", true);
         Pattern pattern = Pattern.compile("(\\d+)_(\\d{8}T\\d{6})Z_0*(\\d+)_(\\d{8}T\\d{6})Z_ *(\\d+)_(\\d{8}T\\d{6})Z_0(\\d)");
-        try (var stream = Files.list(Path.of("foo"))) {
-            Path[] paths = stream.toArray(Path[]::new);
+        try (var stream = Files.list(foo)) {
+            Path[] paths = stream.sorted().toArray(Path[]::new);
             assertEquals(paths.length, 2);
             Matcher matcher1 = pattern.matcher(paths[0].getFileName().toString());
             assertTrue(matcher1.matches());
@@ -141,21 +149,6 @@ public class PathPatternTest implements CracTest {
         assertEquals(str, DATE_FORMAT.format(new Date(TimeUnit.SECONDS.toMillis(ts))));
     }
 
-    private static void deleteDir(String dir) throws IOException {
-        Path dirPath = Path.of(dir);
-        try (var stream = Files.walk(dirPath)) {
-            stream.sorted(Comparator.reverseOrder()).forEach(p -> {
-                if (!p.equals(dirPath)) {
-                    try {
-                        Files.delete(p);
-                    } catch (IOException e) {
-                        throw new RuntimeException(e);
-                    }
-                }
-            });
-        }
-    }
-
     @Override
     public void exec() throws Exception {
         // Do two checkpoint-restores to ensure code behaves correctly after repeated execution
@@ -165,6 +158,4 @@ public class PathPatternTest implements CracTest {
         }
         Core.checkpointRestore();
     }
-
-
 }

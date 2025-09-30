@@ -77,7 +77,7 @@ private:
 
   static int checkpoint_restore(int *shmid);
 
-  static bool resolve_image_location(char *buf, size_t buflen, bool *fixed);
+  static bool interpolate_checkpoint_location(char *buf, size_t buflen, bool *fixed);
 };
 
 #endif //SHARE_RUNTIME_CRAC_HPP

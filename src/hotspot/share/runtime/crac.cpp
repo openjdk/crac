@@ -101,15 +101,15 @@ static char * strchrnul(char * str, char c) {
 }
 #endif //__APPLE__ || _WINDOWS
 
-static int append_time(char *buf, size_t buflen, bool iso8601, bool zero_pad, int width, long timeMillis) {
+static int append_time(char *buf, size_t buflen, bool iso8601, bool zero_pad, int width, jlong timeMillis) {
   if (iso8601) {
     if (width >= 0 || zero_pad) {
-      log_warning(crac)("CRaCCheckpointTo=%s cannot set zero_pad or width for ISO-8601 time", CRaCCheckpointTo);
+      log_warning(crac)("Cannot use zero-padding or set width for ISO-8601 time in CRaCCheckpointTo=%s", CRaCCheckpointTo);
     }
     // os::iso8601_time formats with dashes and colons, we want the basic version
     time_t time = timeMillis / 1000;
     struct tm tms;
-    if (gmtime_r(&time, &tms) == NULL) {
+    if (os::gmtime_pd(&time, &tms) == nullptr) {
       log_warning(crac)("Cannot format time %ld", timeMillis);
       return -1;
     }
@@ -126,7 +126,7 @@ static int append_size(char *buf, size_t buflen, bool zero_pad, int width, size_
   } else if (width >= 0) {
     return snprintf(buf, buflen, "%*zu", width, size);
   } else {
-    const char *suffixes[] = { "k", "M", "G" };
+    static constexpr const char *suffixes[] = { "k", "M", "G" };
     const char *suffix = "";
     for (size_t i = 0; i < ARRAY_SIZE(suffixes) && size != 0 && (size & 1023) == 0; ++i) {
       suffix = suffixes[i];
@@ -136,125 +136,140 @@ static int append_size(char *buf, size_t buflen, bool zero_pad, int width, size_
   }
 }
 
-#define check_no_width() do { \
+#define check_no_width_padding() do { \
     if (width >= 0) { \
-      log_warning(crac)("CRaCCheckpointTo=%s cannot set width for %%%c", CRaCCheckpointTo, c); \
+      log_warning(crac)("Cannot set width for %%%c in CRaCCheckpointTo=%s", c, CRaCCheckpointTo); \
+    } \
+    if (zero_pad) { \
+      log_warning(crac)("Cannot use zero-padding for %%%c in CRaCCheckpointTo=%s", c, CRaCCheckpointTo); \
     } \
   } while (false)
 
 #define check_retval(statement) do { \
     int ret = statement; \
-    if (ret < 0 || (size_t) ret > buflen) { \
-      log_error(crac)("Error interpolating CRaCCheckpointTo=%s (@%zu, buffer size %zu)", CRaCCheckpointTo, si, buflen); \
+    if (ret < 0) { \
+      log_error(crac)("Error interpolating CRaCCheckpointTo=%s (too long)", CRaCCheckpointTo); \
+      return false; \
+    } else if ((size_t) ret > buflen) { \
+      log_error(crac)("Error interpolating CRaCCheckpointTo=%s", CRaCCheckpointTo); \
       return false; \
     } \
     buf += ret; \
     buflen -= ret; \
   } while (false)
 
-bool crac::resolve_image_location(char *buf, size_t buflen, bool *fixed) {
+static inline jlong boot_time() {
+  // RuntimeMxBean.getStartTime() returns Management::vm_init_done_time() but this is not initialized
+  // when CRaC checks the boot time early in the initialization phase
+  return os::javaTimeMillis() - 1000 * (os::elapsed_counter() / os::elapsed_frequency());
+}
+
+bool crac::interpolate_checkpoint_location(char *buf, size_t buflen, bool *fixed) {
   *fixed = true;
   for (size_t si = 0; ; si++) {
+    if (buflen == 0) {
+      log_error(crac)("Error interpolating CRaCCheckpointTo=%s (too long)", CRaCCheckpointTo);
+      return false;
+    }
     char c = CRaCCheckpointTo[si];
-    if (c == '%') {
-      si++;
-      c = CRaCCheckpointTo[si];
-      bool zero_pad = false;
-      if (c == '0') {
-        zero_pad = true;
-        si++;
-      }
-      size_t width_start = si;
-      while (CRaCCheckpointTo[si] >= '1' && CRaCCheckpointTo[si] <= '9') {
-        ++si;
-      }
-      int width = -1;
-      if (zero_pad && width_start == si) {
-        log_error(crac)("CRaCCheckpointTo=%s contains a pattern with zero padding but no length", CRaCCheckpointTo);
-        return false;
-      } else if (si > width_start) {
-        width = atoi(&CRaCCheckpointTo[width_start]);
-      }
-      c = CRaCCheckpointTo[si];
-      switch (c) {
-      case '%':
-        check_no_width();
-        *(buf++) = '%';
-        --buflen;
-        break;
-      case 'a': // CPU architecture; matches system property "os.arch"
-          check_no_width();
-#ifndef ARCHPROPNAME // defined by build scripts
-# define ARCHPROPNAME "unknown"
-#endif
-        check_retval(snprintf(buf, buflen, "%s", ARCHPROPNAME));
-        break;
-      case 'f': { // CPU features
-          struct VM_Version::VM_Features data;
-          if (VM_Version::cpu_features_binary(&data)) {
-            int ret = data.print_numbers_hexonly(buf, buflen);
-            buf += ret;
-            buflen -= ret;
-          } // otherwise just empty string
-        }
-        break;
-      case 'u': { // Random UUID (v4)
-          check_no_width();
-          *fixed = false; // FIXME?
-          u4 time_mid_high = static_cast<u4>(os::random());
-          u4 seq_and_node_low = static_cast<u4>(os::random());
-          check_retval(snprintf(buf, buflen, "%08x-%04x-4%03x-a%03x-%04x%08x",
-            static_cast<u4>(os::random()), time_mid_high >> 16, time_mid_high & 0xFFF,
-            seq_and_node_low & 0xFFF, seq_and_node_low >> 16, static_cast<u4>(os::random())));
-        }
-        break;
-      case 't': // checkpoint (current) time
-      case 'T':
-        *fixed = false;
-        check_retval(append_time(buf, buflen, c == 't', zero_pad, width, os::javaTimeMillis()));
-        break;
-      case 'b': // boot time
-      case 'B':
-        check_retval(append_time(buf, buflen, c == 'b', zero_pad, width,
-            os::javaTimeMillis() - 1000 * (os::elapsed_counter() / os::elapsed_frequency())));
-        break;
-      case 'r': // last restore time
-      case 'R':
-        check_retval(append_time(buf, buflen, c == 'r', zero_pad, width,
-            os::javaTimeMillis() - 1000 * (os::elapsed_counter_since_restore() / os::elapsed_frequency())));
-        break;
-      case 'p': // PID
-        check_retval(snprintf(buf, buflen, zero_pad ? "%0*d" : "%*d", width, os::current_process_id()));
-        break;
-      case 'c': // Number of CPUs
-        check_retval(snprintf(buf, buflen, zero_pad ? "%0*d" : "%*d", width, os::active_processor_count()));
-        break;
-      case 'm': // Max heap size
-        *fixed = false; // Heap size is not yet resolved when this is called from prepare_checkpoint()
-        check_retval(append_size(buf, buflen, zero_pad, width, Universe::heap() != nullptr ? Universe::heap()->max_capacity() : 0));
-        break;
-      case 'g': // CRaC generation
-        check_retval(snprintf(buf, buflen, zero_pad ? "%0*d" : "%*d", width, _generation));
-        break;
-      default: /* incl. terminating '\0' */
-        log_error(crac)("CRaCCheckpointTo=%s contains an invalid pattern", CRaCCheckpointTo);
-        return false;
-      }
-    } else {
+    if (c != '%') {
       *(buf++) = c;
       --buflen;
       if (!c) {
         break;
+      } else {
+        continue;
       }
+    }
+
+    si++;
+    c = CRaCCheckpointTo[si];
+    bool zero_pad = false;
+    if (c == '0') {
+      zero_pad = true;
+      si++;
+    }
+    size_t width_start = si;
+    while (CRaCCheckpointTo[si] >= '0' && CRaCCheckpointTo[si] <= '9') {
+      ++si;
+    }
+    if (zero_pad && width_start == si) {
+      log_error(crac)("CRaCCheckpointTo=%s contains a pattern with zero padding but no length", CRaCCheckpointTo);
+      return false;
+    }
+    const int width = si > width_start ? atoi(&CRaCCheckpointTo[width_start]) : -1;
+    c = CRaCCheckpointTo[si];
+    switch (c) {
+    case '%':
+      check_no_width_padding();
+      *(buf++) = '%';
+      --buflen;
+      break;
+    case 'a': // CPU architecture; matches system property "os.arch"
+        check_no_width_padding();
+#ifndef ARCHPROPNAME
+# error "ARCHPROPNAME must be defined by build scripts"
+#endif
+      check_retval(snprintf(buf, buflen, "%s", ARCHPROPNAME));
+      break;
+    case 'f': { // CPU features
+        check_no_width_padding();
+        struct VM_Version::VM_Features data;
+        if (VM_Version::cpu_features_binary(&data)) {
+          int ret = data.print_numbers(buf, buflen, true);
+          buf += ret;
+          buflen -= ret;
+        } // otherwise just empty string
+      }
+      break;
+    case 'u': { // Random UUID (v4)
+        check_no_width_padding();
+        *fixed = false; // FIXME?
+        u4 time_mid_high = static_cast<u4>(os::random());
+        u4 seq_and_node_low = static_cast<u4>(os::random());
+        check_retval(snprintf(buf, buflen, "%08x-%04x-4%03x-%04x-%04x%08x",
+          static_cast<u4>(os::random()), time_mid_high >> 16, time_mid_high & 0xFFF,
+          0x8000 | (seq_and_node_low & 0x3FFF), seq_and_node_low >> 16, static_cast<u4>(os::random())));
+      }
+      break;
+    case 't': // checkpoint (current) time
+    case 'T':
+      *fixed = false;
+      check_retval(append_time(buf, buflen, c == 't', zero_pad, width, os::javaTimeMillis()));
+      break;
+    case 'b': // boot time
+    case 'B':
+      check_retval(append_time(buf, buflen, c == 'b', zero_pad, width, boot_time()));
+      break;
+    case 'r': // last restore time
+    case 'R':
+      check_retval(append_time(buf, buflen, c == 'r', zero_pad, width, _generation != 1 ? crac::restore_start_time() : boot_time()));
+      break;
+    case 'p': // PID
+      check_retval(snprintf(buf, buflen, zero_pad ? "%0*d" : "%*d", width, os::current_process_id()));
+      break;
+    case 'c': // Number of CPUs
+      check_retval(snprintf(buf, buflen, zero_pad ? "%0*d" : "%*d", width, os::active_processor_count()));
+      break;
+    case 'm': // Max heap size
+      *fixed = false; // Heap size is not yet resolved when this is called from prepare_checkpoint()
+      check_retval(append_size(buf, buflen, zero_pad, width, Universe::heap() != nullptr ? Universe::heap()->max_capacity() : 0));
+      break;
+    case 'g': // CRaC generation
+      check_retval(snprintf(buf, buflen, zero_pad ? "%0*d" : "%*d", width, _generation));
+      break;
+    default: /* incl. terminating '\0' */
+      log_error(crac)("CRaCCheckpointTo=%s contains an invalid pattern", CRaCCheckpointTo);
+      return false;
     }
   }
   return true;
 }
 
-#undef check_no_width
+#undef check_no_width_padding
 #undef check_retval
 
-static bool ensure_image_location(const char *path, bool rm) {
+static bool ensure_checkpoint_dir(const char *path, bool rm) {
   struct stat st;
   if (0 == os::stat(path, &st)) {
     if ((st.st_mode & S_IFMT) != S_IFDIR) {
@@ -281,15 +296,13 @@ int crac::checkpoint_restore(int *shmid) {
 
   // CRaCCheckpointTo can be changed on restore, and if this contains a pattern
   // it might not have been configured => we need to update the conf.
-  char image_location[PATH_MAX];
-  bool ignored;
-  if (!resolve_image_location(image_location, sizeof(image_location), &ignored) ||
-      !ensure_image_location(image_location, false)) {
-    return JVM_CHECKPOINT_ERROR;
-  }
   // Note that CRaCEngine and CRaCEngineOptions are not updated (as documented)
   // so we don't need to re-init the whole engine handle.
-  if (!_engine->configure_image_location(image_location)) {
+    char image_location[PATH_MAX];
+  bool ignored;
+  if (!interpolate_checkpoint_location(image_location, sizeof(image_location), &ignored) ||
+      !ensure_checkpoint_dir(image_location, false) ||
+      !_engine->configure_image_location(image_location)) {
     return JVM_CHECKPOINT_ERROR;
   }
 
@@ -562,10 +575,10 @@ bool crac::prepare_checkpoint() {
 
   char image_location[PATH_MAX];
   bool fixed_path;
-  if (!resolve_image_location(image_location, PATH_MAX, &fixed_path)) {
+  if (!interpolate_checkpoint_location(image_location, PATH_MAX, &fixed_path)) {
     return false;
   }
-  if (fixed_path && (!ensure_image_location(image_location, true) || !engine->configure_image_location(image_location))) {
+  if (fixed_path && (!ensure_checkpoint_dir(image_location, true) || !engine->configure_image_location(image_location))) {
     return false;
   }
 

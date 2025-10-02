@@ -596,14 +596,15 @@ protected:
       return *this == empty_features;
     }
 
-    int print_numbers(char *buf_orig, size_t buflen) const {
+    int print_numbers(char *buf_orig, size_t buflen, bool hexonly = false) const {
       char *buf = buf_orig;
+      const char *format = hexonly ? UINT64_FORMAT_0 : UINT64_FORMAT_X;
       apply_to_all_features([&](uint64_t u, int idx) {
-        int res = jio_snprintf(buf, buflen, UINT64_FORMAT_X, u);
+        int res = jio_snprintf(buf, buflen, format, u);
         buf += res;
         buflen -= res;
         assert(res > 0 && buflen >= 1, "not enough temporary space allocated");
-        if (idx + 1 < features_bitmap_element_count()) {
+        if (!hexonly && idx + 1 < features_bitmap_element_count()) {
           *buf++ = ',';
           --buflen;
         }

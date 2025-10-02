@@ -612,7 +612,7 @@ protected:
       return buf - buf_orig;
     }
 
-    static size_t print_buffer_length() {
+    static constexpr size_t print_buffer_length() {
       return MAX_CPU_FEATURES;
     }
 

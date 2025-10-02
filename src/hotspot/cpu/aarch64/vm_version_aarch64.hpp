@@ -66,7 +66,7 @@ public:
   static void initialize();
   struct VM_Features {
     int print_numbers(char *buf_orig, size_t buflen) const { return 0; }
-    static size_t print_buffer_length() { return 0; }
+    static constexpr size_t print_buffer_length() { return 0; }
   };
   static bool cpu_features_binary(VM_Features *data) { return false; }
   static bool ignore_cpu_features(bool is_checkpoint) { return true; }

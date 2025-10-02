@@ -22,39 +22,60 @@
  * or visit www.oracle.com if you need additional information or have any
  * questions.
  */
+#ifndef LINKEDLIST_HPP
+#define LINKEDLIST_HPP
 
-import java.nio.file.Files;
-import java.util.List;
+#include <new>
+#include <utility>
 
-import jdk.test.lib.crac.CracBuilder;
+template<class T> class LinkedList {
+private:
+  struct Node {
+    T _item;
+    Node *_next;
+  };
 
-/**
- * @test
- * @summary If CRaCIgnoreRestoreIfUnavailable is specified and there are no CPU
- *          features recorded in the image VM should proceed without restoring.
- * @requires (os.family == "linux") & (os.arch == "amd64" | os.arch == "x86_64")
- * @library /test/lib
- */
-public class NoCPUFeaturesTest {
-    private static final String MAIN_MSG = "Hello, world!";
-
-    public static void main(String[] args) throws Exception {
-        final var builder = new CracBuilder()
-            .vmOption("-XX:+CRaCIgnoreRestoreIfUnavailable")
-            .forwardClasspathOnRestore(true)
-            .captureOutput(true);
-
-        // Create an empty image without CPU features data
-        Files.createDirectory(builder.imageDir());
-
-        builder.startRestoreWithArgs(null, List.of(Main.class.getName(), "false"))
-            .waitForSuccess().outputAnalyzer()
-            .shouldContain("the image or its part cannot be found").shouldContain(MAIN_MSG);
+  Node *_head;
+  Node *_tail;
+  size_t _size;
+public:
+  LinkedList(): _head(nullptr), _tail(nullptr), _size(0) {}
+  ~LinkedList() {
+    Node *node = _head;
+    while (node) {
+      Node *next = node->_next;
+      delete node;
+      node = next;
     }
+  }
 
-    public static class Main {
-        public static void main(String[] args) throws Exception {
-            System.out.println(MAIN_MSG);
-        }
+  T& add(T&& item) {
+    Node *node = new(std::nothrow) Node();
+    node->_item = std::forward<T>(item);
+    node->_next = nullptr;
+    if (_tail) {
+      _tail->_next = node;
+    } else {
+      _tail = node;
     }
-}
+    if (!_head) {
+      _head = node;
+    }
+    ++_size;
+    return node->_item;
+  }
+
+  template<typename Func> void foreach(Func f) const {
+    Node *node = _head;
+    while (node) {
+      f(node->_item);
+      node = node->_next;
+    }
+  }
+
+  size_t size() {
+    return _size;
+  }
+};
+
+#endif // LINKEDLIST_HPP

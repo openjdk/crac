@@ -113,12 +113,12 @@ int crac::checkpoint_restore(int *shmid) {
     return JVM_CHECKPOINT_ERROR;
   }
 
-  if (!VM_Version::ignore_cpu_features()) {
+  if (!VM_Version::ignore_cpu_features(true)) {
     VM_Version::VM_Features data;
     if (VM_Version::cpu_features_binary(&data)) {
-      switch (_engine->prepare_user_data_api()) {
+      switch (_engine->prepare_image_constraints_api()) {
         case CracEngine::ApiStatus::OK:
-          if (!_engine->cpufeatures_store(&data)) {
+          if (!_engine->store_cpuinfo(&data)) {
             return JVM_CHECKPOINT_ERROR;
           }
           break;
@@ -520,17 +520,16 @@ void crac::restore(crac_restore_data& restore_data) {
     return;
   }
 
-  if (!VM_Version::ignore_cpu_features()) {
-    switch (engine.prepare_user_data_api()) {
+  // Previously IgnoreCPUFeatures didn't disable the check completely; the difference
+  // was printed out but continued even despite features not being satisfied.
+  // Since the check itself is delegated to the C/R Engine we will simply
+  // skip the check here.
+  if (!VM_Version::ignore_cpu_features(false)) {
+    switch (engine.prepare_image_constraints_api()) {
       case CracEngine::ApiStatus::OK: {
         VM_Version::VM_Features data;
-        bool present;
-        if (!engine.cpufeatures_load(&data, &present)) {
-          return;
-        }
-        if (!VM_Version::cpu_features_binary_check(present ? &data : nullptr)) {
-          log_error(crac)("Image %s has incompatible CPU features in its user data", CRaCRestoreFrom);
-          return;
+        if (VM_Version::cpu_features_binary(&data)) {
+          engine.require_cpuinfo(&data);
         }
         } break;
       case CracEngine::ApiStatus::ERR:
@@ -580,7 +579,33 @@ void crac::restore(crac_restore_data& restore_data) {
 
   const int ret = engine.restore();
   if (ret != 0) {
-    log_error(crac)("CRaC engine failed to restore from %s: error %i", CRaCRestoreFrom, ret);
+    const char *msg = "";
+    switch (ret) {
+      case RESTORE_ERROR_NOT_FOUND:
+        msg = "the image or its part cannot be found";
+        break;
+      case RESTORE_ERROR_NO_ACCESS:
+        msg = "the image cannot be accessed/retrieved (permissions or I/O issue)";
+        break;
+      case RESTORE_ERROR_INVALID:
+        msg = "the image does not match current CPU or is corrupted";
+        break;
+      case RESTORE_ERROR_MEMORY:
+        msg = "memory allocation failure during restore";
+        break;
+      case RESTORE_ERROR_PROCINFO:
+        msg = "the process cannot fetch information about itself";
+        break;
+    }
+    log_error(crac)("CRaC engine failed to restore from %s: %s (error %d)", CRaCRestoreFrom, msg, ret);
+  }
+  if (ret == RESTORE_ERROR_INVALID) {
+    VM_Version::VM_Features data;
+    if (VM_Version::cpu_features_binary(&data)) {
+      char buf[VM_Version::VM_Features::print_buffer_length()];
+      data.print_numbers(buf, sizeof(buf));
+      log_error(crac)("\tIf the restore failed due to a wrong CPU features, try using -XX:CPUFeatures=%s on checkpoint.", buf);
+    }
   }
 }
 

@@ -612,6 +612,10 @@ protected:
       return buf - buf_orig;
     }
 
+    static constexpr size_t print_buffer_length() {
+      return MAX_CPU_FEATURES;
+    }
+
     void print_numbers_and_names(char *buf, size_t buflen) const {
       int res = print_numbers(buf, buflen);
       buf += res;
@@ -908,8 +912,12 @@ public:
   // Initialization
   static void initialize();
   static bool cpu_features_binary(VM_Features *data);
-  static bool cpu_features_binary_check(const VM_Features *data);
-  static bool ignore_cpu_features() { return _ignore_glibc_not_using; }
+  static bool ignore_cpu_features(bool is_checkpoint) {
+    // This gets triggered by -XX:CPUFeatures=ignore, not writing the features & arch
+    // on checkpoint into the image at all, and skipping the check on restore.
+    // IgnoreCPUFeatures is ignored on checkpoint
+    return _ignore_glibc_not_using || (!is_checkpoint && IgnoreCPUFeatures);
+  }
   static void restore_check(const char* str, const char* msg_prefix);
 
   // Override Abstract_VM_Version implementation

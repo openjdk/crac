@@ -26,8 +26,8 @@
 
 #include "crlib/crlib.h"
 #include "crlib/crlib_description.h"
+#include "crlib/crlib_image_constraints.h"
 #include "crlib/crlib_restore_data.h"
-#include "crlib/crlib_user_data.h"
 #include "memory/allocation.hpp"
 #include "nmt/memTag.hpp"
 #include "runtime/vm_version.hpp"
@@ -67,9 +67,9 @@ public:
   const char *description() const;
   const char *configuration_doc() const;
 
-  ApiStatus prepare_user_data_api();
-  bool cpufeatures_store(const VM_Version::VM_Features *datap) const;
-  bool cpufeatures_load(VM_Version::VM_Features *datap, bool *presentp) const;
+  ApiStatus prepare_image_constraints_api();
+  bool store_cpuinfo(const VM_Version::VM_Features *datap) const;
+  void require_cpuinfo(const VM_Version::VM_Features *datap) const;
 
 private:
   void *_lib = nullptr;
@@ -78,7 +78,7 @@ private:
 
   crlib_restore_data_t *_restore_data_api = nullptr;
   crlib_description_t *_description_api = nullptr;
-  crlib_user_data_t *_user_data_api = nullptr;
+  crlib_image_constraints_t *_image_constraints_api = nullptr;
 };
 
 #endif // SHARE_RUNTIME_CRAC_ENGINE_HPP

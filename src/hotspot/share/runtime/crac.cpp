@@ -113,7 +113,7 @@ int crac::checkpoint_restore(int *shmid) {
     return JVM_CHECKPOINT_ERROR;
   }
 
-  if (!VM_Version::ignore_cpu_features()) {
+  if (!VM_Version::ignore_cpu_features(true)) {
     VM_Version::VM_Features data;
     if (VM_Version::cpu_features_binary(&data)) {
       switch (_engine->prepare_image_constraints_api()) {
@@ -523,14 +523,8 @@ void crac::restore(crac_restore_data& restore_data) {
   // Previously IgnoreCPUFeatures didn't disable the check completely; the difference
   // was printed out but continued even despite features not being satisfied.
   // Since the check itself is delegated to the C/R Engine we will simply
-  // skip the check here (or prevent storing the features in the image).
-#ifdef __x86_64__
-  // TODO: Remove IgnoreCPUFeatures completely, or make it at-least platform-independent
-  bool skip_check = IgnoreCPUFeatures;
-#else
-  bool skip_check = true;
-#endif
-  if (!VM_Version::ignore_cpu_features() && !skip_check) {
+  // skip the check here.
+  if (!VM_Version::ignore_cpu_features(false)) {
     switch (engine.prepare_image_constraints_api()) {
       case CracEngine::ApiStatus::OK: {
         VM_Version::VM_Features data;
@@ -586,14 +580,12 @@ void crac::restore(crac_restore_data& restore_data) {
   const int ret = engine.restore();
   if (ret == RESTORE_ERROR_INVALID) {
     log_error(crac)("CRaC engine failed to restore from %s: the image is either corrupted or does not match current CPU", CRaCRestoreFrom);
-#ifdef __x86_64__
     VM_Version::VM_Features data;
     if (VM_Version::cpu_features_binary(&data)) {
       char buf[VM_Version::VM_Features::print_buffer_length()];
       data.print_numbers(buf, sizeof(buf));
       log_error(crac)("\tIf the restore failed due to a wrong CPU features, try using -XX:CPUFeatures=%s on checkpoint.", buf);
     }
-#endif
   } else if (ret != 0) {
     log_error(crac)("CRaC engine failed to restore from %s: error %i", CRaCRestoreFrom, ret);
   }

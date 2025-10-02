@@ -36,7 +36,7 @@
 #define BITMAP_PREFIX "bitmap:"
 
 static FILE *open_tags(const char *image_location, const char *mode) {
-   char fname[PATH_MAX];
+  char fname[PATH_MAX];
   if (snprintf(fname, sizeof(fname), "%s/tags", image_location) >= (int) sizeof(fname) - 1) {
     fprintf(stderr, CREXEC "filename too long: %s/tags\n", image_location);
     return nullptr;
@@ -56,14 +56,14 @@ bool ImageConstraints::persist(const char *image_location) const {
   }
   _tags.foreach([&](const Tag &tag){
     if (tag.type == LABEL) {
-        fprintf(f, LABEL_PREFIX "%s=%s\n", tag.name, static_cast<const char *>(tag.data));
+      fprintf(f, LABEL_PREFIX "%s=%s\n", tag.name, static_cast<const char *>(tag.data));
     } else {
-        fprintf(f, BITMAP_PREFIX "%s=", tag.name);
-        const unsigned char *bytes = static_cast<const unsigned char *>(tag.data);
-        for (const unsigned char *end = bytes + tag.data_length; bytes < end; bytes++) {
-            fprintf(f, "%02x", *bytes);
-        }
-        fputc('\n', f);
+      fprintf(f, BITMAP_PREFIX "%s=", tag.name);
+      const unsigned char *bytes = static_cast<const unsigned char *>(tag.data);
+      for (const unsigned char *end = bytes + tag.data_length; bytes < end; bytes++) {
+        fprintf(f, "%02x", *bytes);
+      }
+      fputc('\n', f);
     }
   });
   if (fclose(f)) {
@@ -74,14 +74,14 @@ bool ImageConstraints::persist(const char *image_location) const {
 }
 
 static inline unsigned char from_hex(char c, bool *err) {
-    if (c >= '0' && c <= '9') {
-        return c - '0';
-    } else if (c >= 'a' && c <= 'f') {
-        return c - 'a' + 10;
-    } else {
-        *err = true;
-        return 0;
-    }
+  if (c >= '0' && c <= '9') {
+    return c - '0';
+  } else if (c >= 'a' && c <= 'f') {
+    return c - 'a' + 10;
+  } else {
+    *err = true;
+    return 0;
+  }
 }
 
 static inline bool check_zeroes(const unsigned char *mem, size_t length) {
@@ -127,11 +127,11 @@ bool ImageConstraints::Constraint::compare_bitmaps(const unsigned char *bitmap, 
 }
 
 static void print_bitmap(const char *name, const unsigned char *data, size_t length) {
-    fprintf(stderr, CREXEC "\t%s", name);
-    for (size_t i = 0; i < length; ++i) {
-        fprintf(stderr, "%02x ", data[i]);
-    }
-    fputc('\n', stderr);
+  fprintf(stderr, CREXEC "\t%s", name);
+  for (size_t i = 0; i < length; ++i) {
+    fprintf(stderr, "%02x ", data[i]);
+  }
+  fputc('\n', stderr);
 }
 
 int ImageConstraints::validate(const char *image_location) const {
@@ -152,13 +152,12 @@ int ImageConstraints::validate(const char *image_location) const {
     *nl = 0;
     assert(eq < nl);
     if (!strncmp(line, LABEL_PREFIX, strlen(LABEL_PREFIX))) {
-      Tag& t = tags.add({
+      tags.add({
         .type = LABEL,
         .name = strdup(line + strlen(LABEL_PREFIX)),
         .data = strdup(eq + 1),
         .data_length = (size_t) (nl - eq),
       });
-      assert(t.data_length == strlen(eq + 1) + 1);
     } else if (!strncmp(line, BITMAP_PREFIX, strlen(BITMAP_PREFIX))) {
       size_t length = (size_t)(nl - eq - 1)/2;
       if (2 * length != (size_t)(nl - eq - 1)) {
@@ -195,7 +194,7 @@ int ImageConstraints::validate(const char *image_location) const {
     keys[counter++] = t.name;
   });
   Hashtable<Tag> ht(keys, tags.size());
-  delete keys;
+  delete[] keys;
 
   tags.foreach([&](Tag &t) {
     ht.put(t.name, std::move(t));

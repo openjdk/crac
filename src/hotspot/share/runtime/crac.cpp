@@ -110,13 +110,13 @@ static int append_time(char *buf, size_t buflen, bool iso8601, bool zero_pad, in
     time_t time = timeMillis / 1000;
     struct tm tms;
     if (os::gmtime_pd(&time, &tms) == nullptr) {
-      log_warning(crac)("Cannot format time %ld", timeMillis);
+      log_warning(crac)("Cannot format time " JLONG_FORMAT, timeMillis);
       return -1;
     }
-    return strftime(buf, buflen, "%Y%m%dT%H%M%SZ", &tms);
+    return (int) strftime(buf, buflen, "%Y%m%dT%H%M%SZ", &tms);
   } else {
     // width -1 works too (means 1 char left aligned => we always print at least 1 char)
-    return snprintf(buf, buflen, zero_pad ? "%0*ld" : "%*ld", width, timeMillis / 1000);
+    return snprintf(buf, buflen, zero_pad ? "%0*" PRId64 : "%*" PRId64, width, (int64_t) (timeMillis / 1000));
   }
 }
 
@@ -214,7 +214,7 @@ bool crac::interpolate_checkpoint_location(char *buf, size_t buflen, bool *fixed
       break;
     case 'f': { // CPU features
         check_no_width_padding();
-        struct VM_Version::VM_Features data;
+        VM_Version::VM_Features data;
         if (VM_Version::cpu_features_binary(&data)) {
           int ret = data.print_numbers(buf, buflen, true);
           buf += ret;
@@ -289,6 +289,10 @@ static bool ensure_checkpoint_dir(const char *path, bool rm) {
   return true;
 }
 
+#ifndef PATH_MAX
+# define PATH_MAX 1024
+#endif
+
 int crac::checkpoint_restore(int *shmid) {
   guarantee(_engine != nullptr, "CRaC engine is not initialized");
 
@@ -298,7 +302,7 @@ int crac::checkpoint_restore(int *shmid) {
   // it might not have been configured => we need to update the conf.
   // Note that CRaCEngine and CRaCEngineOptions are not updated (as documented)
   // so we don't need to re-init the whole engine handle.
-    char image_location[PATH_MAX];
+  char image_location[PATH_MAX];
   bool ignored;
   if (!interpolate_checkpoint_location(image_location, sizeof(image_location), &ignored) ||
       !ensure_checkpoint_dir(image_location, false) ||

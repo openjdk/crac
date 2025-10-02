@@ -90,9 +90,11 @@ public class PathPatternTest implements CracTest {
         runCheckpoints("foo/%u_%f_", false);
         try (var stream = Files.list(foo)) {
             AtomicInteger count = new AtomicInteger(0);
+            String featuresPattern = Platform.isX64() ? "\\p{XDigit}{32}" : "";
             assertTrue(stream.allMatch(d -> {
                 count.incrementAndGet();
-                if (!d.getFileName().toString().matches("\\p{XDigit}{8}-\\p{XDigit}{4}-\\p{XDigit}{4}-\\p{XDigit}{4}-\\p{XDigit}{12}_\\p{XDigit}{32}_")) {
+                if (!d.getFileName().toString().matches("\\p{XDigit}{8}-\\p{XDigit}{4}-\\p{XDigit}{4}-\\p{XDigit}{4}-\\p{XDigit}{12}_" + featuresPattern + "_")) {
+                    System.err.printf("Unexpected file: %s%nFull path: %s%n", d.getFileName(), d);
                     return false;
                 }
                 return d.toFile().isDirectory();
@@ -109,6 +111,9 @@ public class PathPatternTest implements CracTest {
         try (var stream = Files.list(foo)) {
             Path[] paths = stream.sorted().toArray(Path[]::new);
             assertEquals(paths.length, 2);
+            System.err.println("IMAGE1: " + paths[0]);
+            System.err.println("IMAGE2: " + paths[1]);
+
             Matcher matcher1 = pattern.matcher(paths[0].getFileName().toString());
             assertTrue(matcher1.matches());
             Matcher matcher2 = pattern.matcher(paths[1].getFileName().toString());
@@ -125,7 +130,7 @@ public class PathPatternTest implements CracTest {
 
             // boot time is constant
             long b1 = Long.parseLong(matcher1.group(3));
-            long b2 = Long.parseLong(matcher1.group(3));
+            long b2 = Long.parseLong(matcher2.group(3));
             assertEquals(b1, b2);
             assertLTE(b1, t1);
             assertGT(b1 + MAX_DURATION_SECONDS, now);

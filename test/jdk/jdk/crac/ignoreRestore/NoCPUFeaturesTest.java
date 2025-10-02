@@ -49,7 +49,7 @@ public class NoCPUFeaturesTest {
 
         builder.startRestoreWithArgs(null, List.of(Main.class.getName(), "false"))
             .waitForSuccess().outputAnalyzer()
-            .shouldContain("incompatible CPU features").shouldContain(MAIN_MSG);
+            .shouldContain("the image or its part cannot be found").shouldContain(MAIN_MSG);
     }
 
     public static class Main {

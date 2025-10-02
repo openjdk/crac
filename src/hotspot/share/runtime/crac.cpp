@@ -578,16 +578,34 @@ void crac::restore(crac_restore_data& restore_data) {
   }
 
   const int ret = engine.restore();
+  if (ret != 0) {
+    const char *msg = "";
+    switch (ret) {
+      case RESTORE_ERROR_NOT_FOUND:
+        msg = "the image or its part cannot be found";
+        break;
+      case RESTORE_ERROR_NO_ACCESS:
+        msg = "the image cannot be accessed/retrieved (permissions or I/O issue)";
+        break;
+      case RESTORE_ERROR_INVALID:
+        msg = "the image does not match current CPU or is corrupted";
+        break;
+      case RESTORE_ERROR_MEMORY:
+        msg = "memory allocation failure during restore";
+        break;
+      case RESTORE_ERROR_PROCINFO:
+        msg = "the process cannot fetch information about itself";
+        break;
+    }
+    log_error(crac)("CRaC engine failed to restore from %s: %s (error %d)", CRaCRestoreFrom, msg, ret);
+  }
   if (ret == RESTORE_ERROR_INVALID) {
-    log_error(crac)("CRaC engine failed to restore from %s: the image is either corrupted or does not match current CPU", CRaCRestoreFrom);
     VM_Version::VM_Features data;
     if (VM_Version::cpu_features_binary(&data)) {
       char buf[VM_Version::VM_Features::print_buffer_length()];
       data.print_numbers(buf, sizeof(buf));
       log_error(crac)("\tIf the restore failed due to a wrong CPU features, try using -XX:CPUFeatures=%s on checkpoint.", buf);
     }
-  } else if (ret != 0) {
-    log_error(crac)("CRaC engine failed to restore from %s: error %i", CRaCRestoreFrom, ret);
   }
 }
 

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2023, Azul Systems, Inc. All rights reserved.
+ * Copyright (c) 2023, 2025, Azul Systems, Inc. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -22,6 +22,7 @@
  */
 
 import jdk.crac.*;
+import jdk.test.lib.crac.AsyncStreamReader;
 import jdk.test.lib.crac.CracBuilder;
 import jdk.test.lib.crac.CracEngine;
 import jdk.test.lib.crac.CracProcess;
@@ -35,13 +36,10 @@ import com.sun.jdi.connect.IllegalConnectorArgumentsException;
 import com.sun.jdi.VirtualMachine;
 import com.sun.jdi.VMDisconnectedException;
 
-import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.BufferedReader;
-import java.io.IOException;
 import java.util.Map;
-import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 
 import static jdk.test.lib.Asserts.*;
 
@@ -88,12 +86,18 @@ public class JdwpTransportTest implements CracTest {
         return vm;
     }
 
-    private void waitForString(BufferedReader reader, String str) throws IOException {
-        for (String line = reader.readLine(); true; line = reader.readLine()) {
+    private void waitForString(AsyncStreamReader reader, String str, long timeoutMillis) throws Exception {
+        while (true) {
+            String line = reader.readLine(timeoutMillis);
             System.out.println(line);
             if (line.contains(str))
                 break;
         }
+    }
+
+    private void waitForString(AsyncStreamReader reader, String str) throws Exception {
+        final long timeoutMillis = 30000;
+        waitForString(reader, str, timeoutMillis);
     }
 
     @Override
@@ -104,9 +108,9 @@ public class JdwpTransportTest implements CracTest {
         builder.engine(CracEngine.SIMULATE);
 
         CracProcess process = builder.captureOutput(true).startCheckpoint();
-        var errReader = new BufferedReader(new InputStreamReader(process.errOutput()));
+        var errReader = new AsyncStreamReader(process.errOutput());
+        var reader = new AsyncStreamReader(process.output());
         try {
-            var reader = new BufferedReader(new InputStreamReader(process.output()));
             if (!suspendOnJdwpStart) {
                 waitForString(reader, STARTED);
             } else {
@@ -140,21 +144,32 @@ public class JdwpTransportTest implements CracTest {
             process.input().flush();
 
             process.waitForSuccess();
+        } catch (TimeoutException e) {
+            System.err.println("reader.isRunning()=" + reader.isRunning());
+            process.printThreadDump();
+            process.dumpProcess();
+            throw e;
         } finally {
-                for (String line = errReader.readLine(); null != line; line = errReader.readLine()) {
-                    System.err.println(line);
+            try {
+                final long timeoutMillis = 1000;
+                while (true) {
+                    System.err.println("APP STDERR: " + errReader.readLine(timeoutMillis));
                 }
-                process.destroyForcibly();
+            } catch (TimeoutException e) {
+                // do nothing
+            }
+            reader.close();
+            errReader.close();
+            process.destroyForcibly();
         }
     }
 
     @Override
     public void exec() throws Exception {
-        System.out.println(STARTED);
+        System.out.println(STARTED + ", pid=" + ProcessHandle.current().pid());
         Core.checkpointRestore();
         System.out.println("APP: Restored");
         System.in.read(); // Wait for debugger is attached and done
         System.out.println("APP: Finished");
     }
 }
-

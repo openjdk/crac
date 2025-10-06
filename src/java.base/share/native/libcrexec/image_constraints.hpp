@@ -107,25 +107,13 @@ public:
   bool set_bitmap(const char *name, const unsigned char *value, size_t length_bytes);
 
   void require_label(const char *name, const char *value) {
-    _constraints.add({
-      .type = LABEL,
-      .name = strdup(name),
-      .data = strdup(value),
-      .data_length = strlen(value) + 1,
-      .comparison = EQUALS,
-    });
+    _constraints.add({ LABEL, strdup(name), strdup(value), strlen(value) + 1, EQUALS });
   }
 
   void require_bitmap(const char *name, const unsigned char *value, size_t length_bytes, bitmap_comparison_t comparison) {
     void *copy = malloc(length_bytes);
     memcpy(copy, value, length_bytes);
-    _constraints.add({
-      .type = BITMAP,
-      .name = strdup(name),
-      .data = copy,
-      .data_length = length_bytes,
-      .comparison = comparison,
-    });
+    _constraints.add({ BITMAP, strdup(name), copy, length_bytes, comparison });
   }
 
   bool persist(const char *image_location) const;

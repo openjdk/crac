@@ -70,12 +70,7 @@ bool ImageConstraints::set_label(const char *name, const char *value) {
     free(name_copy);
     return false;
   }
-  _tags.add({
-    .type = LABEL,
-    .name = name_copy,
-    .data = value_copy,
-    .data_length = value_length,
-  });
+  _tags.add({ LABEL, name_copy, value_copy, value_length });
   return true;
 }
 
@@ -100,12 +95,7 @@ bool ImageConstraints::set_bitmap(const char *name, const unsigned char *value, 
     return false;
   }
   memcpy(bitmap_copy, value, length_bytes);
-  _tags.add({
-    .type = BITMAP,
-    .name = name_copy,
-    .data = (const unsigned char *) bitmap_copy,
-    .data_length = length_bytes,
-  });
+  _tags.add({ BITMAP, name_copy, (const unsigned char *) bitmap_copy, length_bytes });
   return true;
 }
 
@@ -212,12 +202,15 @@ int ImageConstraints::validate(const char *image_location) const {
     *nl = 0;
     assert(eq < nl);
     if (!strncmp(line, LABEL_PREFIX, strlen(LABEL_PREFIX))) {
-      tags.add({
-        .type = LABEL,
-        .name = strdup(line + strlen(LABEL_PREFIX)),
-        .data = strdup(eq + 1),
-        .data_length = (size_t) (nl - eq),
-      });
+      char *name = strdup(line + strlen(LABEL_PREFIX));
+      char *value = strdup(eq + 1);
+      if (name == nullptr || value == nullptr) {
+        fprintf(stderr, CREXEC, "Cannot allocate memory for validation\n");
+        free(name);
+        free(value);
+        return RESTORE_ERROR_MEMORY;
+      }
+      tags.add({ LABEL, name, value, (size_t) (nl - eq) });
     } else if (!strncmp(line, BITMAP_PREFIX, strlen(BITMAP_PREFIX))) {
       size_t length = (size_t)(nl - eq - 1)/2;
       if (2 * length != (size_t)(nl - eq - 1)) {
@@ -225,6 +218,10 @@ int ImageConstraints::validate(const char *image_location) const {
         return RESTORE_ERROR_INVALID;
       }
       unsigned char *data = (unsigned char *) malloc(length);
+      if (data == nullptr) {
+        fprintf(stderr, CREXEC "Cannot allocate memory for validation\n");
+        return RESTORE_ERROR_MEMORY;
+      }
       bool err = false;
       for (size_t i = 0; i < length; ++i) {
         data[i] = (from_hex(eq[1 + 2 * i], &err) << 4) + from_hex(eq[2 + 2 * i], &err);
@@ -233,12 +230,13 @@ int ImageConstraints::validate(const char *image_location) const {
         fprintf(stderr, CREXEC "Invalid format of tags file (bad character in bitmap): %s\n", line);
         return RESTORE_ERROR_INVALID;
       }
-      tags.add({
-        .type = BITMAP,
-        .name = strdup(line + strlen(BITMAP_PREFIX)),
-        .data = data,
-        .data_length = length,
-      });
+      char *name = strdup(line + strlen(BITMAP_PREFIX));
+      if (name == nullptr) {
+        fprintf(stderr, CREXEC "Cannot allocate memory for validation\n");
+        free(data);
+        return RESTORE_ERROR_MEMORY;
+      }
+      tags.add({ BITMAP, name, data, length });
     } else {
       fprintf(stderr, CREXEC "Invalid format of tags file (unknown type): %s\n", line);
       return RESTORE_ERROR_INVALID;

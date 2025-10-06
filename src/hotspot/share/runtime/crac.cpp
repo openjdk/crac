@@ -147,10 +147,10 @@ static int append_size(char *buf, size_t buflen, bool zero_pad, int width, size_
 
 #define check_retval(statement) do { \
     int ret = statement; \
-    if (ret < 0) { \
+    if ((size_t) ret > buflen) { \
       log_error(crac)("Error interpolating CRaCCheckpointTo=%s (too long)", CRaCCheckpointTo); \
       return false; \
-    } else if ((size_t) ret > buflen) { \
+    } else if (ret < 0) { \
       log_error(crac)("Error interpolating CRaCCheckpointTo=%s", CRaCCheckpointTo); \
       return false; \
     } \
@@ -216,9 +216,7 @@ bool crac::interpolate_checkpoint_location(char *buf, size_t buflen, bool *fixed
         check_no_width_padding();
         VM_Version::VM_Features data;
         if (VM_Version::cpu_features_binary(&data)) {
-          int ret = data.print_numbers(buf, buflen, true);
-          buf += ret;
-          buflen -= ret;
+          check_retval(data.print_numbers(buf, buflen, true));
         } // otherwise just empty string
       }
       break;

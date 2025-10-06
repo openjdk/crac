@@ -1085,10 +1085,11 @@ These `java` options control the runtime behavior of the Java HotSpot VM.
     It is possible to use a pattern with automatically inferred values, using
     these placeholders:
     -   `%%`: single % character
-    -   `%a`: architecture (x86_64 or aarch64)
+    -   `%a`: architecture; the same value as system property 'os.arch'
     -   `%f`: CPU features hex string. Empty string if the architecture does not
               use optional CPU features.
     -   `%u`: UUID (version 4 = random)
+    -   `%g`: checkpoint generation (starting with 1, 0 is reserved for ‘unknown’)
     -   `%t`: checkpoint date & time in ISO-8601 in UTC, basic format (without
               separators) with second precision, e.g. `20250909T141711Z`
     -   `%T`: checkpoint epoch time (second precision)
@@ -1098,7 +1099,6 @@ These `java` options control the runtime behavior of the Java HotSpot VM.
     -   `%p`: PID of checkpointed process
     -   `%c`: number of CPU cores
     -   `%m`: max heap size (`-Xmx`) in a user-friendly format - using G or M suffix
-    -   `%g`: checkpoint generation (starting with 1, 0 is reserved for ‘unknown’)
 
     Numeric placeholders (`%T`, `%B`, `%R`, `%p`, `%c`, `%m` and `%g`) support
     an optional prefix with minimum width, padded with spaces or zeroes if the prefix

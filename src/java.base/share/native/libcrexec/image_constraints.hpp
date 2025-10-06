@@ -103,40 +103,8 @@ private:
   }
 
 public:
-  bool set_label(const char *name, const char *value) {
-    if (check_tag(name)) {
-      return false;
-    }
-    size_t value_length = strlen(value) + 1;
-    if (strlen(name) >= _max_name_length || value_length >= _max_value_length) {
-      return false;
-    }
-    _tags.add({
-      .type = LABEL,
-      .name = strdup(name),
-      .data = strdup(value),
-      .data_length = value_length,
-    });
-    return true;
-  }
-
-  bool set_bitmap(const char *name, const unsigned char *value, size_t length_bytes) {
-    if (check_tag(name)) {
-        return false;
-    }
-    if (strlen(name) >= _max_name_length || length_bytes >= _max_value_length) {
-        return false;
-    }
-    void *copy = malloc(length_bytes);
-    memcpy(copy, value, length_bytes);
-    _tags.add({
-      .type = BITMAP,
-      .name = strdup(name),
-      .data = (const unsigned char *) copy,
-      .data_length = length_bytes,
-    });
-    return true;
-  }
+  bool set_label(const char *name, const char *value);
+  bool set_bitmap(const char *name, const unsigned char *value, size_t length_bytes);
 
   void require_label(const char *name, const char *value) {
     _constraints.add({

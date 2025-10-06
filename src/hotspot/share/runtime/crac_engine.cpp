@@ -276,9 +276,8 @@ CracEngine::CracEngine(const char *image_location) {
 
   bool is_static_crexec = false; // true when using statically linked crexec
 
-  char exec_path[JVM_MAXPATHLEN] = "\0";
   if (!is_library) {
-    strcpy(exec_path, path); // Save to later pass it to crexec
+    _exec_path = os::strdup_check_oom(path); // Save to later pass it to crexec
     if (is_vm_statically_linked()) {
       is_static_crexec = true;
       os::jvm_path(path, sizeof(path)); // points to bin/java for static JDK
@@ -319,8 +318,7 @@ CracEngine::CracEngine(const char *image_location) {
     return;
   }
 
-  const char *exec_location = exec_path[0] != '\0' ? exec_path : nullptr;
-  crlib_conf_t * const conf = create_conf(*api, image_location, exec_location);
+  crlib_conf_t * const conf = create_conf(*api, image_location, _exec_path);
   if (conf == nullptr) {
     os::dll_unload(lib);
     return;
@@ -332,10 +330,17 @@ CracEngine::CracEngine(const char *image_location) {
 }
 
 CracEngine::~CracEngine() {
+  os::free(_exec_path);
   if (is_initialized()) {
     _api->destroy_conf(_conf);
     os::dll_unload(_lib);
   }
+}
+
+bool CracEngine::reset_conf() {
+  _api->destroy_conf(_conf);
+  _conf = create_conf(*_api, nullptr, _exec_path);
+  return _conf != nullptr;
 }
 
 bool CracEngine::is_initialized() const {

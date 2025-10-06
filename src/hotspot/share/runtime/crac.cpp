@@ -56,6 +56,7 @@ static jlong _restore_start_time;
 static jlong _restore_start_nanos;
 
 CracEngine *crac::_engine = nullptr;
+unsigned int crac::_generation = 1;
 char crac::_checkpoint_bootid[UUID_LENGTH];
 jlong crac::_checkpoint_wallclock_seconds;
 jlong crac::_checkpoint_wallclock_nanos;
@@ -102,14 +103,18 @@ static char * strchrnul(char * str, char c) {
 int crac::checkpoint_restore(int *shmid) {
   guarantee(_engine != nullptr, "CRaC engine is not initialized");
 
+  // If this is a second checkpoint we should use a clear configuration
+  if (_generation != 0 && !_engine->reset_conf()) {
+    return JVM_CHECKPOINT_ERROR;
+  }
+
   crac::record_time_before_checkpoint();
 
   // CRaCCheckpointTo can be changed on restore so we need to update the conf
   // to account for that.
   // Note that CRaCEngine and CRaCEngineOptions are not updated (as documented)
   // so we don't need to re-init the whole engine handle.
-  if (restore_start_time() != -1 && // A way to detect we've restored at least once
-      !_engine->configure_image_location(CRaCCheckpointTo)) {
+  if (_generation != 0 && !_engine->configure_image_location(CRaCCheckpointTo)) {
     return JVM_CHECKPOINT_ERROR;
   }
 
@@ -275,6 +280,7 @@ void VM_Crac::doit() {
     }
   }
 
+  crac::_generation++;
   Arguments::reset_for_crac_restore();
   os::reset_cached_process_id();
 

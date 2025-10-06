@@ -49,6 +49,66 @@ static FILE *open_tags(const char *image_location, const char *mode) {
   return f;
 }
 
+bool ImageConstraints::set_label(const char *name, const char *value) {
+  if (check_tag(name)) {
+    fprintf(stderr, CREXEC "Label %s is already set\n", name);
+    return false;
+  }
+  size_t value_length = strlen(value) + 1;
+  if (strlen(name) >= _max_name_length || value_length >= _max_value_length) {
+    fprintf(stderr, CREXEC "Label %s=%s is too long\n", name, value);
+    return false;
+  }
+  char *name_copy = strdup(name);
+  if (name_copy == nullptr) {
+    fprintf(stderr, CREXEC "out of memory\n");
+    return false;
+  }
+  const char *value_copy = strdup(value);
+  if (value_copy == nullptr) {
+    fprintf(stderr, CREXEC "out of memory\n");
+    free(name_copy);
+    return false;
+  }
+  _tags.add({
+    .type = LABEL,
+    .name = name_copy,
+    .data = value_copy,
+    .data_length = value_length,
+  });
+  return true;
+}
+
+bool ImageConstraints::set_bitmap(const char *name, const unsigned char *value, size_t length_bytes) {
+  if (check_tag(name)) {
+      fprintf(stderr, CREXEC "Bitmap %s is already set\n", name);
+      return false;
+  }
+  if (strlen(name) >= _max_name_length || length_bytes >= _max_value_length) {
+      fprintf(stderr, CREXEC "Bitmap %s=(%zu bytes) is too long\n", name, length_bytes);
+      return false;
+  }
+  char *name_copy = strdup(name);
+  if (name_copy == nullptr) {
+    fprintf(stderr, CREXEC "out of memory\n");
+    return false;
+  }
+  void *bitmap_copy = malloc(length_bytes);
+  if (bitmap_copy == nullptr) {
+    fprintf(stderr, CREXEC "out of memory\n");
+    free(name_copy);
+    return false;
+  }
+  memcpy(bitmap_copy, value, length_bytes);
+  _tags.add({
+    .type = BITMAP,
+    .name = name_copy,
+    .data = (const unsigned char *) bitmap_copy,
+    .data_length = length_bytes,
+  });
+  return true;
+}
+
 bool ImageConstraints::persist(const char *image_location) const {
   FILE *f = open_tags(image_location, "w");
   if (f == nullptr) {

@@ -59,6 +59,7 @@ public:
 
 private:
   static CracEngine *_engine;
+  static unsigned int _generation;
 
   static char _checkpoint_bootid[UUID_LENGTH];
   // Timestamps recorded before checkpoint.

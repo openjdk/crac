@@ -25,6 +25,7 @@
 #ifndef CPU_X86_VM_VERSION_X86_HPP
 #define CPU_X86_VM_VERSION_X86_HPP
 
+#include "memory/resourceArea.hpp"
 #include "runtime/abstract_vm_version.hpp"
 #include "utilities/debug.hpp"
 #include "utilities/formatBuffer.hpp"

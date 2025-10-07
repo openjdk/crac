@@ -618,10 +618,6 @@ protected:
       return buf;
     }
 
-    static constexpr size_t print_buffer_length() {
-      return MAX_CPU_FEATURES;
-    }
-
     void print_numbers_and_names(char *buf, size_t buflen) const {
       int res = print_numbers(buf, buflen);
       buf += res;

@@ -33,31 +33,38 @@ extern "C" {
 #define CRLIB_EXTENSION_IMAGE_CONSTRAINTS(api) \
   CRLIB_EXTENSION(api, crlib_image_constraints_t, CRLIB_EXTENSION_IMAGE_CONSTRAINTS_NAME)
 
+// When two bitmaps of different size are compared this behaves as if the shorter
+// bitmap was extended with zeros to the length of the longer bitmap.
 typedef enum {
-  /* Natural zero-extensions of the bitmaps are equal */
   EQUALS,
-  /* Bitmap in image must be subset or equal to bitmap in constraint */
+  // Bitmap in image must be subset or equal to bitmap in constraint
   SUBSET,
-  /* Bitmap in image must be superset or equal to bitmap in constraint */
+  // Bitmap in image must be superset or equal to bitmap in constraint
   SUPERSET,
-} bitmap_comparison_t;
+} crlib_bitmap_comparison_t;
 
-// API for storing & verifying application-defined labels and bitmaps
-typedef struct crlib_image_constraints {
+// API for storing & verifying application-defined image characteristics, generally called tags.
+typedef const struct crlib_image_constraints {
   crlib_extension_t header;
 
-  // Invoked before checkpoint. Return false if name or value exceed limits, or if the name was already used.
+  // Invoked before checkpoint. Return false if name or value exceed limits, or if the name has already been used.
   bool (*set_label)(crlib_conf_t *, const char *name, const char *value);
-  bool (*set_bitmap)(crlib_conf_t *, const char *name, const unsigned char *value, size_t length_bytes);
+  bool (*set_bitmap)(crlib_conf_t *, const char *name, const unsigned char *value, size_t size_bytes);
 
   // Invoked before restore. The conditions are not evaluated immediately; the restore will fail
-  // with RESTORE_ERROR_INVALID if these constraints are not matched.
-  void (*require_label)(crlib_conf_t *, const char *name, const char *value);
-  void (*require_bitmap)(crlib_conf_t *, const char *name, const unsigned char *value, size_t length_bytes, bitmap_comparison_t comparison);
+  // if these constraints are not matched.
+  // Multiple constraints on the same tag are permitted.
+  // These methods return false when the constraint cannot be added to the configuration.
+  bool (*require_label)(crlib_conf_t *, const char *name, const char *value);
+  bool (*require_bitmap)(crlib_conf_t *, const char *name, const unsigned char *value, size_t size_bytes, crlib_bitmap_comparison_t comparison);
+
+  // Invoked after (failed) restore. Returns true if the restore failed due to
+  // any of the constraints on tag <name>, false otherwise.
+  bool (*is_failed)(crlib_conf_t *, const char *name);
 } crlib_image_constraints_t;
 
 #ifdef __cplusplus
 } // extern "C"
 #endif
 
-#endif // CRLIB_USER_DATA_H
+#endif // CRLIB_IMAGE_CONSTRAINTS_H

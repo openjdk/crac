@@ -479,3 +479,17 @@ void CracEngine::require_cpuinfo(const VM_Version::VM_Features *datap) const {
   _image_constraints_api->require_bitmap(_conf, cpufeatures_name,
     reinterpret_cast<const unsigned char *>(datap), sizeof(*datap), SUBSET);
 }
+
+void CracEngine::check_cpuinfo(const VM_Version::VM_Features *datap) const {
+  if (_image_constraints_api == nullptr) {
+    // When CPU features are ignored
+    return;
+  }
+  if (_image_constraints_api->is_failed(_conf, cpuarch_name)) {
+    log_error(crac)("Restore failed due to wrong or missing CPU architecture (current architecture is " ARCHPROPNAME ")");
+  }
+  if (_image_constraints_api->is_failed(_conf, cpufeatures_name)) {
+    ResourceMark rm;
+    log_error(crac)("Restore failed due to incompatible or missing CPU features, try using -XX:CPUFeatures=%s on checkpoint.", datap->print_numbers());
+  }
+}

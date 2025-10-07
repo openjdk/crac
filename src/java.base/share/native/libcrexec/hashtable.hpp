@@ -44,7 +44,7 @@ public:
 
   bool contains(const char *key) const;
   T *get(const char *key) const;
-  bool put(const char *key, T&& value);
+  template<typename TT> bool put(const char *key, TT&& value);
 
 private:
   size_t _length;
@@ -132,13 +132,13 @@ T *Hashtable<T>::get(const char *key) const {
   return nullptr;
 }
 
-template<class T>
-bool Hashtable<T>::put(const char *key, T&& value) {
+template<class T> template<typename TT>
+bool Hashtable<T>::put(const char* key, TT&& value) {
   T * const value_ptr = get(key);
   if (value_ptr == nullptr) {
     return false;
   }
-  *value_ptr = std::forward<T>(value);
+  *value_ptr = std::forward<TT>(value);
   return true;
 }
 

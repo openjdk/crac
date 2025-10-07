@@ -612,6 +612,12 @@ protected:
       return buf - buf_orig;
     }
 
+    const char *print_numbers() const {
+      char *buf = NEW_RESOURCE_ARRAY(char, MAX_CPU_FEATURES);
+      print_numbers(buf, MAX_CPU_FEATURES);
+      return buf;
+    }
+
     static constexpr size_t print_buffer_length() {
       return MAX_CPU_FEATURES;
     }

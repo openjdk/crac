@@ -36,6 +36,7 @@
 #include "crlib/crlib_image_constraints.h"
 #include "crlib/crlib_restore_data.h"
 #include "crlib/crlib_user_data.h"
+#include "crexec.hpp"
 #include "hashtable.hpp"
 #include "image_constraints.hpp"
 #include "jni.h"
@@ -45,10 +46,6 @@
 
 #include "jvm.h"
 #endif // LINUX
-
-#ifndef PATH_MAX
-# define PATH_MAX 1024
-#endif
 
 extern "C" {
 
@@ -78,8 +75,9 @@ static void destroy_user_data(crlib_user_data_storage_t *user_data);
 
 static bool set_label(crlib_conf_t *, const char *name, const char *value);
 static bool set_bitmap(crlib_conf_t *, const char *name, const unsigned char *value, size_t length_bytes);
-static void require_label(crlib_conf_t *, const char *name, const char *value);
-static void require_bitmap(crlib_conf_t *, const char *name, const unsigned char *value, size_t length_bytes, bitmap_comparison_t comparison);
+static bool require_label(crlib_conf_t *, const char *name, const char *value);
+static bool require_bitmap(crlib_conf_t *, const char *name, const unsigned char *value, size_t length_bytes, crlib_bitmap_comparison_t comparison);
+static bool is_failed(crlib_conf_t *, const char *name);
 
 } // extern "C"
 
@@ -134,19 +132,17 @@ static crlib_image_constraints_t image_constraints_extension = {
   set_bitmap,
   require_label,
   require_bitmap,
+  is_failed,
 };
 
 static const crlib_extension_t *extensions[] = {
   &restore_data_extension.header,
-  &user_data_extension.header,
   &image_constraints_extension.header,
+  &user_data_extension.header,
   &description_extension.header,
   nullptr
 };
 
-#define ARRAY_SIZE(x) (sizeof(x) / sizeof(*(x)))
-
-#define CREXEC "crexec: "
 
 // crexec_md.cpp
 const char *file_separator();
@@ -604,12 +600,16 @@ static bool set_bitmap(crlib_conf_t *conf, const char *name, const unsigned char
   return conf->image_constraints().set_bitmap(name, value, length_bytes);
 }
 
-static void require_label(crlib_conf_t *conf, const char *name, const char *value) {
-  conf->image_constraints().require_label(name, value);
+static bool require_label(crlib_conf_t *conf, const char *name, const char *value) {
+  return conf->image_constraints().require_label(name, value);
 }
 
-static void require_bitmap(crlib_conf_t *conf, const char *name, const unsigned char *value, size_t length_bytes, bitmap_comparison_t comparison) {
-  conf->image_constraints().require_bitmap(name, value, length_bytes, comparison);
+static bool require_bitmap(crlib_conf_t *conf, const char *name, const unsigned char *value, size_t length_bytes, crlib_bitmap_comparison_t comparison) {
+  return conf->image_constraints().require_bitmap(name, value, length_bytes, comparison);
+}
+
+static bool is_failed(crlib_conf_t *conf, const char *name) {
+  return conf->image_constraints().is_failed(name);
 }
 
 static const crlib_extension_t *get_extension(const char *name, size_t size) {
@@ -805,11 +805,11 @@ static int checkpoint(crlib_conf_t *conf) {
 static int restore(crlib_conf_t *conf) {
   if (conf->argv()[ARGV_EXEC_LOCATION] == nullptr) {
     fprintf(stderr, CREXEC "%s must be set before restore\n", opt_exec_location);
-    return RESTORE_ERROR_UNKNOWN;
+    return -1;
   }
   if (conf->argv()[ARGV_IMAGE_LOCATION] == nullptr) {
     fprintf(stderr, CREXEC "%s must be set before restore\n", opt_image_location);
-    return RESTORE_ERROR_UNKNOWN;
+    return -1;
   }
   conf->set_argv_action("restore");
 
@@ -817,23 +817,22 @@ static int restore(crlib_conf_t *conf) {
     fprintf(stderr, CREXEC "%s has no effect on restore\n", opt_keep_running);
   }
 
+  if (!conf->image_constraints().validate(conf->argv()[ARGV_IMAGE_LOCATION])) {
+    return -1;
+  }
+
   char restore_data_str[32];
   if (snprintf(restore_data_str, sizeof(restore_data_str), "%i", conf->restore_data()) >
       static_cast<int>(sizeof(restore_data_str)) - 1) {
     perror(CREXEC "snprintf restore data");
-    return RESTORE_ERROR_UNKNOWN;
+    return -1;
   }
 
   Environment env;
   if (!env.is_initialized() ||
       !env.append("CRAC_NEW_ARGS_ID", restore_data_str) ||
       (!conf->direct_map().value && !env.add_criu_option("--no-mmap-page-image"))) {
-    return RESTORE_ERROR_UNKNOWN;
-  }
-
-  int error = conf->image_constraints().validate(conf->argv()[ARGV_IMAGE_LOCATION]);
-  if (error) {
-    return error;
+    return -1;
   }
 
   exec_in_this_process(conf->argv()[ARGV_EXEC_LOCATION],
@@ -841,5 +840,5 @@ static int restore(crlib_conf_t *conf) {
                        const_cast<const char **>(env.env()));
 
   fprintf(stderr, CREXEC "restore failed\n");
-  return RESTORE_ERROR_UNKNOWN;
+  return -1;
 }

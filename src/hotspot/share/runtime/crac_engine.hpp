@@ -72,6 +72,7 @@ public:
   ApiStatus prepare_image_constraints_api();
   bool store_cpuinfo(const VM_Version::VM_Features *datap) const;
   void require_cpuinfo(const VM_Version::VM_Features *datap) const;
+  void check_cpuinfo(const VM_Version::VM_Features *datap) const;
 
 private:
   void *_lib = nullptr;

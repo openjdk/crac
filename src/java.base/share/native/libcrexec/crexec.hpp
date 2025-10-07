@@ -22,73 +22,15 @@
  * or visit www.oracle.com if you need additional information or have any
  * questions.
  */
-#ifndef LINKEDLIST_HPP
-#define LINKEDLIST_HPP
+#ifndef CREXEC_HPP
+#define CREXEC_HPP
 
-#include <new>
-#include <utility>
+#define ARRAY_SIZE(x) (sizeof(x) / sizeof(*(x)))
 
-template<class T> class LinkedList {
-private:
-  struct Node {
-    T _item;
-    Node* _next;
+#define CREXEC "crexec: "
 
-    template<typename TT>
-    Node(TT&& v): _item(std::forward<TT>(v)) {}
-  };
+#ifndef PATH_MAX // For Windows
+# define PATH_MAX 1024
+#endif
 
-  Node* _head = nullptr;
-  Node* _tail = nullptr;
-  size_t _size = 0;
-
-  inline bool add_node(Node *node) {
-    if (node == nullptr) {
-      return false;
-    }
-    node->_next = nullptr;
-    if (_tail) {
-      _tail->_next = node;
-      _tail = node;
-    } else {
-      _tail = node;
-    }
-    if (!_head) {
-      _head = node;
-    }
-    ++_size;
-    return true;
-  }
-
-public:
-  ~LinkedList() {
-    Node *node = _head;
-    while (node) {
-      Node *next = node->_next;
-      delete node;
-      node = next;
-    }
-  }
-
-  bool add(T&& item) {
-    return add_node(new(std::nothrow) Node(std::move(item)));
-  }
-
-  bool add(const T& item) {
-    return add_node(new(std::nothrow) Node(item));
-  }
-
-  template<typename Func> void foreach(Func f) const {
-    Node* node = _head;
-    while (node) {
-      f(node->_item);
-      node = node->_next;
-    }
-  }
-
-  size_t size() const {
-    return _size;
-  }
-};
-
-#endif // LINKEDLIST_HPP
+#endif // CREXEC_HPP

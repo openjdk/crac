@@ -27,97 +27,117 @@
 
 #include <cstring>
 #include <cstdlib>
+#include <cstdint>
 
 #include "crlib/crlib_image_constraints.h"
 #include "linkedlist.hpp"
 
 class ImageConstraints {
 private:
-  enum TagType {
+  enum class TagType: std::uint8_t {
     LABEL,
     BITMAP,
   };
 
   struct Tag {
     TagType type;
-    const char *name;
-    const void *data;
-    size_t data_length;
+    const char* name;
+    const void* data;
+    size_t data_size;
 
-    ~Tag() {
-        free((void *) name);
-        free((void *) data);
+    Tag() = default;
+    Tag(TagType t, const char* n, const void* d, size_t ds):
+      type(t), name(n), data(d), data_size(ds) {}
+
+    Tag(Tag &&o) {
+      type = o.type;
+      name = o.name;
+      data = o.data;
+      data_size = o.data_size;
+      o.name = nullptr;
+      o.data = nullptr;
     }
 
-    Tag &operator=(Tag &&o) {
-        type = o.type;
-        name = o.name;
-        data = o.data;
-        data_length = o.data_length;
-        o.name = nullptr;
-        o.data = nullptr;
-        return *this;
+    ~Tag() {
+      free((void*) name);
+      free((void*) data);
+    }
+
+    Tag& operator=(Tag &&o) {
+      type = o.type;
+      name = o.name;
+      data = o.data;
+      data_size = o.data_size;
+      o.name = nullptr;
+      o.data = nullptr;
+      return *this;
     }
   };
 
   struct Constraint {
     TagType type;
-    const char *name;
-    const void *data;
-    size_t data_length;
-    bitmap_comparison_t comparison;
+    bool failed;
+    const char* name;
+    const void* data;
+    size_t data_size;
+    crlib_bitmap_comparison_t comparison;
+
+    Constraint(TagType t, const char* n, const void* d, size_t ds, crlib_bitmap_comparison_t c):
+      type(t), failed(false), name(n), data(d), data_size(ds), comparison(c) {}
+
+    Constraint(Constraint &&o) {
+      type = o.type;
+      name = o.name;
+      data = o.data;
+      data_size = o.data_size;
+      comparison = o.comparison;
+      o.name = nullptr;
+      o.data = nullptr;
+    }
 
     ~Constraint() {
-        free((void *) name);
-        free((void *) data);
+      free((void*) name);
+      free((void*) data);
     }
 
-    Constraint &operator=(Constraint &&o) {
-        type = o.type;
-        name = o.name;
-        data = o.data;
-        data_length = o.data_length;
-        comparison = o.comparison;
-        o.name = nullptr;
-        o.data = nullptr;
-        return *this;
-    }
 
-    bool compare_bitmaps(const unsigned char *bitmap, size_t length) const;
+    bool compare_bitmaps(const unsigned char* bitmap, size_t length) const;
   };
 
   LinkedList<Tag> _tags;
   LinkedList<Constraint> _constraints;
 
-  const size_t _max_name_length = 256;
-  const size_t _max_value_length = 256;
+  static constexpr const size_t _MAX_NAME_SIZE = 256;
+  static constexpr const size_t _MAX_VALUE_SIZE = 256;
 
-  bool check_tag(const char *name) {
-    bool present = false;
-    _tags.foreach([&](Tag &tag) {
-      if (!strcmp(tag.name, name)) {
-        present = true;
-      }
-    });
-    return present;
-  }
+  bool check_tag(const char* type, const char* name, size_t value_size);
 
 public:
-  bool set_label(const char *name, const char *value);
-  bool set_bitmap(const char *name, const unsigned char *value, size_t length_bytes);
+  bool set_label(const char* name, const char* value);
+  bool set_bitmap(const char* name, const unsigned char* value, size_t length_bytes);
 
-  void require_label(const char *name, const char *value) {
-    _constraints.add({ LABEL, strdup(name), strdup(value), strlen(value) + 1, EQUALS });
+  bool require_label(const char* name, const char* value) {
+    return _constraints.add(Constraint(TagType::LABEL, strdup(name), strdup(value), strlen(value) + 1, EQUALS));
   }
 
-  void require_bitmap(const char *name, const unsigned char *value, size_t length_bytes, bitmap_comparison_t comparison) {
-    void *copy = malloc(length_bytes);
+  bool require_bitmap(const char* name, const unsigned char* value, size_t length_bytes, crlib_bitmap_comparison_t comparison) {
+    void* copy = malloc(length_bytes);
     memcpy(copy, value, length_bytes);
-    _constraints.add({ BITMAP, strdup(name), copy, length_bytes, comparison });
+    return _constraints.add(Constraint(TagType::BITMAP, strdup(name), copy, length_bytes, comparison));
   }
 
-  bool persist(const char *image_location) const;
-  int validate(const char *image_location) const;
+  bool is_failed(const char* name) {
+    bool result = false;
+    _constraints.foreach([&](Constraint &c) {
+      if (!strcmp(c.name, name) && c.failed) {
+        result = true;
+      }
+    });
+    return result;
+  }
+
+  bool persist(const char* image_location) const;
+  bool validate(const char* image_location) const;
 };
 
 #endif // IMAGE_CONSTRAINTS_HPP

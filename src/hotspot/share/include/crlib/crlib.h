@@ -76,14 +76,6 @@ struct crlib_api {
 };
 typedef const struct crlib_api crlib_api_t;
 
-// Error codes returned from crlib_api.restore():
-#define RESTORE_ERROR_UNKNOWN   -1 // generic error
-#define RESTORE_ERROR_NOT_FOUND -2 // image location does not contain an image
-#define RESTORE_ERROR_NO_ACCESS -3 // image cannot be accessed/retrieved (permissions or I/O issue)
-#define RESTORE_ERROR_INVALID   -4 // image is not suitable (e.g. corruption or wrong architecture)
-#define RESTORE_ERROR_MEMORY    -5 // memory allocation failure during restore
-#define RESTORE_ERROR_PROCINFO  -6 // the process cannot fetch information about itself
-
 #define CRLIB_API crlib_api
 #define CRLIB_API_FUNC "crlib_api"
 

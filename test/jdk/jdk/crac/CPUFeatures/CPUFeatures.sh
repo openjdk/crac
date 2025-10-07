@@ -358,7 +358,7 @@ checkpoint_restore "kvm IvyBridge"             "kvm           IvyBridge"   "" "-
 # and subsequent restore requires "-XX:+UnlockExperimentalVMOptions -XX:+IgnoreCPUFeatures"
 expectRC=1
 checkpoint_restore "kvm IvyBridge"             "kvm           IvyBridge"   -  "-XX:CPUFeatures=ignore"
-(set +e;echo "$restore"|grep "the image is either corrupted or does not match current CPU" && ! echo "$restore"|grep "CPUFeaturesCheck ";checkpoint_restore_result)
+(set +e;echo "$restore"|grep "Restore failed due to incompatible or missing CPU features" && ! echo "$restore"|grep "CPUFeaturesCheck ";checkpoint_restore_result)
 expectRC=$expectRC_save
 
 checkpoint_restore "kvm IvyBridge"             "kvm           IvyBridge"   "" "-XX:CPUFeatures=ignore" "-XX:+UnlockExperimentalVMOptions -XX:+IgnoreCPUFeatures"

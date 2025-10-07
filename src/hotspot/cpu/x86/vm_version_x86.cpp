@@ -113,6 +113,12 @@ bool VM_Version::supports_clflush() {
   return false;
 }
 
+const char *VM_Version::VM_Features::print_numbers() const {
+  char *buf = NEW_RESOURCE_ARRAY(char, MAX_CPU_FEATURES);
+  print_numbers(buf, MAX_CPU_FEATURES);
+  return buf;
+}
+
 #define CPUID_STANDARD_FN   0x0
 #define CPUID_STANDARD_FN_1 0x1
 #define CPUID_STANDARD_FN_4 0x4

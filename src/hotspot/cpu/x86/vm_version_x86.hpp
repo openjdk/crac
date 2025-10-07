@@ -25,7 +25,6 @@
 #ifndef CPU_X86_VM_VERSION_X86_HPP
 #define CPU_X86_VM_VERSION_X86_HPP
 
-#include "memory/resourceArea.hpp"
 #include "runtime/abstract_vm_version.hpp"
 #include "utilities/debug.hpp"
 #include "utilities/formatBuffer.hpp"
@@ -613,11 +612,7 @@ protected:
       return buf - buf_orig;
     }
 
-    const char *print_numbers() const {
-      char *buf = NEW_RESOURCE_ARRAY(char, MAX_CPU_FEATURES);
-      print_numbers(buf, MAX_CPU_FEATURES);
-      return buf;
-    }
+    const char *print_numbers() const;
 
     void print_numbers_and_names(char *buf, size_t buflen) const {
       int res = print_numbers(buf, buflen);

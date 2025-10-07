@@ -203,11 +203,11 @@ bool ImageConstraints::validate(const char* image_location) const {
   if (f == nullptr) {
     return false;
   }
-  char line[strlen(BITMAP_PREFIX) + _MAX_NAME_SIZE + 1 + _MAX_VALUE_SIZE + 2];
+  char line[sizeof(BITMAP_PREFIX) + _MAX_NAME_SIZE + 1 + _MAX_VALUE_SIZE + 2];
   LinkedList<Tag> tags;
-  while (fgets(line, sizeof(line), f)) {
-    char* eq = strchr(line, '=');
-    char* nl = strchr(eq + 1, '\n');
+  while (fgets(line, (int) sizeof(line), f)) {
+    char* eq = strchr((char * const) line, '=');
+    char* nl = strchr((char * const) (eq + 1), '\n');
     if (eq == nullptr || nl == nullptr) {
       fprintf(stderr, CREXEC "Invalid format of tags file: %s\n", line);
       return false;

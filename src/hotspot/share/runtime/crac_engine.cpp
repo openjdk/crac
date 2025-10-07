@@ -25,6 +25,7 @@
 #include "crlib/crlib_restore_data.h"
 #include "logging/log.hpp"
 #include "memory/allStatic.hpp"
+#include "memory/resourceArea.hpp"
 #include "nmt/memTag.hpp"
 #include "runtime/crac_engine.hpp"
 #include "runtime/globals.hpp"

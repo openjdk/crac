@@ -39,7 +39,7 @@
 // CRaC engine library wrapper.
 class CracEngine : public CHeapObj<mtInternal> {
 public:
-  explicit CracEngine(const char *image_location = nullptr);
+  CracEngine();
   ~CracEngine();
 
   CracEngine(const CracEngine &) = delete;

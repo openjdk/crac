@@ -596,24 +596,32 @@ protected:
       return *this == empty_features;
     }
 
-    int print_numbers(char *buf_orig, size_t buflen) const {
+    int print_numbers(char *buf_orig, size_t buflen, bool hexonly = false) const {
       char *buf = buf_orig;
+      const char *format = hexonly ? UINT64_FORMAT_0 : UINT64_FORMAT_X;
       apply_to_all_features([&](uint64_t u, int idx) {
-        int res = jio_snprintf(buf, buflen, UINT64_FORMAT_X, u);
+        int res = jio_snprintf(buf, buflen, format, u);
+        if (res < 0) {
+          buflen = 0;
+          return;
+        }
         buf += res;
         buflen -= res;
-        assert(res > 0 && buflen >= 1, "not enough temporary space allocated");
-        if (idx + 1 < features_bitmap_element_count()) {
+        if (!hexonly && idx + 1 < features_bitmap_element_count() && buflen > 0) {
           *buf++ = ',';
           --buflen;
         }
       });
+      if (buflen == 0) {
+        return -1;
+      }
       *buf = 0;
       return buf - buf_orig;
     }
 
     void print_numbers_and_names(char *buf, size_t buflen) const {
       int res = print_numbers(buf, buflen);
+      assert(res >= 0, "buffer too short");
       buf += res;
       buflen -= res;
       assert(buflen >= 3, "not enough temporary space allocated");

@@ -86,7 +86,7 @@ class EPollSelectorImpl extends SelectorImpl implements JDKResource {
         public void run() {
             try {
                 selector.select(1);
-            } catch (IOException e) {
+            } catch (IOException | RuntimeException e) {
             }
         }
     }

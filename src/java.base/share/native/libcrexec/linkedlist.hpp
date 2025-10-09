@@ -49,10 +49,8 @@ private:
     node->_next = nullptr;
     if (_tail) {
       _tail->_next = node;
-      _tail = node;
-    } else {
-      _tail = node;
     }
+    _tail = node;
     if (!_head) {
       _head = node;
     }

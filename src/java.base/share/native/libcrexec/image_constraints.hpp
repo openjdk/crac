@@ -126,7 +126,7 @@ public:
     return _constraints.add(Constraint(TagType::BITMAP, strdup(name), copy, length_bytes, comparison));
   }
 
-  bool is_failed(const char* name) {
+  bool is_failed(const char* name) const {
     bool result = false;
     _constraints.foreach([&](Constraint &c) {
       if (!strcmp(c.name, name) && c.failed) {

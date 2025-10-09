@@ -64,11 +64,11 @@ bool ImageConstraints::check_tag(const char* type, const char* name, size_t valu
     return false;
   }
   if (strlen(name) >= _MAX_NAME_SIZE) {
-    fprintf(stderr, CREXEC "%s %s is too long\n", type, name);
+    fprintf(stderr, CREXEC "%s %s name is too long, at most %zu chars allowed\n", type, name, _MAX_NAME_SIZE - 1;
     return false;
   }
-  if (value_size >= _MAX_VALUE_SIZE) {
-      fprintf(stderr, CREXEC "%s %s value is too long (%zu bytes)\n", type, name, value_size);
+  if (value_size > _MAX_VALUE_SIZE) {
+      fprintf(stderr, CREXEC "%s %s value is too long: %zu bytes > %zu allowed\n", type, name, value_size, _MAX_VALUE_SIZE);
       return false;
   }
   return true;

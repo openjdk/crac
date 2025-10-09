@@ -1,6 +1,6 @@
 /*
  * Copyright (c) 2005, 2024, Oracle and/or its affiliates. All rights reserved.
- * Copyright (c) 2020, 2021, Azul Systems, Inc. All rights reserved.
+ * Copyright (c) 2020, 2025, Azul Systems, Inc. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -38,6 +38,7 @@ import jdk.internal.crac.mirror.impl.CheckpointOpenSocketException;
 import java.io.FileDescriptor;
 import java.io.IOException;
 import java.io.Serial;
+import java.nio.channels.ClosedSelectorException;
 import java.nio.channels.SelectableChannel;
 import java.nio.channels.SelectionKey;
 import java.nio.channels.Selector;
@@ -86,7 +87,7 @@ class EPollSelectorImpl extends SelectorImpl implements JDKResource {
         public void run() {
             try {
                 selector.select(1);
-            } catch (IOException | RuntimeException e) {
+            } catch (IOException | ClosedSelectorException e) {
             }
         }
     }

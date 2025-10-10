@@ -39,7 +39,7 @@
 // CRaC engine library wrapper.
 class CracEngine : public CHeapObj<mtInternal> {
 public:
-  explicit CracEngine(const char *image_location = nullptr);
+  CracEngine();
   ~CracEngine();
 
   CracEngine(const CracEngine &) = delete;
@@ -47,9 +47,6 @@ public:
 
   // Use this to check whether the constructor succeeded.
   bool is_initialized() const;
-
-  // Reinitialize configuration before checkpoint
-  bool reset_conf();
 
   // Operations supported by all engines
   int checkpoint() const;
@@ -78,8 +75,6 @@ private:
   void *_lib = nullptr;
   crlib_api_t *_api = nullptr;
   crlib_conf_t *_conf = nullptr;
-
-  char *_exec_path = nullptr;
 
   crlib_restore_data_t *_restore_data_api = nullptr;
   crlib_description_t *_description_api = nullptr;

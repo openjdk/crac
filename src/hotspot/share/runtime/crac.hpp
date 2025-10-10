@@ -76,6 +76,8 @@ private:
   static void update_javaTimeNanos_offset();
 
   static int checkpoint_restore(int *shmid);
+
+  static bool interpolate_checkpoint_location(char *buf, size_t buflen, bool *fixed);
 };
 
 #endif //SHARE_RUNTIME_CRAC_HPP

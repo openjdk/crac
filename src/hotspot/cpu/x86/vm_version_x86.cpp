@@ -108,7 +108,7 @@ bool VM_Version::supports_clflush() {
   VM_Features flush;
   flush.set_feature(CPU_FLUSH);
   char buf[MAX_CPU_FEATURES];
-  flush.print_numbers(buf, sizeof(buf));
+  guarantee(flush.print_numbers(buf, sizeof(buf)) >= 0, "buffer too short");
   vm_exit_during_initialization(err_msg("-XX:CPUFeatures option requires FLUSH flag to be set: %s", buf));
   return false;
 }
@@ -1267,9 +1267,9 @@ bool VM_Version::glibc_not_using() {
   all_features.set_all_features();
   if (handled != all_features) {
     char buf_handled[MAX_CPU_FEATURES];
-    handled.print_numbers(buf_handled, sizeof(buf_handled));
+    guarantee(handled.print_numbers(buf_handled, sizeof(buf_handled)) >= 0, "buffer too short");
     char buf_all_features[MAX_CPU_FEATURES];
-    all_features.print_numbers(buf_all_features, sizeof(buf_all_features));
+    guarantee(all_features.print_numbers(buf_all_features, sizeof(buf_all_features)) >= 0, "buffer too short");
     vm_exit_during_initialization(err_msg("internal error: Unsupported disabling of some CPU_* %s != full %s", buf_handled, buf_all_features));
   }
 #endif // ASSERT
@@ -1288,7 +1288,7 @@ void VM_Version::print_using_features_cr() {
     tty->print_cr("CPU features are being kept intact as requested by -XX:CPUFeatures=ignore");
   } else {
     char buf[MAX_CPU_FEATURES];
-    _features.print_numbers(buf, sizeof(buf));
+    guarantee(_features.print_numbers(buf, sizeof(buf)) >= 0, "buffer too short");
     tty->print_cr("CPU features being used are: -XX:CPUFeatures=%s", buf);
   }
 }
@@ -1328,7 +1328,7 @@ void VM_Version::get_processor_features_hardware() {
 
   if (ShowCPUFeatures) {
     char buf[MAX_CPU_FEATURES];
-    _features.print_numbers(buf, sizeof(buf));
+    guarantee(_features.print_numbers(buf, sizeof(buf)) >= 0, "buffer too short");
     tty->print_cr("This machine's CPU features are: -XX:CPUFeatures=%s", buf);
   }
 }
@@ -1340,7 +1340,7 @@ void VM_Version::get_processor_features_hotspot() {
       VM_Features sse2;
       sse2.set_feature(CPU_SSE2);
       char buf[MAX_CPU_FEATURES];
-      sse2.print_numbers(buf, sizeof(buf));
+      guarantee(sse2.print_numbers(buf, sizeof(buf)) >= 0, "buffer too short");
       vm_exit_during_initialization(err_msg("-XX:CPUFeatures option requires SSE2 flag to be set: %s", buf));
     }
     vm_exit_during_initialization("Unknown x64 processor: SSE2 not supported");
@@ -2630,9 +2630,9 @@ void VM_Version::initialize() {
 
   if (!features_missing.empty()) {
     char buf_CPUFeatures_parsed[MAX_CPU_FEATURES];
-    CPUFeatures_parsed.print_numbers(buf_CPUFeatures_parsed, sizeof(buf_CPUFeatures_parsed));
+    guarantee(CPUFeatures_parsed.print_numbers(buf_CPUFeatures_parsed, sizeof(buf_CPUFeatures_parsed)) >= 0, "buffer too short");
     char buf_features[MAX_CPU_FEATURES];
-    _features.print_numbers(buf_features, sizeof(buf_features));
+    guarantee(_features.print_numbers(buf_features, sizeof(buf_features)) >= 0, "buffer too short");
     tty->print("Specified -XX:CPUFeatures=%s; this machine's CPU features are %s", buf_CPUFeatures_parsed, buf_features);
     features_missing.print_missing_features();
     vm_exit_during_initialization();

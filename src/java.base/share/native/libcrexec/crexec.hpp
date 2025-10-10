@@ -29,7 +29,10 @@
 
 #define CREXEC "crexec: "
 
-#ifndef PATH_MAX // For Windows
+// For Windows
+#if !defined(PATH_MAX) && defined(MAX_PATH)
+# define PATH_MAX MAX_PATH
+#elif !defined(PATH_MAX)
 # define PATH_MAX 1024
 #endif
 

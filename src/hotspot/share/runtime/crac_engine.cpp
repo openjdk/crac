@@ -175,7 +175,7 @@ public:
 using CStringSet = ResourceHashtable<const char *, bool, 256, AnyObj::C_HEAP, MemTag::mtInternal,
                                      CStringUtils::hash, CStringUtils::equals>;
 
-static crlib_conf_t *create_conf(const crlib_api_t &api, const char *image_location, const char *exec_location) {
+static crlib_conf_t *create_conf(const crlib_api_t &api, const char *exec_location) {
   crlib_conf_t * const conf = api.create_conf();
   if (conf == nullptr) {
     log_error(crac)("CRaC engine failed to create its configuration");
@@ -184,11 +184,6 @@ static crlib_conf_t *create_conf(const crlib_api_t &api, const char *image_locat
 
   if (CRaCEngineOptions != nullptr && strcmp(CRaCEngineOptions, "help") == 0) {
     return conf;
-  }
-
-  if (image_location != nullptr && !configure_image_location(api, conf, image_location)) {
-    api.destroy_conf(conf);
-    return nullptr;
   }
 
   if (exec_location != nullptr) { // Only passed when using crexec
@@ -242,7 +237,7 @@ static crlib_conf_t *create_conf(const crlib_api_t &api, const char *image_locat
   return conf;
 }
 
-CracEngine::CracEngine(const char *image_location) {
+CracEngine::CracEngine() {
   if (CRaCEngine == nullptr) {
     log_error(crac)("CRaCEngine must not be empty");
     return;
@@ -277,8 +272,9 @@ CracEngine::CracEngine(const char *image_location) {
 
   bool is_static_crexec = false; // true when using statically linked crexec
 
+  char exec_path[JVM_MAXPATHLEN] = "\0";
   if (!is_library) {
-    _exec_path = os::strdup_check_oom(path); // Save to later pass it to crexec
+    strcpy(exec_path, path); // Save to later pass it to crexec
     if (is_vm_statically_linked()) {
       is_static_crexec = true;
       os::jvm_path(path, sizeof(path)); // points to bin/java for static JDK
@@ -319,7 +315,8 @@ CracEngine::CracEngine(const char *image_location) {
     return;
   }
 
-  crlib_conf_t * const conf = create_conf(*api, image_location, _exec_path);
+  const char *exec_location = exec_path[0] != '\0' ? exec_path : nullptr;
+  crlib_conf_t * const conf = create_conf(*api, exec_location);
   if (conf == nullptr) {
     os::dll_unload(lib);
     return;
@@ -331,17 +328,10 @@ CracEngine::CracEngine(const char *image_location) {
 }
 
 CracEngine::~CracEngine() {
-  os::free(_exec_path);
   if (is_initialized()) {
     _api->destroy_conf(_conf);
     os::dll_unload(_lib);
   }
-}
-
-bool CracEngine::reset_conf() {
-  _api->destroy_conf(_conf);
-  _conf = create_conf(*_api, nullptr, _exec_path);
-  return _conf != nullptr;
 }
 
 bool CracEngine::is_initialized() const {

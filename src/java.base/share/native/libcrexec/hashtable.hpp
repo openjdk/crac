@@ -42,20 +42,20 @@ public:
 
   size_t length() const { return _length; }
 
-  bool contains(const char *key) const;
-  T *get(const char *key) const;
-  template<typename TT> bool put(const char *key, TT&& value);
+  bool contains(const char* key) const;
+  T* get(const char* key) const;
+  template<typename TT> bool put(const char* key, TT&& value);
 
 private:
   size_t _length;
-  const char **_keys;
-  T *_values;
+  const char** _keys;
+  T* _values;
 
-  static unsigned int string_hash(const char *str);
+  static unsigned int string_hash(const char* str);
 };
 
 template<class T>
-unsigned int Hashtable<T>::string_hash(const char *str) {
+unsigned int Hashtable<T>::string_hash(const char* str) {
   assert(str != nullptr);
   unsigned int hash = 0;
   for (; *str != '\0'; str++) {
@@ -79,7 +79,7 @@ Hashtable<T>::Hashtable(const char * const keys[], size_t length) :
   }
 
   for (size_t i = 0; i < length; i++) {
-    const char *key = keys[i];
+    const char* key = keys[i];
     assert(key != nullptr);
     const unsigned int hash = string_hash(key) % length;
     bool place_found = false;
@@ -108,12 +108,12 @@ Hashtable<T>::~Hashtable() {
 }
 
 template<class T>
-bool Hashtable<T>::contains(const char *key) const {
+bool Hashtable<T>::contains(const char* key) const {
   return get(key) != nullptr;
 }
 
 template<class T>
-T *Hashtable<T>::get(const char *key) const {
+T* Hashtable<T>::get(const char* key) const {
   if (_length == 0) {
     return nullptr;
   }
@@ -134,7 +134,7 @@ T *Hashtable<T>::get(const char *key) const {
 
 template<class T> template<typename TT>
 bool Hashtable<T>::put(const char* key, TT&& value) {
-  T * const value_ptr = get(key);
+  T* const value_ptr = get(key);
   if (value_ptr == nullptr) {
     return false;
   }

@@ -35,13 +35,13 @@
 #define LABEL_PREFIX "label:"
 #define BITMAP_PREFIX "bitmap:"
 
-static FILE *open_tags(const char* image_location, const char* mode) {
+static FILE* open_tags(const char* image_location, const char* mode) {
   char fname[PATH_MAX];
   if (snprintf(fname, sizeof(fname), "%s/tags", image_location) >= (int) sizeof(fname) - 1) {
     fprintf(stderr, CREXEC "filename too long: %s/tags\n", image_location);
     return nullptr;
   }
-  FILE *f = fopen(fname, mode);
+  FILE* f = fopen(fname, mode);
   if (f == nullptr) {
     fprintf(stderr, CREXEC "cannot open %s in mode %s: %s\n", fname, mode, strerror(errno));
     return nullptr;
@@ -51,27 +51,25 @@ static FILE *open_tags(const char* image_location, const char* mode) {
 
 bool ImageConstraints::check_tag(const char* type, const char* name, size_t value_size) {
   bool present = false;
-  _tags.foreach([&](Tag &tag) {
+  _tags.foreach([&](Tag& tag) {
     if (!strcmp(tag.name, name)) {
       present = true;
     }
   });
   if (present) {
     fprintf(stderr, CREXEC "%s %s is already set\n", type, name);
-    return false;
   } else if (strpbrk(name, "=\n")) {
     fprintf(stderr, CREXEC "%s name must not contain '=' or newline\n", type);
-    return false;
+  } else if (strlen(name) >= _MAX_NAME_SIZE) {
+    fprintf(stderr, CREXEC "%s %s name is too long, at most %zu chars allowed\n",
+      type, name, _MAX_NAME_SIZE - 1);
+  } else if (value_size > _MAX_VALUE_SIZE) {
+    fprintf(stderr, CREXEC "%s %s value is too long: %zu bytes > %zu allowed\n",
+      type, name, value_size, _MAX_VALUE_SIZE);
+  } else {
+    return true;
   }
-  if (strlen(name) >= _MAX_NAME_SIZE) {
-    fprintf(stderr, CREXEC "%s %s name is too long, at most %zu chars allowed\n", type, name, _MAX_NAME_SIZE - 1;
-    return false;
-  }
-  if (value_size > _MAX_VALUE_SIZE) {
-      fprintf(stderr, CREXEC "%s %s value is too long: %zu bytes > %zu allowed\n", type, name, value_size, _MAX_VALUE_SIZE);
-      return false;
-  }
-  return true;
+  return false;
 }
 
 bool ImageConstraints::set_label(const char* name, const char* value) {
@@ -118,7 +116,7 @@ bool ImageConstraints::persist(const char* image_location) const {
   if (f == nullptr) {
     return false;
   }
-  _tags.foreach([&](const Tag &tag){
+  _tags.foreach([&](const Tag& tag){
     if (tag.type == TagType::LABEL) {
       fprintf(f, LABEL_PREFIX "%s=%s\n", tag.name, static_cast<const char*>(tag.data));
     } else {
@@ -137,13 +135,13 @@ bool ImageConstraints::persist(const char* image_location) const {
   return true;
 }
 
-static inline unsigned char from_hex(char c, bool& err) {
+static inline unsigned char from_hex(char c, bool* err) {
   if (c >= '0' && c <= '9') {
     return c - '0';
   } else if (c >= 'a' && c <= 'f') {
     return c - 'a' + 10;
   } else {
-    err = true;
+    *err = true;
     return 0;
   }
 }
@@ -237,7 +235,7 @@ bool ImageConstraints::validate(const char* image_location) const {
       }
       bool err = false;
       for (size_t i = 0; i < length; ++i) {
-        data[i] = (from_hex(eq[1 + 2 * i], err) << 4) + from_hex(eq[2 + 2 * i], err);
+        data[i] = (from_hex(eq[1 + 2 * i], &err) << 4) + from_hex(eq[2 + 2 * i], &err);
       }
       if (err) {
         fprintf(stderr, CREXEC "Invalid format of tags file (bad character in bitmap): %s\n", line);
@@ -261,17 +259,17 @@ bool ImageConstraints::validate(const char* image_location) const {
     return false;
   }
   int counter = 0;
-  tags.foreach([&](const Tag &t) {
+  tags.foreach([&](const Tag& t) {
     keys[counter++] = t.name;
   });
   Hashtable<Tag> ht(keys, tags.size());
   delete[] keys;
 
   bool result = true;
-  tags.foreach([&](Tag &t) {
+  tags.foreach([&](Tag& t) {
     result = ht.put(t.name, std::move(t)) && result;
   });
-  _constraints.foreach([&](Constraint &c) {
+  _constraints.foreach([&](Constraint& c) {
     Tag* t = ht.get(c.name);
     c.failed = true;
     if (t == nullptr) {

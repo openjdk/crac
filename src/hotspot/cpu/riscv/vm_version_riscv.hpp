@@ -307,9 +307,7 @@ class VM_Version : public Abstract_VM_Version {
   // Initialization
   static void initialize();
   static void initialize_cpu_information();
-  struct VM_Features {
-    const char *print_numbers() const { return ""; }
-  };
+  struct VM_Features: public Zero_Features {};
   static bool cpu_features_binary(VM_Features *data) { return false; }
   static bool ignore_cpu_features(bool is_checkpoint) { return true; }
 

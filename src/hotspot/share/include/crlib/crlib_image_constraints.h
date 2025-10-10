@@ -60,6 +60,8 @@ typedef const struct crlib_image_constraints {
 
   // Invoked after (failed) restore. Returns true if the restore failed due to
   // any of the constraints on tag <name>, false otherwise.
+  // This method should be used if and only if the configuration specifies the image unambiguously;
+  // if multiple images are considered for restore this method should always return false.
   bool (*is_failed)(crlib_conf_t *, const char *name);
 } crlib_image_constraints_t;
 

@@ -56,6 +56,7 @@ struct crlib_user_data {
 
   // Finds data with the specified name and writes a pointer to it to '*data_p' and the size of the
   // data to '*size_p'. Returns true on success.
+  // If the configuration does not specify the image unambiguously this method returns false.
   // 'user_data', 'data_p' and 'size_p' must not be null. 'name' must be a valid C-string.
   // Stored data should not be freed directly - destroy the managing structure instead.
   bool (*lookup_user_data)(crlib_user_data_storage_t *storage,

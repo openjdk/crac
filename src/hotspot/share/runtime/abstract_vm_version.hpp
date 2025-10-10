@@ -51,6 +51,11 @@ class Abstract_VM_Version: AllStatic {
   friend class JVMCIVMStructs;
 
  protected:
+  struct Zero_Features {
+    int print_numbers(char *buf_orig, size_t buflen, bool hexonly = false) const { return 0; }
+    const char *print_numbers() const { return ""; }
+  };
+
   static const char*  _s_vm_release;
   static const char*  _s_internal_vm_info_string;
 

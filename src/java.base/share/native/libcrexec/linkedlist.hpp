@@ -22,39 +22,71 @@
  * or visit www.oracle.com if you need additional information or have any
  * questions.
  */
+#ifndef LINKEDLIST_HPP
+#define LINKEDLIST_HPP
 
-import java.nio.file.Files;
-import java.util.List;
+#include <new>
+#include <utility>
 
-import jdk.test.lib.crac.CracBuilder;
+template<class T> class LinkedList {
+private:
+  struct Node {
+    T _item;
+    Node* _next;
 
-/**
- * @test
- * @summary If CRaCIgnoreRestoreIfUnavailable is specified and there are no CPU
- *          features recorded in the image VM should proceed without restoring.
- * @requires (os.family == "linux") & (os.arch == "amd64" | os.arch == "x86_64")
- * @library /test/lib
- */
-public class NoCPUFeaturesTest {
-    private static final String MAIN_MSG = "Hello, world!";
+    template<typename TT>
+    Node(TT&& v): _item(std::forward<TT>(v)) {}
+  };
 
-    public static void main(String[] args) throws Exception {
-        final var builder = new CracBuilder()
-            .vmOption("-XX:+CRaCIgnoreRestoreIfUnavailable")
-            .forwardClasspathOnRestore(true)
-            .captureOutput(true);
+  Node* _head = nullptr;
+  Node* _tail = nullptr;
+  size_t _size = 0;
 
-        // Create an empty image without CPU features data
-        Files.createDirectory(builder.imageDir());
-
-        builder.startRestoreWithArgs(null, List.of(Main.class.getName(), "false"))
-            .waitForSuccess().outputAnalyzer()
-            .shouldContain("cannot open cr/tags in mode r").shouldContain(MAIN_MSG);
+  inline bool add_node(Node *node) {
+    if (node == nullptr) {
+      return false;
     }
-
-    public static class Main {
-        public static void main(String[] args) throws Exception {
-            System.out.println(MAIN_MSG);
-        }
+    node->_next = nullptr;
+    if (_tail) {
+      _tail->_next = node;
     }
-}
+    _tail = node;
+    if (!_head) {
+      _head = node;
+    }
+    ++_size;
+    return true;
+  }
+
+public:
+  ~LinkedList() {
+    Node *node = _head;
+    while (node) {
+      Node *next = node->_next;
+      delete node;
+      node = next;
+    }
+  }
+
+  bool add(T&& item) {
+    return add_node(new(std::nothrow) Node(std::move(item)));
+  }
+
+  bool add(const T& item) {
+    return add_node(new(std::nothrow) Node(item));
+  }
+
+  template<typename Func> void foreach(Func f) const {
+    Node* node = _head;
+    while (node) {
+      f(node->_item);
+      node = node->_next;
+    }
+  }
+
+  size_t size() const {
+    return _size;
+  }
+};
+
+#endif // LINKEDLIST_HPP

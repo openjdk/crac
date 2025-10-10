@@ -57,7 +57,6 @@ static jlong _restore_start_nanos;
 
 CracEngine *crac::_engine = nullptr;
 unsigned int crac::_generation = 1;
-
 char crac::_checkpoint_bootid[UUID_LENGTH];
 jlong crac::_checkpoint_wallclock_seconds;
 jlong crac::_checkpoint_wallclock_nanos;
@@ -308,12 +307,14 @@ int crac::checkpoint_restore(int *shmid) {
     return JVM_CHECKPOINT_ERROR;
   }
 
-  if (!VM_Version::ignore_cpu_features()) {
+  // Setup CPU arch & features only during the first checkpoint; the feature set
+  // cannot change after initial boot (and we don't support switching the engine).
+  if (_generation == 1 && !VM_Version::ignore_cpu_features(true)) {
     VM_Version::VM_Features data;
     if (VM_Version::cpu_features_binary(&data)) {
-      switch (_engine->prepare_user_data_api()) {
+      switch (_engine->prepare_image_constraints_api()) {
         case CracEngine::ApiStatus::OK:
-          if (!_engine->cpufeatures_store(&data)) {
+          if (!_engine->store_cpuinfo(&data)) {
             return JVM_CHECKPOINT_ERROR;
           }
           break;
@@ -722,17 +723,16 @@ void crac::restore(crac_restore_data& restore_data) {
     return;
   }
 
-  if (!VM_Version::ignore_cpu_features()) {
-    switch (engine.prepare_user_data_api()) {
+  // Previously IgnoreCPUFeatures didn't disable the check completely; the difference
+  // was printed out but continued even despite features not being satisfied.
+  // Since the check itself is delegated to the C/R Engine we will simply
+  // skip the check here.
+  if (!VM_Version::ignore_cpu_features(false)) {
+    switch (engine.prepare_image_constraints_api()) {
       case CracEngine::ApiStatus::OK: {
         VM_Version::VM_Features data;
-        bool present;
-        if (!engine.cpufeatures_load(&data, &present)) {
-          return;
-        }
-        if (!VM_Version::cpu_features_binary_check(present ? &data : nullptr)) {
-          log_error(crac)("Image %s has incompatible CPU features in its user data", CRaCRestoreFrom);
-          return;
+        if (VM_Version::cpu_features_binary(&data)) {
+          engine.require_cpuinfo(&data);
         }
         } break;
       case CracEngine::ApiStatus::ERR:
@@ -782,7 +782,10 @@ void crac::restore(crac_restore_data& restore_data) {
 
   const int ret = engine.restore();
   if (ret != 0) {
-    log_error(crac)("CRaC engine failed to restore from %s: error %i", CRaCRestoreFrom, ret);
+    log_error(crac)("CRaC engine failed to restore from %s: error %d", CRaCRestoreFrom, ret);
+    VM_Version::VM_Features data;
+    VM_Version::cpu_features_binary(&data); // ignore return value
+    engine.check_cpuinfo(&data);
   }
 }
 

@@ -613,7 +613,7 @@ jint Threads::create_vm(JavaVMInitArgs* args, bool* canTryAgain) {
   if (CRaCRestoreFrom) {
     crac::restore(restore_data);
     if (!CRaCIgnoreRestoreIfUnavailable) {
-      log_error(crac)("Failed to restore %s", CRaCRestoreFrom);
+      log_error(crac)("Failed to restore from %s", CRaCRestoreFrom);
       return JNI_ERR;
     }
   }

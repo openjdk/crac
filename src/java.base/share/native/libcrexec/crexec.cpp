@@ -33,9 +33,12 @@
 
 #include "crlib/crlib.h"
 #include "crlib/crlib_description.h"
+#include "crlib/crlib_image_constraints.h"
 #include "crlib/crlib_restore_data.h"
 #include "crlib/crlib_user_data.h"
+#include "crexec.hpp"
 #include "hashtable.hpp"
+#include "image_constraints.hpp"
 #include "jni.h"
 
 #ifdef LINUX
@@ -43,10 +46,6 @@
 
 #include "jvm.h"
 #endif // LINUX
-
-#ifndef PATH_MAX
-# define PATH_MAX 1024
-#endif
 
 extern "C" {
 
@@ -73,6 +72,12 @@ static bool set_user_data(crlib_conf_t *conf, const char *name, const void *data
 static crlib_user_data_storage_t *load_user_data(crlib_conf_t *conf);
 static bool lookup_user_data(crlib_user_data_storage_t *user_data, const char *name, const void **data_p, size_t *size_p);
 static void destroy_user_data(crlib_user_data_storage_t *user_data);
+
+static bool set_label(crlib_conf_t *, const char *name, const char *value);
+static bool set_bitmap(crlib_conf_t *, const char *name, const unsigned char *value, size_t length_bytes);
+static bool require_label(crlib_conf_t *, const char *name, const char *value);
+static bool require_bitmap(crlib_conf_t *, const char *name, const unsigned char *value, size_t length_bytes, crlib_bitmap_comparison_t comparison);
+static bool is_failed(crlib_conf_t *, const char *name);
 
 } // extern "C"
 
@@ -118,16 +123,26 @@ static crlib_user_data_t user_data_extension = {
   destroy_user_data,
 };
 
+static crlib_image_constraints_t image_constraints_extension = {
+  {
+    CRLIB_EXTENSION_IMAGE_CONSTRAINTS_NAME,
+    sizeof(image_constraints_extension)
+  },
+  set_label,
+  set_bitmap,
+  require_label,
+  require_bitmap,
+  is_failed,
+};
+
 static const crlib_extension_t *extensions[] = {
   &restore_data_extension.header,
+  &image_constraints_extension.header,
   &user_data_extension.header,
   &description_extension.header,
   nullptr
 };
 
-#define ARRAY_SIZE(x) (sizeof(x) / sizeof(*(x)))
-
-#define CREXEC "crexec: "
 
 // crexec_md.cpp
 const char *file_separator();
@@ -213,6 +228,7 @@ private:
   BoolOption _direct_map{true};
   int _restore_data = 0;
   const char *_argv[ARGV_LAST + 2] = {}; // Last element is required to be null
+  ImageConstraints _image_constraints;
 
 public:
   crlib_conf() {
@@ -281,6 +297,10 @@ public:
       memcpy(buf, &_restore_data, size < available_size ? size : available_size);
     }
     return available_size;
+  }
+
+  ImageConstraints &image_constraints() {
+    return _image_constraints;
   }
 
 private:
@@ -572,6 +592,26 @@ static void destroy_user_data(crlib_user_data_storage_t *user_data) {
   free(user_data);
 }
 
+static bool set_label(crlib_conf_t *conf, const char *name, const char *value) {
+  return conf->image_constraints().set_label(name, value);
+}
+
+static bool set_bitmap(crlib_conf_t *conf, const char *name, const unsigned char *value, size_t length_bytes) {
+  return conf->image_constraints().set_bitmap(name, value, length_bytes);
+}
+
+static bool require_label(crlib_conf_t *conf, const char *name, const char *value) {
+  return conf->image_constraints().require_label(name, value);
+}
+
+static bool require_bitmap(crlib_conf_t *conf, const char *name, const unsigned char *value, size_t length_bytes, crlib_bitmap_comparison_t comparison) {
+  return conf->image_constraints().require_bitmap(name, value, length_bytes, comparison);
+}
+
+static bool is_failed(crlib_conf_t *conf, const char *name) {
+  return conf->image_constraints().is_failed(name);
+}
+
 static const crlib_extension_t *get_extension(const char *name, size_t size) {
   for (size_t i = 0; i < ARRAY_SIZE(extensions) - 1 /* omit nullptr */; i++) {
     const crlib_extension_t *ext = extensions[i];
@@ -719,6 +759,10 @@ static int checkpoint(crlib_conf_t *conf) {
     fprintf(stderr, CREXEC "%s has no effect on checkpoint\n", opt_direct_map);
   }
 
+  if (!conf->image_constraints().persist(conf->argv()[ARGV_IMAGE_LOCATION])) {
+    return -1;
+  }
+
   {
     Environment env;
     if (!env.is_initialized() ||
@@ -771,6 +815,10 @@ static int restore(crlib_conf_t *conf) {
 
   if (!conf->keep_running().is_default) {
     fprintf(stderr, CREXEC "%s has no effect on restore\n", opt_keep_running);
+  }
+
+  if (!conf->image_constraints().validate(conf->argv()[ARGV_IMAGE_LOCATION])) {
+    return -1;
   }
 
   char restore_data_str[32];

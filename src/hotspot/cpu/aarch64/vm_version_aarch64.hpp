@@ -64,12 +64,9 @@ protected:
 public:
   // Initialization
   static void initialize();
-  struct VM_Features {
-    inline int print_numbers(char *buf_orig, size_t buflen, bool hexonly = false) const { return 0; }
-  };
+  struct VM_Features: public Zero_Features {};
   static bool cpu_features_binary(VM_Features *data) { return false; }
-  static bool cpu_features_binary_check(const VM_Features *data) { return data == nullptr; }
-  static bool ignore_cpu_features() { return true; }
+  static bool ignore_cpu_features(bool is_checkpoint) { return true; }
   static void check_virtualizations();
 
   static void print_platform_virtualization_info(outputStream*);

@@ -41,12 +41,9 @@ class VM_Version: public Abstract_VM_Version {
  public:
   static void initialize();
   static bool is_initialized()      { return _is_initialized; }
-  struct VM_Features {
-    inline int print_numbers(char *buf_orig, size_t buflen, bool hexonly = false) const { return 0; }
-  };
+  struct VM_Features: public Zero_Features {};
   static bool cpu_features_binary(VM_Features *data) { return false; }
-  static bool cpu_features_binary_check(const VM_Features *data) { return data == nullptr; }
-  static bool ignore_cpu_features() { return true; }
+  static bool ignore_cpu_features(bool is_checkpoint) { return true; }
 
 
  protected:

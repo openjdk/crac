@@ -48,3 +48,13 @@ JNIEXPORT void JNICALL
 Java_jdk_internal_crac_mirror_Core_finishRecordingDecompilationsAndRecompile0(JNIEnv *env, jclass ignore) {
     JVM_FinishRecordingDecompilationsAndRecompile(env);
 }
+
+JNIEXPORT jboolean JNICALL
+Java_jdk_internal_crac_Score_isSupported(JNIEnv *env, jclass ignore) {
+    return JVM_IsCRaCScoreSupported(env);
+}
+
+JNIEXPORT jboolean JNICALL
+Java_jdk_internal_crac_Score_record(JNIEnv *env, jclass ignore, jobjectArray metrics, jdoubleArray values) {
+    return JVM_RecordCRaCScore(env, metrics, values);
+}

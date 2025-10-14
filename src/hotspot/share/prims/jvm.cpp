@@ -3715,6 +3715,15 @@ JVM_ENTRY(void, JVM_FinishRecordingDecompilationsAndRecompile(JNIEnv *env))
   CRaCRecompiler::finish_recording_decompilations_and_recompile();
 JVM_END
 
+JVM_ENTRY(jboolean, JVM_IsCRaCScoreSupported(JNIEnv *env))
+  return crac::is_image_score_supported();
+JVM_END
+
+JVM_ENTRY(jboolean, JVM_RecordCRaCScore(JNIEnv *env, jobjectArray metrics, jdoubleArray values))
+  return crac::record_image_score(metrics, values);
+JVM_END
+
+
 JVM_ENTRY(void, JVM_VirtualThreadStart(JNIEnv* env, jobject vthread))
 #if INCLUDE_JVMTI
   if (!DoJVMTIVirtualThreadTransitions) {

@@ -67,4 +67,8 @@ public class OrderedContext<R extends Resource> extends AbstractContext<R> {
     public synchronized void register(R resource) {
         resources.put(resource, order++);
     }
+
+    public int size() {
+        return resources.size();
+    }
 }

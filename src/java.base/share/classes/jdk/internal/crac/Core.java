@@ -28,6 +28,7 @@ package jdk.internal.crac;
 
 import jdk.internal.crac.mirror.Context;
 import jdk.internal.crac.mirror.impl.BlockingOrderedContext;
+import jdk.internal.crac.mirror.impl.GlobalContext;
 import jdk.internal.crac.mirror.impl.OrderedContext;
 
 public class Core {
@@ -67,6 +68,8 @@ public class Core {
      * Most resources should use priority NORMAL (the lowest priority).
      */
     public enum Priority {
+        // Other resources can record score in the beforeCheckpoint
+        SCORE(Score.getContext()),
         FILE_DESCRIPTORS(new BlockingOrderedContext<>()),
         PRE_FILE_DESCRIPTORS(new BlockingOrderedContext<>()),
         // We use OrderedContext to not cause failure when PlatformRecorder tries to
@@ -80,6 +83,12 @@ public class Core {
         EPOLLSELECTOR(new BlockingOrderedContext<>()),
         SOCKETS(new BlockingOrderedContext<>()),
         NORMAL(new BlockingOrderedContext<>());
+
+        static {
+            // We need the global context before NORMAL is created, so GlobalContext cannot
+            // register the resource in static constructor
+            NORMAL.getContext().register(GlobalContext.Score.instance());
+        }
 
         private final Context<JDKResource> context;
         Priority(Context<JDKResource> context) {

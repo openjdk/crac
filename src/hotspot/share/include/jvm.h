@@ -1193,6 +1193,12 @@ JVM_StartRecordingDecompilations(JNIEnv *env);
 JNIEXPORT void JNICALL
 JVM_FinishRecordingDecompilationsAndRecompile(JNIEnv *env);
 
+JNIEXPORT jboolean JNICALL
+JVM_IsCRaCScoreSupported(JNIEnv *env);
+
+JNIEXPORT jboolean JNICALL
+JVM_RecordCRaCScore(JNIEnv *env, jobjectArray metrics, jdoubleArray values);
+
 #ifdef __cplusplus
 } /* extern "C" */
 

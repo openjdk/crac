@@ -371,7 +371,7 @@ GrowableArrayCHeap<const char *, MemTag::mtInternal> *CracEngine::vm_controlled_
   if (_ext_api != nullptr) { \
     return ApiStatus::OK; \
   } \
-  __typeof__(_ext_api) const ext_api = CRLIB_EXTENSION(_api, __typeof__(*_ext_api), ext_name); \
+  auto const ext_api = CRLIB_EXTENSION(_api, std::remove_reference<decltype(*_ext_api)>::type, ext_name); \
   if (ext_api == nullptr) { \
     log_debug(crac)("CRaC engine does not support extension " ext_name); \
     return ApiStatus::UNSUPPORTED; \

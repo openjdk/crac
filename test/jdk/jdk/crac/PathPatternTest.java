@@ -142,8 +142,8 @@ public class PathPatternTest implements CracTest {
             assertEquals(r1, b1);
             assertLTE(t1, r2);
             assertLTE(r2, now);
-            checkDateEquals(matcher1.group(6), b1);
-            checkDateEquals(matcher2.group(6), b2);
+            checkDateEquals(matcher1.group(6), r1);
+            checkDateEquals(matcher2.group(6), r2);
 
             assertEquals("1", matcher1.group(7));
             assertEquals("2", matcher2.group(7));

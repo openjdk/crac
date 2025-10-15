@@ -296,7 +296,8 @@ public class AMD64 extends Architecture {
         XSAVE,
         CMPXCHG16,
         LAHFSAHF,
-        HTT
+        HTT,
+        XSAVEC
     }
 
     private final EnumSet<CPUFeature> features;

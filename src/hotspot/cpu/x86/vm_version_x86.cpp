@@ -1268,11 +1268,11 @@ bool VM_Version::glibc_not_using() {
   GLIBC_UNSUPPORTED(AVX512_FP16      );
   GLIBC_UNSUPPORTED(AVX10_1          );
   GLIBC_UNSUPPORTED(AVX10_2          );
+  GLIBC_UNSUPPORTED(HT               );
   // These are handled as an exception above.
   GLIBC_UNSUPPORTED(FXSR             );
   GLIBC_UNSUPPORTED(MMX              );
   GLIBC_UNSUPPORTED(SSE              );
-  GLIBC_UNSUPPORTED(HT               );
   GLIBC_UNSUPPORTED(CMPXCHG16        );
   GLIBC_UNSUPPORTED(LAHFSAHF         );
 #undef GLIBC_UNSUPPORTED

@@ -166,7 +166,7 @@ class VM_Version_StubGenerator: public StubCodeGenerator {
     const uint32_t CPU_FAMILY_486 = (4 << CPU_FAMILY_SHIFT);
     bool use_evex = FLAG_IS_DEFAULT(UseAVX) || (UseAVX > 2);
 
-    Label detect_486, cpu486, detect_586, std_cpuid1, std_cpuid4, std_cpuid24;
+    Label detect_486, cpu486, detect_586, std_cpuid1, std_cpuid4, std_cpuid24, check_cpuidb;
     Label sef_cpuid, sefsl1_cpuid, ext_cpuid, ext_cpuid1, ext_cpuid5, ext_cpuid7;
     Label ext_cpuid8, done, wrapup, vector_save_restore, apx_save_restore_warning;
     Label legacy_setup, save_restore_except, legacy_save_restore, start_simd_check;
@@ -239,6 +239,19 @@ class VM_Version_StubGenerator: public StubCodeGenerator {
     __ movl(Address(rsi, 8), rcx);
     __ movl(Address(rsi,12), rdx);
 
+    __ cmpl(rax, 0xc);                  // Is cpuid(0xD) supported?
+    __ jccb(Assembler::belowEqual, check_cpuidb);
+    __ push(rax);
+
+    __ movl(rax, 0xd);
+    __ movl(rcx, 1);     // Packages level
+    __ cpuid();
+
+    __ lea(rsi, Address(rbp, in_bytes(VM_Version::xfs_cpuidD1_offset())));
+    __ movl(Address(rsi, 0), rax);
+
+    __ pop(rax);
+    __ bind(check_cpuidb);
     __ cmpl(rax, 0xa);                  // Is cpuid(0xB) supported?
     __ jccb(Assembler::belowEqual, std_cpuid4);
 
@@ -1210,6 +1223,7 @@ bool VM_Version::glibc_not_using() {
   EXCESSIVE(XSAVE   );
   EXCESSIVE(OSXSAVE );
   EXCESSIVE(HTT     );
+  EXCESSIVE(XSAVEC  );
 #undef EXCESSIVE
 
 #ifdef ASSERT
@@ -1254,11 +1268,11 @@ bool VM_Version::glibc_not_using() {
   GLIBC_UNSUPPORTED(AVX512_FP16      );
   GLIBC_UNSUPPORTED(AVX10_1          );
   GLIBC_UNSUPPORTED(AVX10_2          );
+  GLIBC_UNSUPPORTED(HT               );
   // These are handled as an exception above.
   GLIBC_UNSUPPORTED(FXSR             );
   GLIBC_UNSUPPORTED(MMX              );
   GLIBC_UNSUPPORTED(SSE              );
-  GLIBC_UNSUPPORTED(HT               );
   GLIBC_UNSUPPORTED(CMPXCHG16        );
   GLIBC_UNSUPPORTED(LAHFSAHF         );
 #undef GLIBC_UNSUPPORTED
@@ -3631,6 +3645,9 @@ VM_Version::VM_Features VM_Version::CpuidInfo::feature_flags() const {
   }
   if (std_cpuid1_edx.bits.ht != 0) {
     vm_features.set_feature(CPU_HTT);
+  }
+  if (xfs_cpuidD1_eax.bits.xsavec != 0) {
+    vm_features.set_feature(CPU_XSAVEC);
   }
 
   // Composite features.

@@ -148,6 +148,18 @@ class VM_Version : public Abstract_VM_Version {
     } bits;
   };
 
+  union XfsCpuidDEax {
+    uint32_t value;
+    struct {
+      uint32_t xsaveopt     : 1,
+               xsavec       : 1,
+               xgetbv_ecx1  : 1,
+               xss          : 1,
+               xfd          : 1,
+                            : 27;
+    } bits;
+  };
+
   union ExtCpuid1Ecx {
     uint32_t value;
     struct {
@@ -457,7 +469,8 @@ protected:
     decl(XSAVE,             "xsave",             70) \
     decl(CMPXCHG16,         "cmpxchg16",         71) /* Also known in cpuinfo as cx16 and in glibc as cmpxchg16b */ \
     decl(LAHFSAHF,          "lahfsahf",          72) /* Also known in cpuinfo as lahf_lm and in glibc as lahf64_sahf64 */ \
-    decl(HTT,               "htt",               73) /* hotspot calls it 'ht' but that is affected by threads_per_core() */
+    decl(HTT,               "htt",               73) /* hotspot calls it 'ht' but that is affected by threads_per_core() */ \
+    decl(XSAVEC,            "xsavec",            74)
 
 #define DECLARE_CPU_FEATURE_FLAG(id, name, bit) CPU_##id = (bit),
     CPU_FEATURE_FLAGS(DECLARE_CPU_FEATURE_FLAG)
@@ -741,6 +754,10 @@ protected:
     uint32_t     tpl_cpuidB2_ecx; // unused currently
     uint32_t     tpl_cpuidB2_edx; // unused currently
 
+    // cpuid function 0xD (xsave features and state components)
+    // ecx = 1
+    XfsCpuidDEax xfs_cpuidD1_eax;
+
     // cpuid function 0x80000000 // example, unused
     uint32_t ext_max_function;
     uint32_t ext_vendor_name_0;
@@ -869,6 +886,7 @@ public:
   static ByteSize tpl_cpuidB0_offset() { return byte_offset_of(CpuidInfo, tpl_cpuidB0_eax); }
   static ByteSize tpl_cpuidB1_offset() { return byte_offset_of(CpuidInfo, tpl_cpuidB1_eax); }
   static ByteSize tpl_cpuidB2_offset() { return byte_offset_of(CpuidInfo, tpl_cpuidB2_eax); }
+  static ByteSize xfs_cpuidD1_offset() { return byte_offset_of(CpuidInfo, xfs_cpuidD1_eax); }
   static ByteSize xem_xcr0_offset() { return byte_offset_of(CpuidInfo, xem_xcr0_eax); }
   static ByteSize ymm_save_offset() { return byte_offset_of(CpuidInfo, ymm_save); }
   static ByteSize zmm_save_offset() { return byte_offset_of(CpuidInfo, zmm_save); }

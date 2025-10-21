@@ -68,7 +68,8 @@ public class CPUInfoTest {
                     "cet_ss",       "avx512_ifma",      "serialize",         "avx_ifma",
                     "apx_f",        "avx10_1",          "avx10_2",           "fma4",
                     "movbe",        "osxsave",          "ibt",               "shstk",
-                    "xsave",        "cmpxchg16",        "lahfsahf",          "htt"
+                    "xsave",        "cmpxchg16",        "lahfsahf",          "htt",
+                    "xsavec"
                     );
             // @formatter:on
             // Checkstyle: resume

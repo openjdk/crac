@@ -225,6 +225,7 @@ checkpoint_restore() {
 }
 # SIGTERM+128; see 'kill \$p' above
 expectRC=143
+errorMsg="Bitmap mismatch for tag cpu.features"
 
 checkpoint_restore_result() {
   rc=$?
@@ -305,7 +306,6 @@ checkpoint_restore "kvm           host"        "kvm           host"
 # IvyBridge is the first superset of SandyBridge
 expectRC_save=$expectRC
 expectRC=1
-errorMsg="Bitmap mismatch for tag cpu.features"
 checkpoint_restore "kvm           IvyBridge"   "kvm           SandyBridge" -
 (set +e;  echo "$restore"|grep "$errorMsg" && ! echo "$restore"|grep "CPUFeaturesCheck ";checkpoint_restore_result)
 expectRC=$expectRC_save

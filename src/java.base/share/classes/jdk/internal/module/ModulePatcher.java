@@ -432,7 +432,7 @@ public final class ModulePatcher {
         private final URL csURL;
 
         JarResourceFinder(Path path) throws IOException {
-            this.jf = new PersistentJarFile(path.toFile(), true, ZipFile.OPEN_READ, JarFile.runtimeVersion());
+            this.jf = new PersistentJarFile(new File(path.toString()), true, ZipFile.OPEN_READ, JarFile.runtimeVersion());
             this.csURL = path.toUri().toURL();
         }
 

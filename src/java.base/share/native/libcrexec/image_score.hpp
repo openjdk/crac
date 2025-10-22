@@ -29,6 +29,7 @@
 #include <cstdlib>
 #include <cstdint>
 
+#include "crexec.hpp"
 #include "crlib/crlib_image_constraints.h"
 #include "linkedlist.hpp"
 
@@ -58,9 +59,16 @@ public:
   bool set_score(const char* name, double value) {
     const char* name_copy = strdup(name);
     if (name_copy == nullptr) {
+      fprintf(stderr, CREXEC "Cannot allocate copy of metric name\n");
       return false;
     }
+    // We don't have expandable hashtable, so we'll sort out duplicates
+    // in persist() when we have all the keys.
     return _score.add(Score(name_copy, value));
+  }
+
+  void reset_all() {
+    _score.clear();
   }
 
   bool persist(const char* image_location) const;

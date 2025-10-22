@@ -31,6 +31,7 @@
 #include "memory/allocation.hpp"
 #include "memory/oopFactory.hpp"
 #include "nmt/memTag.hpp"
+#include "oops/oopCast.inline.hpp"
 #include "oops/typeArrayOop.inline.hpp"
 #include "prims/jvmtiExport.hpp"
 #include "runtime/crac_engine.hpp"
@@ -711,8 +712,8 @@ bool crac::record_image_score(jobjectArray metrics, jdoubleArray values) {
     return true;
   }
   ResourceMark rm;
-  objArrayOop metrics_oops = objArrayOop(JNIHandles::resolve_non_null(metrics));
-  typeArrayOop values_oops = typeArrayOop(JNIHandles::resolve_non_null(values));
+  objArrayOop metrics_oops = oop_cast<objArrayOop>(JNIHandles::resolve_non_null(metrics));
+  typeArrayOop values_oops = oop_cast<typeArrayOop>(JNIHandles::resolve_non_null(values));
   assert(metrics_oops->length() == values_oops->length(), "should be equal");
   for (int i = 0; i < metrics_oops->length(); ++i) {
     oop metric_oop = metrics_oops->obj_at(i);
@@ -743,7 +744,9 @@ bool crac::record_image_score(jobjectArray metrics, jdoubleArray values) {
   result = result && _engine->set_score("java.cls.unloadedClasses", ClassLoadingService::unloaded_class_count() - shared_unloaded_classes);
   result = result && _engine->set_score("java.cls.sharedUnloadedClasses", shared_unloaded_classes);
 #endif // INCLUDE_MANAGEMENT
-  result = result && _engine->set_score("sun.cls.appClassLoadCount", ClassLoader::perf_app_classload_count()->get_value());
+  if (ClassLoader::perf_app_classload_count() != nullptr) {
+    result = result && _engine->set_score("sun.cls.appClassLoadCount", ClassLoader::perf_app_classload_count()->get_value());
+  }
 
   result = result && _engine->set_score("sun.ci.totalCompiles", CompileBroker::get_total_compile_count());
   result = result && _engine->set_score("sun.ci.totalBailouts", CompileBroker::get_total_bailout_count());

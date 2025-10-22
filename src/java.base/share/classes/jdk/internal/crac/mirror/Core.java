@@ -70,7 +70,7 @@ public class Core {
             Boolean.parseBoolean(System.getProperty(ENABLE_RECOMPILATION_PROPERTY, "true"));
     }
 
-    private static final Context<Resource> globalContext = GlobalContext.createGlobalContextImpl();
+    private static final Context<Resource> globalContext = GlobalContext.createGlobalContextImpl("jdk.crac.internal.globalContext");
 
     private static class ReferenceHandlerResource implements JDKResource {
         @Override

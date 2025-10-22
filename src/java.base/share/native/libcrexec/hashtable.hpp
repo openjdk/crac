@@ -34,20 +34,21 @@
 template<class T>
 class Hashtable {
 public:
-  Hashtable(const char * const keys[], size_t length);
+  inline Hashtable(const char * const keys[], size_t num_keys): Hashtable(keys, num_keys, num_keys) {}
+  Hashtable(const char * const keys[], size_t num_keys, size_t capacity);
   ~Hashtable();
 
   // Use this to check whether the constructor succeeded.
   bool is_initialized() const { return _keys != nullptr; }
 
-  size_t length() const { return _length; }
-
   bool contains(const char* key) const;
   T* get(const char* key) const;
   template<typename TT> bool put(const char* key, TT&& value);
 
+  template<typename F> void foreach(F func) const;
+
 private:
-  size_t _length;
+  size_t _capacity;
   const char** _keys;
   T* _values;
 
@@ -65,10 +66,10 @@ unsigned int Hashtable<T>::string_hash(const char* str) {
 }
 
 template<class T>
-Hashtable<T>::Hashtable(const char * const keys[], size_t length) :
-    _length(length),
-    _keys(new(std::nothrow) const char*[length]()),
-    _values(new(std::nothrow) T[length]()) {
+Hashtable<T>::Hashtable(const char * const keys[], size_t num_keys, size_t capacity) :
+    _capacity(capacity),
+    _keys(new(std::nothrow) const char*[capacity]()),
+    _values(new(std::nothrow) T[capacity]()) {
   if (_keys == nullptr || _values == nullptr) {
     delete[] _keys;
     delete[] _values;
@@ -78,20 +79,24 @@ Hashtable<T>::Hashtable(const char * const keys[], size_t length) :
     return;
   }
 
-  for (size_t i = 0; i < length; i++) {
+  for (size_t i = 0; i < num_keys; i++) {
     const char* key = keys[i];
     assert(key != nullptr);
-    const unsigned int hash = string_hash(key) % length;
+    const unsigned int hash = string_hash(key) % capacity;
     bool place_found = false;
-    for (size_t j = hash; !place_found && j < length; j++) {
+    for (size_t j = hash; !place_found && j < capacity; j++) {
       if (_keys[j] == nullptr) {
         _keys[j] = key;
+        place_found = true;
+      } else if (!strcmp(key, _keys[j])) {
         place_found = true;
       }
     }
     for (size_t j = 0; !place_found && j < hash; j++) {
       if (_keys[j] == nullptr) {
         _keys[j] = key;
+        place_found = true;
+      } else if (!strcmp(key, _keys[j])) {
         place_found = true;
       }
     }
@@ -114,12 +119,12 @@ bool Hashtable<T>::contains(const char* key) const {
 
 template<class T>
 T* Hashtable<T>::get(const char* key) const {
-  if (_length == 0) {
+  if (_capacity == 0) {
     return nullptr;
   }
   assert(key != nullptr);
-  const unsigned int hash = string_hash(key) % _length;
-  for (size_t i = hash; i < _length; i++) {
+  const unsigned int hash = string_hash(key) % _capacity;
+  for (size_t i = hash; i < _capacity; i++) {
     if (strcmp(key, _keys[i]) == 0) {
       return &_values[i];
     }
@@ -140,6 +145,16 @@ bool Hashtable<T>::put(const char* key, TT&& value) {
   }
   *value_ptr = std::forward<TT>(value);
   return true;
+}
+
+template<class T> template<typename F>
+void Hashtable<T>::foreach(F func) const {
+  for (size_t i = 0; i < _capacity; ++i) {
+    const char *key = _keys[i];
+    if (key != nullptr) {
+      func(key, _values[i]);
+    }
+  }
 }
 
 #endif // HASHTABLE_HPP

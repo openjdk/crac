@@ -34,11 +34,13 @@ public class Score {
         }
     };
 
+    private Score() {}
+
     public static native boolean isSupported();
 
     private static native boolean record(String[] metrics, double[] values);
 
-    static synchronized void record() {
+    private static synchronized void record() {
         String[] metrics = new String[score.size()];
         double[] values = new double[score.size()];
         int i = 0;
@@ -54,8 +56,8 @@ public class Score {
 
     /**
      * Record value to be stored in the image metadata on checkpoint. Repeated invocations
-     * with the same {@code metric} overwrite previous value. If the engine does not support
-     * recording metadata this is ignored.
+     * with the same {@code metric} overwrite previous value. This method can be safely
+     * called even if the C/R engine does not support recording metadata.
      * On checkpoint the metrics are not reset; if that is desired invoke {@link #resetAll()}
      * manually.
      *
@@ -66,6 +68,10 @@ public class Score {
         score.put(metric, value);
     }
 
+    /**
+     * Drop all currently stored metrics. This method can be safely called
+     * even if the C/R engine does not support recording metadata.
+     */
     public static synchronized void resetAll() {
         score.clear();
     }

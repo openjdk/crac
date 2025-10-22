@@ -786,6 +786,10 @@ static int checkpoint(crlib_conf_t *conf) {
       !conf->image_score().persist(image_location)) {
     return -1;
   }
+  // We will reset scores now; scores can be retained or reset higher on the Java level.
+  // Before another checkpoint all the scores will be recorded again; we won't keep
+  // anything here to not write down any outdated value.
+  conf->image_score().reset_all();
 
   {
     Environment env;

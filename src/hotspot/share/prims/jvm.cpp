@@ -3723,7 +3723,6 @@ JVM_ENTRY(jboolean, JVM_RecordCRaCScore(JNIEnv *env, jobjectArray metrics, jdoub
   return crac::record_image_score(metrics, values);
 JVM_END
 
-
 JVM_ENTRY(void, JVM_VirtualThreadStart(JNIEnv* env, jobject vthread))
 #if INCLUDE_JVMTI
   if (!DoJVMTIVirtualThreadTransitions) {

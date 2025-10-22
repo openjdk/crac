@@ -36,4 +36,16 @@
 # define PATH_MAX 1024
 #endif
 
+template<typename F> class deferred {
+private:
+  F _f;
+public:
+  inline deferred(F f): _f(f) {}
+  inline ~deferred() { _f(); }
+};
+
+template<typename F> deferred<F> defer(F f) {
+  return deferred<F>(f);
+}
+
 #endif // CREXEC_HPP

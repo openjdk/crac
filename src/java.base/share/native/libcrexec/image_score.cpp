@@ -27,6 +27,7 @@
 #include <cstring>
 
 #include "crexec.hpp"
+#include "hashtable.hpp"
 #include "image_score.hpp"
 
 bool ImageScore::persist(const char* image_location) const {
@@ -40,12 +41,33 @@ bool ImageScore::persist(const char* image_location) const {
     fprintf(stderr, CREXEC "cannot open %s for writing: %s\n", fname, strerror(errno));
     return false;
   }
-  _score.foreach([&](const Score& score){
-    fprintf(f, "%s=%f\n", score._name, score._value);
+  auto close_f = defer([&] {
+    if (fclose(f)) {
+     fprintf(stderr, CREXEC "cannot close %s/score: %s\n", image_location, strerror(errno));
+    }
   });
-  if (fclose(f)) {
-    fprintf(stderr, CREXEC "cannot close %s/score: %s\n", image_location, strerror(errno));
+  // Handle duplicates
+  bool result = true;
+  const char **keys = new(std::nothrow) const char*[_score.size()];
+  if (keys == nullptr) {
+    fprintf(stderr, CREXEC "cannot allocate array of metrics\n");
     return false;
   }
-  return true;
+  auto delete_keys = defer([&] { delete[] keys; });
+  size_t index = 0;
+  _score.foreach([&](const Score& score){
+    keys[index++] = score._name;
+  });
+  Hashtable<double> ht(keys, _score.size(), _score.size() * 3 / 2);
+  if (!ht.is_initialized()) {
+    fprintf(stderr, CREXEC "cannot create score hashtable (allocation failure)\n");
+    return false;
+  }
+  _score.foreach([&](const Score& score) {
+    ht.put(score._name, score._value);
+  });
+  ht.foreach([&](const char *key, double value){
+    fprintf(f, "%s=%f\n", key, value);
+  });
+  return result;
 }

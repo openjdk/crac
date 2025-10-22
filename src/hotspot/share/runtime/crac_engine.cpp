@@ -388,12 +388,11 @@ GrowableArrayCHeap<const char *, MemTag::mtInternal> *CracEngine::vm_controlled_
   _ext_api = ext_api; \
   return ApiStatus::OK;
 
-
 CracEngine::ApiStatus CracEngine::prepare_restore_data_api() {
   prepare_extension_api(_restore_data_api, CRLIB_EXTENSION_RESTORE_DATA_NAME)
   require_method(set_restore_data)
   require_method(get_restore_data)
-  complete_extension_api(_restore_data_api);
+  complete_extension_api(_restore_data_api)
 }
 
 bool CracEngine::set_restore_data(const void *data, size_t size) const {

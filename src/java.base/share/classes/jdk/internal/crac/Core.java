@@ -84,12 +84,6 @@ public class Core {
         SOCKETS(new BlockingOrderedContext<>()),
         NORMAL(new BlockingOrderedContext<>());
 
-        static {
-            // We need the global context before NORMAL is created, so GlobalContext cannot
-            // register the resource in static constructor
-            NORMAL.getContext().register(GlobalContext.Score.instance());
-        }
-
         private final Context<JDKResource> context;
         Priority(Context<JDKResource> context) {
             jdk.internal.crac.mirror.Core.getGlobalContext().register(context);

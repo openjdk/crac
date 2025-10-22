@@ -115,7 +115,6 @@ public class ImageScoreTest implements CracTest {
         Resource dummy = new Resource() {
             @Override
             public void beforeCheckpoint(Context<? extends Resource> context) {
-                System.err.println("BEFORE");
             }
 
             @Override

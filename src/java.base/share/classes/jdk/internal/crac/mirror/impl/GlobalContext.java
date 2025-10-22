@@ -67,11 +67,17 @@ public class GlobalContext {
             case "OrderedContext" -> new OrderedContext<>();
             default -> new OrderedContext<>(); // cannot report as System.out/err are not initialized yet
         };
-        Score score = new Score(name, ctx);
-        synchronized (scores) {
-            scores.put(name, score);
+        // The 'internal' context from jdk.internal.crac.mirror.Core should host only the Core.Priority contexts
+        // and the context created by jdk.crac.Core (the 'user' global context). We won't record score for
+        // the internal context as if registered here, beforeCheckpoint would be called after Core.Priority.SCORE
+        // and the score would not be recorded.
+        if (name != null) {
+            Score score = new Score(name, ctx);
+            synchronized (scores) {
+                scores.put(name, score);
+            }
+            ctx.register(score);
         }
-        ctx.register(score);
         return ctx;
     }
 }

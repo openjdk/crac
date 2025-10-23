@@ -27,6 +27,7 @@ package jdk.internal.crac;
 
 import jdk.internal.crac.mirror.Context;
 import jdk.internal.crac.mirror.Resource;
+import jdk.internal.crac.mirror.impl.OrderedContext;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -45,6 +46,7 @@ public class Score {
         @Override
         public void beforeCheckpoint(Context<? extends Resource> context) {
             if (isSupported()) {
+                setJdkResourceScore();
                 record();
             }
         }
@@ -58,6 +60,16 @@ public class Score {
             throw new UnsupportedOperationException("Score is a singleton resource");
         }
     };
+
+    private static void setJdkResourceScore() {
+        int resources = 0;
+        for (var p : Core.Priority.values()) {
+            if (p.getContext() instanceof OrderedContext<?> octx) {
+                resources += octx.size();
+            }
+        }
+        setScore("jdk.crac.internalResources", resources);
+    }
 
     private Score() {}
 

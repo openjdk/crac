@@ -34,7 +34,7 @@ extern "C" {
   CRLIB_EXTENSION(api, crlib_image_score_t, CRLIB_EXTENSION_IMAGE_SCORE_NAME)
 
 // API for quantifying image performance. This is a write-only API.
-// The metrics are NOT retained after checkpoint (succesful or not),
+// The metrics are NOT retained after checkpoint (successful or not),
 // the application is expected to set scores again before next attempt
 // to checkpoint.
 typedef const struct crlib_image_score {

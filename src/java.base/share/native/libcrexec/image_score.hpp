@@ -57,10 +57,16 @@ private:
 
 public:
   bool set_score(const char* name, double value) {
-    const char* name_copy = strdup(name);
+    char* name_copy = strdup(name);
     if (name_copy == nullptr) {
       fprintf(stderr, CREXEC "Cannot allocate copy of metric name\n");
       return false;
+    }
+    // Truncate metric name
+    char *newline = strchr(name_copy, '\n');
+    if (newline != nullptr) {
+      *newline = '\0';
+      fprintf(stderr, CREXEC "warning: metric name '%s' contains a newline, truncating to '%s'\n", name, name_copy);
     }
     // We don't have expandable hashtable, so we'll sort out duplicates
     // in persist() when we have all the keys.

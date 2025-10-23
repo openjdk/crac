@@ -29,15 +29,11 @@ import jdk.internal.crac.JDKResource;
 import jdk.internal.crac.mirror.Context;
 import jdk.internal.crac.mirror.Resource;
 
-import java.util.HashMap;
-import java.util.Map;
-
 public class GlobalContext {
     private static final String GLOBAL_CONTEXT_IMPL_PROP = "jdk.crac.globalContext.impl";
 
-    // Scores are in this map only to keep a strong reference to the resource
-    @SuppressWarnings("MismatchedQueryAndUpdateOfCollection")
-    private static final Map<String, Score> scores = new HashMap<>();
+    // Strong reference to the resource
+    private static Score scoreSingleton;
 
     public static class Score implements JDKResource {
         private final String name;
@@ -73,8 +69,11 @@ public class GlobalContext {
         // and the score would not be recorded.
         if (name != null) {
             Score score = new Score(name, ctx);
-            synchronized (scores) {
-                scores.put(name, score);
+            synchronized (GlobalContext.class) {
+                // In JDK this should be called only once with a non-null name. If the implementation changes
+                // let's turn scoreSingleton into a map.
+                assert scoreSingleton == null;
+                scoreSingleton = score;
             }
             ctx.register(score);
         }

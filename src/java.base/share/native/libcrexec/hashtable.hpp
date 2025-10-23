@@ -78,6 +78,7 @@ Hashtable<T>::Hashtable(const char * const keys[], size_t num_keys, size_t capac
     assert(!is_initialized());
     return;
   }
+  memset(_keys, 0, sizeof(_keys[0]) * capacity);
 
   for (size_t i = 0; i < num_keys; i++) {
     const char* key = keys[i];
@@ -125,12 +126,12 @@ T* Hashtable<T>::get(const char* key) const {
   assert(key != nullptr);
   const unsigned int hash = string_hash(key) % _capacity;
   for (size_t i = hash; i < _capacity; i++) {
-    if (strcmp(key, _keys[i]) == 0) {
+    if (_keys[i] != nullptr && strcmp(key, _keys[i]) == 0) {
       return &_values[i];
     }
   }
   for (size_t i = 0; i < hash; i++) {
-    if (strcmp(key, _keys[i]) == 0) {
+    if (_keys[i] != nullptr && strcmp(key, _keys[i]) == 0) {
       return &_values[i];
     }
   }

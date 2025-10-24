@@ -366,23 +366,33 @@ GrowableArrayCHeap<const char *, MemTag::mtInternal> *CracEngine::vm_controlled_
   return opts;
 }
 
-CracEngine::ApiStatus CracEngine::prepare_restore_data_api() {
-  precond(is_initialized());
-  if (_restore_data_api != nullptr) {
-    return ApiStatus::OK;
+#define prepare_extension_api(_ext_api, ext_name) \
+  precond(is_initialized()); \
+  if (_ext_api != nullptr) { \
+    return ApiStatus::OK; \
+  } \
+  auto const ext_api = CRLIB_EXTENSION(_api, std::remove_reference<decltype(*_ext_api)>::type, ext_name); \
+  if (ext_api == nullptr) { \
+    log_debug(crac)("CRaC engine does not support extension " ext_name); \
+    return ApiStatus::UNSUPPORTED; \
+  } \
+  constexpr const char *_ext_name = ext_name;
+
+#define require_method(_func) \
+  if (ext_api->_func == nullptr) { \
+    log_error(crac)("CRaC engine provided invalid API for extension %s: %s is not set", _ext_name, #_func); \
+    return ApiStatus::ERR; \
   }
 
-  crlib_restore_data_t * const restore_data_api = CRLIB_EXTENSION_RESTORE_DATA(_api);
-  if (restore_data_api == nullptr) {
-    log_debug(crac)("CRaC engine does not support extension: " CRLIB_EXTENSION_RESTORE_DATA_NAME);
-    return ApiStatus::UNSUPPORTED;
-  }
-  if (restore_data_api->set_restore_data == nullptr || restore_data_api->get_restore_data == nullptr) {
-    log_error(crac)("CRaC engine provided invalid API for extension: " CRLIB_EXTENSION_RESTORE_DATA_NAME);
-    return ApiStatus::ERR;
-  }
-  _restore_data_api = restore_data_api;
+#define complete_extension_api(_ext_api) \
+  _ext_api = ext_api; \
   return ApiStatus::OK;
+
+CracEngine::ApiStatus CracEngine::prepare_restore_data_api() {
+  prepare_extension_api(_restore_data_api, CRLIB_EXTENSION_RESTORE_DATA_NAME)
+  require_method(set_restore_data)
+  require_method(get_restore_data)
+  complete_extension_api(_restore_data_api)
 }
 
 bool CracEngine::set_restore_data(const void *data, size_t size) const {
@@ -396,25 +406,13 @@ size_t CracEngine::get_restore_data(void *buf, size_t size) const {
 }
 
 CracEngine::ApiStatus CracEngine::prepare_description_api() {
-  precond(is_initialized());
-  if (_description_api != nullptr) {
-    return ApiStatus::OK;
-  }
-
-  crlib_description_t * const description_api = CRLIB_EXTENSION_DESCRIPTION(_api);
-  if (description_api == nullptr) {
-    log_debug(crac)("CRaC engine does not support extension: " CRLIB_EXTENSION_DESCRIPTION_NAME);
-    return ApiStatus::UNSUPPORTED;
-  }
-  if (description_api->identity == nullptr || description_api->description == nullptr ||
-      description_api->configuration_doc == nullptr ||
-      description_api->configurable_keys == nullptr ||
-      description_api->supported_extensions == nullptr) {
-    log_error(crac)("CRaC engine provided invalid API for extension: " CRLIB_EXTENSION_DESCRIPTION_NAME);
-    return ApiStatus::ERR;
-  }
-  _description_api = description_api;
-  return ApiStatus::OK;
+  prepare_extension_api(_description_api, CRLIB_EXTENSION_DESCRIPTION_NAME)
+  require_method(identity)
+  require_method(description)
+  require_method(configuration_doc)
+  require_method(configurable_keys)
+  require_method(supported_extensions)
+  complete_extension_api(_description_api)
 }
 
 const char *CracEngine::description() const {
@@ -431,23 +429,13 @@ static constexpr char cpuarch_name[] = "cpu.arch";
 static constexpr char cpufeatures_name[] = "cpu.features";
 
 CracEngine::ApiStatus CracEngine::prepare_image_constraints_api() {
-  precond(is_initialized());
-  if (_image_constraints_api != nullptr) {
-    return ApiStatus::OK;
-  }
-
-  crlib_image_constraints_t * const ic_api = CRLIB_EXTENSION_IMAGE_CONSTRAINTS(_api);
-  if (ic_api == nullptr) {
-    log_debug(crac)("CRaC engine does not support extension: " CRLIB_EXTENSION_IMAGE_CONSTRAINTS_NAME);
-    return ApiStatus::UNSUPPORTED;
-  }
-  if (ic_api->set_label == nullptr || ic_api->set_bitmap == nullptr
-      || ic_api->require_label == nullptr || ic_api->require_bitmap == nullptr) {
-    log_error(crac)("CRaC engine provided invalid API for extension: " CRLIB_EXTENSION_IMAGE_CONSTRAINTS_NAME);
-    return ApiStatus::ERR;
-  }
-  _image_constraints_api = ic_api;
-  return ApiStatus::OK;
+  prepare_extension_api(_image_constraints_api, CRLIB_EXTENSION_IMAGE_CONSTRAINTS_NAME)
+  require_method(set_label)
+  require_method(set_bitmap)
+  require_method(require_label)
+  require_method(require_bitmap)
+  require_method(is_failed)
+  complete_extension_api(_image_constraints_api)
 }
 
 // Return success.
@@ -483,4 +471,14 @@ void CracEngine::check_cpuinfo(const VM_Version::VM_Features *datap) const {
     ResourceMark rm;
     log_error(crac)("Restore failed due to incompatible or missing CPU features, try using -XX:CPUFeatures=%s on checkpoint.", datap->print_numbers());
   }
+}
+
+CracEngine::ApiStatus CracEngine::prepare_image_score_api() {
+  prepare_extension_api(_image_score_api, CRLIB_EXTENSION_IMAGE_SCORE_NAME)
+  require_method(set_score)
+  complete_extension_api(_image_score_api)
+}
+
+bool CracEngine::set_score(const char* metric, double value) {
+  return _image_score_api->set_score(_conf, metric, value);
 }

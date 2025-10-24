@@ -60,12 +60,19 @@ private:
 
 public:
   ~LinkedList() {
+    clear();
+  }
+
+  void clear() {
     Node *node = _head;
     while (node) {
       Node *next = node->_next;
       delete node;
       node = next;
     }
+    _head = nullptr;
+    _tail = nullptr;
+    _size = 0;
   }
 
   bool add(T&& item) {

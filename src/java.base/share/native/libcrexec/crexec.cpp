@@ -34,11 +34,13 @@
 #include "crlib/crlib.h"
 #include "crlib/crlib_description.h"
 #include "crlib/crlib_image_constraints.h"
+#include "crlib/crlib_image_score.h"
 #include "crlib/crlib_restore_data.h"
 #include "crlib/crlib_user_data.h"
 #include "crexec.hpp"
 #include "hashtable.hpp"
 #include "image_constraints.hpp"
+#include "image_score.hpp"
 #include "jni.h"
 
 #ifdef LINUX
@@ -78,6 +80,8 @@ static bool set_bitmap(crlib_conf_t *, const char *name, const unsigned char *va
 static bool require_label(crlib_conf_t *, const char *name, const char *value);
 static bool require_bitmap(crlib_conf_t *, const char *name, const unsigned char *value, size_t length_bytes, crlib_bitmap_comparison_t comparison);
 static bool is_failed(crlib_conf_t *, const char *name);
+
+static bool set_score(crlib_conf_t *, const char* name, double value);
 
 } // extern "C"
 
@@ -135,9 +139,18 @@ static crlib_image_constraints_t image_constraints_extension = {
   is_failed,
 };
 
+static crlib_image_score_t image_score_extension {
+  {
+    CRLIB_EXTENSION_IMAGE_SCORE_NAME,
+    sizeof(image_score_extension),
+  },
+  set_score,
+};
+
 static const crlib_extension_t *extensions[] = {
   &restore_data_extension.header,
   &image_constraints_extension.header,
+  &image_score_extension.header,
   &user_data_extension.header,
   &description_extension.header,
   nullptr
@@ -229,6 +242,7 @@ private:
   int _restore_data = 0;
   const char *_argv[ARGV_LAST + 2] = {}; // Last element is required to be null
   ImageConstraints _image_constraints;
+  ImageScore _image_score;
 
 public:
   crlib_conf() {
@@ -301,6 +315,10 @@ public:
 
   ImageConstraints &image_constraints() {
     return _image_constraints;
+  }
+
+  ImageScore &image_score() {
+    return _image_score;
   }
 
 private:
@@ -612,6 +630,10 @@ static bool is_failed(crlib_conf_t *conf, const char *name) {
   return conf->image_constraints().is_failed(name);
 }
 
+static bool set_score(crlib_conf_t *conf, const char *name, double value) {
+  return conf->image_score().set_score(name, value);
+}
+
 static const crlib_extension_t *get_extension(const char *name, size_t size) {
   for (size_t i = 0; i < ARRAY_SIZE(extensions) - 1 /* omit nullptr */; i++) {
     const crlib_extension_t *ext = extensions[i];
@@ -749,7 +771,8 @@ static int checkpoint(crlib_conf_t *conf) {
     fprintf(stderr, CREXEC "%s must be set before checkpoint\n", opt_exec_location);
     return -1;
   }
-  if (conf->argv()[ARGV_IMAGE_LOCATION] == nullptr) {
+  const char *image_location = conf->argv()[ARGV_IMAGE_LOCATION];
+  if (image_location == nullptr) {
     fprintf(stderr, CREXEC "%s must be set before checkpoint\n", opt_image_location);
     return -1;
   }
@@ -759,9 +782,14 @@ static int checkpoint(crlib_conf_t *conf) {
     fprintf(stderr, CREXEC "%s has no effect on checkpoint\n", opt_direct_map);
   }
 
-  if (!conf->image_constraints().persist(conf->argv()[ARGV_IMAGE_LOCATION])) {
+  if (!conf->image_constraints().persist(image_location) ||
+      !conf->image_score().persist(image_location)) {
     return -1;
   }
+  // We will reset scores now; scores can be retained or reset higher on the Java level.
+  // Before another checkpoint all the scores will be recorded again; we won't keep
+  // anything here to not write down any outdated value.
+  conf->image_score().reset_all();
 
   {
     Environment env;

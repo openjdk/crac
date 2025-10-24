@@ -25,6 +25,8 @@
 #ifndef CREXEC_HPP
 #define CREXEC_HPP
 
+#include <utility>
+
 #define ARRAY_SIZE(x) (sizeof(x) / sizeof(*(x)))
 
 #define CREXEC "crexec: "
@@ -35,5 +37,21 @@
 #elif !defined(PATH_MAX)
 # define PATH_MAX 1024
 #endif
+
+template<typename F> class Deferred;
+template<typename F> inline Deferred<F> defer(F&& f);
+
+template<typename F> class Deferred {
+friend Deferred<F> defer<F>(F&& f);
+private:
+  F _f;
+  inline explicit Deferred(F f): _f(f) {}
+public:
+  inline ~Deferred() { _f(); }
+};
+
+template<typename F> inline Deferred<F> defer(F&& f) {
+  return Deferred<F>(std::forward<F>(f));
+}
 
 #endif // CREXEC_HPP

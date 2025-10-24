@@ -39,7 +39,7 @@ public class Core {
     }
 
     private static final Context<Resource> globalContext = new ContextWrapper(
-        jdk.internal.crac.mirror.impl.GlobalContext.createGlobalContextImpl());
+        jdk.internal.crac.mirror.impl.GlobalContext.createGlobalContextImpl("jdk.crac.globalContext"));
 
     static {
         jdk.internal.crac.mirror.Core.getGlobalContext().register(new ResourceWrapper(null, globalContext));

@@ -27,6 +27,7 @@
 #include "crlib/crlib.h"
 #include "crlib/crlib_description.h"
 #include "crlib/crlib_image_constraints.h"
+#include "crlib/crlib_image_score.h"
 #include "crlib/crlib_restore_data.h"
 #include "memory/allocation.hpp"
 #include "nmt/memTag.hpp"
@@ -71,6 +72,9 @@ public:
   void require_cpuinfo(const VM_Version::VM_Features *datap) const;
   void check_cpuinfo(const VM_Version::VM_Features *datap) const;
 
+  ApiStatus prepare_image_score_api();
+  bool set_score(const char* metric, double value);
+
 private:
   void *_lib = nullptr;
   crlib_api_t *_api = nullptr;
@@ -79,6 +83,7 @@ private:
   crlib_restore_data_t *_restore_data_api = nullptr;
   crlib_description_t *_description_api = nullptr;
   crlib_image_constraints_t *_image_constraints_api = nullptr;
+  crlib_image_score_t *_image_score_api = nullptr;
 };
 
 #endif // SHARE_RUNTIME_CRAC_ENGINE_HPP

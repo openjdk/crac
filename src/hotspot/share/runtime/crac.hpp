@@ -41,6 +41,9 @@ public:
   static bool prepare_checkpoint();
   static Handle checkpoint(jarray fd_arr, jobjectArray obj_arr, bool dry_run, jlong jcmd_stream, TRAPS);
 
+  static bool is_image_score_supported();
+  static bool record_image_score(jobjectArray metrics, jdoubleArray values);
+
   struct crac_restore_data {
     jlong restore_time;
     jlong restore_nanos;

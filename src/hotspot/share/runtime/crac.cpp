@@ -22,6 +22,7 @@
  */
 
 #include "classfile/classLoader.hpp"
+#include "compiler/compileBroker.hpp"
 #include "jfr/jfr.hpp"
 #include "jvm.h"
 #include "logging/log.hpp"
@@ -30,6 +31,7 @@
 #include "memory/allocation.hpp"
 #include "memory/oopFactory.hpp"
 #include "nmt/memTag.hpp"
+#include "oops/oopCast.inline.hpp"
 #include "oops/typeArrayOop.inline.hpp"
 #include "prims/jvmtiExport.hpp"
 #include "runtime/crac_engine.hpp"
@@ -42,6 +44,7 @@
 #include "runtime/jniHandles.inline.hpp"
 #include "runtime/threads.hpp"
 #include "runtime/vmThread.hpp"
+#include "services/classLoadingService.hpp"
 #include "services/heapDumper.hpp"
 #include "services/writeableFlags.hpp"
 #include "utilities/debug.hpp"
@@ -160,7 +163,7 @@ static int append_size(char *buf, size_t buflen, bool zero_pad, int width, size_
 static inline jlong boot_time() {
   // RuntimeMxBean.getStartTime() returns Management::vm_init_done_time() but this is not initialized
   // when CRaC checks the boot time early in the initialization phase
-  return os::javaTimeMillis() - 1000 * (os::elapsed_counter() / os::elapsed_frequency());
+  return os::javaTimeMillis() - (1000 * os::elapsed_counter() / os::elapsed_frequency());
 }
 
 bool crac::interpolate_checkpoint_location(char *buf, size_t buflen, bool *fixed) {
@@ -697,6 +700,66 @@ Handle crac::checkpoint(jarray fd_arr, jobjectArray obj_arr, bool dry_run, jlong
   }
 
   return ret_cr(JVM_CHECKPOINT_ERROR, Handle(), Handle(), codes, msgs, THREAD);
+}
+
+bool crac::is_image_score_supported() {
+  return _engine->prepare_image_score_api() == CracEngine::ApiStatus::OK;
+}
+
+bool crac::record_image_score(jobjectArray metrics, jdoubleArray values) {
+  if (_engine->prepare_image_score_api() != CracEngine::ApiStatus::OK) {
+    // silently ignoring this
+    return true;
+  }
+  ResourceMark rm;
+  objArrayOop metrics_oops = oop_cast<objArrayOop>(JNIHandles::resolve_non_null(metrics));
+  typeArrayOop values_oops = oop_cast<typeArrayOop>(JNIHandles::resolve_non_null(values));
+  assert(metrics_oops->length() == values_oops->length(), "should be equal");
+  for (int i = 0; i < metrics_oops->length(); ++i) {
+    oop metric_oop = metrics_oops->obj_at(i);
+    assert(metric_oop != nullptr, "not null");
+    const char* metric = java_lang_String::as_utf8_string(metric_oop);
+    double value = values_oops->double_at(i);
+    if (!_engine->set_score(metric, value)) {
+      return false;
+    }
+  }
+
+  bool result = true;
+  result = result && _engine->set_score("java.lang.Runtime.availableProcessors", os::active_processor_count());
+  result = result && _engine->set_score("java.lang.Runtime.totalMemory", Universe::heap()->capacity());
+  result = result && _engine->set_score("java.lang.Runtime.maxMemory", Universe::heap()->max_capacity());
+
+  double uptime = TimeHelper::counter_to_millis(os::elapsed_counter());
+  result = result && _engine->set_score("vm.boot_time", os::javaTimeMillis() - uptime);
+  result = result && _engine->set_score("vm.uptime", uptime);
+  result = result && _engine->set_score("vm.uptime_since_restore", TimeHelper::counter_to_millis(os::elapsed_counter_since_restore()));
+
+#if INCLUDE_MANAGEMENT
+  jlong shared_loaded_classes = ClassLoadingService::loaded_shared_class_count();
+  jlong shared_unloaded_classes = ClassLoadingService::unloaded_shared_class_count();
+  // The keys match what jcmd <pid> PerfCounter.print would use
+  result = result && _engine->set_score("java.cls.loadedClasses", ClassLoadingService::loaded_class_count() - shared_loaded_classes);
+  result = result && _engine->set_score("java.cls.sharedLoadedClasses", shared_loaded_classes);
+  result = result && _engine->set_score("java.cls.unloadedClasses", ClassLoadingService::unloaded_class_count() - shared_unloaded_classes);
+  result = result && _engine->set_score("java.cls.sharedUnloadedClasses", shared_unloaded_classes);
+#endif // INCLUDE_MANAGEMENT
+  if (ClassLoader::perf_app_classload_count() != nullptr) {
+    result = result && _engine->set_score("sun.cls.appClassLoadCount", ClassLoader::perf_app_classload_count()->get_value());
+  }
+
+  result = result && _engine->set_score("sun.ci.totalCompiles", CompileBroker::get_total_compile_count());
+  result = result && _engine->set_score("sun.ci.totalBailouts", CompileBroker::get_total_bailout_count());
+  result = result && _engine->set_score("sun.ci.totalInvalidates", CompileBroker::get_total_invalidated_count());
+  // CompileBroker::get_total_native_compile_count() is never incremented?
+  result = result && _engine->set_score("sun.ci.osrCompiles", CompileBroker::get_total_osr_compile_count());
+  result = result && _engine->set_score("sun.ci.standardCompiles", CompileBroker::get_total_standard_compile_count());
+  result = result && _engine->set_score("sun.ci.osrBytes", CompileBroker::get_sum_osr_bytes_compiled());
+  result = result && _engine->set_score("sun.ci.standardBytes", CompileBroker::get_sum_standard_bytes_compiled());
+  result = result && _engine->set_score("sun.ci.nmethodSize", CompileBroker::get_sum_nmethod_size());
+  result = result && _engine->set_score("sun.ci.nmethodCodeSize", CompileBroker::get_sum_nmethod_code_size());
+  result = result && _engine->set_score("java.ci.totalTime", CompileBroker::get_total_compilation_time());
+  return result;
 }
 
 void crac::prepare_restore(crac_restore_data& restore_data) {

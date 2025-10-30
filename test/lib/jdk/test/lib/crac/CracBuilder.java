@@ -450,6 +450,10 @@ public class CracBuilder {
         if (debug) {
             cmd.add("-agentlib:jdwp=transport=dt_socket,server=y,suspend=y,address=0.0.0.0:5005");
         }
+        cmd.addAll(vmOptions);
+        for (var entry : javaOptions.entrySet()) {
+            cmd.add("-D" + entry.getKey() + "=" + entry.getValue());
+        }
         cmd.add(main().getName());
         cmd.addAll(Arrays.asList(args()));
         log("Starting process without CRaC:");

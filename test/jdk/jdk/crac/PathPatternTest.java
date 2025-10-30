@@ -34,9 +34,7 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.text.SimpleDateFormat;
-import java.util.Comparator;
-import java.util.Date;
-import java.util.TimeZone;
+import java.util.*;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.regex.Matcher;
@@ -88,18 +86,21 @@ public class PathPatternTest implements CracTest {
 
         // Pattern-based checks
         runCheckpoints("foo/%u_%f_", false);
+        runCheckpoints("foo/%u_%f_", false);
         try (var stream = Files.list(foo)) {
-            AtomicInteger count = new AtomicInteger(0);
+            Set<String> uuids = new HashSet<>();
             String featuresPattern = Platform.isX64() ? "\\p{XDigit}{32}" : "";
+            Pattern p = Pattern.compile("(\\p{XDigit}{8}-\\p{XDigit}{4}-\\p{XDigit}{4}-\\p{XDigit}{4}-\\p{XDigit}{12})_" + featuresPattern + "_");
             assertTrue(stream.allMatch(d -> {
-                count.incrementAndGet();
-                if (!d.getFileName().toString().matches("\\p{XDigit}{8}-\\p{XDigit}{4}-\\p{XDigit}{4}-\\p{XDigit}{4}-\\p{XDigit}{12}_" + featuresPattern + "_")) {
+                Matcher matcher = p.matcher(d.getFileName().toString());
+                if (!matcher.matches()) {
                     System.err.printf("Unexpected file: %s%nFull path: %s%n", d.getFileName(), d);
                     return false;
                 }
+                uuids.add(matcher.group(1));
                 return d.toFile().isDirectory();
             }));
-            assertEquals(count.intValue(), 2);
+            assertEquals(uuids.size(), 4, "UUIDs are not unique: " + uuids);
         }
         FileUtils.deleteFileTreeWithRetry(foo);
         //noinspection ResultOfMethodCallIgnored

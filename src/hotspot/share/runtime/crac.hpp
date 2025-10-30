@@ -81,6 +81,9 @@ private:
   static int checkpoint_restore(int *shmid);
 
   static bool interpolate_checkpoint_location(char *buf, size_t buflen, bool *fixed);
+
+  // os::random() is not seeded, we need a better random source
+  static bool random_bytes(u1 *data, size_t length);
 };
 
 #endif //SHARE_RUNTIME_CRAC_HPP

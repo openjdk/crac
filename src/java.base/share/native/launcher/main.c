@@ -283,7 +283,6 @@ main(int argc, char **argv)
         }
         // Iterate the rest of command line
         for (i = 1; i < argc; i++) {
-            parse_crac(argv[i]);
             JLI_List argsInFile = JLI_PreprocessArg(argv[i], JNI_TRUE);
             if (NULL == argsInFile) {
                 JLI_List_add(args, JLI_StringDup(argv[i]));
@@ -297,6 +296,9 @@ main(int argc, char **argv)
                 JLI_MemFree(argsInFile->elements);
                 JLI_MemFree(argsInFile);
             }
+        }
+        for (size_t j = 0; j < args->size; j++) {
+            parse_crac(args->elements[j]);
         }
         margc = args->size;
         // add the NULL pointer at argv[argc]

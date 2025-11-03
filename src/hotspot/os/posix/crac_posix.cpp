@@ -54,4 +54,20 @@ void VM_Crac::memory_restore() {
 bool crac::read_bootid(char *dest) {
   return true;
 }
+
+bool crac::random_bytes(u1 *dest, size_t length) {
+  // Dummy implementation
+  unsigned int seed = static_cast<unsigned int>(os::javaTimeNanos());
+  for (size_t i = 0; i < length; i += sizeof(int)) {
+    int value = os::next_random(seed);
+    seed = value;
+    size_t to_copy = length - i;
+    if (to_copy > sizeof(value)) {
+      to_copy = sizeof(value);
+    }
+    ::memcpy(dest + i, &value, to_copy);
+  }
+  return true;
+}
+
 #endif

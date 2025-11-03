@@ -546,3 +546,14 @@ bool crac::read_bootid(char *dest) {
   }
   return false;
 }
+
+bool crac::random_bytes(u1 *dest, size_t length) {
+  const char *urandom_file = "/dev/urandom";
+  int fd = ::open(urandom_file, O_RDONLY);
+  FDGuard guard("/dev/urandom", fd);
+  if (fd < 0 || !read_all(fd, urandom_file, reinterpret_cast<char *>(dest), length)) {
+    log_error(crac)("Cannot get random bytes");
+    return false;
+  }
+  return true;
+}

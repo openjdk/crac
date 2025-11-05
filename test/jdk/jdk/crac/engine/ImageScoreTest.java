@@ -27,6 +27,7 @@ import jdk.crac.Resource;
 import jdk.internal.crac.Score;
 import jdk.test.lib.crac.*;
 
+import java.io.File;
 import java.lang.ref.Reference;
 import java.nio.file.Files;
 import java.util.List;
@@ -60,6 +61,11 @@ public class ImageScoreTest implements CracTest {
         final CracBuilder builder = new CracBuilder().engine(CracEngine.PAUSE).captureOutput(true);
         builder.vmOption("-XX:" + (usePerfData ? '+' : '-') + "UsePerfData");
         builder.vmOption("--add-opens=java.base/jdk.internal.crac=ALL-UNNAMED");
+
+        File pidFile = builder.imageDir().resolve("pid").toFile();
+        if (pidFile.exists()) {
+            assertTrue(pidFile.delete());
+        }
         final CracProcess process = builder.startCheckpoint();
         builder.clearVmOptions();
         process.waitForPausePid();

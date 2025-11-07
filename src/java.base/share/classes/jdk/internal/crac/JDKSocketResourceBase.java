@@ -8,11 +8,17 @@ import java.io.FileDescriptor;
 import java.io.IOException;
 import java.net.*;
 import java.nio.file.FileSystems;
-import java.util.Map;
+import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.function.Consumer;
 import java.util.function.Predicate;
 import java.util.function.Supplier;
 
 public abstract class JDKSocketResourceBase extends JDKFdResource {
+    // While the collection should be used by the single thread invoking the checkpoint
+    // we won't prevent some races that could touch these as well.
+    private static final Map<Object, List<Runnable>> markedForReopen = new ConcurrentHashMap<>();
+
     protected final Object owner;
     private boolean valid;
     private boolean error;
@@ -20,6 +26,18 @@ public abstract class JDKSocketResourceBase extends JDKFdResource {
     public JDKSocketResourceBase(Object owner) {
         super(Core.Priority.SOCKETS);
         this.owner = owner;
+    }
+
+    protected static void markForReopen(Object owner) {
+        var prev = markedForReopen.putIfAbsent(owner, Collections.synchronizedList(new ArrayList<>()));
+        if (prev != null) {
+            throw new IllegalStateException("Marking for reopen twice");
+        }
+    }
+
+    public static Consumer<Runnable> reopenQueue(Object owner) {
+        List<Runnable> queue = markedForReopen.get(owner);
+        return queue == null ? null : queue::add;
     }
 
     protected abstract FileDescriptor getFD();
@@ -43,7 +61,10 @@ public abstract class JDKSocketResourceBase extends JDKFdResource {
                 case "error":
                     error = true;
                     yield () -> new CheckpointOpenSocketException(owner.toString(), getStackTraceHolder());
-                case "close", "reopen":
+                case "reopen":
+                    markForReopen();
+                    // intentional fallthrough
+                case "close":
                     try {
                         closeBeforeCheckpoint();
                     } catch (IOException e) {
@@ -150,7 +171,19 @@ public abstract class JDKSocketResourceBase extends JDKFdResource {
 
     protected abstract void reset();
 
+    protected void markForReopen() {
+        throw new UnsupportedOperationException("Reopen not implemented on sockets");
+    }
+
     protected void reopenAfterRestore() throws IOException {
         throw new UnsupportedOperationException("Reopen not implemented on sockets");
+    }
+
+    protected void afterReopen(Object self) {
+        List<Runnable> runnables = markedForReopen.remove(self);
+        if (runnables == null) {
+            throw new IllegalStateException(self + " was not marked for reopen");
+        }
+        runnables.forEach(Runnable::run);
     }
 }

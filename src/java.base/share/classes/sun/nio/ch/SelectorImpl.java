@@ -25,6 +25,10 @@
 
 package sun.nio.ch;
 
+import jdk.internal.access.JavaNioChannelsSpiAccess;
+import jdk.internal.access.SharedSecrets;
+import jdk.internal.crac.JDKSocketResourceBase;
+
 import java.io.IOException;
 import java.nio.channels.CancelledKeyException;
 import java.nio.channels.ClosedSelectorException;
@@ -34,13 +38,7 @@ import java.nio.channels.SelectionKey;
 import java.nio.channels.spi.AbstractSelectableChannel;
 import java.nio.channels.spi.AbstractSelector;
 import java.nio.channels.spi.SelectorProvider;
-import java.util.ArrayDeque;
-import java.util.Collections;
-import java.util.Deque;
-import java.util.HashSet;
-import java.util.Iterator;
-import java.util.Objects;
-import java.util.Set;
+import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Consumer;
 
@@ -52,6 +50,8 @@ import java.util.function.Consumer;
 public abstract class SelectorImpl
     extends AbstractSelector
 {
+    private static final JavaNioChannelsSpiAccess SPI_ACCESS = SharedSecrets.getJavaNioChannelsSpiAccess();
+
     // The set of keys registered with this Selector
     private final Set<SelectionKey> keys;
 
@@ -254,6 +254,29 @@ public abstract class SelectorImpl
     public void cancel(SelectionKeyImpl ski) {
         synchronized (cancelledKeys) {
             cancelledKeys.addLast(ski);
+        }
+        // If a key registered on the channel that is about to be reopened
+        // by FD policies is cancelled during JDK resource C/R handling
+        // this would be automatically uncancelled. We cannot prevent such race
+        // even if marking the keys individually.
+        Consumer<Runnable> enqueue = JDKSocketResourceBase.reopenQueue(ski.channel());
+        if (enqueue != null) {
+            enqueue.accept(() -> {
+                SPI_ACCESS.revalidateSelectionKey(ski);
+                implRegister(ski);
+                setEventOps(ski);
+                keys.add(ski);
+                if (ski.channel() instanceof AbstractSelectableChannel asc) {
+                    SPI_ACCESS.reregisterSelectionKey(asc, ski);
+                }
+                if (isOpen()) {
+                    // Let the implementation process updates queue
+                    wakeup();
+                } else {
+                    keys.remove(ski);
+                    ski.cancel();
+                }
+            });
         }
     }
 

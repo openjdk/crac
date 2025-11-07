@@ -103,6 +103,10 @@ abstract class AsynchronousServerSocketChannelImpl
             }
 
             @Override
+            protected void markForReopen() {
+            }
+
+            @Override
             protected void reopenAfterRestore() throws IOException {
                 FileDescriptor newfd = Net.serverSocket();
                 IOUtil.setfdVal(fd, IOUtil.fdVal(newfd));

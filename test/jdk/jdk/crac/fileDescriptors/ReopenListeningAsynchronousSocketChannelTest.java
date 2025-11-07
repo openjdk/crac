@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2023, Azul Systems, Inc. All rights reserved.
+ * Copyright (c) 2023, 2025 Azul Systems, Inc. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -26,10 +26,13 @@ import jdk.test.lib.crac.CracTest;
 import java.io.IOException;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
+import java.nio.channels.AsynchronousCloseException;
 import java.nio.channels.AsynchronousServerSocketChannel;
 import java.nio.channels.AsynchronousSocketChannel;
-import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
+
+import static jdk.test.lib.Asserts.assertTrue;
 
 /**
  * @test
@@ -47,23 +50,21 @@ public class ReopenListeningAsynchronousSocketChannelTest extends ReopenListenin
     }
 
     @Override
-    protected void testConnection(AsynchronousServerSocketChannel serverSocket) throws Exception {
-        CountDownLatch latch = new CountDownLatch(1);
-        Thread serverThread = new Thread(() -> {
-            try {
-                Future<AsynchronousSocketChannel> socket = serverSocket.accept();
-                socket.get();
-                latch.countDown();
-                // the socket leaks in here but for some reason it does not leave the FD open
-            } catch (Exception e) {
-                e.printStackTrace();
-            }
-        });
-        serverThread.setDaemon(true);
-        serverThread.start();
-        AsynchronousSocketChannel clientSocket = AsynchronousSocketChannel.open();
-        Future<Void> connectFuture = clientSocket.connect(serverSocket.getLocalAddress());
-        connectFuture.get();
-        latch.await();
+    protected boolean acceptClient(AsynchronousServerSocketChannel serverSocket) throws Exception {
+        try {
+            serverSocket.accept().get().close();
+            return true;
+        } catch (ExecutionException ee) {
+            assertTrue(ee.getCause() instanceof AsynchronousCloseException);
+            return false;
+        }
+    }
+
+    @Override
+    protected void connectClient(AsynchronousServerSocketChannel serverSocket) throws Exception {
+        try (AsynchronousSocketChannel clientSocket = AsynchronousSocketChannel.open()) {
+            Future<Void> connectFuture = clientSocket.connect(serverSocket.getLocalAddress());
+            connectFuture.get();
+        }
     }
 }

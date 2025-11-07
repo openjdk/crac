@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2023, Azul Systems, Inc. All rights reserved.
+ * Copyright (c) 2023, 2025 Azul Systems, Inc. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -21,15 +21,17 @@
  * questions.
  */
 
-import jdk.test.lib.Asserts;
 import jdk.test.lib.crac.CracTest;
+import jdk.test.lib.crac.CracTestArg;
+
+import static jdk.test.lib.Asserts.*;
 
 import java.io.IOException;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
+import java.nio.channels.ClosedChannelException;
 import java.nio.channels.ServerSocketChannel;
 import java.nio.channels.SocketChannel;
-import java.util.concurrent.CountDownLatch;
 
 /**
  * @test
@@ -38,30 +40,43 @@ import java.util.concurrent.CountDownLatch;
  * @build FDPolicyTestBase
  * @build ReopenListeningTestBase
  * @build ReopenListeningSocketChannelTest
- * @run driver jdk.test.lib.crac.CracTest
+ * @run driver jdk.test.lib.crac.CracTest true
+ * @run driver jdk.test.lib.crac.CracTest false
  */
 public class ReopenListeningSocketChannelTest extends ReopenListeningTestBase<ServerSocketChannel> implements CracTest {
+    @CracTestArg
+    boolean blocking;
+
     @Override
     protected ServerSocketChannel createServer() throws IOException {
-        return ServerSocketChannel.open().bind(new InetSocketAddress(InetAddress.getLoopbackAddress(), 0));
+        ServerSocketChannel channel = ServerSocketChannel.open();
+        channel.configureBlocking(blocking);
+        return channel.bind(new InetSocketAddress(InetAddress.getLoopbackAddress(), 0));
     }
 
     @Override
-    protected void testConnection(ServerSocketChannel serverSocket) throws Exception {
-        CountDownLatch latch = new CountDownLatch(1);
-        Thread serverThread = new Thread(() -> {
-            try {
-                SocketChannel socket = serverSocket.accept();
-                latch.countDown();
-                // the socket leaks in here but for some reason it does not leave the FD open
-            } catch (IOException e) {
-                e.printStackTrace();
+    protected boolean acceptClient(ServerSocketChannel serverSocket) throws IOException {
+        try {
+            SocketChannel socket;
+            if (blocking) {
+                socket = serverSocket.accept();
+                assertNotNull(socket);
+            } else {
+                while ((socket = serverSocket.accept()) == null) {
+                    Thread.yield();
+                }
             }
-        });
-        serverThread.setDaemon(true);
-        serverThread.start();
-        SocketChannel clientSocket = SocketChannel.open(serverSocket.getLocalAddress());
-        Asserts.assertTrue(clientSocket.isConnected());
-        latch.await();
+            socket.close();
+            return true;
+        } catch (ClosedChannelException e) {
+            return false;
+        }
+    }
+
+    @Override
+    protected void connectClient(ServerSocketChannel serverSocket) throws Exception {
+        try (SocketChannel clientSocket = SocketChannel.open(serverSocket.getLocalAddress())) {
+            assertTrue(clientSocket.isConnected());
+        }
     }
 }

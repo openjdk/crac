@@ -65,6 +65,11 @@ public abstract class AbstractSelectionKey
         invalid = true;
     }
 
+    void revalidate() { // package-private, called only by CRaC on reopen
+        assert invalid;
+        invalid = false;
+    }
+
     /**
      * Cancels this key.
      *

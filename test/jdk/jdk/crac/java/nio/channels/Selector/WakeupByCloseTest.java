@@ -30,13 +30,13 @@ import java.io.IOException;
  * @test Selector/wakeupByClose
  * @summary check that the Selector's close() wakes it up after restore
  * @library /test/lib
- * @build Test
+ * @build WakeupByCloseTest
  * @run driver jdk.test.lib.crac.CracTest true  false
  * @run driver jdk.test.lib.crac.CracTest false false
  * @run driver jdk.test.lib.crac.CracTest true  true
  * @run driver jdk.test.lib.crac.CracTest false true
  */
-public class Test implements CracTest {
+public class WakeupByCloseTest implements CracTest {
 
     static boolean awakened, closed;
 

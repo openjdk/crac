@@ -21,23 +21,33 @@
 import jdk.test.lib.crac.CracBuilder;
 import jdk.test.lib.crac.CracEngine;
 import jdk.test.lib.crac.CracTest;
+import jdk.test.lib.crac.CracTestArg;
 
 import java.nio.channels.Selector;
-import java.io.IOException;
 
 /*
- * @test Selector/wakeupByTimeoutAfterRestore
- * @summary check that the Selector selected before the checkpoint,
- *          will wake up by timeout after the restore
+ * @test Selector/selectAfterWakeup
+ * @summary check that the Selector's wakeup() makes the subsequent select() call to return immediately
+ *          (see also jdk/test/java/nio/channels/Selector/WakeupSpeed.java);
+ *          covers ZE-983
  * @library /test/lib
- * @build Test
- * @run driver jdk.test.lib.crac.CracTest
+ * @build SelectAfterWakeupTest
+ * @run driver jdk.test.lib.crac.CracTest true  false false
+ * @run driver jdk.test.lib.crac.CracTest true  false true
+ * @run driver jdk.test.lib.crac.CracTest true  true  false
+ * @run driver jdk.test.lib.crac.CracTest true  true  true
+ * @run driver jdk.test.lib.crac.CracTest false true  false
+ * @run driver jdk.test.lib.crac.CracTest false true  true
  */
-public class Test implements CracTest {
+public class SelectAfterWakeupTest implements CracTest {
+    @CracTestArg(0)
+    boolean wakeupBeforeCheckpoint;
 
-    private final static long TIMEOUT = 40_000; // 40 seconds
+    @CracTestArg(1)
+    boolean wakeupAfterRestore;
 
-    static boolean awakened = false;
+    @CracTestArg(2)
+    boolean setSelectTimeout;
 
     @Override
     public void test() throws Exception {
@@ -46,34 +56,25 @@ public class Test implements CracTest {
 
     @Override
     public void exec() throws Exception {
+
         Selector selector = Selector.open();
-        Runnable r = new Runnable() {
-            @Override
-            public void run() {
-                try {
-                    selector.select(TIMEOUT);
-                    awakened = true;
-                } catch (IOException e) { throw new RuntimeException(e); }
-            }
-        };
-        Thread t = new Thread(r);
-        t.start();
-        Thread.sleep(1000);
 
-        jdk.crac.Core.checkpointRestore();
-
-        t.join();
-        if (!awakened) { throw new RuntimeException("not awakened!"); }
-
-        // check that the selector works as expected
-
-        if (!selector.isOpen()) { throw new RuntimeException("the selector must be open"); }
-
+        // do this just in case
         selector.wakeup();
         selector.select();
 
-        selector.selectNow();
-        selector.select(200);
+        if (wakeupBeforeCheckpoint) {
+            selector.wakeup();
+        }
+
+        jdk.crac.Core.checkpointRestore();
+
+        if (wakeupAfterRestore) {
+            selector.wakeup();
+        }
+        if (setSelectTimeout) { selector.select(3600_000); }
+        else { selector.select(); }
+
         selector.close();
     }
 }

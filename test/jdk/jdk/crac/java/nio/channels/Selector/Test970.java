@@ -31,8 +31,7 @@ import jdk.test.lib.crac.CracTestArg;
  * @summary a regression test for ZE-970 ("a channel deregistration
  *          is locked depending on mutual order of selector and channel creation")
  * @library /test/lib
- * @build ChannelResource
- * @build Test
+ * @build Test970
  * @run driver jdk.test.lib.crac.CracTest SELECT_NOW true
  * @run driver jdk.test.lib.crac.CracTest SELECT_NOW false
  * @run driver jdk.test.lib.crac.CracTest SELECT true
@@ -40,7 +39,7 @@ import jdk.test.lib.crac.CracTestArg;
  * @run driver jdk.test.lib.crac.CracTest SELECT_TIMEOUT true
  * @run driver jdk.test.lib.crac.CracTest SELECT_TIMEOUT false
  */
-public class Test implements CracTest {
+public class Test970 implements CracTest {
     @CracTestArg(0)
     ChannelResource.SelectionType selType;
 
@@ -76,6 +75,67 @@ public class Test implements CracTest {
             Core.checkpointRestore();
 
             selector.close();
+        }
+    }
+
+    static class ChannelResource implements Resource {
+
+        public enum SelectionType {
+            SELECT,
+            SELECT_TIMEOUT,
+            SELECT_NOW
+        };
+
+        private SocketChannel channel;
+        private SelectionKey key;
+        private Selector selector;
+
+        private final SelectionType selType;
+
+        public ChannelResource(SelectionType selType) {
+            this.selType = selType;
+            Core.getGlobalContext().register(this);
+        }
+
+        public void open() throws IOException {
+            channel = SocketChannel.open();
+            channel.configureBlocking(false);
+        }
+
+        public void register(Selector selector) throws IOException {
+            key = channel.register(selector, SelectionKey.OP_READ);
+            this.selector = selector;
+        }
+
+        @Override
+        public void beforeCheckpoint(Context<? extends Resource> context) throws IOException {
+
+            channel.socket().close();
+
+            // causes the channel deregistration
+            if (selType == SelectionType.SELECT_NOW) {
+                selector.selectNow();
+            } else if (selType == SelectionType.SELECT_TIMEOUT) {
+                selector.select(500);
+            } else {
+                new Thread(new Runnable() {
+                    @Override
+                    public void run() {
+                        try {
+                            Thread.sleep(1000);
+                            selector.wakeup();
+                        } catch (InterruptedException ie) {
+                            throw new RuntimeException(ie);
+                        }
+                    }
+                }).start();
+
+                selector.select();
+            }
+        }
+
+        @Override
+        public void afterRestore(Context<? extends Resource> context) {
         }
     }
 }

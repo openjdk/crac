@@ -26,26 +26,19 @@ import jdk.test.lib.crac.CracTestArg;
 import java.nio.channels.Selector;
 import java.io.IOException;
 
+import java.util.concurrent.atomic.AtomicInteger;
+
 /*
- * @test Selector/interruptedSelection
- * @summary check that the thread blocked by Selector.select() could be properly woken up by an interruption
+ * @test Selector/multipleSelectNow
+ * @summary check work of multiple selectNow() + C/R peaceful coexistence
  * @library /test/lib
- * @build Test
- * @run driver/timeout=30 jdk.test.lib.crac.CracTest true  true  false
- * @run driver/timeout=30 jdk.test.lib.crac.CracTest true  false false
- * @run driver/timeout=30 jdk.test.lib.crac.CracTest false true  false
- * @run driver/timeout=30 jdk.test.lib.crac.CracTest false false false
- * @run driver/timeout=30 jdk.test.lib.crac.CracTest true  true  true
- * @run driver/timeout=30 jdk.test.lib.crac.CracTest false true  true
+ * @build MultipleSelectNowTest
+ * @run driver jdk.test.lib.crac.CracTest false
+ * @run driver jdk.test.lib.crac.CracTest true
  */
-public class Test implements CracTest {
-    @CracTestArg(0)
-    boolean setTimeout;
+public class MultipleSelectNowTest implements CracTest {
 
-    @CracTestArg(1)
-    boolean interruptBeforeCheckpoint;
-
-    @CracTestArg(2)
+    @CracTestArg
     boolean skipCR;
 
     @Override
@@ -58,42 +51,54 @@ public class Test implements CracTest {
         }
     }
 
-    // select(): interrupt before the checkpoint
     @Override
     public void exec() throws Exception {
+        AtomicInteger nSelected = new AtomicInteger(0);
+
         Selector selector = Selector.open();
-        Runnable r = new Runnable() {
+
+        int nThreads = skipCR ? 30 : 150; // some selectNow() calls should occur at the same time with C/R
+        Thread threads[] = new Thread[nThreads];
+
+        Runnable rStart = new Runnable() {
             @Override
-            public void run() {  try {
-                if (setTimeout) { selector.select(3600_000); }
-                else { selector.select(); }
-            } catch (IOException e) { throw new RuntimeException(e); }   }
+            public void run() {
+
+                for (int i = 0; i < threads.length; ++i) {
+
+                    threads[i] = new Thread(new Runnable() {
+                        @Override
+                        public void run() {
+                            try {
+                                System.out.println("selectNow");
+                                nSelected.incrementAndGet();
+                                selector.selectNow();
+                                System.out.println("done");
+                                nSelected.decrementAndGet();
+                            } catch (IOException e) {
+                                throw new RuntimeException(e);
+                            }
+                        }
+                    });
+                    threads[i].start();
+                    try { Thread.sleep(5); } catch (InterruptedException ie) {}
+                }
+            }
         };
-        Thread t = new Thread(r);
-        t.start();
-
-        Thread.sleep(1000);
-
-        if (interruptBeforeCheckpoint) {
-            t.interrupt();
-            t.join();
-            System.out.println(">> interrupt before checkpoint");
-        }
+        Thread tStart = new Thread(rStart);
+        tStart.start();
+        Thread.sleep(500);
 
         if (!skipCR) {
             jdk.crac.Core.checkpointRestore();
         }
 
-        Thread.sleep(1000);
+        tStart.join();
 
-        if (!interruptBeforeCheckpoint) {
-            t.interrupt();
-            t.join();
-            System.out.println(">>> interrupt after restore");
-        }
+        do { Thread.sleep(2000); } while (nSelected.get() > 0);
+        for (Thread t: threads) { t.join(); } // just in case...
 
-        // just in case, check that the selector works as expected
-
+        // === check that the selector works as expected ===
         if (!selector.isOpen()) { throw new RuntimeException("the selector must be open"); }
 
         selector.wakeup();
@@ -101,7 +106,7 @@ public class Test implements CracTest {
 
         selector.selectNow();
         selector.select(200);
+
         selector.close();
     }
 }
-

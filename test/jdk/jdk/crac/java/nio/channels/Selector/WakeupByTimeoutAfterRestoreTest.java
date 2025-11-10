@@ -18,26 +18,26 @@
 // CA 94089 USA or visit www.azul.com if you need additional information or
 // have any questions.
 
-import java.nio.channels.*;
-import java.io.IOException;
-import jdk.crac.*;
 import jdk.test.lib.crac.CracBuilder;
 import jdk.test.lib.crac.CracEngine;
 import jdk.test.lib.crac.CracTest;
-import jdk.test.lib.crac.CracTestArg;
+
+import java.nio.channels.Selector;
+import java.io.IOException;
 
 /*
- * @test Selector/keyAfterRestore
- * @summary a trivial test for SelectionKey's state after restore
+ * @test Selector/wakeupByTimeoutAfterRestore
+ * @summary check that the Selector selected before the checkpoint,
+ *          will wake up by timeout after the restore
  * @library /test/lib
- * @build ChannelResource
- * @build Test
- * @run driver/timeout=30 jdk.test.lib.crac.CracTest true
- * @run driver/timeout=30 jdk.test.lib.crac.CracTest false
+ * @build WakeupByTimeoutAfterRestoreTest
+ * @run driver jdk.test.lib.crac.CracTest
  */
-public class Test implements CracTest {
-    @CracTestArg
-    boolean openSelectorAtFirst;
+public class WakeupByTimeoutAfterRestoreTest implements CracTest {
+
+    private final static long TIMEOUT = 40_000; // 40 seconds
+
+    static boolean awakened = false;
 
     @Override
     public void test() throws Exception {
@@ -46,30 +46,34 @@ public class Test implements CracTest {
 
     @Override
     public void exec() throws Exception {
-        ChannelResource ch;
-        Selector selector = null;
+        Selector selector = Selector.open();
+        Runnable r = new Runnable() {
+            @Override
+            public void run() {
+                try {
+                    selector.select(TIMEOUT);
+                    awakened = true;
+                } catch (IOException e) { throw new RuntimeException(e); }
+            }
+        };
+        Thread t = new Thread(r);
+        t.start();
+        Thread.sleep(1000);
 
-        // check various order (see ZE-970)
-        if (openSelectorAtFirst) { selector = Selector.open(); }
+        jdk.crac.Core.checkpointRestore();
 
-        ch = new ChannelResource();
-        ch.open();
+        t.join();
+        if (!awakened) { throw new RuntimeException("not awakened!"); }
 
-        if (!openSelectorAtFirst) { selector = Selector.open(); }
+        // check that the selector works as expected
 
-        ch.register(selector);
+        if (!selector.isOpen()) { throw new RuntimeException("the selector must be open"); }
 
-        try {
-            Core.checkpointRestore();
-        } catch (CheckpointException | RestoreException e) {
-            e.printStackTrace();
-            throw e;
-        }
+        selector.wakeup();
+        selector.select();
 
-        Thread.sleep(200);
-
-        ch.checkKey();
-
+        selector.selectNow();
+        selector.select(200);
         selector.close();
     }
 }

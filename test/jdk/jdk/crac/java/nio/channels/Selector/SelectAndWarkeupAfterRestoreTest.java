@@ -22,17 +22,16 @@ import jdk.test.lib.crac.CracBuilder;
 import jdk.test.lib.crac.CracEngine;
 import jdk.test.lib.crac.CracTest;
 
-import java.io.IOException;
 import java.nio.channels.Selector;
 
 /*
  * @test Selector/selectAndWakeupAfterRestore
  * @summary a trivial check that Selector.wakeup() after restore behaves as expected
  * @library /test/lib
- * @build Test
+ * @build SelectAndWarkeupAfterRestoreTest
  * @run driver jdk.test.lib.crac.CracTest
  */
-public class Test implements CracTest {
+public class SelectAndWarkeupAfterRestoreTest implements CracTest {
     @Override
     public void test() throws Exception {
         new CracBuilder().engine(CracEngine.SIMULATE).startCheckpoint().waitForSuccess();

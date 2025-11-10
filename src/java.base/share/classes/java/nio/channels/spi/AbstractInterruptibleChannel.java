@@ -30,6 +30,7 @@ import java.nio.channels.AsynchronousCloseException;
 import java.nio.channels.Channel;
 import java.nio.channels.ClosedByInterruptException;
 import java.nio.channels.InterruptibleChannel;
+import java.nio.channels.SelectionKey;
 
 import jdk.internal.access.JavaNioChannelsSpiAccess;
 import jdk.internal.access.SharedSecrets;
@@ -98,6 +99,16 @@ public abstract class AbstractInterruptibleChannel
             @Override
             public void setChannelReopened(AbstractInterruptibleChannel channel) {
                 channel.setReopened();
+            }
+
+            @Override
+            public void revalidateSelectionKey(AbstractSelectionKey selectionKey) {
+                selectionKey.revalidate();
+            }
+
+            @Override
+            public void reregisterSelectionKey(AbstractSelectableChannel channel, SelectionKey key) {
+                channel.reregister(key);
             }
         });
     }

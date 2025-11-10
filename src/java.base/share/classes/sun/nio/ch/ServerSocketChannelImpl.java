@@ -58,6 +58,7 @@ import static java.net.StandardProtocolFamily.UNIX;
 import jdk.internal.access.JavaNioChannelsSpiAccess;
 import jdk.internal.access.SharedSecrets;
 import jdk.internal.crac.JDKSocketResource;
+import jdk.internal.crac.JDKSocketResourceBase;
 import sun.net.NetHooks;
 import sun.net.ext.ExtendedSocketOptions;
 
@@ -762,6 +763,11 @@ class ServerSocketChannelImpl
         }
 
         @Override
+        protected void markForReopen() {
+            JDKSocketResourceBase.markForReopen(ServerSocketChannelImpl.this);
+        }
+
+        @Override
         protected void closeBeforeCheckpoint() throws IOException {
             close();
         }
@@ -788,6 +794,7 @@ class ServerSocketChannelImpl
                 }
             }
             SPI_ACCESS.setChannelReopened(ServerSocketChannelImpl.this);
+            afterReopen(ServerSocketChannelImpl.this);
         }
     }
 }

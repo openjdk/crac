@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2023, Azul Systems, Inc. All rights reserved.
+ * Copyright (c) 2023, 2025 Azul Systems, Inc. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -28,7 +28,9 @@ import java.io.IOException;
 import java.net.InetAddress;
 import java.net.ServerSocket;
 import java.net.Socket;
-import java.util.concurrent.CountDownLatch;
+import java.net.SocketException;
+
+import static jdk.test.lib.Asserts.assertEquals;
 
 /**
  * @test
@@ -46,22 +48,21 @@ public class ReopenListeningSocketTest extends ReopenListeningTestBase<ServerSoc
     }
 
     @Override
-    protected void testConnection(ServerSocket serverSocket) throws Exception {
-        CountDownLatch latch = new CountDownLatch(1);
-        Thread serverThread = new Thread(() -> {
-            try {
-                Socket socket = serverSocket.accept();
-                latch.countDown();
-                // the socket leaks in here but for some reason it does not leave the FD open
-            } catch (IOException e) {
-                e.printStackTrace();
-            }
-        });
-        serverThread.setDaemon(true);
-        serverThread.start();
-        Socket clientSocket = new Socket(InetAddress.getLoopbackAddress(), serverSocket.getLocalPort());
-        Asserts.assertTrue(clientSocket.isConnected());
-        latch.await();
+    protected boolean acceptClient(ServerSocket serverSocket) throws Exception {
+        try {
+            Socket socket = serverSocket.accept();
+            socket.close();
+            return true;
+        } catch (SocketException e) {
+            assertEquals("Socket closed", e.getMessage());
+            return false;
+        }
     }
 
+    @Override
+    protected void connectClient(ServerSocket serverSocket) throws Exception {
+        try (Socket clientSocket = new Socket(InetAddress.getLoopbackAddress(), serverSocket.getLocalPort())) {
+            Asserts.assertTrue(clientSocket.isConnected());
+        }
+    }
 }

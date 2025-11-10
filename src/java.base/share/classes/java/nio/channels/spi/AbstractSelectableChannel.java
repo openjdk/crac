@@ -243,6 +243,15 @@ public abstract class AbstractSelectableChannel
         }
     }
 
+    void reregister(SelectionKey key) {
+        assert key.channel() == this;
+        synchronized (regLock) {
+            synchronized (keyLock) {
+                assert findKey(key.selector()) == null;
+                addKey(key);
+            }
+        }
+    }
 
     // -- Closing --
 

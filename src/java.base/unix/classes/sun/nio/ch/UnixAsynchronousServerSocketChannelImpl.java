@@ -100,6 +100,11 @@ class UnixAsynchronousServerSocketChannelImpl
             future = acceptFuture;
         }
 
+        // This channel is closed and the current accept is going to throw
+        // AsynchronousCloseException, but if CRaC is going to reopen it after restore
+        // we must reset the accepting state.
+        enableAccept();
+
         // discard the stack trace as otherwise it may appear that implClose
         // has thrown the exception.
         AsynchronousCloseException x = new AsynchronousCloseException();

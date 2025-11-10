@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2023, 2025 Azul Systems, Inc. All rights reserved.
+ * Copyright (c) 2023, Azul Systems, Inc. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -22,61 +22,54 @@
  */
 
 import jdk.test.lib.crac.CracTest;
-import jdk.test.lib.crac.CracTestArg;
+
+import java.io.IOException;
+import java.nio.channels.*;
 
 import static jdk.test.lib.Asserts.*;
 
-import java.io.IOException;
-import java.net.InetAddress;
-import java.net.InetSocketAddress;
-import java.nio.channels.ClosedChannelException;
-import java.nio.channels.ServerSocketChannel;
-import java.nio.channels.SocketChannel;
-
+// FIXME: JDK-8371549 - remove @requires Linux
 /**
  * @test
  * @library /test/lib
  * @modules java.base/jdk.internal.crac:+open
+ * @requires (os.family == "linux")
  * @build FDPolicyTestBase
  * @build ReopenListeningTestBase
  * @build ReopenListeningSocketChannelTest
- * @run driver jdk.test.lib.crac.CracTest true
- * @run driver jdk.test.lib.crac.CracTest false
+ * @build ReopenListeningWithSelectorTest
+ * @run driver/timeout=10 jdk.test.lib.crac.CracTest false
  */
-public class ReopenListeningSocketChannelTest extends ReopenListeningTestBase<ServerSocketChannel> implements CracTest {
-    @CracTestArg
-    boolean blocking;
+public class ReopenListeningWithSelectorTest extends ReopenListeningSocketChannelTest implements CracTest {
+    private Selector selector;
+
+    @Override
+    public void exec() throws Exception {
+        super.exec();
+        selector.close();
+    }
 
     @Override
     protected ServerSocketChannel createServer() throws IOException {
-        ServerSocketChannel channel = ServerSocketChannel.open();
-        channel.configureBlocking(blocking);
-        return channel.bind(new InetSocketAddress(InetAddress.getLoopbackAddress(), 0));
+        selector = Selector.open();
+        ServerSocketChannel channel = super.createServer();
+        channel.register(selector, SelectionKey.OP_ACCEPT);
+        return channel;
     }
 
     @Override
     protected boolean acceptClient(ServerSocketChannel serverSocket) throws IOException {
-        try {
-            SocketChannel socket;
-            if (blocking) {
-                socket = serverSocket.accept();
-                assertNotNull(socket);
-            } else {
-                while ((socket = serverSocket.accept()) == null) {
-                    Thread.yield();
-                }
-            }
-            socket.close();
-            return true;
-        } catch (ClosedChannelException e) {
+        if (selector.select() == 0) {
             return false;
         }
+        for (SelectionKey key : selector.selectedKeys()) {
+            assertTrue(key.isAcceptable());
+            assertEquals(serverSocket, key.channel());
+            SocketChannel socket = serverSocket.accept();
+            socket.close();
+        }
+        selector.selectedKeys().clear();
+        return true;
     }
 
-    @Override
-    protected void connectClient(ServerSocketChannel serverSocket) throws Exception {
-        try (SocketChannel clientSocket = SocketChannel.open(serverSocket.getLocalAddress())) {
-            assertTrue(clientSocket.isConnected());
-        }
-    }
 }

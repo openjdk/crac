@@ -28,10 +28,12 @@ import java.nio.channels.*;
 
 import static jdk.test.lib.Asserts.*;
 
+// FIXME: JDK-8371549 - remove @requires Linux
 /**
  * @test
  * @library /test/lib
  * @modules java.base/jdk.internal.crac:+open
+ * @requires (os.family == "linux")
  * @build FDPolicyTestBase
  * @build ReopenListeningTestBase
  * @build ReopenListeningSocketChannelTest

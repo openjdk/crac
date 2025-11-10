@@ -19,6 +19,7 @@
 // have any questions.
 
 import jdk.test.lib.crac.CracBuilder;
+import jdk.test.lib.crac.CracEngine;
 import jdk.test.lib.crac.CracTest;
 import jdk.test.lib.crac.CracTestArg;
 
@@ -28,7 +29,6 @@ import java.io.IOException;
 /*
  * @test Selector/interruptedSelection
  * @summary check that the thread blocked by Selector.select() could be properly woken up by an interruption
- * @requires (os.family == "linux")
  * @library /test/lib
  * @build Test
  * @run driver/timeout=30 jdk.test.lib.crac.CracTest true  true  false
@@ -50,11 +50,11 @@ public class Test implements CracTest {
 
     @Override
     public void test() throws Exception {
-        CracBuilder builder = new CracBuilder();
+        CracBuilder builder = new CracBuilder().engine(CracEngine.SIMULATE);
         if (skipCR) {
             builder.doPlain();
         } else {
-            builder.doCheckpointAndRestore();
+            builder.startCheckpoint().waitForSuccess();
         }
     }
 

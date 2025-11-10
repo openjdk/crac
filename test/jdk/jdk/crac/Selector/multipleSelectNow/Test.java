@@ -19,6 +19,7 @@
 // have any questions.
 
 import jdk.test.lib.crac.CracBuilder;
+import jdk.test.lib.crac.CracEngine;
 import jdk.test.lib.crac.CracTest;
 import jdk.test.lib.crac.CracTestArg;
 
@@ -30,7 +31,6 @@ import java.util.concurrent.atomic.AtomicInteger;
 /*
  * @test Selector/multipleSelectNow
  * @summary check work of multiple selectNow() + C/R peaceful coexistence
- * @requires (os.family == "linux")
  * @library /test/lib
  * @build Test
  * @run driver jdk.test.lib.crac.CracTest false
@@ -43,11 +43,11 @@ public class Test implements CracTest {
 
     @Override
     public void test() throws Exception {
-        CracBuilder builder = new CracBuilder();
+        CracBuilder builder = new CracBuilder().engine(CracEngine.SIMULATE);
         if (skipCR) {
             builder.doPlain();
         } else {
-            builder.doCheckpointAndRestore();
+            builder.startCheckpoint().waitForSuccess();
         }
     }
 

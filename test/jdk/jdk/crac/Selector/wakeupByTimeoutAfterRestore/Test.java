@@ -19,6 +19,7 @@
 // have any questions.
 
 import jdk.test.lib.crac.CracBuilder;
+import jdk.test.lib.crac.CracEngine;
 import jdk.test.lib.crac.CracTest;
 
 import java.nio.channels.Selector;
@@ -28,7 +29,6 @@ import java.io.IOException;
  * @test Selector/wakeupByTimeoutAfterRestore
  * @summary check that the Selector selected before the checkpoint,
  *          will wake up by timeout after the restore
- * @requires (os.family == "linux")
  * @library /test/lib
  * @build Test
  * @run driver jdk.test.lib.crac.CracTest
@@ -41,7 +41,7 @@ public class Test implements CracTest {
 
     @Override
     public void test() throws Exception {
-        new CracBuilder().doCheckpointAndRestore();
+        new CracBuilder().engine(CracEngine.SIMULATE).startCheckpoint().waitForSuccess();
     }
 
     @Override

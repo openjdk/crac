@@ -19,6 +19,7 @@
 // have any questions.
 
 import jdk.test.lib.crac.CracBuilder;
+import jdk.test.lib.crac.CracEngine;
 import jdk.test.lib.crac.CracTest;
 import jdk.test.lib.crac.CracTestArg;
 
@@ -30,7 +31,6 @@ import java.nio.channels.Selector;
  * @summary check that the Selector's wakeup() makes the subsequent select() call to return immediately
  *          (see also jdk/test/java/nio/channels/Selector/WakeupSpeed.java);
  *          covers ZE-983
- * @requires (os.family == "linux")
  * @library /test/lib
  * @build Test
  * @run driver jdk.test.lib.crac.CracTest true  false false
@@ -52,7 +52,7 @@ public class Test implements CracTest {
 
     @Override
     public void test() throws Exception {
-        new CracBuilder().doCheckpointAndRestore();
+        new CracBuilder().engine(CracEngine.SIMULATE).startCheckpoint().waitForSuccess();
     }
 
     @Override

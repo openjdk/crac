@@ -25,12 +25,15 @@ import jdk.test.lib.crac.CracTestArg;
 
 import java.nio.channels.Selector;
 import java.io.IOException;
+import java.nio.channels.spi.SelectorProvider;
 import java.util.Random;
 
 import java.util.concurrent.atomic.AtomicInteger;
 
+import static jdk.test.lib.Asserts.assertEquals;
+
 /*
- * @test Selector/multipleSelect
+ * @test id=DEFAULT
  * @summary check work of multiple select() + wakeup() + C/R
  * @library /test/lib
  * @build MultipleSelectTest
@@ -40,6 +43,30 @@ import java.util.concurrent.atomic.AtomicInteger;
  * @run driver/timeout=30 jdk.test.lib.crac.CracTest ONLY_TIMEOUTS true
  * @run driver/timeout=30 jdk.test.lib.crac.CracTest NO_TIMEOUTS true
  * @run driver/timeout=30 jdk.test.lib.crac.CracTest MIXED true
+ */
+/*
+ * @test id=ALT_LINUX
+ * @requires (os.family == "linux")
+ * @library /test/lib
+ * @build MultipleSelectTest
+ * @run driver/timeout=30 jdk.test.lib.crac.CracTest ONLY_TIMEOUTS false sun.nio.ch.PollSelectorProvider
+ * @run driver/timeout=30 jdk.test.lib.crac.CracTest NO_TIMEOUTS   false sun.nio.ch.PollSelectorProvider
+ * @run driver/timeout=30 jdk.test.lib.crac.CracTest MIXED         false sun.nio.ch.PollSelectorProvider
+ * @run driver/timeout=30 jdk.test.lib.crac.CracTest ONLY_TIMEOUTS true  sun.nio.ch.PollSelectorProvider
+ * @run driver/timeout=30 jdk.test.lib.crac.CracTest NO_TIMEOUTS   true  sun.nio.ch.PollSelectorProvider
+ * @run driver/timeout=30 jdk.test.lib.crac.CracTest MIXED         true  sun.nio.ch.PollSelectorProvider
+ */
+/*
+ * @test id=ALT_WINDOWS
+ * @requires (os.family == "windows")
+ * @library /test/lib
+ * @build MultipleSelectTest
+ * @run driver/timeout=30 jdk.test.lib.crac.CracTest ONLY_TIMEOUTS false sun.nio.ch.WindowsSelectorProvider
+ * @run driver/timeout=30 jdk.test.lib.crac.CracTest NO_TIMEOUTS   false sun.nio.ch.WindowsSelectorProvider
+ * @run driver/timeout=30 jdk.test.lib.crac.CracTest MIXED         false sun.nio.ch.WindowsSelectorProvider
+ * @run driver/timeout=30 jdk.test.lib.crac.CracTest ONLY_TIMEOUTS true  sun.nio.ch.WindowsSelectorProvider
+ * @run driver/timeout=30 jdk.test.lib.crac.CracTest NO_TIMEOUTS   true  sun.nio.ch.WindowsSelectorProvider
+ * @run driver/timeout=30 jdk.test.lib.crac.CracTest MIXED         true  sun.nio.ch.WindowsSelectorProvider
  */
 public class MultipleSelectTest implements CracTest {
 
@@ -59,9 +86,15 @@ public class MultipleSelectTest implements CracTest {
     @CracTestArg(1)
     boolean skipCR;
 
+    @CracTestArg(value = 2, optional = true)
+    String selectorImpl;
+
     @Override
     public void test() throws Exception {
         CracBuilder builder = new CracBuilder().engine(CracEngine.SIMULATE);
+        if (selectorImpl != null) {
+            builder.javaOption(SelectorProvider.class.getName(), selectorImpl);
+        }
         if (skipCR) {
             builder.doPlain();
         } else {
@@ -71,6 +104,9 @@ public class MultipleSelectTest implements CracTest {
 
     @Override
     public void exec() throws Exception {
+        if (selectorImpl != null) {
+            assertEquals(selectorImpl, SelectorProvider.provider().getClass().getName());
+        }
 
         long dt = (type == TestType.ONLY_TIMEOUTS) ? SHORT_TIMEOUT : LONG_TIMEOUT;
 

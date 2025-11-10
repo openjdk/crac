@@ -26,24 +26,49 @@ import jdk.test.lib.crac.CracTestArg;
 import java.nio.channels.Selector;
 import java.io.IOException;
 
+import java.nio.channels.spi.SelectorProvider;
 import java.util.concurrent.atomic.AtomicInteger;
 
+import static jdk.test.lib.Asserts.assertEquals;
+
 /*
- * @test Selector/multipleSelectNow
+ * @test id=DEFAULT
  * @summary check work of multiple selectNow() + C/R peaceful coexistence
  * @library /test/lib
  * @build MultipleSelectNowTest
  * @run driver jdk.test.lib.crac.CracTest false
  * @run driver jdk.test.lib.crac.CracTest true
  */
+/*
+ * @test id=ALT_LINUX
+ * @requires (os.family == "linux")
+ * @library /test/lib
+ * @build MultipleSelectNowTest
+ * @run driver jdk.test.lib.crac.CracTest false sun.nio.ch.PollSelectorProvider
+ * @run driver jdk.test.lib.crac.CracTest true sun.nio.ch.PollSelectorProvider
+ */
+/*
+ * @test id=ALT_WINDOWS
+ * @requires (os.family == "windows")
+ * @library /test/lib
+ * @build MultipleSelectNowTest
+ * @run driver jdk.test.lib.crac.CracTest false sun.nio.ch.WindowsSelectorProvider
+ * @run driver jdk.test.lib.crac.CracTest true sun.nio.ch.WindowsSelectorProvider
+ */
 public class MultipleSelectNowTest implements CracTest {
 
     @CracTestArg
     boolean skipCR;
 
+    @CracTestArg(value = 1, optional = true)
+    String selectorImpl;
+
     @Override
     public void test() throws Exception {
         CracBuilder builder = new CracBuilder().engine(CracEngine.SIMULATE);
+        if (selectorImpl != null) {
+            builder.javaOption(SelectorProvider.class.getName(), selectorImpl);
+        }
         if (skipCR) {
             builder.doPlain();
         } else {
@@ -53,6 +78,10 @@ public class MultipleSelectNowTest implements CracTest {
 
     @Override
     public void exec() throws Exception {
+        if (selectorImpl != null) {
+            assertEquals(selectorImpl, SelectorProvider.provider().getClass().getName());
+        }
+
         AtomicInteger nSelected = new AtomicInteger(0);
 
         Selector selector = Selector.open();

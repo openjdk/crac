@@ -25,9 +25,12 @@ import jdk.test.lib.crac.CracTestArg;
 
 import java.nio.channels.Selector;
 import java.io.IOException;
+import java.nio.channels.spi.SelectorProvider;
+
+import static jdk.test.lib.Asserts.assertEquals;
 
 /*
- * @test Selector/wakeupByClose
+ * @test id=DEFAULT
  * @summary check that the Selector's close() wakes it up after restore
  * @library /test/lib
  * @build WakeupByCloseTest
@@ -35,6 +38,26 @@ import java.io.IOException;
  * @run driver jdk.test.lib.crac.CracTest false false
  * @run driver jdk.test.lib.crac.CracTest true  true
  * @run driver jdk.test.lib.crac.CracTest false true
+ */
+/*
+ * @test id=ALT_LINUX
+ * @requires (os.family == "linux")
+ * @library /test/lib
+ * @build WakeupByCloseTest
+ * @run driver jdk.test.lib.crac.CracTest true  false sun.nio.ch.PollSelectorProvider
+ * @run driver jdk.test.lib.crac.CracTest false false sun.nio.ch.PollSelectorProvider
+ * @run driver jdk.test.lib.crac.CracTest true  true  sun.nio.ch.PollSelectorProvider
+ * @run driver jdk.test.lib.crac.CracTest false true  sun.nio.ch.PollSelectorProvider
+ */
+/*
+ * @test id=ALT_WINDOWS
+ * @requires (os.family == "windows")
+ * @library /test/lib
+ * @build WakeupByCloseTest
+ * @run driver jdk.test.lib.crac.CracTest true  false sun.nio.ch.WindowsSelectorProvider
+ * @run driver jdk.test.lib.crac.CracTest false false sun.nio.ch.WindowsSelectorProvider
+ * @run driver jdk.test.lib.crac.CracTest true  true  sun.nio.ch.WindowsSelectorProvider
+ * @run driver jdk.test.lib.crac.CracTest false true  sun.nio.ch.WindowsSelectorProvider
  */
 public class WakeupByCloseTest implements CracTest {
 
@@ -46,9 +69,15 @@ public class WakeupByCloseTest implements CracTest {
     @CracTestArg(1)
     boolean skipCR;
 
+    @CracTestArg(value = 2, optional = true)
+    String selectorImpl;
+
     @Override
     public void test() throws Exception {
         CracBuilder builder = new CracBuilder().engine(CracEngine.SIMULATE);
+        if (selectorImpl != null) {
+            builder.javaOption(SelectorProvider.class.getName(), selectorImpl);
+        }
         if (skipCR) {
             builder.doPlain();
         } else {
@@ -58,6 +87,10 @@ public class WakeupByCloseTest implements CracTest {
 
     @Override
     public void exec() throws Exception {
+        if (selectorImpl != null) {
+            assertEquals(selectorImpl, SelectorProvider.provider().getClass().getName());
+        }
+
         Selector selector = Selector.open();
 
         Thread tSelect = new Thread(new Runnable() {

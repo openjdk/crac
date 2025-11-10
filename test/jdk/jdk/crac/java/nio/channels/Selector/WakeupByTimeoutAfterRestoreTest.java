@@ -21,17 +21,35 @@
 import jdk.test.lib.crac.CracBuilder;
 import jdk.test.lib.crac.CracEngine;
 import jdk.test.lib.crac.CracTest;
+import jdk.test.lib.crac.CracTestArg;
 
 import java.nio.channels.Selector;
 import java.io.IOException;
+import java.nio.channels.spi.SelectorProvider;
+
+import static jdk.test.lib.Asserts.assertEquals;
 
 /*
- * @test Selector/wakeupByTimeoutAfterRestore
+ * @test id=DEFAULT
  * @summary check that the Selector selected before the checkpoint,
  *          will wake up by timeout after the restore
  * @library /test/lib
  * @build WakeupByTimeoutAfterRestoreTest
  * @run driver jdk.test.lib.crac.CracTest
+ */
+/*
+ * @test id=ALT_LINUX
+ * @requires (os.family == "linux")
+ * @library /test/lib
+ * @build WakeupByTimeoutAfterRestoreTest
+ * @run driver jdk.test.lib.crac.CracTest sun.nio.ch.PollSelectorProvider
+ */
+/*
+ * @test id=ALT_WINDOWS
+ * @requires (os.family == "windows")
+ * @library /test/lib
+ * @build WakeupByTimeoutAfterRestoreTest
+ * @run driver jdk.test.lib.crac.CracTest sun.nio.ch.WindowsSelectorProvider
  */
 public class WakeupByTimeoutAfterRestoreTest implements CracTest {
 
@@ -39,13 +57,24 @@ public class WakeupByTimeoutAfterRestoreTest implements CracTest {
 
     static boolean awakened = false;
 
+    @CracTestArg(optional = true)
+    String selectorImpl;
+
     @Override
     public void test() throws Exception {
-        new CracBuilder().engine(CracEngine.SIMULATE).startCheckpoint().waitForSuccess();
+        CracBuilder builder = new CracBuilder().engine(CracEngine.SIMULATE);
+        if (selectorImpl != null) {
+            builder.javaOption(SelectorProvider.class.getName(), selectorImpl);
+        }
+        builder.startCheckpoint().waitForSuccess();
     }
 
     @Override
     public void exec() throws Exception {
+        if (selectorImpl != null) {
+            assertEquals(selectorImpl, SelectorProvider.provider().getClass().getName());
+        }
+
         Selector selector = Selector.open();
         Runnable r = new Runnable() {
             @Override

@@ -26,18 +26,39 @@ import jdk.test.lib.crac.CracTestArg;
 import java.nio.channels.Selector;
 import java.nio.channels.ClosedSelectorException;
 import java.io.IOException;
+import java.nio.channels.spi.SelectorProvider;
 import java.util.Random;
 
 import java.util.concurrent.atomic.AtomicInteger;
 
+import static jdk.test.lib.Asserts.assertEquals;
+
 /*
- * @test Selector/multipleSelectSingleClose
+ * @test id=DEFAULT
  * @summary check a coexistence of multiple select() + C/R in case when the selector is finally closed
  * @library /test/lib
  * @build MultipleSelectSingleCloseTest
  * @run driver jdk.test.lib.crac.CracTest false false
  * @run driver jdk.test.lib.crac.CracTest false true
  * @run driver jdk.test.lib.crac.CracTest true  true
+ */
+/*
+ * @test id=ALT_LINUX
+ * @requires (os.family == "linux")
+ * @library /test/lib
+ * @build MultipleSelectSingleCloseTest
+ * @run driver jdk.test.lib.crac.CracTest false false sun.nio.ch.PollSelectorProvider
+ * @run driver jdk.test.lib.crac.CracTest false true sun.nio.ch.PollSelectorProvider
+ * @run driver jdk.test.lib.crac.CracTest true  true sun.nio.ch.PollSelectorProvider
+ */
+/*
+ * @test id=ALT_WINDOWS
+ * @requires (os.family == "windows")
+ * @library /test/lib
+ * @build MultipleSelectSingleCloseTest
+ * @run driver jdk.test.lib.crac.CracTest false false sun.nio.ch.WindowsSelectorProvider
+ * @run driver jdk.test.lib.crac.CracTest false true sun.nio.ch.WindowsSelectorProvider
+ * @run driver jdk.test.lib.crac.CracTest true  true sun.nio.ch.WindowsSelectorProvider
  */
 public class MultipleSelectSingleCloseTest implements CracTest {
     private final static Random RND = new Random();
@@ -48,9 +69,15 @@ public class MultipleSelectSingleCloseTest implements CracTest {
     @CracTestArg(1)
     boolean closeBeforeCheckpoint;
 
+    @CracTestArg(value = 2, optional = true)
+    String selectorImpl;
+
     @Override
     public void test() throws Exception {
         CracBuilder builder = new CracBuilder().engine(CracEngine.SIMULATE);
+        if (selectorImpl != null) {
+            builder.javaOption(SelectorProvider.class.getName(), selectorImpl);
+        }
         if (skipCR) {
             builder.doPlain();
         } else {
@@ -60,6 +87,10 @@ public class MultipleSelectSingleCloseTest implements CracTest {
 
     @Override
     public void exec() throws Exception {
+        if (selectorImpl != null) {
+            assertEquals(selectorImpl, SelectorProvider.provider().getClass().getName());
+        }
+
         int nThreads = 20;
 
         AtomicInteger nSelected = new AtomicInteger(0);

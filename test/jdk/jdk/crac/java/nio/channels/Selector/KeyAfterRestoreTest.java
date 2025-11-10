@@ -20,31 +20,62 @@
 
 import java.nio.channels.*;
 import java.io.IOException;
+import java.nio.channels.spi.SelectorProvider;
+
 import jdk.crac.*;
 import jdk.test.lib.crac.CracBuilder;
 import jdk.test.lib.crac.CracEngine;
 import jdk.test.lib.crac.CracTest;
 import jdk.test.lib.crac.CracTestArg;
 
+import static jdk.test.lib.Asserts.assertEquals;
+
 /*
- * @test Selector/keyAfterRestore
+ * @test id=DEFAULT
  * @summary a trivial test for SelectionKey's state after restore
  * @library /test/lib
  * @build KeyAfterRestoreTest
  * @run driver/timeout=30 jdk.test.lib.crac.CracTest true
  * @run driver/timeout=30 jdk.test.lib.crac.CracTest false
  */
+/*
+ * @test id=ALT_LINUX
+ * @requires (os.family == "linux")
+ * @library /test/lib
+ * @build KeyAfterRestoreTest
+ * @run driver/timeout=30 jdk.test.lib.crac.CracTest true sun.nio.ch.PollSelectorProvider
+ * @run driver/timeout=30 jdk.test.lib.crac.CracTest false sun.nio.ch.PollSelectorProvider
+ */
+/*
+ * @test id=ALT_WINDOWS
+ * @requires (os.family == "windows")
+ * @library /test/lib
+ * @build KeyAfterRestoreTest
+ * @run driver/timeout=30 jdk.test.lib.crac.CracTest true sun.nio.ch.WindowsSelectorProvider
+ * @run driver/timeout=30 jdk.test.lib.crac.CracTest false sun.nio.ch.WindowsSelectorProvider
+ */
 public class KeyAfterRestoreTest implements CracTest {
     @CracTestArg
     boolean openSelectorAtFirst;
 
+    @CracTestArg(value = 1, optional = true)
+    String selectorImpl;
+
     @Override
     public void test() throws Exception {
-        new CracBuilder().engine(CracEngine.SIMULATE).startCheckpoint().waitForSuccess();
+        CracBuilder builder = new CracBuilder().engine(CracEngine.SIMULATE);
+        if (selectorImpl != null) {
+            builder.javaOption(SelectorProvider.class.getName(), selectorImpl);
+        }
+        builder.startCheckpoint().waitForSuccess();
     }
 
     @Override
     public void exec() throws Exception {
+        if (selectorImpl != null) {
+            assertEquals(selectorImpl, SelectorProvider.provider().getClass().getName());
+        }
+
         ChannelResource ch;
         Selector selector = null;
 

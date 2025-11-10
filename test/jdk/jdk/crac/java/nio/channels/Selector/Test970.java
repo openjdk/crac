@@ -20,14 +20,18 @@
 
 import java.nio.channels.*;
 import java.io.IOException;
+import java.nio.channels.spi.SelectorProvider;
+
 import jdk.crac.*;
 import jdk.test.lib.crac.CracBuilder;
 import jdk.test.lib.crac.CracEngine;
 import jdk.test.lib.crac.CracTest;
 import jdk.test.lib.crac.CracTestArg;
 
+import static jdk.test.lib.Asserts.assertEquals;
+
 /*
- * @test Selector/Test970
+ * @test id=DEFAULT
  * @summary a regression test for ZE-970 ("a channel deregistration
  *          is locked depending on mutual order of selector and channel creation")
  * @library /test/lib
@@ -39,6 +43,30 @@ import jdk.test.lib.crac.CracTestArg;
  * @run driver jdk.test.lib.crac.CracTest SELECT_TIMEOUT true
  * @run driver jdk.test.lib.crac.CracTest SELECT_TIMEOUT false
  */
+/*
+ * @test id=ALT_LINUX
+ * @requires (os.family == "linux")
+ * @library /test/lib
+ * @build Test970
+ * @run driver jdk.test.lib.crac.CracTest SELECT_NOW     true  sun.nio.ch.PollSelectorProvider
+ * @run driver jdk.test.lib.crac.CracTest SELECT_NOW     false sun.nio.ch.PollSelectorProvider
+ * @run driver jdk.test.lib.crac.CracTest SELECT         true  sun.nio.ch.PollSelectorProvider
+ * @run driver jdk.test.lib.crac.CracTest SELECT         false sun.nio.ch.PollSelectorProvider
+ * @run driver jdk.test.lib.crac.CracTest SELECT_TIMEOUT true  sun.nio.ch.PollSelectorProvider
+ * @run driver jdk.test.lib.crac.CracTest SELECT_TIMEOUT false sun.nio.ch.PollSelectorProvider
+ */
+/*
+ * @test id=ALT_WINDOWS
+ * @requires (os.family == "windows")
+ * @library /test/lib
+ * @build Test970
+ * @run driver jdk.test.lib.crac.CracTest SELECT_NOW     true  sun.nio.ch.WindowsSelectorProvider
+ * @run driver jdk.test.lib.crac.CracTest SELECT_NOW     false sun.nio.ch.WindowsSelectorProvider
+ * @run driver jdk.test.lib.crac.CracTest SELECT         true  sun.nio.ch.WindowsSelectorProvider
+ * @run driver jdk.test.lib.crac.CracTest SELECT         false sun.nio.ch.WindowsSelectorProvider
+ * @run driver jdk.test.lib.crac.CracTest SELECT_TIMEOUT true  sun.nio.ch.WindowsSelectorProvider
+ * @run driver jdk.test.lib.crac.CracTest SELECT_TIMEOUT false sun.nio.ch.WindowsSelectorProvider
+ */
 public class Test970 implements CracTest {
     @CracTestArg(0)
     ChannelResource.SelectionType selType;
@@ -46,13 +74,23 @@ public class Test970 implements CracTest {
     @CracTestArg(1)
     boolean openSelectorAtFirst;
 
+    @CracTestArg(value = 2, optional = true)
+    String selectorImpl;
+
     @Override
     public void test() throws Exception {
-        new CracBuilder().engine(CracEngine.SIMULATE).startCheckpoint().waitForSuccess();
+        CracBuilder builder = new CracBuilder().engine(CracEngine.SIMULATE);
+        if (selectorImpl != null) {
+            builder.javaOption(SelectorProvider.class.getName(), selectorImpl);
+        }
+        builder.startCheckpoint().waitForSuccess();
     }
 
     @Override
     public void exec() throws Exception {
+        if (selectorImpl != null) {
+            assertEquals(selectorImpl, SelectorProvider.provider().getClass().getName());
+        }
 
         if (openSelectorAtFirst) {
 

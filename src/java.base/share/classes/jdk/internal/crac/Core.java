@@ -28,7 +28,6 @@ package jdk.internal.crac;
 
 import jdk.internal.crac.mirror.Context;
 import jdk.internal.crac.mirror.impl.BlockingOrderedContext;
-import jdk.internal.crac.mirror.impl.GlobalContext;
 import jdk.internal.crac.mirror.impl.OrderedContext;
 
 public class Core {
@@ -80,7 +79,7 @@ public class Core {
         SEEDER_HOLDER(new BlockingOrderedContext<>()),
         SECURE_RANDOM(new BlockingOrderedContext<>()),
         NATIVE_PRNG(new BlockingOrderedContext<>()),
-        EPOLLSELECTOR(new BlockingOrderedContext<>()),
+        SELECTOR(new BlockingOrderedContext<>()),
         SOCKETS(new BlockingOrderedContext<>()),
         NORMAL(new BlockingOrderedContext<>());
 

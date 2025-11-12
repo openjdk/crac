@@ -65,12 +65,14 @@ public abstract class JDKSocketResourceBase extends JDKFdResource {
                     markForReopen();
                     // intentional fallthrough
                 case "close":
+                    // Let's warn before actually closing the resource
+                    warnOpenResource(policy, "Socket " + owner);
                     try {
                         closeBeforeCheckpoint();
                     } catch (IOException e) {
                         throw new CheckpointOpenSocketException("Cannot close " + owner, e);
                     }
-                    // intentional fallthrough
+                    yield NO_EXCEPTION;
                 case "ignore":
                     warnOpenResource(policy, "Socket " + owner);
                     yield NO_EXCEPTION;

@@ -76,7 +76,6 @@ public abstract class ReopenListeningTestBase<ServerType extends Closeable> exte
         assertFalse(cf.get());
 
         testConnection(serverSocket);
-
         serverSocket.close();
     }
 

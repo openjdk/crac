@@ -32,6 +32,7 @@ import java.nio.channels.AsynchronousSocketChannel;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
 
+import static jdk.test.lib.Asserts.assertEquals;
 import static jdk.test.lib.Asserts.assertTrue;
 
 /**
@@ -52,10 +53,15 @@ public class ReopenListeningAsynchronousSocketChannelTest extends ReopenListenin
     @Override
     protected boolean acceptClient(AsynchronousServerSocketChannel serverSocket) throws Exception {
         try {
-            serverSocket.accept().get().close();
+            AsynchronousSocketChannel channel = serverSocket.accept().get();
+            channel.close();
             return true;
         } catch (ExecutionException ee) {
-            assertTrue(ee.getCause() instanceof AsynchronousCloseException);
+            Throwable cause = ee.getCause();
+            if (!(cause instanceof AsynchronousCloseException)) {
+                assertTrue(cause instanceof IOException, ee.toString());
+                assertTrue(ee.getMessage().contains("The I/O operation has been aborted because of either a thread exit or an application request"), ee.toString());
+            }
             return false;
         }
     }

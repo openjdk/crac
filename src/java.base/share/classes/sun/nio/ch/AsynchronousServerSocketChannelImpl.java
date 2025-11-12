@@ -163,6 +163,7 @@ abstract class AsynchronousServerSocketChannelImpl
     }
 
     private void reopen() throws IOException {
+        implReopen();
         closeLock.writeLock().lock();
         try {
             assert(closed);
@@ -170,7 +171,6 @@ abstract class AsynchronousServerSocketChannelImpl
         } finally {
             closeLock.writeLock().unlock();
         }
-        implReopen();
     }
 
     protected abstract void implReopen() throws IOException;

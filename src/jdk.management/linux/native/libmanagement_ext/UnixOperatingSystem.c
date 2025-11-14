@@ -287,7 +287,7 @@ static double get_cpuload_internal(int which, double *pkernelLoad, CpuLoadTarget
         }
         // After restoring with CRaC the new process can appear 'younger'
         // than last value in counters - we will return -1 (unavailable).
-        if (!failed && pticks->usedKernel >= tmp.usedKernel) {
+        if (!failed && pticks->usedKernel >= tmp.usedKernel && pticks->total >= tmp.total && pticks->used >= tmp.used) {
 
             kdiff = pticks->usedKernel - tmp.usedKernel;
             tdiff = pticks->total - tmp.total;

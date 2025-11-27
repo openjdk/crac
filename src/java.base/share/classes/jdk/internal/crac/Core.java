@@ -80,7 +80,11 @@ public class Core {
         SECURE_RANDOM(new BlockingOrderedContext<>()),
         NATIVE_PRNG(new BlockingOrderedContext<>()),
         SELECTOR(new BlockingOrderedContext<>()),
-        SOCKETS(new BlockingOrderedContext<>()),
+        // We permit adding new sockets because WindowsSelectorImpl will create a socket
+        // in afterRestore to do internal notification.
+        // FIXME: Keep BlockingOrderedContext refusing registrations during checkpoint
+        //        but allow new resources to be added during restore.
+        SOCKETS(new OrderedContext<>()),
         NORMAL(new BlockingOrderedContext<>());
 
         private final Context<JDKResource> context;

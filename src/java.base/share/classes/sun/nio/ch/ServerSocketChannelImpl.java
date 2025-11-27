@@ -44,13 +44,19 @@ import java.nio.channels.NotYetBoundException;
 import java.nio.channels.SelectionKey;
 import java.nio.channels.ServerSocketChannel;
 import java.nio.channels.SocketChannel;
+import java.nio.channels.spi.AbstractSelectableChannel;
+import java.nio.channels.spi.AbstractSelectionKey;
 import java.nio.channels.spi.SelectorProvider;
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Set;
 import java.util.Objects;
 import java.util.concurrent.locks.ReentrantLock;
+import java.util.function.Consumer;
+
 import static java.net.StandardProtocolFamily.INET;
 import static java.net.StandardProtocolFamily.INET6;
 import static java.net.StandardProtocolFamily.UNIX;
@@ -738,6 +744,8 @@ class ServerSocketChannelImpl
     }
 
     private class Resource extends JDKSocketResource {
+        private List<SelectionKey> reopenQueue;
+
         public Resource() {
             super(ServerSocketChannelImpl.this);
         }
@@ -764,7 +772,9 @@ class ServerSocketChannelImpl
 
         @Override
         protected void markForReopen() {
-            JDKSocketResourceBase.markForReopen(ServerSocketChannelImpl.this);
+            // No need to synchronization: reopen will be invoked from single thread
+            reopenQueue = new ArrayList<>();
+            SPI_ACCESS.forEachKey(ServerSocketChannelImpl.this, reopenQueue::add);
         }
 
         @Override
@@ -794,7 +804,32 @@ class ServerSocketChannelImpl
                 }
             }
             SPI_ACCESS.setChannelReopened(ServerSocketChannelImpl.this);
-            afterReopen(ServerSocketChannelImpl.this);
+
+            for (SelectionKey key : reopenQueue) {
+                assert(key.channel() == ServerSocketChannelImpl.this);
+                // If a key registered on the channel that is about to be reopened
+                // by FD policies is cancelled during JDK resource C/R handling
+                // this would be automatically uncancelled.
+                if (key instanceof AbstractSelectionKey ask) {
+                    SPI_ACCESS.revalidateSelectionKey(ask);
+                }
+                if (key.channel() instanceof AbstractSelectableChannel asc) {
+                    SPI_ACCESS.reregisterSelectionKey(asc, key);
+                }
+                if (key.selector() instanceof SelectorImpl selector) {
+                    assert key instanceof SelectionKeyImpl;
+                    SelectionKeyImpl ski = (SelectionKeyImpl) key;
+                    selector.registerExisting(ski);
+                    if (selector.isOpen()) {
+                        // Let the implementation process updates queue
+                        selector.wakeup();
+                    } else {
+                        selector.removeKey(ski);
+                        key.cancel();
+                    }
+                }
+            }
+            reopenQueue = null;
         }
     }
 }

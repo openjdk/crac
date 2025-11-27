@@ -31,6 +31,7 @@ import java.nio.channels.Channel;
 import java.nio.channels.ClosedByInterruptException;
 import java.nio.channels.InterruptibleChannel;
 import java.nio.channels.SelectionKey;
+import java.util.function.Consumer;
 
 import jdk.internal.access.JavaNioChannelsSpiAccess;
 import jdk.internal.access.SharedSecrets;
@@ -109,6 +110,11 @@ public abstract class AbstractInterruptibleChannel
             @Override
             public void reregisterSelectionKey(AbstractSelectableChannel channel, SelectionKey key) {
                 channel.reregister(key);
+            }
+
+            @Override
+            public void forEachKey(AbstractSelectableChannel channel, Consumer<SelectionKey> keyConsumer) {
+                channel.forEach(keyConsumer);
             }
         });
     }

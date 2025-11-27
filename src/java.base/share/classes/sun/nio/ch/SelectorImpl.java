@@ -243,6 +243,16 @@ public abstract class SelectorImpl
         ensureOpen();
     }
 
+    void registerExisting(SelectionKeyImpl ski) {
+        implRegister(ski);
+        setEventOps(ski);
+        keys.add(ski);
+    }
+
+    void removeKey(SelectionKeyImpl ski) {
+        keys.remove(ski);
+    }
+
     /**
      * Removes the key from the selector
      */
@@ -254,29 +264,6 @@ public abstract class SelectorImpl
     public void cancel(SelectionKeyImpl ski) {
         synchronized (cancelledKeys) {
             cancelledKeys.addLast(ski);
-        }
-        // If a key registered on the channel that is about to be reopened
-        // by FD policies is cancelled during JDK resource C/R handling
-        // this would be automatically uncancelled. We cannot prevent such race
-        // even if marking the keys individually.
-        Consumer<Runnable> enqueue = JDKSocketResourceBase.reopenQueue(ski.channel());
-        if (enqueue != null) {
-            enqueue.accept(() -> {
-                SPI_ACCESS.revalidateSelectionKey(ski);
-                implRegister(ski);
-                setEventOps(ski);
-                keys.add(ski);
-                if (ski.channel() instanceof AbstractSelectableChannel asc) {
-                    SPI_ACCESS.reregisterSelectionKey(asc, ski);
-                }
-                if (isOpen()) {
-                    // Let the implementation process updates queue
-                    wakeup();
-                } else {
-                    keys.remove(ski);
-                    ski.cancel();
-                }
-            });
         }
     }
 

@@ -25,6 +25,10 @@
 
 package sun.nio.ch;
 
+import jdk.internal.access.JavaNioChannelsSpiAccess;
+import jdk.internal.access.SharedSecrets;
+import jdk.internal.crac.JDKSocketResourceBase;
+
 import java.io.IOException;
 import java.nio.channels.CancelledKeyException;
 import java.nio.channels.ClosedSelectorException;
@@ -34,13 +38,7 @@ import java.nio.channels.SelectionKey;
 import java.nio.channels.spi.AbstractSelectableChannel;
 import java.nio.channels.spi.AbstractSelector;
 import java.nio.channels.spi.SelectorProvider;
-import java.util.ArrayDeque;
-import java.util.Collections;
-import java.util.Deque;
-import java.util.HashSet;
-import java.util.Iterator;
-import java.util.Objects;
-import java.util.Set;
+import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Consumer;
 
@@ -52,6 +50,8 @@ import java.util.function.Consumer;
 public abstract class SelectorImpl
     extends AbstractSelector
 {
+    private static final JavaNioChannelsSpiAccess SPI_ACCESS = SharedSecrets.getJavaNioChannelsSpiAccess();
+
     // The set of keys registered with this Selector
     private final Set<SelectionKey> keys;
 
@@ -241,6 +241,16 @@ public abstract class SelectorImpl
      */
     protected void implRegister(SelectionKeyImpl ski) {
         ensureOpen();
+    }
+
+    void registerExisting(SelectionKeyImpl ski) {
+        implRegister(ski);
+        setEventOps(ski);
+        keys.add(ski);
+    }
+
+    void removeKey(SelectionKeyImpl ski) {
+        keys.remove(ski);
     }
 
     /**

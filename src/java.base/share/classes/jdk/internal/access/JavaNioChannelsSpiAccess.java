@@ -24,8 +24,15 @@
  */
 package jdk.internal.access;
 
+import java.nio.channels.SelectionKey;
 import java.nio.channels.spi.AbstractInterruptibleChannel;
+import java.nio.channels.spi.AbstractSelectableChannel;
+import java.nio.channels.spi.AbstractSelectionKey;
+import java.util.function.Consumer;
 
 public interface JavaNioChannelsSpiAccess {
     void setChannelReopened(AbstractInterruptibleChannel channel);
+    void revalidateSelectionKey(AbstractSelectionKey selectionKey);
+    void reregisterSelectionKey(AbstractSelectableChannel channel, SelectionKey key);
+    void forEachKey(AbstractSelectableChannel channel, Consumer<SelectionKey> keyConsumer);
 }

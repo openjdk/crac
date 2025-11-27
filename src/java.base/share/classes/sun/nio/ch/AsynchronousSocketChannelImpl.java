@@ -40,7 +40,10 @@ import java.util.Collections;
 import java.util.concurrent.*;
 import java.util.concurrent.locks.*;
 
+import jdk.internal.crac.Core;
 import jdk.internal.crac.JDKSocketResource;
+import jdk.internal.crac.mirror.Context;
+import jdk.internal.crac.mirror.Resource;
 import sun.net.NetHooks;
 import sun.net.ext.ExtendedSocketOptions;
 
@@ -52,7 +55,9 @@ abstract class AsynchronousSocketChannelImpl
     extends AsynchronousSocketChannel
     implements Cancellable, Groupable
 {
-    protected final FileDescriptor fd;
+    private static final FileDispatcherImpl nd = new FileDispatcherImpl();
+
+    protected FileDescriptor fd;
     @SuppressWarnings("unused")
     private final JDKSocketResource resource = new Resource();
 
@@ -605,6 +610,47 @@ abstract class AsynchronousSocketChannelImpl
     private class Resource extends JDKSocketResource {
         public Resource() {
             super(AsynchronousSocketChannelImpl.this);
+        }
+
+        @Override
+        public void beforeCheckpoint(Context<? extends jdk.internal.crac.mirror.Resource> context) throws Exception {
+            try {
+                begin();
+                synchronized (stateLock) {
+                    // On Windows, the socket channel with its FD is created in the accept()
+                    // (returning incomplete future) so the user code does not have the chance to close it.
+                    if (state == ST_UNCONNECTED) {
+                        nd.close(fd);
+                        Core.getClaimedFDs().claimFd(fd, AsynchronousSocketChannelImpl.this, NO_EXCEPTION, fd);
+                    } else {
+                        // Unlock so that we could close by FD policy
+                        end();
+                        try {
+                            super.beforeCheckpoint(context);
+                        } finally {
+                            // lock again - afterRestore should start locked
+                            begin();
+                        }
+                    }
+                }
+            } catch (ClosedChannelException e) {
+                // ignored
+            }
+            // Not calling end() here - we've left the fd inconsistent
+        }
+
+        @Override
+        public void afterRestore(Context<? extends jdk.internal.crac.mirror.Resource> context) throws Exception {
+            try {
+                synchronized (stateLock) {
+                    if (state == ST_UNCONNECTED) {
+                        fd = Net.socket();
+                    }
+                }
+            } finally {
+                end();
+            }
+            super.afterRestore(context);
         }
 
         @Override

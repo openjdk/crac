@@ -8,7 +8,7 @@ import java.io.FileDescriptor;
 import java.io.IOException;
 import java.net.*;
 import java.nio.file.FileSystems;
-import java.util.Map;
+import java.util.*;
 import java.util.function.Predicate;
 import java.util.function.Supplier;
 
@@ -43,13 +43,18 @@ public abstract class JDKSocketResourceBase extends JDKFdResource {
                 case "error":
                     error = true;
                     yield () -> new CheckpointOpenSocketException(owner.toString(), getStackTraceHolder());
-                case "close", "reopen":
+                case "reopen":
+                    markForReopen();
+                    // intentional fallthrough
+                case "close":
+                    // Let's warn before actually closing the resource
+                    warnOpenResource(policy, "Socket " + owner);
                     try {
                         closeBeforeCheckpoint();
                     } catch (IOException e) {
                         throw new CheckpointOpenSocketException("Cannot close " + owner, e);
                     }
-                    // intentional fallthrough
+                    yield NO_EXCEPTION;
                 case "ignore":
                     warnOpenResource(policy, "Socket " + owner);
                     yield NO_EXCEPTION;
@@ -149,6 +154,10 @@ public abstract class JDKSocketResourceBase extends JDKFdResource {
     }
 
     protected abstract void reset();
+
+    protected void markForReopen() {
+        throw new UnsupportedOperationException("Reopen not implemented on sockets");
+    }
 
     protected void reopenAfterRestore() throws IOException {
         throw new UnsupportedOperationException("Reopen not implemented on sockets");

@@ -180,7 +180,7 @@ public abstract class AbstractSelectableChannel
      *
      * This method is invoked by DatagramChannelImpl::disconnect.
      */
-    private void forEach(Consumer<SelectionKey> action) {
+    void forEach(Consumer<SelectionKey> action) {
         synchronized (keyLock) {
             SelectionKey[] keys = this.keys;
             if (keys != null) {
@@ -243,6 +243,15 @@ public abstract class AbstractSelectableChannel
         }
     }
 
+    void reregister(SelectionKey key) {
+        assert key.channel() == this;
+        synchronized (regLock) {
+            synchronized (keyLock) {
+                assert findKey(key.selector()) == null;
+                addKey(key);
+            }
+        }
+    }
 
     // -- Closing --
 

@@ -72,25 +72,34 @@ class WEPollSelectorImpl extends SelectorCRaCSupport {
     WEPollSelectorImpl(SelectorProvider sp) throws IOException {
         super(sp);
         this.pollArrayAddress = WEPoll.allocatePollArray(NUM_EPOLLEVENTS);
-        initFileDescriptors();
+        initFileDescriptors(false);
     }
 
     @Override
-    protected void initFileDescriptors() throws IOException {
-        this.eph = WEPoll.create();
-        // wakeup support
-        try {
-            this.pipe = new PipeImpl(provider(), /* AF_UNIX */ true, /*buffering*/ false);
-        } catch (IOException ioe) {
-            WEPoll.freePollArray(pollArrayAddress);
-            WEPoll.close(eph);
-            throw ioe;
+    protected void initFileDescriptors(boolean restore) throws IOException {
+        // Creation of PipeImpl inside begin() and end() calls AbstractInterruptibleChannel.blockedOn
+        // overriding the current Interruptable; we need to revert that before entering the poll loop.
+        if (restore) {
+            end();
         }
-        this.fd0Val = pipe.source().getFDVal();
-        this.fd1Val = pipe.sink().getFDVal();
+        try {
+            this.eph = WEPoll.create();
+            // wakeup support
+            try {
+                this.pipe = new PipeImpl(provider(), /* AF_UNIX */ true, /*buffering*/ false);
+            } catch (IOException ioe) {
+                WEPoll.freePollArray(pollArrayAddress);
+                WEPoll.close(eph);
+                throw ioe;
+            }
+            this.fd0Val = pipe.source().getFDVal();
+            this.fd1Val = pipe.sink().getFDVal();
 
-        // register one end of the pipe for wakeups
-        WEPoll.ctl(eph, EPOLL_CTL_ADD, fd0Val, WEPoll.EPOLLIN);
+            // register one end of the pipe for wakeups
+            WEPoll.ctl(eph, EPOLL_CTL_ADD, fd0Val, WEPoll.EPOLLIN);
+        } finally {
+            begin();
+        }
     }
 
     @Override

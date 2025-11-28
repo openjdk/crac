@@ -76,7 +76,7 @@ class PollSelectorImpl extends SelectorCRaCSupport {
         int size = pollArrayCapacity * SIZE_POLLFD;
         this.pollArray = new AllocatedNativeObject(size, false);
 
-        initFileDescriptors();
+        initFileDescriptors(false);
         // wakeup support
         synchronized (this) {
             setFirst(fd0, Net.POLLIN);
@@ -84,7 +84,7 @@ class PollSelectorImpl extends SelectorCRaCSupport {
     }
 
     @Override
-    protected void initFileDescriptors() throws IOException {
+    protected void initFileDescriptors(boolean restore) throws IOException {
         try {
             long fds = IOUtil.makePipe(false);
             this.fd0 = (int) (fds >>> 32);

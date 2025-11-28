@@ -139,15 +139,26 @@ class WindowsSelectorImpl extends SelectorCRaCSupport {
     WindowsSelectorImpl(SelectorProvider sp) throws IOException {
         super(sp);
         pollWrapper = new PollArrayWrapper(INIT_CAP);
-        initFileDescriptors();
+        initFileDescriptors(false);
     }
 
     @Override
-    protected void initFileDescriptors() throws IOException {
-        wakeupPipe = new PipeImpl(provider(), /* AF_UNIX */ true, /*buffering*/ false);
-        wakeupSourceFd = ((SelChImpl)wakeupPipe.source()).getFDVal();
-        wakeupSinkFd = ((SelChImpl)wakeupPipe.sink()).getFDVal();
-        pollWrapper.addWakeupSocket(wakeupSourceFd, 0);
+    protected void initFileDescriptors(boolean restore) throws IOException {
+        // Creation of PipeImpl inside begin() and end() calls AbstractInterruptibleChannel.blockedOn
+        // overriding the current Interruptable; we need to revert that before entering the poll loop.
+        if (restore) {
+            end();
+        }
+        try {
+            wakeupPipe = new PipeImpl(provider(), /* AF_UNIX */ true, /*buffering*/ false);
+            wakeupSourceFd = ((SelChImpl) wakeupPipe.source()).getFDVal();
+            wakeupSinkFd = ((SelChImpl) wakeupPipe.sink()).getFDVal();
+            pollWrapper.addWakeupSocket(wakeupSourceFd, 0);
+        } finally {
+            if (restore) {
+                begin();
+            }
+        }
     }
 
     @Override
@@ -189,6 +200,8 @@ class WindowsSelectorImpl extends SelectorCRaCSupport {
         processDeregisterQueue();
         if (interruptTriggered) {
             resetWakeupSocket();
+            // We need to transition even if another wakeup was called before
+            processCheckpointRestore();
             return 0;
         }
         // Calculate number of helper threads needed for poll. If necessary

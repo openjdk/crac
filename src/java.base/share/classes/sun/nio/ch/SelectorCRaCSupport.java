@@ -36,7 +36,7 @@ public abstract class SelectorCRaCSupport extends SelectorImpl implements JDKRes
         Core.Priority.SELECTOR.getContext().register(this);
     }
 
-    protected abstract void initFileDescriptors() throws IOException;
+    protected abstract void initFileDescriptors(boolean restore) throws IOException;
 
     protected boolean processCheckpointRestore() throws IOException {
         assert Thread.holdsLock(this);
@@ -70,7 +70,7 @@ public abstract class SelectorCRaCSupport extends SelectorImpl implements JDKRes
 
             assert checkpointState == CheckpointRestoreState.RESTORE_TRANSITION;
             if (thisState == CheckpointRestoreState.CHECKPOINTED) {
-                initFileDescriptors();
+                initFileDescriptors(true);
             }
             checkpointState = CheckpointRestoreState.NORMAL_OPERATION;
             interruptLock.notifyAll();

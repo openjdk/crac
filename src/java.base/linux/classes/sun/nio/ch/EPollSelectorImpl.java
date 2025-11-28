@@ -85,11 +85,11 @@ class EPollSelectorImpl extends SelectorCRaCSupport {
     EPollSelectorImpl(SelectorProvider sp) throws IOException {
         super(sp);
         pollArrayAddress = EPoll.allocatePollArray(NUM_EPOLLEVENTS);
-        initFileDescriptors();
+        initFileDescriptors(false);
     }
 
     @Override
-    protected void initFileDescriptors() throws IOException {
+    protected void initFileDescriptors(boolean restore) throws IOException {
         epfd = EPoll.create();
 
         try {

@@ -80,11 +80,11 @@ class KQueueSelectorImpl extends SelectorCRaCSupport {
     KQueueSelectorImpl(SelectorProvider sp) throws IOException {
         super(sp);
         this.pollArrayAddress = KQueue.allocatePollArray(MAX_KEVENTS);
-        initFileDescriptors();
+        initFileDescriptors(false);
     }
 
     @Override
-    protected void initFileDescriptors() throws IOException {
+    protected void initFileDescriptors(boolean restore) throws IOException {
         this.kqfd = KQueue.create();
 
         try {

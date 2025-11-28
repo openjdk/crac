@@ -953,13 +953,14 @@ bool VM_Version::_ignore_glibc_not_using = false;
 #ifdef LINUX
 const char VM_Version::glibc_prefix[] = ":glibc.cpu.hwcaps=";
 const size_t VM_Version::glibc_prefix_len = strlen(glibc_prefix);
+static bool from_reexec;
 
 bool VM_Version::glibc_env_set(char *disable_str) {
 #define TUNABLES_NAME "GLIBC_TUNABLES"
 #define REEXEC_NAME "HOTSPOT_GLIBC_TUNABLES_REEXEC"
   char *env_val = disable_str;
   const char *env = getenv(TUNABLES_NAME);
-  if (env && (strcmp(env, env_val) == 0 || (!INCLUDE_CPU_FEATURE_ACTIVE && getenv(REEXEC_NAME)))) {
+  if (env && (strcmp(env, env_val) == 0 || (!INCLUDE_CPU_FEATURE_ACTIVE && from_reexec))) {
     if (!INCLUDE_CPU_FEATURE_ACTIVE) {
       if (ShowCPUFeatures) {
         tty->print_cr("Environment variable already set, glibc CPU_FEATURE_ACTIVE is unavailable - re-exec suppressed: " TUNABLES_NAME "=%s", env);
@@ -999,13 +1000,12 @@ bool VM_Version::glibc_env_set(char *disable_str) {
     }
   }
 
-  if (getenv(REEXEC_NAME)) {
+  if (from_reexec) {
     vm_exit_during_initialization(err_msg("internal error: " TUNABLES_NAME "=%s failed and " REEXEC_NAME " is set", disable_str));
   }
   if (setenv(REEXEC_NAME, "1", 1)) {
     vm_exit_during_initialization(err_msg("setenv " REEXEC_NAME " error: %m"));
   }
-#undef REEXEC_NAME
   return false;
 }
 
@@ -1065,6 +1065,8 @@ void VM_Version::glibc_reexec() {
 bool VM_Version::glibc_not_using() {
   if (_ignore_glibc_not_using)
     return true;
+
+  from_reexec = getenv(REEXEC_NAME) != nullptr;
 
   VM_Version::VM_Features features_expected;
   features_expected.set_all_features();
@@ -1159,7 +1161,7 @@ bool VM_Version::glibc_not_using() {
     }
   }
 
-  static const size_t tunables_size_max = 17;
+  static const size_t tunables_size_max = 23;
   char disable_str[MAX_CPU_FEATURES * (1/*','*/ + 1/*'-'*/ + tunables_size_max) + 1/*'\0'*/];
   strcpy(disable_str, glibc_prefix);
   char *disable_end = disable_str + glibc_prefix_len;
@@ -1193,7 +1195,10 @@ bool VM_Version::glibc_not_using() {
       disable(tunables);
     }
   };
-#define EXCESSIVE(tunables) shouldnotuse_set(PASTE_TOKENS(CPU_, tunables), STR(tunables), FEATURE_ACTIVE(tunables))
+#define EXCESSIVE2(tunables, feature_active) shouldnotuse_set(PASTE_TOKENS(CPU_, tunables), STR(tunables), feature_active)
+#define EXCESSIVE(tunables) EXCESSIVE2(tunables, FEATURE_ACTIVE(tunables))
+// There is no CPU_FEATURE_ACTIVE() available for this symbol.
+#define EXCESSIVE_GLIBC_PREFERRED(tunables) EXCESSIVE2(tunables, !from_reexec)
   EXCESSIVE(AVX     );
   EXCESSIVE(CX8     );
   EXCESSIVE(FMA     );
@@ -1224,6 +1229,7 @@ bool VM_Version::glibc_not_using() {
   EXCESSIVE(OSXSAVE );
   EXCESSIVE(HTT     );
   EXCESSIVE(XSAVEC  );
+  EXCESSIVE_GLIBC_PREFERRED(AVX_Fast_Unaligned_Load);
 #undef EXCESSIVE
 
 #ifdef ASSERT
@@ -1295,6 +1301,7 @@ bool VM_Version::glibc_not_using() {
     return true;
   return false;
 }
+#undef REEXEC_NAME
 #endif // LINUX
 
 void VM_Version::print_using_features_cr() {
@@ -3648,6 +3655,17 @@ VM_Version::VM_Features VM_Version::CpuidInfo::feature_flags() const {
   }
   if (xfs_cpuidD1_eax.bits.xsavec != 0) {
     vm_features.set_feature(CPU_XSAVEC);
+  }
+  // sysdeps/x86/cpu-features.c
+  if (vm_features.supports_feature(CPU_OSXSAVE)) {
+    if (xem_xcr0_eax.bits.sse != 0 &&
+        xem_xcr0_eax.bits.ymm != 0) {
+      if (vm_features.supports_feature(CPU_AVX)) {
+        if (vm_features.supports_feature(CPU_AVX2)) {
+          vm_features.set_feature(CPU_AVX_Fast_Unaligned_Load);
+        }
+      }
+    }
   }
 
   // Composite features.

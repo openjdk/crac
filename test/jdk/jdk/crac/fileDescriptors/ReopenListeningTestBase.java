@@ -27,12 +27,21 @@ import jdk.test.lib.crac.CracBuilder;
 import jdk.test.lib.crac.CracEngine;
 import jdk.test.lib.crac.CracTest;
 
+import java.io.Closeable;
 import java.io.IOException;
-import java.net.InetAddress;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.concurrent.CompletableFuture;
 
-public abstract class ReopenListeningTestBase<ServerType> extends FDPolicyTestBase implements CracTest {
+import static jdk.test.lib.Asserts.assertFalse;
+import static jdk.test.lib.Asserts.assertTrue;
+
+public abstract class ReopenListeningTestBase<ServerType extends Closeable> extends FDPolicyTestBase implements CracTest {
+
+    protected interface Acceptor<ServerType> {
+        void accept(ServerType serverSocket) throws Exception;
+    }
+
     @Override
     public void test() throws Exception {
         Path config = writeConfig("""
@@ -40,10 +49,6 @@ public abstract class ReopenListeningTestBase<ServerType> extends FDPolicyTestBa
                 family: ip
                 listening: true
                 action: reopen
-                ---
-                type: SOCKET
-                family: ip
-                action: close
                 """);
         try {
             new CracBuilder()
@@ -60,11 +65,45 @@ public abstract class ReopenListeningTestBase<ServerType> extends FDPolicyTestBa
     public void exec() throws Exception {
         ServerType serverSocket = createServer();
         testConnection(serverSocket);
+
+        CompletableFuture<Boolean> cf = asyncAccept(serverSocket);
+        // There's no way to even check that the accepting thread entered accept() or select()
+        Thread.sleep(100);
+        assertFalse(cf.isDone());
+
         Core.checkpointRestore();
+        connectClient(serverSocket);
+        assertFalse(cf.get());
+
         testConnection(serverSocket);
+        serverSocket.close();
     }
 
     protected abstract ServerType createServer() throws IOException;
 
-    protected abstract void testConnection(ServerType serverSocket) throws Exception;
+    protected abstract boolean acceptClient(ServerType serverType) throws Exception;
+
+    // This method creates the connection and validates that the port is open;
+    // it does not wait for the other party to accept the connection.
+    protected abstract void connectClient(ServerType serverSocket) throws Exception;
+
+    private void testConnection(ServerType serverSocket) throws Exception {
+        CompletableFuture<Boolean> cf = asyncAccept(serverSocket);
+        connectClient(serverSocket);
+        assertTrue(cf.get());
+    }
+
+    protected CompletableFuture<Boolean> asyncAccept(ServerType serverSocket) {
+        CompletableFuture<Boolean> cf = new CompletableFuture<>();
+        Thread serverThread = new Thread(() -> {
+            try {
+                cf.complete(acceptClient(serverSocket));
+            } catch (Throwable t) {
+                cf.completeExceptionally(t);
+            }
+        });
+        serverThread.setDaemon(true);
+        serverThread.start();
+        return cf;
+    }
 }

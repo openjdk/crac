@@ -56,7 +56,7 @@ class WindowsAsynchronousServerSocketChannelImpl
     private PendingIoCache ioCache;
 
     // the data buffer to receive the local/remote socket address
-    private final long dataBuffer;
+    private long dataBuffer;
 
     // flag to indicate that an accept operation is outstanding
     private AtomicBoolean accepting = new AtomicBoolean();
@@ -100,6 +100,7 @@ class WindowsAsynchronousServerSocketChannelImpl
 
         // release other resources
         unsafe.freeMemory(dataBuffer);
+        dataBuffer = 0;
     }
 
     @Override
@@ -112,6 +113,8 @@ class WindowsAsynchronousServerSocketChannelImpl
             closesocket0(handle);
             throw x;
         }
+        assert(dataBuffer == 0);
+        dataBuffer = unsafe.allocateMemory(DATA_BUFFER_SIZE);
     }
 
     @Override

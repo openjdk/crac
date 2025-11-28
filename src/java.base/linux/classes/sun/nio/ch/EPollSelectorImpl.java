@@ -149,6 +149,9 @@ class EPollSelectorImpl extends SelectorImpl implements JDKResource {
         if (checkpointState != CheckpointRestoreState.CHECKPOINT_TRANSITION) {
             return false;
         }
+        // If the channel using this selector was closed, some keys might be cancelled
+        // and we shall remove them.
+        processDeregisterQueue();
 
         synchronized (interruptLock) {
 

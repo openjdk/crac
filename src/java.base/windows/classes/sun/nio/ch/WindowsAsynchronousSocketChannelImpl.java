@@ -33,6 +33,9 @@ import java.nio.BufferOverflowException;
 import java.net.*;
 import java.util.concurrent.*;
 import java.io.IOException;
+
+import jdk.internal.access.JavaIOFileDescriptorAccess;
+import jdk.internal.access.SharedSecrets;
 import jdk.internal.util.Exceptions;
 import jdk.internal.invoke.MhUtil;
 import jdk.internal.misc.Unsafe;
@@ -45,6 +48,8 @@ class WindowsAsynchronousSocketChannelImpl
     extends AsynchronousSocketChannelImpl implements Iocp.OverlappedChannel
 {
     private static final Unsafe unsafe = Unsafe.getUnsafe();
+    private static final JavaIOFileDescriptorAccess fdAccess =
+            SharedSecrets.getJavaIOFileDescriptorAccess();
 
     private static int dependsArch(int value32, int value64) {
         return (unsafe.addressSize() == 4) ? value32 : value64;
@@ -154,6 +159,10 @@ class WindowsAsynchronousSocketChannelImpl
     void implClose() throws IOException {
         // close socket (may cause outstanding async I/O operations to fail).
         closesocket0(handle);
+        synchronized (fd) {
+            // On Windows the FD value is used for sockets
+            fdAccess.set(fd, -1);
+        }
 
         // waits until all I/O operations have completed
         ioCache.close();

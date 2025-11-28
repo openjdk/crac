@@ -105,6 +105,10 @@ public abstract class SocketImpl implements SocketOptions {
         }
 
         @Override
+        protected void markForReopen() {
+        }
+
+        @Override
         protected void reopenAfterRestore() throws IOException {
             if (SocketImpl.this instanceof NioSocketImpl) {
                 ((NioSocketImpl) SocketImpl.this).reopenAfterRestore();

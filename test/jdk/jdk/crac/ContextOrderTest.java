@@ -38,7 +38,6 @@ import static jdk.test.lib.Asserts.*;
 
 /**
  * @test ContextOrderTest
- * @requires os.family == "linux"
  * @library /test/lib
  * @modules java.base/jdk.internal.crac:+open
  * @modules java.base/jdk.internal.crac.mirror:+open
@@ -172,7 +171,7 @@ public class ContextOrderTest {
         getGlobalContext().register(new ThrowingResource(recorder, "throwing1"));
         getGlobalContext().register(new MockResource(recorder, "regular2"));
         NORMAL.getContext().register(new MockResource(recorder, "jdk1"));
-        EPOLLSELECTOR.getContext().register(new ThrowingResource(recorder, "throwing2"));
+        SELECTOR.getContext().register(new ThrowingResource(recorder, "throwing2"));
         SECURE_RANDOM.getContext().register(new MockResource(recorder, "jdk2"));
 
         try {

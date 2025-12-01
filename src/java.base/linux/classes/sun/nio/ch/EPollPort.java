@@ -195,7 +195,7 @@ final class EPollPort
         this.queue = new ArrayBlockingQueue<>(MAX_EPOLL_EVENTS);
         this.queue.offer(NEED_TO_POLL);
 
-        Core.Priority.EPOLLSELECTOR.getContext().register(resource);
+        Core.Priority.SELECTOR.getContext().register(resource);
     }
 
     EPollPort start() {

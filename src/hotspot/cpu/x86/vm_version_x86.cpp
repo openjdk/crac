@@ -1161,7 +1161,7 @@ bool VM_Version::glibc_not_using() {
     }
   }
 
-  static const size_t tunables_size_max = 23;
+  static const size_t tunables_size_max = sizeof("AVX_Fast_Unaligned_Load") - 1;
   char disable_str[MAX_CPU_FEATURES * (1/*','*/ + 1/*'-'*/ + tunables_size_max) + 1/*'\0'*/];
   strcpy(disable_str, glibc_prefix);
   char *disable_end = disable_str + glibc_prefix_len;

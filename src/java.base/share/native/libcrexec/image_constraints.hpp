@@ -80,16 +80,18 @@ private:
     const char* name;
     const void* data;
     size_t data_size;
+    const void* conjunction; // data_size
     crlib_bitmap_comparison_t comparison;
 
     Constraint(TagType t, const char* n, const void* d, size_t ds, crlib_bitmap_comparison_t c):
-      type(t), failed(false), name(n), data(d), data_size(ds), comparison(c) {}
+      type(t), failed(false), name(n), data(d), data_size(ds), conjunction(nullptr), comparison(c) {}
 
     Constraint(Constraint &&o) {
       type = o.type;
       name = o.name;
       data = o.data;
       data_size = o.data_size;
+      conjunction = o.conjunction;
       comparison = o.comparison;
       o.name = nullptr;
       o.data = nullptr;
@@ -98,6 +100,7 @@ private:
     ~Constraint() {
       free((void*) name);
       free((void*) data);
+      free((void *) conjunction);
     }
 
 
@@ -126,11 +129,14 @@ public:
     return _constraints.add(Constraint(TagType::BITMAP, strdup(name), copy, length_bytes, comparison));
   }
 
-  bool is_failed(const char* name) const {
+  bool is_failed(const char* name, unsigned char *value_return) const {
     bool result = false;
     _constraints.foreach([&](Constraint &c) {
       if (!strcmp(c.name, name) && c.failed) {
         result = true;
+        if (value_return && c.conjunction) {
+          memcpy(value_return, c.conjunction, c.data_size);
+        }
       }
     });
     return result;

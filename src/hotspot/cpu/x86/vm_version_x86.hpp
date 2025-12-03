@@ -471,7 +471,7 @@ protected:
     decl(LAHFSAHF,          "lahfsahf",          72) /* Also known in cpuinfo as lahf_lm and in glibc as lahf64_sahf64 */ \
     decl(HTT,               "htt",               73) /* hotspot calls it 'ht' but that is affected by threads_per_core() */ \
     decl(XSAVEC,            "xsavec",            74) \
-    decl(AVX_Fast_Unaligned_Load, "AVX_Fast_Unaligned_Load", 75)
+    decl(AVX_Fast_Unaligned_Load, "avx_fast_unaligned_load", 75)
 
 #define DECLARE_CPU_FEATURE_FLAG(id, name, bit) CPU_##id = (bit),
     CPU_FEATURE_FLAGS(DECLARE_CPU_FEATURE_FLAG)

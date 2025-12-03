@@ -69,7 +69,7 @@ public class CPUInfoTest {
                     "apx_f",        "avx10_1",          "avx10_2",           "fma4",
                     "movbe",        "osxsave",          "ibt",               "shstk",
                     "xsave",        "cmpxchg16",        "lahfsahf",          "htt",
-                    "xsavec",       "AVX_Fast_Unaligned_Load"
+                    "xsavec",       "avx_fast_unaligned_load"
                     );
             // @formatter:on
             // Checkstyle: resume

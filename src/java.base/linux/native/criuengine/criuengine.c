@@ -230,8 +230,10 @@ static int restore(const char *basedir,
         "--shell-job",
         "--action-script", self,
         "-D", imagedir,
+        // XSAVE is not needed when the snapshot is being made / restored
+        "--cpu-cap=none",
     };
-    const char** arg = args + 9;
+    const char** arg = args + 10;
 
     *arg++ = verbosity != NULL ? verbosity : "-v1";
     if (log_file != NULL) {

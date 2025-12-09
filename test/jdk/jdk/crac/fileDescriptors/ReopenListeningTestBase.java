@@ -51,7 +51,7 @@ public abstract class ReopenListeningTestBase<ServerType extends Closeable> exte
                 action: reopen
                 """);
         try {
-            new CracBuilder()
+            builder()
                     .engine(CracEngine.SIMULATE)
                     .javaOption(OpenResourcePolicies.PROPERTY, config.toString())
                     .javaOption("jdk.crac.collect-fd-stacktraces", "true")
@@ -59,6 +59,10 @@ public abstract class ReopenListeningTestBase<ServerType extends Closeable> exte
         } finally {
             Files.deleteIfExists(config);
         }
+    }
+
+    protected CracBuilder builder() {
+        return new CracBuilder();
     }
 
     @Override

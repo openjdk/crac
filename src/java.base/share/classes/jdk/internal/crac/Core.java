@@ -28,7 +28,6 @@ package jdk.internal.crac;
 
 import jdk.internal.crac.mirror.Context;
 import jdk.internal.crac.mirror.impl.BlockingOrderedContext;
-import jdk.internal.crac.mirror.impl.GlobalContext;
 import jdk.internal.crac.mirror.impl.OrderedContext;
 
 public class Core {
@@ -80,8 +79,12 @@ public class Core {
         SEEDER_HOLDER(new BlockingOrderedContext<>()),
         SECURE_RANDOM(new BlockingOrderedContext<>()),
         NATIVE_PRNG(new BlockingOrderedContext<>()),
-        EPOLLSELECTOR(new BlockingOrderedContext<>()),
-        SOCKETS(new BlockingOrderedContext<>()),
+        SELECTOR(new BlockingOrderedContext<>()),
+        // We permit adding new sockets because WindowsSelectorImpl will create a socket
+        // in afterRestore to do internal notification.
+        // FIXME: Keep BlockingOrderedContext refusing registrations during checkpoint
+        //        but allow new resources to be added during restore.
+        SOCKETS(new OrderedContext<>()),
         NORMAL(new BlockingOrderedContext<>());
 
         private final Context<JDKResource> context;

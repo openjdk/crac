@@ -24,17 +24,24 @@
  */
 package sun.nio.ch;
 
+import java.io.FileDescriptor;
 import java.io.IOException;
 import java.nio.channels.ClosedSelectorException;
+import java.nio.channels.SelectableChannel;
 import java.nio.channels.SelectionKey;
 import java.nio.channels.Selector;
 import java.nio.channels.spi.SelectorProvider;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collection;
 import java.util.Deque;
 import java.util.List;
+import java.util.Set;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
+import java.util.stream.Collectors;
+
 import jdk.internal.misc.Blocker;
 import jdk.internal.misc.Unsafe;
 
@@ -42,7 +49,7 @@ import jdk.internal.misc.Unsafe;
  * Selector implementation based on poll
  */
 
-class PollSelectorImpl extends SelectorImpl {
+class PollSelectorImpl extends SelectorCRaCSupport {
 
     // initial capacity of poll array
     private static final int INITIAL_CAPACITY = 16;
@@ -53,8 +60,8 @@ class PollSelectorImpl extends SelectorImpl {
     private AllocatedNativeObject pollArray;
 
     // file descriptors used for interrupt
-    private final int fd0;
-    private final int fd1;
+    private int fd0;
+    private int fd1;
 
     // keys for file descriptors in poll array, synchronize on selector
     private final List<SelectionKeyImpl> pollKeys = new ArrayList<>();
@@ -63,16 +70,21 @@ class PollSelectorImpl extends SelectorImpl {
     private final Object updateLock = new Object();
     private final Deque<SelectionKeyImpl> updateKeys = new ArrayDeque<>();
 
-    // interrupt triggering and clearing
-    private final Object interruptLock = new Object();
-    private boolean interruptTriggered;
-
     PollSelectorImpl(SelectorProvider sp) throws IOException {
         super(sp);
 
         int size = pollArrayCapacity * SIZE_POLLFD;
         this.pollArray = new AllocatedNativeObject(size, false);
 
+        initFileDescriptors(false);
+        // wakeup support
+        synchronized (this) {
+            setFirst(fd0, Net.POLLIN);
+        }
+    }
+
+    @Override
+    protected void initFileDescriptors(boolean restore) throws IOException {
         try {
             long fds = IOUtil.makePipe(false);
             this.fd0 = (int) (fds >>> 32);
@@ -82,10 +94,37 @@ class PollSelectorImpl extends SelectorImpl {
             throw ioe;
         }
 
-        // wakeup support
-        synchronized (this) {
-            setFirst(fd0, Net.POLLIN);
-        }
+        putDescriptor(0, fd0);
+    }
+
+    @Override
+    protected void closeFileDescriptors() throws IOException {
+        assert Thread.holdsLock(this);
+        assert pollArraySize == 1; // only fd0 as first element
+
+        putDescriptor(0, -1);
+        FileDispatcherImpl.closeIntFD(fd0);
+        FileDispatcherImpl.closeIntFD(fd1);
+    }
+
+    @Override
+    protected Set<SelectableChannel> getRegisteredChannels() {
+        assert Thread.holdsLock(this);
+        assert pollKeys.getFirst() == null;
+        return pollKeys.stream().skip(1).map(SelectionKey::channel).collect(Collectors.toSet());
+    }
+
+    @Override
+    protected void wakeupInternal() throws IOException {
+        assert Thread.holdsLock(interruptLock);
+        IOUtil.write1(fd1, (byte)0);
+    }
+
+    @Override
+    protected Collection<FileDescriptor> claimFileDescriptors() {
+        return Arrays.asList(
+                claimFileDescriptor(fd0, "Selector pipe read-end FD "),
+                claimFileDescriptor(fd1, "Selector pipe write-end FD "));
     }
 
     private void ensureOpen() {
@@ -113,7 +152,9 @@ class PollSelectorImpl extends SelectorImpl {
                 long startTime = timedPoll ? System.nanoTime() : 0;
                 boolean attempted = Blocker.begin(blocking);
                 try {
-                    numPolled = poll(pollArray.address(), pollArraySize, to);
+                    do {
+                        numPolled = poll(pollArray.address(), pollArraySize, to);
+                    } while (processCheckpointRestore());
                 } finally {
                     Blocker.end(attempted);
                 }
@@ -188,7 +229,7 @@ class PollSelectorImpl extends SelectorImpl {
         }
 
         // check for interrupt
-        if (getReventOps(0) != 0) {
+        if (getReventOps(0) != 0 && shouldClearInterrupt()) {
             assert getDescriptor(0) == fd0;
             clearInterrupt();
         }

@@ -21,16 +21,28 @@
  * questions.
  */
 
+import jdk.test.lib.crac.CracBuilder;
 import jdk.test.lib.crac.CracTest;
+import jdk.test.lib.crac.CracTestArg;
 
 import java.io.IOException;
 import java.nio.channels.*;
+import java.nio.channels.spi.SelectorProvider;
 
 import static jdk.test.lib.Asserts.*;
 
-// FIXME: JDK-8371549 - remove @requires Linux
 /**
- * @test
+ * @test id=DEFAULT
+ * @library /test/lib
+ * @modules java.base/jdk.internal.crac:+open
+ * @build FDPolicyTestBase
+ * @build ReopenListeningTestBase
+ * @build ReopenListeningSocketChannelTest
+ * @build ReopenListeningWithSelectorTest
+ * @run driver jdk.test.lib.crac.CracTest false
+ */
+/**
+ * @test id=ALT_LINUX
  * @library /test/lib
  * @modules java.base/jdk.internal.crac:+open
  * @requires (os.family == "linux")
@@ -38,20 +50,46 @@ import static jdk.test.lib.Asserts.*;
  * @build ReopenListeningTestBase
  * @build ReopenListeningSocketChannelTest
  * @build ReopenListeningWithSelectorTest
- * @run driver/timeout=10 jdk.test.lib.crac.CracTest false
+ * @run driver jdk.test.lib.crac.CracTest false sun.nio.ch.PollSelectorProvider
+ */
+/**
+ * @test id=ALT_WINDOWS
+ * @library /test/lib
+ * @modules java.base/jdk.internal.crac:+open
+ * @requires (os.family == "windows")
+ * @build FDPolicyTestBase
+ * @build ReopenListeningTestBase
+ * @build ReopenListeningSocketChannelTest
+ * @build ReopenListeningWithSelectorTest
+ * @run driver jdk.test.lib.crac.CracTest false sun.nio.ch.WindowsSelectorProvider
  */
 public class ReopenListeningWithSelectorTest extends ReopenListeningSocketChannelTest implements CracTest {
     private Selector selector;
 
+    @CracTestArg(value = 1, optional = true)
+    String selectorImpl;
+
+    @Override
+    protected CracBuilder builder() {
+        CracBuilder builder = super.builder();
+        if (selectorImpl != null) {
+            builder.javaOption(SelectorProvider.class.getName(), selectorImpl);
+        }
+        return builder;
+    }
+
     @Override
     public void exec() throws Exception {
+        if (selectorImpl != null) {
+            assertEquals(selectorImpl, SelectorProvider.provider().getClass().getName());
+        }
+        selector = Selector.open();
         super.exec();
         selector.close();
     }
 
     @Override
     protected ServerSocketChannel createServer() throws IOException {
-        selector = Selector.open();
         ServerSocketChannel channel = super.createServer();
         channel.register(selector, SelectionKey.OP_ACCEPT);
         return channel;

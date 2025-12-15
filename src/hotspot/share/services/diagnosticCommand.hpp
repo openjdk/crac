@@ -851,18 +851,29 @@ public:
 
 #endif // LINUX, WINDOWS or MACOS
 
-class CheckpointDCmd : public DCmd {
+class CheckpointDCmd : public DCmdWithParser {
+  DCmdArgument<char*> _metrics;
+  DCmdArgument<char*> _labels;
+
 public:
-  CheckpointDCmd(outputStream* output, bool heap) : DCmd(output, heap) { }
-    static const char* name() { return "JDK.checkpoint"; }
-    static const char* description() {
-      return "Checkpoint via jdk.crac.checkpointRestore().";
-    }
-    static const char* impact() {
-      return "High: JVM terminates";
-    }
-    static int num_arguments() { return 0; }
-    virtual void execute(DCmdSource source, TRAPS);
+  CheckpointDCmd(outputStream* output, bool heap);
+  static const char* name() { return "JDK.checkpoint"; }
+  static const char* description() {
+    return "Checkpoint via jdk.crac.checkpointRestore().";
+  }
+  static const char* impact() {
+    return "High: JVM terminates";
+  }
+  static int num_arguments() { return 2; }
+  virtual void execute(DCmdSource source, TRAPS);
+
+private:
+  typedef bool (*accept_func)(CheckpointDCmd*, const char*, char*);
+
+  bool parse_pairs(const char* what, const char* pairs, accept_func accept);
+  bool parse_pairs_from_file(const char* what, const char* path, accept_func accept);
+  static bool accept_metric(CheckpointDCmd* self, const char* key, char* str);
+  static bool accept_label(CheckpointDCmd* self, const char* key, char* str);
 };
 
 #endif // SHARE_SERVICES_DIAGNOSTICCOMMAND_HPP

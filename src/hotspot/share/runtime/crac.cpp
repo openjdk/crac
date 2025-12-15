@@ -707,6 +707,14 @@ Handle crac::checkpoint(jarray fd_arr, jobjectArray obj_arr, bool dry_run, jlong
   return ret_cr(JVM_CHECKPOINT_ERROR, Handle(), Handle(), codes, msgs, THREAD);
 }
 
+bool crac::record_image_label(const char *label, const char *value) {
+  if (_engine->prepare_image_constraints_api() != CracEngine::ApiStatus::OK) {
+    // silently ignoring this
+    return true;
+  }
+  return _engine->set_label(label, value);
+}
+
 bool crac::is_image_score_supported() {
   return _engine->prepare_image_score_api() == CracEngine::ApiStatus::OK;
 }
@@ -765,6 +773,14 @@ bool crac::record_image_score(jobjectArray metrics, jdoubleArray values) {
   result = result && _engine->set_score("sun.ci.nmethodCodeSize", CompileBroker::get_sum_nmethod_code_size());
   result = result && _engine->set_score("java.ci.totalTime", CompileBroker::get_total_compilation_time());
   return result;
+}
+
+bool crac::record_image_score(const char *metric, double value) {
+  if (_engine->prepare_image_score_api() != CracEngine::ApiStatus::OK) {
+    // silently ignoring this
+    return true;
+  }
+  return _engine->set_score(metric, value);
 }
 
 void crac::prepare_restore(crac_restore_data& restore_data) {

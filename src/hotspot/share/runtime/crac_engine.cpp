@@ -482,3 +482,7 @@ CracEngine::ApiStatus CracEngine::prepare_image_score_api() {
 bool CracEngine::set_score(const char* metric, double value) {
   return _image_score_api->set_score(_conf, metric, value);
 }
+
+bool CracEngine::set_label(const char* label, const char* value) {
+  return _image_constraints_api->set_label(_conf, label, value);
+}

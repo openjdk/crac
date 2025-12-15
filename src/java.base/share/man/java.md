@@ -1881,11 +1881,24 @@ performed by the Java HotSpot VM.
     compilation while values greater than 1.0 delay compilation. Setting
     `CompileThresholdScaling` to 0 is equivalent to disabling compilation.
 
-`-XX:CPUFeatures=`*0xnumber,0xnumber*
-:   CPU feature set, use `-XX:CPUFeatures=`*0xnumber,0xnumber* with
-    `-XX:CRaCCheckpointTo` when you get an error during `-XX:CRaCRestoreFrom`
-    on a different machine. `-XX:CPUFeatures=native` is the default.
-    `-XX:CPUFeatures=generic` is compatible with any CPU.
+`-XX:CPUFeatures=`*features*
+:   Limit set of CPU features to make the CRaC image compatible for running
+    on a machine with different CPU:
+
+    `native`
+    :   Use all available CPU features (default).
+
+    `generic`
+    :   This option is compatible with most CPUs and faster than disabling
+        all optional features.
+
+    `ignore`
+    :   Do not store CPU features at all.
+
+    *arch-specific*
+    :   Architecture specific string, e.g. *0xnumber,0xnumber* on x86_64.
+        Use `-XX:+ShowCPUFeatures` to find a suitable architecture-specific
+        string.
 
 `-XX:+DoEscapeAnalysis`
 :   Enables the use of escape analysis. This option is enabled by default. To

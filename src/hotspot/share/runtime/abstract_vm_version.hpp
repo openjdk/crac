@@ -227,6 +227,9 @@ class Abstract_VM_Version: AllStatic {
   static char  _cpu_name[CPU_TYPE_DESC_BUF_SIZE];
   static char  _cpu_desc[CPU_DETAILED_DESC_BUF_SIZE];
 
+  // Default check for non-x86_64 architectures on VM options sanity
+  static void check_cpufeatures_vmoptions();
+
  public:
   static int number_of_threads(void);
   static int number_of_cores(void);

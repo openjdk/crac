@@ -317,7 +317,7 @@ int crac::checkpoint_restore(int *shmid) {
 
   // Setup CPU arch & features only during the first checkpoint; the feature set
   // cannot change after initial boot (and we don't support switching the engine).
-  if (_generation == 1 && !VM_Version::ignore_cpu_features(true)) {
+  if (_generation == 1 && !VM_Version::ignore_cpu_features()) {
     VM_Version::VM_Features data;
     if (VM_Version::cpu_features_binary(&data)) {
       switch (_engine->prepare_image_constraints_api()) {
@@ -795,7 +795,7 @@ void crac::restore(crac_restore_data& restore_data) {
   // was printed out but continued even despite features not being satisfied.
   // Since the check itself is delegated to the C/R Engine we will simply
   // skip the check here.
-  if (!VM_Version::ignore_cpu_features(false)) {
+  if (!VM_Version::ignore_cpu_features() && !IgnoreCPUFeatures) {
     switch (engine.prepare_image_constraints_api()) {
       case CracEngine::ApiStatus::OK: {
         VM_Version::VM_Features data;

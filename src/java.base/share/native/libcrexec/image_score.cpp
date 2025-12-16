@@ -26,6 +26,9 @@
 #include <clocale>
 #include <cstdio>
 #include <cstring>
+#ifdef MACOSX
+#include <xlocale.h>
+#endif // MACOSX
 
 #include "crexec.hpp"
 #include "hashtable.hpp"
@@ -67,14 +70,18 @@ bool ImageScore::persist(const char* image_location) const {
   _score.foreach([&](const Score& score) {
     ht.put(score._name, score._value);
   });
+#ifndef _WINDOWS
   // Make sure that we're using 'standard' format independent of locale
   // Ignore error, the reset with local 0 will be a noop
   locale_t c_locale = newlocale(LC_ALL_MASK, "C", 0);
   locale_t old_locale = uselocale(c_locale);
+#endif // _WINDOWS
   ht.foreach([&](const char *key, double value){
     fprintf(f, "%s=%f\n", key, value);
   });
+#ifndef _WINDOWS
   uselocale(old_locale);
   freelocale(c_locale);
+#endif
   return result;
 }

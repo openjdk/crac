@@ -22,6 +22,9 @@
  *
  */
 #include <clocale>
+#ifdef MACOSX
+#include <xlocale.h>
+#endif // MACOSX
 
 #include "cds/cdsConfig.hpp"
 #include "cds/cds_globals.hpp"
@@ -1068,12 +1071,17 @@ CheckpointDCmd::CheckpointDCmd(outputStream* output, bool heap) :
 }
 
 struct LocaleGuard {
+#ifndef _WINDOWS
   locale_t _new, _old;
-
   LocaleGuard(): _new(newlocale(LC_ALL_MASK, "C", 0)), _old(uselocale(_new)) {}
+#else
+  LocaleGuard() {}
+#endif // _WINDOWS
   ~LocaleGuard() {
+#ifndef _WINDOWS
     uselocale(_old);
     freelocale(_new);
+#endif // _WINDOWS
   }
 };
 

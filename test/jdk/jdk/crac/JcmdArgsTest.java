@@ -42,6 +42,7 @@ import static jdk.test.lib.Asserts.assertTrue;
 /**
  * @test
  * @library /test/lib
+ * @requires !jdk.static
  * @build JcmdArgsTest
  * @run driver/timeout=10 jdk.test.lib.crac.CracTest false
  * @run driver/timeout=10 jdk.test.lib.crac.CracTest true

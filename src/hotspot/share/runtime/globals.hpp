@@ -2045,6 +2045,13 @@ const int ObjectAlignmentInBytes = 8;
           "Do not refuse to run after -XX:CRaCRestoreFrom finds out some "  \
           "CPU features are missing")                                       \
                                                                             \
+  product(ccstr, CheckCPUFeatures, nullptr, RESTORE_SETTABLE,                \
+          "Set requirements for CPU features check: "                       \
+          "compatible: image must be runnable on this CPU (default), "      \
+          "exact: image must use the very same features as this CPU, "      \
+          "skip: don't check features at all (requires "                    \
+          "-XX:+UnlockExperimentalVMOptions).")                             \
+                                                                            \
   product(int, LockingMode, LM_LIGHTWEIGHT,                                 \
           "(Deprecated) Select locking mode: "                              \
           "0: (Deprecated) monitors only (LM_MONITOR), "                    \

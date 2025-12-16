@@ -581,6 +581,7 @@ static SpecialFlag const special_jvm_flags[] = {
   { "CRTrace",                      JDK_Version::undefined(), JDK_Version::jdk(24), JDK_Version::jdk(26) },
   { "CRaCAllowToSkipCheckpoint",    JDK_Version::jdk(25), JDK_Version::jdk(26), JDK_Version::jdk(27) },
   { "CRaCDoThrowCheckpointException", JDK_Version::undefined(), JDK_Version::jdk(25), JDK_Version::jdk(26) },
+  { "IgnoreCPUFeatures",            JDK_Version::jdk(26), JDK_Version::jdk(29), JDK_Version::undefined() },
 
   { nullptr, JDK_Version(0), JDK_Version(0) }
 };
@@ -4069,6 +4070,15 @@ jint Arguments::apply_ergo() {
       LogConfiguration::configure_stdout(LogLevel::Info, true, LOG_TAGS(valuebasedclasses));
     }
   }
+
+  if (IgnoreCPUFeatures) {
+    if (FLAG_IS_DEFAULT(CheckCPUFeatures)) {
+      FLAG_SET_ERGO(CheckCPUFeatures, "skip");
+    } else {
+      vm_exit_during_initialization(err_msg("Cannot set both -XX:+IgnoreCPUFeatures and -XX:CheckCPUFeatures=%s", CheckCPUFeatures));
+    }
+  }
+
   return JNI_OK;
 }
 

@@ -1167,6 +1167,23 @@ bool CheckpointDCmd::accept_label(CheckpointDCmd* self, const char* key, char* s
   return true;
 }
 
+#ifdef _WINDOWS
+static char *strsep(char **strp, const char *delim) {
+  char *str = *strp;
+  if (str == nullptr) {
+    return nullptr;
+  }
+  size_t len = strcspn(str, delim);
+  if (str[len] == '\0') {
+    *strp = nullptr;
+    return str;
+  }
+  str[len] = '\0';
+  *strp += len + 1;
+  return str;
+}
+#endif // _WINDOWS
+
 bool CheckpointDCmd::parse_pairs(const char* what, const char* str, accept_func accept) {
   ResourceMark rm;
   size_t len = strlen(str);

@@ -27,6 +27,7 @@
 #include <cstdio>
 #include <cstring>
 #ifdef MACOSX
+#include <locale.h>
 #include <xlocale.h>
 #endif // MACOSX
 

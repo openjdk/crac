@@ -23,6 +23,7 @@
  */
 #include <clocale>
 #ifdef MACOSX
+#include <locale.h>
 #include <xlocale.h>
 #endif // MACOSX
 

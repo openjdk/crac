@@ -22,10 +22,9 @@
  *
  */
 #include <clocale>
-#ifdef MACOSX
-#include <locale.h>
+#ifdef _ALLBSD_SOURCE
 #include <xlocale.h>
-#endif // MACOSX
+#endif // _ALLBSD_SOURCE
 
 #include "cds/cdsConfig.hpp"
 #include "cds/cds_globals.hpp"

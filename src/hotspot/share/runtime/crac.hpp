@@ -41,10 +41,12 @@ public:
   static bool prepare_checkpoint();
   static Handle checkpoint(jarray fd_arr, jobjectArray obj_arr, bool dry_run, jlong jcmd_stream, TRAPS);
 
+  static bool is_image_constraints_supported();
+  static bool record_image_label(const char *label, const char *value);
+
   static bool is_image_score_supported();
   static bool record_image_score(jobjectArray metrics, jdoubleArray values);
   static bool record_image_score(const char *metric, double value);
-  static bool record_image_label(const char *label, const char *value);
 
   struct crac_restore_data {
     jlong restore_time;

@@ -73,6 +73,7 @@
 #include "utilities/formatBuffer.hpp"
 #include "utilities/macros.hpp"
 #include "utilities/parseInteger.hpp"
+#include "utilities/stringUtils.hpp"
 #if INCLUDE_SERVICES && !defined(_WINDOWS) && !defined(AIX)
 #include "attachListener_posix.hpp"
 #include "posixAttachOperation.hpp"
@@ -1086,30 +1087,37 @@ struct LocaleGuard {
 };
 
 void CheckpointDCmd::execute(DCmdSource source, TRAPS) {
-
   const char *metrics = _metrics.value();
   if (metrics != nullptr) {
-    LocaleGuard lg;
-    if (metrics[0] == '@') {
-      if (!parse_pairs_from_file("metric", metrics + 1, CheckpointDCmd::accept_metric)) {
-        return;
+    if (crac::is_image_score_supported()) {
+      LocaleGuard lg;
+      if (metrics[0] == '@') {
+        if (!parse_pairs_from_file("metric", metrics + 1, CheckpointDCmd::accept_metric)) {
+          return;
+        }
+      } else {
+        if (!parse_pairs("metric", metrics, CheckpointDCmd::accept_metric)) {
+          return;
+        }
       }
     } else {
-      if (!parse_pairs("metric", metrics, CheckpointDCmd::accept_metric)) {
-        return;
-      }
+      output()->print_cr("Warning: metrics are not supported by current C/R engine");
     }
   }
   const char *labels = _labels.value();
   if (labels != nullptr) {
-    if (labels[0] == '@') {
-      if (!parse_pairs_from_file("label", labels + 1, CheckpointDCmd::accept_label)) {
-        return;
+    if (crac::is_image_constraints_supported()) {
+      if (labels[0] == '@') {
+        if (!parse_pairs_from_file("label", labels + 1, CheckpointDCmd::accept_label)) {
+          return;
+        }
+      } else {
+        if (!parse_pairs("label", labels, CheckpointDCmd::accept_label)) {
+          return;
+        }
       }
     } else {
-      if (!parse_pairs("label", labels, CheckpointDCmd::accept_label)) {
-        return;
-      }
+      output()->print_cr("Warning: labels are not supported by current C/R engine");
     }
   }
 
@@ -1166,23 +1174,6 @@ bool CheckpointDCmd::accept_label(CheckpointDCmd* self, const char* key, char* s
   }
   return true;
 }
-
-#ifdef _WINDOWS
-static char *strsep(char **strp, const char *delim) {
-  char *str = *strp;
-  if (str == nullptr) {
-    return nullptr;
-  }
-  size_t len = strcspn(str, delim);
-  if (str[len] == '\0') {
-    *strp = nullptr;
-    return str;
-  }
-  str[len] = '\0';
-  *strp += len + 1;
-  return str;
-}
-#endif // _WINDOWS
 
 bool CheckpointDCmd::parse_pairs(const char* what, const char* str, accept_func accept) {
   ResourceMark rm;
@@ -1246,7 +1237,6 @@ bool CheckpointDCmd::parse_pairs_from_file(const char* what, const char* path, a
   }
   return true;
 }
-
 
 ThreadDumpToFileDCmd::ThreadDumpToFileDCmd(outputStream* output, bool heap) :
                                            DCmdWithParser(output, heap),

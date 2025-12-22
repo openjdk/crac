@@ -707,6 +707,10 @@ Handle crac::checkpoint(jarray fd_arr, jobjectArray obj_arr, bool dry_run, jlong
   return ret_cr(JVM_CHECKPOINT_ERROR, Handle(), Handle(), codes, msgs, THREAD);
 }
 
+bool crac::is_image_constraints_supported() {
+  return _engine->prepare_image_constraints_api() == CracEngine::ApiStatus::OK;
+}
+
 bool crac::record_image_label(const char *label, const char *value) {
   if (_engine->prepare_image_constraints_api() != CracEngine::ApiStatus::OK) {
     // silently ignoring this

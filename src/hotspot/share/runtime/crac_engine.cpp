@@ -35,6 +35,7 @@
 #include "utilities/growableArray.hpp"
 #include "utilities/macros.hpp"
 #include "utilities/resourceHash.hpp"
+#include "utilities/stringUtils.hpp"
 
 #include <cstddef>
 #include <cstring>
@@ -53,23 +54,6 @@ static constexpr const char * const vm_controlled_engine_opts[] = {
 #define DEFINE_OPT_VAR(opt) static constexpr const char engine_opt_##opt[] = #opt;
 VM_CONTROLLED_ENGINE_OPTS(DEFINE_OPT_VAR)
 #undef DEFINE_OPT_VAR
-
-#ifdef _WINDOWS
-static char *strsep(char **strp, const char *delim) {
-  char *str = *strp;
-  if (str == nullptr) {
-    return nullptr;
-  }
-  size_t len = strcspn(str, delim);
-  if (str[len] == '\0') {
-    *strp = nullptr;
-    return str;
-  }
-  str[len] = '\0';
-  *strp += len + 1;
-  return str;
-}
-#endif // _WINDOWS
 
 static bool find_engine(const char *dll_dir, char *path, size_t path_size, bool *is_library) {
   // Try to interpret as a file path
@@ -473,6 +457,10 @@ void CracEngine::check_cpuinfo(const VM_Version::VM_Features *datap) const {
   }
 }
 
+bool CracEngine::set_label(const char* label, const char* value) {
+  return _image_constraints_api->set_label(_conf, label, value);
+}
+
 CracEngine::ApiStatus CracEngine::prepare_image_score_api() {
   prepare_extension_api(_image_score_api, CRLIB_EXTENSION_IMAGE_SCORE_NAME)
   require_method(set_score)
@@ -481,8 +469,4 @@ CracEngine::ApiStatus CracEngine::prepare_image_score_api() {
 
 bool CracEngine::set_score(const char* metric, double value) {
   return _image_score_api->set_score(_conf, metric, value);
-}
-
-bool CracEngine::set_label(const char* label, const char* value) {
-  return _image_constraints_api->set_label(_conf, label, value);
 }

@@ -91,8 +91,8 @@ public class JcmdArgsTest implements CracTest {
                 .anyMatch("label:xxx=yyy"::equals));
     }
 
-    private static Path createTemp(String metrics, String text) throws IOException {
-        Path path = Files.createTempFile(metrics, ".txt");
+    private static Path createTemp(String name, String text) throws IOException {
+        Path path = Files.createTempFile(name, ".txt");
         path.toFile().deleteOnExit();
         Files.writeString(path, text);
         return path;

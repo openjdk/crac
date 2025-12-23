@@ -406,7 +406,7 @@ const char* Abstract_VM_Version::cpu_description(void) {
 
 void Abstract_VM_Version::check_cpufeatures_vmoptions() {
   if (!FLAG_IS_DEFAULT(CPUFeatures)) {
-    if (!strcmp(CPUFeatures, "native") || !strcmp(CPUFeatures, "generic") || !strcmp(CPUFeatures, "ignore")) {
+    if (strcmp(CPUFeatures, "native") && strcmp(CPUFeatures, "generic") && strcmp(CPUFeatures, "ignore")) {
       vm_exit_during_initialization("This architecture does not support any arch-specific -XX:CPUFeatures options");
     }
   }

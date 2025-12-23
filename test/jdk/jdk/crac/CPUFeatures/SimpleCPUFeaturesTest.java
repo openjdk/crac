@@ -47,7 +47,8 @@ import jdk.test.lib.process.OutputAnalyzer;
  * @run driver jdk.test.lib.crac.CracTest generic                      glibc.cpu.hwcaps=-AVX:glibc.pthread.rseq=0
  */
 /*
- * @test id=X86
+ * @test id=X86-LINUX
+ * @requires os.family == "linux"
  * @requires os.arch=="amd64" | os.arch=="x86_64"
  * @library /test/lib
  * @build SimpleCPUFeaturesTest
@@ -58,14 +59,22 @@ import jdk.test.lib.process.OutputAnalyzer;
  * @run driver jdk.test.lib.crac.CracTest 0x20000000080,0xfff -- MISSING_FEATURES
  */
 /*
- * @test id=AARCH64
+ * @test id=AARCH64-LINUX
+ * @requires os.family == "linux"
  * @requires os.arch=="aarch64"
  * @library /test/lib
  * @build SimpleCPUFeaturesTest
  * @run driver jdk.test.lib.crac.CracTest 0x0,0x0 -- UNSUPPORTED_ARCH
  * @run driver jdk.test.lib.crac.CracTest foobar  -- UNSUPPORTED_ARCH
  */
-
+/*
+ * @test id=NON-LINUX
+ * @comment non-Linux behaves as if CPUFeatures=ignored was set
+ * @requires os.family != "linux"
+  * @library /test/lib
+ * @build SimpleCPUFeaturesTest
+ * @run driver jdk.test.lib.crac.CracTest foobar
+ */
 public class SimpleCPUFeaturesTest implements CracTest {
     private static final String SUCCESS = "SUCCESS";
 

@@ -1882,8 +1882,8 @@ performed by the Java HotSpot VM.
     `CompileThresholdScaling` to 0 is equivalent to disabling compilation.
 
 `-XX:CPUFeatures=`*features*
-:   Limit set of CPU features to make the CRaC image compatible for running
-    on a machine with different CPU:
+:   Limit the set of CPU features to make the CRaC image compatible for running
+    on a machine with a different CPU:
 
     `native`
     :   Use all available CPU features (default).

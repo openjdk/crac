@@ -713,8 +713,7 @@ bool crac::is_image_constraints_supported() {
 
 bool crac::record_image_label(const char *label, const char *value) {
   if (_engine->prepare_image_constraints_api() != CracEngine::ApiStatus::OK) {
-    // silently ignoring this
-    return true;
+    return false;
   }
   return _engine->set_label(label, value);
 }
@@ -725,8 +724,7 @@ bool crac::is_image_score_supported() {
 
 bool crac::record_image_score(jobjectArray metrics, jdoubleArray values) {
   if (_engine->prepare_image_score_api() != CracEngine::ApiStatus::OK) {
-    // silently ignoring this
-    return true;
+    return false;
   }
   ResourceMark rm;
   objArrayOop metrics_oops = oop_cast<objArrayOop>(JNIHandles::resolve_non_null(metrics));
@@ -781,8 +779,7 @@ bool crac::record_image_score(jobjectArray metrics, jdoubleArray values) {
 
 bool crac::record_image_score(const char *metric, double value) {
   if (_engine->prepare_image_score_api() != CracEngine::ApiStatus::OK) {
-    // silently ignoring this
-    return true;
+    return false;
   }
   return _engine->set_score(metric, value);
 }

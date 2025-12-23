@@ -72,7 +72,8 @@ bool ImageScore::persist(const char* image_location) const {
     ht.put(score._name, score._value);
   });
 #ifndef _WINDOWS
-  // Make sure that we're using 'standard' format independent of locale
+  // C locale uses '.' as decimal point for floating-point values
+  // (some other locales use ',').
   // Ignore error, the reset with local 0 will be a noop
   locale_t c_locale = newlocale(LC_ALL_MASK, "C", 0);
   locale_t old_locale = uselocale(c_locale);

@@ -1090,6 +1090,8 @@ void CheckpointDCmd::execute(DCmdSource source, TRAPS) {
   const char *metrics = _metrics.value();
   if (metrics != nullptr) {
     if (crac::is_image_score_supported()) {
+      // This guard ensures that we are parsing the floating point values
+      // with '.' as the decimal point (some other locales use ',')
       LocaleGuard lg;
       if (metrics[0] == '@') {
         if (!parse_pairs_from_file("metric", metrics + 1, CheckpointDCmd::accept_metric)) {

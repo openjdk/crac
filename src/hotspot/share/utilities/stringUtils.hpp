@@ -32,22 +32,8 @@
 # define strtok_r strtok_s
 
 // Windows does not have standard C library's strsep
-static char *strsep(char **strp, const char *delim) {
-  char *str = *strp;
-  if (str == nullptr) {
-    return nullptr;
-  }
-  size_t len = strcspn(str, delim);
-  if (str[len] == '\0') {
-    *strp = nullptr;
-    return str;
-  }
-  str[len] = '\0';
-  *strp += len + 1;
-  return str;
-}
+char *strsep(char **strp, const char *delim);
 #endif // _WINDOWS
-
 
 class StringUtils : AllStatic {
 public:

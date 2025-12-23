@@ -21,6 +21,10 @@
  * questions.
  *
  */
+#include <clocale>
+#ifdef _ALLBSD_SOURCE
+#include <xlocale.h>
+#endif // _ALLBSD_SOURCE
 
 #include "cds/cdsConfig.hpp"
 #include "cds/cds_globals.hpp"
@@ -49,6 +53,7 @@
 #include "oops/oop.inline.hpp"
 #include "oops/typeArrayOop.inline.hpp"
 #include "prims/jvmtiAgentList.hpp"
+#include "runtime/crac.hpp"
 #include "runtime/fieldDescriptor.inline.hpp"
 #include "runtime/flags/jvmFlag.hpp"
 #include "runtime/handles.inline.hpp"
@@ -68,6 +73,7 @@
 #include "utilities/formatBuffer.hpp"
 #include "utilities/macros.hpp"
 #include "utilities/parseInteger.hpp"
+#include "utilities/stringUtils.hpp"
 #if INCLUDE_SERVICES && !defined(_WINDOWS) && !defined(AIX)
 #include "attachListener_posix.hpp"
 #include "posixAttachOperation.hpp"
@@ -1057,7 +1063,66 @@ void DumpSharedArchiveDCmd::execute(DCmdSource source, TRAPS) {
 }
 #endif // INCLUDE_CDS
 
+CheckpointDCmd::CheckpointDCmd(outputStream* output, bool heap) :
+  DCmdWithParser(output, heap),
+  _metrics("metrics", "Extra image metrics to record (key1=value2,key2=value2,... or @/path/to/file)", "STRING", false),
+  _labels("labels", "Extra labels to record (label1=value1,label2=value2,... or @/path/to/file)", "STRING", false) {
+  _dcmdparser.add_dcmd_option(&_metrics);
+  _dcmdparser.add_dcmd_option(&_labels);
+}
+
+struct LocaleGuard {
+#ifndef _WINDOWS
+  locale_t _new, _old;
+  LocaleGuard(): _new(newlocale(LC_ALL_MASK, "C", 0)), _old(uselocale(_new)) {}
+#else
+  LocaleGuard() {}
+#endif // _WINDOWS
+  ~LocaleGuard() {
+#ifndef _WINDOWS
+    uselocale(_old);
+    freelocale(_new);
+#endif // _WINDOWS
+  }
+};
+
 void CheckpointDCmd::execute(DCmdSource source, TRAPS) {
+  const char *metrics = _metrics.value();
+  if (metrics != nullptr) {
+    if (crac::is_image_score_supported()) {
+      // This guard ensures that we are parsing the floating point values
+      // with '.' as the decimal point (some other locales use ',')
+      LocaleGuard lg;
+      if (metrics[0] == '@') {
+        if (!parse_pairs_from_file("metric", metrics + 1, CheckpointDCmd::accept_metric)) {
+          return;
+        }
+      } else {
+        if (!parse_pairs("metric", metrics, CheckpointDCmd::accept_metric)) {
+          return;
+        }
+      }
+    } else {
+      output()->print_cr("Warning: metrics are not supported by current C/R engine");
+    }
+  }
+  const char *labels = _labels.value();
+  if (labels != nullptr) {
+    if (crac::is_image_constraints_supported()) {
+      if (labels[0] == '@') {
+        if (!parse_pairs_from_file("label", labels + 1, CheckpointDCmd::accept_label)) {
+          return;
+        }
+      } else {
+        if (!parse_pairs("label", labels, CheckpointDCmd::accept_label)) {
+          return;
+        }
+      }
+    } else {
+      output()->print_cr("Warning: labels are not supported by current C/R engine");
+    }
+  }
+
   Klass* k = SystemDictionary::resolve_or_fail(vmSymbols::jdk_internal_crac_mirror_Core(),
                                                  true, CHECK);
   JavaValue result(T_OBJECT);
@@ -1081,6 +1146,98 @@ void CheckpointDCmd::execute(DCmdSource source, TRAPS) {
       stream->print("%s", out);
     }
   }
+}
+
+bool CheckpointDCmd::accept_metric(CheckpointDCmd* self, const char* key, char* str) {
+  char *endptr;
+  double value = strtod(str, &endptr);
+  while (isspace(*endptr)) ++endptr;
+  if (*endptr) {
+    self->output()->print_cr("Cannot convert '%s' into double value for metric '%s'", str, key);
+    return false;
+  }
+  if (!crac::record_image_score(key, value)) {
+    self->output()->print_cr("Cannot record metric %s=%f", key, value);
+    return false;
+  }
+  return true;
+}
+
+bool CheckpointDCmd::accept_label(CheckpointDCmd* self, const char* key, char* str) {
+  while (isspace(*str)) ++str;
+  char *end = str + strlen(str) - 1;
+  while (end >= str && isspace(*end)) {
+    *end = '\0';
+    --end;
+  }
+  if (!crac::record_image_label(key, str)) {
+    self->output()->print_cr("Cannot record label %s=%s", key, str);
+    return false;
+  }
+  return true;
+}
+
+bool CheckpointDCmd::parse_pairs(const char* what, const char* str, accept_func accept) {
+  ResourceMark rm;
+  size_t len = strlen(str);
+  char *copy = strcpy(NEW_RESOURCE_ARRAY(char, len + 1), str);
+  char *key_value;
+  while ((key_value = strsep(&copy, ",")) != nullptr) {
+    char *key = strsep(&key_value, "=");
+    if (*key == '\0') {
+      output()->print_cr("Empty %s name", what);
+      return false;
+    }
+    if (key_value == nullptr) {
+      output()->print_cr("Missing value for %s '%s'", what, key);
+      return false;
+    }
+    if (!accept(this, key, key_value)) {
+      return false;
+    }
+  }
+  return true;
+}
+
+bool CheckpointDCmd::parse_pairs_from_file(const char* what, const char* path, accept_func accept) {
+  FILE *file = os::fopen(path, "r");
+  if (file == nullptr) {
+    output()->print_cr("Cannot open %s: %s", path, os::strerror(errno));
+    return false;
+  }
+  struct FileCloser: StackObj {
+    FILE *_file;
+    FileCloser(FILE *f): _file(f) {}
+    ~FileCloser() { fclose(_file); }
+  } closer(file);
+  char linebuf[1024];
+  for (int linenum = 1; fgets(linebuf, sizeof(linebuf), file); ++linenum) {
+    char *line = linebuf;
+    size_t line_length = strlen(line);
+    if (line_length >= sizeof(linebuf) - 1 && line[line_length - 1] != '\n') {
+      output()->print_cr("Line %d starting with '%s' is too long", linenum, line);
+      return false;
+    } else if (line[line_length - 1] == '\n') {
+      // don't print newline in error message
+      line[line_length - 1] = '\0';
+    }
+    char *key = strsep(&line, "=");
+    if (line == nullptr) {
+      output()->print_cr("Invalid line %d in %s (no '=' separator)", linenum, path);
+      return false;
+    }
+    // truncate whitespace in key
+    while (isspace(*key)) ++key;
+    for (char *end = line - 2; end >= key && isspace(*end); --end) *end = '\0';
+    if (*key == '\0') {
+      output()->print_cr("Empty %s name", what);
+      return false;
+    }
+    if (!accept(this, key, line)) {
+      return false;
+    }
+  }
+  return true;
 }
 
 ThreadDumpToFileDCmd::ThreadDumpToFileDCmd(outputStream* output, bool heap) :

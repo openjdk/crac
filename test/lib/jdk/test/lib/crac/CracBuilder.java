@@ -13,6 +13,7 @@ import java.nio.file.NoSuchFileException;
 import java.nio.file.Path;
 import java.util.*;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 import static jdk.test.lib.Asserts.*;
 
@@ -527,15 +528,17 @@ public class CracBuilder {
         doRestore();
     }
 
-    public void checkpointViaJcmd(long pid) throws Exception {
-        runJcmd(Long.toString(pid), "JDK.checkpoint").shouldHaveExitValue(0);
+    public void checkpointViaJcmd(long pid, String... args) throws Exception {
+        runJcmd(Long.toString(pid), Stream.concat(Stream.of("JDK.checkpoint"), Stream.of(args)).toArray(String[]::new))
+                .shouldHaveExitValue(0).outputTo(System.out).errorTo(System.err);
     }
 
     public void checkpointViaJcmd() throws Exception {
         if (null == dockerImageName) {
             fail("Docker container is not set. Use checkpointViaJcmd(long pid) to run jcmd for non-container tests.");
         }
-        runJcmd(main().getName(), "JDK.checkpoint").shouldHaveExitValue(0);
+        runJcmd(main().getName(), "JDK.checkpoint").shouldHaveExitValue(0)
+                .outputTo(System.out).errorTo(System.err);
     }
 
     public OutputAnalyzer runJcmd(String id, String... command) throws Exception {

@@ -68,6 +68,7 @@ public:
   const char *configuration_doc() const;
 
   ApiStatus prepare_image_constraints_api();
+  bool set_label(const char* label, const char* value);
   bool store_cpuinfo(const VM_Version::VM_Features *datap) const;
   void require_cpuinfo(const VM_Version::VM_Features *datap) const;
   void check_cpuinfo(const VM_Version::VM_Features *datap) const;

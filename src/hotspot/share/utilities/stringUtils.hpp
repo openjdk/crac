@@ -30,7 +30,10 @@
 #ifdef _WINDOWS
   // strtok_s is the Windows thread-safe equivalent of POSIX strtok_r
 # define strtok_r strtok_s
-#endif
+
+// Windows does not have standard C library's strsep
+char *strsep(char **strp, const char *delim);
+#endif // _WINDOWS
 
 class StringUtils : AllStatic {
 public:

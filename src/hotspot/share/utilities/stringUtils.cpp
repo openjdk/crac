@@ -30,6 +30,23 @@
 #include <ctype.h>
 #include <string.h>
 
+#ifdef _WINDOWS
+char *strsep(char **strp, const char *delim) {
+  char *str = *strp;
+  if (str == nullptr) {
+    return nullptr;
+  }
+  size_t len = strcspn(str, delim);
+  if (str[len] == '\0') {
+    *strp = nullptr;
+    return str;
+  }
+  str[len] = '\0';
+  *strp += len + 1;
+  return str;
+}
+#endif // _WINDOWS
+
 int StringUtils::replace_no_expand(char* string, const char* from, const char* to) {
   int replace_count = 0;
   size_t from_len = strlen(from);

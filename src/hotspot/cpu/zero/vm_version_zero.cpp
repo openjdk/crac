@@ -139,6 +139,8 @@ void VM_Version::initialize() {
   // the support unconditionally.
   _supports_cx8 = true;
 #endif
+
+  check_cpufeatures_vmoptions();
 }
 
 void VM_Version::initialize_cpu_information(void) {

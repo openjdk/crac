@@ -937,11 +937,11 @@ public:
   // Initialization
   static void initialize();
   static bool cpu_features_binary(VM_Features *data);
-  static bool ignore_cpu_features(bool is_checkpoint) {
+  static bool ignore_cpu_features() {
     // This gets triggered by -XX:CPUFeatures=ignore, not writing the features & arch
     // on checkpoint into the image at all, and skipping the check on restore.
     // IgnoreCPUFeatures is ignored on checkpoint
-    return _ignore_glibc_not_using || (!is_checkpoint && IgnoreCPUFeatures);
+    return _ignore_glibc_not_using;
   }
   static void restore_check(const char* str, const char* msg_prefix);
 

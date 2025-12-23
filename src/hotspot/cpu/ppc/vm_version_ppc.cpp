@@ -331,6 +331,8 @@ void VM_Version::initialize() {
   }
 
   check_virtualizations();
+
+  check_cpufeatures_vmoptions();
 }
 
 void VM_Version::check_virtualizations() {

@@ -2029,6 +2029,22 @@ const int ObjectAlignmentInBytes = 8;
   product(size_t, CRaCMaxHeapSizeBeforeCheckpoint, 0, "Maximum size "       \
           "of heap before checkpoint. By default equals to -Xmx.")          \
                                                                             \
+  product(ccstr, CPUFeatures, nullptr, "CPU feature set, "                  \
+          "Limit set of CPU features to make the CRaC image compatible "    \
+          "for running on a machine with different CPU:"                    \
+          "native: use all available features (default), "                  \
+          "generic: compatible with most CPUs, "                            \
+          "ignore: do not store CPU features at all, "                      \
+          "<arch-specific>: use -XX:+ShowCPUFeatures to find a suitable "   \
+          "architecture-specific string, e.g. 0xnumber,0xnumber on x86_64.")\
+                                                                            \
+  product(bool, ShowCPUFeatures, false, "Show features of this CPU "        \
+          "to be possibly used for the -XX:CPUFeatures=0xnumber option")    \
+                                                                            \
+  product(bool, IgnoreCPUFeatures, false, RESTORE_SETTABLE | EXPERIMENTAL,  \
+          "Do not refuse to run after -XX:CRaCRestoreFrom finds out some "  \
+          "CPU features are missing")                                       \
+                                                                            \
   product(int, LockingMode, LM_LIGHTWEIGHT,                                 \
           "(Deprecated) Select locking mode: "                              \
           "0: (Deprecated) monitors only (LM_MONITOR), "                    \

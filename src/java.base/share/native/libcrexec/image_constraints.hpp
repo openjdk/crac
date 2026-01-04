@@ -80,18 +80,18 @@ private:
     const char* name;
     const void* data;
     size_t data_size;
-    const void* conjunction; // data_size
+    const void* intersection; // data_size
     crlib_bitmap_comparison_t comparison;
 
     Constraint(TagType t, const char* n, const void* d, size_t ds, crlib_bitmap_comparison_t c):
-      type(t), failed(false), name(n), data(d), data_size(ds), conjunction(nullptr), comparison(c) {}
+      type(t), failed(false), name(n), data(d), data_size(ds), intersection(nullptr), comparison(c) {}
 
     Constraint(Constraint &&o) {
       type = o.type;
       name = o.name;
       data = o.data;
       data_size = o.data_size;
-      conjunction = o.conjunction;
+      intersection = o.intersection;
       comparison = o.comparison;
       o.name = nullptr;
       o.data = nullptr;
@@ -100,7 +100,7 @@ private:
     ~Constraint() {
       free((void*) name);
       free((void*) data);
-      free((void *) conjunction);
+      free((void *) intersection);
     }
 
 
@@ -134,8 +134,8 @@ public:
     _constraints.foreach([&](Constraint &c) {
       if (!strcmp(c.name, name) && c.failed) {
         result = true;
-        if (value_return && c.conjunction) {
-          memcpy(value_return, c.conjunction, c.data_size);
+        if (value_return && c.intersection) {
+          memcpy(value_return, c.intersection, c.data_size);
         }
       }
     });

@@ -281,17 +281,17 @@ bool ImageConstraints::validate(const char* image_location) const {
         static_cast<const char*>(c.data), static_cast<const char*>(t->data));
     } else if (c.type == TagType::BITMAP && !c.compare_bitmaps(static_cast<const unsigned char*>(t->data), t->data_size)) {
       fprintf(stderr, CREXEC "Bitmap mismatch for tag %s:\n", c.name);
-      print_bitmap("Constraint:  ", static_cast<const unsigned char*>(c.data), c.data_size);
-      print_bitmap("Image:       ", static_cast<const unsigned char*>(t->data), t->data_size);
+      print_bitmap("Constraint:   ", static_cast<const unsigned char*>(c.data), c.data_size);
+      print_bitmap("Image:        ", static_cast<const unsigned char*>(t->data), t->data_size);
       if (c.comparison != EQUALS) {
-        free((void *) c.conjunction);
-        c.conjunction = malloc(c.data_size);
+        free((void *) c.intersection);
+        c.intersection = malloc(c.data_size);
         for (size_t ix = 0; ix < c.data_size; ++ix) {
-          const_cast<unsigned char*>(static_cast<const unsigned char*>(c.conjunction))[ix]
+          const_cast<unsigned char*>(static_cast<const unsigned char*>(c.intersection))[ix]
             = static_cast<const unsigned char*>(c.data)[ix]
             & (ix >= t->data_size ? 0 : static_cast<const unsigned char*>(t->data)[ix]);
         }
-        print_bitmap("Conjunction: ", static_cast<const unsigned char*>(c.conjunction), c.data_size);
+        print_bitmap("Intersection: ", static_cast<const unsigned char*>(c.intersection), c.data_size);
       }
     } else {
       c.failed = false;

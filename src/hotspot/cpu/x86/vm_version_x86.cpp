@@ -1197,8 +1197,6 @@ bool VM_Version::glibc_not_using() {
   };
 #define EXCESSIVE2(tunables, feature_active) shouldnotuse_set(PASTE_TOKENS(CPU_, tunables), STR(tunables), feature_active)
 #define EXCESSIVE(tunables) EXCESSIVE2(tunables, FEATURE_ACTIVE(tunables))
-// There is no CPU_FEATURE_ACTIVE() available for this symbol.
-#define EXCESSIVE_GLIBC_PREFERRED(tunables) EXCESSIVE2(tunables, !from_reexec)
   EXCESSIVE(AVX     );
   EXCESSIVE(CX8     );
   EXCESSIVE(FMA     );
@@ -1229,7 +1227,9 @@ bool VM_Version::glibc_not_using() {
   EXCESSIVE(OSXSAVE );
   EXCESSIVE(HTT     );
   EXCESSIVE(XSAVEC  );
-  EXCESSIVE_GLIBC_PREFERRED(AVX_Fast_Unaligned_Load);
+  // There is no CPU_FEATURE_ACTIVE() available for this symbol.
+  // There is no check for 'xem_xcr0_eax.bits.sse != 0 && xem_xcr0_eax.bits.ymm != 0' but FEATURE_ACTIVE(AVX) depends on it so it can be assumed.
+  EXCESSIVE2(AVX_Fast_Unaligned_Load, FEATURE_ACTIVE(OSXSAVE) && FEATURE_ACTIVE(AVX) && FEATURE_ACTIVE(AVX2));
 #undef EXCESSIVE
 
 #ifdef ASSERT

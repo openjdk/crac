@@ -129,12 +129,22 @@ public:
     return _constraints.add(Constraint(TagType::BITMAP, strdup(name), copy, length_bytes, comparison));
   }
 
-  bool is_failed(const char* name, unsigned char *value_return) const {
+  bool is_failed(const char* name) const {
     bool result = false;
     _constraints.foreach([&](Constraint &c) {
       if (!strcmp(c.name, name) && c.failed) {
         result = true;
-        if (value_return && c.intersection) {
+      }
+    });
+    return result;
+  }
+
+  bool get_failed_bitmap(const char* name, unsigned char *value_return, size_t value_size) const {
+    bool result = false;
+    _constraints.foreach([&](Constraint &c) {
+      if (!strcmp(c.name, name) && c.failed) {
+        result = true;
+        if (value_return && c.intersection && value_size == c.data_size) {
           memcpy(value_return, c.intersection, c.data_size);
         }
       }

@@ -213,6 +213,7 @@ $(eval $(call SetupJdkLibrary, BUILD_LIBCREXEC, \
     EXTRA_HEADER_DIRS := libjvm, \
     CXXFLAGS := $(CXXFLAGS_JDKLIB) -DCRLIB_IS_IMPL, \
     CXXFLAGS_windows := -D_WINDOWS -DWIN32, \
+    CXXFLAGS_macosx := -DMACOSX, \
     LDFLAGS := $(LDFLAGS_JDKLIB), \
 ))
 TARGETS += $(BUILD_LIBCREXEC)

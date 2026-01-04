@@ -283,7 +283,7 @@ bool ImageConstraints::validate(const char* image_location) const {
       fprintf(stderr, CREXEC "Bitmap mismatch for tag %s:\n", c.name);
       print_bitmap("Constraint:   ", static_cast<const unsigned char*>(c.data), c.data_size);
       print_bitmap("Image:        ", static_cast<const unsigned char*>(t->data), t->data_size);
-      if (c.comparison != EQUALS) {
+      if (c.comparison == SUBSET) {
         free((void *) c.intersection);
         c.intersection = malloc(c.data_size);
         for (size_t ix = 0; ix < c.data_size; ++ix) {

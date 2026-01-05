@@ -54,26 +54,26 @@ import jdk.test.lib.process.OutputAnalyzer;
  * @build SimpleCPUFeaturesTest
  * @comment FLUSH and SSE2 must be present
  * @run driver jdk.test.lib.crac.CracTest 0x20000000080,0x0
- * @run driver jdk.test.lib.crac.CracTest foobar        -- INVALID_FORMAT
- * @run driver jdk.test.lib.crac.CracTest 0xfffff,0x0   -- MISSING_FEATURES
+ * @run driver jdk.test.lib.crac.CracTest foobar              -- INVALID_FORMAT
+ * @run driver jdk.test.lib.crac.CracTest 0xfffff,0x0         -- MISSING_FEATURES
  * @run driver jdk.test.lib.crac.CracTest 0x20000000080,0xfff -- MISSING_FEATURES
  */
 /*
- * @test id=AARCH64-LINUX
- * @requires os.family == "linux"
+ * @test id=x86-NON-LINUX
+ * @requires os.arch=="amd64" | os.arch=="x86_64"
+ * @requires os.family != "linux"
+ * @library /test/lib
+ * @build SimpleCPUFeaturesTest
+ * @run driver jdk.test.lib.crac.CracTest foobar            -- OS_DOES_NOT_SUPPORT
+ * @run driver jdk.test.lib.crac.CracTest 0x20000000080,0x0 -- OS_DOES_NOT_SUPPORT
+ */
+/*
+ * @test id=AARCH64
  * @requires os.arch=="aarch64"
  * @library /test/lib
  * @build SimpleCPUFeaturesTest
- * @run driver jdk.test.lib.crac.CracTest 0x0,0x0 -- UNSUPPORTED_ARCH
- * @run driver jdk.test.lib.crac.CracTest foobar  -- UNSUPPORTED_ARCH
- */
-/*
- * @test id=NON-LINUX
- * @comment non-Linux behaves as if CPUFeatures=ignored was set
- * @requires os.family != "linux"
-  * @library /test/lib
- * @build SimpleCPUFeaturesTest
- * @run driver jdk.test.lib.crac.CracTest foobar
+ * @run driver jdk.test.lib.crac.CracTest 0x0,0x0 -- ARCH_DOES_NOT_SUPPORT
+ * @run driver jdk.test.lib.crac.CracTest foobar  -- ARCH_DOES_NOT_SUPPORT
  */
 public class SimpleCPUFeaturesTest implements CracTest {
     private static final String SUCCESS = "SUCCESS";
@@ -82,7 +82,8 @@ public class SimpleCPUFeaturesTest implements CracTest {
     private enum ErrorMsg {
         INVALID_FORMAT("must be of the form: 0xNUM,0xNUM"),
         MISSING_FEATURES("missing features of this CPU are"),
-        UNSUPPORTED_ARCH("This architecture does not support any arch-specific")
+        ARCH_DOES_NOT_SUPPORT("This architecture does not support any arch-specific"),
+        OS_DOES_NOT_SUPPORT("This OS does not support"),
         ;
         final String msg;
 

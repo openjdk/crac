@@ -1226,6 +1226,7 @@ bool VM_Version::glibc_not_using() {
   EXCESSIVE(HTT     );
   EXCESSIVE(XSAVEC  );
   // There is no CPU_FEATURE_ACTIVE() available for this symbol.
+  // The detection is a copy from glibc sysdeps/x86/cpu-features.c .
   // There is no check for 'xem_xcr0_eax.bits.sse != 0 && xem_xcr0_eax.bits.ymm != 0' but FEATURE_ACTIVE(AVX) depends on it so it can be assumed.
   EXCESSIVE2(AVX_Fast_Unaligned_Load, FEATURE_ACTIVE(OSXSAVE) && FEATURE_ACTIVE(AVX) && FEATURE_ACTIVE(AVX2));
 #undef EXCESSIVE
@@ -3654,14 +3655,13 @@ VM_Version::VM_Features VM_Version::CpuidInfo::feature_flags() const {
   if (xfs_cpuidD1_eax.bits.xsavec != 0) {
     vm_features.set_feature(CPU_XSAVEC);
   }
-  // sysdeps/x86/cpu-features.c
+  // The detection is a copy from glibc sysdeps/x86/cpu-features.c .
   if (vm_features.supports_feature(CPU_OSXSAVE)) {
-    if (xem_xcr0_eax.bits.sse != 0 &&
-        xem_xcr0_eax.bits.ymm != 0) {
-      if (vm_features.supports_feature(CPU_AVX)) {
-        if (vm_features.supports_feature(CPU_AVX2)) {
-          vm_features.set_feature(CPU_AVX_Fast_Unaligned_Load);
-        }
+    if (vm_features.supports_feature(CPU_AVX)) {
+      assert(xem_xcr0_eax.bits.sse != 0, "required by CPU_AVX");
+      assert(xem_xcr0_eax.bits.ymm != 0, "required by CPU_AVX");
+      if (vm_features.supports_feature(CPU_AVX2)) {
+        vm_features.set_feature(CPU_AVX_Fast_Unaligned_Load);
       }
     }
   }

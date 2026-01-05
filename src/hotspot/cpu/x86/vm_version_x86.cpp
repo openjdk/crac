@@ -953,13 +953,13 @@ bool VM_Version::_ignore_glibc_not_using = false;
 #ifdef LINUX
 const char VM_Version::glibc_prefix[] = ":glibc.cpu.hwcaps=";
 const size_t VM_Version::glibc_prefix_len = strlen(glibc_prefix);
-static bool from_reexec;
 
 bool VM_Version::glibc_env_set(char *disable_str) {
 #define TUNABLES_NAME "GLIBC_TUNABLES"
 #define REEXEC_NAME "HOTSPOT_GLIBC_TUNABLES_REEXEC"
   char *env_val = disable_str;
   const char *env = getenv(TUNABLES_NAME);
+  bool from_reexec = getenv(REEXEC_NAME) != nullptr;
   if (env && (strcmp(env, env_val) == 0 || (!INCLUDE_CPU_FEATURE_ACTIVE && from_reexec))) {
     if (!INCLUDE_CPU_FEATURE_ACTIVE) {
       if (ShowCPUFeatures) {
@@ -1065,8 +1065,6 @@ void VM_Version::glibc_reexec() {
 bool VM_Version::glibc_not_using() {
   if (_ignore_glibc_not_using)
     return true;
-
-  from_reexec = getenv(REEXEC_NAME) != nullptr;
 
   VM_Version::VM_Features features_expected;
   features_expected.set_all_features();

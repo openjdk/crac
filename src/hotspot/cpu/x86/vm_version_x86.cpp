@@ -891,8 +891,7 @@ class VM_Version_StubGenerator: public StubCodeGenerator {
 VM_Version::VM_Features VM_Version::CPUFeatures_parse(const char *str) {
 #ifndef LINUX
   _ignore_glibc_not_using = true;
-  return _features;
-#else
+#endif // !LINUX
   if (str == nullptr || strcmp(str, "native") == 0) {
     return _features;
   }
@@ -901,6 +900,9 @@ VM_Version::VM_Features VM_Version::CPUFeatures_parse(const char *str) {
     return _features;
   }
   if (strcmp(str, "generic") == 0) {
+#ifndef LINUX
+    return _features;
+#else
     // 32-bit x86 cannot rely on anything.
     VM_Version::VM_Features retval;
 #ifdef AMD64
@@ -917,7 +919,12 @@ VM_Version::VM_Features VM_Version::CPUFeatures_parse(const char *str) {
     // CPU_LAHFSAHF is disabled in 'gcc -Q --help=target' and "Early Intel Pentium 4 CPUs with Intel 64 support ... lacked the LAHF and SAHF instructions"
 #endif
     return retval;
+#endif // !LINUX
   }
+#ifndef LINUX
+  vm_exit_during_initialization("This OS does not support any arch-specific -XX:CPUFeatures options");
+  return {};
+#else // LINUX
   int count = VM_Version::VM_Features::features_bitmap_element_count();
   VM_Version::VM_Features retval;
   const char *str_orig = str;
@@ -946,7 +953,7 @@ VM_Version::VM_Features VM_Version::CPUFeatures_parse(const char *str) {
   }
   vm_exit_during_initialization(err_msg("VM option 'CPUFeatures=%s' must be of the form: %s", str_orig, buf + 1));
   return {};
-#endif // LINUX
+#endif
 }
 
 bool VM_Version::_ignore_glibc_not_using = false;

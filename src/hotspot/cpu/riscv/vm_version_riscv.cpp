@@ -62,6 +62,8 @@ void VM_Version::initialize() {
 #ifdef COMPILER2
   c2_initialize();
 #endif // COMPILER2
+
+  check_cpufeatures_vmoptions();
 }
 
 void VM_Version::common_initialize() {

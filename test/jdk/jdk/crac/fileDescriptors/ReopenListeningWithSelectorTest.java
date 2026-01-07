@@ -42,10 +42,10 @@ import static jdk.test.lib.Asserts.*;
  * @run driver jdk.test.lib.crac.CracTest false
  */
 /**
- * @test id=ALT_LINUX
+ * @test id=ALT_UNIX
  * @library /test/lib
  * @modules java.base/jdk.internal.crac:+open
- * @requires (os.family == "linux")
+ * @requires (os.family != "unix")
  * @build FDPolicyTestBase
  * @build ReopenListeningTestBase
  * @build ReopenListeningSocketChannelTest

@@ -122,7 +122,7 @@ class WEPollSelectorImpl extends SelectorCRaCSupport {
 
     @Override
     protected Collection<FileDescriptor> claimFileDescriptors() {
-        // What about WEPoll eph?
+        // We do not close/reopen `eph`; on Windows there's no actual FD check
         return Arrays.asList(
                 claimFileDescriptor(fd0Val, "WEPoll pipe sink "),
                 claimFileDescriptor(fd1Val, "WEPoll pipe source "));

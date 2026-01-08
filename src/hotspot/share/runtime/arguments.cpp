@@ -581,7 +581,7 @@ static SpecialFlag const special_jvm_flags[] = {
   { "CRTrace",                      JDK_Version::undefined(), JDK_Version::jdk(24), JDK_Version::jdk(26) },
   { "CRaCAllowToSkipCheckpoint",    JDK_Version::jdk(25), JDK_Version::jdk(26), JDK_Version::jdk(27) },
   { "CRaCDoThrowCheckpointException", JDK_Version::undefined(), JDK_Version::jdk(25), JDK_Version::jdk(26) },
-  { "IgnoreCPUFeatures",            JDK_Version::jdk(26), JDK_Version::jdk(29), JDK_Version::undefined() },
+  { "IgnoreCPUFeatures",            JDK_Version::jdk(26), JDK_Version::jdk(27), JDK_Version::jdk(28) },
 
   { nullptr, JDK_Version(0), JDK_Version(0) }
 };
@@ -1915,6 +1915,22 @@ bool Arguments::check_vm_args_consistency() {
                 "-XX:+VerifyHeavyMonitors requires LockingMode == 0 (LM_MONITOR)\n");
     return false;
   }
+
+  if (IgnoreCPUFeatures) {
+    if (FLAG_IS_DEFAULT(CheckCPUFeatures)) {
+      FLAG_SET_CMDLINE(CheckCPUFeatures, "skip");
+    } else {
+      jio_fprintf(defaultStream::error_stream(),
+                "Cannot set both -XX:+IgnoreCPUFeatures and -XX:CheckCPUFeatures=%s\n", CheckCPUFeatures);
+      return false;
+    }
+  }
+  if (CheckCPUFeatures != nullptr && !strcmp(CheckCPUFeatures, "skip") && !UnlockExperimentalVMOptions) {
+    jio_fprintf(defaultStream::error_stream(),
+                "-XX:CheckCPUFeatures=skip is allowed only with -XX:+UnlockExperimentalVMOptions\n");
+    return false;
+  }
+
   return status;
 }
 
@@ -4068,14 +4084,6 @@ jint Arguments::apply_ergo() {
   if (FLAG_IS_CMDLINE(DiagnoseSyncOnValueBasedClasses)) {
     if (DiagnoseSyncOnValueBasedClasses == ObjectSynchronizer::LOG_WARNING && !log_is_enabled(Info, valuebasedclasses)) {
       LogConfiguration::configure_stdout(LogLevel::Info, true, LOG_TAGS(valuebasedclasses));
-    }
-  }
-
-  if (IgnoreCPUFeatures) {
-    if (FLAG_IS_DEFAULT(CheckCPUFeatures)) {
-      FLAG_SET_ERGO(CheckCPUFeatures, "skip");
-    } else {
-      vm_exit_during_initialization(err_msg("Cannot set both -XX:+IgnoreCPUFeatures and -XX:CheckCPUFeatures=%s", CheckCPUFeatures));
     }
   }
 

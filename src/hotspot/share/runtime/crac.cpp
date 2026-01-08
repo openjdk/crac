@@ -814,17 +814,13 @@ void crac::restore(crac_restore_data& restore_data) {
   // skip the check here.
   bool ignore = VM_Version::ignore_cpu_features();
   bool exact = false;
-  if (CheckCPUFeatures == nullptr) {
+  if (CheckCPUFeatures == nullptr || !strcmp(CheckCPUFeatures, "compatible")) {
     // default, compatible
   } else if (!strcmp(CheckCPUFeatures, "skip")) {
-    if (!UnlockExperimentalVMOptions) {
-      log_error(crac)("-XX:CheckCPUFeatures=skip is allowed only with -XX:+UnlockExperimentalVMOptions");
-      return;
-    }
     ignore = true;
   } else if (!strcmp(CheckCPUFeatures, "exact")) {
     exact = true;
-  } else if (strcmp(CheckCPUFeatures, "compatible")) {
+  } else {
     log_error(crac)("Invalid value for -XX:CheckCPUFeatures=%s; available are 'compatible', 'exact' or 'skip'", CheckCPUFeatures);
     return;
   }

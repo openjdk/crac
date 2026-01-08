@@ -45,7 +45,7 @@ import static jdk.test.lib.Asserts.*;
  * @test id=ALT_UNIX
  * @library /test/lib
  * @modules java.base/jdk.internal.crac:+open
- * @requires (os.family != "unix")
+ * @requires (os.family != "windows")
  * @build FDPolicyTestBase
  * @build ReopenListeningTestBase
  * @build ReopenListeningSocketChannelTest

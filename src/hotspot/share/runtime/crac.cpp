@@ -812,12 +812,24 @@ void crac::restore(crac_restore_data& restore_data) {
   // was printed out but continued even despite features not being satisfied.
   // Since the check itself is delegated to the C/R Engine we will simply
   // skip the check here.
-  if (!VM_Version::ignore_cpu_features() && !IgnoreCPUFeatures) {
+  bool ignore = VM_Version::ignore_cpu_features();
+  bool exact = false;
+  if (CheckCPUFeatures == nullptr || !strcmp(CheckCPUFeatures, "compatible")) {
+    // default, compatible
+  } else if (!strcmp(CheckCPUFeatures, "skip")) {
+    ignore = true;
+  } else if (!strcmp(CheckCPUFeatures, "exact")) {
+    exact = true;
+  } else {
+    log_error(crac)("Invalid value for -XX:CheckCPUFeatures=%s; available are 'compatible', 'exact' or 'skip'", CheckCPUFeatures);
+    return;
+  }
+  if (!ignore) {
     switch (engine.prepare_image_constraints_api()) {
       case CracEngine::ApiStatus::OK: {
         VM_Version::VM_Features data;
         if (VM_Version::cpu_features_binary(&data)) {
-          engine.require_cpuinfo(&data);
+          engine.require_cpuinfo(&data, exact);
         }
         } break;
       case CracEngine::ApiStatus::ERR:

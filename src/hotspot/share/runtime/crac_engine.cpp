@@ -436,11 +436,11 @@ bool CracEngine::store_cpuinfo(const VM_Version::VM_Features *datap) const {
   return true;
 }
 
-void CracEngine::require_cpuinfo(const VM_Version::VM_Features *datap) const {
+void CracEngine::require_cpuinfo(const VM_Version::VM_Features *datap, bool exact) const {
   log_debug(crac)("cpufeatures_load user data %s from %s...", cpufeatures_name, CRaCRestoreFrom);
   _image_constraints_api->require_label(_conf, cpuarch_name, ARCHPROPNAME);
   _image_constraints_api->require_bitmap(_conf, cpufeatures_name,
-    reinterpret_cast<const unsigned char *>(datap), sizeof(*datap), SUBSET);
+    reinterpret_cast<const unsigned char *>(datap), sizeof(*datap), exact ? EQUALS : SUBSET);
 }
 
 void CracEngine::check_cpuinfo(const VM_Version::VM_Features *datap) const {

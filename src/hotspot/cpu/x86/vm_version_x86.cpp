@@ -917,9 +917,9 @@ VM_Version::VM_Features VM_Version::CPUFeatures_parse(const char *str) {
     retval.set_feature(CPU_FLUSH); // ="clflush" in cpuinfo, not used by gcc, required by OpenJDK
     // CPU_MOVBE is disabled in 'gcc -Q --help=target' and for example i7-720QM does not support it
     // CPU_LAHFSAHF is disabled in 'gcc -Q --help=target' and "Early Intel Pentium 4 CPUs with Intel 64 support ... lacked the LAHF and SAHF instructions"
-#endif
+#endif // AMD64
     return retval;
-#endif // !LINUX
+#endif // LINUX
   }
 #ifndef LINUX
   vm_exit_during_initialization("This OS does not support any arch-specific -XX:CPUFeatures options");
@@ -953,7 +953,7 @@ VM_Version::VM_Features VM_Version::CPUFeatures_parse(const char *str) {
   }
   vm_exit_during_initialization(err_msg("VM option 'CPUFeatures=%s' must be of the form: %s", str_orig, buf + 1));
   return {};
-#endif
+#endif // LINUX
 }
 
 bool VM_Version::_ignore_glibc_not_using = false;
@@ -2584,7 +2584,7 @@ void VM_Version::VM_Features::print_missing_features() const {
   char buf[MAX_CPU_FEATURES * 16];
   print_numbers_and_names(buf, sizeof(buf));
   tty->print_cr("; missing features of this CPU are %s\n"
-                "If you are sure it will not crash you can override this check by -XX:+UnlockExperimentalVMOptions -XX:+IgnoreCPUFeatures .",
+                "If you are sure it will not crash you can override this check by -XX:+UnlockExperimentalVMOptions -XX:CheckCPUFeatures=ignore .",
                 buf);
 }
 

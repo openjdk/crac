@@ -70,7 +70,7 @@ public:
   ApiStatus prepare_image_constraints_api();
   bool set_label(const char* label, const char* value);
   bool store_cpuinfo(const VM_Version::VM_Features *datap) const;
-  void require_cpuinfo(const VM_Version::VM_Features *datap) const;
+  void require_cpuinfo(const VM_Version::VM_Features *datap, bool exact) const;
   void check_cpuinfo(const VM_Version::VM_Features *datap) const;
 
   ApiStatus prepare_image_score_api();

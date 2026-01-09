@@ -25,16 +25,22 @@
 
 package sun.nio.ch;
 
+import java.io.FileDescriptor;
 import java.io.IOException;
+import java.nio.channels.SelectableChannel;
 import java.nio.channels.SelectionKey;
 import java.nio.channels.Selector;
 import java.nio.channels.spi.SelectorProvider;
 import java.util.ArrayDeque;
+import java.util.Arrays;
+import java.util.Collection;
 import java.util.Deque;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
+import java.util.stream.Collectors;
 
 import static sun.nio.ch.KQueue.EVFILT_READ;
 import static sun.nio.ch.KQueue.EVFILT_WRITE;
@@ -45,20 +51,20 @@ import static sun.nio.ch.KQueue.EV_DELETE;
  * KQueue based Selector implementation for macOS
  */
 
-class KQueueSelectorImpl extends SelectorImpl {
+class KQueueSelectorImpl extends SelectorCRaCSupport {
 
     // maximum number of events to poll in one call to kqueue
     private static final int MAX_KEVENTS = 256;
 
     // kqueue file descriptor
-    private final int kqfd;
+    private int kqfd;
 
     // address of poll array (event list) when polling for pending events
     private final long pollArrayAddress;
 
     // file descriptors used for interrupt
-    private final int fd0;
-    private final int fd1;
+    private int fd0;
+    private int fd1;
 
     // maps file descriptor to selection key, synchronize on selector
     private final Map<Integer, SelectionKeyImpl> fdToKey = new HashMap<>();
@@ -67,19 +73,19 @@ class KQueueSelectorImpl extends SelectorImpl {
     private final Object updateLock = new Object();
     private final Deque<SelectionKeyImpl> updateKeys = new ArrayDeque<>();
 
-    // interrupt triggering and clearing
-    private final Object interruptLock = new Object();
-    private boolean interruptTriggered;
-
     // used by updateSelectedKeys to handle cases where the same file
     // descriptor is polled by more than one filter
     private int pollCount;
 
     KQueueSelectorImpl(SelectorProvider sp) throws IOException {
         super(sp);
-
-        this.kqfd = KQueue.create();
         this.pollArrayAddress = KQueue.allocatePollArray(MAX_KEVENTS);
+        initFileDescriptors(false);
+    }
+
+    @Override
+    protected void initFileDescriptors(boolean restore) throws IOException {
+        this.kqfd = KQueue.create();
 
         try {
             long fds = IOUtil.makePipe(false);
@@ -93,6 +99,31 @@ class KQueueSelectorImpl extends SelectorImpl {
 
         // register one end of the socket pair for wakeups
         KQueue.register(kqfd, fd0, EVFILT_READ, EV_ADD);
+    }
+
+    @Override
+    protected void closeFileDescriptors() throws IOException {
+        FileDispatcherImpl.closeIntFD(fd0);
+        FileDispatcherImpl.closeIntFD(fd1);
+        FileDispatcherImpl.closeIntFD(kqfd);
+    }
+
+    @Override
+    protected Set<SelectableChannel> getRegisteredChannels() {
+        return fdToKey.values().stream().map(SelectionKey::channel).collect(Collectors.toSet());
+    }
+
+    @Override
+    protected void wakeupInternal() throws IOException {
+        IOUtil.write1(fd1, (byte)0);
+    }
+
+    @Override
+    protected Collection<FileDescriptor> claimFileDescriptors() {
+        return Arrays.asList(
+                claimFileDescriptor(fd0, "Selector pipe read-end FD "),
+                claimFileDescriptor(fd0, "Selector pipe write-end FD "),
+                claimFileDescriptor(fd0, "KQueue FD "));
     }
 
     @Override
@@ -118,7 +149,9 @@ class KQueueSelectorImpl extends SelectorImpl {
                 begin(blocking);
                 do {
                     long startTime = timedPoll ? System.nanoTime() : 0;
-                    numEntries = KQueue.poll(kqfd, pollArrayAddress, MAX_KEVENTS, to);
+                    do {
+                        numEntries = KQueue.poll(kqfd, pollArrayAddress, MAX_KEVENTS, to);
+                    } while (processCheckpointRestore());
                     if (numEntries == IOStatus.INTERRUPTED && timedPoll) {
                         // timed poll interrupted so need to adjust timeout
                         long adjust = System.nanoTime() - startTime;
@@ -268,7 +301,7 @@ class KQueueSelectorImpl extends SelectorImpl {
             }
         }
 
-        if (interrupted) {
+        if (interrupted && shouldClearInterrupt()) {
             clearInterrupt();
         }
         return numKeysUpdated;

@@ -19,20 +19,22 @@
 // have any questions.
 
 import jdk.test.lib.crac.CracBuilder;
+import jdk.test.lib.crac.CracEngine;
 import jdk.test.lib.crac.CracTest;
 import jdk.test.lib.crac.CracTestArg;
 
-import java.io.IOException;
 import java.nio.channels.Selector;
+import java.nio.channels.spi.SelectorProvider;
+
+import static jdk.test.lib.Asserts.assertEquals;
 
 /*
- * @test Selector/selectAfterWakeup
+ * @test id=DEFAULT Selector/selectAfterWakeup
  * @summary check that the Selector's wakeup() makes the subsequent select() call to return immediately
  *          (see also jdk/test/java/nio/channels/Selector/WakeupSpeed.java);
  *          covers ZE-983
- * @requires (os.family == "linux")
  * @library /test/lib
- * @build Test
+ * @build SelectAfterWakeupTest
  * @run driver jdk.test.lib.crac.CracTest true  false false
  * @run driver jdk.test.lib.crac.CracTest true  false true
  * @run driver jdk.test.lib.crac.CracTest true  true  false
@@ -40,7 +42,31 @@ import java.nio.channels.Selector;
  * @run driver jdk.test.lib.crac.CracTest false true  false
  * @run driver jdk.test.lib.crac.CracTest false true  true
  */
-public class Test implements CracTest {
+/*
+ * @test id=ALT_UNIX
+ * @requires (os.family != "windows")
+ * @library /test/lib
+ * @build SelectAfterWakeupTest
+ * @run driver jdk.test.lib.crac.CracTest true  false false sun.nio.ch.PollSelectorProvider
+ * @run driver jdk.test.lib.crac.CracTest true  false true  sun.nio.ch.PollSelectorProvider
+ * @run driver jdk.test.lib.crac.CracTest true  true  false sun.nio.ch.PollSelectorProvider
+ * @run driver jdk.test.lib.crac.CracTest true  true  true  sun.nio.ch.PollSelectorProvider
+ * @run driver jdk.test.lib.crac.CracTest false true  false sun.nio.ch.PollSelectorProvider
+ * @run driver jdk.test.lib.crac.CracTest false true  true  sun.nio.ch.PollSelectorProvider
+ */
+/*
+ * @test id=ALT_WINDOWS
+ * @requires (os.family == "windows")
+ * @library /test/lib
+ * @build SelectAfterWakeupTest
+ * @run driver jdk.test.lib.crac.CracTest true  false false sun.nio.ch.WindowsSelectorProvider
+ * @run driver jdk.test.lib.crac.CracTest true  false true  sun.nio.ch.WindowsSelectorProvider
+ * @run driver jdk.test.lib.crac.CracTest true  true  false sun.nio.ch.WindowsSelectorProvider
+ * @run driver jdk.test.lib.crac.CracTest true  true  true  sun.nio.ch.WindowsSelectorProvider
+ * @run driver jdk.test.lib.crac.CracTest false true  false sun.nio.ch.WindowsSelectorProvider
+ * @run driver jdk.test.lib.crac.CracTest false true  true  sun.nio.ch.WindowsSelectorProvider
+ */
+public class SelectAfterWakeupTest implements CracTest {
     @CracTestArg(0)
     boolean wakeupBeforeCheckpoint;
 
@@ -50,13 +76,23 @@ public class Test implements CracTest {
     @CracTestArg(2)
     boolean setSelectTimeout;
 
+    @CracTestArg(value = 3, optional = true)
+    String selectorImpl;
+
     @Override
     public void test() throws Exception {
-        new CracBuilder().doCheckpointAndRestore();
+        CracBuilder builder = new CracBuilder().engine(CracEngine.SIMULATE);
+        if (selectorImpl != null) {
+            builder.javaOption(SelectorProvider.class.getName(), selectorImpl);
+        }
+        builder.startCheckpoint().waitForSuccess();
     }
 
     @Override
     public void exec() throws Exception {
+        if (selectorImpl != null) {
+            assertEquals(selectorImpl, SelectorProvider.provider().getClass().getName());
+        }
 
         Selector selector = Selector.open();
 

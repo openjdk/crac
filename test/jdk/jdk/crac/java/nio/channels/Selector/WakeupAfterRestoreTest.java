@@ -19,39 +19,76 @@
 // have any questions.
 
 import jdk.test.lib.crac.CracBuilder;
+import jdk.test.lib.crac.CracEngine;
 import jdk.test.lib.crac.CracTest;
+import jdk.test.lib.crac.CracTestArg;
 
 import java.nio.channels.Selector;
 import java.io.IOException;
+import java.nio.channels.spi.SelectorProvider;
+
+import static jdk.test.lib.Asserts.assertEquals;
 
 /*
- * @test Selector/wakeupByTimeoutAfterRestore
- * @summary check that the Selector selected before the checkpoint,
- *          will wake up by timeout after the restore
- * @requires (os.family == "linux")
+ * @test id=DEFAULT
+ * @summary check that the thread blocked by Selector.select() on checkpoint could be properly woken up after restore
  * @library /test/lib
- * @build Test
- * @run driver jdk.test.lib.crac.CracTest
+ * @build WakeupAfterRestoreTest
+ * @run driver jdk.test.lib.crac.CracTest true
+ * @run driver jdk.test.lib.crac.CracTest false
  */
-public class Test implements CracTest {
+/*
+ * @test id=ALT_UNIX
+ * @requires (os.family != "windows")
+ * @library /test/lib
+ * @build WakeupAfterRestoreTest
+ * @run driver jdk.test.lib.crac.CracTest true  sun.nio.ch.PollSelectorProvider
+ * @run driver jdk.test.lib.crac.CracTest false sun.nio.ch.PollSelectorProvider
+ */
+/*
+ * @test id=ALT_WINDOWS
+ * @requires (os.family == "windows")
+ * @library /test/lib
+ * @build WakeupAfterRestoreTest
+ * @run driver jdk.test.lib.crac.CracTest true  sun.nio.ch.WindowsSelectorProvider
+ * @run driver jdk.test.lib.crac.CracTest false sun.nio.ch.WindowsSelectorProvider
+ */
+public class WakeupAfterRestoreTest implements CracTest {
 
-    private final static long TIMEOUT = 40_000; // 40 seconds
+    private final static long TIMEOUT = 3600_000; // looong timeout
 
-    static boolean awakened = false;
+    static boolean awakened;
+
+    @CracTestArg
+    boolean setTimeout;
+
+    @CracTestArg(value = 1, optional = true)
+    String selectorImpl;
 
     @Override
     public void test() throws Exception {
-        new CracBuilder().doCheckpointAndRestore();
+        CracBuilder builder = new CracBuilder().engine(CracEngine.SIMULATE);
+        if (selectorImpl != null) {
+            builder.javaOption(SelectorProvider.class.getName(), selectorImpl);
+        }
+        builder.startCheckpoint().waitForSuccess();
     }
 
     @Override
     public void exec() throws Exception {
+        if (selectorImpl != null) {
+            assertEquals(selectorImpl, SelectorProvider.provider().getClass().getName());
+        }
+
         Selector selector = Selector.open();
         Runnable r = new Runnable() {
             @Override
             public void run() {
+                System.out.println(">> select, setTimeout = " + setTimeout);
                 try {
-                    selector.select(TIMEOUT);
+                    awakened = false;
+                    if (setTimeout) { selector.select(TIMEOUT); }
+                    else { selector.select(); }
                     awakened = true;
                 } catch (IOException e) { throw new RuntimeException(e); }
             }
@@ -62,7 +99,11 @@ public class Test implements CracTest {
 
         jdk.crac.Core.checkpointRestore();
 
+        System.out.print(">> waking up: ");
+        selector.wakeup();
         t.join();
+        System.out.println("done");
+
         if (!awakened) { throw new RuntimeException("not awakened!"); }
 
         // check that the selector works as expected

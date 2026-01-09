@@ -27,16 +27,20 @@ package sun.nio.ch;
 
 import java.io.FileDescriptor;
 import java.io.IOException;
-import java.nio.ByteBuffer;
-import java.nio.channels.Pipe;
+import java.nio.channels.SelectableChannel;
 import java.nio.channels.SelectionKey;
 import java.nio.channels.Selector;
 import java.nio.channels.spi.SelectorProvider;
 import java.util.ArrayDeque;
+import java.util.Arrays;
+import java.util.Collection;
 import java.util.Deque;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Set;
 import java.util.function.Consumer;
+import java.util.stream.Collectors;
+
 import jdk.internal.misc.Blocker;
 
 import static sun.nio.ch.WEPoll.*;
@@ -44,12 +48,12 @@ import static sun.nio.ch.WEPoll.*;
 /**
  * Windows wepoll based Selector implementation
  */
-class WEPollSelectorImpl extends SelectorImpl {
+class WEPollSelectorImpl extends SelectorCRaCSupport {
     // maximum number of events to poll in one call to epoll_wait
     private static final int NUM_EPOLLEVENTS = 256;
 
     // wepoll handle
-    private final long eph;
+    private long eph;
 
     // address of epoll_event array when polling with epoll_wait
     private final long pollArrayAddress;
@@ -62,30 +66,66 @@ class WEPollSelectorImpl extends SelectorImpl {
     private final Deque<SelectionKeyImpl> updateKeys = new ArrayDeque<>();
 
     // interrupt/wakeup
-    private final Object interruptLock = new Object();
-    private boolean interruptTriggered;
-    private final PipeImpl pipe;
-    private final int fd0Val, fd1Val;
+    private PipeImpl pipe;
+    private int fd0Val, fd1Val;
 
     WEPollSelectorImpl(SelectorProvider sp) throws IOException {
         super(sp);
-
-        this.eph = WEPoll.create();
         this.pollArrayAddress = WEPoll.allocatePollArray(NUM_EPOLLEVENTS);
+        initFileDescriptors(false);
+    }
 
-        // wakeup support
-        try {
-            this.pipe = new PipeImpl(sp, /* AF_UNIX */ true, /*buffering*/ false);
-        } catch (IOException ioe) {
-            WEPoll.freePollArray(pollArrayAddress);
-            WEPoll.close(eph);
-            throw ioe;
+    @Override
+    protected void initFileDescriptors(boolean restore) throws IOException {
+        // Creation of PipeImpl inside begin() and end() calls AbstractInterruptibleChannel.blockedOn
+        // overriding the current Interruptable; we need to revert that before entering the poll loop.
+        if (restore) {
+            end();
         }
-        this.fd0Val = pipe.source().getFDVal();
-        this.fd1Val = pipe.sink().getFDVal();
+        try {
+            this.eph = WEPoll.create();
+            // wakeup support
+            try {
+                this.pipe = new PipeImpl(provider(), /* AF_UNIX */ true, /*buffering*/ false);
+            } catch (IOException ioe) {
+                WEPoll.freePollArray(pollArrayAddress);
+                WEPoll.close(eph);
+                throw ioe;
+            }
+            this.fd0Val = pipe.source().getFDVal();
+            this.fd1Val = pipe.sink().getFDVal();
 
-        // register one end of the pipe for wakeups
-        WEPoll.ctl(eph, EPOLL_CTL_ADD, fd0Val, WEPoll.EPOLLIN);
+            // register one end of the pipe for wakeups
+            WEPoll.ctl(eph, EPOLL_CTL_ADD, fd0Val, WEPoll.EPOLLIN);
+        } finally {
+            begin();
+        }
+    }
+
+    @Override
+    protected void closeFileDescriptors() throws IOException {
+        pipe.sink().close();
+        pipe.source().close();
+        pipe = null;
+        WEPoll.close(eph);
+    }
+
+    @Override
+    protected Set<SelectableChannel> getRegisteredChannels() {
+        return fdToKey.values().stream().map(SelectionKey::channel).collect(Collectors.toSet());
+    }
+
+    @Override
+    protected void wakeupInternal() throws IOException {
+        IOUtil.write1(fd1Val, (byte) 0);
+    }
+
+    @Override
+    protected Collection<FileDescriptor> claimFileDescriptors() {
+        // We do not close/reopen `eph`; on Windows there's no actual FD check
+        return Arrays.asList(
+                claimFileDescriptor(fd0Val, "WEPoll pipe sink "),
+                claimFileDescriptor(fd1Val, "WEPoll pipe source "));
     }
 
     @Override
@@ -105,7 +145,9 @@ class WEPollSelectorImpl extends SelectorImpl {
             begin(blocking);
             boolean attempted = Blocker.begin(blocking);
             try {
-                numEntries = WEPoll.wait(eph, pollArrayAddress, NUM_EPOLLEVENTS, to);
+                do {
+                    numEntries = WEPoll.wait(eph, pollArrayAddress, NUM_EPOLLEVENTS, to);
+                } while (processCheckpointRestore());
             } finally {
                 Blocker.end(attempted);
             }
@@ -182,7 +224,7 @@ class WEPollSelectorImpl extends SelectorImpl {
             }
         }
 
-        if (interrupted) {
+        if (interrupted && shouldClearInterrupt()) {
             clearInterrupt();
         }
 

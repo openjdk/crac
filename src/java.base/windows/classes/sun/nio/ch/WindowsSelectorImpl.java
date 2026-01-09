@@ -25,6 +25,7 @@
 
 package sun.nio.ch;
 
+import java.io.FileDescriptor;
 import java.io.IOException;
 import java.nio.channels.ClosedSelectorException;
 import java.nio.channels.Pipe;
@@ -34,10 +35,15 @@ import java.nio.channels.SelectableChannel;
 import java.nio.channels.spi.SelectorProvider;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collection;
 import java.util.Deque;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Set;
 import java.util.function.Consumer;
+import java.util.stream.Collectors;
+
 import jdk.internal.misc.Unsafe;
 
 /**
@@ -47,7 +53,7 @@ import jdk.internal.misc.Unsafe;
  * @author Mark Reinhold
  */
 
-class WindowsSelectorImpl extends SelectorImpl {
+class WindowsSelectorImpl extends SelectorCRaCSupport {
     private static final Unsafe unsafe = Unsafe.getUnsafe();
 
     private static int dependsArch(int value32, int value64) {
@@ -87,10 +93,10 @@ class WindowsSelectorImpl extends SelectorImpl {
     private final List<SelectThread> threads = new ArrayList<SelectThread>();
 
     //Pipe used as a wakeup object.
-    private final Pipe wakeupPipe;
+    private Pipe wakeupPipe;
 
     // File descriptors corresponding to source and sink
-    private final int wakeupSourceFd, wakeupSinkFd;
+    private int wakeupSourceFd, wakeupSinkFd;
 
     // Maps file descriptors to their indices in  pollArray
     private static final class FdMap extends HashMap<Integer, MapEntry> {
@@ -125,23 +131,58 @@ class WindowsSelectorImpl extends SelectorImpl {
 
     private long timeout; //timeout for poll
 
-    // Lock for interrupt triggering and clearing
-    private final Object interruptLock = new Object();
-    private volatile boolean interruptTriggered;
-
     // pending new registrations/updates, queued by implRegister and setEventOps
     private final Object updateLock = new Object();
     private final Deque<SelectionKeyImpl> newKeys = new ArrayDeque<>();
     private final Deque<SelectionKeyImpl> updateKeys = new ArrayDeque<>();
 
-
     WindowsSelectorImpl(SelectorProvider sp) throws IOException {
         super(sp);
         pollWrapper = new PollArrayWrapper(INIT_CAP);
-        wakeupPipe = new PipeImpl(sp, /* AF_UNIX */ true, /*buffering*/ false);
-        wakeupSourceFd = ((SelChImpl)wakeupPipe.source()).getFDVal();
-        wakeupSinkFd = ((SelChImpl)wakeupPipe.sink()).getFDVal();
-        pollWrapper.addWakeupSocket(wakeupSourceFd, 0);
+        initFileDescriptors(false);
+    }
+
+    @Override
+    protected void initFileDescriptors(boolean restore) throws IOException {
+        // Creation of PipeImpl inside begin() and end() calls AbstractInterruptibleChannel.blockedOn
+        // overriding the current Interruptable; we need to revert that before entering the poll loop.
+        if (restore) {
+            end();
+        }
+        try {
+            wakeupPipe = new PipeImpl(provider(), /* AF_UNIX */ true, /*buffering*/ false);
+            wakeupSourceFd = ((SelChImpl) wakeupPipe.source()).getFDVal();
+            wakeupSinkFd = ((SelChImpl) wakeupPipe.sink()).getFDVal();
+            pollWrapper.addWakeupSocket(wakeupSourceFd, 0);
+        } finally {
+            if (restore) {
+                begin();
+            }
+        }
+    }
+
+    @Override
+    protected void closeFileDescriptors() throws IOException {
+        wakeupPipe.sink().close();
+        wakeupPipe.source().close();
+        wakeupPipe = null;
+    }
+
+    @Override
+    protected Set<SelectableChannel> getRegisteredChannels() {
+        return fdMap.values().stream().map(me -> me.ski.channel()).collect(Collectors.toSet());
+    }
+
+    @Override
+    protected void wakeupInternal() {
+        setWakeupSocket();
+    }
+
+    @Override
+    protected Collection<FileDescriptor> claimFileDescriptors() {
+        return Arrays.asList(
+                claimFileDescriptor(wakeupSinkFd, "Selector sink FD "),
+                claimFileDescriptor(wakeupSourceFd, "Selector source FD "));
     }
 
     private void ensureOpen() {
@@ -159,6 +200,8 @@ class WindowsSelectorImpl extends SelectorImpl {
         processDeregisterQueue();
         if (interruptTriggered) {
             resetWakeupSocket();
+            // We need to transition even if another wakeup was called before
+            processCheckpointRestore();
             return 0;
         }
         // Calculate number of helper threads needed for poll. If necessary
@@ -173,7 +216,9 @@ class WindowsSelectorImpl extends SelectorImpl {
         try {
             begin();
             try {
-                subSelector.poll();
+                do {
+                    subSelector.poll();
+                } while (processCheckpointRestore());
             } catch (IOException e) {
                 finishLock.setException(e); // Save this exception
             }
@@ -504,7 +549,7 @@ class WindowsSelectorImpl extends SelectorImpl {
     // Sets Windows wakeup socket to a non-signaled state.
     private void resetWakeupSocket() {
         synchronized (interruptLock) {
-            if (interruptTriggered == false)
+            if (interruptTriggered == false || !shouldClearInterrupt())
                 return;
             resetWakeupSocket0(wakeupSourceFd);
             interruptTriggered = false;

@@ -19,23 +19,47 @@
 // have any questions.
 
 import jdk.test.lib.crac.CracBuilder;
+import jdk.test.lib.crac.CracEngine;
 import jdk.test.lib.crac.CracTest;
+import jdk.test.lib.crac.CracTestArg;
 
-import java.io.IOException;
 import java.nio.channels.Selector;
+import java.nio.channels.spi.SelectorProvider;
+
+import static jdk.test.lib.Asserts.assertEquals;
 
 /*
- * @test Selector/selectAndWakeupAfterRestore
+ * @test id=DEFAULT
  * @summary a trivial check that Selector.wakeup() after restore behaves as expected
- * @requires (os.family == "linux")
  * @library /test/lib
- * @build Test
+ * @build SelectAndWarkeupAfterRestoreTest
  * @run driver jdk.test.lib.crac.CracTest
  */
-public class Test implements CracTest {
+/*
+ * @test id=ALT_UNIX
+ * @requires (os.family != "windows")
+ * @library /test/lib
+ * @build SelectAndWarkeupAfterRestoreTest
+ * @run driver jdk.test.lib.crac.CracTest sun.nio.ch.PollSelectorProvider
+ */
+/*
+ * @test id=ALT_WINDOWS
+ * @requires (os.family == "windows")
+ * @library /test/lib
+ * @build SelectAndWarkeupAfterRestoreTest
+ * @run driver jdk.test.lib.crac.CracTest sun.nio.ch.WindowsSelectorProvider
+ */
+public class SelectAndWarkeupAfterRestoreTest implements CracTest {
+    @CracTestArg(optional = true)
+    String selectorImpl;
+
     @Override
     public void test() throws Exception {
-        new CracBuilder().doCheckpointAndRestore();
+        CracBuilder builder = new CracBuilder().engine(CracEngine.SIMULATE);
+        if (selectorImpl != null) {
+            builder.javaOption(SelectorProvider.class.getName(), selectorImpl);
+        }
+        builder.startCheckpoint().waitForSuccess();
     }
 
     private static void selectAndWakeup(Selector selector) throws java.io.IOException {
@@ -57,6 +81,9 @@ public class Test implements CracTest {
 
     @Override
     public void exec() throws Exception {
+        if (selectorImpl != null) {
+            assertEquals(selectorImpl, SelectorProvider.provider().getClass().getName());
+        }
 
         Selector selector = Selector.open();
 

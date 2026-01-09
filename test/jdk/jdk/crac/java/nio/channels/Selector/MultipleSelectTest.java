@@ -45,8 +45,8 @@ import static jdk.test.lib.Asserts.assertEquals;
  * @run driver/timeout=30 jdk.test.lib.crac.CracTest MIXED true
  */
 /*
- * @test id=ALT_LINUX
- * @requires (os.family == "linux")
+ * @test id=ALT_UNIX
+ * @requires (os.family != "windows")
  * @library /test/lib
  * @build MultipleSelectTest
  * @run driver/timeout=30 jdk.test.lib.crac.CracTest ONLY_TIMEOUTS false sun.nio.ch.PollSelectorProvider

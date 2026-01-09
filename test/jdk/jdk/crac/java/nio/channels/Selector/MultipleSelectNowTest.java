@@ -40,8 +40,8 @@ import static jdk.test.lib.Asserts.assertEquals;
  * @run driver jdk.test.lib.crac.CracTest true
  */
 /*
- * @test id=ALT_LINUX
- * @requires (os.family == "linux")
+ * @test id=ALT_UNIX
+ * @requires (os.family != "unix")
  * @library /test/lib
  * @build MultipleSelectNowTest
  * @run driver jdk.test.lib.crac.CracTest false sun.nio.ch.PollSelectorProvider

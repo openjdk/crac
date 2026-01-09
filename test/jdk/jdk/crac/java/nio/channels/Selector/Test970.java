@@ -44,8 +44,8 @@ import static jdk.test.lib.Asserts.assertEquals;
  * @run driver jdk.test.lib.crac.CracTest SELECT_TIMEOUT false
  */
 /*
- * @test id=ALT_LINUX
- * @requires (os.family == "linux")
+ * @test id=ALT_UNIX
+ * @requires (os.family != "windows")
  * @library /test/lib
  * @build Test970
  * @run driver jdk.test.lib.crac.CracTest SELECT_NOW     true  sun.nio.ch.PollSelectorProvider

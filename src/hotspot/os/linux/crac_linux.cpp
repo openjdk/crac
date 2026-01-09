@@ -53,8 +53,6 @@ private:
     int fd;
     struct stat stat;
     state_t state;
-
-    int flags;
   };
 
   // params are indices into _fdinfos

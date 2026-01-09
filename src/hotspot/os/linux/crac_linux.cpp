@@ -48,18 +48,11 @@ public:
     // ...
   };
 
-  enum mark_t {
-    M_CANT_RESTORE = 1 << 0,
-  };
-
 private:
   struct fdinfo {
     int fd;
     struct stat stat;
     state_t state;
-    unsigned mark;
-
-    int flags;
   };
 
   // params are indices into _fdinfos
@@ -67,12 +60,6 @@ private:
 
   bool _inited;
   GrowableArray<fdinfo> _fdinfos;
-
-  void assert_mark(int i) {
-    assert(_inited, "");
-    assert(i < _fdinfos.length(), "");
-    assert(_fdinfos.at(i).state != CLOSED, "");
-  }
 
 public:
   void initialize();
@@ -118,26 +105,6 @@ public:
 };
 
 static FdsInfo _vm_inited_fds(false);
-
-/* taken from criu, that took this from kernel */
-#define NFS_PREF ".nfs"
-#define NFS_PREF_LEN ((unsigned)sizeof(NFS_PREF) - 1)
-#define NFS_FILEID_LEN ((unsigned)sizeof(uint64_t) << 1)
-#define NFS_COUNTER_LEN ((unsigned)sizeof(unsigned int) << 1)
-#define NFS_LEN (NFS_PREF_LEN + NFS_FILEID_LEN + NFS_COUNTER_LEN)
-static bool nfs_silly_rename(char* path) {
-  char *sep = strrchr(path, '/');
-  char *base = sep ? sep + 1 : path;
-  if (strncmp(base, NFS_PREF, NFS_PREF_LEN)) {
-    return false;
-  }
-  for (unsigned i = NFS_PREF_LEN; i < NFS_LEN; ++i) {
-    if (!isxdigit(base[i])) {
-      return false;
-    }
-  }
-  return true;
-}
 
 static int readfdlink(int fd, char *link, size_t len) {
   char fdpath[64];
@@ -211,7 +178,6 @@ void FdsInfo::initialize() {
       continue;
     }
     info.state = ROOT; // can be changed to DUP_OF_0 + N below
-    info.mark = 0;
     _fdinfos.append(info);
   }
   closedir(dir);
@@ -223,17 +189,6 @@ void FdsInfo::initialize() {
       if (get_state(j) == ROOT && same_fd(i, j)) {
         info->state = (state_t)(DUP_OF_0 + j);
         break;
-      }
-    }
-
-    if (info->state == ROOT) {
-      char fdpath[PATH_MAX];
-      int r = readfdlink(info->fd, fdpath, sizeof(fdpath));
-      guarantee(-1 != r, "can't stat fd");
-      if (info->stat.st_nlink == 0 ||
-          strstr(fdpath, "(deleted)") ||
-          nfs_silly_rename(fdpath)) {
-        info->mark |= FdsInfo::M_CANT_RESTORE;
       }
     }
   }

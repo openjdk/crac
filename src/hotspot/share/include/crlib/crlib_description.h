@@ -38,14 +38,13 @@ extern "C" {
 typedef enum {
   CHECKPOINT = 1 << 0,
   RESTORE    = 1 << 1,
+  DEPRECATED = 1 << 2,
 } crlib_conf_option_flag_t;
 
 // Structured information about the configuration option
 typedef struct crlib_conf_option {
   const char *key;
   crlib_conf_option_flag_t flags;
-  // Null-terminated array of deprecated names, or null.
-  const char **deprecated_names;
   const char *value_type;
   const char *default_value;
   const char *description;
@@ -69,7 +68,7 @@ struct crlib_description {
   // with their descriptions, or null on error.
   //
   // Some keys can be excluded if these are not supposed to be set by a user but rather by the
-  // application the engine is linked to.
+  // application the engine is linked to, or if these are deprecated.
   //
   // Example:
   // "

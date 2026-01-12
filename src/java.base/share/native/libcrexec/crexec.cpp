@@ -182,15 +182,15 @@ JNIEXPORT crlib_api_t *CRLIB_API(int api_version, size_t api_size) {
 // Place more frequently used options first - this will make them faster to find
 // in the options hash table.
 #define CONFIGURE_OPTIONS(OPT) \
-  OPT(image_location, const char *, nullptr, CHECKPOINT | RESTORE, nullptr, "path", "no default", \
+  OPT(image_location, const char *, nullptr, CHECKPOINT | RESTORE, "path", "no default", \
     "path to a directory with checkpoint/restore files.") \
-  OPT(exec_location, const char *, nullptr, CHECKPOINT | RESTORE, nullptr, "path", "no default", "path to the engine executable.") \
-  OPT(keep_running, bool, false, CHECKPOINT, nullptr, "true/false", "false", \
+  OPT(exec_location, const char *, nullptr, CHECKPOINT | RESTORE, "path", "no default", "path to the engine executable.") \
+  OPT(keep_running, bool, false, CHECKPOINT, "true/false", "false", \
     "keep the process running after the checkpoint or kill it.") \
-  OPT(direct_map, bool, true, RESTORE, nullptr, "true/false", "true", \
+  OPT(direct_map, bool, true, RESTORE, "true/false", "true", \
     "on restore, map process data directly from saved files. This may speedup the restore " \
     "but the resulting process will not be the same as before the checkpoint.") \
-  OPT(args, const char *, nullptr, CHECKPOINT | RESTORE, nullptr, "string", "\"\"", \
+  OPT(args, const char *, nullptr, CHECKPOINT | RESTORE, "string", "\"\"", \
     "free space-separated arguments passed directly to the engine executable, e.g. \"--arg1 --arg2 --arg3\".") \
 
 #define DEFINE_OPT(id, ...) static constexpr char opt_##id[] = #id;
@@ -442,7 +442,7 @@ static const char *description(crlib_conf_t *conf) {
 }
 
 static const char *configuration_doc(crlib_conf_t *conf) {
-#define DOC_ITEM(name, ctype, cdef, flags, deprecated, type, _default, description) \
+#define DOC_ITEM(name, ctype, cdef, flags, type, _default, description) \
   "* " #name "=<" type "> (default: " _default ") - " description "\n"
   return CONFIGURE_OPTIONS(DOC_ITEM);
 #undef DOC_ITEM

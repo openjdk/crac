@@ -437,13 +437,17 @@ const crlib_conf_option_t *CracEngine::configuration_options() const {
   all_options = NEW_C_HEAP_ARRAY(crlib_conf_option_t, src - options + 1, mtInternal);
   crlib_conf_option_t *dst = all_options;
   for (src = options; src->key != nullptr; ++src, ++dst) {
-    *dst = *src;
+    memcpy(dst, src, sizeof(*src));
+    bool skip = false;
     for (const char *opt : vm_controlled_engine_opts) {
       if (!strcmp(src->key, opt)) {
-        // override, do not expose
-        --dst;
-        continue;
+        skip = true;
+        break;
       }
+    }
+    if (skip) {
+      --dst; // next iteration will overwrite
+      continue;
     }
     if (!strcmp(dst->key, DIRECT_MAP)) {
       // JVM is overriding the direct_map default in all engines

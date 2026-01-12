@@ -3141,8 +3141,12 @@ jint Arguments::finalize_vm_init_args() {
   UNSUPPORTED_OPTION(ShowRegistersOnAssert);
 #endif // CAN_SHOW_REGISTERS_ON_ASSERT
 
-  if (CRaCEngineOptions && strcmp(CRaCEngineOptions, "help") == 0) {
-    crac::print_engine_info_and_exit(); // Does not return on success
+  if (CRaCEngineOptions && (!strcmp(CRaCEngineOptions, "help") || !strncmp(CRaCEngineOptions, "help=", 5))) {
+    const char *pattern = nullptr;
+    if (CRaCEngineOptions[4] == '=') {
+      pattern = CRaCEngineOptions + 5;
+    }
+    crac::print_engine_info_and_exit(pattern); // Does not return on success
     return JNI_ERR;
   }
   if (CRaCRestoreFrom && !process_flags_for_restore()) {

@@ -35,7 +35,7 @@
 class crac: AllStatic {
   friend class VM_Crac;
 public:
-  static void print_engine_info_and_exit();
+  static void print_engine_info_and_exit(const char *pattern);
   static void vm_create_start();
 
   static bool prepare_checkpoint();

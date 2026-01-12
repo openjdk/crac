@@ -66,6 +66,7 @@ public:
   ApiStatus prepare_description_api();
   const char *description() const;
   const char *configuration_doc() const;
+  const crlib_conf_option_t *configuration_options() const;
 
   ApiStatus prepare_image_constraints_api();
   bool set_label(const char* label, const char* value);

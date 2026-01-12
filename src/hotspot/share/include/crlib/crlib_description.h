@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2025, Azul Systems, Inc. All rights reserved.
+ * Copyright (c) 2025, 2026, Azul Systems, Inc. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -33,6 +33,24 @@ extern "C" {
 #define CRLIB_EXTENSION_DESCRIPTION(api) \
   CRLIB_EXTENSION(api, crlib_description_t, CRLIB_EXTENSION_DESCRIPTION_NAME)
 
+// Applicability of the option: setting the value in non-applicable context
+// may result in warnings or errors.
+typedef enum {
+  CHECKPOINT = 1 << 0,
+  RESTORE    = 1 << 1,
+} crlib_conf_option_flag_t;
+
+// Structured information about the configuration option
+typedef struct crlib_conf_option {
+  const char *key;
+  crlib_conf_option_flag_t flags;
+  // Null-terminated array of deprecated names, or null.
+  const char **deprecated_names;
+  const char *value_type;
+  const char *default_value;
+  const char *description;
+} crlib_conf_option_t;
+
 // API for obtaining engine description.
 //
 // Unless noted otherwise, storage duration of the returned data should (1) be either static or
@@ -50,6 +68,9 @@ struct crlib_description {
   // Returns a valid C-string with a formatted list of configuration keys supported by the engine
   // with their descriptions, or null on error.
   //
+  // Some keys can be excluded if these are not supposed to be set by a user but rather by the
+  // application the engine is linked to.
+  //
   // Example:
   // "
   // * do_stuff=<true/false> (default: true) — whether to do stuff.\n
@@ -63,6 +84,11 @@ struct crlib_description {
   // Returns a null-terminated array of all API extensions supported by the engine, or null if this
   // method is not supported.
   crlib_extension_t * const *(*supported_extensions)(crlib_conf_t *);
+
+  // Returns an array of all configuration options supported by the engine.
+  // The array is terminated with an option with NULL key.
+  // Set to null if this method is not supported.
+  const crlib_conf_option_t *(*configuration_options)(crlib_conf_t *);
 };
 typedef const struct crlib_description crlib_description_t;
 

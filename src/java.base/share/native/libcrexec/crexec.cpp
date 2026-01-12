@@ -66,6 +66,7 @@ static const char *description(crlib_conf_t *conf);
 static const char *configuration_doc(crlib_conf_t *conf);
 static const char * const *configurable_keys(crlib_conf_t *conf);
 static crlib_extension_t * const *supported_extensions(crlib_conf_t *conf);
+static const crlib_conf_option_t *configuration_options(crlib_conf_t *conf);
 
 static bool set_restore_data(crlib_conf_t *conf, const void *data, size_t size);
 static size_t get_restore_data(crlib_conf_t *conf, void *buf, size_t size);
@@ -105,6 +106,7 @@ static crlib_description_t description_extension = {
   configuration_doc,
   configurable_keys,
   supported_extensions,
+  configuration_options,
 };
 
 static crlib_restore_data_t restore_data_extension = {
@@ -174,24 +176,31 @@ JNIEXPORT crlib_api_t *CRLIB_API(int api_version, size_t api_size) {
   return &api;
 }
 
-// When adding a new option also add its description into the help message,
-// ensure the proper default value is set for it in the configuration struct and
-// consider checking for inappropriate use on checkpoint/restore.
+// When adding a new option ensure the proper default value is set for it
+// in the configuration struct.
 //
 // Place more frequently used options first - this will make them faster to find
 // in the options hash table.
 #define CONFIGURE_OPTIONS(OPT) \
-  OPT(image_location) \
-  OPT(exec_location) \
-  OPT(keep_running) \
-  OPT(direct_map) \
-  OPT(args) \
+  OPT(image_location, const char *, nullptr, CHECKPOINT | RESTORE, nullptr, "path", "no default", \
+    "path to a directory with checkpoint/restore files.") \
+  OPT(exec_location, const char *, nullptr, CHECKPOINT | RESTORE, nullptr, "path", "no default", "path to the engine executable.") \
+  OPT(keep_running, bool, false, CHECKPOINT, nullptr, "true/false", "false", \
+    "keep the process running after the checkpoint or kill it.") \
+  OPT(direct_map, bool, true, RESTORE, nullptr, "true/false", "true", \
+    "on restore, map process data directly from saved files. This may speedup the restore " \
+    "but the resulting process will not be the same as before the checkpoint.") \
+  OPT(args, const char *, nullptr, CHECKPOINT | RESTORE, nullptr, "string", "\"\"", \
+    "free space-separated arguments passed directly to the engine executable, e.g. \"--arg1 --arg2 --arg3\".") \
 
-#define DEFINE_OPT(id) static constexpr char opt_##id[] = #id;
+#define DEFINE_OPT(id, ...) static constexpr char opt_##id[] = #id;
 CONFIGURE_OPTIONS(DEFINE_OPT)
 #undef DEFINE_OPT
-#define ADD_ARR_ELEM(id) opt_##id,
-static constexpr const char *configure_options[] = { CONFIGURE_OPTIONS(ADD_ARR_ELEM) nullptr };
+#define ADD_ARR_ELEM(id, ...) opt_##id,
+static const char *configure_options_names[] = { CONFIGURE_OPTIONS(ADD_ARR_ELEM) nullptr };
+#undef ADD_ARR_ELEM
+#define ADD_ARR_ELEM(id, ctype, cdef, flags, ...) { opt_##id, static_cast<crlib_conf_option_flag_t>(flags), __VA_ARGS__ },
+static const crlib_conf_option_t configure_options[] = { CONFIGURE_OPTIONS(ADD_ARR_ELEM) {} };
 #undef ADD_ARR_ELEM
 
 static char *strdup_checked(const char *src) {
@@ -202,13 +211,12 @@ static char *strdup_checked(const char *src) {
   return res;
 }
 
-// Value of a boolean configuration option.
-struct BoolOption {
-  bool value;
+template <typename T> struct Option {
+  T value;
   bool is_default = true;
 };
 
-static bool parse_bool(const char *str, BoolOption *result) {
+static bool parse_bool(const char *str, Option<bool> *result) {
   if (strcmp(str, "true") == 0) {
     *result = {true, false};
     return true;
@@ -234,11 +242,14 @@ struct crlib_conf {
 private:
   using configure_func = bool (crlib_conf::*) (const char *value);
   Hashtable<configure_func> _options {
-    configure_options, ARRAY_SIZE(configure_options) - 1 /* omit nullptr */
+    configure_options_names, ARRAY_SIZE(configure_options_names) - 1 /* omit nullptr */
   };
 
-  BoolOption _keep_running{false};
-  BoolOption _direct_map{true};
+// Note: image_location, exec_location and args from this are ignored
+#define DEFINE_DEFAULT(id, ctype, cdef, ...) Option<ctype> _##id = { .value = cdef };
+  CONFIGURE_OPTIONS(DEFINE_DEFAULT)
+#undef DEFINE_DEFAULT
+
   int _restore_data = 0;
   const char *_argv[ARGV_LAST + 2] = {}; // Last element is required to be null
   ImageConstraints _image_constraints;
@@ -251,7 +262,7 @@ public:
       assert(!is_initialized());
       return;
     }
-#define PUT_HANDLER(id) _options.put(opt_##id, &crlib_conf::configure_##id);
+#define PUT_HANDLER(id, ...) _options.put(opt_##id, &crlib_conf::configure_##id);
     CONFIGURE_OPTIONS(PUT_HANDLER)
 #undef PUT_HANDLER
   }
@@ -267,10 +278,18 @@ public:
   // Use this to check whether the constructor succeeded.
   bool is_initialized() const { return _options.is_initialized(); }
 
-  BoolOption keep_running() const { return _keep_running; }
-  BoolOption direct_map() const { return _direct_map; }
+  bool keep_running() const { return _keep_running.value; }
+  bool direct_map() const { return _direct_map.value; }
   int restore_data() const { return _restore_data; }
   const char * const *argv() const { return _argv; }
+
+  void require_defaults(crlib_conf_option_flag_t flag, const char *event) const {
+#define CHECK_OPT(id, ctype, cdef, flags, ...) if (!_##id.is_default && !((flags) & flag)) { \
+    fprintf(stderr, CREXEC #id " has no effect on %s\n", event); \
+  }
+    CONFIGURE_OPTIONS(CHECK_OPT)
+#undef CHECK_OPT
+  }
 
   bool can_configure(const char *key) const {
     assert(key != nullptr);
@@ -423,24 +442,22 @@ static const char *description(crlib_conf_t *conf) {
 }
 
 static const char *configuration_doc(crlib_conf_t *conf) {
-  return
-    "* image_location=<path> (no default) - path to a directory with checkpoint/restore files.\n"
-    "* exec_location=<path> (no default) - path to the engine executable.\n"
-    "* keep_running=<true/false> (default: false) - keep the process running after the checkpoint "
-    "or kill it.\n"
-    "* direct_map=<true/false> (default: true) - on restore, map process data directly from saved "
-    "files. This may speedup the restore but the resulting process will not be the same as before "
-    "the checkpoint.\n"
-    "* args=<string> (default: \"\") - free space-separated arguments passed directly to the "
-    "engine executable, e.g. \"--arg1 --arg2 --arg3\".\n";
+#define DOC_ITEM(name, ctype, cdef, flags, deprecated, type, _default, description) \
+  "* " #name "=<" type "> (default: " _default ") - " description "\n"
+  return CONFIGURE_OPTIONS(DOC_ITEM);
+#undef DOC_ITEM
 }
 
 static const char * const *configurable_keys(crlib_conf_t *conf) {
-  return configure_options;
+  return configure_options_names;
 }
 
 static crlib_extension_t * const *supported_extensions(crlib_conf_t *conf) {
   return extensions;
+}
+
+static const crlib_conf_option_t *configuration_options(crlib_conf_t *conf) {
+   return configure_options;
 }
 
 static bool set_restore_data(crlib_conf_t *conf, const void *data, size_t size) {
@@ -777,10 +794,7 @@ static int checkpoint(crlib_conf_t *conf) {
     return -1;
   }
   conf->set_argv_action("checkpoint");
-
-  if (!conf->direct_map().is_default) {
-    fprintf(stderr, CREXEC "%s has no effect on checkpoint\n", opt_direct_map);
-  }
+  conf->require_defaults(CHECKPOINT, "checkpoint");
 
   if (!conf->image_constraints().persist(image_location) ||
       !conf->image_score().persist(image_location)) {
@@ -794,7 +808,7 @@ static int checkpoint(crlib_conf_t *conf) {
   {
     Environment env;
     if (!env.is_initialized() ||
-        (conf->keep_running().value && !env.append("CRAC_CRIU_LEAVE_RUNNING", ""))) {
+        (conf->keep_running() && !env.append("CRAC_CRIU_LEAVE_RUNNING", ""))) {
       return -1;
     }
 
@@ -840,10 +854,7 @@ static int restore(crlib_conf_t *conf) {
     return -1;
   }
   conf->set_argv_action("restore");
-
-  if (!conf->keep_running().is_default) {
-    fprintf(stderr, CREXEC "%s has no effect on restore\n", opt_keep_running);
-  }
+  conf->require_defaults(RESTORE, "restore");
 
   if (!conf->image_constraints().validate(conf->argv()[ARGV_IMAGE_LOCATION])) {
     return -1;
@@ -859,7 +870,7 @@ static int restore(crlib_conf_t *conf) {
   Environment env;
   if (!env.is_initialized() ||
       !env.append("CRAC_NEW_ARGS_ID", restore_data_str) ||
-      (!conf->direct_map().value && !env.add_criu_option("--no-mmap-page-image"))) {
+      (!conf->direct_map() && !env.add_criu_option("--no-mmap-page-image"))) {
     return -1;
   }
 

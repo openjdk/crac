@@ -45,6 +45,8 @@
   OPT(image_location) \
   OPT(exec_location) \
 
+#define DIRECT_MAP "direct_map"
+
 #define ARRAY_ELEM(opt) #opt,
 static constexpr const char * const vm_controlled_engine_opts[] = {
   VM_CONTROLLED_ENGINE_OPTS(ARRAY_ELEM)
@@ -166,7 +168,7 @@ static crlib_conf_t *create_conf(const crlib_api_t &api, const char *exec_locati
     return nullptr;
   }
 
-  if (CRaCEngineOptions != nullptr && strcmp(CRaCEngineOptions, "help") == 0) {
+  if (CRaCEngineOptions != nullptr && (!strcmp(CRaCEngineOptions, "help") || !strncmp(CRaCEngineOptions, "help=", 5))) {
     return conf;
   }
 
@@ -175,6 +177,14 @@ static crlib_conf_t *create_conf(const crlib_api_t &api, const char *exec_locati
               "crexec does not support expected option: %s", engine_opt_exec_location);
     if (!api.configure(conf, engine_opt_exec_location, exec_location)) {
       log_error(crac)("crexec failed to configure: '%s' = '%s'", engine_opt_exec_location, exec_location);
+      api.destroy_conf(conf);
+      return nullptr;
+    }
+  }
+
+  if (api.can_configure(conf, DIRECT_MAP)) {
+    if (!api.configure(conf, DIRECT_MAP, "true")) {
+      log_error(crac)("CRaC engine failed to configure: '" DIRECT_MAP "' = 'true'");
       api.destroy_conf(conf);
       return nullptr;
     }
@@ -396,6 +406,7 @@ CracEngine::ApiStatus CracEngine::prepare_description_api() {
   require_method(configuration_doc)
   require_method(configurable_keys)
   require_method(supported_extensions)
+  // configuration_options is not mandatory
   complete_extension_api(_description_api)
 }
 
@@ -407,6 +418,41 @@ const char *CracEngine::description() const {
 const char *CracEngine::configuration_doc() const {
   precond(_description_api != nullptr);
   return _description_api->configuration_doc(_conf);
+}
+
+const crlib_conf_option_t *CracEngine::configuration_options() const {
+  static crlib_conf_option_t *all_options = nullptr;
+  if (all_options != nullptr) {
+    return all_options;
+  }
+  if (_description_api->header.size < sizeof(crlib_description_t) || _description_api->configuration_options == nullptr) {
+    return nullptr;
+  }
+  const crlib_conf_option_t *options = _description_api->configuration_options(_conf);
+  if (options == nullptr) {
+    return nullptr;
+  }
+  const crlib_conf_option_t *src = options;
+  for (; src->key != nullptr; ++src);
+  all_options = NEW_C_HEAP_ARRAY(crlib_conf_option_t, src - options + 1, mtInternal);
+  crlib_conf_option_t *dst = all_options;
+  for (src = options; src->key != nullptr; ++src, ++dst) {
+    *dst = *src;
+    for (const char *opt : vm_controlled_engine_opts) {
+      if (!strcmp(src->key, opt)) {
+        // override, do not expose
+        --dst;
+        continue;
+      }
+    }
+    if (!strcmp(dst->key, DIRECT_MAP)) {
+      // JVM is overriding the direct_map default in all engines
+      dst->default_value = "true";
+    }
+  }
+  // last element should be zeroes
+  memset(dst, 0, sizeof(*dst));
+  return all_options;
 }
 
 static constexpr char cpuarch_name[] = "cpu.arch";

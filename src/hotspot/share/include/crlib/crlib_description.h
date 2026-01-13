@@ -85,7 +85,7 @@ struct crlib_description {
   crlib_extension_t * const *(*supported_extensions)(crlib_conf_t *);
 
   // Returns an array of all configuration options supported by the engine.
-  // The array is terminated with an option with NULL key.
+  // The array is terminated with an option with null key.
   // Set to null if this method is not supported.
   const crlib_conf_option_t *(*configuration_options)(crlib_conf_t *);
 };

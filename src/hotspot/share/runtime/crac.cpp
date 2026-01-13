@@ -539,7 +539,7 @@ void crac::print_engine_info_and_exit(const char *pattern) {
   const crlib_conf_option_t *options = engine.configuration_options();
   if (options != nullptr) {
     int matched = 0;
-    for (; options->key != NULL; ++options) {
+    for (; options->key != nullptr; ++options) {
       if (pattern == nullptr || strstr(options->key, pattern)) {
         tty->print_cr("* %s=<%s> (default: %s) - %s", options->key, options->value_type, options->default_value, options->description);
         ++matched;

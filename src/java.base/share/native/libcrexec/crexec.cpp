@@ -246,7 +246,7 @@ private:
   };
 
 // Note: image_location, exec_location and args from this are ignored
-#define DEFINE_DEFAULT(id, ctype, cdef, ...) Option<ctype> _##id = { .value = cdef };
+#define DEFINE_DEFAULT(id, ctype, cdef, ...) Option<ctype> _##id = { cdef, true };
   CONFIGURE_OPTIONS(DEFINE_DEFAULT)
 #undef DEFINE_DEFAULT
 

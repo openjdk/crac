@@ -261,7 +261,9 @@ public class CracBuilder {
             ensureContainerStarted();
         }
         List<String> cmd = prepareCommand(javaPrefix, false);
-        cmd.add("-XX:CRaCCheckpointTo=" + imageDir);
+        if (imageDir != null) {
+            cmd.add("-XX:CRaCCheckpointTo=" + imageDir);
+        }
         cmd.add(main().getName());
         cmd.addAll(Arrays.asList(args()));
         log("Starting process to be checkpointed:");
@@ -430,7 +432,9 @@ public class CracBuilder {
             ensureContainerStarted();
         }
         List<String> cmd = prepareCommand(javaPrefix, true);
-        cmd.add("-XX:CRaCRestoreFrom=" + imageDir);
+        if (imageDir != null) {
+            cmd.add("-XX:CRaCRestoreFrom=" + imageDir);
+        }
         if (null != args) {
             cmd.addAll(args);
         }

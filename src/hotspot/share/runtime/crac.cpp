@@ -708,22 +708,23 @@ Handle crac::checkpoint(jarray fd_arr, jobjectArray obj_arr, bool dry_run, jlong
 }
 
 bool crac::is_image_constraints_supported() {
-  return _engine->prepare_image_constraints_api() == CracEngine::ApiStatus::OK;
+  return _engine != nullptr && _engine->prepare_image_constraints_api() == CracEngine::ApiStatus::OK;
 }
 
 bool crac::record_image_label(const char *label, const char *value) {
-  if (_engine->prepare_image_constraints_api() != CracEngine::ApiStatus::OK) {
+  if (_engine == nullptr || _engine->prepare_image_constraints_api() != CracEngine::ApiStatus::OK) {
     return false;
   }
   return _engine->set_label(label, value);
 }
 
 bool crac::is_image_score_supported() {
-  return _engine->prepare_image_score_api() == CracEngine::ApiStatus::OK;
+  // The engine is not initialized when CRaCCheckpointTo is not set
+  return _engine != nullptr && _engine->prepare_image_score_api() == CracEngine::ApiStatus::OK;
 }
 
 bool crac::record_image_score(jobjectArray metrics, jdoubleArray values) {
-  if (_engine->prepare_image_score_api() != CracEngine::ApiStatus::OK) {
+  if (_engine == nullptr || _engine->prepare_image_score_api() != CracEngine::ApiStatus::OK) {
     return false;
   }
   ResourceMark rm;
@@ -778,7 +779,7 @@ bool crac::record_image_score(jobjectArray metrics, jdoubleArray values) {
 }
 
 bool crac::record_image_score(const char *metric, double value) {
-  if (_engine->prepare_image_score_api() != CracEngine::ApiStatus::OK) {
+  if (_engine == nullptr || _engine->prepare_image_score_api() != CracEngine::ApiStatus::OK) {
     return false;
   }
   return _engine->set_score(metric, value);

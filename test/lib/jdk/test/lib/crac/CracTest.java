@@ -158,6 +158,10 @@ public interface CracTest {
                 }
             } else if (t.isEnum()) {
                 value = Enum.valueOf((Class<Enum>) t, arg);
+            } else if (t == Method.class) {
+                Method m = testInstance.getClass().getDeclaredMethod(arg);
+                m.setAccessible(true);
+                value = m;
             }
             f.setAccessible(true);
             f.set(testInstance, value);

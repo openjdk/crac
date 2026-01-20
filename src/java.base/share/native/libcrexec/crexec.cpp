@@ -184,7 +184,8 @@ JNIEXPORT crlib_api_t *CRLIB_API(int api_version, size_t api_size) {
 #define UNCHECKED_OPTIONS(OPT) \
   OPT(image_location, const char *, nullptr, CRLIB_OPTION_FLAG_CHECKPOINT | CRLIB_OPTION_FLAG_RESTORE, "path", "no default", \
     "path to a directory with checkpoint/restore files.") \
-  OPT(exec_location, const char *, nullptr, CRLIB_OPTION_FLAG_CHECKPOINT | CRLIB_OPTION_FLAG_RESTORE, "path", "no default", "path to the engine executable.") \
+  OPT(exec_location, const char *, nullptr, CRLIB_OPTION_FLAG_CHECKPOINT | CRLIB_OPTION_FLAG_RESTORE, "path", "no default", \
+    "path to the engine executable.") \
   OPT(args, const char *, nullptr, CRLIB_OPTION_FLAG_CHECKPOINT | CRLIB_OPTION_FLAG_RESTORE, "string", "\"\"", \
     "free space-separated arguments passed directly to the engine executable, e.g. \"--arg1 --arg2 --arg3\".") \
 

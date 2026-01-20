@@ -33,20 +33,30 @@ extern "C" {
 #define CRLIB_EXTENSION_DESCRIPTION(api) \
   CRLIB_EXTENSION(api, crlib_description_t, CRLIB_EXTENSION_DESCRIPTION_NAME)
 
-// Applicability of the option: setting the value in non-applicable context
-// may result in warnings or errors.
-typedef enum {
-  CHECKPOINT = 1 << 0,
-  RESTORE    = 1 << 1,
-  DEPRECATED = 1 << 2,
-} crlib_conf_option_flag_t;
+typedef unsigned int crlib_conf_option_flag_t;
+// This option is applicable on checkpoint. Using option that does not have this
+// flag set on checkpoint may result in warnings or errors.
+#define CRLIB_OPTION_FLAG_CHECKPOINT (1 << 0)
+// This option is applicable on restore. Using option that does not have this
+// flag set on restore may result in warnings or errors.
+#define CRLIB_OPTION_FLAG_RESTORE    (1 << 1)
+// This option is deprecated and should not be used. Warning may be printed when this is used.
+// It might be excluded from crlib_description_t.configuration_doc string.
+#define CRLIB_OPTION_FLAG_DEPRECATED (1 << 2)
+// Setting this option has no effect. Warning may be printed when this is used.
+#define CRLIB_OPTION_FLAG_OBSOLETE   (1 << 3)
 
 // Structured information about the configuration option
 typedef struct crlib_conf_option {
+  // Not null, unless used as a sentinel
   const char *key;
+  // Bitwise combination of CRLIB_OPTION_FLAG_* values
   crlib_conf_option_flag_t flags;
+  // Human-readable info about the type. Must not be null.
   const char *value_type;
+  // String representation of the default value. Must not be null (use empty string instead).
   const char *default_value;
+  // Human-readable description of the option. Must not be null.
   const char *description;
 } crlib_conf_option_t;
 
@@ -85,8 +95,7 @@ struct crlib_description {
   crlib_extension_t * const *(*supported_extensions)(crlib_conf_t *);
 
   // Returns an array of all configuration options supported by the engine.
-  // The array is terminated with an option with null key.
-  // Set to null if this method is not supported.
+  // The array is terminated with a sentinel option with null key.
   const crlib_conf_option_t *(*configuration_options)(crlib_conf_t *);
 };
 typedef const struct crlib_description crlib_description_t;

@@ -181,26 +181,30 @@ JNIEXPORT crlib_api_t *CRLIB_API(int api_version, size_t api_size) {
 //
 // Place more frequently used options first - this will make them faster to find
 // in the options hash table.
-#define CONFIGURE_OPTIONS(OPT) \
-  OPT(image_location, const char *, nullptr, CHECKPOINT | RESTORE, "path", "no default", \
+#define UNCHECKED_OPTIONS(OPT) \
+  OPT(image_location, const char *, nullptr, CRLIB_OPTION_FLAG_CHECKPOINT | CRLIB_OPTION_FLAG_RESTORE, "path", "no default", \
     "path to a directory with checkpoint/restore files.") \
-  OPT(exec_location, const char *, nullptr, CHECKPOINT | RESTORE, "path", "no default", "path to the engine executable.") \
-  OPT(keep_running, bool, false, CHECKPOINT, "true/false", "false", \
+  OPT(exec_location, const char *, nullptr, CRLIB_OPTION_FLAG_CHECKPOINT | CRLIB_OPTION_FLAG_RESTORE, "path", "no default", "path to the engine executable.") \
+  OPT(args, const char *, nullptr, CRLIB_OPTION_FLAG_CHECKPOINT | CRLIB_OPTION_FLAG_RESTORE, "string", "\"\"", \
+    "free space-separated arguments passed directly to the engine executable, e.g. \"--arg1 --arg2 --arg3\".") \
+
+#define CHECKED_OPTIONS(OPT) \
+  OPT(keep_running, bool, false, CRLIB_OPTION_FLAG_CHECKPOINT, "true/false", "false", \
     "keep the process running after the checkpoint or kill it.") \
-  OPT(direct_map, bool, true, RESTORE, "true/false", "true", \
+  OPT(direct_map, bool, true, CRLIB_OPTION_FLAG_RESTORE, "true/false", "true", \
     "on restore, map process data directly from saved files. This may speedup the restore " \
     "but the resulting process will not be the same as before the checkpoint.") \
-  OPT(args, const char *, nullptr, CHECKPOINT | RESTORE, "string", "\"\"", \
-    "free space-separated arguments passed directly to the engine executable, e.g. \"--arg1 --arg2 --arg3\".") \
+
+#define CONFIGURE_OPTIONS(OPT) UNCHECKED_OPTIONS(OPT) CHECKED_OPTIONS(OPT)
 
 #define DEFINE_OPT(id, ...) static constexpr char opt_##id[] = #id;
 CONFIGURE_OPTIONS(DEFINE_OPT)
 #undef DEFINE_OPT
 #define ADD_ARR_ELEM(id, ...) opt_##id,
-static const char *configure_options_names[] = { CONFIGURE_OPTIONS(ADD_ARR_ELEM) nullptr };
+static constexpr const char *configure_options_names[] = { CONFIGURE_OPTIONS(ADD_ARR_ELEM) nullptr };
 #undef ADD_ARR_ELEM
 #define ADD_ARR_ELEM(id, ctype, cdef, flags, ...) { opt_##id, static_cast<crlib_conf_option_flag_t>(flags), __VA_ARGS__ },
-static const crlib_conf_option_t configure_options[] = { CONFIGURE_OPTIONS(ADD_ARR_ELEM) {} };
+static constexpr const crlib_conf_option_t configure_options[] = { CONFIGURE_OPTIONS(ADD_ARR_ELEM) {} };
 #undef ADD_ARR_ELEM
 
 static char *strdup_checked(const char *src) {
@@ -245,11 +249,13 @@ private:
     configure_options_names, ARRAY_SIZE(configure_options_names) - 1 /* omit nullptr */
   };
 
-// Note: image_location, exec_location and args from this are ignored
-#define DEFINE_DEFAULT(id, ctype, cdef, ...) Option<ctype> _##id = { cdef, true };
-  CONFIGURE_OPTIONS(DEFINE_DEFAULT)
+#define DEFINE_DEFAULT(id, ctype, cdef, ...) \
+  private: Option<ctype> _##id = { cdef, true }; \
+  public: inline ctype id() const { return _##id.value; }
+  CHECKED_OPTIONS(DEFINE_DEFAULT)
 #undef DEFINE_DEFAULT
 
+private:
   int _restore_data = 0;
   const char *_argv[ARGV_LAST + 2] = {}; // Last element is required to be null
   ImageConstraints _image_constraints;
@@ -278,16 +284,15 @@ public:
   // Use this to check whether the constructor succeeded.
   bool is_initialized() const { return _options.is_initialized(); }
 
-  bool keep_running() const { return _keep_running.value; }
-  bool direct_map() const { return _direct_map.value; }
   int restore_data() const { return _restore_data; }
   const char * const *argv() const { return _argv; }
 
   void require_defaults(crlib_conf_option_flag_t flag, const char *event) const {
-#define CHECK_OPT(id, ctype, cdef, flags, ...) if (!_##id.is_default && !((flags) & flag)) { \
+#define CHECK_OPT(id, ctype, cdef, flags, ...) \
+  if (!_##id.is_default && !((flags) & flag)) { \
     fprintf(stderr, CREXEC #id " has no effect on %s\n", event); \
   }
-    CONFIGURE_OPTIONS(CHECK_OPT)
+    CHECKED_OPTIONS(CHECK_OPT)
 #undef CHECK_OPT
   }
 
@@ -794,7 +799,7 @@ static int checkpoint(crlib_conf_t *conf) {
     return -1;
   }
   conf->set_argv_action("checkpoint");
-  conf->require_defaults(CHECKPOINT, "checkpoint");
+  conf->require_defaults(CRLIB_OPTION_FLAG_CHECKPOINT, "checkpoint");
 
   if (!conf->image_constraints().persist(image_location) ||
       !conf->image_score().persist(image_location)) {
@@ -854,7 +859,7 @@ static int restore(crlib_conf_t *conf) {
     return -1;
   }
   conf->set_argv_action("restore");
-  conf->require_defaults(RESTORE, "restore");
+  conf->require_defaults(CRLIB_OPTION_FLAG_RESTORE, "restore");
 
   if (!conf->image_constraints().validate(conf->argv()[ARGV_IMAGE_LOCATION])) {
     return -1;

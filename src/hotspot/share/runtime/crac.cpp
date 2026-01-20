@@ -530,14 +530,14 @@ void crac::print_engine_info_and_exit(const char *pattern) {
   }
   tty->print_raw_cr(description);
   tty->cr();
-  if (pattern == nullptr) {
-    tty->print_raw_cr("Configuration options:");
-  } else {
-    tty->print_cr("Configuration options matching *%s*:", pattern);
-  }
 
   const crlib_conf_option_t *options = engine.configuration_options();
   if (options != nullptr) {
+    if (pattern == nullptr) {
+      tty->print_raw_cr("Configuration options:");
+    } else {
+      tty->print_cr("Configuration options matching *%s*:", pattern);
+    }
     int matched = 0;
     for (; options->key != nullptr; ++options) {
       if (pattern == nullptr || strstr(options->key, pattern)) {
@@ -545,10 +545,11 @@ void crac::print_engine_info_and_exit(const char *pattern) {
         ++matched;
       }
     }
-    if (matched == 0) {
+    if (pattern != nullptr && matched == 0) {
       tty->print_raw_cr("(no configuration options match the pattern)");
     }
   } else {
+    tty->print_raw_cr("Configuration options:");
     if (pattern != nullptr) {
       log_warning(crac)("Option filtering by pattern not available");
     }

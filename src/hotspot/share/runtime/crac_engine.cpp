@@ -231,7 +231,7 @@ static crlib_conf_t *create_conf(const crlib_api_t &api, const char *exec_locati
   return conf;
 }
 
-CracEngine::CracEngine() {
+CracEngine::CracEngine(): _options(nullptr) {
   if (CRaCEngine == nullptr) {
     log_error(crac)("CRaCEngine must not be empty");
     return;
@@ -326,6 +326,7 @@ CracEngine::~CracEngine() {
     _api->destroy_conf(_conf);
     os::dll_unload(_lib);
   }
+  FREE_C_HEAP_ARRAY(crlib_conf_option_t, _options);
 }
 
 bool CracEngine::is_initialized() const {
@@ -372,8 +373,11 @@ GrowableArrayCHeap<const char *, MemTag::mtInternal> *CracEngine::vm_controlled_
   } \
   constexpr const char *_ext_name = ext_name;
 
+#define has_method(_ext_api, _func) \
+  (_ext_api->header.size >= offsetof(std::remove_reference<decltype(*_ext_api)>::type, _func) + sizeof(_ext_api->_func))
+
 #define require_method(_func) \
-  if (ext_api->_func == nullptr) { \
+  if (has_method(ext_api, _func) && ext_api->_func == nullptr) { \
     log_error(crac)("CRaC engine provided invalid API for extension %s: %s is not set", _ext_name, #_func); \
     return ApiStatus::ERR; \
   }
@@ -406,7 +410,7 @@ CracEngine::ApiStatus CracEngine::prepare_description_api() {
   require_method(configuration_doc)
   require_method(configurable_keys)
   require_method(supported_extensions)
-  // configuration_options is not mandatory
+  require_method(configuration_options);
   complete_extension_api(_description_api)
 }
 
@@ -420,12 +424,11 @@ const char *CracEngine::configuration_doc() const {
   return _description_api->configuration_doc(_conf);
 }
 
-const crlib_conf_option_t *CracEngine::configuration_options() const {
-  static crlib_conf_option_t *all_options = nullptr;
-  if (all_options != nullptr) {
-    return all_options;
+const crlib_conf_option_t *CracEngine::configuration_options() {
+  if (_options != nullptr) {
+    return _options;
   }
-  if (_description_api->header.size < sizeof(crlib_description_t) || _description_api->configuration_options == nullptr) {
+  if (!has_method(_description_api, configuration_options)) {
     return nullptr;
   }
   const crlib_conf_option_t *options = _description_api->configuration_options(_conf);
@@ -434,10 +437,9 @@ const crlib_conf_option_t *CracEngine::configuration_options() const {
   }
   const crlib_conf_option_t *src = options;
   for (; src->key != nullptr; ++src);
-  all_options = NEW_C_HEAP_ARRAY(crlib_conf_option_t, src - options + 1, mtInternal);
-  crlib_conf_option_t *dst = all_options;
+  _options = NEW_C_HEAP_ARRAY(crlib_conf_option_t, src - options + 1, mtInternal);
+  crlib_conf_option_t *dst = _options;
   for (src = options; src->key != nullptr; ++src, ++dst) {
-    memcpy(dst, src, sizeof(*src));
     bool skip = false;
     for (const char *opt : vm_controlled_engine_opts) {
       if (!strcmp(src->key, opt)) {
@@ -446,9 +448,10 @@ const crlib_conf_option_t *CracEngine::configuration_options() const {
       }
     }
     if (skip) {
-      --dst; // next iteration will overwrite
+      --dst;
       continue;
     }
+    memcpy(dst, src, sizeof(*src));
     if (!strcmp(dst->key, DIRECT_MAP)) {
       // JVM is overriding the direct_map default in all engines
       dst->default_value = "true";
@@ -456,7 +459,7 @@ const crlib_conf_option_t *CracEngine::configuration_options() const {
   }
   // last element should be zeroes
   memset(dst, 0, sizeof(*dst));
-  return all_options;
+  return _options;
 }
 
 static constexpr char cpuarch_name[] = "cpu.arch";

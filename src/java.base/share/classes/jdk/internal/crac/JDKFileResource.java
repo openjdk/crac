@@ -4,6 +4,7 @@ import jdk.internal.crac.mirror.Context;
 import jdk.internal.crac.mirror.Resource;
 import jdk.internal.crac.mirror.impl.CheckpointOpenFileException;
 import jdk.internal.crac.mirror.impl.CheckpointOpenResourceException;
+import jdk.internal.vm.annotation.Stable;
 
 import java.io.File;
 import java.io.FileDescriptor;
@@ -14,22 +15,41 @@ import java.nio.file.Path;
 import java.util.function.Supplier;
 
 public abstract class JDKFileResource extends JDKFdResource {
-    private static final Path[] CLASSPATH_ENTRIES;
+    // Non-final to reduce the amount of static initialization. Currently
+    // initialization of this class always becomes a part of VM initialization.
+    //
+    // Besides the performance benefit when no C/R will be performed, we want to
+    // keep the static initialization order of the CRaC project closer to the
+    // mainline JDK to reduce incompatibilities (the order defines the final
+    // result).
+    @Stable
+    private static volatile Path[] CLASSPATH_ENTRIES;
 
-    static {
-        String[] items = System.getProperty("java.class.path")
-                .split(File.pathSeparator);
-        CLASSPATH_ENTRIES = new Path[items.length];
+    private static Path[] getClasspathEntries() {
+        if (CLASSPATH_ENTRIES == null) {
+            synchronized (JDKFileResource.class) {
+                if (CLASSPATH_ENTRIES == null) {
+                    CLASSPATH_ENTRIES = createClasspathEntries();
+                }
+            }
+        }
+        return CLASSPATH_ENTRIES;
+    }
+
+    private static Path[] createClasspathEntries() {
+        final var items = System.getProperty("java.class.path").split(File.pathSeparator);
+        final var entries = new Path[items.length];
         for (int i = 0; i < items.length; i++) {
             try {
                 // On Windows, path with forward slashes starting with '/' is an accepted classpath
                 // element, even though it might seem as invalid and parsing in Path.of(...) would fail.
-                CLASSPATH_ENTRIES[i] = new File(items[i]).toPath();
+                entries[i] = new File(items[i]).toPath();
             } catch (Exception e) {
                 // Ignore any exception parsing the path: URLClassPath.toFileURL() ignores IOExceptions
                 // as well, here we might get InvalidPathException
             }
         }
+        return entries;
     }
 
     boolean closed;
@@ -55,7 +75,7 @@ public abstract class JDKFileResource extends JDKFdResource {
 
     protected boolean matchClasspath(String path) {
         Path p = Path.of(path);
-        for (Path entry : CLASSPATH_ENTRIES) {
+        for (Path entry : getClasspathEntries()) {
             try {
                 if (entry != null && Files.isSameFile(p, entry)) {
                     return true;

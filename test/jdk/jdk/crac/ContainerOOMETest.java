@@ -24,7 +24,7 @@
 import jdk.crac.Core;
 import jdk.test.lib.containers.docker.Common;
 import jdk.test.lib.containers.docker.DockerTestUtils;
-import jdk.test.lib.crac.CracBuilder;
+import jdk.test.lib.crac.CracContainerBuilder;
 import jdk.test.lib.crac.CracTest;
 
 import java.util.HashMap;
@@ -35,7 +35,10 @@ import static jdk.test.lib.Asserts.*;
  * @test ContainerOOMETest
  * @requires (os.family == "linux")
  * @requires container.support
+ * @comment Static JDK eagerly loads X11 which is missing from the Docker image
+ * @requires !jdk.static
  * @library /test/lib
+ * @modules java.base/jdk.internal.platform
  * @build ContainerOOMETest
  * @run driver/timeout=120 jdk.test.lib.crac.CracTest
  */
@@ -44,11 +47,9 @@ public class ContainerOOMETest implements CracTest {
 
     @Override
     public void test() throws Exception {
-        if (!DockerTestUtils.canTestDocker()) {
-            return;
-        }
+        DockerTestUtils.checkCanUseResourceLimits();
         final String imageName = Common.imageName("oome-test");
-        CracBuilder builder = new CracBuilder()
+        CracContainerBuilder builder = new CracContainerBuilder()
                 .captureOutput(true)
                 .inDockerImage(imageName)
                 .dockerOptions("-m", "256M")

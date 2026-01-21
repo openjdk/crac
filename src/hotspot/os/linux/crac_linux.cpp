@@ -22,20 +22,19 @@
  */
 
 // no precompiled headers
-#include <string.h>
-
+#include "classfile/classLoader.hpp"
 #include "jvm.h"
-#include "perfMemory_linux.hpp"
-#include "runtime/crac_structs.hpp"
-#include "runtime/crac.hpp"
-#include "runtime/os.hpp"
-#include "utilities/growableArray.hpp"
 #include "logging/log.hpp"
 #include "logging/logConfiguration.hpp"
-#include "classfile/classLoader.hpp"
+#include "perfMemory_linux.hpp"
+#include "runtime/crac.hpp"
+#include "runtime/crac_structs.hpp"
+#include "runtime/os.hpp"
 #include "utilities/defaultStream.hpp"
+#include "utilities/growableArray.hpp"
 
 #include <netinet/in.h>
+#include <string.h>
 
 class FdsInfo {
 public:
@@ -108,7 +107,7 @@ static FdsInfo _vm_inited_fds(false);
 
 static int readfdlink(int fd, char *link, size_t len) {
   char fdpath[64];
-  snprintf(fdpath, sizeof(fdpath), "/proc/self/fd/%d", fd);
+  os::snprintf_checked(fdpath, sizeof(fdpath), "/proc/self/fd/%d", fd);
   int ret = readlink(fdpath, link, len);
   if (ret == -1) {
     return ret;
@@ -277,7 +276,7 @@ bool VM_Crac::check_fds() {
       socklen_t slen = sizeof(sa);
       if (S_ISSOCK(st->st_mode) && 0 == getsockname(fd, (sockaddr*)&sa, &slen)) {
         const size_t len = strlen(detailsbuf);
-        snprintf(detailsbuf + len, sizeof(detailsbuf) - len, ",port=%d", (int)ntohs(sa.sin_port));
+        os::snprintf_checked(detailsbuf + len, sizeof(detailsbuf) - len, ",port=%d", (int)ntohs(sa.sin_port));
       }
     }
     print_resources("JVM: FD fd=%d type=%s path=\"%s\" ", fd, type, details);
@@ -342,7 +341,7 @@ bool VM_Crac::check_fds() {
     const int maxinfo = 64;
     size_t buflen = strlen(details) + maxinfo;
     char* msg = NEW_C_HEAP_ARRAY(char, buflen, mtInternal);
-    int len = snprintf(msg, buflen, "FD fd=%d type=%s path=%s", fd, type, detailsbuf);
+    int len = os::snprintf(msg, buflen, "FD fd=%d type=%s path=%s", fd, type, detailsbuf);
     msg[len < 0 ? 0 : ((size_t) len >= buflen ? buflen - 1 : len)] = '\0';
     _failures->append(CracFailDep(stat2stfail(st->st_mode & S_IFMT), msg));
   }

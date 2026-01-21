@@ -34,14 +34,15 @@
 #include "oops/oopCast.inline.hpp"
 #include "oops/typeArrayOop.inline.hpp"
 #include "prims/jvmtiExport.hpp"
+#include "runtime/crac.hpp"
 #include "runtime/crac_engine.hpp"
 #include "runtime/crac_structs.hpp"
-#include "runtime/crac.hpp"
 #include "runtime/globals.hpp"
 #include "runtime/interfaceSupport.inline.hpp"
 #include "runtime/java.hpp"
 #include "runtime/jniHandles.hpp"
 #include "runtime/jniHandles.inline.hpp"
+#include "runtime/os.inline.hpp"
 #include "runtime/threads.hpp"
 #include "runtime/vmThread.hpp"
 #include "services/classLoadingService.hpp"
@@ -49,7 +50,6 @@
 #include "services/writeableFlags.hpp"
 #include "utilities/debug.hpp"
 #include "utilities/decoder.hpp"
-#include "os.inline.hpp"
 #include "utilities/defaultStream.hpp"
 #include "utilities/globalDefinitions.hpp"
 #include "utilities/growableArray.hpp"
@@ -118,15 +118,15 @@ static int append_time(char *buf, size_t buflen, bool iso8601, bool zero_pad, in
     return (int) strftime(buf, buflen, "%Y%m%dT%H%M%SZ", &tms);
   } else {
     // width -1 works too (means 1 char left aligned => we always print at least 1 char)
-    return snprintf(buf, buflen, zero_pad ? "%0*" PRId64 : "%*" PRId64, width, (int64_t) (timeMillis / 1000));
+    return os::snprintf(buf, buflen, zero_pad ? "%0*" PRId64 : "%*" PRId64, width, static_cast<int64_t>(timeMillis / 1000));
   }
 }
 
 static int append_size(char *buf, size_t buflen, bool zero_pad, int width, size_t size) {
   if (zero_pad) {
-    return snprintf(buf, buflen, "%0*zu", width, size);
+    return os::snprintf(buf, buflen, "%0*zu", width, size);
   } else if (width >= 0) {
-    return snprintf(buf, buflen, "%*zu", width, size);
+    return os::snprintf(buf, buflen, "%*zu", width, size);
   } else {
     static constexpr const char *suffixes[] = { "k", "M", "G" };
     const char *suffix = "";
@@ -134,7 +134,7 @@ static int append_size(char *buf, size_t buflen, bool zero_pad, int width, size_
       suffix = suffixes[i];
       size = size >> 10;
     }
-    return snprintf(buf, buflen, "%zu%s", size, suffix);
+    return os::snprintf(buf, buflen, "%zu%s", size, suffix);
   }
 }
 
@@ -166,6 +166,7 @@ static inline jlong boot_time() {
   return os::javaTimeMillis() - (1000 * os::elapsed_counter() / os::elapsed_frequency());
 }
 
+// TODO: use stringStream or similar instead of a raw buffer
 bool crac::interpolate_checkpoint_location(char *buf, size_t buflen, bool *fixed) {
   *fixed = true;
   for (size_t si = 0; ; si++) {
@@ -212,13 +213,17 @@ bool crac::interpolate_checkpoint_location(char *buf, size_t buflen, bool *fixed
 #ifndef ARCHPROPNAME
 # error "ARCHPROPNAME must be defined by build scripts"
 #endif
-      check_retval(snprintf(buf, buflen, "%s", ARCHPROPNAME));
+      check_retval(os::snprintf(buf, buflen, "%s", ARCHPROPNAME));
       break;
     case 'f': { // CPU features
         check_no_width_padding();
         VM_Version::VM_Features data;
         if (VM_Version::cpu_features_binary(&data)) {
-          check_retval(data.print_numbers(buf, buflen, true));
+          // The copying is inefficient but the proper fix is to use stringStream on the caller-site
+          stringStream ss;
+          data.print_numbers(ss, true);
+          check_retval(static_cast<int>(ss.size()));
+          memcpy(buf - ss.size(), ss.base(), ss.size());
         } // otherwise just empty string
       }
       break;
@@ -232,7 +237,7 @@ bool crac::interpolate_checkpoint_location(char *buf, size_t buflen, bool *fixed
         *fixed = false; // FIXME?
         u4 time_mid_high = uuid[0];
         u4 seq_and_node_low = uuid[1];
-        check_retval(snprintf(buf, buflen, "%08x-%04x-4%03x-%04x-%04x%08x",
+        check_retval(os::snprintf(buf, buflen, "%08x-%04x-4%03x-%04x-%04x%08x",
           uuid[2], time_mid_high >> 16, time_mid_high & 0xFFF,
           0x8000 | (seq_and_node_low & 0x3FFF), seq_and_node_low >> 16, uuid[3]));
       }
@@ -251,17 +256,17 @@ bool crac::interpolate_checkpoint_location(char *buf, size_t buflen, bool *fixed
       check_retval(append_time(buf, buflen, c == 'r', zero_pad, width, _generation != 1 ? crac::restore_start_time() : boot_time()));
       break;
     case 'p': // PID
-      check_retval(snprintf(buf, buflen, zero_pad ? "%0*d" : "%*d", width, os::current_process_id()));
+      check_retval(os::snprintf(buf, buflen, zero_pad ? "%0*d" : "%*d", width, os::current_process_id()));
       break;
     case 'c': // Number of CPUs
-      check_retval(snprintf(buf, buflen, zero_pad ? "%0*d" : "%*d", width, os::active_processor_count()));
+      check_retval(os::snprintf(buf, buflen, zero_pad ? "%0*d" : "%*d", width, os::active_processor_count()));
       break;
     case 'm': // Max heap size
       *fixed = false; // Heap size is not yet resolved when this is called from prepare_checkpoint()
       check_retval(append_size(buf, buflen, zero_pad, width, Universe::heap() != nullptr ? Universe::heap()->max_capacity() : 0));
       break;
     case 'g': // CRaC generation
-      check_retval(snprintf(buf, buflen, zero_pad ? "%0*d" : "%*d", width, _generation));
+      check_retval(os::snprintf(buf, buflen, zero_pad ? "%0*d" : "%*d", width, _generation));
       break;
     default: /* incl. terminating '\0' */
       log_error(crac)("CRaCCheckpointTo=%s contains an invalid pattern", CRaCCheckpointTo);
@@ -809,10 +814,6 @@ void crac::restore(crac_restore_data& restore_data) {
     return;
   }
 
-  // Previously IgnoreCPUFeatures didn't disable the check completely; the difference
-  // was printed out but continued even despite features not being satisfied.
-  // Since the check itself is delegated to the C/R Engine we will simply
-  // skip the check here.
   bool ignore = VM_Version::ignore_cpu_features();
   bool exact = false;
   if (CheckCPUFeatures == nullptr || !strcmp(CheckCPUFeatures, "compatible")) {

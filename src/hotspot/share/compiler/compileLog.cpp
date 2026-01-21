@@ -28,10 +28,12 @@
 #include "jvm.h"
 #include "memory/allocation.inline.hpp"
 #include "oops/method.hpp"
+#include "runtime/atomicAccess.hpp"
 #include "runtime/mutexLocker.hpp"
 #include "runtime/os.hpp"
+#include "runtime/safepoint.hpp"
 
-CompileLog* CompileLog::_first = nullptr;
+CompileLog* volatile CompileLog::_list_head = nullptr;
 
 // ------------------------------------------------------------------
 // CompileLog::CompileLog
@@ -49,9 +51,12 @@ CompileLog::CompileLog(const char* file_name, FILE* fp, intx thread_id)
    strcpy((char*)_file, file_name);
 
   // link into the global list
-  { MutexLocker locker(CompileTaskAlloc_lock);
-    _next = _first;
-    _first = this;
+  while (true) {
+    CompileLog* head = AtomicAccess::load_acquire(&_list_head);
+    _next = head;
+    if (AtomicAccess::cmpxchg(&_list_head, head, this) == head) {
+      break;
+    }
   }
 }
 
@@ -205,10 +210,9 @@ void CompileLog::after_restore() {
 }
 
 void CompileLog::swap_streams_on_restore() {
-  CompileLog* log = _first;
-  while (log != nullptr) {
+  assert_at_safepoint();
+  for (CompileLog* log = _list_head; log != nullptr; log = log->_next) {
     log->after_restore();
-    log = log->_next;
   }
 }
 
@@ -223,7 +227,7 @@ void CompileLog::finish_log_on_error(outputStream* file, char* buf, int buflen) 
   if (called_exit)  return;
   called_exit = true;
 
-  CompileLog* log = _first;
+  CompileLog* log = AtomicAccess::load_acquire(&_list_head);
   while (log != nullptr) {
     log->flush();
     const char* partial_file = log->file();
@@ -311,7 +315,7 @@ void CompileLog::finish_log_on_error(outputStream* file, char* buf, int buflen) 
     delete log; // Removes partial file
     log = next_log;
   }
-  _first = nullptr;
+  AtomicAccess::store(&_list_head, (CompileLog*)nullptr);
 }
 
 // ------------------------------------------------------------------
@@ -326,12 +330,11 @@ void CompileLog::finish_log(outputStream* file) {
 }
 
 void CompileLog::finish_log_on_checkpoint(outputStream* file) {
+  assert_at_safepoint(); // Ensures no concurrent modifications of log list
   char buf[4 * K];
   int buflen = sizeof(buf);
-  CompileLog* log = _first;
   file->print_raw("<compilation_log closed at a checkpoint >");
-
-  while (log != nullptr) {
+  for (CompileLog* log = _list_head; log != nullptr; log = log->_next) {
     log->flush();
     const char* partial_file = log->file();
     int partial_fd = open(partial_file, O_RDONLY);
@@ -361,7 +364,6 @@ void CompileLog::finish_log_on_checkpoint(outputStream* file) {
       ::close(partial_fd);
     }
     log->before_checkpoint();
-    log = log->_next;
   }
 }
 

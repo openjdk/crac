@@ -23,8 +23,7 @@
 
 import jdk.test.lib.Platform;
 import jdk.test.lib.containers.docker.Common;
-import jdk.test.lib.containers.docker.DockerTestUtils;
-import jdk.test.lib.crac.CracBuilder;
+import jdk.test.lib.crac.CracContainerBuilder;
 import jdk.test.lib.crac.CracProcess;
 import jdk.test.lib.crac.CracTest;
 import jdk.test.lib.crac.CracTestArg;
@@ -33,14 +32,15 @@ import jdk.test.lib.process.OutputAnalyzer;
 import static jdk.test.lib.Asserts.assertEquals;
 import static jdk.test.lib.Asserts.assertLessThan;
 
-import java.util.Arrays;
-
 /*
  * @test ContainerPidAdjustmentTest
  * @summary The test checks that process PID is adjusted with the specified value, when checkpointing in a container. Default min PID value is 128.
  * @requires (os.family == "linux")
  * @requires container.support
+ * @comment Static JDK eagerly loads X11 which is missing from the Docker image
+ * @requires !jdk.static
  * @library /test/lib
+ * @modules java.base/jdk.internal.platform
  * @build ContainerPidAdjustmentTest
  * @run driver/timeout=120 jdk.test.lib.crac.CracTest  true   false  INF     true   128
  * @run driver/timeout=120 jdk.test.lib.crac.CracTest  true   true   1       false  1
@@ -57,7 +57,6 @@ import java.util.Arrays;
  * @run driver/timeout=120 jdk.test.lib.crac.CracTest  false  true   5000000 true   -1
  * @run driver/timeout=120 jdk.test.lib.crac.CracTest  false  true   5000000 true   -1     MAX-100
  * @run driver/timeout=120 jdk.test.lib.crac.CracTest  false  true   MAX-1   true   -1
-
  */
 public class ContainerPidAdjustmentTest implements CracTest {
     @CracTestArg(0)
@@ -83,11 +82,8 @@ public class ContainerPidAdjustmentTest implements CracTest {
 
     @Override
     public void test() throws Exception {
-        if (!DockerTestUtils.canTestDocker()) {
-            return;
-        }
         final String imageName = Common.imageName("pid-adjustment");
-        CracBuilder builder = new CracBuilder()
+        CracContainerBuilder builder = new CracContainerBuilder()
             .inDockerImage(imageName)
             .runContainerDirectly(runDirectly)
             .containerUsePrivileged(usePrivilegedContainer);
@@ -105,13 +101,13 @@ public class ContainerPidAdjustmentTest implements CracTest {
                 String setupLastPidCmd = "export LAST_PID=" + createLastPidValue(lastPidSetup)
                         + " && echo ${LAST_PID} >/proc/sys/kernel/ns_last_pid";
                 if (Platform.isMusl()) {
-                    builder.containerSetup(Arrays.asList("sh", "-x", "-c",
-                            "adduser -D the_user && cat /proc/sys/kernel/pid_max && " + setupLastPidCmd));
+                    builder.containerSetup("sh", "-x", "-c",
+                            "adduser -D the_user && cat /proc/sys/kernel/pid_max && " + setupLastPidCmd);
                 } else {
-                    builder.containerSetup(Arrays.asList("bash", "-x", "-c",
-                            "useradd the_user && cat /proc/sys/kernel/pid_max && " + setupLastPidCmd));
+                    builder.containerSetup("bash", "-x", "-c",
+                            "useradd the_user && cat /proc/sys/kernel/pid_max && " + setupLastPidCmd);
                 }
-                builder.dockerCheckpointOptions(Arrays.asList("-u", "the_user"));
+                builder.dockerCheckpointOptions("-u", "the_user");
             }
 
             if (0 < expectedLastPid) {

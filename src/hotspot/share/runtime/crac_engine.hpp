@@ -87,7 +87,7 @@ private:
   crlib_image_constraints_t *_image_constraints_api = nullptr;
   crlib_image_score_t *_image_score_api = nullptr;
 
-  crlib_conf_option_t *_options;
+  crlib_conf_option_t *_options = nullptr;
 };
 
 #endif // SHARE_RUNTIME_CRAC_ENGINE_HPP

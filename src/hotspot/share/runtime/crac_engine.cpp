@@ -231,7 +231,7 @@ static crlib_conf_t *create_conf(const crlib_api_t &api, const char *exec_locati
   return conf;
 }
 
-CracEngine::CracEngine(): _options(nullptr) {
+CracEngine::CracEngine() {
   if (CRaCEngine == nullptr) {
     log_error(crac)("CRaCEngine must not be empty");
     return;

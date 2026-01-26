@@ -506,7 +506,7 @@ void VM_Crac::doit() {
   _ok = true;
 }
 
-void crac::print_engine_info_and_exit() {
+void crac::print_engine_info_and_exit(const char *pattern) {
   CracEngine engine;
   if (!engine.is_initialized()) {
     return;
@@ -529,28 +529,50 @@ void crac::print_engine_info_and_exit() {
     return;
   }
   tty->print_raw_cr(description);
-
-  const char *conf_doc = engine.configuration_doc();
-  if (conf_doc == nullptr) {
-    log_error(crac)("CRaC engine failed to provide documentation of its configuration options");
-    return;
-  }
   tty->cr();
-  tty->print_raw_cr("Configuration options:");
-  tty->print_raw(conf_doc); // Doc string ends with CR by convention
 
-  const GrowableArrayCHeap<const char *, MemTag::mtInternal> *controlled_opts = engine.vm_controlled_options();
-  tty->cr();
-  tty->print_raw("Configuration options controlled by the JVM: ");
-  for (int i = 0; i < controlled_opts->length(); i++) {
-    const char *opt = controlled_opts->at(i);
-    tty->print_raw(opt);
-    if (i < controlled_opts->length() - 1) {
-      tty->print_raw(", ");
+  const crlib_conf_option_t *options = engine.configuration_options();
+  if (options != nullptr) {
+    if (pattern == nullptr) {
+      tty->print_raw_cr("Configuration options:");
+    } else {
+      tty->print_cr("Configuration options matching *%s*:", pattern);
     }
+    int matched = 0;
+    for (; options->key != nullptr; ++options) {
+      if (pattern == nullptr || strstr(options->key, pattern)) {
+        tty->print_cr("* %s=<%s> (default: %s) - %s", options->key, options->value_type, options->default_value, options->description);
+        ++matched;
+      }
+    }
+    if (pattern != nullptr && matched == 0) {
+      tty->print_raw_cr("(no configuration options match the pattern)");
+    }
+  } else {
+    tty->print_raw_cr("Configuration options:");
+    if (pattern != nullptr) {
+      log_warning(crac)("Option filtering by pattern not available");
+    }
+    const char *conf_doc = engine.configuration_doc();
+    if (conf_doc == nullptr) {
+      log_error(crac)("CRaC engine failed to provide documentation of its configuration options");
+      return;
+    }
+    tty->print_raw(conf_doc); // Doc string ends with CR by convention
+
+    const GrowableArrayCHeap<const char *, MemTag::mtInternal> *controlled_opts = engine.vm_controlled_options();
+    tty->cr();
+    tty->print_raw("Configuration options controlled by the JVM: ");
+    for (int i = 0; i < controlled_opts->length(); i++) {
+      const char *opt = controlled_opts->at(i);
+      tty->print_raw(opt);
+      if (i < controlled_opts->length() - 1) {
+        tty->print_raw(", ");
+      }
+    }
+    tty->cr();
+    delete controlled_opts;
   }
-  tty->cr();
-  delete controlled_opts;
 
   vm_exit(0);
   ShouldNotReachHere();

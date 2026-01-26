@@ -98,9 +98,14 @@ public class ParsingTest {
                     Arrays.asList("[error]") /* warning are expected (repeated 'keep_running'), errors are not */);
         }
 
-        test("simengine", "help=true", 1,
-                "unknown configure option: help",
-                "CRaC engine failed to configure: 'help' = 'true'");
+        test("simengine", "help", 0,
+                "keep_running", "direct_map");
+        test("simengine", "help=keep", 0,
+                "Configuration options matching",
+                "keep the process running");
+        test("simengine", "help=foobar", 0,
+                "no configuration options match the pattern");
+
         test("simengine", "unknown=123", 1,
                 "unknown configure option: unknown",
                 "CRaC engine failed to configure: 'unknown' = '123'");

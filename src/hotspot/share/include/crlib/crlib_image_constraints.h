@@ -63,6 +63,9 @@ typedef const struct crlib_image_constraints {
   // This method should be used if and only if the configuration specifies the image unambiguously;
   // if multiple images are considered for restore this method should always return false.
   bool (*is_failed)(crlib_conf_t *, const char *name);
+
+  // For failed require_bitmap it will copy the expected value to the provided buffer.
+  bool (*get_failed_bitmap)(crlib_conf_t *, const char *name, unsigned char *value_return, size_t value_size);
 } crlib_image_constraints_t;
 
 #ifdef __cplusplus

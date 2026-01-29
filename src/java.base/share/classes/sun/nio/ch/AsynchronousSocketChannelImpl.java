@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2008, 2024, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2008, 2025, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -39,12 +39,12 @@ import java.util.Objects;
 import java.util.Collections;
 import java.util.concurrent.*;
 import java.util.concurrent.locks.*;
-
+import jdk.internal.access.JavaNioAccess;
+import jdk.internal.access.SharedSecrets;
 import jdk.internal.crac.Core;
 import jdk.internal.crac.JDKSocketResource;
 import jdk.internal.crac.mirror.Context;
 import jdk.internal.crac.mirror.Resource;
-import sun.net.NetHooks;
 import sun.net.ext.ExtendedSocketOptions;
 
 /**
@@ -55,6 +55,7 @@ abstract class AsynchronousSocketChannelImpl
     extends AsynchronousSocketChannel
     implements Cancellable, Groupable
 {
+    private static final JavaNioAccess NIO_ACCESS = SharedSecrets.getJavaNioAccess();
     private static final FileDispatcherImpl nd = new FileDispatcherImpl();
 
     protected FileDescriptor fd;
@@ -290,6 +291,8 @@ abstract class AsynchronousSocketChannelImpl
     public final Future<Integer> read(ByteBuffer dst) {
         if (dst.isReadOnly())
             throw new IllegalArgumentException("Read-only buffer");
+        if (NIO_ACCESS.isThreadConfined(dst))
+            throw new IllegalArgumentException("Buffer is thread confined");
         return read(false, dst, null, 0L, TimeUnit.MILLISECONDS, null, null);
     }
 
@@ -304,6 +307,8 @@ abstract class AsynchronousSocketChannelImpl
             throw new NullPointerException("'handler' is null");
         if (dst.isReadOnly())
             throw new IllegalArgumentException("Read-only buffer");
+        if (NIO_ACCESS.isThreadConfined(dst))
+            throw new IllegalArgumentException("Buffer is thread confined");
         read(false, dst, null, timeout, unit, attachment, handler);
     }
 
@@ -319,12 +324,14 @@ abstract class AsynchronousSocketChannelImpl
         if (handler == null)
             throw new NullPointerException("'handler' is null");
         Objects.checkFromIndexSize(offset, length, dsts.length);
-        ByteBuffer[] bufs = Util.subsequence(dsts, offset, length);
-        for (int i=0; i<bufs.length; i++) {
-            if (bufs[i].isReadOnly())
+        dsts = Util.subsequence(dsts, offset, length);
+        for (ByteBuffer dst : dsts) {
+            if (dst.isReadOnly())
                 throw new IllegalArgumentException("Read-only buffer");
+            if (NIO_ACCESS.isThreadConfined(dst))
+                throw new IllegalArgumentException("Buffer is thread confined");
         }
-        read(true, null, bufs, timeout, unit, attachment, handler);
+        read(true, null, dsts, timeout, unit, attachment, handler);
     }
 
     /**
@@ -393,6 +400,8 @@ abstract class AsynchronousSocketChannelImpl
 
     @Override
     public final Future<Integer> write(ByteBuffer src) {
+        if (NIO_ACCESS.isThreadConfined(src))
+            throw new IllegalArgumentException("Buffer is thread confined");
         return write(false, src, null, 0L, TimeUnit.MILLISECONDS, null, null);
     }
 
@@ -405,6 +414,8 @@ abstract class AsynchronousSocketChannelImpl
     {
         if (handler == null)
             throw new NullPointerException("'handler' is null");
+        if (NIO_ACCESS.isThreadConfined(src))
+            throw new IllegalArgumentException("Buffer is thread confined");
         write(false, src, null, timeout, unit, attachment, handler);
     }
 
@@ -421,6 +432,11 @@ abstract class AsynchronousSocketChannelImpl
             throw new NullPointerException("'handler' is null");
         Objects.checkFromIndexSize(offset, length, srcs.length);
         srcs = Util.subsequence(srcs, offset, length);
+        for (ByteBuffer src : srcs) {
+            if (NIO_ACCESS.isThreadConfined(src)) {
+                throw new IllegalArgumentException("Buffer is thread confined");
+            }
+        }
         write(true, null, srcs, timeout, unit, attachment, handler);
     }
 
@@ -437,7 +453,6 @@ abstract class AsynchronousSocketChannelImpl
                     throw new AlreadyBoundException();
                 InetSocketAddress isa = (local == null) ?
                     new InetSocketAddress(0) : Net.checkAddress(local);
-                NetHooks.beforeTcpBind(fd, isa.getAddress(), isa.getPort());
                 Net.bind(fd, isa.getAddress(), isa.getPort());
                 localAddress = Net.localAddress(fd);
             }

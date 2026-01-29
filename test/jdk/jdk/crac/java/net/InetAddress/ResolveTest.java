@@ -23,8 +23,7 @@
 
 import jdk.test.lib.Utils;
 import jdk.test.lib.containers.docker.Common;
-import jdk.test.lib.containers.docker.DockerTestUtils;
-import jdk.test.lib.crac.CracBuilder;
+import jdk.test.lib.crac.CracContainerBuilder;
 import jdk.test.lib.crac.CracProcess;
 import jdk.test.lib.crac.CracTest;
 import jdk.test.lib.crac.CracTestArg;
@@ -40,7 +39,10 @@ import java.util.concurrent.*;
  * @summary Test if InetAddress cache is flushed after checkpoint/restore
  * @requires (os.family == "linux")
  * @requires container.support
+ * @comment Static JDK eagerly loads X11 which is missing from the Docker image
+ * @requires !jdk.static
  * @library /test/lib
+ * @modules java.base/jdk.internal.platform
  * @build ResolveTest
  * @run driver jdk.test.lib.crac.CracTest
  */
@@ -55,13 +57,9 @@ public class ResolveTest implements CracTest {
 
     @Override
     public void test() throws Exception {
-        if (!DockerTestUtils.canTestDocker()) {
-            return;
-        }
-
         String imageName = Common.imageName("inet-address");
 
-        CracBuilder builder = new CracBuilder()
+        CracContainerBuilder builder = new CracContainerBuilder()
                 .inDockerImage(imageName).dockerOptions("--add-host", TEST_HOSTNAME + ":192.168.12.34")
                 .captureOutput(true)
                 .args(CracTest.args(TEST_HOSTNAME, "/second-run"));

@@ -63,7 +63,6 @@ import jdk.internal.crac.JDKSocketResource;
 import jdk.internal.event.SocketReadEvent;
 import jdk.internal.event.SocketWriteEvent;
 import sun.net.ConnectionResetException;
-import sun.net.NetHooks;
 import sun.net.ext.ExtendedSocketOptions;
 import jdk.internal.util.Exceptions;
 
@@ -830,7 +829,6 @@ class SocketChannelImpl
         } else {
             isa = Net.checkAddress(local, family);
         }
-        NetHooks.beforeTcpBind(fd, isa.getAddress(), isa.getPort());
         Net.bind(family, fd, isa.getAddress(), isa.getPort());
         return Net.localAddress(fd);
     }
@@ -848,7 +846,7 @@ class SocketChannelImpl
     /**
      * Marks the beginning of a connect operation that might block.
      * @param blocking true if configured blocking
-     * @param isa the remote address
+     * @param sa the remote socket address
      * @throws ClosedChannelException if the channel is closed
      * @throws AlreadyConnectedException if already connected
      * @throws ConnectionPendingException is a connection is pending
@@ -873,7 +871,6 @@ class SocketChannelImpl
 
             if (isNetSocket() && (localAddress == null)) {
                 InetSocketAddress isa = (InetSocketAddress) sa;
-                NetHooks.beforeTcpConnect(fd, isa.getAddress(), isa.getPort());
             }
             remoteAddress = sa;
 
@@ -1072,8 +1069,8 @@ class SocketChannelImpl
     }
 
     /**
-     * Closes the socket if there are no I/O operations in progress and the
-     * channel is not registered with a Selector.
+     * Closes the socket if there are no I/O operations in progress (or no I/O
+     * operations tracked), and the channel is not registered with a Selector.
      */
     private boolean tryClose() throws IOException {
         assert Thread.holdsLock(stateLock) && state == ST_CLOSING;
@@ -1098,11 +1095,21 @@ class SocketChannelImpl
     }
 
     /**
-     * Closes this channel when configured in blocking mode.
+     * Closes this channel when configured in blocking mode. If there are no I/O
+     * operations in progress (or tracked), then the channel's socket is closed. If
+     * there are I/O operations in progress then the behavior is platform specific.
      *
-     * If there is an I/O operation in progress then the socket is pre-closed
-     * and the I/O threads signalled, in which case the final close is deferred
-     * until all I/O operations complete.
+     * On Unix systems, the channel's socket is pre-closed. This unparks any virtual
+     * threads that are blocked in I/O operations on this channel. If there are
+     * platform threads blocked on the channel's socket then the socket is dup'ed
+     * and the platform threads signalled. The final close is deferred until all I/O
+     * operations complete.
+     *
+     * On Windows, the channel's socket is pre-closed. This unparks any virtual
+     * threads that are blocked in I/O operations on this channel. If there are no
+     * virtual threads blocked in I/O operations on this channel then the channel's
+     * socket is closed. If there are virtual threads in I/O then the final close is
+     * deferred until all I/O operations on virtual threads complete.
      *
      * Note that a channel configured blocking may be registered with a Selector
      * This arises when a key is canceled and the channel configured to blocking
@@ -1114,17 +1121,17 @@ class SocketChannelImpl
             boolean connected = (state == ST_CONNECTED);
             state = ST_CLOSING;
 
-            if (!tryClose()) {
+            if (connected && Net.shouldShutdownWriteBeforeClose()) {
                 // shutdown output when linger interval not set to 0
-                if (connected) {
-                    try {
-                        var SO_LINGER = StandardSocketOptions.SO_LINGER;
-                        if ((int) Net.getSocketOption(fd, SO_LINGER) != 0) {
-                            Net.shutdown(fd, Net.SHUT_WR);
-                        }
-                    } catch (IOException ignore) { }
-                }
+                try {
+                    var SO_LINGER = StandardSocketOptions.SO_LINGER;
+                    if ((int) Net.getSocketOption(fd, SO_LINGER) != 0) {
+                        Net.shutdown(fd, Net.SHUT_WR);
+                    }
+                } catch (IOException ignore) { }
+            }
 
+            if (!tryClose()) {
                 // prepare file descriptor for closing
                 nd.preClose(fd, readerThread, writerThread);
             }
@@ -1368,6 +1375,7 @@ class SocketChannelImpl
             // nothing to do
             return 0;
         }
+        len = Math.min(len, Streams.MAX_BUFFER_SIZE);
 
         readLock.lock();
         try {
@@ -1464,7 +1472,7 @@ class SocketChannelImpl
                 beginWrite(true);
                 configureSocketNonBlockingIfVirtualThread();
                 while (pos < end && isOpen()) {
-                    int size = end - pos;
+                    int size = Math.min(end - pos, Streams.MAX_BUFFER_SIZE);
                     int n = tryWrite(b, pos, size);
                     while (IOStatus.okayToRetry(n) && isOpen()) {
                         park(Net.POLLOUT);

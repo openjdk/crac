@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2019, 2025, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2019, 2026, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -22,29 +22,33 @@
  *
  */
 
+#include "classfile/classFileParser.hpp"
 #include "jfr/instrumentation/jfrEventClassTransformer.hpp"
 #include "jfr/jfr.hpp"
 #include "jfr/jni/jfrJavaSupport.hpp"
 #include "jfr/jni/jfrUpcalls.hpp"
 #include "jfr/leakprofiler/leakProfiler.hpp"
 #include "jfr/periodic/jfrOSInterface.hpp"
-#include "jfr/recorder/jfrRecorder.hpp"
 #include "jfr/recorder/checkpoint/jfrCheckpointManager.hpp"
+#include "jfr/recorder/jfrRecorder.hpp"
 #include "jfr/recorder/repository/jfrEmergencyDump.hpp"
-#include "jfr/recorder/service/jfrOptionSet.hpp"
-#include "jfr/recorder/service/jfrOptionSet.hpp"
 #include "jfr/recorder/repository/jfrRepository.hpp"
+#include "jfr/recorder/service/jfrOptionSet.hpp"
+#include "jfr/recorder/service/jfrRecorderService.hpp"
+#include "jfr/support/jfrClassDefineEvent.hpp"
 #include "jfr/support/jfrKlassExtension.hpp"
 #include "jfr/support/jfrResolution.hpp"
 #include "jfr/support/jfrThreadLocal.hpp"
 #include "jfr/support/methodtracer/jfrMethodTracer.hpp"
+#include "jfr/support/methodtracer/jfrTraceTagging.hpp"
 #include "memory/resourceArea.hpp"
-#include "oops/instanceKlass.hpp"
 #include "oops/instanceKlass.inline.hpp"
 #include "oops/klass.hpp"
 #include "runtime/flags/jvmFlag.hpp"
 #include "runtime/java.hpp"
 #include "runtime/javaThread.hpp"
+#include "runtime/os.hpp"
+
 
 bool Jfr::is_enabled() {
   return JfrRecorder::is_enabled();
@@ -83,20 +87,20 @@ void Jfr::on_unloading_classes() {
 }
 
 void Jfr::on_klass_creation(InstanceKlass*& ik, ClassFileParser& parser, TRAPS) {
+  JfrTraceId::assign(ik);
   if (IS_EVENT_OR_HOST_KLASS(ik)) {
     JfrEventClassTransformer::on_klass_creation(ik, parser, THREAD);
-    return;
-  }
-  if (JfrMethodTracer::in_use()) {
+  } else if (JfrMethodTracer::in_use()) {
     JfrMethodTracer::on_klass_creation(ik, parser, THREAD);
   }
+  if (!parser.is_internal()) {
+    JfrClassDefineEvent::on_creation(ik, parser, THREAD);
+  }
 }
 
-void Jfr::on_klass_redefinition(const InstanceKlass* ik, Thread* thread) {
-  assert(JfrMethodTracer::in_use(), "invariant");
-  JfrMethodTracer::on_klass_redefinition(ik, thread);
+void Jfr::on_klass_redefinition(const InstanceKlass* ik, const InstanceKlass* scratch_klass) {
+  JfrTraceTagging::on_klass_redefinition(ik, scratch_klass);
 }
-
 
 bool Jfr::is_excluded(Thread* t) {
   return JfrJavaSupport::is_excluded(t);
@@ -156,9 +160,9 @@ void Jfr::on_resolution(const Method* caller, const Method* target, TRAPS) {
 }
 #endif
 
-void Jfr::on_vm_shutdown(bool exception_handler, bool halt) {
+void Jfr::on_vm_shutdown(bool exception_handler /* false */, bool halt /* false */, bool oom /* false */) {
   if (!halt && JfrRecorder::is_recording()) {
-    JfrEmergencyDump::on_vm_shutdown(exception_handler);
+    JfrEmergencyDump::on_vm_shutdown(exception_handler, oom);
   }
 }
 
@@ -189,7 +193,7 @@ void Jfr::after_restore() {
     size_t buf_len = 4 + strlen(jfr_flag) + 1 + strlen(flag->get_ccstr()) + 1;
     ResourceMark rm;
     char *buf = NEW_RESOURCE_ARRAY(char, buf_len);
-    snprintf(buf, buf_len, "-XX:%s=%s", jfr_flag, flag->get_ccstr());
+    os::snprintf_checked(buf, buf_len, "-XX:%s=%s", jfr_flag, flag->get_ccstr());
     JavaVMOption option;
     option.optionString = buf;
     option.extraInfo = nullptr;
@@ -201,3 +205,19 @@ void Jfr::after_restore() {
     JfrUpcalls::request_start_after_restore();
   }
 }
+
+void Jfr::on_report_java_out_of_memory() {
+  if (CrashOnOutOfMemoryError && JfrRecorder::is_recording()) {
+    JfrRecorderService::emit_leakprofiler_events_on_oom();
+  }
+}
+
+#if INCLUDE_CDS
+void Jfr::on_restoration(const Klass* k, JavaThread* jt) {
+  assert(k != nullptr, "invariant");
+  JfrTraceId::restore(k);
+  if (k->is_instance_klass()) {
+    JfrClassDefineEvent::on_restoration(InstanceKlass::cast(k), jt);
+  }
+}
+#endif

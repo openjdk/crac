@@ -33,7 +33,6 @@ import jdk.test.lib.crac.CracTest;
 
 import java.lang.management.ManagementFactory;
 import java.nio.file.Files;
-import java.nio.file.Path;
 import java.util.*;
 import java.util.stream.Collectors;
 
@@ -125,13 +124,6 @@ public class VMOptionsTest implements CracTest {
 
         // Non-restore-settable option from before + allowing restore to fail => should succeed
         builder.vmOption("-XX:+CRaCIgnoreRestoreIfUnavailable");
-        checkRestoreOutput(builder.doRestore());
-
-        // Only restore-settable options one of which is aliased => should succeed
-        // TODO: once we have aliased restore-settable boolean options include them here
-        builder.clearVmOptions();
-        setVmOptions(builder, OPTIONS_RESTORE);
-        builder.vmOption("-XX:CREngine=criuengine"); // Deprecated alias
         checkRestoreOutput(builder.doRestore());
 
         // Only restore-settable options coming from a settings file => should succeed

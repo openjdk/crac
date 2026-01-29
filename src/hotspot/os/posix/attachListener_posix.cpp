@@ -22,24 +22,24 @@
  *
  */
 
+#include "attachListener_posix.hpp"
 #include "logging/log.hpp"
 #include "memory/allocation.inline.hpp"
+#include "memory/resourceArea.hpp"
+#include "os_posix.hpp"
+#include "posixAttachOperation.hpp"
 #include "runtime/interfaceSupport.inline.hpp"
 #include "runtime/os.inline.hpp"
-#include "os_posix.hpp"
 #include "services/attachListener.hpp"
-#include "attachListener_posix.hpp"
-#include "posixAttachOperation.hpp"
-#include "memory/resourceArea.hpp"
 #include "utilities/checkedCast.hpp"
 #include "utilities/macros.hpp"
 
-#include <unistd.h>
 #include <signal.h>
-#include <sys/types.h>
 #include <sys/socket.h>
-#include <sys/un.h>
 #include <sys/stat.h>
+#include <sys/types.h>
+#include <sys/un.h>
+#include <unistd.h>
 
 #if INCLUDE_SERVICES
 #ifndef AIX
@@ -99,10 +99,10 @@ int PosixAttachListener::init() {
     ::atexit(listener_cleanup);
   }
 
-  int n = snprintf(path, UNIX_PATH_MAX, "%s/.java_pid%d",
-                   os::get_temp_directory(), os::current_process_id());
+  int n = os::snprintf(path, UNIX_PATH_MAX, "%s/.java_pid%d",
+                       os::get_temp_directory(), os::current_process_id());
   if (n < (int)UNIX_PATH_MAX) {
-    n = snprintf(initial_path, UNIX_PATH_MAX, "%s.tmp", path);
+    n = os::snprintf(initial_path, UNIX_PATH_MAX, "%s.tmp", path);
   }
   if (n >= (int)UNIX_PATH_MAX) {
     return -1;
@@ -299,9 +299,8 @@ void AttachListener::vm_start() {
   struct stat st;
   int ret;
 
-  int n = snprintf(fn, UNIX_PATH_MAX, "%s/.java_pid%d",
-           os::get_temp_directory(), os::current_process_id());
-  assert(n < (int)UNIX_PATH_MAX, "java_pid file name buffer overflow");
+  os::snprintf_checked(fn, UNIX_PATH_MAX, "%s/.java_pid%d",
+                       os::get_temp_directory(), os::current_process_id());
 
   RESTARTABLE(::stat(fn, &st), ret);
   if (ret == 0) {
@@ -371,8 +370,8 @@ bool AttachListener::is_init_trigger() {
   RESTARTABLE(::stat(fn, &st), ret);
   if (ret == -1) {
     log_trace(attach)("Failed to find attach file: %s, trying alternate", fn);
-    snprintf(fn, sizeof(fn), "%s/.attach_pid%d", os::get_temp_directory(),
-             os::current_process_id());
+    os::snprintf_checked(fn, sizeof(fn), "%s/.attach_pid%d", os::get_temp_directory(),
+                         os::current_process_id());
     RESTARTABLE(::stat(fn, &st), ret);
     if (ret == -1) {
       log_debug(attach)("Failed to find attach file: %s", fn);

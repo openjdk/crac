@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2022, 2024, Oracle and/or its affiliates. All rights reserved.
+# Copyright (c) 2022, 2025, Oracle and/or its affiliates. All rights reserved.
 # DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
 #
 # This code is free software; you can redistribute it and/or modify it
@@ -40,6 +40,10 @@ on:
       xcode-toolset-version:
         required: false
         type: string
+      dry-run:
+        required: false
+        type: boolean
+        default: false
       debug-suffix:
         required: false
         type: string
@@ -155,6 +159,7 @@ jobs:
           platform: ${{ inputs.platform }}
           debug-suffix: ${{ matrix.debug-suffix }}
           static-suffix: ${{ inputs.static-suffix }}
+        if: ${{ inputs.dry-run == false }}
 
       - name: 'Install dependencies'
         run: |
@@ -218,6 +223,7 @@ jobs:
           JAVA_OPTIONS: >-
             -XX:-CreateCoredumpOnCrash
             ${{ matrix.test-name == 'jdk/crac' && '-Djdk.test.docker.retain.image=true -Djdk.test.crac.reuse.image=true' || '' }}
+        if: ${{ inputs.dry-run == false }}
 
         # This is a separate step, since if the markdown from a step gets bigger than
         # 1024 kB it is skipped, but then the short summary above is still generated

@@ -34,7 +34,7 @@
 #include "jfr/jfrEvents.hpp"
 #include "logging/logStream.hpp"
 #include "memory/allocation.hpp"
-#include "runtime/atomic.hpp"
+#include "runtime/atomicAccess.hpp"
 #include "runtime/mutexLocker.hpp"
 #include "runtime/orderAccess.hpp"
 #include "utilities/bitMap.inline.hpp"
@@ -52,7 +52,7 @@ public:
 
     if (SafepointSynchronize::is_at_safepoint()) {
       guarantee(Thread::current()->is_VM_thread() ||
-                FreeList_lock->owned_by_self(), "master free list MT safety protocol at a safepoint");
+                G1FreeList_lock->owned_by_self(), "master free list MT safety protocol at a safepoint");
     } else {
       guarantee(Heap_lock->owned_by_self(), "master free list MT safety protocol outside a safepoint");
     }
@@ -63,7 +63,8 @@ public:
 
 G1HeapRegionManager::G1HeapRegionManager() :
   _bot_mapper(nullptr),
-  _cardtable_mapper(nullptr),
+  _card_table_mapper(nullptr),
+  _refinement_table_mapper(nullptr),
   _committed_map(),
   _next_highest_used_hrm_index(0),
   _regions(),
@@ -76,7 +77,8 @@ G1HeapRegionManager::G1HeapRegionManager() :
 void G1HeapRegionManager::initialize(G1RegionToSpaceMapper* heap_storage,
                                      G1RegionToSpaceMapper* bitmap,
                                      G1RegionToSpaceMapper* bot,
-                                     G1RegionToSpaceMapper* cardtable) {
+                                     G1RegionToSpaceMapper* card_table,
+                                     G1RegionToSpaceMapper* refinement_table) {
   _next_highest_used_hrm_index = 0;
 
   _heap_mapper = heap_storage;
@@ -84,7 +86,8 @@ void G1HeapRegionManager::initialize(G1RegionToSpaceMapper* heap_storage,
   _bitmap_mapper = bitmap;
 
   _bot_mapper = bot;
-  _cardtable_mapper = cardtable;
+  _card_table_mapper = card_table;
+  _refinement_table_mapper = refinement_table;
 
   _regions.initialize(heap_storage->reserved(), G1HeapRegion::GrainBytes);
   _max_available_regions = (uint) (FLAG_IS_DEFAULT(CRaCMaxHeapSizeBeforeCheckpoint) ? _regions.length() :
@@ -200,7 +203,8 @@ void G1HeapRegionManager::commit_regions(uint index, size_t num_regions, WorkerT
   _bitmap_mapper->commit_regions(index, num_regions, pretouch_workers);
 
   _bot_mapper->commit_regions(index, num_regions, pretouch_workers);
-  _cardtable_mapper->commit_regions(index, num_regions, pretouch_workers);
+  _card_table_mapper->commit_regions(index, num_regions, pretouch_workers);
+  _refinement_table_mapper->commit_regions(index, num_regions, pretouch_workers);
 }
 
 void G1HeapRegionManager::uncommit_regions(uint start, uint num_regions) {
@@ -223,7 +227,8 @@ void G1HeapRegionManager::uncommit_regions(uint start, uint num_regions) {
   _bitmap_mapper->uncommit_regions(start, num_regions);
 
   _bot_mapper->uncommit_regions(start, num_regions);
-  _cardtable_mapper->uncommit_regions(start, num_regions);
+  _card_table_mapper->uncommit_regions(start, num_regions);
+  _refinement_table_mapper->uncommit_regions(start, num_regions);
 
   _committed_map.uncommit(start, end);
 }
@@ -275,19 +280,23 @@ void G1HeapRegionManager::clear_auxiliary_data_structures(uint start, uint num_r
   // Signal G1BlockOffsetTable to clear the given regions.
   _bot_mapper->signal_mapping_changed(start, num_regions);
   // Signal G1CardTable to clear the given regions.
-  _cardtable_mapper->signal_mapping_changed(start, num_regions);
+  _card_table_mapper->signal_mapping_changed(start, num_regions);
+  // Signal refinement table to clear the given regions.
+  _refinement_table_mapper->signal_mapping_changed(start, num_regions);
 }
 
 MemoryUsage G1HeapRegionManager::get_auxiliary_data_memory_usage() const {
   size_t used_sz =
     _bitmap_mapper->committed_size() +
     _bot_mapper->committed_size() +
-    _cardtable_mapper->committed_size();
+    _card_table_mapper->committed_size() +
+    _refinement_table_mapper->committed_size();
 
   size_t committed_sz =
     _bitmap_mapper->reserved_size() +
     _bot_mapper->reserved_size() +
-    _cardtable_mapper->reserved_size();
+    _card_table_mapper->reserved_size() +
+    _refinement_table_mapper->reserved_size();
 
   return MemoryUsage(0, used_sz, committed_sz, committed_sz);
 }
@@ -302,7 +311,7 @@ uint G1HeapRegionManager::uncommit_inactive_regions(uint limit) {
   uint uncommitted = 0;
   uint offset = 0;
   do {
-    MutexLocker uc(Uncommit_lock, Mutex::_no_safepoint_check_flag);
+    MutexLocker uc(G1Uncommit_lock, Mutex::_no_safepoint_check_flag);
     G1HeapRegionRange range = _committed_map.next_inactive_range(offset);
     // No more regions available for uncommit. Return the number of regions
     // already uncommitted or 0 if there were no longer any inactive regions.
@@ -391,7 +400,7 @@ bool G1HeapRegionManager::expand_exact(uint start, uint num_regions, WorkerThrea
     if (_committed_map.inactive(i)) {
       // Need to grab the lock since this can be called by a java thread
       // doing humongous allocations.
-      MutexLocker uc(Uncommit_lock, Mutex::_no_safepoint_check_flag);
+      MutexLocker uc(G1Uncommit_lock, Mutex::_no_safepoint_check_flag);
       // State might change while getting the lock.
       if (_committed_map.inactive(i)) {
         reactivate_regions(i, 1);
@@ -518,10 +527,6 @@ uint G1HeapRegionManager::find_contiguous_in_free_list(uint num_regions) {
 }
 
 uint G1HeapRegionManager::find_contiguous_allow_expand(uint num_regions) {
-  // Check if we can actually satisfy the allocation.
-  if (num_regions > num_available_regions()) {
-    return G1_NO_HRM_INDEX;
-  }
   // Find any candidate.
   return find_contiguous_in_range(0, max_num_regions(), num_regions);
 }
@@ -773,7 +778,7 @@ bool G1HeapRegionClaimer::is_region_claimed(uint region_index) const {
 
 bool G1HeapRegionClaimer::claim_region(uint region_index) {
   assert(region_index < _n_regions, "Invalid index.");
-  uint old_val = Atomic::cmpxchg(&_claims[region_index], Unclaimed, Claimed);
+  uint old_val = AtomicAccess::cmpxchg(&_claims[region_index], Unclaimed, Claimed);
   return old_val == Unclaimed;
 }
 

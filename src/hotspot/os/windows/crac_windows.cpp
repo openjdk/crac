@@ -22,7 +22,9 @@
  */
 
 #include "jvm.h"
+#include "runtime/crac.hpp"
 #include "runtime/crac_structs.hpp"
+#include "runtime/os.hpp"
 
 void crac::vm_create_start() {
 }

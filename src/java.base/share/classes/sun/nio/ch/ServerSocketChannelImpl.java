@@ -65,7 +65,6 @@ import jdk.internal.access.JavaNioChannelsSpiAccess;
 import jdk.internal.access.SharedSecrets;
 import jdk.internal.crac.JDKSocketResource;
 import jdk.internal.crac.JDKSocketResourceBase;
-import sun.net.NetHooks;
 import sun.net.ext.ExtendedSocketOptions;
 
 /**
@@ -346,7 +345,6 @@ class ServerSocketChannelImpl
         } else {
             isa = Net.checkAddress(local, family);
         }
-        NetHooks.beforeTcpBind(fd, isa.getAddress(), isa.getPort());
         Net.bind(family, fd, isa.getAddress(), isa.getPort());
         Net.listen(fd, backlog < 1 ? 50 : backlog);
         return Net.localAddress(fd);

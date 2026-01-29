@@ -38,9 +38,7 @@ import java.util.Collections;
 import java.util.concurrent.Future;
 import java.util.concurrent.locks.ReadWriteLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
-
 import jdk.internal.crac.JDKSocketResource;
-import sun.net.NetHooks;
 import sun.net.ext.ExtendedSocketOptions;
 
 /**
@@ -219,7 +217,6 @@ abstract class AsynchronousServerSocketChannelImpl
             synchronized (stateLock) {
                 if (localAddress != null)
                     throw new AlreadyBoundException();
-                NetHooks.beforeTcpBind(fd, isa.getAddress(), isa.getPort());
                 Net.bind(fd, isa.getAddress(), isa.getPort());
                 this.backlog = backlog < 1 ? 50 : backlog;
                 Net.listen(fd, this.backlog);

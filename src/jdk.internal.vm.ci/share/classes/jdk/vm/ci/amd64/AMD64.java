@@ -288,6 +288,7 @@ public class AMD64 extends Architecture {
         AVX512_FP16,
         AVX10_1,
         AVX10_2,
+        HYBRID,
         FMA4,
         MOVBE,
         OSXSAVE,

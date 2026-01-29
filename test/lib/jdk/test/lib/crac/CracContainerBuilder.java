@@ -249,7 +249,7 @@ public class CracContainerBuilder extends CracBuilderBase<CracContainerBuilder> 
         }
         new File(System.getProperty("user.dir") + "/cr").mkdirs(); // create "cr" dir under the current user, to be able to delete it later.
         cmd.addAll(Arrays.asList("--volume", System.getProperty("user.dir") + "/cr:/cr"));
-        if (engine == CracEngine.CRIU) {
+        if (engine == null || engine == CracEngine.CRIU) {
             cmd.addAll(Arrays.asList("--volume", CRIU_PATH + ":/criu"));
             cmd.addAll(Arrays.asList("--env", "CRAC_CRIU_PATH=/criu"));
         }

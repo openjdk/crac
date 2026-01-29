@@ -964,7 +964,9 @@ void G1CollectedHeap::cleanup_unused_regions() {
   assert(capacity() <= orig_capacity, "unexpectedly gained capacity: %zu -> %zu", orig_capacity, capacity());
 
   // Commit them back
-  expand(orig_capacity - capacity(), _workers);
+  if (capacity() < orig_capacity) {
+    expand(orig_capacity - capacity(), _workers);
+  }
   assert(capacity() >= orig_capacity, "unexpectedly lost capacity: %zu -> %zu", orig_capacity, capacity());
 }
 

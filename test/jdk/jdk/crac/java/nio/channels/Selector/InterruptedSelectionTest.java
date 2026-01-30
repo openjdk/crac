@@ -19,18 +19,21 @@
 // have any questions.
 
 import jdk.test.lib.crac.CracBuilder;
+import jdk.test.lib.crac.CracEngine;
 import jdk.test.lib.crac.CracTest;
 import jdk.test.lib.crac.CracTestArg;
 
 import java.nio.channels.Selector;
 import java.io.IOException;
+import java.nio.channels.spi.SelectorProvider;
+
+import static jdk.test.lib.Asserts.assertEquals;
 
 /*
- * @test Selector/interruptedSelection
+ * @test id=DEFAULT
  * @summary check that the thread blocked by Selector.select() could be properly woken up by an interruption
- * @requires (os.family == "linux")
  * @library /test/lib
- * @build Test
+ * @build InterruptedSelectionTest
  * @run driver/timeout=30 jdk.test.lib.crac.CracTest true  true  false
  * @run driver/timeout=30 jdk.test.lib.crac.CracTest true  false false
  * @run driver/timeout=30 jdk.test.lib.crac.CracTest false true  false
@@ -38,7 +41,31 @@ import java.io.IOException;
  * @run driver/timeout=30 jdk.test.lib.crac.CracTest true  true  true
  * @run driver/timeout=30 jdk.test.lib.crac.CracTest false true  true
  */
-public class Test implements CracTest {
+/*
+ * @test id=ALT_UNIX
+ * @requires (os.family != "windows")
+ * @library /test/lib
+ * @build InterruptedSelectionTest
+ * @run driver/timeout=30 jdk.test.lib.crac.CracTest true  true  false sun.nio.ch.PollSelectorProvider
+ * @run driver/timeout=30 jdk.test.lib.crac.CracTest true  false false sun.nio.ch.PollSelectorProvider
+ * @run driver/timeout=30 jdk.test.lib.crac.CracTest false true  false sun.nio.ch.PollSelectorProvider
+ * @run driver/timeout=30 jdk.test.lib.crac.CracTest false false false sun.nio.ch.PollSelectorProvider
+ * @run driver/timeout=30 jdk.test.lib.crac.CracTest true  true  true  sun.nio.ch.PollSelectorProvider
+ * @run driver/timeout=30 jdk.test.lib.crac.CracTest false true  true  sun.nio.ch.PollSelectorProvider
+ */
+/*
+ * @test id=ALT_WINDOWS
+ * @requires (os.family == "windows")
+ * @library /test/lib
+ * @build InterruptedSelectionTest
+ * @run driver/timeout=30 jdk.test.lib.crac.CracTest true  true  false sun.nio.ch.WindowsSelectorProvider
+ * @run driver/timeout=30 jdk.test.lib.crac.CracTest true  false false sun.nio.ch.WindowsSelectorProvider
+ * @run driver/timeout=30 jdk.test.lib.crac.CracTest false true  false sun.nio.ch.WindowsSelectorProvider
+ * @run driver/timeout=30 jdk.test.lib.crac.CracTest false false false sun.nio.ch.WindowsSelectorProvider
+ * @run driver/timeout=30 jdk.test.lib.crac.CracTest true  true  true  sun.nio.ch.WindowsSelectorProvider
+ * @run driver/timeout=30 jdk.test.lib.crac.CracTest false true  true  sun.nio.ch.WindowsSelectorProvider
+ */
+public class InterruptedSelectionTest implements CracTest {
     @CracTestArg(0)
     boolean setTimeout;
 
@@ -48,19 +75,29 @@ public class Test implements CracTest {
     @CracTestArg(2)
     boolean skipCR;
 
+    @CracTestArg(value = 3, optional = true)
+    String selectorImpl;
+
     @Override
     public void test() throws Exception {
-        CracBuilder builder = new CracBuilder();
+        CracBuilder builder = new CracBuilder().engine(CracEngine.SIMULATE);
+        if (selectorImpl != null) {
+            builder.javaOption(SelectorProvider.class.getName(), selectorImpl);
+        }
         if (skipCR) {
             builder.doPlain();
         } else {
-            builder.doCheckpointAndRestore();
+            builder.startCheckpoint().waitForSuccess();
         }
     }
 
     // select(): interrupt before the checkpoint
     @Override
     public void exec() throws Exception {
+        if (selectorImpl != null) {
+            assertEquals(selectorImpl, SelectorProvider.provider().getClass().getName());
+        }
+
         Selector selector = Selector.open();
         Runnable r = new Runnable() {
             @Override

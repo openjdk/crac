@@ -26,6 +26,7 @@
 #include "compiler/compilerDefinitions.hpp"
 #include "jvm_io.h"
 #include "runtime/arguments.hpp"
+#include "runtime/globals_extension.hpp"
 #include "runtime/vm_version.hpp"
 #include "utilities/globalDefinitions.hpp"
 
@@ -401,4 +402,15 @@ const char* Abstract_VM_Version::cpu_description(void) {
   }
   strncpy(tmp, _cpu_desc, CPU_DETAILED_DESC_BUF_SIZE);
   return tmp;
+}
+
+void Abstract_VM_Version::check_cpufeatures_vmoptions() {
+  if (!FLAG_IS_DEFAULT(CPUFeatures)) {
+    if (strcmp(CPUFeatures, "native") && strcmp(CPUFeatures, "generic") && strcmp(CPUFeatures, "ignore")) {
+      vm_exit_during_initialization("This architecture does not support any arch-specific -XX:CPUFeatures options");
+    }
+  }
+  if (!FLAG_IS_DEFAULT(ShowCPUFeatures)) {
+    tty->print_cr("Do not use -XX:ShowCPUFeatures: this architecture does not support any arch-specific strings.");
+  }
 }

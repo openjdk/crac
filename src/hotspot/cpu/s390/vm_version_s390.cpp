@@ -328,6 +328,8 @@ void VM_Version::initialize() {
   if (FLAG_IS_DEFAULT(UseUnalignedAccesses)) {
     FLAG_SET_DEFAULT(UseUnalignedAccesses, true);
   }
+
+  check_cpufeatures_vmoptions();
 }
 
 

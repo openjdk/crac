@@ -45,6 +45,8 @@
   OPT(image_location) \
   OPT(exec_location) \
 
+#define DIRECT_MAP "direct_map"
+
 #define ARRAY_ELEM(opt) #opt,
 static constexpr const char * const vm_controlled_engine_opts[] = {
   VM_CONTROLLED_ENGINE_OPTS(ARRAY_ELEM)
@@ -166,7 +168,7 @@ static crlib_conf_t *create_conf(const crlib_api_t &api, const char *exec_locati
     return nullptr;
   }
 
-  if (CRaCEngineOptions != nullptr && strcmp(CRaCEngineOptions, "help") == 0) {
+  if (CRaCEngineOptions != nullptr && (!strcmp(CRaCEngineOptions, "help") || !strncmp(CRaCEngineOptions, "help=", 5))) {
     return conf;
   }
 
@@ -175,6 +177,14 @@ static crlib_conf_t *create_conf(const crlib_api_t &api, const char *exec_locati
               "crexec does not support expected option: %s", engine_opt_exec_location);
     if (!api.configure(conf, engine_opt_exec_location, exec_location)) {
       log_error(crac)("crexec failed to configure: '%s' = '%s'", engine_opt_exec_location, exec_location);
+      api.destroy_conf(conf);
+      return nullptr;
+    }
+  }
+
+  if (api.can_configure(conf, DIRECT_MAP)) {
+    if (!api.configure(conf, DIRECT_MAP, "true")) {
+      log_error(crac)("CRaC engine failed to configure: '" DIRECT_MAP "' = 'true'");
       api.destroy_conf(conf);
       return nullptr;
     }
@@ -316,6 +326,7 @@ CracEngine::~CracEngine() {
     _api->destroy_conf(_conf);
     os::dll_unload(_lib);
   }
+  FREE_C_HEAP_ARRAY(crlib_conf_option_t, _options);
 }
 
 bool CracEngine::is_initialized() const {
@@ -362,8 +373,11 @@ GrowableArrayCHeap<const char *, MemTag::mtInternal> *CracEngine::vm_controlled_
   } \
   constexpr const char *_ext_name = ext_name;
 
+#define has_method(_ext_api, _func) \
+  (_ext_api->header.size >= offsetof(std::remove_reference<decltype(*_ext_api)>::type, _func) + sizeof(_ext_api->_func))
+
 #define require_method(_func) \
-  if (ext_api->_func == nullptr) { \
+  if (has_method(ext_api, _func) && ext_api->_func == nullptr) { \
     log_error(crac)("CRaC engine provided invalid API for extension %s: %s is not set", _ext_name, #_func); \
     return ApiStatus::ERR; \
   }
@@ -396,6 +410,7 @@ CracEngine::ApiStatus CracEngine::prepare_description_api() {
   require_method(configuration_doc)
   require_method(configurable_keys)
   require_method(supported_extensions)
+  require_method(configuration_options);
   complete_extension_api(_description_api)
 }
 
@@ -407,6 +422,44 @@ const char *CracEngine::description() const {
 const char *CracEngine::configuration_doc() const {
   precond(_description_api != nullptr);
   return _description_api->configuration_doc(_conf);
+}
+
+const crlib_conf_option_t *CracEngine::configuration_options() {
+  if (_options != nullptr) {
+    return _options;
+  }
+  if (!has_method(_description_api, configuration_options)) {
+    return nullptr;
+  }
+  const crlib_conf_option_t *options = _description_api->configuration_options(_conf);
+  if (options == nullptr) {
+    return nullptr;
+  }
+  const crlib_conf_option_t *src = options;
+  for (; src->key != nullptr; ++src);
+  _options = NEW_C_HEAP_ARRAY(crlib_conf_option_t, src - options + 1, mtInternal);
+  crlib_conf_option_t *dst = _options;
+  for (src = options; src->key != nullptr; ++src, ++dst) {
+    bool skip = false;
+    for (const char *opt : vm_controlled_engine_opts) {
+      if (!strcmp(src->key, opt)) {
+        skip = true;
+        break;
+      }
+    }
+    if (skip) {
+      --dst;
+      continue;
+    }
+    memcpy(dst, src, sizeof(*src));
+    if (!strcmp(dst->key, DIRECT_MAP)) {
+      // JVM is overriding the direct_map default in all engines
+      dst->default_value = "true";
+    }
+  }
+  // last element should be zeroes
+  memset(dst, 0, sizeof(*dst));
+  return _options;
 }
 
 static constexpr char cpuarch_name[] = "cpu.arch";
@@ -436,11 +489,11 @@ bool CracEngine::store_cpuinfo(const VM_Version::VM_Features *datap) const {
   return true;
 }
 
-void CracEngine::require_cpuinfo(const VM_Version::VM_Features *datap) const {
+void CracEngine::require_cpuinfo(const VM_Version::VM_Features *datap, bool exact) const {
   log_debug(crac)("cpufeatures_load user data %s from %s...", cpufeatures_name, CRaCRestoreFrom);
   _image_constraints_api->require_label(_conf, cpuarch_name, ARCHPROPNAME);
   _image_constraints_api->require_bitmap(_conf, cpufeatures_name,
-    reinterpret_cast<const unsigned char *>(datap), sizeof(*datap), SUBSET);
+    reinterpret_cast<const unsigned char *>(datap), sizeof(*datap), exact ? EQUALS : SUBSET);
 }
 
 void CracEngine::check_cpuinfo(const VM_Version::VM_Features *datap) const {

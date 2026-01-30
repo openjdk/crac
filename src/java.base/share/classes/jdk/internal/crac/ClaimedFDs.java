@@ -82,7 +82,14 @@ public class ClaimedFDs {
             .filter((var e) -> e.getKey().valid())
             .map(entry -> {
                     Descriptor d = entry.getValue();
-                    d.setFd(fileDescriptorAccess.get(entry.getKey()));
+                    int fd = fileDescriptorAccess.get(entry.getKey());
+                    if (fd < 0) {
+                        assert fileDescriptorAccess.getHandle(entry.getKey()) != -1;
+                        // On Windows the native FDs check is a no-op, but we need to set
+                        // the FD to prevent assertion failure on Descriptor.getFd()
+                        fd = 0;
+                    }
+                    d.setFd(fd);
                     return d;
                 })
             .collect(Collectors.toList());
@@ -97,8 +104,8 @@ public class ClaimedFDs {
         }
 
         Descriptor descriptor = fds.get(fd);
-        LoggerContainer.debug("ClaimFD: fd {0} claimer {1} existing {2}",
-            fd, claimer, descriptor != null ? descriptor.claimer : "NONE");
+        LoggerContainer.debug("ClaimFD: fd {0} ({1}) claimer {2} existing {3}",
+            fd, fileDescriptorAccess.get(fd), claimer, descriptor != null ? descriptor.claimer : "NONE");
         if (descriptor == null ||
                 Stream.of(suppressedClaimers).anyMatch((supressed) -> supressed == descriptor.getClaimer())) {
             fds.put(fd, new Descriptor(claimer, supplier));

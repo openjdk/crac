@@ -636,6 +636,8 @@ void VM_Version::initialize() {
     _features &= ~CPU_SVE;
   }
 
+  check_cpufeatures_vmoptions();
+
   // Construct the "features" string
   char buf[512];
   int buf_used_len = os::snprintf_checked(buf, sizeof(buf), "0x%02x:0x%x:0x%03x:%d", _cpu, _variant, _model, _revision);

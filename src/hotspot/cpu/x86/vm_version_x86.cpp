@@ -891,8 +891,7 @@ class VM_Version_StubGenerator: public StubCodeGenerator {
 VM_Version::VM_Features VM_Version::CPUFeatures_parse(const char *str) {
 #ifndef LINUX
   _ignore_glibc_not_using = true;
-  return _features;
-#else
+#endif // !LINUX
   if (str == nullptr || strcmp(str, "native") == 0) {
     return _features;
   }
@@ -901,6 +900,9 @@ VM_Version::VM_Features VM_Version::CPUFeatures_parse(const char *str) {
     return _features;
   }
   if (strcmp(str, "generic") == 0) {
+#ifndef LINUX
+    return _features;
+#else
     // 32-bit x86 cannot rely on anything.
     VM_Version::VM_Features retval;
 #ifdef AMD64
@@ -915,9 +917,14 @@ VM_Version::VM_Features VM_Version::CPUFeatures_parse(const char *str) {
     retval.set_feature(CPU_FLUSH); // ="clflush" in cpuinfo, not used by gcc, required by OpenJDK
     // CPU_MOVBE is disabled in 'gcc -Q --help=target' and for example i7-720QM does not support it
     // CPU_LAHFSAHF is disabled in 'gcc -Q --help=target' and "Early Intel Pentium 4 CPUs with Intel 64 support ... lacked the LAHF and SAHF instructions"
-#endif
+#endif // AMD64
     return retval;
+#endif // LINUX
   }
+#ifndef LINUX
+  vm_exit_during_initialization("This OS does not support any arch-specific -XX:CPUFeatures options");
+  return {};
+#else // LINUX
   int count = VM_Version::VM_Features::features_bitmap_element_count();
   VM_Version::VM_Features retval;
   const char *str_orig = str;
@@ -953,13 +960,13 @@ bool VM_Version::_ignore_glibc_not_using = false;
 #ifdef LINUX
 const char VM_Version::glibc_prefix[] = ":glibc.cpu.hwcaps=";
 const size_t VM_Version::glibc_prefix_len = strlen(glibc_prefix);
-static bool from_reexec;
 
 bool VM_Version::glibc_env_set(char *disable_str) {
 #define TUNABLES_NAME "GLIBC_TUNABLES"
 #define REEXEC_NAME "HOTSPOT_GLIBC_TUNABLES_REEXEC"
   char *env_val = disable_str;
   const char *env = getenv(TUNABLES_NAME);
+  bool from_reexec = getenv(REEXEC_NAME) != nullptr;
   if (env && (strcmp(env, env_val) == 0 || (!INCLUDE_CPU_FEATURE_ACTIVE && from_reexec))) {
     if (!INCLUDE_CPU_FEATURE_ACTIVE) {
       if (ShowCPUFeatures) {
@@ -1065,8 +1072,6 @@ void VM_Version::glibc_reexec() {
 bool VM_Version::glibc_not_using() {
   if (_ignore_glibc_not_using)
     return true;
-
-  from_reexec = getenv(REEXEC_NAME) != nullptr;
 
   VM_Version::VM_Features features_expected;
   features_expected.set_all_features();
@@ -1197,8 +1202,6 @@ bool VM_Version::glibc_not_using() {
   };
 #define EXCESSIVE2(tunables, feature_active) shouldnotuse_set(PASTE_TOKENS(CPU_, tunables), STR(tunables), feature_active)
 #define EXCESSIVE(tunables) EXCESSIVE2(tunables, FEATURE_ACTIVE(tunables))
-// There is no CPU_FEATURE_ACTIVE() available for this symbol.
-#define EXCESSIVE_GLIBC_PREFERRED(tunables) EXCESSIVE2(tunables, !from_reexec)
   EXCESSIVE(AVX     );
   EXCESSIVE(CX8     );
   EXCESSIVE(FMA     );
@@ -1229,7 +1232,10 @@ bool VM_Version::glibc_not_using() {
   EXCESSIVE(OSXSAVE );
   EXCESSIVE(HTT     );
   EXCESSIVE(XSAVEC  );
-  EXCESSIVE_GLIBC_PREFERRED(AVX_Fast_Unaligned_Load);
+  // There is no CPU_FEATURE_ACTIVE() available for this symbol.
+  // The detection is a copy from glibc sysdeps/x86/cpu-features.c .
+  // There is no check for 'xem_xcr0_eax.bits.sse != 0 && xem_xcr0_eax.bits.ymm != 0' but FEATURE_ACTIVE(AVX) depends on it so it can be assumed.
+  EXCESSIVE2(AVX_Fast_Unaligned_Load, FEATURE_ACTIVE(OSXSAVE) && FEATURE_ACTIVE(AVX) && FEATURE_ACTIVE(AVX2));
 #undef EXCESSIVE
 
 #ifdef ASSERT
@@ -2578,7 +2584,7 @@ void VM_Version::VM_Features::print_missing_features() const {
   char buf[MAX_CPU_FEATURES * 16];
   print_numbers_and_names(buf, sizeof(buf));
   tty->print_cr("; missing features of this CPU are %s\n"
-                "If you are sure it will not crash you can override this check by -XX:+UnlockExperimentalVMOptions -XX:+IgnoreCPUFeatures .",
+                "If you are sure it will not crash you can override this check by -XX:+UnlockExperimentalVMOptions -XX:CheckCPUFeatures=ignore .",
                 buf);
 }
 
@@ -3656,14 +3662,13 @@ VM_Version::VM_Features VM_Version::CpuidInfo::feature_flags() const {
   if (xfs_cpuidD1_eax.bits.xsavec != 0) {
     vm_features.set_feature(CPU_XSAVEC);
   }
-  // sysdeps/x86/cpu-features.c
+  // The detection is a copy from glibc sysdeps/x86/cpu-features.c .
   if (vm_features.supports_feature(CPU_OSXSAVE)) {
-    if (xem_xcr0_eax.bits.sse != 0 &&
-        xem_xcr0_eax.bits.ymm != 0) {
-      if (vm_features.supports_feature(CPU_AVX)) {
-        if (vm_features.supports_feature(CPU_AVX2)) {
-          vm_features.set_feature(CPU_AVX_Fast_Unaligned_Load);
-        }
+    if (vm_features.supports_feature(CPU_AVX)) {
+      assert(xem_xcr0_eax.bits.sse != 0, "required by CPU_AVX");
+      assert(xem_xcr0_eax.bits.ymm != 0, "required by CPU_AVX");
+      if (vm_features.supports_feature(CPU_AVX2)) {
+        vm_features.set_feature(CPU_AVX_Fast_Unaligned_Load);
       }
     }
   }

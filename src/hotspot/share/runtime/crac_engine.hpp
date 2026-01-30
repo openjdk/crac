@@ -66,11 +66,12 @@ public:
   ApiStatus prepare_description_api();
   const char *description() const;
   const char *configuration_doc() const;
+  const crlib_conf_option_t *configuration_options();
 
   ApiStatus prepare_image_constraints_api();
   bool set_label(const char* label, const char* value);
   bool store_cpuinfo(const VM_Version::VM_Features *datap) const;
-  void require_cpuinfo(const VM_Version::VM_Features *datap) const;
+  void require_cpuinfo(const VM_Version::VM_Features *datap, bool exact) const;
   void check_cpuinfo(const VM_Version::VM_Features *datap) const;
 
   ApiStatus prepare_image_score_api();
@@ -85,6 +86,8 @@ private:
   crlib_description_t *_description_api = nullptr;
   crlib_image_constraints_t *_image_constraints_api = nullptr;
   crlib_image_score_t *_image_score_api = nullptr;
+
+  crlib_conf_option_t *_options = nullptr;
 };
 
 #endif // SHARE_RUNTIME_CRAC_ENGINE_HPP

@@ -197,6 +197,10 @@ static void print_bitmap(const char* name, const unsigned char* data, size_t siz
 }
 
 bool ImageConstraints::validate(const char* image_location) const {
+  if (_constraints.size() == 0) {
+    // If there are no constraints don't even try to open the file (it's fine if it is missing)
+    return true;
+  }
   FILE* f = open_tags(image_location, "r");
   if (f == nullptr) {
     return false;

@@ -5,7 +5,10 @@ import jdk.crac.Core;
 import java.lang.reflect.*;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Arrays;
 import java.util.Comparator;
+import java.util.HashSet;
+import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Stream;
@@ -155,6 +158,10 @@ public interface CracTest {
                 }
             } else if (t.isEnum()) {
                 value = Enum.valueOf((Class<Enum>) t, arg);
+            } else if (t == Method.class) {
+                Method m = testInstance.getClass().getDeclaredMethod(arg);
+                m.setAccessible(true);
+                value = m;
             }
             f.setAccessible(true);
             f.set(testInstance, value);
@@ -167,8 +174,11 @@ public interface CracTest {
     }
 
     private static Field[] getArgFields(Class<? extends CracTest> testClass) {
-        // TODO: check superclasses
-        Field[] sortedFields = Stream.of(testClass.getDeclaredFields()).filter(f -> f.isAnnotationPresent(CracTestArg.class))
+        Set<Field> argFields = new HashSet<>();
+        for (Class<?> cls = testClass; cls != null && cls != Object.class; cls = cls.getSuperclass()) {
+            Arrays.stream(cls.getDeclaredFields()).filter(f -> f.isAnnotationPresent(CracTestArg.class)).forEach(argFields::add);
+        }
+        Field[] sortedFields = argFields.stream()
                 .sorted(Comparator.comparingInt(f -> f.getAnnotation(CracTestArg.class).value()))
                 .toArray(Field[]::new);
         if (sortedFields.length == 0) {

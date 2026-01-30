@@ -1881,20 +1881,41 @@ performed by the Java HotSpot VM.
     compilation while values greater than 1.0 delay compilation. Setting
     `CompileThresholdScaling` to 0 is equivalent to disabling compilation.
 
-`-XX:CPUFeatures=`*0xnumber,0xnumber*
-:   CPU feature set, use `-XX:CPUFeatures=`*0xnumber,0xnumber* with
-    `-XX:CRaCCheckpointTo` when you get an error during `-XX:CRaCRestoreFrom`
-    on a different machine. `-XX:CPUFeatures=native` is the default.
-    `-XX:CPUFeatures=generic` is compatible with any CPU.
+`-XX:CPUFeatures=`*features*
+:   Limit the set of CPU features to make the CRaC image compatible for running
+    on a machine with a different CPU:
+
+    `native`
+    :   Use all available CPU features (default).
+
+    `generic`
+    :   This option is compatible with most CPUs and faster than disabling
+        all optional features.
+
+    `ignore`
+    :   Do not store CPU features at all.
+
+    *arch-specific*
+    :   Architecture specific string, e.g. *0xnumber,0xnumber* on x86_64.
+        Use `-XX:+ShowCPUFeatures` to find a suitable architecture-specific
+        string.
 
 `-XX:+DoEscapeAnalysis`
 :   Enables the use of escape analysis. This option is enabled by default. To
     disable the use of escape analysis, specify `-XX:-DoEscapeAnalysis`.
 
-`-XX:+IgnoreCPUFeatures`
-:   Skip any verifications of `-XX:CPUFeatures`. It may lead to a crash
-    if `-XX:CRaCRestoreFrom` is used on a CPU with less features than the CPU
-    where `-XX:CRaCCheckpointTo` was made.
+`-XX:CheckCPUFeatures=`*check*
+:   Set requirements for CPU features check:
+
+    `compatible`
+    :   The image must be runnable on this CPU (default).
+
+    `exact`
+    :   The image must use the very same features as this CPU.
+
+    `skip`
+    :   Don't check features at all. This option is allowed only when
+        `-XX:+UnlockExperimentalVMOptions` is used.
 
 `-XX:InitialCodeCacheSize=`*size*
 :   Sets the initial code cache size (in bytes). Append the letter `k` or `K`

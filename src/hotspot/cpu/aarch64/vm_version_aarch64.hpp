@@ -66,7 +66,7 @@ public:
   static void initialize();
   struct VM_Features: public Zero_Features {};
   static bool cpu_features_binary(VM_Features *data) { return false; }
-  static bool ignore_cpu_features(bool is_checkpoint) { return true; }
+  static bool ignore_cpu_features() { return true; }
   static void check_virtualizations();
 
   static void print_platform_virtualization_info(outputStream*);

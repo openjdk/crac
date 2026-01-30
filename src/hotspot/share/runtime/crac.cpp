@@ -317,7 +317,7 @@ int crac::checkpoint_restore(int *shmid) {
 
   // Setup CPU arch & features only during the first checkpoint; the feature set
   // cannot change after initial boot (and we don't support switching the engine).
-  if (_generation == 1 && !VM_Version::ignore_cpu_features(true)) {
+  if (_generation == 1 && !VM_Version::ignore_cpu_features()) {
     VM_Version::VM_Features data;
     if (VM_Version::cpu_features_binary(&data)) {
       switch (_engine->prepare_image_constraints_api()) {
@@ -506,7 +506,7 @@ void VM_Crac::doit() {
   _ok = true;
 }
 
-void crac::print_engine_info_and_exit() {
+void crac::print_engine_info_and_exit(const char *pattern) {
   CracEngine engine;
   if (!engine.is_initialized()) {
     return;
@@ -529,28 +529,50 @@ void crac::print_engine_info_and_exit() {
     return;
   }
   tty->print_raw_cr(description);
-
-  const char *conf_doc = engine.configuration_doc();
-  if (conf_doc == nullptr) {
-    log_error(crac)("CRaC engine failed to provide documentation of its configuration options");
-    return;
-  }
   tty->cr();
-  tty->print_raw_cr("Configuration options:");
-  tty->print_raw(conf_doc); // Doc string ends with CR by convention
 
-  const GrowableArrayCHeap<const char *, MemTag::mtInternal> *controlled_opts = engine.vm_controlled_options();
-  tty->cr();
-  tty->print_raw("Configuration options controlled by the JVM: ");
-  for (int i = 0; i < controlled_opts->length(); i++) {
-    const char *opt = controlled_opts->at(i);
-    tty->print_raw(opt);
-    if (i < controlled_opts->length() - 1) {
-      tty->print_raw(", ");
+  const crlib_conf_option_t *options = engine.configuration_options();
+  if (options != nullptr) {
+    if (pattern == nullptr) {
+      tty->print_raw_cr("Configuration options:");
+    } else {
+      tty->print_cr("Configuration options matching *%s*:", pattern);
     }
+    int matched = 0;
+    for (; options->key != nullptr; ++options) {
+      if (pattern == nullptr || strstr(options->key, pattern)) {
+        tty->print_cr("* %s=<%s> (default: %s) - %s", options->key, options->value_type, options->default_value, options->description);
+        ++matched;
+      }
+    }
+    if (pattern != nullptr && matched == 0) {
+      tty->print_raw_cr("(no configuration options match the pattern)");
+    }
+  } else {
+    tty->print_raw_cr("Configuration options:");
+    if (pattern != nullptr) {
+      log_warning(crac)("Option filtering by pattern not available");
+    }
+    const char *conf_doc = engine.configuration_doc();
+    if (conf_doc == nullptr) {
+      log_error(crac)("CRaC engine failed to provide documentation of its configuration options");
+      return;
+    }
+    tty->print_raw(conf_doc); // Doc string ends with CR by convention
+
+    const GrowableArrayCHeap<const char *, MemTag::mtInternal> *controlled_opts = engine.vm_controlled_options();
+    tty->cr();
+    tty->print_raw("Configuration options controlled by the JVM: ");
+    for (int i = 0; i < controlled_opts->length(); i++) {
+      const char *opt = controlled_opts->at(i);
+      tty->print_raw(opt);
+      if (i < controlled_opts->length() - 1) {
+        tty->print_raw(", ");
+      }
+    }
+    tty->cr();
+    delete controlled_opts;
   }
-  tty->cr();
-  delete controlled_opts;
 
   vm_exit(0);
   ShouldNotReachHere();
@@ -708,22 +730,23 @@ Handle crac::checkpoint(jarray fd_arr, jobjectArray obj_arr, bool dry_run, jlong
 }
 
 bool crac::is_image_constraints_supported() {
-  return _engine->prepare_image_constraints_api() == CracEngine::ApiStatus::OK;
+  return _engine != nullptr && _engine->prepare_image_constraints_api() == CracEngine::ApiStatus::OK;
 }
 
 bool crac::record_image_label(const char *label, const char *value) {
-  if (_engine->prepare_image_constraints_api() != CracEngine::ApiStatus::OK) {
+  if (_engine == nullptr || _engine->prepare_image_constraints_api() != CracEngine::ApiStatus::OK) {
     return false;
   }
   return _engine->set_label(label, value);
 }
 
 bool crac::is_image_score_supported() {
-  return _engine->prepare_image_score_api() == CracEngine::ApiStatus::OK;
+  // The engine is not initialized when CRaCCheckpointTo is not set
+  return _engine != nullptr && _engine->prepare_image_score_api() == CracEngine::ApiStatus::OK;
 }
 
 bool crac::record_image_score(jobjectArray metrics, jdoubleArray values) {
-  if (_engine->prepare_image_score_api() != CracEngine::ApiStatus::OK) {
+  if (_engine == nullptr || _engine->prepare_image_score_api() != CracEngine::ApiStatus::OK) {
     return false;
   }
   ResourceMark rm;
@@ -778,7 +801,7 @@ bool crac::record_image_score(jobjectArray metrics, jdoubleArray values) {
 }
 
 bool crac::record_image_score(const char *metric, double value) {
-  if (_engine->prepare_image_score_api() != CracEngine::ApiStatus::OK) {
+  if (_engine == nullptr || _engine->prepare_image_score_api() != CracEngine::ApiStatus::OK) {
     return false;
   }
   return _engine->set_score(metric, value);
@@ -812,12 +835,24 @@ void crac::restore(crac_restore_data& restore_data) {
   // was printed out but continued even despite features not being satisfied.
   // Since the check itself is delegated to the C/R Engine we will simply
   // skip the check here.
-  if (!VM_Version::ignore_cpu_features(false)) {
+  bool ignore = VM_Version::ignore_cpu_features();
+  bool exact = false;
+  if (CheckCPUFeatures == nullptr || !strcmp(CheckCPUFeatures, "compatible")) {
+    // default, compatible
+  } else if (!strcmp(CheckCPUFeatures, "skip")) {
+    ignore = true;
+  } else if (!strcmp(CheckCPUFeatures, "exact")) {
+    exact = true;
+  } else {
+    log_error(crac)("Invalid value for -XX:CheckCPUFeatures=%s; available are 'compatible', 'exact' or 'skip'", CheckCPUFeatures);
+    return;
+  }
+  if (!ignore) {
     switch (engine.prepare_image_constraints_api()) {
       case CracEngine::ApiStatus::OK: {
         VM_Version::VM_Features data;
         if (VM_Version::cpu_features_binary(&data)) {
-          engine.require_cpuinfo(&data);
+          engine.require_cpuinfo(&data, exact);
         }
         } break;
       case CracEngine::ApiStatus::ERR:

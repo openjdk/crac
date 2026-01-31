@@ -905,7 +905,7 @@ void crac::restore(crac_restore_data& restore_data) {
     log_error(crac)("CRaC engine failed to restore from %s: error %d", CRaCRestoreFrom, ret);
     VM_Version::VM_Features data;
     VM_Version::cpu_features_binary(&data); // ignore return value
-    engine.check_cpuinfo(&data);
+    engine.check_cpuinfo(&data, exact);
   }
 }
 

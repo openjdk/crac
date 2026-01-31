@@ -54,6 +54,7 @@ class Abstract_VM_Version: AllStatic {
   struct Zero_Features {
     int print_numbers(char *buf_orig, size_t buflen, bool hexonly = false) const { return 0; }
     const char *print_numbers() const { return ""; }
+    Zero_Features &operator &=(const Zero_Features &) { return *this; }
   };
 
   static const char*  _s_vm_release;

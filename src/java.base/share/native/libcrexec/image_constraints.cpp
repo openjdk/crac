@@ -289,7 +289,12 @@ bool ImageConstraints::validate(const char* image_location) const {
       print_bitmap("Image:        ", static_cast<const unsigned char*>(t->data), t->data_size);
       free((void *) c.image_data);
       c.image_data = static_cast<unsigned char *>(malloc(c.data_size));
-      memcpy(c.image_data, t->data, c.data_size);
+      if (c.image_data == nullptr) {
+        fprintf(stderr, CREXEC "Cannot allocate memory for a bitmap copy\n");
+        result = false;
+      } else {
+        memcpy(c.image_data, t->data, c.data_size);
+      }
     } else {
       c.failed = false;
     }

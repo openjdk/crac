@@ -510,6 +510,8 @@ void CracEngine::check_cpuinfo(const VM_Version::VM_Features *datap, bool exact)
       ResourceMark rm;
       if (!exact) {
         image_features &= *datap;
+      } else {
+        image_features = *datap;
       }
       log_error(crac)("Restore failed due to incompatible or missing CPU features, try using -XX:CPUFeatures=%s on checkpoint.", image_features.print_numbers());
     } else {

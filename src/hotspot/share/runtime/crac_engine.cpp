@@ -46,6 +46,7 @@
   OPT(exec_location) \
 
 #define DIRECT_MAP "direct_map"
+#define PAUSE "pause"
 
 #define ARRAY_ELEM(opt) #opt,
 static constexpr const char * const vm_controlled_engine_opts[] = {
@@ -56,6 +57,10 @@ static constexpr const char * const vm_controlled_engine_opts[] = {
 #define DEFINE_OPT_VAR(opt) static constexpr const char engine_opt_##opt[] = #opt;
 VM_CONTROLLED_ENGINE_OPTS(DEFINE_OPT_VAR)
 #undef DEFINE_OPT_VAR
+
+static bool is_pauseengine() {
+  return !strcmp(CRaCEngine, "pause") || !strcmp(CRaCEngine, "pauseengine");
+}
 
 static bool find_engine(const char *dll_dir, char *path, size_t path_size, bool *is_library) {
   // Try to interpret as a file path
@@ -87,11 +92,29 @@ static bool find_engine(const char *dll_dir, char *path, size_t path_size, bool 
     return true;
   }
 
+  const char *engine = CRaCEngine;
+  if (is_pauseengine()) {
+    engine = "simengine";
+    log_warning(crac)("-XX:CRaCEngine=pause/pauseengine is deprecated; use -XX:CRaCEngine=simengine -XX:CRaCEngineOptions=pause=true");
+  }
+
   // Try to interpret as a library name
-  if (os::dll_locate_lib(path, path_size, dll_dir, CRaCEngine)) {
+  if (os::dll_locate_lib(path, path_size, dll_dir, engine)) {
     *is_library = true;
-    log_debug(crac)("Found CRaCEngine %s as a library in %s", CRaCEngine, path);
+    log_debug(crac)("Found CRaCEngine %s as a library in %s", engine, path);
     return true;
+  }
+  // Alternative for engines without the `engine` suffix, to be used for non-absolute (=short) paths.
+  // Let's just skip it with weird long engine parameter.
+  // Note: resource mark allocation is not possible here (too early in JVM boot)
+  char alt_engine[128];
+  if (strlen(engine) + strlen("engine") + 1 <= sizeof(alt_engine)) {
+    os::snprintf_checked(alt_engine, sizeof(alt_engine), "%sengine", engine);
+    if (os::dll_locate_lib(path, path_size, dll_dir, alt_engine)) {
+      *is_library = true;
+      log_debug(crac)("Found CRaCEngine %s as a library in %s", engine, path);
+      return true;
+    }
   }
 
   *is_library = false;
@@ -170,6 +193,15 @@ static crlib_conf_t *create_conf(const crlib_api_t &api, const char *exec_locati
 
   if (CRaCEngineOptions != nullptr && (!strcmp(CRaCEngineOptions, "help") || !strncmp(CRaCEngineOptions, "help=", 5))) {
     return conf;
+  }
+
+  if (is_pauseengine()) {
+    guarantee(api.can_configure(conf, PAUSE), "simengine must support option " PAUSE);
+    if (!api.configure(conf, PAUSE, "true")) {
+      log_error(crac)("simengine failed to configure: '" PAUSE "' = 'true'");
+      api.destroy_conf(conf);
+      return nullptr;
+    }
   }
 
   if (exec_location != nullptr) { // Only passed when using crexec

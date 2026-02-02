@@ -60,15 +60,15 @@ public class ParsingTest {
         test("sim");
         test("simengine");
         if (Platform.isLinux()) {
-            test("pause");
-            test("pauseengine");
+            test("pause", Collections.emptyList(), 0, List.of("pauseengine is deprecated"), List.of("[error]"));
+            test("pauseengine", Collections.emptyList(), 0, List.of("pauseengine is deprecated"), List.of("[error"));
             test("criu");
             test("criuengine");
         }
 
         final String absolute = Platform.isWindows() ?
-            Path.of(Utils.TEST_JDK, "bin", "simengine.exe").toString() :
-            Path.of(Utils.TEST_JDK, "lib", "simengine").toString();
+            Path.of(Utils.TEST_JDK, "bin", "simengine.dll").toString() :
+            Path.of(Utils.TEST_JDK, "lib", "libsimengine" + (Platform.isOSX() ? ".dylib" : ".so")).toString();
         test(absolute);
 
         test("unknown", null, 1, "Cannot find CRaC engine unknown");
@@ -80,8 +80,6 @@ public class ParsingTest {
     @Test
     public void test_options() throws Exception {
         test("simengine", "");
-        test("simengine", "args=simengine ignores this", 0,
-                "CRaC engine option: 'args' = 'simengine ignores this'");
         test("simengine", Arrays.asList("image_location=cr"), 0,
                 Arrays.asList("VM-controlled CRaC engine option provided, skipping: image_location"),
                 Arrays.asList("[error]") /* warning are expected (VM-controlled option used), errors are not */);
@@ -99,10 +97,10 @@ public class ParsingTest {
         }
 
         test("simengine", "help", 0,
-                "keep_running", "direct_map");
-        test("simengine", "help=keep", 0,
+                "pause");
+        test("simengine", "help=pause", 0,
                 "Configuration options matching",
-                "keep the process running");
+                "wake up the waiting process");
         test("simengine", "help=foobar", 0,
                 "no configuration options match the pattern");
 
@@ -136,24 +134,26 @@ public class ParsingTest {
 
     @Test
     public void test_options_separated() throws Exception {
-        test("simengine",
+        // We won't find that `args` contain nonsense until we invoke the engine
+        // (and this test doesn't do that, only tests parsing)
+        test("criuengine",
                 Arrays.asList(
-                    "args=simengine ignores this",
+                    "args=foobar",
                     "args=another arg,keep_running=true,args=and another",
-                    "args=this is also ignored"
+                    "args=some argument with spaces"
                 ),
                 0,
                 Arrays.asList(
-                    "CRaC engine option: 'args' = 'simengine ignores this'",
+                    "CRaC engine option: 'args' = 'foobar'",
                     "CRaC engine option: 'args' = 'another arg'",
                     "CRaC engine option: 'keep_running' = 'true'",
                     "CRaC engine option: 'args' = 'and another'",
-                    "CRaC engine option: 'args' = 'this is also ignored'",
+                    "CRaC engine option: 'args' = 'some argument with spaces'",
                     "CRaC engine option 'args' specified multiple times"
                 ),
                 Arrays.asList("[error]") /* warning are expected (repeated 'args'), errors are not */);
 
-        test("simengine",
+        test("criuengine",
                 Arrays.asList("args=--arg1 --arg2", "--arg3"),
                 1,
                 Arrays.asList(

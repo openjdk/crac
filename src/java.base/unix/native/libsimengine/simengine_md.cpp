@@ -1,5 +1,6 @@
 /*
- * Copyright (c) 2025, Azul Systems, Inc. All rights reserved.
+ * Copyright (c) 2021,2026, Azul Systems, Inc. All rights reserved.
+ * Copyright (c) 2021,2026, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -22,36 +23,36 @@
  * or visit www.oracle.com if you need additional information or have any
  * questions.
  */
-#ifndef CREXEC_HPP
-#define CREXEC_HPP
+#include <errno.h>
+#include <signal.h>
+#include <string.h>
 
-#include <utility>
+#include "crcommon.hpp"
 
-#define ARRAY_SIZE(x) (sizeof(x) / sizeof(*(x)))
+#define RESTORE_SIGNAL (SIGRTMIN + 2)
 
-#define CREXEC "crexec: "
-
-// For Windows
-#if !defined(PATH_MAX) && defined(MAX_PATH)
-# define PATH_MAX MAX_PATH
-#elif !defined(PATH_MAX)
-# define PATH_MAX 1024
-#endif
-
-template<typename F> class Deferred;
-template<typename F> inline Deferred<F> defer(F&& f);
-
-template<typename F> class Deferred {
-friend Deferred<F> defer<F>(F&& f);
-private:
-  F _f;
-  inline explicit Deferred(F f): _f(f) {}
-public:
-  inline ~Deferred() { _f(); }
-};
-
-template<typename F> inline Deferred<F> defer(F&& f) {
-  return Deferred<F>(std::forward<F>(f));
+int kickjvm(pid_t jvm, int code) {
+    union sigval sv = { .sival_int = code };
+    if (-1 == sigqueue(jvm, RESTORE_SIGNAL, sv)) {
+        LOG("sigqueue: %s", strerror(errno));
+        return 1;
+    }
+    return 0;
 }
 
-#endif // CREXEC_HPP
+int waitjvm() {
+    siginfo_t info;
+    sigset_t waitmask;
+    sigemptyset(&waitmask);
+    sigaddset(&waitmask, RESTORE_SIGNAL);
+
+    int sig;
+    do {
+        sig = sigwaitinfo(&waitmask, &info);
+    } while (sig == -1 && errno == EINTR);
+
+    if (info.si_code != SI_QUEUE) {
+        return -1;
+    }
+    return info.si_int;
+}

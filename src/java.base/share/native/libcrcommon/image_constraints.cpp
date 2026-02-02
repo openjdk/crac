@@ -28,7 +28,7 @@
 #include <cerrno>
 #include <utility>
 
-#include "crexec.hpp"
+#include "crcommon.hpp"
 #include "image_constraints.hpp"
 #include "hashtable.hpp"
 
@@ -38,12 +38,12 @@
 static FILE* open_tags(const char* image_location, const char* mode) {
   char fname[PATH_MAX];
   if (snprintf(fname, sizeof(fname), "%s/tags", image_location) >= (int) sizeof(fname) - 1) {
-    fprintf(stderr, CREXEC "filename too long: %s/tags\n", image_location);
+    LOG("filename too long: %s/tags", image_location);
     return nullptr;
   }
   FILE* f = fopen(fname, mode);
   if (f == nullptr) {
-    fprintf(stderr, CREXEC "cannot open %s in mode %s: %s\n", fname, mode, strerror(errno));
+    LOG("cannot open %s in mode %s: %s", fname, mode, strerror(errno));
     return nullptr;
   }
   return f;
@@ -57,14 +57,14 @@ bool ImageConstraints::check_tag(const char* type, const char* name, size_t valu
     }
   });
   if (present) {
-    fprintf(stderr, CREXEC "%s %s is already set\n", type, name);
+    LOG("%s %s is already set", type, name);
   } else if (strpbrk(name, "=\n")) {
-    fprintf(stderr, CREXEC "%s name must not contain '=' or newline\n", type);
+    LOG("%s name must not contain '=' or newline", type);
   } else if (strlen(name) >= _MAX_NAME_SIZE) {
-    fprintf(stderr, CREXEC "%s %s name is too long, at most %zu chars allowed\n",
+    LOG("%s %s name is too long, at most %zu chars allowed",
       type, name, _MAX_NAME_SIZE - 1);
   } else if (value_size > _MAX_VALUE_SIZE) {
-    fprintf(stderr, CREXEC "%s %s value is too long: %zu bytes > %zu allowed\n",
+    LOG("%s %s value is too long: %zu bytes > %zu allowed",
       type, name, value_size, _MAX_VALUE_SIZE);
   } else {
     return true;
@@ -77,14 +77,14 @@ bool ImageConstraints::set_label(const char* name, const char* value) {
   if (!check_tag("Label", name, value_size)) {
     return false;
   } else if (strchr(value, '\n')) {
-    fprintf(stderr, CREXEC "Label value must not contain a newline\n");
+    LOG("label value must not contain a newline");
     return false;
   }
   char* name_copy = strdup(name);
   char* value_copy = strdup(value);
   if (name_copy == nullptr || value_copy == nullptr || !_tags.add(
       Tag(TagType::LABEL, name_copy, value_copy, value_size))) {
-    fprintf(stderr, CREXEC "out of memory\n");
+    LOG("out of memory");
     free(name_copy);
     free(value_copy);
     return false;
@@ -103,7 +103,7 @@ bool ImageConstraints::set_bitmap(const char* name, const unsigned char* value, 
   }
   if (name_copy == nullptr || bitmap_copy == nullptr || !_tags.add(
       Tag(TagType::BITMAP, name_copy, (const unsigned char*) bitmap_copy, value_size))) {
-    fprintf(stderr, CREXEC "out of memory\n");
+    LOG("out of memory");
     free(name_copy);
     free(bitmap_copy);
     return false;
@@ -129,7 +129,7 @@ bool ImageConstraints::persist(const char* image_location) const {
     }
   });
   if (fclose(f)) {
-    fprintf(stderr, CREXEC "cannot close %s/tags: %s\n", image_location, strerror(errno));
+    LOG("cannot close %s/tags: %s", image_location, strerror(errno));
     return false;
   }
   return true;
@@ -189,7 +189,7 @@ bool ImageConstraints::Constraint::compare_bitmaps(const unsigned char* bitmap, 
 }
 
 static void print_bitmap(const char* name, const unsigned char* data, size_t size) {
-  fprintf(stderr, CREXEC "\t%s", name);
+  LOG("\t%s", name);
   for (size_t i = 0; i < size; ++i) {
     fprintf(stderr, "%02x ", data[i]);
   }
@@ -211,7 +211,7 @@ bool ImageConstraints::validate(const char* image_location) const {
     char* eq = strchr((char *) line, '=');
     char* nl = strchr((char *) (eq + 1), '\n');
     if (eq == nullptr || nl == nullptr) {
-      fprintf(stderr, CREXEC "Invalid format of tags file: %s\n", line);
+      LOG("Invalid format of tags file: %s", line);
       return false;
     }
     *eq = 0;
@@ -221,7 +221,7 @@ bool ImageConstraints::validate(const char* image_location) const {
       char* name = strdup(line + strlen(LABEL_PREFIX));
       char* value = strdup(eq + 1);
       if (name == nullptr || value == nullptr || !tags.add({ TagType::LABEL, name, value, (size_t) (nl - eq) })) {
-        fprintf(stderr, CREXEC "Cannot allocate memory for validation\n");
+        LOG("Cannot allocate memory for validation");
         free(name);
         free(value);
         return false;
@@ -229,12 +229,12 @@ bool ImageConstraints::validate(const char* image_location) const {
     } else if (!strncmp(line, BITMAP_PREFIX, strlen(BITMAP_PREFIX))) {
       size_t length = (size_t)(nl - eq - 1)/2;
       if (2 * length != (size_t)(nl - eq - 1)) {
-        fprintf(stderr, CREXEC "Invalid format of tags file (bad bitmap): %s\n", line);
+        LOG("Invalid format of tags file (bad bitmap): %s", line);
         return false;
       }
       unsigned char* data = (unsigned char*) malloc(length);
       if (data == nullptr) {
-        fprintf(stderr, CREXEC "Cannot allocate memory for validation\n");
+        LOG("Cannot allocate memory for validation");
         return false;
       }
       bool err = false;
@@ -242,24 +242,24 @@ bool ImageConstraints::validate(const char* image_location) const {
         data[i] = (from_hex(eq[1 + 2 * i], &err) << 4) + from_hex(eq[2 + 2 * i], &err);
       }
       if (err) {
-        fprintf(stderr, CREXEC "Invalid format of tags file (bad character in bitmap): %s\n", line);
+        LOG("Invalid format of tags file (bad character in bitmap): %s", line);
         return false;
       }
       char* name = strdup(line + strlen(BITMAP_PREFIX));
       if (name == nullptr || !tags.add({ TagType::BITMAP, name, data, length })) {
-        fprintf(stderr, CREXEC "Cannot allocate memory for validation\n");
+        LOG("Cannot allocate memory for validation");
         free(name);
         free(data);
         return false;
       }
     } else {
-      fprintf(stderr, CREXEC "Invalid format of tags file (unknown type): %s\n", line);
+      LOG("Invalid format of tags file (unknown type): %s", line);
       return false;
     }
   }
   const char** keys = new(std::nothrow) const char*[tags.size()];
   if (keys == nullptr) {
-    fprintf(stderr, CREXEC "Insufficient memory\n");
+    LOG("Insufficient memory");
     return false;
   }
   int counter = 0;
@@ -277,14 +277,14 @@ bool ImageConstraints::validate(const char* image_location) const {
     Tag* t = ht.get(c.name);
     c.failed = true;
     if (t == nullptr) {
-      fprintf(stderr, CREXEC "Tag %s was not found\n", c.name);
+      LOG("Tag %s was not found", c.name);
     } else if (t->type != c.type) {
-      fprintf(stderr, CREXEC "Type mismatch for tag %s\n", c.name);
+      LOG("Type mismatch for tag %s", c.name);
     } else if (c.type == TagType::LABEL && strcmp(static_cast<const char*>(c.data), static_cast<const char*>(t->data))) {
-      fprintf(stderr, CREXEC "Label mismatch for tag %s: '%s' vs. '%s'\n", c.name,
+      LOG("Label mismatch for tag %s: '%s' vs. '%s'", c.name,
         static_cast<const char*>(c.data), static_cast<const char*>(t->data));
     } else if (c.type == TagType::BITMAP && !c.compare_bitmaps(static_cast<const unsigned char*>(t->data), t->data_size)) {
-      fprintf(stderr, CREXEC "Bitmap mismatch for tag %s:\n", c.name);
+      LOG("Bitmap mismatch for tag %s:", c.name);
       print_bitmap("Constraint: ", static_cast<const unsigned char*>(c.data), c.data_size);
       print_bitmap("Image:      ", static_cast<const unsigned char*>(t->data), t->data_size);
     } else {

@@ -37,10 +37,12 @@
 #include "crlib/crlib_image_score.h"
 #include "crlib/crlib_restore_data.h"
 #include "crlib/crlib_user_data.h"
-#include "crexec.hpp"
+#include "crcommon.hpp"
+#include "environment.hpp"
 #include "hashtable.hpp"
 #include "image_constraints.hpp"
 #include "image_score.hpp"
+#include "user_data.hpp"
 #include "jni.h"
 
 #ifdef LINUX
@@ -49,132 +51,11 @@
 #include "jvm.h"
 #endif // LINUX
 
-extern "C" {
-
-JNIEXPORT crlib_api_t *CRLIB_API(int api_version, size_t api_size);
-
-static crlib_conf_t *create_conf();
-static void destroy_conf(crlib_conf_t *conf);
-static int checkpoint(crlib_conf_t *conf);
-static int restore(crlib_conf_t *conf);
-static bool can_configure(crlib_conf_t *conf, const char *key);
-static bool configure(crlib_conf_t *conf, const char *key, const char *value);
-static const crlib_extension_t *get_extension(const char *name, size_t size);
-
-static const char *identity(crlib_conf_t *conf);
-static const char *description(crlib_conf_t *conf);
-static const char *configuration_doc(crlib_conf_t *conf);
-static const char * const *configurable_keys(crlib_conf_t *conf);
-static crlib_extension_t * const *supported_extensions(crlib_conf_t *conf);
-static const crlib_conf_option_t *configuration_options(crlib_conf_t *conf);
-
-static bool set_restore_data(crlib_conf_t *conf, const void *data, size_t size);
-static size_t get_restore_data(crlib_conf_t *conf, void *buf, size_t size);
-
-static bool set_user_data(crlib_conf_t *conf, const char *name, const void *data, size_t size);
-static crlib_user_data_storage_t *load_user_data(crlib_conf_t *conf);
-static bool lookup_user_data(crlib_user_data_storage_t *user_data, const char *name, const void **data_p, size_t *size_p);
-static void destroy_user_data(crlib_user_data_storage_t *user_data);
-
-static bool set_label(crlib_conf_t *, const char *name, const char *value);
-static bool set_bitmap(crlib_conf_t *, const char *name, const unsigned char *value, size_t length_bytes);
-static bool require_label(crlib_conf_t *, const char *name, const char *value);
-static bool require_bitmap(crlib_conf_t *, const char *name, const unsigned char *value, size_t length_bytes, crlib_bitmap_comparison_t comparison);
-static bool is_failed(crlib_conf_t *, const char *name);
-
-static bool set_score(crlib_conf_t *, const char* name, double value);
-
-} // extern "C"
-
-static crlib_api_t api = {
-  create_conf,
-  destroy_conf,
-  checkpoint,
-  restore,
-  can_configure,
-  configure,
-  get_extension,
-};
-
-static crlib_description_t description_extension = {
-  {
-    CRLIB_EXTENSION_DESCRIPTION_NAME,
-    sizeof(description_extension)
-  },
-  identity,
-  description,
-  configuration_doc,
-  configurable_keys,
-  supported_extensions,
-  configuration_options,
-};
-
-static crlib_restore_data_t restore_data_extension = {
-  {
-    CRLIB_EXTENSION_RESTORE_DATA_NAME,
-    sizeof(restore_data_extension)
-  },
-  set_restore_data,
-  get_restore_data,
-};
-
-static crlib_user_data_t user_data_extension = {
-  {
-    CRLIB_EXTENSION_USER_DATA_NAME,
-    sizeof(user_data_extension)
-  },
-  set_user_data,
-  load_user_data,
-  lookup_user_data,
-  destroy_user_data,
-};
-
-static crlib_image_constraints_t image_constraints_extension = {
-  {
-    CRLIB_EXTENSION_IMAGE_CONSTRAINTS_NAME,
-    sizeof(image_constraints_extension)
-  },
-  set_label,
-  set_bitmap,
-  require_label,
-  require_bitmap,
-  is_failed,
-};
-
-static crlib_image_score_t image_score_extension {
-  {
-    CRLIB_EXTENSION_IMAGE_SCORE_NAME,
-    sizeof(image_score_extension),
-  },
-  set_score,
-};
-
-static const crlib_extension_t *extensions[] = {
-  &restore_data_extension.header,
-  &image_constraints_extension.header,
-  &image_score_extension.header,
-  &user_data_extension.header,
-  &description_extension.header,
-  nullptr
-};
-
-
 // crexec_md.cpp
 const char *file_separator();
 bool is_path_absolute(const char *path);
 bool exec_child_process_and_wait(const char *path, char * const argv[], char * const env[]);
-char **get_environ();
 void exec_in_this_process(const char *path, const char *argv[], const char *env[]);
-
-JNIEXPORT crlib_api_t *CRLIB_API(int api_version, size_t api_size) {
-  if (api_version != CRLIB_API_VERSION) {
-    return nullptr;
-  }
-  if (sizeof(crlib_api_t) < api_size) {
-    return nullptr;
-  }
-  return &api;
-}
 
 // When adding a new option ensure the proper default value is set for it
 // in the configuration struct.
@@ -211,7 +92,7 @@ static constexpr const crlib_conf_option_t configure_options[] = { CONFIGURE_OPT
 static char *strdup_checked(const char *src) {
   char * const res = strdup(src);
   if (res == nullptr) {
-    fprintf(stderr, CREXEC "out of memory\n");
+    LOG("out of memory");
   }
   return res;
 }
@@ -230,7 +111,7 @@ static bool parse_bool(const char *str, Option<bool> *result) {
     *result = {false, false};
     return true;
   }
-  fprintf(stderr, CREXEC "expected '%s' to be either 'true' or 'false'\n", str);
+  LOG("expected '%s' to be either 'true' or 'false'", str);
   return false;
 }
 
@@ -243,9 +124,9 @@ enum Argv : std::uint8_t {
   ARGV_LAST = 31,
 };
 
-struct crlib_conf {
+class CrExec: public crlib_conf_t {
 private:
-  using configure_func = bool (crlib_conf::*) (const char *value);
+  using configure_func = bool (CrExec::*) (const char *value);
   Hashtable<configure_func> _options {
     configure_options_names, ARRAY_SIZE(configure_options_names) - 1 /* omit nullptr */
   };
@@ -259,27 +140,31 @@ private:
 private:
   int _restore_data = 0;
   const char *_argv[ARGV_LAST + 2] = {}; // Last element is required to be null
-  ImageConstraints _image_constraints;
-  ImageScore _image_score;
+
+  UserData _user_data;
 
 public:
-  crlib_conf() {
+  CrExec(): _user_data(&_argv[ARGV_IMAGE_LOCATION]) {
+    if (!init_conf(this, "crexec")) {
+      return;
+    }
     if (!_options.is_initialized()) {
-      fprintf(stderr, CREXEC "out of memory\n");
+      LOG("out of memory");
       assert(!is_initialized());
       return;
     }
-#define PUT_HANDLER(id, ...) _options.put(opt_##id, &crlib_conf::configure_##id);
+#define PUT_HANDLER(id, ...) _options.put(opt_##id, &CrExec::configure_##id);
     CONFIGURE_OPTIONS(PUT_HANDLER)
 #undef PUT_HANDLER
   }
 
-  ~crlib_conf() {
+  ~CrExec() {
     for (int i = 0; i <= ARGV_FREE /* all free args are allocated together */; i++) {
       if (i != ARGV_ACTION) { // Action is a static string
         free(const_cast<char*>(_argv[i]));
       }
     }
+    destroy_conf(this);
   }
 
   // Use this to check whether the constructor succeeded.
@@ -291,7 +176,7 @@ public:
   void require_defaults(crlib_conf_option_flag_t flag, const char *event) const {
 #define CHECK_OPT(id, ctype, cdef, flags, ...) \
   if (!_##id.is_default && !((flags) & flag)) { \
-    fprintf(stderr, CREXEC #id " has no effect on %s\n", event); \
+    LOG(#id " has no effect on %s", event); \
   }
     CHECKED_OPTIONS(CHECK_OPT)
 #undef CHECK_OPT
@@ -308,7 +193,7 @@ public:
     if (func != nullptr) {
       return (this->**func)(value);
     }
-    fprintf(stderr, CREXEC "unknown configure option: %s\n", key);
+    LOG("unknown configure option: %s", key);
     return false;
   }
 
@@ -317,9 +202,7 @@ public:
   bool set_restore_data(const void *data, size_t size) {
     constexpr const size_t supported_size = sizeof(_restore_data);
     if (size > 0 && size != supported_size) {
-      fprintf(stderr,
-              CREXEC "unsupported size of restore data: %zu was requested but only %zu is supported\n",
-              size, supported_size);
+      LOG("unsupported size of restore data: %zu was requested but only %zu is supported", size, supported_size);
       return false;
     }
     if (size > 0) {
@@ -338,12 +221,8 @@ public:
     return available_size;
   }
 
-  ImageConstraints &image_constraints() {
-    return _image_constraints;
-  }
-
-  ImageScore &image_score() {
-    return _image_score;
+  UserData &user_data() {
+    return _user_data;
   }
 
 private:
@@ -359,7 +238,7 @@ private:
 
   bool configure_exec_location(const char *exec_location) {
     if (!is_path_absolute(exec_location)) {
-      fprintf(stderr, CREXEC "expected absolute path: %s\n", exec_location);
+      LOG("expected absolute path: %s", exec_location);
       return false;
     }
     const char *copy = strdup_checked(exec_location);
@@ -403,7 +282,7 @@ private:
 
     if (arg[0] != '\0') {
       assert(arg_i == MAX_ARGS_NUM);
-      fprintf(stderr, CREXEC "too many free arguments, at most %i allowed\n", MAX_ARGS_NUM);
+      LOG("too many free arguments, at most %i allowed", MAX_ARGS_NUM);
       free(const_cast<char *>(args[0]));
       return false;
     }
@@ -414,8 +293,8 @@ private:
   }
 };
 
-static crlib_conf_t *create_conf() {
-  auto * const conf = new(std::nothrow) crlib_conf();
+static crlib_conf_t *create_crexec() {
+  auto * const conf = new(std::nothrow) CrExec();
   if (conf == nullptr || !conf->is_initialized()) {
     delete conf;
     return nullptr;
@@ -423,16 +302,16 @@ static crlib_conf_t *create_conf() {
   return conf;
 }
 
-static void destroy_conf(crlib_conf_t *conf) {
-  delete conf;
+static void destroy_crexec(crlib_conf_t *conf) {
+  delete static_cast<CrExec*>(conf);
 }
 
 static bool can_configure(crlib_conf_t *conf, const char *key) {
-  return conf->can_configure(key);
+  return static_cast<CrExec*>(conf)->can_configure(key);
 }
 
 static bool configure(crlib_conf_t *conf, const char *key, const char *value) {
-  return conf->configure(key, value);
+  return static_cast<CrExec*>(conf)->configure(key, value);
 }
 
 static const char *identity(crlib_conf_t *conf) {
@@ -458,358 +337,56 @@ static const char * const *configurable_keys(crlib_conf_t *conf) {
   return configure_options_names;
 }
 
-static crlib_extension_t * const *supported_extensions(crlib_conf_t *conf) {
-  return extensions;
-}
-
 static const crlib_conf_option_t *configuration_options(crlib_conf_t *conf) {
    return configure_options;
 }
 
 static bool set_restore_data(crlib_conf_t *conf, const void *data, size_t size) {
-  return conf->set_restore_data(data, size);
+  return static_cast<CrExec*>(conf)->set_restore_data(data, size);
 }
 
 static size_t get_restore_data(crlib_conf_t *conf, void *buf, size_t size) {
-  return conf->get_restore_data(buf, size);
+  return static_cast<CrExec*>(conf)->get_restore_data(buf, size);
 }
 
 static bool set_user_data(crlib_conf_t *conf, const char *name, const void *data, size_t size) {
-  if (!conf->argv()[ARGV_IMAGE_LOCATION]) {
-    fprintf(stderr, CREXEC "configure_image_location has not been called\n");
-    return false;
-  }
-  char fname[PATH_MAX];
-  if (snprintf(fname, sizeof(fname), "%s/%s", conf->argv()[ARGV_IMAGE_LOCATION], name) >= (int) sizeof(fname) - 1) {
-    fprintf(stderr, CREXEC "filename too long: %s/%s\n", conf->argv()[ARGV_IMAGE_LOCATION], name);
-    return false;
-  }
-  FILE *f = fopen(fname, "w");
-  if (f == nullptr) {
-    fprintf(stderr, CREXEC "cannot create %s: %s\n", fname, strerror(errno));
-    return false;
-  }
-  while (size--) {
-    uint8_t byte = *(const uint8_t *) data;
-    data = (const void *) ((uintptr_t) data + 1);
-    if (fprintf(f, "%02x", byte) != 2) {
-      fclose(f);
-      fprintf(stderr, CREXEC "cannot write to %s: %s\n", fname, strerror(errno));
-      return false;
-    }
-  }
-  if (fputc('\n', f) != '\n') {
-    fclose(f);
-    fprintf(stderr, CREXEC "cannot write to %s: %s\n", fname, strerror(errno));
-    return false;
-  }
-  if (fclose(f)) {
-    fprintf(stderr, CREXEC "cannot close %s: %s\n", fname, strerror(errno));
-    return false;
-  }
-  return true;
+  return static_cast<CrExec*>(conf)->user_data().set_user_data(name, data, size);
 }
-
-struct user_data_chunk {
-  struct user_data_chunk *next;
-  size_t size;
-  uint8_t *data;
-};
-
-struct crlib_user_data_storage {
-  crlib_conf_t *conf;
-  struct user_data_chunk *chunk;
-};
 
 static crlib_user_data_storage_t *load_user_data(crlib_conf_t *conf) {
-  crlib_user_data_storage_t *user_data = static_cast<crlib_user_data_storage_t *>(malloc(sizeof(*user_data)));
-  if (user_data == nullptr) {
-    fprintf(stderr, CREXEC "cannot allocate memory\n");
-    return nullptr;
-  }
-  user_data->conf = conf;
-  user_data->chunk = nullptr;
-  return user_data;
+  return static_cast<CrExec*>(conf)->user_data().load_user_data();
 }
 
-static bool lookup_user_data(crlib_user_data_storage_t *user_data, const char *name, const void **data_p, size_t *size_p) {
-  const crlib_conf_t *conf = user_data->conf;
-  if (!conf->argv()[ARGV_IMAGE_LOCATION]) {
-    fprintf(stderr, CREXEC "configure_image_location has not been called\n");
-    return false;
-  }
-  char fname[PATH_MAX];
-  if (snprintf(fname, sizeof(fname), "%s/%s", conf->argv()[ARGV_IMAGE_LOCATION], name) >= (int) sizeof(fname) - 1) {
-    fprintf(stderr, CREXEC "filename is too long: %s/%s\n", conf->argv()[ARGV_IMAGE_LOCATION], name);
-    return false;
-  }
-  FILE *f = fopen(fname, "r");
-  if (f == nullptr) {
-    if (errno != ENOENT) {
-      fprintf(stderr, CREXEC "cannot open %s: %s\n", fname, strerror(errno));
-    }
-    return false;
-  }
-  uint8_t *data = nullptr;
-  size_t data_used = 0;
-  size_t data_allocated = 0;
-  int nibble = -1;
-  for (;;) {
-    int gotc = fgetc(f);
-    if (gotc == EOF) {
-      fclose(f);
-      free(data);
-      fprintf(stderr, CREXEC "unexpected EOF or error in %s after %zu parsed bytes\n", fname, data_used);
-      return false;
-    }
-    if (gotc == '\n' && nibble == -1) {
-      break;
-    }
-    if (gotc >= '0' && gotc <= '9') {
-      gotc += -'0';
-    } else if (gotc >= 'a' && gotc <= 'f') {
-      gotc += -'a' + 0xa;
-    } else {
-      fclose(f);
-      free(data);
-      fprintf(stderr, CREXEC "unexpected character 0x%02x in %s after %zu parsed bytes\n", gotc, fname, data_used);
-      return false;
-    }
-    if (nibble == -1) {
-      nibble = gotc;
-      continue;
-    }
-    if (data_used == data_allocated) {
-      data_allocated *= 2;
-      if (!data_allocated) {
-        data_allocated = 0x100;
-      }
-      uint8_t *data_new = static_cast<uint8_t *>(realloc(data, data_allocated));
-      if (data_new == nullptr) {
-        fclose(f);
-        free(data);
-        fprintf(stderr, CREXEC "cannot allocate memory for %s after %zu parsed bytes\n", fname, data_used);
-        return false;
-      }
-      data = data_new;
-    }
-    assert(data_used < data_allocated);
-    data[data_used++] = (nibble << 4) | gotc;
-    nibble = -1;
-  }
-  if (fgetc(f) != EOF || !feof(f) || ferror(f)) {
-    fclose(f);
-    free(data);
-    fprintf(stderr, CREXEC "EOF expected after newline in %s after %zu parsed bytes\n", fname, data_used);
-    return false;
-  }
-  if (fclose(f)) {
-    free(data);
-    fprintf(stderr, CREXEC "error closing %s after %zu parsed bytes\n", fname, data_used);
-    return false;
-  }
-  *data_p = data;
-  *size_p = data_used;
-  struct user_data_chunk *chunk = static_cast<struct user_data_chunk *>(malloc(sizeof(*chunk)));
-  if (chunk == nullptr) {
-    free(data);
-    fprintf(stderr, CREXEC "cannot allocate memory\n");
-    return false;
-  }
-  chunk->next = user_data->chunk;
-  user_data->chunk = chunk;
-  chunk->size = data_used;
-  chunk->data = data;
-  return true;
+static bool lookup_user_data(crlib_user_data_storage_t *storage, const char *name, const void **data_p, size_t *size_p) {
+  return storage->user_data->lookup_user_data(storage, name, data_p, size_p);
 }
 
-static void destroy_user_data(crlib_user_data_storage_t *user_data) {
-  while (user_data->chunk) {
-    struct user_data_chunk *chunk = user_data->chunk;
-    user_data->chunk = chunk->next;
-    free(chunk->data);
-    free(chunk);
-  }
-  free(user_data);
+static void destroy_user_data(crlib_user_data_storage_t *storage) {
+  return storage->user_data->destroy_user_data(storage);
 }
 
-static bool set_label(crlib_conf_t *conf, const char *name, const char *value) {
-  return conf->image_constraints().set_label(name, value);
-}
-
-static bool set_bitmap(crlib_conf_t *conf, const char *name, const unsigned char *value, size_t length_bytes) {
-  return conf->image_constraints().set_bitmap(name, value, length_bytes);
-}
-
-static bool require_label(crlib_conf_t *conf, const char *name, const char *value) {
-  return conf->image_constraints().require_label(name, value);
-}
-
-static bool require_bitmap(crlib_conf_t *conf, const char *name, const unsigned char *value, size_t length_bytes, crlib_bitmap_comparison_t comparison) {
-  return conf->image_constraints().require_bitmap(name, value, length_bytes, comparison);
-}
-
-static bool is_failed(crlib_conf_t *conf, const char *name) {
-  return conf->image_constraints().is_failed(name);
-}
-
-static bool set_score(crlib_conf_t *conf, const char *name, double value) {
-  return conf->image_score().set_score(name, value);
-}
-
-static const crlib_extension_t *get_extension(const char *name, size_t size) {
-  for (size_t i = 0; i < ARRAY_SIZE(extensions) - 1 /* omit nullptr */; i++) {
-    const crlib_extension_t *ext = extensions[i];
-    if (strcmp(name, ext->name) == 0) {
-      if (size <= ext->size) {
-        return ext;
-      }
-      return nullptr;
-    }
-  }
-  return nullptr;
-}
-
-class Environment {
-private:
-  char **_env;
-  size_t _length;
-
-public:
-  explicit Environment(const char * const *env = get_environ()) {
-    _length = 0;
-    for (; env[_length] != nullptr; _length++) {}
-
-    // Not using new here because we cannot safely use realloc with it
-    _env = static_cast<char**>(malloc((_length + 1) * sizeof(char *)));
-    if (_env == nullptr) {
-      return;
-    }
-
-    for (size_t i = 0; i < _length; i++) {
-      _env[i] = strdup(env[i]);
-      if (_env[i] == nullptr) {
-        for (size_t j = 0; j < i; i++) {
-          free(_env[j]);
-          free(_env);
-          _env = nullptr;
-        }
-        assert(!is_initialized());
-        return;
-      }
-    }
-    _env[_length] = nullptr;
-  }
-
-  ~Environment() {
-    if (is_initialized()) {
-      for (size_t i = 0; i < _length; i++) {
-        free(_env[i]);
-      }
-      free(_env);
-    }
-  }
-
-  // Use this to check whether the constructor succeeded.
-  bool is_initialized() const { return _env != nullptr; }
-
-  char **env() { return _env; }
-
-  bool append(const char *var, const char *value) {
-    assert(is_initialized());
-
-    const size_t str_size = strlen(var) + strlen("=") + strlen(value) + 1;
-    char * const str = static_cast<char *>(malloc(sizeof(char) * str_size));
-    if (str == nullptr) {
-      fprintf(stderr, CREXEC "out of memory\n");
-      return false;
-    }
-    if (snprintf(str, str_size, "%s=%s", var, value) != static_cast<int>(str_size) - 1) {
-      perror(CREXEC "snprintf env var");
-      free(str);
-      return false;
-    }
-
-    {
-      char ** const new_env = static_cast<char **>(realloc(_env, (_length + 2) * sizeof(char *)));
-      if (new_env == nullptr) {
-        fprintf(stderr, CREXEC "out of memory\n");
-        free(str);
-        return false;
-      }
-      _env = new_env;
-    }
-
-    _env[_length++] = str;
-    _env[_length] = nullptr;
-
-    return true;
-  }
-
-  bool add_criu_option(const char *opt) {
-    constexpr char CRAC_CRIU_OPTS[] = "CRAC_CRIU_OPTS";
-    constexpr size_t CRAC_CRIU_OPTS_LEN = ARRAY_SIZE(CRAC_CRIU_OPTS) - 1;
-
-    assert(is_initialized());
-
-    bool opts_found = false;
-    size_t opts_index = 0;
-    for (; _env[opts_index] != nullptr; opts_index++) {
-      if (strncmp(_env[opts_index], CRAC_CRIU_OPTS, CRAC_CRIU_OPTS_LEN) == 0 &&
-          _env[opts_index][CRAC_CRIU_OPTS_LEN] == '=') {
-        opts_found = true;
-        break;
-      }
-    }
-
-    if (!opts_found) {
-      return append(CRAC_CRIU_OPTS, opt);
-    }
-
-    if (strstr(_env[opts_index] + CRAC_CRIU_OPTS_LEN + 1, opt) != nullptr) {
-      return true;
-    }
-
-    const size_t new_opts_size = strlen(_env[opts_index]) + strlen(" ") + strlen(opt) + 1;
-    char * const new_opts = static_cast<char *>(malloc(new_opts_size * sizeof(char)));
-    if (new_opts == nullptr) {
-      fprintf(stderr, CREXEC "out of memory\n");
-      return false;
-    }
-    if (snprintf(new_opts, new_opts_size, "%s %s", _env[opts_index], opt) !=
-          static_cast<int>(new_opts_size) - 1) {
-      perror(CREXEC "snprintf CRAC_CRIU_OPTS (append)");
-      free(new_opts);
-      return false;
-    }
-    free(_env[opts_index]);
-    _env[opts_index] = new_opts;
-
-    return true;
-  }
-};
-
-static int checkpoint(crlib_conf_t *conf) {
+static int checkpoint(crlib_conf_t *c) {
+  CrExec *conf = static_cast<CrExec *>(c);
   if (conf->argv()[ARGV_EXEC_LOCATION] == nullptr) {
-    fprintf(stderr, CREXEC "%s must be set before checkpoint\n", opt_exec_location);
+    LOG("%s must be set before checkpoint", opt_exec_location);
     return -1;
   }
   const char *image_location = conf->argv()[ARGV_IMAGE_LOCATION];
   if (image_location == nullptr) {
-    fprintf(stderr, CREXEC "%s must be set before checkpoint\n", opt_image_location);
+    LOG("%s must be set before checkpoint", opt_image_location);
     return -1;
   }
   conf->set_argv_action("checkpoint");
   conf->require_defaults(CRLIB_OPTION_FLAG_CHECKPOINT, "checkpoint");
 
-  if (!conf->image_constraints().persist(image_location) ||
-      !conf->image_score().persist(image_location)) {
+  if (!image_constraints_persist(conf, image_location) ||
+      !image_score_persist(conf, image_location)) {
     return -1;
   }
   // We will reset scores now; scores can be retained or reset higher on the Java level.
   // Before another checkpoint all the scores will be recorded again; we won't keep
   // anything here to not write down any outdated value.
-  conf->image_score().reset_all();
+  image_score_reset(conf);
 
   {
     Environment env;
@@ -850,26 +427,27 @@ static int checkpoint(crlib_conf_t *conf) {
   return 0;
 }
 
-static int restore(crlib_conf_t *conf) {
+static int restore(crlib_conf_t *c) {
+  CrExec *conf = static_cast<CrExec *>(c);
   if (conf->argv()[ARGV_EXEC_LOCATION] == nullptr) {
-    fprintf(stderr, CREXEC "%s must be set before restore\n", opt_exec_location);
+    LOG("%s must be set before restore", opt_exec_location);
     return -1;
   }
   if (conf->argv()[ARGV_IMAGE_LOCATION] == nullptr) {
-    fprintf(stderr, CREXEC "%s must be set before restore\n", opt_image_location);
+    LOG("%s must be set before restore", opt_image_location);
     return -1;
   }
   conf->set_argv_action("restore");
   conf->require_defaults(CRLIB_OPTION_FLAG_RESTORE, "restore");
 
-  if (!conf->image_constraints().validate(conf->argv()[ARGV_IMAGE_LOCATION])) {
+  if (!image_constraints_validate(conf, conf->argv()[ARGV_IMAGE_LOCATION])) {
     return -1;
   }
 
   char restore_data_str[32];
   if (snprintf(restore_data_str, sizeof(restore_data_str), "%i", conf->restore_data()) >
       static_cast<int>(sizeof(restore_data_str)) - 1) {
-    perror(CREXEC "snprintf restore data");
+    LOG("snprintf restore data: %s", strerror(errno));
     return -1;
   }
 
@@ -884,6 +462,82 @@ static int restore(crlib_conf_t *conf) {
                        const_cast<const char **>(conf->argv()),
                        const_cast<const char **>(env.env()));
 
-  fprintf(stderr, CREXEC "restore failed\n");
+  LOG("restore failed");
   return -1;
+}
+
+static crlib_extension_t * const *supported_extensions(crlib_conf_t *conf);
+
+static crlib_description_t description_extension = {
+  {
+    CRLIB_EXTENSION_DESCRIPTION_NAME,
+    sizeof(description_extension)
+  },
+  identity,
+  description,
+  configuration_doc,
+  configurable_keys,
+  supported_extensions,
+  configuration_options,
+};
+
+static crlib_restore_data_t restore_data_extension = {
+  {
+    CRLIB_EXTENSION_RESTORE_DATA_NAME,
+    sizeof(restore_data_extension)
+  },
+  set_restore_data,
+  get_restore_data,
+};
+
+static crlib_user_data_t user_data_extension = {
+  {
+    CRLIB_EXTENSION_USER_DATA_NAME,
+    sizeof(user_data_extension)
+  },
+  set_user_data,
+  load_user_data,
+  lookup_user_data,
+  destroy_user_data,
+};
+
+static const crlib_extension_t *extensions[] = {
+  &restore_data_extension.header,
+  &image_constraints_extension.header,
+  &image_score_extension.header,
+  &user_data_extension.header,
+  &description_extension.header,
+  nullptr
+};
+
+static const crlib_extension_t *get_extension(const char *name, size_t size) {
+  return find_extension(extensions, name, size);
+}
+
+static crlib_extension_t * const *supported_extensions(crlib_conf_t *conf) {
+  return extensions;
+}
+
+static crlib_api_t api = {
+  create_crexec,
+  destroy_crexec,
+  checkpoint,
+  restore,
+  can_configure,
+  configure,
+  get_extension,
+};
+
+extern "C" {
+
+JNIEXPORT crlib_api_t *CRLIB_API(int api_version, size_t api_size) {
+  if (api_version != CRLIB_API_VERSION) {
+    return nullptr;
+  }
+  if (sizeof(crlib_api_t) < api_size) {
+    return nullptr;
+  }
+  return &api;
+}
+
 }

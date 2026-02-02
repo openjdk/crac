@@ -26,6 +26,8 @@
 #ifndef OS_POSIX_ATTACHLISTENER_POSIX_HPP
 #define OS_POSIX_ATTACHLISTENER_POSIX_HPP
 
+#include "utilities/macros.hpp"
+
 #if INCLUDE_SERVICES
 #ifndef AIX
 

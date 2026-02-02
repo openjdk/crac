@@ -26,8 +26,7 @@ import jdk.crac.management.CRaCMXBean;
 import jdk.test.lib.Container;
 import jdk.test.lib.Platform;
 import jdk.test.lib.containers.docker.Common;
-import jdk.test.lib.containers.docker.DockerTestUtils;
-import jdk.test.lib.crac.CracBuilder;
+import jdk.test.lib.crac.CracContainerBuilder;
 import jdk.test.lib.crac.CracTest;
 import jdk.test.lib.crac.CracTestArg;
 
@@ -36,7 +35,6 @@ import java.lang.management.ManagementFactory;
 import java.lang.management.RuntimeMXBean;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.Arrays;
 import java.util.concurrent.TimeUnit;
 
 import static jdk.test.lib.Asserts.*;
@@ -45,7 +43,10 @@ import static jdk.test.lib.Asserts.*;
  * @test NanoTimeTest
  * @requires (os.family == "linux")
  * @requires container.support
+ * @comment Static JDK eagerly loads X11 which is missing from the Docker image
+ * @requires !jdk.static
  * @library /test/lib
+ * @modules java.base/jdk.internal.platform
  * @build NanoTimeTest
  * @run driver jdk.test.lib.crac.CracTest      0 true
  * @run driver jdk.test.lib.crac.CracTest  86400 true
@@ -62,10 +63,7 @@ public class NanoTimeTest implements CracTest {
 
     @Override
     public void test() throws Exception {
-        if (!DockerTestUtils.canTestDocker()) {
-            return;
-        }
-        CracBuilder builder = new CracBuilder();
+        CracContainerBuilder builder = new CracContainerBuilder();
         Path bootIdFile = Files.createTempFile("NanoTimeTest-", "-boot_id");
 
         String imageName = Common.imageName("system-nanotime");
@@ -82,21 +80,21 @@ public class NanoTimeTest implements CracTest {
             builder.doCheckpoint(Container.ENGINE_COMMAND, "exec",
                     "-e", "LD_PRELOAD=/opt/path-mapping-quiet.so",
                     "-e", "PATH_MAPPING=/proc/sys/kernel/random/boot_id:/fake_boot_id",
-                    CracBuilder.CONTAINER_NAME,
+                    CracContainerBuilder.CONTAINER_NAME,
                     // In case we are trying to use negative monotonic offset we could
                     // run into situation where we'd set it to negative value (prohibited).
                     // Therefore, we'll rather offset it to the future before checkpoint
                     // and set to 0 for restore.
                     "unshare", "--fork", "--time", "--monotonic", String.valueOf(Math.max(-monotonicOffset, 0)),
-                    CracBuilder.DOCKER_JAVA);
+                    CracContainerBuilder.DOCKER_JAVA);
 
             if (changeBootId) {
                 Files.writeString(bootIdFile, "yyyyyyyy-yyyy-yyyy-yyyy-yyyyyyyyyyyy\n");
             }
 
-            builder.doRestore(Container.ENGINE_COMMAND, "exec", CracBuilder.CONTAINER_NAME,
+            builder.doRestore(Container.ENGINE_COMMAND, "exec", CracContainerBuilder.CONTAINER_NAME,
                     "unshare", "--fork", "--time", "--boottime", "86400", "--monotonic", String.valueOf(Math.max(monotonicOffset, 0)),
-                    CracBuilder.DOCKER_JAVA);
+                    CracContainerBuilder.DOCKER_JAVA);
         } finally {
             builder.ensureContainerKilled();
             assertTrue(bootIdFile.toFile().delete());

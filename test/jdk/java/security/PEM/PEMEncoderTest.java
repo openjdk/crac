@@ -26,9 +26,15 @@
 /*
  * @test
  * @bug 8298420
+ * @library /test/lib
  * @summary Testing basic PEM API encoding
  * @enablePreview
  * @modules java.base/sun.security.util
+ * @run main PEMEncoderTest PBEWithHmacSHA256AndAES_128
+ * @run main/othervm -Djava.security.properties=${test.src}/java.security-anotherAlgo
+ *      PEMEncoderTest PBEWithHmacSHA512AndAES_256
+ * @run main/othervm -Djava.security.properties=${test.src}/java.security-emptyAlgo
+ *      PEMEncoderTest PBEWithHmacSHA256AndAES_128
  */
 
 import sun.security.util.Pem;
@@ -39,14 +45,27 @@ import javax.crypto.spec.PBEParameterSpec;
 import java.nio.charset.StandardCharsets;
 import java.security.*;
 import java.security.spec.InvalidParameterSpecException;
+import java.security.spec.PKCS8EncodedKeySpec;
+import java.security.spec.X509EncodedKeySpec;
 import java.util.*;
+
+import jdk.test.lib.security.SecurityUtils;
+
+import static jdk.test.lib.Asserts.assertEquals;
+import static jdk.test.lib.Asserts.assertThrows;
 
 public class PEMEncoderTest {
 
     static Map<String, DEREncodable> keymap;
+    static String pkcs8DefaultAlgExpect;
 
     public static void main(String[] args) throws Exception {
+        pkcs8DefaultAlgExpect = args[0];
         PEMEncoder encoder = PEMEncoder.of();
+        PEMDecoder decoder = PEMDecoder.of();
+        EncryptedPrivateKeyInfo ekpi;
+        KeyPair kp;
+        PEM pem;
 
         // These entries are removed
         var newEntryList = new ArrayList<>(PEMData.entryList);
@@ -55,25 +74,29 @@ public class PEMEncoderTest {
         newEntryList.remove(PEMData.getEntry("ecsecp384"));
         keymap = generateObjKeyMap(newEntryList);
         System.out.println("Same instance re-encode test:");
-        keymap.keySet().stream().forEach(key -> test(key, encoder));
+        keymap.keySet().forEach(key -> test(key, encoder));
         System.out.println("New instance re-encode test:");
-        keymap.keySet().stream().forEach(key -> test(key, PEMEncoder.of()));
+        keymap.keySet().forEach(key -> test(key, PEMEncoder.of()));
         System.out.println("Same instance re-encode testToString:");
-        keymap.keySet().stream().forEach(key -> testToString(key, encoder));
+        keymap.keySet().forEach(key -> testToString(key, encoder));
         System.out.println("New instance re-encode testToString:");
-        keymap.keySet().stream().forEach(key -> testToString(key,
-            PEMEncoder.of()));
-
+        keymap.keySet().forEach(key -> testToString(key, PEMEncoder.of()));
+        System.out.println("Same instance Encoder testEncodedKeySpec:");
+        testEncodedKeySpec(encoder);
+        System.out.println("New instance Encoder testEncodedKeySpec:");
+        testEncodedKeySpec(PEMEncoder.of());
+        System.out.println("Same instance Encoder testEmptyKey:");
+        testEmptyAndNullKey(encoder);
         keymap = generateObjKeyMap(PEMData.encryptedList);
         System.out.println("Same instance Encoder match test:");
-        keymap.keySet().stream().forEach(key -> testEncryptedMatch(key, encoder));
+        keymap.keySet().forEach(key -> testEncryptedMatch(key, encoder));
         System.out.println("Same instance Encoder new withEnc test:");
-        keymap.keySet().stream().forEach(key -> testEncrypted(key, encoder));
+        keymap.keySet().forEach(key -> testEncrypted(key, encoder));
         System.out.println("New instance Encoder and withEnc test:");
-        keymap.keySet().stream().forEach(key -> testEncrypted(key, PEMEncoder.of()));
+        keymap.keySet().forEach(key -> testEncrypted(key, PEMEncoder.of()));
         System.out.println("Same instance encrypted Encoder test:");
         PEMEncoder encEncoder = encoder.withEncryption("fish".toCharArray());
-        keymap.keySet().stream().forEach(key -> testSameEncryptor(key, encEncoder));
+        keymap.keySet().forEach(key -> testSameEncryptor(key, encEncoder));
         try {
             encoder.withEncryption(null);
         } catch (Exception e) {
@@ -82,10 +105,51 @@ public class PEMEncoderTest {
             }
         }
 
-        PEMDecoder d = PEMDecoder.of();
-        PEMRecord pemRecord =
-            d.decode(PEMData.ed25519ep8.pem(), PEMRecord.class);
-        PEMData.checkResults(PEMData.ed25519ep8, pemRecord.toString());
+        pem = decoder.decode(PEMData.ed25519ep8.pem(), PEM.class);
+        PEMData.checkResults(PEMData.ed25519ep8, pem.toString());
+
+        // test PEM is encapsulated with PEM header and footer on encoding
+        String[] pemLines = PEMData.ed25519ep8.pem().split("\n");
+        String[] pemNoHeaderFooter = Arrays.copyOfRange(pemLines, 1, pemLines.length - 1);
+        pem = new PEM("ENCRYPTED PRIVATE KEY", String.join("\n",
+                pemNoHeaderFooter));
+        PEMData.checkResults(PEMData.ed25519ep8.pem(), encoder.encodeToString(pem));
+
+        // Verify the same private key bytes are returned with an ECDSA private
+        // key PEM and an encrypted PEM.
+        kp = decoder.decode(PEMData.ecsecp256.pem(), KeyPair.class);
+        var origPriv = kp.getPrivate();
+        String s = encoder.withEncryption(PEMData.ecsecp256ekpi.password()).encodeToString(kp);
+        kp = decoder.withDecryption(PEMData.ecsecp256ekpi.password()).decode(s, KeyPair.class);
+        var newPriv = kp.getPrivate();
+        if (!Arrays.equals(origPriv.getEncoded(), newPriv.getEncoded())) {
+            throw new AssertionError("compare fails");
+        }
+
+        // Encoded non-encrypted Keypair
+        kp = KeyPairGenerator.getInstance("XDH").generateKeyPair();
+        s = encoder.encodeToString(kp);
+        decoder.decode(s, KeyPair.class);
+
+        // EmptyKey for the PrivateKey in a KeyPair.  Uses keypair from above.
+        try {
+            encoder.encode(new KeyPair(kp.getPublic(), new EmptyKey()));
+            throw new AssertionError("encoder accepted a empty private key encoding");
+        } catch (IllegalArgumentException _) {}
+
+        // NullKey for the PrivateKey in a KeyPair.  Uses keypair from above.
+        try {
+            encoder.encode(new KeyPair(kp.getPublic(), new NullKey()));
+            throw new AssertionError("encoder accepted a empty private key encoding");
+        } catch (IllegalArgumentException _) {}
+
+        ekpi = decoder.decode(PEMData.ecsecp256ekpi.pem(),
+            EncryptedPrivateKeyInfo.class);
+        try {
+            encoder.withEncryption("blah".toCharArray()).encode(ekpi);
+            throw new AssertionError("encoder tried to encrypt " +
+                "an EncryptedPrivateKeyInfo.");
+        } catch (IllegalArgumentException _) {}
     }
 
     static Map generateObjKeyMap(List<PEMData.Entry> list) {
@@ -145,16 +209,23 @@ public class PEMEncoderTest {
     static void testEncrypted(String key, PEMEncoder encoder) {
         PEMData.Entry entry = PEMData.getEntry(key);
         try {
-            encoder.withEncryption(
+            String pem = encoder.withEncryption(
                     (entry.password() != null ? entry.password() :
                         "fish".toCharArray()))
                 .encodeToString(keymap.get(key));
+
+            verifyEncriptionAlg(pem);
         } catch (RuntimeException e) {
             throw new AssertionError("Encrypted encoder failed with " +
                 entry.name(), e);
         }
 
         System.out.println("PASS: " + entry.name());
+    }
+
+    private static void verifyEncriptionAlg(String pem) {
+        var epki = PEMDecoder.of().decode(pem, EncryptedPrivateKeyInfo.class);
+        assertEquals(epki.getAlgName(), pkcs8DefaultAlgExpect);
     }
 
     /*
@@ -181,7 +252,7 @@ public class PEMEncoderTest {
             EncryptedPrivateKeyInfo ekpi = PEMDecoder.of().decode(entry.pem(),
                 EncryptedPrivateKeyInfo.class);
             if (entry.password() != null) {
-                EncryptedPrivateKeyInfo.encryptKey(pkey, entry.password(),
+                EncryptedPrivateKeyInfo.encrypt(pkey, entry.password(),
                     Pem.DEFAULT_ALGO, ekpi.getAlgParameters().
                         getParameterSpec(PBEParameterSpec.class),
                     null);
@@ -195,5 +266,54 @@ public class PEMEncoderTest {
         PEMData.checkResults(entry, result);
         System.out.println("PASS: " + entry.name());
     }
-}
 
+    static void testEncodedKeySpec(PEMEncoder encoder) throws NoSuchAlgorithmException {
+        KeyPair kp = getKeyPair();
+        encoder.encodeToString(new X509EncodedKeySpec(kp.getPublic().getEncoded()));
+        encoder.encodeToString(new PKCS8EncodedKeySpec(kp.getPrivate().getEncoded()));
+        System.out.println("PASS: testEncodedKeySpec");
+    }
+    private static void testEmptyAndNullKey(PEMEncoder encoder) throws NoSuchAlgorithmException {
+        KeyPair kp = getKeyPair();
+        assertThrows(IllegalArgumentException.class, () -> encoder.encode(
+                new KeyPair(kp.getPublic(), new EmptyKey())));
+        assertThrows(IllegalArgumentException.class, () -> encoder.encode(
+                new KeyPair(kp.getPublic(), null)));
+
+        assertThrows(IllegalArgumentException.class, () -> encoder.encode(
+                new KeyPair(new EmptyKey(), kp.getPrivate())));
+        assertThrows(IllegalArgumentException.class, () -> encoder.encode(
+                new KeyPair(null, kp.getPrivate())));
+        System.out.println("PASS: testEmptyKey");
+    }
+
+    private static KeyPair getKeyPair() throws NoSuchAlgorithmException {
+        Provider provider = Security.getProvider("SunRsaSign");
+        KeyPairGenerator kpg = KeyPairGenerator.getInstance("RSA", provider);
+        kpg.initialize(SecurityUtils.getTestKeySize("RSA"));
+        return kpg.generateKeyPair();
+    }
+
+    private static class EmptyKey implements PublicKey, PrivateKey {
+        @Override
+        public String getAlgorithm() { return "Test"; }
+
+        @Override
+        public String getFormat() { return "Test"; }
+
+        @Override
+        public byte[] getEncoded() { return new byte[0]; }
+    }
+
+    private static class NullKey implements PrivateKey {
+        @Override
+        public String getAlgorithm() { return "Test"; }
+
+        @Override
+        public String getFormat() { return "Test"; }
+
+        @Override
+        public byte[] getEncoded() { return null; }
+    }
+
+}

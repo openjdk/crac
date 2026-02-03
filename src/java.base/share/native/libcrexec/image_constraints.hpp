@@ -144,7 +144,7 @@ public:
     size_t result = 0;
     _constraints.foreach([&](Constraint &c) {
       if (!strcmp(c.name, name) && c.failed) {
-        if (!c.image_data) {
+        if (c.image_data == nullptr) {
           result = 0;
         } else {
           result = c.data_size;

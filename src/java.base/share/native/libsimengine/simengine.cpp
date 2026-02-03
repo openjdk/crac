@@ -172,7 +172,7 @@ static int restore(crlib_conf_t* conf) {
 #else // if !LINUX
   abort(); // engine->_pause should be false
   return -1;
-#endif LINUX;
+#endif // !LINUX
 }
 
 static bool can_configure(crlib_conf_t* conf, const char* key) {

@@ -31,10 +31,7 @@
 #include <cstring>
 #include <new>
 
-#include "crlib/crlib.h"
 #include "crlib/crlib_description.h"
-#include "crlib/crlib_image_constraints.h"
-#include "crlib/crlib_image_score.h"
 #include "crlib/crlib_restore_data.h"
 #include "crlib/crlib_user_data.h"
 #include "crcommon.hpp"
@@ -530,7 +527,7 @@ static crlib_api_t api = {
 
 extern "C" {
 
-JNIEXPORT crlib_api_t *CRLIB_API(int api_version, size_t api_size) {
+JNIEXPORT crlib_api_t *CRLIB_API_MAYBE_STATIC(int api_version, size_t api_size) {
   if (api_version != CRLIB_API_VERSION) {
     return nullptr;
   }

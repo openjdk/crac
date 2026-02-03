@@ -29,8 +29,17 @@
 #include <utility>
 
 #include "jni.h"
+#include "crlib/crlib.h"
 #include "crlib/crlib_image_constraints.h"
 #include "crlib/crlib_image_score.h"
+
+#ifdef STATIC_BUILD
+# define CONCAT_2(a, b) a##b
+# define CONCAT(a, b) CONCAT_2(a, b)
+# define CRLIB_API_MAYBE_STATIC CONCAT(CONCAT(CRLIB_API, _), LIBRARY_NAME)
+#else
+# define CRLIB_API_MAYBE_STATIC CRLIB_API
+#endif
 
 #define ARRAY_SIZE(x) (sizeof(x) / sizeof(*(x)))
 

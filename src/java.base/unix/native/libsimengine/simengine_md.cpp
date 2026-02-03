@@ -29,6 +29,11 @@
 
 #include "crcommon.hpp"
 
+// pause is supported only on Linux.
+// OSX does not define SIGRTMIN nor sigwaitinfo
+// FIXME: it would be better to implement this using another (standard) IPC mechanism, e.g. named pipe
+#ifdef LINUX
+
 #define RESTORE_SIGNAL (SIGRTMIN + 2)
 
 int kickjvm(pid_t jvm, int code) {
@@ -56,3 +61,5 @@ int waitjvm() {
     }
     return info.si_int;
 }
+
+#endif // LINUX

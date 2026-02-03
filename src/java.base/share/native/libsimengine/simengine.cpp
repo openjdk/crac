@@ -35,7 +35,6 @@
 #include <new>
 
 #include "crcommon.hpp"
-#include "crlib/crlib.h"
 #include "crlib/crlib_restore_data.h"
 #include "crlib/crlib_description.h"
 #include "jni.h"
@@ -48,6 +47,7 @@
 #else
 # define LINUX_ONLY_FUNCTION { abort(); }
 # define LINUX_ONLY(x)
+typedef int pid_t;
 #endif // !LINUX
 
 
@@ -311,7 +311,7 @@ static crlib_api_t api = {
 
 extern "C" {
 
-JNIEXPORT crlib_api_t *CRLIB_API(int api_version, size_t api_size) {
+JNIEXPORT crlib_api_t *CRLIB_API_MAYBE_STATIC(int api_version, size_t api_size) {
   if (api_version != CRLIB_API_VERSION) {
     return nullptr;
   }

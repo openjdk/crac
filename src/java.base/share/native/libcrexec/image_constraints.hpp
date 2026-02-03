@@ -140,16 +140,16 @@ public:
     return result;
   }
 
-  bool get_failed_bitmap(const char* name, unsigned char *value_return, size_t value_size) const {
-    bool result = false;
+  size_t get_failed_bitmap(const char* name, unsigned char *value_return, size_t value_size) const {
+    size_t result = 0;
     _constraints.foreach([&](Constraint &c) {
       if (!strcmp(c.name, name) && c.failed) {
-        result = true;
-        if (value_return) {
-          if (!c.image_data || value_size != c.data_size) {
-            result = false;
-          } else {
-            memcpy(value_return, c.image_data, c.data_size);
+        if (!c.image_data) {
+          result = 0;
+        } else {
+          result = c.data_size;
+          if (value_return) {
+            memcpy(value_return, c.image_data, value_size <= c.data_size ? value_size : c.data_size);
           }
         }
       }

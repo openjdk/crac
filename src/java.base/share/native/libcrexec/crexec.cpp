@@ -81,7 +81,7 @@ static bool set_bitmap(crlib_conf_t *, const char *name, const unsigned char *va
 static bool require_label(crlib_conf_t *, const char *name, const char *value);
 static bool require_bitmap(crlib_conf_t *, const char *name, const unsigned char *value, size_t length_bytes, crlib_bitmap_comparison_t comparison);
 static bool is_failed(crlib_conf_t *, const char *name);
-static bool get_failed_bitmap(crlib_conf_t *, const char *name, unsigned char *value_return, size_t value_size);
+static size_t get_failed_bitmap(crlib_conf_t *, const char *name, unsigned char *value_return, size_t value_size);
 
 static bool set_score(crlib_conf_t *, const char* name, double value);
 
@@ -655,7 +655,7 @@ static bool is_failed(crlib_conf_t *conf, const char *name) {
   return conf->image_constraints().is_failed(name);
 }
 
-static bool get_failed_bitmap(crlib_conf_t *conf, const char *name, unsigned char *value_return, size_t value_size) {
+static size_t get_failed_bitmap(crlib_conf_t *conf, const char *name, unsigned char *value_return, size_t value_size) {
   return conf->image_constraints().get_failed_bitmap(name, value_return, value_size);
 }
 

@@ -506,7 +506,8 @@ void CracEngine::check_cpuinfo(const VM_Version::VM_Features *current_features, 
   }
   if (_image_constraints_api->is_failed(_conf, cpufeatures_name)) {
     VM_Version::VM_Features image_features;
-    if (_image_constraints_api->get_failed_bitmap(_conf, cpufeatures_name, reinterpret_cast<unsigned char *>(&image_features), sizeof(image_features))) {
+    size_t image_features_size = _image_constraints_api->get_failed_bitmap(_conf, cpufeatures_name, reinterpret_cast<unsigned char *>(&image_features), sizeof(image_features));
+    if (image_features_size == sizeof(image_features)) {
       ResourceMark rm;
       if (!exact) {
         image_features &= *current_features;

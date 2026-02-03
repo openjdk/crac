@@ -65,7 +65,10 @@ typedef const struct crlib_image_constraints {
   bool (*is_failed)(crlib_conf_t *, const char *name);
 
   // For failed require_bitmap it will copy value from the image to the provided buffer.
-  bool (*get_failed_bitmap)(crlib_conf_t *, const char *name, unsigned char *value_return, size_t value_size);
+  // Copies up to 'value_size' bytes of the data into 'value_return' of appropriate size.
+  // Returns the size of the data, in bytes — it can be more, equal to or less than
+  // 'value_size'. Returned value of 0 represents an error.
+  size_t (*get_failed_bitmap)(crlib_conf_t *, const char *name, unsigned char *value_return, size_t value_size);
 } crlib_image_constraints_t;
 
 #ifdef __cplusplus

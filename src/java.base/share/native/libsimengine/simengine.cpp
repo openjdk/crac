@@ -23,6 +23,7 @@
  * or visit www.oracle.com if you need additional information or have any
  * questions.
  */
+#include <assert.h>
 #include <errno.h>
 #include <string.h>
 #include <stdio.h>
@@ -42,17 +43,15 @@
 #define SIMENGINE "simengine: "
 
 #ifdef LINUX
-# define LINUX_ONLY_FUNCTION ;
 # define LINUX_ONLY(x) x
+
+int kickjvm(pid_t jvm, int code);
+int waitjvm();
+
 #else
-# define LINUX_ONLY_FUNCTION { abort(); }
 # define LINUX_ONLY(x)
 typedef int pid_t;
 #endif // !LINUX
-
-
-int kickjvm(pid_t jvm, int code) LINUX_ONLY_FUNCTION
-int waitjvm() LINUX_ONLY_FUNCTION
 
 #define CONFIGURE_OPTIONS(OPT) \
   OPT(image_location, CRLIB_OPTION_FLAG_CHECKPOINT | CRLIB_OPTION_FLAG_RESTORE, "path", "no default", \
@@ -101,6 +100,7 @@ static int checkpoint(crlib_conf_t* conf) {
   }
   image_score_reset(conf);
 
+#ifdef LINUX
   if (!engine->_pause) {
     // Return immediately
     return 0;
@@ -123,6 +123,9 @@ static int checkpoint(crlib_conf_t* conf) {
 
   LOG("pausing the process, restore from another process to unpause it");
   engine->_restore_data = waitjvm();
+#else // !LINUX
+  assert(!engine->_pause);
+#endif // !LINUX
   return 0;
 }
 
@@ -139,6 +142,7 @@ static int restore(crlib_conf_t* conf) {
     return -1;
   }
 
+#ifdef LINUX
   char pidpath[1024];
   if ((size_t) snprintf(pidpath, sizeof(pidpath), "%s/pid", engine->_image_location) >= sizeof(pidpath)) {
     return -1;
@@ -165,6 +169,10 @@ static int restore(crlib_conf_t* conf) {
 
   // Do not return; terminate the restoring JVM immediatelly
   exit(0);
+#else // if !LINUX
+  abort(); // engine->_pause should be false
+  return -1;
+#endif LINUX;
 }
 
 static bool can_configure(crlib_conf_t* conf, const char* key) {

@@ -66,10 +66,12 @@ public class ParsingTest {
             test("criuengine");
         }
 
-        final String absolute = Platform.isWindows() ?
-            Path.of(Utils.TEST_JDK, "bin", "simengine.dll").toString() :
-            Path.of(Utils.TEST_JDK, "lib", "libsimengine" + (Platform.isOSX() ? ".dylib" : ".so")).toString();
-        test(absolute);
+        if (!Platform.isStatic()) {
+            final String absolute = Platform.isWindows() ?
+                    Path.of(Utils.TEST_JDK, "bin", "simengine.dll").toString() :
+                    Path.of(Utils.TEST_JDK, "lib", "libsimengine" + (Platform.isOSX() ? ".dylib" : ".so")).toString();
+            test(absolute);
+        }
 
         test("unknown", null, 1, "Cannot find CRaC engine unknown");
         test("simengine,--arg", null, 1, "Cannot find CRaC engine simengine,--arg");

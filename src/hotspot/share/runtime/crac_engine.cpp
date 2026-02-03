@@ -130,7 +130,7 @@ static bool find_engine(const char *dll_dir, char *path, size_t path_size, bool 
     if (!strcmp(SIMENGINE, resolved_engine)) {
       log_debug(crac)("Using static simengine");
       *is_library = true;
-      os::jvm_path(path, path_size);
+      os::jvm_path(path, static_cast<jint>(path_size));
       return true;
     }
   }

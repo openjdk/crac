@@ -25,7 +25,7 @@
 #ifndef CRCOMMON_HPP
 #define CRCOMMON_HPP
 
-#include <stdio.h>
+#include <cstdio>
 #include <utility>
 
 #include "jni.h"
@@ -69,26 +69,26 @@ template<typename F> inline Deferred<F> defer(F&& f) {
 }
 
 struct crlib_conf {
-  void *_image_constraints;
-  void *_image_score;
+  void *image_constraints;
+  void *image_score;
 };
 
 extern "C" {
-  extern JNIEXPORT const char* log_prefix;
+  extern const char* log_prefix;
 
-  JNIEXPORT bool init_conf(struct crlib_conf* conf, const char* log_prefix);
-  JNIEXPORT void destroy_conf(struct crlib_conf* conf);
+  extern bool init_conf(struct crlib_conf* conf, const char* log_prefix);
+  extern void destroy_conf(struct crlib_conf* conf);
 
-  extern JNIEXPORT crlib_image_constraints_t image_constraints_extension;
-  JNIEXPORT bool image_constraints_persist(const struct crlib_conf* conf, const char* image_location);
-  JNIEXPORT bool image_constraints_validate(const struct crlib_conf* conf, const char* image_location);
+  extern crlib_image_constraints_t image_constraints_extension;
+  extern bool image_constraints_persist(const struct crlib_conf* conf, const char* image_location);
+  extern bool image_constraints_validate(const struct crlib_conf* conf, const char* image_location);
 
-  extern JNIEXPORT crlib_image_score_t image_score_extension;
-  JNIEXPORT bool image_score_persist(const struct crlib_conf* conf, const char* image_location);
-  JNIEXPORT void image_score_reset(struct crlib_conf* conf);
+  extern crlib_image_score_t image_score_extension;
+  extern bool image_score_persist(const struct crlib_conf* conf, const char* image_location);
+  extern void image_score_reset(struct crlib_conf* conf);
 
   // helper function
-  JNIEXPORT const crlib_extension_t *find_extension(crlib_extension_t * const *extensions, const char *name, size_t size);
+  extern const crlib_extension_t *find_extension(crlib_extension_t * const *extensions, const char *name, size_t size);
 }
 
 #endif // CRCOMMON_HPP

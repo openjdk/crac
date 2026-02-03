@@ -293,6 +293,7 @@ private:
 static crlib_conf_t *create_crexec() {
   auto * const conf = new(std::nothrow) CrExec();
   if (conf == nullptr || !conf->is_initialized()) {
+    LOG("Cannot create crexec instance (insufficient memory?)");
     delete conf;
     return nullptr;
   }

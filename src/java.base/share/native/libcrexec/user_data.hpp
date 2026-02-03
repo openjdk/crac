@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2023,2026, Azul Systems, Inc. All rights reserved.
+ * Copyright (c) 2023, 2026, Azul Systems, Inc. All rights reserved.
  * Copyright (c) 2023, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
@@ -26,6 +26,8 @@
 #ifndef USER_DATA_HPP
 #define USER_DATA_HPP
 
+#include "crlib/crlib_user_data.h"
+
 class UserData;
 struct user_data_chunk;
 
@@ -42,7 +44,7 @@ private:
         return *_image_location;
     }
 public:
-    UserData(const char **image_location): _image_location(image_location) {}
+    explicit UserData(const char **image_location): _image_location(image_location) {}
 
     bool set_user_data(const char *name, const void *data, size_t size);
     crlib_user_data_storage_t *load_user_data();

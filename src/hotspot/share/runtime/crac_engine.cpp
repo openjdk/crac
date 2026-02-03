@@ -67,10 +67,10 @@ static bool is_pauseengine() {
 }
 
 static bool find_engine(const char *dll_dir, char *path, size_t path_size, bool *is_library, char *resolved_engine, size_t resolved_engine_size) {
+  const size_t engine_length = strlen(CRaCEngine);
   // Try to interpret as a file path
   if (os::is_path_absolute(CRaCEngine)) {
-    const size_t path_len = strlen(CRaCEngine);
-    if (path_len + 1 > path_size) {
+    if (engine_length + 1 > path_size) {
       log_error(crac)("CRaCEngine file path is too long: %s", CRaCEngine);
       return false;
     }
@@ -90,7 +90,7 @@ static bool find_engine(const char *dll_dir, char *path, size_t path_size, bool 
       basename = last_slash + strlen(os::file_separator());
     }
     *is_library = strncmp(basename, JNI_LIB_PREFIX, strlen(JNI_LIB_PREFIX)) == 0 &&
-      strcmp(path + path_len - strlen(JNI_LIB_SUFFIX), JNI_LIB_SUFFIX) == 0;
+      strcmp(path + engine_length - strlen(JNI_LIB_SUFFIX), JNI_LIB_SUFFIX) == 0;
     log_debug(crac)("CRaCEngine path %s is %s library", CRaCEngine, *is_library ? "a" : "not a");
 
     if (*is_library) {
@@ -110,11 +110,16 @@ static bool find_engine(const char *dll_dir, char *path, size_t path_size, bool 
     return true;
   }
 
+#ifdef LINUX
   if (is_pauseengine()) {
     assert(sizeof(SIMENGINE) <= resolved_engine_size, "must be");
     memcpy(resolved_engine, SIMENGINE, sizeof(SIMENGINE));
     log_warning(crac)("-XX:CRaCEngine=pause/pauseengine is deprecated; use -XX:CRaCEngine=simengine -XX:CRaCEngineOptions=pause=true");
-  } else if (static_cast<size_t>(os::snprintf(resolved_engine, resolved_engine_size, "%s", CRaCEngine)) >= resolved_engine_size) {
+  } else /* intentional line break */
+#endif // LINUX
+  if (engine_length < resolved_engine_size) {
+    memcpy(resolved_engine, CRaCEngine, engine_length);
+  } else {
     log_error(crac)("CRaCEngine name is too long: %s", CRaCEngine);
     return false;
   }
@@ -336,7 +341,7 @@ CracEngine::CracEngine() {
 
   bool is_library;
   if (!find_engine(dll_dir, path, sizeof(path), &is_library,
-    resolved_engine_func + sizeof(CRLIB_API_FUNC), MAX_ENGINE_LENGTH)) {
+      resolved_engine_func + sizeof(CRLIB_API_FUNC), MAX_ENGINE_LENGTH)) {
     log_error(crac)("Cannot find CRaC engine %s", CRaCEngine);
     return;
   }

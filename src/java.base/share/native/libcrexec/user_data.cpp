@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2023,2026, Azul Systems, Inc. All rights reserved.
+ * Copyright (c) 2023, 2026, Azul Systems, Inc. All rights reserved.
  * Copyright (c) 2023, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
@@ -23,12 +23,12 @@
  * or visit www.oracle.com if you need additional information or have any
  * questions.
  */
-#include <assert.h>
-#include <errno.h>
-#include <stdio.h>
-#include <stdint.h>
-#include <stdlib.h>
-#include <string.h>
+#include <cassert>
+#include <cerrno>
+#include <cstdio>
+#include <cstdint>
+#include <cstdlib>
+#include <cstring>
 
 #include "crcommon.hpp"
 #include "crlib/crlib_user_data.h"

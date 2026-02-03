@@ -23,24 +23,22 @@
  * or visit www.oracle.com if you need additional information or have any
  * questions.
  */
-#include <assert.h>
-#include <errno.h>
-#include <string.h>
-#include <stdio.h>
-#include <stdlib.h>
+#include <cassert>
+#include <cerrno>
+#include <cstring>
+#include <cstdio>
+#include <cstdlib>
+#include <new>
+
 #ifdef LINUX
 #include <signal.h>
 #include <unistd.h>
 #endif // LINUX
 
-#include <new>
-
 #include "crcommon.hpp"
 #include "crlib/crlib_restore_data.h"
 #include "crlib/crlib_description.h"
 #include "jni.h"
-
-#define SIMENGINE "simengine: "
 
 #ifdef LINUX
 # define LINUX_ONLY(x) x
@@ -64,26 +62,32 @@ CONFIGURE_OPTIONS(DEFINE_NAME);
 #undef DEFINE_NAME
 
 struct SimEngine: public crlib_conf_t {
-  char* _image_location = nullptr;
-  bool _pause;
+  bool initialized = false;
+  char* image_location = nullptr;
+  bool pause = false;
 
-  bool _has_restore_data = false;
-  int _restore_data = 0;
+  bool has_restore_data = false;
+  int restore_data = 0;
 
   SimEngine() {
     if (!init_conf(this, "simengine")) {
       return;
     }
+    initialized = true;
   }
   ~SimEngine() {
-    free(_image_location);
+    free(image_location);
     destroy_conf(this);
   }
 };
 
 static crlib_conf_t* create_simengine() {
     SimEngine *engine = new(std::nothrow) SimEngine();
-
+    if (engine == nullptr || !engine->initialized) {
+        LOG("Cannot create simengine instance (insufficient memory?)");
+        delete engine;
+        return nullptr;
+    }
     return engine;
 }
 
@@ -94,20 +98,20 @@ static void destroy_simengine(crlib_conf_t* conf) {
 static int checkpoint(crlib_conf_t* conf) {
   SimEngine *engine = static_cast<SimEngine*>(conf);
 
-  if (!image_constraints_persist(conf, engine->_image_location) ||
-    !image_score_persist(conf, engine->_image_location)) {
+  if (!image_constraints_persist(conf, engine->image_location) ||
+      !image_score_persist(conf, engine->image_location)) {
     return -1;
   }
   image_score_reset(conf);
 
 #ifdef LINUX
-  if (!engine->_pause) {
+  if (!engine->pause) {
     // Return immediately
     return 0;
   }
 
   char pidpath[1024];
-  if ((size_t) snprintf(pidpath, sizeof(pidpath), "%s/pid", engine->_image_location) >= sizeof(pidpath)) {
+  if ((size_t) snprintf(pidpath, sizeof(pidpath), "%s/pid", engine->image_location) >= sizeof(pidpath)) {
     return 1;
   }
   pid_t jvm = getpid();
@@ -122,7 +126,7 @@ static int checkpoint(crlib_conf_t* conf) {
   fclose(pidfile);
 
   LOG("pausing the process, restore from another process to unpause it");
-  engine->_restore_data = waitjvm();
+  engine->restore_data = waitjvm();
 #else // !LINUX
   assert(!engine->_pause);
 #endif // !LINUX
@@ -132,19 +136,17 @@ static int checkpoint(crlib_conf_t* conf) {
 static int restore(crlib_conf_t* conf) {
   SimEngine* engine = static_cast<SimEngine*>(conf);
 
-  if (!image_constraints_validate(conf, engine->_image_location)) {
-    return -1;
-  }
-
-  if (!engine->_pause) {
-    LOG("restore is not supported as a separate action by this engine, "
-        "it always restores a process immediately after checkpointing it");
+  if (!image_constraints_validate(conf, engine->image_location)) {
     return -1;
   }
 
 #ifdef LINUX
+  if (!engine->pause) {
+    LOG("restore requires -XX:CRaCEngineOptions=pause=true to wake the process paused with this option.");
+    return -1;
+  }
   char pidpath[1024];
-  if ((size_t) snprintf(pidpath, sizeof(pidpath), "%s/pid", engine->_image_location) >= sizeof(pidpath)) {
+  if ((size_t) snprintf(pidpath, sizeof(pidpath), "%s/pid", engine->image_location) >= sizeof(pidpath)) {
     return -1;
   }
   FILE *pidfile = fopen(pidpath, "r");
@@ -161,7 +163,7 @@ static int restore(crlib_conf_t* conf) {
   }
   fclose(pidfile);
 
-  if (kickjvm(jvm, engine->_restore_data)) {
+  if (kickjvm(jvm, engine->restore_data)) {
     LOG("error unpausing checkpointed process (pid %d)", jvm);
   } else {
     LOG("successfully unpaused the checkpointed process\n");
@@ -170,68 +172,69 @@ static int restore(crlib_conf_t* conf) {
   // Do not return; terminate the restoring JVM immediatelly
   exit(0);
 #else // if !LINUX
-  abort(); // engine->_pause should be false
+  LOG("restore is not supported as a separate action by this engine, "
+    "it always restores a process immediately after checkpointing it");
   return -1;
 #endif // !LINUX
 }
 
 static bool can_configure(crlib_conf_t* conf, const char* key) {
-    return !strcmp(key, opt_image_location) LINUX_ONLY(|| !strcmp(key, opt_pause));
+  return !strcmp(key, opt_image_location) LINUX_ONLY(|| !strcmp(key, opt_pause));
 }
 
 static bool configure(crlib_conf_t* conf, const char* key, const char* value) {
-    SimEngine* engine = static_cast<SimEngine*>(conf);
-    if (!strcmp(key, opt_image_location)) {
-        char* copy = strdup(value);
-        if (value == nullptr) {
-            LOG("out of memory");
-            return false;
-        }
-        free(engine->_image_location);
-        engine->_image_location = copy;
-        return true;
-#ifdef LINUX
-    } else if (!strcmp(key, opt_pause)) {
-        if (!strcasecmp(value, "true")) {
-            engine->_pause = true;
-        } else if (!strcasecmp(value, "false")) {
-            engine->_pause = false;
-        } else {
-            LOG("expected %s to be either 'true' or 'false'", key);
-            return false;
-        }
-        return true;
-#endif // LINUX
+  SimEngine* engine = static_cast<SimEngine*>(conf);
+  if (!strcmp(key, opt_image_location)) {
+    char* copy = strdup(value);
+    if (value == nullptr) {
+      LOG("out of memory");
+      return false;
     }
-    LOG("unknown configure option: %s", key);
-    return false;
+    free(engine->image_location);
+    engine->image_location = copy;
+    return true;
+#ifdef LINUX
+  } else if (!strcmp(key, opt_pause)) {
+    if (!strcasecmp(value, "true")) {
+      engine->pause = true;
+    } else if (!strcasecmp(value, "false")) {
+      engine->pause = false;
+    } else {
+      LOG("expected %s to be either 'true' or 'false'", key);
+      return false;
+    }
+    return true;
+#endif // LINUX
+  }
+  LOG("unknown configure option: %s", key);
+  return false;
 }
 
 static bool set_restore_data(crlib_conf_t *conf, const void *data, size_t size) {
   SimEngine* engine = static_cast<SimEngine*>(conf);
-  constexpr const size_t supported_size = sizeof(engine->_restore_data);
+  constexpr const size_t supported_size = sizeof(engine->restore_data);
   if (size > 0 && size != supported_size) {
     LOG("unsupported size of restore data: %zu was requested but only %zu is supported", size, supported_size);
     return false;
   }
   if (size > 0) {
-    memcpy(&engine->_restore_data, data, size);
-    engine->_has_restore_data = true;
+    memcpy(&engine->restore_data, data, size);
+    engine->has_restore_data = true;
   } else {
-    engine->_restore_data = 0;
-    engine->_has_restore_data = false;
+    engine->restore_data = 0;
+    engine->has_restore_data = false;
   }
   return true;
 }
 
 static size_t get_restore_data(crlib_conf_t *conf, void *buf, size_t size) {
   SimEngine* engine = static_cast<SimEngine*>(conf);
-  if (!engine->_has_restore_data) {
+  if (!engine->has_restore_data) {
     return 0;
   }
-  constexpr const size_t available_size = sizeof(engine->_restore_data);
+  constexpr const size_t available_size = sizeof(engine->restore_data);
   if (size > 0) {
-    memcpy(buf, &engine->_restore_data, size < available_size ? size : available_size);
+    memcpy(buf, &engine->restore_data, size < available_size ? size : available_size);
   }
   return available_size;
 }
@@ -252,7 +255,7 @@ static const char *identity(crlib_conf_t *conf) {
 static const char *description(crlib_conf_t *conf) {
   return
     "simengine - CRaC-engine used for development & testing; does not implement "
-    "actual process snapshot & rehydration but only simulates these.";
+    "actual process checkpoint & restoration but only simulates these.";
 }
 
 static const char *configuration_doc(crlib_conf_t *conf) {

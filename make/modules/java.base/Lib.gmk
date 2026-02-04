@@ -213,7 +213,7 @@ $(eval $(call SetupJdkLibrary, BUILD_LIBCRCOMMON, \
     NAME := crcommon, \
     LINK_TYPE := C++, \
     EXTRA_HEADER_DIRS := libjvm, \
-    CXXFLAGS := $(CXXFLAGS_JDKLIB) -DCRLIB_IS_IMPL, \
+    CXXFLAGS := $(CXXFLAGS_JDKLIB) -DCRLIB_IS_IMPL -DCRCOMMON_IMPL, \
     CXXFLAGS_windows := -D_WINDOWS -DWIN32, \
     CXXFLAGS_macosx := -DMACOSX, \
     LDFLAGS := $(LDFLAGS_JDKLIB), \

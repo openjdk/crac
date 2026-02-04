@@ -73,22 +73,30 @@ struct crlib_conf {
   void *image_score;
 };
 
+#ifdef CRCOMMON_IMPL
+# define CRCOMMON_API JNIEXPORT
+#else
+# define CRCOMMON_API JNIIMPORT
+#endif
+
 extern "C" {
-  extern const char* log_prefix;
+  extern CRCOMMON_API const char* log_prefix;
 
-  extern bool init_conf(struct crlib_conf* conf, const char* log_prefix);
-  extern void destroy_conf(struct crlib_conf* conf);
+  extern CRCOMMON_API bool init_conf(struct crlib_conf* conf, const char* log_prefix);
+  extern CRCOMMON_API void destroy_conf(struct crlib_conf* conf);
 
-  extern crlib_image_constraints_t image_constraints_extension;
-  extern bool image_constraints_persist(const struct crlib_conf* conf, const char* image_location);
-  extern bool image_constraints_validate(const struct crlib_conf* conf, const char* image_location);
+  extern CRCOMMON_API crlib_image_constraints_t image_constraints_extension;
+  extern CRCOMMON_API bool image_constraints_persist(const struct crlib_conf* conf, const char* image_location);
+  extern CRCOMMON_API bool image_constraints_validate(const struct crlib_conf* conf, const char* image_location);
 
-  extern crlib_image_score_t image_score_extension;
-  extern bool image_score_persist(const struct crlib_conf* conf, const char* image_location);
-  extern void image_score_reset(struct crlib_conf* conf);
+  extern CRCOMMON_API crlib_image_score_t image_score_extension;
+  extern CRCOMMON_API bool image_score_persist(const struct crlib_conf* conf, const char* image_location);
+  extern CRCOMMON_API void image_score_reset(struct crlib_conf* conf);
 
   // helper function
-  extern const crlib_extension_t *find_extension(crlib_extension_t * const *extensions, const char *name, size_t size);
+  extern CRCOMMON_API const crlib_extension_t *find_extension(crlib_extension_t * const *extensions, const char *name, size_t size);
 }
+
+#undef CRCOMMON_API
 
 #endif // CRCOMMON_HPP

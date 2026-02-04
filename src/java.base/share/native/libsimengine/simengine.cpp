@@ -128,7 +128,7 @@ static int checkpoint(crlib_conf_t* conf) {
   LOG("pausing the process, restore from another process to unpause it");
   engine->restore_data = waitjvm();
 #else // !LINUX
-  assert(!engine->_pause);
+  assert(!engine->pause);
 #endif // !LINUX
   return 0;
 }
@@ -172,6 +172,7 @@ static int restore(crlib_conf_t* conf) {
   // Do not return; terminate the restoring JVM immediatelly
   exit(0);
 #else // if !LINUX
+  assert(!engine->pause);
   LOG("restore is not supported as a separate action by this engine, "
     "it always restores a process immediately after checkpointing it");
   return -1;

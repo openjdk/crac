@@ -24,6 +24,7 @@
 
 import jdk.crac.*;
 import jdk.test.lib.crac.CracBuilder;
+import jdk.test.lib.crac.CracEngine;
 import jdk.test.lib.crac.CracTest;
 
 import java.util.Arrays;
@@ -44,7 +45,7 @@ public class FailedResourceTest implements CracTest {
 
     @Override
     public void test() throws Exception {
-        new CracBuilder().startCheckpoint().waitForSuccess();
+        new CracBuilder().engine(CracEngine.SIMULATE).startCheckpoint().waitForSuccess();
     }
 
     @Override

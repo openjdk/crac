@@ -81,7 +81,7 @@ public class CracContainerBuilder extends CracBuilderBase<CracContainerBuilder> 
     private List<String> dockerOptions; // Immutable
     private List<String> dockerCheckpointOptions; // Immutable
     private List<String> containerSetupCommand; // Immutable
-    boolean containerUsePrivileged = true;
+    boolean containerUsePrivileged;
     boolean runContainerDirectly = false;
     // make sure to update copy constructor when adding new fields
 

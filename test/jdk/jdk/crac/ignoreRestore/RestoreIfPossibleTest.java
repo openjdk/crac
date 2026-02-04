@@ -31,7 +31,6 @@ import jdk.crac.Core;
 
 import static jdk.test.lib.Asserts.*;
 import jdk.test.lib.crac.CracBuilder;
-import jdk.test.lib.crac.CracEngine;
 import jdk.test.lib.util.FileUtils;
 
 /**
@@ -51,7 +50,7 @@ public class RestoreIfPossibleTest {
     public static void main(String[] args) throws Exception {
         final var makeRestorePossible = Boolean.parseBoolean(args[0]);
 
-        final var builder = new CracBuilder().engine(CracEngine.CRIU)
+        final var builder = new CracBuilder()
             .vmOption("-XX:+CRaCIgnoreRestoreIfUnavailable")
             .forwardClasspathOnRestore(true)
             .captureOutput(true);

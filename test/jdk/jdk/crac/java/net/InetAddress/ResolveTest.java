@@ -60,7 +60,9 @@ public class ResolveTest implements CracTest {
         String imageName = Common.imageName("inet-address");
 
         CracContainerBuilder builder = new CracContainerBuilder()
-                .inDockerImage(imageName).dockerOptions("--add-host", TEST_HOSTNAME + ":192.168.12.34")
+                .inDockerImage(imageName)
+                .dockerOptions("--add-host", TEST_HOSTNAME + ":192.168.12.34")
+                .containerUsePrivileged(true)
                 .captureOutput(true)
                 .args(CracTest.args(TEST_HOSTNAME, "/second-run"));
 

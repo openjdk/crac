@@ -27,7 +27,6 @@ import java.nio.file.Files;
 import java.util.List;
 
 import jdk.test.lib.crac.CracBuilder;
-import jdk.test.lib.crac.CracEngine;
 
 /**
  * @test
@@ -49,7 +48,7 @@ public class InvalidImageLocationTest {
     public static void main(String[] args) throws Exception {
         final var variant = Variant.valueOf(args[0]);
 
-        final var builder = new CracBuilder().engine(CracEngine.CRIU)
+        final var builder = new CracBuilder()
             .vmOption("-XX:+CRaCIgnoreRestoreIfUnavailable")
             .forwardClasspathOnRestore(true)
             .captureOutput(true);

@@ -26,22 +26,26 @@
 import jdk.crac.*;
 
 import jdk.test.lib.crac.CracBuilder;
+import jdk.test.lib.crac.CracEngine;
 import jdk.test.lib.crac.CracTest;
+import jdk.test.lib.crac.CracTestArg;
 
 /**
  * @test
  * @library /test/lib
- * @build LeaveRunning
- * @run driver jdk.test.lib.crac.CracTest
  * @requires (os.family == "linux")
+ * @build KeepRunningTest
+ * @run driver jdk.test.lib.crac.CracTest CRIU
  */
-public class LeaveRunning implements CracTest {
+public class KeepRunningTest implements CracTest {
+    @CracTestArg
+    CracEngine engine;
+
     @Override
     public void test() throws Exception {
-        CracBuilder builder = new CracBuilder().env("CRAC_CRIU_LEAVE_RUNNING", "")
-                .captureOutput(true);
+        CracBuilder builder = new CracBuilder().engine(engine).engineOptions("keep_running=true").captureOutput(true);
         builder.startCheckpoint().waitForSuccess().outputAnalyzer().shouldContain(RESTORED_MESSAGE);
-        builder.doRestore().outputAnalyzer().shouldContain(RESTORED_MESSAGE);
+        builder.engineOptions().doRestore().outputAnalyzer().shouldContain(RESTORED_MESSAGE);
     }
 
     @Override

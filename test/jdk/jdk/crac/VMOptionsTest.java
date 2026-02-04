@@ -27,7 +27,6 @@ import com.sun.management.VMOption;
 import jdk.crac.*;
 import jdk.test.lib.Utils;
 import jdk.test.lib.crac.CracBuilder;
-import jdk.test.lib.crac.CracEngine;
 import jdk.test.lib.crac.CracProcess;
 import jdk.test.lib.crac.CracTest;
 
@@ -107,7 +106,7 @@ public class VMOptionsTest implements CracTest {
 
     @Override
     public void test() throws Exception {
-        final var builder = new CracBuilder().engine(CracEngine.CRIU).captureOutput(true);
+        final var builder = new CracBuilder().captureOutput(true);
         setVmOptions(builder, OPTIONS_CHECKPOINT);
         builder.doCheckpoint();
 

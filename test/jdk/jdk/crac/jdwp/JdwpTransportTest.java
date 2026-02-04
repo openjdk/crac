@@ -103,9 +103,8 @@ public class JdwpTransportTest implements CracTest {
     @Override
     public void test() throws Exception {
         final String suspendArg = ",suspend=" + (suspendOnJdwpStart ? "y" : "n");
-        CracBuilder builder = new CracBuilder()
+        CracBuilder builder = new CracBuilder().engine(CracEngine.SIMULATE)
             .vmOption("-agentlib:jdwp=transport=dt_socket,server=y,address=0.0.0.0:" + PORT + suspendArg);
-        builder.engine(CracEngine.SIMULATE);
 
         CracProcess process = builder.captureOutput(true).startCheckpoint();
         var errReader = new AsyncStreamReader(process.errOutput());

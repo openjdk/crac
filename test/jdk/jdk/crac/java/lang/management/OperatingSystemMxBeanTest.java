@@ -40,7 +40,7 @@ public class OperatingSystemMxBeanTest implements CracTest {
     @Override
     public void test() throws Exception {
         // The restore must be in a new process => cannot use simengine
-        new CracBuilder().engine(CracEngine.CRIU).doCheckpointAndRestore();
+        new CracBuilder().doCheckpointAndRestore();
     }
 
     @Override

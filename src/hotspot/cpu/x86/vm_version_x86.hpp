@@ -603,6 +603,11 @@ protected:
       return retval;
     }
 
+    VM_Features &operator &=(const VM_Features &other) {
+      *this = *this & other;
+      return *this;
+    }
+
     bool operator ==(const VM_Features &other) const {
       bool retval = true;
       apply_to_all_features([&other, &retval](uint64_t u, int idx) {

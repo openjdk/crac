@@ -34,8 +34,6 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.concurrent.CountDownLatch;
 
-import static jdk.test.lib.Asserts.assertEquals;
-
 /**
  * @test
  * @library /test/lib

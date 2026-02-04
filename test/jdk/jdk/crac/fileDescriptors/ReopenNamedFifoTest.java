@@ -28,7 +28,6 @@ import jdk.test.lib.crac.CracProcess;
 import jdk.test.lib.crac.CracTest;
 import jdk.test.lib.crac.CracTestArg;
 
-import java.io.File;
 import java.io.FileReader;
 import java.io.FileWriter;
 import java.nio.file.Files;

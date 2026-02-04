@@ -33,8 +33,8 @@
 #include "runtime/os.hpp"
 #include "utilities/debug.hpp"
 #include "utilities/growableArray.hpp"
+#include "utilities/hashTable.hpp"
 #include "utilities/macros.hpp"
-#include "utilities/resourceHash.hpp"
 #include "utilities/stringUtils.hpp"
 
 #include <cstddef>
@@ -158,8 +158,8 @@ public:
 };
 
 // Have to use C-heap because resource area may yet be unavailable when this is used
-using CStringSet = ResourceHashtable<const char *, bool, 256, AnyObj::C_HEAP, MemTag::mtInternal,
-                                     CStringUtils::hash, CStringUtils::equals>;
+using CStringSet = HashTable<const char *, bool, 256, AnyObj::C_HEAP, MemTag::mtInternal,
+                             CStringUtils::hash, CStringUtils::equals>;
 
 static crlib_conf_t *create_conf(const crlib_api_t &api, const char *exec_location) {
   crlib_conf_t * const conf = api.create_conf();

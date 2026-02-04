@@ -31,6 +31,8 @@
 #include "utilities/macros.hpp"
 #include "utilities/sizes.hpp"
 
+class stringStream;
+
 class VM_Version : public Abstract_VM_Version {
   friend class VMStructs;
   friend class JVMCIVMStructs;
@@ -215,8 +217,8 @@ class VM_Version : public Abstract_VM_Version {
   union ExtCpuid8Ecx {
     uint32_t value;
     struct {
-      uint32_t cores_per_cpu : 8,
-                             : 24;
+      uint32_t threads_per_cpu : 8,
+                               : 24;
     } bits;
   };
 
@@ -292,7 +294,8 @@ class VM_Version : public Abstract_VM_Version {
         fast_short_rep_mov : 1,
                            : 9,
                  serialize : 1,
-                           : 5,
+                     hybrid: 1,
+                           : 4,
                    cet_ibt : 1,
                            : 2,
               avx512_fp16  : 1,
@@ -318,6 +321,14 @@ class VM_Version : public Abstract_VM_Version {
                      : 1,
               apx_f  : 1,
                      : 10;
+    } bits;
+  };
+
+  union StdCpuidEax29Ecx0 {
+    uint32_t value;
+    struct {
+      uint32_t  apx_nci_ndd_nf  : 1,
+                                : 31;
     } bits;
   };
 
@@ -461,17 +472,18 @@ protected:
     decl(AVX512_FP16,       "avx512_fp16",       62) /* AVX512 FP16 ISA support*/ \
     decl(AVX10_1,           "avx10_1",           63) /* AVX10 512 bit vector ISA Version 1 support*/ \
     decl(AVX10_2,           "avx10_2",           64) /* AVX10 512 bit vector ISA Version 2 support*/ \
-    decl(FMA4,              "fma4",              65) \
-    decl(MOVBE,             "movbe",             66) \
-    decl(OSXSAVE,           "osxsave",           67) \
-    decl(IBT,               "ibt",               68) \
-    decl(SHSTK,             "shstk",             69) /* Also known as cet_ss */ \
-    decl(XSAVE,             "xsave",             70) \
-    decl(CMPXCHG16,         "cmpxchg16",         71) /* Also known in cpuinfo as cx16 and in glibc as cmpxchg16b */ \
-    decl(LAHFSAHF,          "lahfsahf",          72) /* Also known in cpuinfo as lahf_lm and in glibc as lahf64_sahf64 */ \
-    decl(HTT,               "htt",               73) /* hotspot calls it 'ht' but that is affected by threads_per_core() */ \
-    decl(XSAVEC,            "xsavec",            74) \
-    decl(AVX_Fast_Unaligned_Load, "avx_fast_unaligned_load", 75)
+    decl(HYBRID,            "hybrid",            65) /* Hybrid architecture */ \
+    decl(FMA4,              "fma4",              66) \
+    decl(MOVBE,             "movbe",             67) \
+    decl(OSXSAVE,           "osxsave",           68) \
+    decl(IBT,               "ibt",               69) \
+    decl(SHSTK,             "shstk",             70) /* Also known as cet_ss */ \
+    decl(XSAVE,             "xsave",             71) \
+    decl(CMPXCHG16,         "cmpxchg16",         72) /* Also known in cpuinfo as cx16 and in glibc as cmpxchg16b */ \
+    decl(LAHFSAHF,          "lahfsahf",          73) /* Also known in cpuinfo as lahf_lm and in glibc as lahf64_sahf64 */ \
+    decl(HTT,               "htt",               74) /* hotspot calls it 'ht' but that is affected by threads_per_core() */ \
+    decl(XSAVEC,            "xsavec",            75) \
+    decl(AVX_Fast_Unaligned_Load, "avx_fast_unaligned_load", 76)
 
 #define DECLARE_CPU_FEATURE_FLAG(id, name, bit) CPU_##id = (bit),
     CPU_FEATURE_FLAGS(DECLARE_CPU_FEATURE_FLAG)
@@ -615,49 +627,9 @@ protected:
       return *this == empty_features;
     }
 
-    int print_numbers(char *buf_orig, size_t buflen, bool hexonly = false) const {
-      char *buf = buf_orig;
-      const char *format = hexonly ? UINT64_FORMAT_0 : UINT64_FORMAT_X;
-      apply_to_all_features([&](uint64_t u, int idx) {
-        int res = jio_snprintf(buf, buflen, format, u);
-        if (res < 0) {
-          buflen = 0;
-          return;
-        }
-        buf += res;
-        buflen -= res;
-        if (!hexonly && idx + 1 < features_bitmap_element_count() && buflen > 0) {
-          *buf++ = ',';
-          --buflen;
-        }
-      });
-      if (buflen == 0) {
-        return -1;
-      }
-      *buf = 0;
-      return buf - buf_orig;
-    }
+    void print_numbers(outputStream &os, bool hexonly = false) const;
 
     const char *print_numbers() const;
-
-    void print_numbers_and_names(char *buf, size_t buflen) const {
-      int res = print_numbers(buf, buflen);
-      assert(res >= 0, "buffer too short");
-      buf += res;
-      buflen -= res;
-      assert(buflen >= 3, "not enough temporary space allocated");
-      *buf++ = ' ';
-      --buflen;
-      *buf = 0;
-      insert_features_names(*this, buf, buflen);
-
-      // insert_features_names puts ", " at the beginning, make it " = ".
-      if (*buf) {
-        *buf = '=';
-      }
-    }
-
-    void print_missing_features() const;
   };
 
   // CPU feature flags vector, can be affected by VM settings.
@@ -740,6 +712,10 @@ protected:
     // eax = 24, ecx = 0
     StdCpuid24MainLeafEax std_cpuid24_eax;
     StdCpuid24MainLeafEbx std_cpuid24_ebx;
+
+    // cpuid function 0x29 APX Advanced Performance Extensions Leaf
+    // eax = 0x29, ecx = 0
+    StdCpuidEax29Ecx0 std_cpuid29_ebx;
 
     // cpuid function 0xB (processor topology)
     // ecx = 0
@@ -881,6 +857,7 @@ public:
   static ByteSize std_cpuid0_offset() { return byte_offset_of(CpuidInfo, std_max_function); }
   static ByteSize std_cpuid1_offset() { return byte_offset_of(CpuidInfo, std_cpuid1_eax); }
   static ByteSize std_cpuid24_offset() { return byte_offset_of(CpuidInfo, std_cpuid24_eax); }
+  static ByteSize std_cpuid29_offset() { return byte_offset_of(CpuidInfo, std_cpuid29_ebx); }
   static ByteSize dcp_cpuid4_offset() { return byte_offset_of(CpuidInfo, dcp_cpuid4_eax); }
   static ByteSize sef_cpuid7_offset() { return byte_offset_of(CpuidInfo, sef_cpuid7_eax); }
   static ByteSize sefsl1_cpuid7_offset() { return byte_offset_of(CpuidInfo, sefsl1_cpuid7_eax); }
@@ -931,7 +908,9 @@ public:
     _features.set_feature(CPU_SSE2);
     _features.set_feature(CPU_VZEROUPPER);
   }
-  static void set_apx_cpuFeatures() { _features.set_feature(CPU_APX_F); }
+  static void set_apx_cpuFeatures() {
+    _features.set_feature(CPU_APX_F);
+  }
   static void set_bmi_cpuFeatures() {
     _features.set_feature(CPU_BMI1);
     _features.set_feature(CPU_BMI2);
@@ -945,7 +924,6 @@ public:
   static bool ignore_cpu_features() {
     // This gets triggered by -XX:CPUFeatures=ignore, not writing the features & arch
     // on checkpoint into the image at all, and skipping the check on restore.
-    // IgnoreCPUFeatures is ignored on checkpoint
     return _ignore_glibc_not_using;
   }
   static void restore_check(const char* str, const char* msg_prefix);
@@ -1058,6 +1036,7 @@ public:
   static bool supports_avx512_fp16()  { return _features.supports_feature(CPU_AVX512_FP16); }
   static bool supports_hv()           { return _features.supports_feature(CPU_HV); }
   static bool supports_serialize()    { return _features.supports_feature(CPU_SERIALIZE); }
+  static bool supports_hybrid()       { return _features.supports_feature(CPU_HYBRID); }
   static bool supports_f16c()         { return _features.supports_feature(CPU_F16C); }
   static bool supports_pku()          { return _features.supports_feature(CPU_PKU); }
   static bool supports_ospke()        { return _features.supports_feature(CPU_OSPKE); }
@@ -1101,11 +1080,13 @@ public:
 
   static bool is_intel_cascade_lake();
 
+  static bool is_intel_darkmont();
+
   static int avx3_threshold();
 
   static bool is_intel_tsc_synched_at_init();
 
-  static void insert_features_names(VM_Version::VM_Features features, char* buf, size_t buflen);
+  static void insert_features_names(VM_Version::VM_Features features, stringStream& ss);
 
   // This checks if the JVM is potentially affected by an erratum on Intel CPUs (SKX102)
   // that causes unpredictable behaviour when jcc crosses 64 byte boundaries. Its microcode
@@ -1156,7 +1137,7 @@ public:
     return true;
   }
 
-  constexpr static bool supports_recursive_lightweight_locking() {
+  constexpr static bool supports_recursive_fast_locking() {
     return true;
   }
 
@@ -1254,7 +1235,6 @@ public:
 
   static bool supports_tscinv_ext(void);
 
-  static void initialize_tsc();
   static void initialize_cpu_information(void);
 };
 

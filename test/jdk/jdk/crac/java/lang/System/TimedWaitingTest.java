@@ -24,12 +24,10 @@
 import jdk.test.lib.Container;
 import jdk.test.lib.Platform;
 import jdk.test.lib.containers.docker.Common;
-import jdk.test.lib.containers.docker.DockerTestUtils;
-import jdk.test.lib.crac.CracBuilder;
+import jdk.test.lib.crac.CracContainerBuilder;
 import jdk.test.lib.crac.CracProcess;
 import jdk.test.lib.crac.CracTest;
 
-import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -48,7 +46,10 @@ import static jdk.test.lib.Asserts.*;
  * @test TimedWaitingTest checks whether timed waiting does not block when monotonic time runs backwards
  * @requires (os.family == "linux")
  * @requires container.support
+ * @comment Static JDK eagerly loads X11 which is missing from the Docker image
+ * @requires !jdk.static
  * @library /test/lib
+ * @modules java.base/jdk.internal.platform
  * @build TimedWaitingTest
  * @run driver jdk.test.lib.crac.CracTest
  */
@@ -58,13 +59,9 @@ public class TimedWaitingTest implements CracTest {
 
     @Override
     public void test() throws Exception {
-        if (!DockerTestUtils.canTestDocker()) {
-            return;
-        }
-
         String imageName = Common.imageName("timed-waiting");
 
-        CracBuilder builder = new CracBuilder();
+        CracContainerBuilder builder = new CracContainerBuilder();
         Path bootIdFile = Files.createTempFile("TimedWaitingTest-", "-boot_id");
         try {
             String baseImage = Platform.isMusl() ? "ghcr.io/crac/test-base-musl" : "ghcr.io/crac/test-base";
@@ -78,9 +75,9 @@ public class TimedWaitingTest implements CracTest {
             CracProcess checkpointed = builder.startCheckpoint(Container.ENGINE_COMMAND, "exec",
                     "-e", "LD_PRELOAD=/opt/path-mapping-quiet.so",
                     "-e", "PATH_MAPPING=/proc/sys/kernel/random/boot_id:/fake_boot_id",
-                    CracBuilder.CONTAINER_NAME,
+                    CracContainerBuilder.CONTAINER_NAME,
                     "unshare", "--fork", "--time", "--monotonic", "86400", "--boottime", "86400",
-                    CracBuilder.DOCKER_JAVA);
+                    CracContainerBuilder.DOCKER_JAVA);
             CountDownLatch latch = new CountDownLatch(1);
             checkpointed.watch(out -> {
                 System.out.println(out);

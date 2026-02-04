@@ -21,11 +21,10 @@
  * questions.
  */
 
-#include "runtime/cracRecompiler.hpp"
 #include "code/nmethod.hpp"
 #include "compiler/compileBroker.hpp"
-#include "compiler/compileTask.hpp"
 #include "compiler/compilerDefinitions.hpp"
+#include "compiler/compileTask.hpp"
 #include "logging/log.hpp"
 #include "memory/allocation.hpp"
 #include "memory/resourceArea.hpp"
@@ -33,6 +32,7 @@
 #include "oops/klass.inline.hpp"
 #include "oops/metadata.hpp"
 #include "oops/method.hpp"
+#include "runtime/cracRecompiler.hpp"
 #include "runtime/handles.hpp"
 #include "runtime/javaThread.hpp"
 #include "runtime/jniHandles.hpp"
@@ -136,7 +136,7 @@ static void request_recompilation(CompilationInfo *info) {
 // - COMPILING — recompiling the recorded decompilations.
 //  - is_recording == false
 //  - decompilations != null — used for non-concurrent reading and writing
-static volatile bool is_recording;
+static Atomic<bool> is_recording;
 static Mutex *decompilations_lock;
 static GrowableArrayCHeap<CompilationInfo *, MemTag::mtInternal> *decompilations;
 
@@ -146,10 +146,10 @@ void CRaCRecompiler::start_recording_decompilations() {
     decompilations_lock = new Mutex(Mutex::nosafepoint - 2, "CRaCRecompiler_lock");
   }
 
-  assert(!is_recording && decompilations == nullptr, "unexpected state: is_recording = %s, decompilations = %p",
-         BOOL_TO_STR(is_recording), decompilations);
+  assert(!is_recording.load_relaxed() && decompilations == nullptr, "unexpected state: is_recording = %s, decompilations = %p",
+         BOOL_TO_STR(is_recording.load_relaxed()), decompilations);
   decompilations = new GrowableArrayCHeap<CompilationInfo *, MemTag::mtInternal>();
-  Atomic::release_store_fence(&is_recording, true);
+  is_recording.release_store_fence(true);
   log_debug(crac, compilation)("CRaCRecompiler state: IDLE -> RECORDING");
 }
 
@@ -159,9 +159,9 @@ void CRaCRecompiler::finish_recording_decompilations_and_recompile() {
   {
     // The lock ensures we do not change the state while someone is recording
     const MutexLocker ml(decompilations_lock, Mutex::_no_safepoint_check_flag);
-    assert(is_recording && decompilations != nullptr, "unexpected state: is_recording = %s, decompilations = %p",
-           BOOL_TO_STR(is_recording), decompilations);
-    Atomic::release_store_fence(&is_recording, false);
+    assert(is_recording.load_relaxed() && decompilations != nullptr, "unexpected state: is_recording = %s, decompilations = %p",
+           BOOL_TO_STR(is_recording.load_relaxed()), decompilations);
+    is_recording.release_store_fence(false);
     log_debug(crac, compilation)("CRaCRecompiler state: RECORDING -> COMPILING (recorded: %i)", decompilations->length());
   }
 
@@ -185,14 +185,14 @@ void CRaCRecompiler::finish_recording_decompilations_and_recompile() {
 }
 
 void CRaCRecompiler::record_decompilation(const nmethod &nmethod) {
-  if (!Atomic::load_acquire(&is_recording)) {
+  if (!is_recording.load_acquire()) {
     return; // Fast pass to not acquire a lock when no C/R occurs (i.e. most of the time)
   }
 
   const MutexLocker ml(decompilations_lock, Mutex::_no_safepoint_check_flag);
-  if (is_recording) { // Re-check under the lock to be safe from concurrent changes
+  if (is_recording.load_relaxed()) { // Re-check under the lock to be safe from concurrent changes
     assert(decompilations != nullptr, "unexpected state: is_recording = %s, decompilations = %p",
-           BOOL_TO_STR(is_recording), decompilations);
+           BOOL_TO_STR(is_recording.load_relaxed()), decompilations);
     decompilations->append(new CompilationInfo(nmethod.method(),
                                                nmethod.is_osr_method() ? nmethod.osr_entry_bci() : InvocationEntryBci,
                                                nmethod.comp_level()));

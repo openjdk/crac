@@ -20,10 +20,10 @@ import java.util.stream.Stream;
 import static jdk.test.lib.Asserts.*;
 
 public class CracProcess {
-    private final CracBuilder builder;
+    private final CracBuilderBase<?> builder;
     private final Process process;
 
-    public CracProcess(CracBuilder builder, List<String> cmd) throws IOException {
+    public CracProcess(CracBuilderBase<?> builder, List<String> cmd) throws IOException {
         this.builder = builder;
         ProcessBuilder pb = new ProcessBuilder().inheritIO().redirectInput(ProcessBuilder.Redirect.PIPE);
         if (builder.captureOutput) {

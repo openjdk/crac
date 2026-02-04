@@ -24,7 +24,7 @@ sudo chmod u+s jdk/lib/criu
 # JDK
 
 For build instructions please see the
-[online documentation](https://openjdk.org/groups/build/doc/building.html),
+[online documentation](https://git.openjdk.org/jdk/blob/master/doc/building.md),
 or either of these files:
 
 - [doc/building.html](doc/building.html) (html version)

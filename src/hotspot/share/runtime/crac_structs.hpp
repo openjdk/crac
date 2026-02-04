@@ -26,9 +26,10 @@
 
 #include "jvm.h"
 #include "runtime/arguments.hpp"
+#include "runtime/os.hpp"
+#include "runtime/vmOperation.hpp"
 #include "utilities/growableArray.hpp"
 #include "utilities/macros.hpp"
-#include "runtime/vmOperation.hpp"
 
 #ifdef LINUX
 #include "attachListener_posix.hpp"
@@ -136,7 +137,7 @@ class CracRestoreParameters : public CHeapObj<mtInternal> {
     const SystemProperty* p = props;
     while (p != nullptr) {
       char prop[4096];
-      int len = snprintf(prop, sizeof(prop), "%s=%s", p->key(), p->value());
+      int len = os::snprintf(prop, sizeof(prop), "%s=%s", p->key(), p->value());
       guarantee((0 < len) && ((unsigned)len < sizeof(prop)), "property does not fit temp buffer");
       if (!write_check_error(fd, prop, len+1)) {
         return false;
@@ -209,7 +210,7 @@ class CracSHM {
   char _path[128];
 public:
   CracSHM(int id) {
-    int shmpathlen = snprintf(_path, sizeof(_path), "%s/crac_%d", os::get_temp_directory(), id);
+    int shmpathlen = os::snprintf(_path, sizeof(_path), "%s/crac_%d", os::get_temp_directory(), id);
     if (shmpathlen < 0 || sizeof(_path) <= (size_t)shmpathlen) {
       fprintf(stderr, "shmpath is too long: %d\n", shmpathlen);
     }

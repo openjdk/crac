@@ -25,8 +25,8 @@
 #ifndef SHARE_UTILITIES_DEFAULTSTREAM_HPP
 #define SHARE_UTILITIES_DEFAULTSTREAM_HPP
 
-#include "utilities/xmlstream.hpp"
 #include "compiler/compileLog.hpp"
+#include "utilities/xmlstream.hpp"
 
 class defaultStream : public xmlTextStream {
   friend void ostream_abort();

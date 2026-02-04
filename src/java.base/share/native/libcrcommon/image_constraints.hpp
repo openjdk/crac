@@ -80,24 +80,28 @@ private:
     const char* name;
     const void* data;
     size_t data_size;
+    unsigned char* image_data; // data_size
     crlib_bitmap_comparison_t comparison;
 
     Constraint(TagType t, const char* n, const void* d, size_t ds, crlib_bitmap_comparison_t c):
-      type(t), failed(false), name(n), data(d), data_size(ds), comparison(c) {}
+      type(t), failed(false), name(n), data(d), data_size(ds), image_data(nullptr), comparison(c) {}
 
     Constraint(Constraint &&o) {
       type = o.type;
       name = o.name;
       data = o.data;
       data_size = o.data_size;
+      image_data = o.image_data;
       comparison = o.comparison;
       o.name = nullptr;
       o.data = nullptr;
+      o.image_data = nullptr;
     }
 
     ~Constraint() {
       free((void*) name);
       free((void*) data);
+      free((void*) image_data);
     }
 
 
@@ -131,6 +135,23 @@ public:
     _constraints.foreach([&](Constraint &c) {
       if (!strcmp(c.name, name) && c.failed) {
         result = true;
+      }
+    });
+    return result;
+  }
+
+  size_t get_failed_bitmap(const char* name, unsigned char *value_return, size_t value_size) const {
+    size_t result = 0;
+    _constraints.foreach([&](Constraint &c) {
+      if (!strcmp(c.name, name) && c.failed) {
+        if (c.image_data == nullptr) {
+          result = 0;
+        } else {
+          result = c.data_size;
+          if (value_return) {
+            memcpy(value_return, c.image_data, value_size <= c.data_size ? value_size : c.data_size);
+          }
+        }
       }
     });
     return result;

@@ -47,6 +47,10 @@ static bool is_failed(crlib_conf_t* conf, const char* name) {
   return static_cast<ImageConstraints*>(conf->image_constraints)->is_failed(name);
 }
 
+static size_t get_failed_bitmap(crlib_conf_t *conf, const char *name, unsigned char *value_return, size_t value_size) {
+  return static_cast<ImageConstraints*>(conf->image_constraints)->get_failed_bitmap(name, value_return, value_size);
+}
+
 static bool set_score(crlib_conf_t* conf, const char* name, double value) {
   return static_cast<ImageScore*>(conf->image_score)->set_score(name, value);
 }
@@ -82,6 +86,7 @@ extern JNIEXPORT crlib_image_constraints_t image_constraints_extension = {
   require_label,
   require_bitmap,
   is_failed,
+  get_failed_bitmap,
 };
 
 JNIEXPORT bool image_constraints_persist(const struct crlib_conf* conf, const char* image_location) {

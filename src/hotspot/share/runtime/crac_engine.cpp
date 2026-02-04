@@ -558,27 +558,27 @@ CracEngine::ApiStatus CracEngine::prepare_image_constraints_api() {
 }
 
 // Return success.
-bool CracEngine::store_cpuinfo(const VM_Version::VM_Features *datap) const {
+bool CracEngine::store_cpuinfo(const VM_Version::VM_Features *current_features) const {
   log_debug(crac)("store cpu.arch & cpu.features to %s...", CRaCRestoreFrom);
   if (!_image_constraints_api->set_label(_conf, cpuarch_name, ARCHPROPNAME)) {
     log_error(crac)("CRaC engine failed to record label %s", cpuarch_name);
     return false;
   }
-  if (!_image_constraints_api->set_bitmap(_conf, cpufeatures_name, reinterpret_cast<const unsigned char *>(datap), sizeof(*datap))) {
+  if (!_image_constraints_api->set_bitmap(_conf, cpufeatures_name, reinterpret_cast<const unsigned char *>(current_features), sizeof(*current_features))) {
     log_error(crac)("CRaC engine failed to record bitmap %s", cpufeatures_name);
     return false;
   }
   return true;
 }
 
-void CracEngine::require_cpuinfo(const VM_Version::VM_Features *datap, bool exact) const {
+void CracEngine::require_cpuinfo(const VM_Version::VM_Features *current_features, bool exact) const {
   log_debug(crac)("cpufeatures_load user data %s from %s...", cpufeatures_name, CRaCRestoreFrom);
   _image_constraints_api->require_label(_conf, cpuarch_name, ARCHPROPNAME);
   _image_constraints_api->require_bitmap(_conf, cpufeatures_name,
-    reinterpret_cast<const unsigned char *>(datap), sizeof(*datap), exact ? EQUALS : SUBSET);
+    reinterpret_cast<const unsigned char *>(current_features), sizeof(*current_features), exact ? EQUALS : SUBSET);
 }
 
-void CracEngine::check_cpuinfo(const VM_Version::VM_Features *datap) const {
+void CracEngine::check_cpuinfo(const VM_Version::VM_Features *current_features, bool exact) const {
   if (_image_constraints_api == nullptr) {
     // When CPU features are ignored
     return;
@@ -587,8 +587,19 @@ void CracEngine::check_cpuinfo(const VM_Version::VM_Features *datap) const {
     log_error(crac)("Restore failed due to wrong or missing CPU architecture (current architecture is " ARCHPROPNAME ")");
   }
   if (_image_constraints_api->is_failed(_conf, cpufeatures_name)) {
-    ResourceMark rm;
-    log_error(crac)("Restore failed due to incompatible or missing CPU features, try using -XX:CPUFeatures=%s on checkpoint.", datap->print_numbers());
+    VM_Version::VM_Features image_features;
+    size_t image_features_size = _image_constraints_api->get_failed_bitmap(_conf, cpufeatures_name, reinterpret_cast<unsigned char *>(&image_features), sizeof(image_features));
+    if (image_features_size == sizeof(image_features)) {
+      ResourceMark rm;
+      if (!exact) {
+        image_features &= *current_features;
+      } else {
+        image_features = *current_features;
+      }
+      log_error(crac)("Restore failed due to incompatible or missing CPU features, try using -XX:CPUFeatures=%s on checkpoint.", image_features.print_numbers());
+    } else {
+      log_error(crac)("Restore failed due to incompatible or missing CPU features.");
+    }
   }
 }
 

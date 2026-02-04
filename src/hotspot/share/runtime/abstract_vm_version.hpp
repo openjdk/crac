@@ -54,6 +54,7 @@ class Abstract_VM_Version: AllStatic {
   struct Zero_Features {
     void print_numbers(outputStream &os, bool hexonly = false) const {}
     const char *print_numbers() const { return ""; }
+    Zero_Features &operator &=(const Zero_Features &) { return *this; }
   };
 
   static const char*  _s_vm_release;

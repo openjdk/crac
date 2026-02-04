@@ -285,8 +285,16 @@ bool ImageConstraints::validate(const char* image_location) const {
         static_cast<const char*>(c.data), static_cast<const char*>(t->data));
     } else if (c.type == TagType::BITMAP && !c.compare_bitmaps(static_cast<const unsigned char*>(t->data), t->data_size)) {
       LOG("Bitmap mismatch for tag %s:", c.name);
-      print_bitmap("Constraint: ", static_cast<const unsigned char*>(c.data), c.data_size);
-      print_bitmap("Image:      ", static_cast<const unsigned char*>(t->data), t->data_size);
+      print_bitmap("Constraint:   ", static_cast<const unsigned char*>(c.data), c.data_size);
+      print_bitmap("Image:        ", static_cast<const unsigned char*>(t->data), t->data_size);
+      free((void *) c.image_data);
+      c.image_data = static_cast<unsigned char *>(malloc(c.data_size));
+      if (c.image_data == nullptr) {
+        LOG("Cannot allocate memory for a bitmap copy");
+        result = false;
+      } else {
+        memcpy(c.image_data, t->data, c.data_size);
+      }
     } else {
       c.failed = false;
     }

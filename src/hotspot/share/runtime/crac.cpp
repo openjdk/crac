@@ -323,11 +323,11 @@ int crac::checkpoint_restore(int *shmid) {
   // Setup CPU arch & features only during the first checkpoint; the feature set
   // cannot change after initial boot (and we don't support switching the engine).
   if (_generation == 1 && !VM_Version::ignore_cpu_features()) {
-    VM_Version::VM_Features data;
-    if (VM_Version::cpu_features_binary(&data)) {
+    VM_Version::VM_Features current_features;
+    if (VM_Version::cpu_features_binary(&current_features)) {
       switch (_engine->prepare_image_constraints_api()) {
         case CracEngine::ApiStatus::OK:
-          if (!_engine->store_cpuinfo(&data)) {
+          if (!_engine->store_cpuinfo(&current_features)) {
             return JVM_CHECKPOINT_ERROR;
           }
           break;
@@ -851,9 +851,9 @@ void crac::restore(crac_restore_data& restore_data) {
   if (!ignore) {
     switch (engine.prepare_image_constraints_api()) {
       case CracEngine::ApiStatus::OK: {
-        VM_Version::VM_Features data;
-        if (VM_Version::cpu_features_binary(&data)) {
-          engine.require_cpuinfo(&data, exact);
+        VM_Version::VM_Features current_features;
+        if (VM_Version::cpu_features_binary(&current_features)) {
+          engine.require_cpuinfo(&current_features, exact);
         }
         } break;
       case CracEngine::ApiStatus::ERR:
@@ -904,9 +904,9 @@ void crac::restore(crac_restore_data& restore_data) {
   const int ret = engine.restore();
   if (ret != 0) {
     log_error(crac)("CRaC engine failed to restore from %s: error %d", CRaCRestoreFrom, ret);
-    VM_Version::VM_Features data;
-    VM_Version::cpu_features_binary(&data); // ignore return value
-    engine.check_cpuinfo(&data);
+    VM_Version::VM_Features current_features;
+    VM_Version::cpu_features_binary(&current_features); // ignore return value
+    engine.check_cpuinfo(&current_features, exact);
   }
 }
 

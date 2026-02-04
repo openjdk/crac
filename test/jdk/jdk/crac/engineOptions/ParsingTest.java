@@ -96,13 +96,14 @@ public class ParsingTest {
                         "CRaC engine option: 'keep_running' = 'false'",
                         "CRaC engine option 'keep_running' specified multiple times"),
                     Arrays.asList("[error]") /* warning are expected (repeated 'keep_running'), errors are not */);
+
+            test("simengine", "help", 0,
+                    "pause");
+            test("simengine", "help=pause", 0,
+                    "Configuration options matching",
+                    "wake up the waiting process");
         }
 
-        test("simengine", "help", 0,
-                "pause");
-        test("simengine", "help=pause", 0,
-                "Configuration options matching",
-                "wake up the waiting process");
         test("simengine", "help=foobar", 0,
                 "no configuration options match the pattern");
 
@@ -136,6 +137,10 @@ public class ParsingTest {
 
     @Test
     public void test_options_separated() throws Exception {
+        if (!Platform.isLinux()) {
+            // all tests use criuengine
+            return;
+        }
         // We won't find that `args` contain nonsense until we invoke the engine
         // (and this test doesn't do that, only tests parsing)
         test("criuengine",
@@ -165,16 +170,15 @@ public class ParsingTest {
                 ),
                 Arrays.asList("specified multiple times"));
 
-        if (Platform.isLinux()) {
-            test("criuengine",
-                    Arrays.asList("help", "args=-v4"),
-                    1,
-                    Arrays.asList(
-                        "unknown configure option: help",
-                        "CRaC engine failed to configure: 'help' = ''"
-                    ),
-                    Collections.emptyList());
-        }
+
+        test("criuengine",
+                Arrays.asList("help", "args=-v4"),
+                1,
+                Arrays.asList(
+                    "unknown configure option: help",
+                    "CRaC engine failed to configure: 'help' = ''"
+                ),
+                Collections.emptyList());
     }
 
     private void test(String engine) throws Exception {

@@ -119,6 +119,7 @@ static bool find_engine(const char *dll_dir, char *path, size_t path_size, bool 
 #endif // LINUX
   if (engine_length < resolved_engine_size) {
     memcpy(resolved_engine, CRaCEngine, engine_length);
+    resolved_engine[engine_length] = '\0';
   } else {
     log_error(crac)("CRaCEngine name is too long: %s", CRaCEngine);
     return false;
@@ -140,6 +141,7 @@ static bool find_engine(const char *dll_dir, char *path, size_t path_size, bool 
     }
   }
 
+  log_debug(crac)("Resolved engine name '%s'", resolved_engine);
   // Try to interpret as a library name
   if (os::dll_locate_lib(path, path_size, dll_dir, resolved_engine)) {
     *is_library = true;

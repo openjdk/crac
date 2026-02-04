@@ -161,7 +161,7 @@ public:
 using CStringSet = HashTable<const char *, bool, 256, AnyObj::C_HEAP, MemTag::mtInternal,
                              CStringUtils::hash, CStringUtils::equals>;
 
-static crlib_conf_t *create_conf(const crlib_api_t &api, const char *exec_location) {
+static crlib_conf_t *create_conf(const crlib_api_t &api, const char *exec_location, bool for_restore) {
   crlib_conf_t * const conf = api.create_conf();
   if (conf == nullptr) {
     log_error(crac)("CRaC engine failed to create its configuration");
@@ -182,7 +182,7 @@ static crlib_conf_t *create_conf(const crlib_api_t &api, const char *exec_locati
     }
   }
 
-  if (api.can_configure(conf, DIRECT_MAP)) {
+  if (for_restore && api.can_configure(conf, DIRECT_MAP)) {
     if (!api.configure(conf, DIRECT_MAP, "true")) {
       log_error(crac)("CRaC engine failed to configure: '" DIRECT_MAP "' = 'true'");
       api.destroy_conf(conf);
@@ -231,7 +231,7 @@ static crlib_conf_t *create_conf(const crlib_api_t &api, const char *exec_locati
   return conf;
 }
 
-CracEngine::CracEngine() {
+CracEngine::CracEngine(bool for_restore) {
   if (CRaCEngine == nullptr) {
     log_error(crac)("CRaCEngine must not be empty");
     return;
@@ -310,7 +310,7 @@ CracEngine::CracEngine() {
   }
 
   const char *exec_location = exec_path[0] != '\0' ? exec_path : nullptr;
-  crlib_conf_t * const conf = create_conf(*api, exec_location);
+  crlib_conf_t * const conf = create_conf(*api, exec_location, for_restore);
   if (conf == nullptr) {
     os::dll_unload(lib);
     return;

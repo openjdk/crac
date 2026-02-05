@@ -104,6 +104,19 @@ public abstract class CracBuilderBase<T extends CracBuilderBase<T>> {
         return self();
     }
 
+    /**
+     * If possible tests should use {@link CracEngine#SIMULATE simengine}, to cover all platforms.
+     * If the test is specific to engine behaviour, it should use CracBuilder.engine(...) explicitly.
+     * If the test can cover more generic behaviour of real engines (alternatives to CRIU),
+     * either use the default or accept the engine as test arg.
+     * <p>
+     * Note that while currently CRIU is the default engine on Linux, downstream distributions
+     * can select different default engine. The testsuite should be written with minimizing
+     * differences in downstream distribution in mind.
+     *
+     * @param engine The engine.
+     * @return Self.
+     */
     public T engine(CracEngine engine) {
         assertTrue(this.engine == null || this.engine.equals(engine));
         this.engine = engine;

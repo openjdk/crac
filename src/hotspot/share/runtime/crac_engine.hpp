@@ -40,7 +40,7 @@
 // CRaC engine library wrapper.
 class CracEngine : public CHeapObj<mtInternal> {
 public:
-  CracEngine();
+  CracEngine(bool for_restore);
   ~CracEngine();
 
   CracEngine(const CracEngine &) = delete;

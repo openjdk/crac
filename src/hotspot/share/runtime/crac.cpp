@@ -512,7 +512,7 @@ void VM_Crac::doit() {
 }
 
 void crac::print_engine_info_and_exit(const char *pattern) {
-  CracEngine engine;
+  CracEngine engine(false);
   if (!engine.is_initialized()) {
     return;
   }
@@ -606,7 +606,7 @@ bool crac::prepare_checkpoint() {
 
   // Initialize CRaC engine now to verify all the related VM options
   assert(_engine == nullptr, "CRaC engine should be initialized only once");
-  FutureRef<CracEngine> engine(new CracEngine());
+  FutureRef<CracEngine> engine(new CracEngine(false));
   if (!engine->is_initialized()) {
     return false;
   }
@@ -831,7 +831,7 @@ void crac::restore(crac_restore_data& restore_data) {
   }
 
   // Note that this is a local, i.e. the handle will be destroyed if we fail to restore
-  CracEngine engine;
+  CracEngine engine(true);
   if (!engine.is_initialized() || !engine.configure_image_location(CRaCRestoreFrom)) {
     return;
   }

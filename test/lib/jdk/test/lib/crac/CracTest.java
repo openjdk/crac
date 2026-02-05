@@ -128,6 +128,9 @@ public interface CracTest {
 
         CracTest testInstance = ctor.newInstance();
         Field[] argFields = getArgFields(testClass);
+        int testArgs = args.length - argsOffset;
+        assertLessThanOrEqual(testArgs, argFields.length,
+                "Too many (" + testArgs + ") args for a test with " + argFields.length + " @CracTestArg fields");
         for (int index = 0; index < argFields.length; index++) {
             Field f = argFields[index];
             assertFalse(Modifier.isFinal(f.getModifiers()), "@CracTestArg fields must not be final!");

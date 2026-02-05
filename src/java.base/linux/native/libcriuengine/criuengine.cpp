@@ -1,0 +1,795 @@
+/*
+ * Copyright (c) 2023-2025, Azul Systems, Inc. All rights reserved.
+ * Copyright (c) 2023, Oracle and/or its affiliates. All rights reserved.
+ * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
+ *
+ * This code is free software; you can redistribute it and/or modify it
+ * under the terms of the GNU General Public License version 2 only, as
+ * published by the Free Software Foundation.  Oracle designates this
+ * particular file as subject to the "Classpath" exception as provided
+ * by Oracle in the LICENSE file that accompanied this code.
+ *
+ * This code is distributed in the hope that it will be useful, but WITHOUT
+ * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+ * FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
+ * version 2 for more details (a copy is included in the LICENSE file that
+ * accompanied this code).
+ *
+ * You should have received a copy of the GNU General Public License version
+ * 2 along with this work; if not, write to the Free Software Foundation,
+ * Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301 USA.
+ *
+ * Please contact Oracle, 500 Oracle Parkway, Redwood Shores, CA 94065 USA
+ * or visit www.oracle.com if you need additional information or have any
+ * questions.
+ */
+#include <cassert>
+#include <cerrno>
+#include <csignal>
+#include <cstdint>
+#include <cstdio>
+#include <cstdlib>
+#include <cstring>
+#include <dlfcn.h>
+#include <new>
+#include <spawn.h>
+#include <sys/types.h>
+#include <sys/wait.h>
+#include <unistd.h>
+
+#include "crlib/crlib_description.h"
+#include "crlib/crlib_restore_data.h"
+#include "crlib/crlib_user_data.h"
+#include "crcommon.hpp"
+#include "hashtable.hpp"
+#include "image_constraints.hpp"
+#include "image_score.hpp"
+#include "user_data.hpp"
+#include "jni.h"
+#include "jvm.h"
+
+// When adding a new option ensure the proper default value is set for it
+// in the configuration struct.
+//
+// Place more frequently used options first - this will make them faster to find
+// in the options hash table.
+#define UNCHECKED_OPTIONS(OPT) \
+  OPT(image_location, const char *, nullptr, CRLIB_OPTION_FLAG_CHECKPOINT | CRLIB_OPTION_FLAG_RESTORE, "path", "no default", \
+    "path to a directory with checkpoint/restore files.") \
+  OPT(criu_location, const char *, nullptr, CRLIB_OPTION_FLAG_CHECKPOINT | CRLIB_OPTION_FLAG_RESTORE, "path", "no default", \
+    "path to this engine library (self).") \
+  OPT(args, const char *, nullptr, CRLIB_OPTION_FLAG_CHECKPOINT | CRLIB_OPTION_FLAG_RESTORE, "string", "\"\"", \
+    "free space-separated arguments passed directly to the engine executable, e.g. \"--arg1 --arg2 --arg3\".") \
+
+#define CHECKED_OPTIONS(OPT) \
+  OPT(keep_running, bool, false, CRLIB_OPTION_FLAG_CHECKPOINT, "true/false", "false", \
+    "keep the process running after the checkpoint or kill it.") \
+  OPT(direct_map, bool, true, CRLIB_OPTION_FLAG_RESTORE, "true/false", "true", \
+    "on restore, map process data directly from saved files. This may speedup the restore " \
+    "but the resulting process will not be the same as before the checkpoint.") \
+
+#define CONFIGURE_OPTIONS(OPT) UNCHECKED_OPTIONS(OPT) CHECKED_OPTIONS(OPT)
+
+#define DEFINE_OPT(id, ...) static constexpr char opt_##id[] = #id;
+CONFIGURE_OPTIONS(DEFINE_OPT)
+#undef DEFINE_OPT
+#define ADD_ARR_ELEM(id, ...) opt_##id,
+static constexpr const char *configure_options_names[] = { CONFIGURE_OPTIONS(ADD_ARR_ELEM) nullptr };
+#undef ADD_ARR_ELEM
+#define ADD_ARR_ELEM(id, ctype, cdef, flags, ...) { opt_##id, static_cast<crlib_conf_option_flag_t>(flags), __VA_ARGS__ },
+static constexpr const crlib_conf_option_t configure_options[] = { CONFIGURE_OPTIONS(ADD_ARR_ELEM) {} };
+#undef ADD_ARR_ELEM
+
+static char *strdup_checked(const char *src) {
+  char * const res = strdup(src);
+  if (res == nullptr) {
+    LOG("out of memory");
+  }
+  return res;
+}
+
+template <typename T> struct Option {
+  T value;
+  bool is_default = true;
+};
+
+static bool parse_bool(const char *str, Option<bool> *result) {
+  if (strcmp(str, "true") == 0) {
+    *result = {true, false};
+    return true;
+  }
+  if (strcmp(str, "false") == 0) {
+    *result = {false, false};
+    return true;
+  }
+  LOG("expected '%s' to be either 'true' or 'false'", str);
+  return false;
+}
+
+class criuengine: public crlib_base {
+private:
+  using configure_func = bool (criuengine::*) (const char *value);
+  Hashtable<configure_func> _options {
+    configure_options_names, ARRAY_SIZE(configure_options_names) - 1 /* omit nullptr */
+  };
+
+#define DEFINE_DEFAULT(id, ctype, cdef, ...) \
+  private: Option<ctype> _##id = { cdef, true }; \
+  public: inline ctype id() const { return _##id.value; }
+  CHECKED_OPTIONS(DEFINE_DEFAULT)
+#undef DEFINE_DEFAULT
+
+private:
+  char* _image_location = nullptr;
+  char* _criu_location = nullptr;
+  char* _args = nullptr;
+  int _restore_data = 0;
+
+  UserData _user_data;
+
+public:
+  criuengine():
+    crlib_base("criuengine"),
+    _user_data(const_cast<const char**>(&_image_location)) {
+    if (!_options.is_initialized()) {
+      LOG("out of memory");
+      assert(!is_initialized());
+      return;
+    }
+#define PUT_HANDLER(id, ...) _options.put(opt_##id, &criuengine::configure_##id);
+    CONFIGURE_OPTIONS(PUT_HANDLER)
+#undef PUT_HANDLER
+  }
+
+  ~criuengine() {
+    free(_image_location);
+    free(_criu_location);
+    free(_args);
+  }
+
+  // Use this to check whether the constructor succeeded.
+  bool is_initialized() const { return _common != nullptr && _options.is_initialized(); }
+
+  int restore_data() const { return _restore_data; }
+
+  void require_defaults(crlib_conf_option_flag_t flag, const char *event) const {
+#define CHECK_OPT(id, ctype, cdef, flags, ...) \
+  if (!_##id.is_default && !((flags) & flag)) { \
+    LOG(#id " has no effect on %s", event); \
+  }
+    CHECKED_OPTIONS(CHECK_OPT)
+#undef CHECK_OPT
+  }
+
+  bool can_configure(const char *key) const {
+    assert(key != nullptr);
+    return _options.contains(key);
+  }
+
+  bool configure(const char *key, const char *value) {
+    assert(key != nullptr && value != nullptr);
+    auto * const func = _options.get(key);
+    if (func != nullptr) {
+      return (this->**func)(value);
+    }
+    LOG("unknown configure option: %s", key);
+    return false;
+  }
+
+  bool set_restore_data(const void *data, size_t size) {
+    constexpr const size_t supported_size = sizeof(_restore_data);
+    if (size > 0 && size != supported_size) {
+      LOG("unsupported size of restore data: %zu was requested but only %zu is supported", size, supported_size);
+      return false;
+    }
+    if (size > 0) {
+      memcpy(&_restore_data, data, size);
+    } else {
+      _restore_data = 0;
+    }
+    return true;
+  }
+
+  size_t get_restore_data(void *buf, size_t size) {
+    constexpr const size_t available_size = sizeof(_restore_data);
+    if (size > 0) {
+      memcpy(buf, &_restore_data, size < available_size ? size : available_size);
+    }
+    return available_size;
+  }
+
+  UserData &user_data() {
+    return _user_data;
+  }
+
+  int checkpoint();
+  int restore();
+  const char *get_criu();
+  bool execute_criu(const char **argv) const;
+
+private:
+  bool configure_str(const char *value, char **field) {
+    char *copy = strdup_checked(value);
+    if (copy == nullptr) {
+      return false;
+    }
+    free(*field);
+    *field = copy;
+    return true;
+  }
+
+  bool configure_image_location(const char *image_location) {
+    return configure_str(image_location, &_image_location);
+  }
+
+  bool configure_criu_location(const char *criu_location) {
+    if (criu_location[0] != '/') {
+      LOG("expected absolute path: %s", criu_location);
+      return false;
+    }
+    return configure_str(criu_location, &_criu_location);
+  }
+
+  bool configure_keep_running(const char *keep_running_str) {
+    return parse_bool(keep_running_str, &_keep_running);
+  }
+
+  bool configure_direct_map(const char *direct_map_str) {
+    return parse_bool(direct_map_str, &_direct_map);
+  }
+
+  bool configure_args(const char *args) {
+    return configure_str(args, &_args);
+  }
+};
+
+RENAME_CRLIB(criuengine);
+
+static crlib_conf_t* create_criuengine() {
+  auto * const conf = new(std::nothrow) criuengine();
+  if (conf == nullptr) {
+    LOG("Cannot create criuengine instance (out of memory)");
+    return nullptr;
+  } else if (!conf->is_initialized()) {
+    delete conf;
+    return nullptr;
+  }
+  return static_cast<crlib_conf_t*>(conf);
+}
+
+static void destroy_criuengine(crlib_conf_t *conf) {
+  delete static_cast<criuengine*>(conf);
+}
+
+static int checkpoint(crlib_conf_t *conf) {
+  return conf->checkpoint();
+}
+
+static int restore(crlib_conf_t *conf) {
+  return conf->restore();
+}
+
+static bool can_configure(crlib_conf_t *conf, const char *key) {
+  return conf->can_configure(key);
+}
+
+static bool configure(crlib_conf_t *conf, const char *key, const char *value) {
+  return conf->configure(key, value);
+}
+
+static const char *identity(crlib_conf_t *conf) {
+  return "criuengine";
+}
+
+static const char *description(crlib_conf_t *conf) {
+  return "criuengine - CRaC-engine implementing the checkpoint and restore via CRIU";
+}
+
+static const char *configuration_doc(crlib_conf_t *conf) {
+#define DOC_ITEM(name, ctype, cdef, flags, type, _default, description) \
+  "* " #name "=<" type "> (default: " _default ") - " description "\n"
+  return CONFIGURE_OPTIONS(DOC_ITEM);
+#undef DOC_ITEM
+}
+
+static const char * const *configurable_keys(crlib_conf_t *conf) {
+  return configure_options_names;
+}
+
+static const crlib_conf_option_t *configuration_options(crlib_conf_t *conf) {
+   return configure_options;
+}
+
+static bool set_restore_data(crlib_conf_t *conf, const void *data, size_t size) {
+  return conf->set_restore_data(data, size);
+}
+
+static size_t get_restore_data(crlib_conf_t *conf, void *buf, size_t size) {
+  return conf->get_restore_data(buf, size);
+}
+
+static bool set_user_data(crlib_conf_t *conf, const char *name, const void *data, size_t size) {
+  return conf->user_data().set_user_data(name, data, size);
+}
+
+static crlib_user_data_storage_t *load_user_data(crlib_conf_t *conf) {
+  return conf->user_data().load_user_data();
+}
+
+static bool lookup_user_data(crlib_user_data_storage_t *storage, const char *name, const void **data_p, size_t *size_p) {
+  return storage->user_data->lookup_user_data(storage, name, data_p, size_p);
+}
+
+static void destroy_user_data(crlib_user_data_storage_t *storage) {
+  return storage->user_data->destroy_user_data(storage);
+}
+
+static const char* check_criu_executable(const char *path) {
+  struct stat st;
+  if (stat(path, &st)) {
+    if (errno == ENOENT) {
+      LOG("CRIU executable does not exist in %s", path);
+    } else {
+      LOG("Cannot stat %s: %s", path, strerror(errno));
+    }
+    return nullptr;
+  }
+  if ((st.st_mode & S_IXUSR) == 0) {
+    LOG("CRIU at %s is not executable", path);
+    return nullptr;
+  }
+  if ((st.st_mode & S_ISUID) == 0 && getuid() != 0) {
+    LOG("Warning: CRIU at %s does not have the SUID bit set and you're not a root", path);
+  }
+  if (st.st_uid != 0 && getuid() != 0) {
+    LOG("Warning: CRIU at %s is not owned by the root user and you're not a root", path);
+  }
+  return path;
+}
+
+const char *criuengine::get_criu() {
+  char *criu = _criu_location;
+  if (criu == nullptr) {
+    criu = getenv("CRAC_CRIU_PATH");
+  }
+  if (criu != nullptr) {
+    return check_criu_executable(criu);
+  }
+  Dl_info symbol_info;
+  if (dladdr(reinterpret_cast<const void*>(::checkpoint), &symbol_info)) {
+    const char *fname = symbol_info.dli_fname;
+    const char *last_slash = strrchr(fname, '/');
+    if (last_slash == nullptr) {
+      LOG("Invalid engine library location (missing '/'): %s", fname);
+      return nullptr;
+    }
+    // We need to use the ../lib because static build would find this code in `java` executable
+    // in the bin folder.
+    static constexpr const char criu_suffix[] = "../lib/criu";
+    assert(!strcmp("libcriuengine.so", last_slash + 1) || !strcmp("java", last_slash + 1));
+    // let's cache the value in _criu_location, and release it in dtor
+    _criu_location = static_cast<char*>(malloc(last_slash - fname + 1 + sizeof(criu_suffix)));
+    if (_criu_location == nullptr) {
+      LOG("Cannot allocate memory for criu location");
+      return nullptr;
+    }
+    char *end = static_cast<char*>(mempcpy(_criu_location, fname, last_slash - fname + 1));
+    memcpy(end, criu_suffix, sizeof(criu_suffix));
+    return check_criu_executable(_criu_location);
+  } else {
+    LOG("Failed to find engine library location: %s", dlerror());
+    return nullptr;
+  }
+}
+
+static int kickjvm(pid_t jvm, int code) {
+  union sigval sv = { .sival_int = code };
+  if (-1 == sigqueue(jvm, RESTORE_SIGNAL, sv)) {
+    perror("sigqueue");
+    return 1;
+  }
+  return 0;
+}
+
+static void print_args_to_stderr(const char **args) {
+  fprintf(stderr, "Command: ");
+  for (const char **argp = args; *argp != NULL; ++argp) {
+    const char *s = *argp;
+    if (argp != args) {
+        fputc(' ', stderr);
+    }
+    // https://unix.stackexchange.com/a/357932/296319
+    if (!strpbrk(s, " \t\n!\"#$&'()*,;<=>?[\\]^`{|}~")) {
+        fputs(s, stderr);
+        continue;
+    }
+    fputc('\'', stderr);
+    for (; *s; ++s) {
+        if (*s != '\'') {
+            fputc(*s, stderr);
+        } else {
+            fputs("'\\''", stderr);
+        }
+    }
+    fputc('\'', stderr);
+  }
+  fputc('\n', stderr);
+}
+
+static const char *join_path(const char *path1, const char *path2) {
+    char *retval;
+    if (asprintf(&retval, "%s/%s", path1, path2) == -1) {
+        perror("asprintf");
+        exit(1);
+    }
+    return retval;
+}
+
+static const char *path_abs(const char *rel) {
+    if (rel[0] == '/') {
+        return rel;
+    }
+    char *cwd = get_current_dir_name();
+    if (!cwd) {
+        perror("get_current_dir_name");
+        exit(1);
+    }
+    return join_path(cwd, rel);
+}
+
+bool criuengine::execute_criu(const char **argv) const {
+  pid_t jvm_pid = getpid();
+  pid_t child_pid = fork();
+  if (child_pid < 0) {
+    LOG("Failed to fork: %s", strerror(errno));
+    return false;
+  }
+  if (child_pid) {
+    // This is JVM
+    if (waitpid(child_pid, NULL, 0) < 0) {
+      LOG("Failed to wait for %d: %s", child_pid, strerror(errno));
+      return false;
+    }
+    return true;
+  }
+
+  pid_t parent_before = getpid();
+  pid_t grandchild_pid = fork();
+  if (grandchild_pid < 0) {
+    LOG("Failed to fork grandchild: %s", strerror(errno));
+    kickjvm(jvm_pid, -1);
+  }
+  if (grandchild_pid) {
+    // intermediate process, terminates immediately
+    exit(0);
+  }
+
+  // grand-child
+  pid_t parent = getppid();
+  int tries = 300;
+  while (parent != 1 && 0 < tries--) {
+      usleep(10);
+      parent = getppid();
+  }
+
+  if (parent == parent_before) {
+    fprintf(stderr, "can't move out of JVM process hierarchy");
+    kickjvm(jvm_pid, -1);
+    exit(0);
+  }
+
+  constexpr const int SUPPRESS_ERROR_IN_PARENT = 77;
+  // Technically we could execve right here, but in case of error (bad CRIU args...)
+  // the JVM would just wait indefinitely; therefore we'll fork once more and wait
+  // for CRIU exit code.
+  pid_t child = fork();
+  if (!child) {
+      execv(argv[0], const_cast<char**>(argv));
+      LOG("Cannot execute CRIU");
+      print_args_to_stderr(argv);
+      fprintf(stderr, "\": %s\n", strerror(errno));
+      exit(SUPPRESS_ERROR_IN_PARENT);
+  }
+
+  int status;
+  if (child != wait(&status)) {
+      LOG("Error waiting for CRIU: %s", strerror(errno));
+      print_args_to_stderr(argv);
+      kickjvm(jvm_pid, -1);
+  } else if (!WIFEXITED(status)) {
+      LOG("CRIU has not properly exited, waitpid status was %d - check %s/dump4.log", status, path_abs(_image_location));
+      print_args_to_stderr(argv);
+      kickjvm(jvm_pid, -1);
+  } else if (WEXITSTATUS(status)) {
+      if (WEXITSTATUS(status) != SUPPRESS_ERROR_IN_PARENT) {
+          LOG("CRIU failed with exit code %d - check %s/dump4.log", WEXITSTATUS(status), path_abs(_image_location));
+          print_args_to_stderr(argv);
+      }
+      kickjvm(jvm_pid, -1);
+  } else if (keep_running()) {
+      kickjvm(jvm_pid, 0);
+  }
+
+  exit(0);
+}
+
+class ArgsAppender {
+  char *_from_env = nullptr;
+  char *_from_opts = nullptr;
+
+  const char** fill_args(const char* from, char* copy, const char** next, const char** end) {
+    char* saveptr = nullptr;
+    char* arg = strtok_r(copy, " ", &saveptr);
+    while (arg) {
+      if (next < end - 1) { /* account for trailing NULL */
+        *next++ = arg;
+      } else {
+        LOG("Warning: too many arguments for CRIU (dropped '%s' from %s)\n", arg, from);
+      }
+      arg = strtok_r(NULL, " ", &saveptr);
+    }
+    return next;
+  }
+
+public:
+  ~ArgsAppender() {
+    free(_from_env);
+    free(_from_opts);
+  }
+
+  const char** append(const char** next, const char** const end, const char* args) {
+    const char *criu_opts = getenv("CRAC_CRIU_OPTS");
+    if (criu_opts) {
+      _from_env = strdup_checked(criu_opts);
+      if (_from_env == nullptr) {
+        return nullptr;
+      }
+      next = fill_args("CRAC_CRIU_OPTS", _from_env, next, end);
+    }
+    // applying args later (these have higher priority)
+    if (args != nullptr) {
+      _from_opts = strdup_checked(args);
+      if (_from_opts == nullptr) {
+        return nullptr;
+      }
+      next = fill_args("args option", _from_opts, next, end);
+    }
+    assert(next < end);
+    *next = nullptr;
+    return next;
+  }
+};
+
+int criuengine::checkpoint() {
+  const char *criu = get_criu();
+  if (criu == nullptr) {
+    return -1;
+  }
+  if (_image_location == nullptr) {
+    LOG("%s must be set before checkpoint", opt_image_location);
+    return -1;
+  }
+  require_defaults(CRLIB_OPTION_FLAG_CHECKPOINT, "checkpoint");
+
+  if (!image_constraints_persist(common(), _image_location) ||
+      !image_score_persist(common(), _image_location)) {
+    return -1;
+  }
+  // We will reset scores now; scores can be retained or reset higher on the Java level.
+  // Before another checkpoint all the scores will be recorded again; we won't keep
+  // anything here to not write down any outdated value.
+  image_score_reset(common());
+
+  char jvmpidchar[32];
+  snprintf(jvmpidchar, sizeof(jvmpidchar), "%d", getpid());
+
+  const char* args[32] = {
+      criu,
+      "dump",
+      "-t", jvmpidchar,
+      // -D without -W makes criu cd to image dir for logs
+      "-D", _image_location,
+      // will be overwritten with any later log-related args
+      "-v4", "-o", "dump4.log",
+      "--shell-job",
+  };
+  const char** next = args + 10;
+
+  if (keep_running()) {
+      *next++ = "-R";
+  }
+
+  ArgsAppender appender;
+  if (!appender.append(next, args + ARRAY_SIZE(args), _args)) {
+    return -1;
+  }
+
+  print_args_to_stderr(args);
+
+  if (!execute_criu(args)) {
+    return -1;
+  }
+
+  siginfo_t info;
+  sigset_t waitmask;
+  sigemptyset(&waitmask);
+  sigaddset(&waitmask, RESTORE_SIGNAL);
+
+  int sig;
+  do {
+    sig = sigwaitinfo(&waitmask, &info);
+  } while (sig == -1 && errno == EINTR);
+
+  if (info.si_code != SI_QUEUE) {
+    return false;
+  }
+  {
+#ifndef NDEBUG
+    const bool ok =
+#endif // NDEBUG
+    set_restore_data(&info.si_int, sizeof(info.si_int));
+    assert(ok);
+  }
+
+  return 0;
+}
+
+int criuengine::restore() {
+  const char *criu = get_criu();
+  if (criu == nullptr) {
+    return -1;
+  }
+  if (_image_location == nullptr) {
+    LOG("%s must be set before restore", opt_image_location);
+    return -1;
+  }
+  require_defaults(CRLIB_OPTION_FLAG_RESTORE, "restore");
+
+  if (!image_constraints_validate(common(), _image_location)) {
+    return -1;
+  }
+
+  char restore_data_str[32];
+  if (snprintf(restore_data_str, sizeof(restore_data_str), "%i", restore_data()) >
+      static_cast<int>(sizeof(restore_data_str)) - 1) {
+    LOG("snprintf restore data: %s", strerror(errno));
+    return -1;
+  }
+
+  char criuhelper[PATH_MAX];
+  Dl_info symbol_info;
+  if (dladdr(reinterpret_cast<const void*>(::restore), &symbol_info)) {
+    const char *fname = symbol_info.dli_fname;
+    const char *last_slash = strrchr(fname, '/');
+    if (last_slash == nullptr) {
+      LOG("Invalid engine library location (missing '/'): %s", fname);
+      return -1;
+    }
+    // We need to use ../lib for static build
+    static const char criuhelper_str[] = "../lib/criuhelper";
+    const size_t dir_length = last_slash - fname + 1;
+    assert(dir_length + sizeof(criuhelper_str) < sizeof(criuhelper));
+    memcpy(criuhelper, fname, dir_length);
+    memcpy(criuhelper + dir_length, criuhelper_str, sizeof(criuhelper_str));
+  }
+
+  const char* args[32] = {
+    criu,
+    "restore",
+    "-W", ".",
+    "--shell-job",
+    "--action-script", criuhelper,
+    "-D", _image_location,
+    // XSAVE is not needed when the snapshot is being made / restored
+    "--cpu-cap=none",
+    "-v1", // errors-only by default, can be overwritten through -XX:CRaCEngineOptions=args=-v4
+  };
+  const char** next = args + 11;
+  if (!direct_map()) {
+    *(next++) = "--no-mmap-page-image";
+  }
+
+  ArgsAppender appender;
+  next = appender.append(next, args + ARRAY_SIZE(args), _args);
+  if (next == nullptr) {
+    return -1;
+  }
+  if (next + 4 >= args + ARRAY_SIZE(args)) {
+    LOG("Too many arguments to CRIU");
+    print_args_to_stderr(args);
+    return -1;
+  }
+  *(next++) = "--exec-cmd";
+  *(next++) = "--";
+  *(next++) = criuhelper;
+  *(next++) = "restorewait";
+  *next = nullptr;
+
+  if (setenv("CRAC_NEW_ARGS_ID", restore_data_str, 1)) {
+    LOG("Cannot set CRAC_NEW_ARGS_ID: %s", strerror(errno));
+    return -1;
+  }
+
+  fflush(stderr);
+  execve(criu, const_cast<char* const*>(args), environ);
+
+  LOG("Cannot execute CRIU: %s", strerror(errno));
+  print_args_to_stderr(args);
+  return -1;
+}
+
+static crlib_extension_t * const *supported_extensions(crlib_conf_t *conf);
+
+static crlib_description_t description_extension = {
+  {
+    CRLIB_EXTENSION_DESCRIPTION_NAME,
+    sizeof(description_extension)
+  },
+  identity,
+  description,
+  configuration_doc,
+  configurable_keys,
+  supported_extensions,
+  configuration_options,
+};
+
+static crlib_restore_data_t restore_data_extension = {
+  {
+    CRLIB_EXTENSION_RESTORE_DATA_NAME,
+    sizeof(restore_data_extension)
+  },
+  set_restore_data,
+  get_restore_data,
+};
+
+static crlib_user_data_t user_data_extension = {
+  {
+    CRLIB_EXTENSION_USER_DATA_NAME,
+    sizeof(user_data_extension)
+  },
+  set_user_data,
+  load_user_data,
+  lookup_user_data,
+  destroy_user_data,
+};
+
+static const crlib_extension_t *extensions[] = {
+  &restore_data_extension.header,
+  &image_constraints_extension.header,
+  &image_score_extension.header,
+  &user_data_extension.header,
+  &description_extension.header,
+  nullptr
+};
+
+static const crlib_extension_t *get_extension(const char *name, size_t size) {
+  return find_extension(extensions, name, size);
+}
+
+static crlib_extension_t * const *supported_extensions(crlib_conf_t *conf) {
+  return extensions;
+}
+
+static crlib_api_t api = {
+  create_criuengine,
+  destroy_criuengine,
+  checkpoint,
+  restore,
+  can_configure,
+  configure,
+  get_extension,
+};
+
+extern "C" {
+
+JNIEXPORT crlib_api_t *CRLIB_API_MAYBE_STATIC(int api_version, size_t api_size) {
+  if (api_version != CRLIB_API_VERSION) {
+    return nullptr;
+  }
+  if (sizeof(crlib_api_t) < api_size) {
+    return nullptr;
+  }
+  return &api;
+}
+
+}

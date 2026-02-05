@@ -31,7 +31,6 @@ import java.io.File;
 import java.io.RandomAccessFile;
 import java.nio.file.Path;
 import java.util.*;
-import java.util.stream.Collectors;
 
 import static jdk.test.lib.Asserts.*;
 

@@ -21,6 +21,7 @@
  * questions.
  */
 import jdk.test.lib.crac.CracBuilder;
+import jdk.test.lib.crac.CracEngine;
 import jdk.test.lib.crac.CracTest;
 import jdk.test.lib.crac.CracTestArg;
 
@@ -57,7 +58,7 @@ public class LauncherVMOptionsTest implements CracTest {
     public void test() throws Exception {
         // Let's prevent inheriting any GLIBC_TUNABLES value...
         assertNull(System.getenv("GLIBC_TUNABLES"));
-        CracBuilder builder = new CracBuilder();
+        CracBuilder builder = new CracBuilder().engine(CracEngine.SIMULATE);
         switch (variant) {
             case REGULAR -> builder.vmOption(CHECKPOINT_OPT);
             case VM_OPTION -> builder.env("JDK_JAVA_OPTIONS", CHECKPOINT_OPT);

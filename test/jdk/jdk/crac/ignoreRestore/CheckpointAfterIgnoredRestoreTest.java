@@ -29,7 +29,6 @@ import java.util.List;
 import jdk.crac.Core;
 import static jdk.test.lib.Asserts.*;
 import jdk.test.lib.crac.CracBuilder;
-import jdk.test.lib.crac.CracEngine;
 
 /**
  * @test
@@ -41,7 +40,7 @@ import jdk.test.lib.crac.CracEngine;
  */
 public class CheckpointAfterIgnoredRestoreTest {
     public static void main(String[] args) throws Exception {
-        final var builder = new CracBuilder().engine(CracEngine.CRIU)
+        final var builder = new CracBuilder()
             .vmOption("-XX:+CRaCIgnoreRestoreIfUnavailable")
             .forwardClasspathOnRestore(true);
         assertTrue(Files.notExists(builder.imageDir()), "Image should not exist yet: " + builder.imageDir());

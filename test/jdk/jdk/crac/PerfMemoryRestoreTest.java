@@ -23,6 +23,7 @@
 
 import jdk.crac.*;
 import jdk.test.lib.crac.CracBuilder;
+import jdk.test.lib.crac.CracEngine;
 import jdk.test.lib.crac.CracProcess;
 import jdk.test.lib.crac.CracTest;
 import jdk.test.lib.crac.CracTestArg;
@@ -40,8 +41,8 @@ import static jdk.test.lib.Asserts.*;
  * @requires os.family == "linux"
  * @library /test/lib
  * @build PerfMemoryRestoreTest
- * @run driver/timeout=30 jdk.test.lib.crac.CracTest false
- * @run driver/timeout=30 jdk.test.lib.crac.CracTest true
+ * @run driver/timeout=30 jdk.test.lib.crac.CracTest false CRIU
+ * @run driver/timeout=30 jdk.test.lib.crac.CracTest true  CRIU
  */
 
 public class PerfMemoryRestoreTest implements CracTest {
@@ -50,10 +51,12 @@ public class PerfMemoryRestoreTest implements CracTest {
     @CracTestArg(0)
     boolean perfDisableSharedMem;
 
+    @CracTestArg(1)
+    CracEngine engine;
+
     @Override
     public void test() throws Exception {
-        CracBuilder builder = new CracBuilder();
-        builder.captureOutput(true);
+        CracBuilder builder = new CracBuilder().engine(engine).captureOutput(true);
         if (perfDisableSharedMem) {
             builder.vmOption("-XX:+PerfDisableSharedMem");
         } else {
@@ -79,18 +82,23 @@ public class PerfMemoryRestoreTest implements CracTest {
 
         builder.clearVmOptions();
         CracProcess restored = builder.startRestore();
-        // Note: we need to check the checkpoint.pid(), which should be restored (when using CRIU),
-        // as restored.pid() would be the criuengine restorewait process
-        String pidString = String.valueOf(checkpoint.pid());
-        if (perfDisableSharedMem) {
-            Thread.sleep(PERFDATA_CREATE_DELAY_MS);
-            assertFalse(perfdata.toFile().exists(), "Perf data file exists although we run with -XX:+PerfDisableSharedMem");
+        String pidString = null;
+        if (engine == CracEngine.CRIU) {
+            // We need to check the checkpoint.pid(), which should be restored (when using CRIU),
+            // as restored.pid() would be the criuengine restorewait process
+            pidString = String.valueOf(checkpoint.pid());
         } else {
+            fail("Unexpected engine " + engine);
+        }
+        if (!perfDisableSharedMem) {
             waitForFile(perfdata);
             checkMapped(pidString, perfdata.toString());
             builder.runJcmd(pidString, "PerfCounter.print")
                     .shouldHaveExitValue(0)
                     .shouldContain("sun.perfdata.size=");
+        } else if (engine == CracEngine.CRIU) {
+            Thread.sleep(PERFDATA_CREATE_DELAY_MS);
+            assertFalse(perfdata.toFile().exists(), "Perf data file exists although we run with -XX:+PerfDisableSharedMem");
         }
         restored.input().write('\n');
         restored.input().flush();
@@ -104,7 +112,7 @@ public class PerfMemoryRestoreTest implements CracTest {
         long start = System.nanoTime();
         while (!perfdata.toFile().exists()) {
             if (System.nanoTime() - start > TimeUnit.SECONDS.toNanos(10)) {
-                throw new IllegalStateException("Perf data file did not appear within time limit in the checkpointed process: " + perfdata);
+                throw new IllegalStateException("Perf data file did not appear within time limit: " + perfdata);
             }
             //noinspection BusyWait
             Thread.sleep(10);

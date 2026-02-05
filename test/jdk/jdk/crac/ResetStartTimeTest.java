@@ -24,14 +24,10 @@
 import jdk.crac.Core;
 import jdk.internal.perf.Perf;
 import jdk.test.lib.crac.CracBuilder;
-import jdk.test.lib.crac.CracEngine;
 import jdk.test.lib.crac.CracTest;
 import jdk.test.lib.crac.CracTestArg;
-import jdk.test.lib.Utils;
 
 import java.lang.management.ManagementFactory;
-import java.nio.file.Path;
-import java.util.*;
 
 import static jdk.test.lib.Asserts.assertLT;
 import static jdk.test.lib.Asserts.assertLTE;

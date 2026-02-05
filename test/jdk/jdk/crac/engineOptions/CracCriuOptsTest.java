@@ -27,6 +27,7 @@ import java.nio.file.Path;
 
 import jdk.crac.*;
 import jdk.test.lib.crac.CracBuilder;
+import jdk.test.lib.crac.CracEngine;
 import jdk.test.lib.crac.CracTest;
 import jdk.test.lib.crac.CracTestArg;
 
@@ -59,7 +60,7 @@ public class CracCriuOptsTest implements CracTest {
 
     @Override
     public void test() throws Exception {
-        final CracBuilder builder = new CracBuilder();
+        final CracBuilder builder = new CracBuilder().engine(CracEngine.CRIU);
         builder.doCheckpoint();
 
         // "direct_map=false" engine option is expected to add "--no-mmap-page-image" to

@@ -24,12 +24,15 @@
 
 import jdk.crac.Core;
 import jdk.test.lib.crac.CracBuilder;
+import jdk.test.lib.crac.CracEngine;
 import jdk.test.lib.crac.CracProcess;
 import jdk.test.lib.crac.CracTest;
+import jdk.test.lib.crac.CracTestArg;
 
 import java.io.File;
 
 import static jdk.test.lib.Asserts.assertTrue;
+import static jdk.test.lib.Asserts.fail;
 
 /**
  * @test FlightRecorderJcmdTest
@@ -37,17 +40,20 @@ import static jdk.test.lib.Asserts.assertTrue;
  * @requires (os.family == "linux")
  * @build FlightRecorderTestBase
  * @build FlightRecorderJcmdTest
- * @run driver jdk.test.lib.crac.CracTest
+ * @run driver jdk.test.lib.crac.CracTest CRIU
  *
  */
 public class FlightRecorderJcmdTest extends FlightRecorderTestBase implements CracTest {
     protected static final String TEST_STARTED = "TEST STARTED";
 
+    @CracTestArg
+    CracEngine engine;
+
     @Override
     public void test() throws Exception {
         File jfr = File.createTempFile("flight", ".jfr");
         assertTrue(jfr.delete());
-        CracBuilder builder = new CracBuilder().captureOutput(true);
+        CracBuilder builder = new CracBuilder().engine(engine).captureOutput(true);
         CracProcess first = builder.startCheckpoint();
         first.waitForStdout(TEST_STARTED);
         builder.runJcmd(String.valueOf(first.pid()), "JFR.start", "name=xxx", "dumponexit=true", "filename=" + jfr)
@@ -57,13 +63,18 @@ public class FlightRecorderJcmdTest extends FlightRecorderTestBase implements Cr
         first.input().flush();
         first.waitForCheckpointed();
         assertRecording(jfr);
-        CracProcess second = new CracBuilder().captureOutput(true).startRestore();
+        CracProcess second = new CracBuilder().engine(engine).captureOutput(true).startRestore();
         second.waitForStdout(RESTORED_MESSAGE, false);
 
         File jfrOther = File.createTempFile("other", ".jfr");
         assertTrue(jfrOther.delete());
         // CRIU restored with the same PID
-        String restoredPid = String.valueOf(first.pid());
+        String restoredPid = null;
+        if (engine == CracEngine.CRIU) {
+            restoredPid = String.valueOf(first.pid());
+        } else {
+            fail("Unexpected engine " + engine);
+        }
         builder.runJcmd(restoredPid, "JFR.dump", "name=xxx", "filename=" + jfrOther)
                 .shouldHaveExitValue(0)
                 .shouldContain("Dumped recording \"xxx\"");

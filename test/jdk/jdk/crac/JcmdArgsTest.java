@@ -56,7 +56,7 @@ public class JcmdArgsTest implements CracTest {
     @Override
     public void test() throws Exception {
         // Ensure the image does not exist
-        Path imageDir = new CracBuilder().imageDir();
+        Path imageDir = new CracBuilder().engine(CracEngine.SIMULATE).imageDir();
         if (imageDir.toFile().isDirectory()) {
             FileUtils.deleteFileTreeWithRetry(imageDir);
         }
@@ -78,7 +78,7 @@ public class JcmdArgsTest implements CracTest {
         } else {
             args = new String[] { "metrics=foo.bar=123", "labels=xxx=yyy" };
         }
-        new CracBuilder().checkpointViaJcmd(process.pid(), args);
+        new CracBuilder().engine(CracEngine.SIMULATE).checkpointViaJcmd(process.pid(), args);
         assertEquals(CHECKPOINTED, queue.take());
         process.input().write('\n');
         process.input().flush();

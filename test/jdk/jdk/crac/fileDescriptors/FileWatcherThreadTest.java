@@ -27,13 +27,9 @@ import jdk.test.lib.crac.CracBuilder;
 import jdk.test.lib.crac.CracTest;
 import jdk.test.lib.crac.CracTestArg;
 
-import java.io.File;
-import java.io.IOException;
 import java.nio.file.*;
-import java.util.Objects;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.BrokenBarrierException;
 import java.util.concurrent.CyclicBarrier;
 
 /**

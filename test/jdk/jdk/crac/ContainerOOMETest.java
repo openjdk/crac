@@ -54,6 +54,7 @@ public class ContainerOOMETest implements CracTest {
                 .inDockerImage(imageName)
                 .dockerOptions("-m", "256M")
                 .runContainerDirectly(true)
+                .containerUsePrivileged(true)
                 // Without specific request for G1 we would get Serial on 256M
                 .vmOption("-XX:+UseG1GC")
                 .vmOption("-Xmx4G")

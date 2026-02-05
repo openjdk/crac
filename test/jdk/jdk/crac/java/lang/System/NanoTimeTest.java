@@ -73,6 +73,8 @@ public class NanoTimeTest implements CracTest {
             String baseImage = Platform.isMusl() ? "ghcr.io/crac/test-base-musl" : "ghcr.io/crac/test-base";
             builder.withBaseImage(baseImage, "latest")
                     .dockerOptions("-v", bootIdFile + ":/fake_boot_id")
+                    // unshare requires privileged
+                    .containerUsePrivileged(true)
                     .inDockerImage(imageName);
 
             Files.writeString(bootIdFile, "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx\n");

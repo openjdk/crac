@@ -31,6 +31,7 @@ import java.nio.file.*;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CyclicBarrier;
+import java.util.concurrent.TimeoutException;
 
 /**
  * @test Checks the different state of WatchService keys at a checkpoint moment.
@@ -104,10 +105,14 @@ public class FileWatcherThreadTest implements CracTest {
             Asserts.assertFalse(caughtSecond.isDone());
         } else {
             Files.createTempFile(directory, "temp", ".txt");
-            Asserts.assertTrue(caughtFirst.get());
-            Core.checkpointRestore();
-            Files.createTempFile(directory, "temp", ".txt");
-            Asserts.assertTrue(caughtSecond.get());
+            try {
+                Asserts.assertTrue(caughtFirst.get(10, TimeUnit.SECONDS));
+                Core.checkpointRestore();
+                Files.createTempFile(directory, "temp", ".txt");
+                Asserts.assertTrue(caughtSecond.get(10, TimeUnit.SECONDS));
+            } catch (TimeoutException e) {
+                Asserts.fail("WatchService failed to wait for an event. caughtFirst.isDone="+caughtFirst.isDone()+", caughtSecond.isDone="+caughtSecond.isDone());
+            }
         }
     }
 }

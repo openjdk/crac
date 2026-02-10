@@ -62,9 +62,12 @@ VM_CONTROLLED_ENGINE_OPTS(DEFINE_OPT_VAR)
 #define CREXEC "crexec"
 #define SIMENGINE "simengine"
 
+#ifdef LINUX
 static bool is_pauseengine() {
+  assert(JDK_Version::current().major_version() < 28, "pauseengine shall be expired in JDK 28");
   return !strcmp(CRaCEngine, "pause") || !strcmp(CRaCEngine, "pauseengine");
 }
+#endif // LINUX
 
 static bool find_engine(const char *dll_dir, char *path, size_t path_size, bool *is_library, char *resolved_engine, size_t resolved_engine_size) {
   const size_t engine_length = strlen(CRaCEngine);
@@ -240,6 +243,7 @@ static crlib_conf_t *create_conf(const crlib_api_t &api, const char *exec_locati
     return conf;
   }
 
+#if LINUX
   if (is_pauseengine()) {
     guarantee(api.can_configure(conf, PAUSE), "simengine must support option " PAUSE);
     if (!api.configure(conf, PAUSE, "true")) {
@@ -248,6 +252,7 @@ static crlib_conf_t *create_conf(const crlib_api_t &api, const char *exec_locati
       return nullptr;
     }
   }
+#endif // LINUX
 
   if (exec_location != nullptr) { // Only passed when using crexec
     guarantee(api.can_configure(conf, engine_opt_exec_location),

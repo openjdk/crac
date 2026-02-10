@@ -61,57 +61,52 @@ typedef int pid_t;
 CONFIGURE_OPTIONS(DEFINE_NAME);
 #undef DEFINE_NAME
 
-struct SimEngine: public crlib_conf_t {
-  bool initialized = false;
+struct crlib_conf: crlib_base_t {
   char* image_location = nullptr;
   bool pause = false;
 
   bool has_restore_data = false;
   int restore_data = 0;
 
-  SimEngine() {
-    if (!init_conf(this, "simengine")) {
-      return;
-    }
-    initialized = true;
+  crlib_conf():
+    crlib_base("simengine") {
   }
-  ~SimEngine() {
+  ~crlib_conf() {
     free(image_location);
-    destroy_conf(this);
   }
 };
 
 static crlib_conf_t* create_simengine() {
-    SimEngine *engine = new(std::nothrow) SimEngine();
-    if (engine == nullptr || !engine->initialized) {
-        LOG("Cannot create simengine instance (insufficient memory?)");
-        delete engine;
-        return nullptr;
+    crlib_conf *conf = new(std::nothrow) crlib_conf();
+    if (conf == nullptr) {
+      LOG("Cannot create simengine instance (out of memory)");
+      return nullptr;
+    } else if (conf->common() == nullptr) {
+      delete conf;
+      return nullptr;
     }
-    return engine;
+    return conf;
 }
 
 static void destroy_simengine(crlib_conf_t* conf) {
-    delete static_cast<SimEngine*>(conf);
+  delete conf;
 }
 
 static int checkpoint(crlib_conf_t* conf) {
-  SimEngine *engine = static_cast<SimEngine*>(conf);
-
-  if (!image_constraints_persist(conf, engine->image_location) ||
-      !image_score_persist(conf, engine->image_location)) {
+  if (!image_constraints_persist(conf->common(), conf->image_location) ||
+      !image_score_persist(conf->common(), conf->image_location)) {
     return -1;
   }
-  image_score_reset(conf);
+  image_score_reset(conf->common());
 
 #ifdef LINUX
-  if (!engine->pause) {
+  if (!conf->pause) {
     // Return immediately
     return 0;
   }
 
   char pidpath[1024];
-  if ((size_t) snprintf(pidpath, sizeof(pidpath), "%s/pid", engine->image_location) >= sizeof(pidpath)) {
+  if ((size_t) snprintf(pidpath, sizeof(pidpath), "%s/pid", conf->image_location) >= sizeof(pidpath)) {
     return 1;
   }
   pid_t jvm = getpid();
@@ -126,7 +121,7 @@ static int checkpoint(crlib_conf_t* conf) {
   fclose(pidfile);
 
   LOG("pausing the process, restore from another process to unpause it");
-  engine->restore_data = waitjvm();
+  conf->restore_data = waitjvm();
 #else // !LINUX
   assert(!engine->pause);
 #endif // !LINUX
@@ -134,19 +129,17 @@ static int checkpoint(crlib_conf_t* conf) {
 }
 
 static int restore(crlib_conf_t* conf) {
-  SimEngine* engine = static_cast<SimEngine*>(conf);
-
-  if (!image_constraints_validate(conf, engine->image_location)) {
+  if (!image_constraints_validate(conf->common(), conf->image_location)) {
     return -1;
   }
 
 #ifdef LINUX
-  if (!engine->pause) {
+  if (!conf->pause) {
     LOG("restore requires -XX:CRaCEngineOptions=pause=true to wake the process paused with this option.");
     return -1;
   }
   char pidpath[1024];
-  if ((size_t) snprintf(pidpath, sizeof(pidpath), "%s/pid", engine->image_location) >= sizeof(pidpath)) {
+  if ((size_t) snprintf(pidpath, sizeof(pidpath), "%s/pid", conf->image_location) >= sizeof(pidpath)) {
     return -1;
   }
   FILE *pidfile = fopen(pidpath, "r");
@@ -163,7 +156,7 @@ static int restore(crlib_conf_t* conf) {
   }
   fclose(pidfile);
 
-  if (kickjvm(jvm, engine->restore_data)) {
+  if (kickjvm(jvm, conf->restore_data)) {
     LOG("error unpausing checkpointed process (pid %d)", jvm);
   } else {
     LOG("successfully unpaused the checkpointed process\n");
@@ -184,22 +177,21 @@ static bool can_configure(crlib_conf_t* conf, const char* key) {
 }
 
 static bool configure(crlib_conf_t* conf, const char* key, const char* value) {
-  SimEngine* engine = static_cast<SimEngine*>(conf);
   if (!strcmp(key, opt_image_location)) {
     char* copy = strdup(value);
     if (value == nullptr) {
       LOG("out of memory");
       return false;
     }
-    free(engine->image_location);
-    engine->image_location = copy;
+    free(conf->image_location);
+    conf->image_location = copy;
     return true;
 #ifdef LINUX
   } else if (!strcmp(key, opt_pause)) {
     if (!strcasecmp(value, "true")) {
-      engine->pause = true;
+      conf->pause = true;
     } else if (!strcasecmp(value, "false")) {
-      engine->pause = false;
+      conf->pause = false;
     } else {
       LOG("expected %s to be either 'true' or 'false'", key);
       return false;
@@ -212,30 +204,28 @@ static bool configure(crlib_conf_t* conf, const char* key, const char* value) {
 }
 
 static bool set_restore_data(crlib_conf_t *conf, const void *data, size_t size) {
-  SimEngine* engine = static_cast<SimEngine*>(conf);
-  constexpr const size_t supported_size = sizeof(engine->restore_data);
+  constexpr const size_t supported_size = sizeof(conf->restore_data);
   if (size > 0 && size != supported_size) {
     LOG("unsupported size of restore data: %zu was requested but only %zu is supported", size, supported_size);
     return false;
   }
   if (size > 0) {
-    memcpy(&engine->restore_data, data, size);
-    engine->has_restore_data = true;
+    memcpy(&conf->restore_data, data, size);
+    conf->has_restore_data = true;
   } else {
-    engine->restore_data = 0;
-    engine->has_restore_data = false;
+    conf->restore_data = 0;
+    conf->has_restore_data = false;
   }
   return true;
 }
 
 static size_t get_restore_data(crlib_conf_t *conf, void *buf, size_t size) {
-  SimEngine* engine = static_cast<SimEngine*>(conf);
-  if (!engine->has_restore_data) {
+  if (!conf->has_restore_data) {
     return 0;
   }
-  constexpr const size_t available_size = sizeof(engine->restore_data);
+  constexpr const size_t available_size = sizeof(conf->restore_data);
   if (size > 0) {
-    memcpy(buf, &engine->restore_data, size < available_size ? size : available_size);
+    memcpy(buf, &conf->restore_data, size < available_size ? size : available_size);
   }
   return available_size;
 }

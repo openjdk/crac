@@ -121,9 +121,9 @@ enum Argv : std::uint8_t {
   ARGV_LAST = 31,
 };
 
-class CrExec: public crlib_conf_t {
+struct crlib_conf: crlib_base_t {
 private:
-  using configure_func = bool (CrExec::*) (const char *value);
+  using configure_func = bool (crlib_conf_t::*) (const char *value);
   Hashtable<configure_func> _options {
     configure_options_names, ARRAY_SIZE(configure_options_names) - 1 /* omit nullptr */
   };
@@ -141,31 +141,29 @@ private:
   UserData _user_data;
 
 public:
-  CrExec(): _user_data(&_argv[ARGV_IMAGE_LOCATION]) {
-    if (!init_conf(this, "crexec")) {
-      return;
-    }
+  crlib_conf():
+    crlib_base("crexec"),
+    _user_data(&_argv[ARGV_IMAGE_LOCATION]) {
     if (!_options.is_initialized()) {
       LOG("out of memory");
       assert(!is_initialized());
       return;
     }
-#define PUT_HANDLER(id, ...) _options.put(opt_##id, &CrExec::configure_##id);
+#define PUT_HANDLER(id, ...) _options.put(opt_##id, &crlib_conf_t::configure_##id);
     CONFIGURE_OPTIONS(PUT_HANDLER)
 #undef PUT_HANDLER
   }
 
-  ~CrExec() {
+  ~crlib_conf() {
     for (int i = 0; i <= ARGV_FREE /* all free args are allocated together */; i++) {
       if (i != ARGV_ACTION) { // Action is a static string
         free(const_cast<char*>(_argv[i]));
       }
     }
-    destroy_conf(this);
   }
 
   // Use this to check whether the constructor succeeded.
-  bool is_initialized() const { return _options.is_initialized(); }
+  bool is_initialized() const { return _common != nullptr && _options.is_initialized(); }
 
   int restore_data() const { return _restore_data; }
   const char * const *argv() const { return _argv; }
@@ -290,10 +288,12 @@ private:
   }
 };
 
-static crlib_conf_t *create_crexec() {
-  auto * const conf = new(std::nothrow) CrExec();
-  if (conf == nullptr || !conf->is_initialized()) {
-    LOG("Cannot create crexec instance (insufficient memory?)");
+static crlib_conf_t* create_crexec() {
+  auto * const conf = new(std::nothrow) crlib_conf_t();
+  if (conf == nullptr) {
+    LOG("Cannot create crexec instance (out of memory)");
+    return nullptr;
+  } else if (!conf->is_initialized()) {
     delete conf;
     return nullptr;
   }
@@ -301,15 +301,15 @@ static crlib_conf_t *create_crexec() {
 }
 
 static void destroy_crexec(crlib_conf_t *conf) {
-  delete static_cast<CrExec*>(conf);
+  delete conf;
 }
 
 static bool can_configure(crlib_conf_t *conf, const char *key) {
-  return static_cast<CrExec*>(conf)->can_configure(key);
+  return conf->can_configure(key);
 }
 
 static bool configure(crlib_conf_t *conf, const char *key, const char *value) {
-  return static_cast<CrExec*>(conf)->configure(key, value);
+  return conf->configure(key, value);
 }
 
 static const char *identity(crlib_conf_t *conf) {
@@ -340,19 +340,19 @@ static const crlib_conf_option_t *configuration_options(crlib_conf_t *conf) {
 }
 
 static bool set_restore_data(crlib_conf_t *conf, const void *data, size_t size) {
-  return static_cast<CrExec*>(conf)->set_restore_data(data, size);
+  return conf->set_restore_data(data, size);
 }
 
 static size_t get_restore_data(crlib_conf_t *conf, void *buf, size_t size) {
-  return static_cast<CrExec*>(conf)->get_restore_data(buf, size);
+  return conf->get_restore_data(buf, size);
 }
 
 static bool set_user_data(crlib_conf_t *conf, const char *name, const void *data, size_t size) {
-  return static_cast<CrExec*>(conf)->user_data().set_user_data(name, data, size);
+  return conf->user_data().set_user_data(name, data, size);
 }
 
 static crlib_user_data_storage_t *load_user_data(crlib_conf_t *conf) {
-  return static_cast<CrExec*>(conf)->user_data().load_user_data();
+  return conf->user_data().load_user_data();
 }
 
 static bool lookup_user_data(crlib_user_data_storage_t *storage, const char *name, const void **data_p, size_t *size_p) {
@@ -363,8 +363,7 @@ static void destroy_user_data(crlib_user_data_storage_t *storage) {
   return storage->user_data->destroy_user_data(storage);
 }
 
-static int checkpoint(crlib_conf_t *c) {
-  CrExec *conf = static_cast<CrExec *>(c);
+static int checkpoint(crlib_conf_t *conf) {
   if (conf->argv()[ARGV_EXEC_LOCATION] == nullptr) {
     LOG("%s must be set before checkpoint", opt_exec_location);
     return -1;
@@ -377,14 +376,14 @@ static int checkpoint(crlib_conf_t *c) {
   conf->set_argv_action("checkpoint");
   conf->require_defaults(CRLIB_OPTION_FLAG_CHECKPOINT, "checkpoint");
 
-  if (!image_constraints_persist(conf, image_location) ||
-      !image_score_persist(conf, image_location)) {
+  if (!image_constraints_persist(conf->common(), image_location) ||
+      !image_score_persist(conf->common(), image_location)) {
     return -1;
   }
   // We will reset scores now; scores can be retained or reset higher on the Java level.
   // Before another checkpoint all the scores will be recorded again; we won't keep
   // anything here to not write down any outdated value.
-  image_score_reset(conf);
+  image_score_reset(conf->common());
 
   {
     Environment env;
@@ -425,8 +424,7 @@ static int checkpoint(crlib_conf_t *c) {
   return 0;
 }
 
-static int restore(crlib_conf_t *c) {
-  CrExec *conf = static_cast<CrExec *>(c);
+static int restore(crlib_conf_t *conf) {
   if (conf->argv()[ARGV_EXEC_LOCATION] == nullptr) {
     LOG("%s must be set before restore", opt_exec_location);
     return -1;
@@ -438,7 +436,7 @@ static int restore(crlib_conf_t *c) {
   conf->set_argv_action("restore");
   conf->require_defaults(CRLIB_OPTION_FLAG_RESTORE, "restore");
 
-  if (!image_constraints_validate(conf, conf->argv()[ARGV_IMAGE_LOCATION])) {
+  if (!image_constraints_validate(conf->common(), conf->argv()[ARGV_IMAGE_LOCATION])) {
     return -1;
   }
 

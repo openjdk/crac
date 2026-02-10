@@ -43,7 +43,7 @@
 
 #define ARRAY_SIZE(x) (sizeof(x) / sizeof(*(x)))
 
-#define LOG(fmt, ...) fprintf(stderr, "%s: " fmt "\n", log_prefix, ##__VA_ARGS__)
+#define LOG(fmt, ...) fprintf(stderr, "%s: " fmt "\n", crcommon_log_prefix(), ##__VA_ARGS__)
 
 // For Windows
 #if !defined(PATH_MAX) && defined(MAX_PATH)
@@ -68,10 +68,8 @@ template<typename F> inline Deferred<F> defer(F&& f) {
   return Deferred<F>(std::forward<F>(f));
 }
 
-struct crlib_conf {
-  void *image_constraints;
-  void *image_score;
-};
+typedef struct crcommon crcommon_t;
+typedef crcommon_t* (crlib_to_crcommon_t)(crlib_conf_t*);
 
 #ifdef CRCOMMON_IMPL
 # define CRCOMMON_API JNIEXPORT
@@ -80,23 +78,35 @@ struct crlib_conf {
 #endif
 
 extern "C" {
-  extern CRCOMMON_API const char* log_prefix;
-
-  extern CRCOMMON_API bool init_conf(struct crlib_conf* conf, const char* log_prefix);
-  extern CRCOMMON_API void destroy_conf(struct crlib_conf* conf);
+  extern CRCOMMON_API crcommon_t* crcommon_create(const char* log_prefix);
+  extern CRCOMMON_API void crcommon_destroy(crcommon_t* conf);
+  extern CRCOMMON_API const char* crcommon_log_prefix();
 
   extern CRCOMMON_API crlib_image_constraints_t image_constraints_extension;
-  extern CRCOMMON_API bool image_constraints_persist(const struct crlib_conf* conf, const char* image_location);
-  extern CRCOMMON_API bool image_constraints_validate(const struct crlib_conf* conf, const char* image_location);
+  extern CRCOMMON_API bool image_constraints_persist(const crcommon_t* conf, const char* image_location);
+  extern CRCOMMON_API bool image_constraints_validate(const crcommon_t* conf, const char* image_location);
 
   extern CRCOMMON_API crlib_image_score_t image_score_extension;
-  extern CRCOMMON_API bool image_score_persist(const struct crlib_conf* conf, const char* image_location);
-  extern CRCOMMON_API void image_score_reset(struct crlib_conf* conf);
+  extern CRCOMMON_API bool image_score_persist(const crcommon_t* conf, const char* image_location);
+  extern CRCOMMON_API void image_score_reset(crcommon_t* conf);
 
   // helper function
-  extern CRCOMMON_API const crlib_extension_t *find_extension(crlib_extension_t * const *extensions, const char *name, size_t size);
+  extern CRCOMMON_API crlib_extension_t* find_extension(crlib_extension_t* const* extensions, const char* name, size_t size);
 }
 
 #undef CRCOMMON_API
+
+typedef struct crlib_base {
+protected:
+  crcommon_t* _common;
+
+  crlib_base(const char* log_prefix): _common(crcommon_create(log_prefix)) {}
+  ~crlib_base() {
+    crcommon_destroy(_common);
+  }
+
+public:
+  inline crcommon_t* common() { return _common; }
+} crlib_base_t;
 
 #endif // CRCOMMON_HPP

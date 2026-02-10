@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022, Azul Systems, Inc. All rights reserved.
+ * Copyright (c) 2022, 2026 Azul Systems, Inc. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -32,12 +32,10 @@ import jdk.test.lib.crac.CracProcess;
 import jdk.test.lib.crac.CracTest;
 import jdk.test.lib.crac.CracTestArg;
 
-import java.io.BufferedReader;
-import java.io.InputStreamReader;
 import java.io.IOException;
 import java.util.HashMap;
 import java.util.Map;
-import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
 import javax.management.JMX;
 import javax.management.MalformedObjectNameException;
@@ -45,7 +43,6 @@ import javax.management.ObjectName;
 import javax.management.remote.JMXConnector;
 import javax.management.remote.JMXConnectorFactory;
 import javax.management.remote.JMXServiceURL;
-import java.io.IOException;
 
 import static jdk.test.lib.Asserts.*;
 
@@ -70,34 +67,41 @@ public class RemoteJmxTest implements CracTest {
 
     @Override
     public void test() throws Exception {
-        CracBuilder builder = new CracBuilder().captureOutput(true);
-        builder.engine(CracEngine.SIMULATE);
+        CracBuilder builder = new CracBuilder().captureOutput(true).engine(CracEngine.SIMULATE);
         if (!NONE.equals(portBefore)) {
             javaOptions(portBefore).forEach(builder::javaOption);
         }
+
         CracProcess process = builder.startCheckpoint();
         try {
-            var reader = new BufferedReader(new InputStreamReader(process.output()));
-            waitForString(reader, BOOTED);
+            final var bootedFuture = new CompletableFuture<>();
+            final var restoredFuture = new CompletableFuture<>();
+            process.watch(
+                    (line) -> {
+                        System.out.println("[CHILD STDOUT] " + line);
+                        if (!bootedFuture.isDone()) {
+                            if (BOOTED.equals(line)) bootedFuture.complete(null);
+                        } else if (!restoredFuture.isDone()) {
+                            if (RESTORED.equals(line)) restoredFuture.complete(null);
+                        }
+                    },
+                    (line) -> System.out.println("[CHILD STDERR] " + line)
+            );
+
+            bootedFuture.get(30, TimeUnit.SECONDS);
             if (!NONE.equals(portBefore)) {
                 assertEquals(-1L, getUptimeFromRestoreFromJmx(portBefore));
             }
             process.sendNewline();
-            waitForString(reader, RESTORED);
+
+            restoredFuture.get(30, TimeUnit.SECONDS);
             String currentPort = NONE.equals(portAfter) ? portBefore : portAfter;
             assertGreaterThanOrEqual(getUptimeFromRestoreFromJmx(currentPort), 0L);
             process.sendNewline();
+
             process.waitForSuccess();
         } finally {
             process.destroyForcibly();
-        }
-    }
-
-    private void waitForString(BufferedReader reader, String str) throws IOException {
-        for (String line = reader.readLine(); true; line = reader.readLine()) {
-            System.out.println(line);
-            if (line.contains(str))
-                break;
         }
     }
 

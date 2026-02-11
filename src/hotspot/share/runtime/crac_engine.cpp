@@ -117,7 +117,7 @@ static bool find_engine(const char *dll_dir, char *path, size_t path_size, bool 
   if (is_pauseengine()) {
     assert(sizeof(SIMENGINE) <= resolved_engine_size, "must be");
     memcpy(resolved_engine, SIMENGINE, sizeof(SIMENGINE));
-    log_warning(crac)("-XX:CRaCEngine=pause/pauseengine is deprecated; use -XX:CRaCEngine=simengine -XX:CRaCEngineOptions=pause=true");
+    log_warning(crac)("-XX:CRaCEngine=pause/pauseengine is deprecated and will be removed in version 28; use -XX:CRaCEngine=simengine -XX:CRaCEngineOptions=pause=true");
   } else /* intentional line break */
 #endif // LINUX
   if (engine_length < resolved_engine_size) {

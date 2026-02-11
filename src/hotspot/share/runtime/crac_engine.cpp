@@ -243,7 +243,7 @@ static crlib_conf_t *create_conf(const crlib_api_t &api, const char *exec_locati
     return conf;
   }
 
-#if LINUX
+#ifdef LINUX
   if (is_pauseengine()) {
     guarantee(api.can_configure(conf, PAUSE), "simengine must support option " PAUSE);
     if (!api.configure(conf, PAUSE, "true")) {

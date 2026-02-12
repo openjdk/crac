@@ -109,4 +109,12 @@ public:
   inline crcommon_t* common() { return _common; }
 } crlib_base_t;
 
+// We cannot use simply 'struct crlib_conf' for engine implementation;
+// in static build the symbols would mix with other implementations
+#define RENAME_CRLIB(other_class) \
+  struct crlib_conf: other_class { \
+    crlib_conf() = delete; \
+    ~crlib_conf() = delete; \
+  }
+
 #endif // CRCOMMON_HPP

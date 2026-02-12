@@ -61,23 +61,26 @@ typedef int pid_t;
 CONFIGURE_OPTIONS(DEFINE_NAME);
 #undef DEFINE_NAME
 
-struct crlib_conf: crlib_base_t {
+class simengine: public crlib_base_t {
+public:
   char* image_location = nullptr;
   bool pause = false;
 
   bool has_restore_data = false;
   int restore_data = 0;
 
-  crlib_conf():
-    crlib_base("simengine") {
+  simengine():
+    crlib_base_t("simengine") {
   }
-  ~crlib_conf() {
+  ~simengine() {
     free(image_location);
   }
 };
 
+RENAME_CRLIB(simengine);
+
 static crlib_conf_t* create_simengine() {
-    crlib_conf *conf = new(std::nothrow) crlib_conf();
+    simengine* conf = new(std::nothrow) simengine();
     if (conf == nullptr) {
       LOG("Cannot create simengine instance (out of memory)");
       return nullptr;
@@ -85,11 +88,11 @@ static crlib_conf_t* create_simengine() {
       delete conf;
       return nullptr;
     }
-    return conf;
+    return static_cast<crlib_conf_t*>(conf);
 }
 
 static void destroy_simengine(crlib_conf_t* conf) {
-  delete conf;
+  delete static_cast<simengine*>(conf);
 }
 
 static int checkpoint(crlib_conf_t* conf) {
@@ -123,7 +126,7 @@ static int checkpoint(crlib_conf_t* conf) {
   LOG("pausing the process, restore from another process to unpause it");
   conf->restore_data = waitjvm();
 #else // !LINUX
-  assert(!engine->pause);
+  assert(!conf->pause);
 #endif // !LINUX
   return 0;
 }
@@ -165,7 +168,7 @@ static int restore(crlib_conf_t* conf) {
   // Do not return; terminate the restoring JVM immediatelly
   exit(0);
 #else // if !LINUX
-  assert(!engine->pause);
+  assert(!conf->pause);
   LOG("restore is not supported as a separate action by this engine, "
     "it always restores a process immediately after checkpointing it");
   return -1;

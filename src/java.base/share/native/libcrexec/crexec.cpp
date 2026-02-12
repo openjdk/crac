@@ -121,9 +121,9 @@ enum Argv : std::uint8_t {
   ARGV_LAST = 31,
 };
 
-struct crlib_conf: crlib_base_t {
+class crexec: public crlib_base_t {
 private:
-  using configure_func = bool (crlib_conf_t::*) (const char *value);
+  using configure_func = bool (crexec::*) (const char *value);
   Hashtable<configure_func> _options {
     configure_options_names, ARRAY_SIZE(configure_options_names) - 1 /* omit nullptr */
   };
@@ -141,7 +141,7 @@ private:
   UserData _user_data;
 
 public:
-  crlib_conf():
+  crexec():
     crlib_base("crexec"),
     _user_data(&_argv[ARGV_IMAGE_LOCATION]) {
     if (!_options.is_initialized()) {
@@ -149,12 +149,12 @@ public:
       assert(!is_initialized());
       return;
     }
-#define PUT_HANDLER(id, ...) _options.put(opt_##id, &crlib_conf_t::configure_##id);
+#define PUT_HANDLER(id, ...) _options.put(opt_##id, &crexec::configure_##id);
     CONFIGURE_OPTIONS(PUT_HANDLER)
 #undef PUT_HANDLER
   }
 
-  ~crlib_conf() {
+  ~crexec() {
     for (int i = 0; i <= ARGV_FREE /* all free args are allocated together */; i++) {
       if (i != ARGV_ACTION) { // Action is a static string
         free(const_cast<char*>(_argv[i]));
@@ -288,8 +288,10 @@ private:
   }
 };
 
+RENAME_CRLIB(crexec);
+
 static crlib_conf_t* create_crexec() {
-  auto * const conf = new(std::nothrow) crlib_conf_t();
+  auto * const conf = new(std::nothrow) crexec();
   if (conf == nullptr) {
     LOG("Cannot create crexec instance (out of memory)");
     return nullptr;
@@ -297,11 +299,11 @@ static crlib_conf_t* create_crexec() {
     delete conf;
     return nullptr;
   }
-  return conf;
+  return static_cast<crlib_conf_t*>(conf);
 }
 
 static void destroy_crexec(crlib_conf_t *conf) {
-  delete conf;
+  delete static_cast<crexec*>(conf);
 }
 
 static bool can_configure(crlib_conf_t *conf, const char *key) {

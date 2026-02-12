@@ -29,14 +29,12 @@ import java.nio.file.Path;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Map;
-import java.util.stream.Stream;
 import jdk.crac.Core;
 
 import static jdk.test.lib.Asserts.assertTrue;
 
 import jdk.test.lib.crac.CracBuilder;
 import jdk.test.lib.crac.CracEngine;
-import jdk.test.lib.crac.CracProcess;
 import jdk.test.lib.crac.CracTest;
 import jdk.test.lib.crac.CracTestArg;
 
@@ -59,10 +57,7 @@ public class JrtFsTest implements CracTest {
 
     @Override
     public void test() throws Exception {
-        CracProcess cp = new CracBuilder().engine(CracEngine.SIMULATE).captureOutput(true)
-            .startCheckpoint();
-        cp.outputAnalyzer()
-            .shouldHaveExitValue(0);
+        new CracBuilder().engine(CracEngine.SIMULATE).captureOutput(true).doCheckpoint();
     }
 
     @Override

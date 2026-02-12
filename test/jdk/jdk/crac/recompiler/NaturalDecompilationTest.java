@@ -33,6 +33,7 @@ import jdk.test.lib.crac.CracBuilder;
 import jdk.test.lib.crac.CracEngine;
 import jdk.test.lib.crac.CracTest;
 import jdk.test.lib.crac.CracTestArg;
+import jdk.test.lib.process.OutputAnalyzer;
 import jdk.test.whitebox.WhiteBox;
 
 /*
@@ -99,18 +100,12 @@ public class NaturalDecompilationTest implements CracTest {
             case C2_ONLY -> builder.vmOption("-XX:-TieredCompilation");
         }
 
-        // Must create an output analyzer before waiting for success, otherwise
-        // on Windows PrintCompilation overflows the piping buffer and the
-        // waiting never completes
-        final var proc = builder.startCheckpoint();
-        final var out = proc.outputAnalyzer();
-        try {
-            proc.waitForSuccess();
-        } catch (InterruptedException ex) {
-            out.reportDiagnosticSummary();
-            throw ex;
+        OutputAnalyzer out;
+        try (var proc = builder.startCheckpoint()) {
+            out = proc.outputAnalyzer();
         }
-        out.shouldContain("Requesting recompilation: int " + NaturalDecompilationTest.class.getName() + "." + TEST_METHOD_NAME + "(int)");
+        out.shouldHaveExitValue(0)
+                .shouldContain("Requesting recompilation: int " + NaturalDecompilationTest.class.getName() + "." + TEST_METHOD_NAME + "(int)");
     }
 
     @Override

@@ -29,9 +29,6 @@ import jdk.test.lib.crac.CracTest;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 
@@ -47,16 +44,17 @@ public class IgnoredFileDescriptorsTest implements CracTest {
 
     @Override
     public void test() throws Exception {
-        List<String> prefix = new ArrayList<>();
-        prefix.add(EXTRA_FD_WRAPPER);
-        prefix.addAll(Arrays.asList("-o", "43", "/dev/stdout"));
-        prefix.addAll(Arrays.asList("-o", "45", "/dev/urandom"));
-        prefix.add(CracBuilder.JAVA);
-        prefix.add("-XX:CRaCIgnoredFileDescriptors=43,/dev/null,44,/dev/urandom");
+        final var prefix = new String[] {
+                EXTRA_FD_WRAPPER,
+                "-o", "43", "/dev/stdout",
+                "-o", "45", "/dev/urandom",
+                CracBuilder.JAVA,
+                "-XX:CRaCIgnoredFileDescriptors=43,/dev/null,44,/dev/urandom"
+        };
 
         CracBuilder builder = new CracBuilder();
-        builder.startCheckpoint(prefix).waitForCheckpointed();
-        builder.captureOutput(true).doRestore().outputAnalyzer().shouldContain(RESTORED_MESSAGE);
+        builder.doCheckpoint(prefix);
+        builder.captureOutput(true).doRestoreToAnalyze().shouldHaveExitValue(0).shouldContain(RESTORED_MESSAGE);
     }
 
     @Override

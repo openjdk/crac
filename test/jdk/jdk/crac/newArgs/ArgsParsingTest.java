@@ -44,8 +44,9 @@ public class ArgsParsingTest implements CracTest {
         final String ARG2 = "  ano\007ther  'yet  arg  \\";
         CracBuilder builder = new CracBuilder().captureOutput(true);
         builder.doCheckpoint();
-        builder.startRestoreWithArgs(null, List.of(NEW_MAIN_CLASS, ARG0, ARG1, ARG2))
-            .waitForSuccess().outputAnalyzer()
+        builder.startRestoreWithArgs(List.of(), List.of(NEW_MAIN_CLASS, ARG0, ARG1, ARG2))
+            .outputAnalyzer()
+            .shouldHaveExitValue(0)
             .shouldContain("RESTORED")
             .shouldContain("Arg 0: " + ARG0 + ".")
             .shouldContain("Arg 1: " + ARG1 + ".")

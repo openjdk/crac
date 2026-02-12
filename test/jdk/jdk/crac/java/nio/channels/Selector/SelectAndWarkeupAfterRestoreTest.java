@@ -59,20 +59,16 @@ public class SelectAndWarkeupAfterRestoreTest implements CracTest {
         if (selectorImpl != null) {
             builder.javaOption(SelectorProvider.class.getName(), selectorImpl);
         }
-        builder.startCheckpoint().waitForSuccess();
+        builder.doCheckpoint();
     }
 
     private static void selectAndWakeup(Selector selector) throws java.io.IOException {
-
-        new Thread(new Runnable() {
-            @Override
-            public void run() {
-                try {
-                    Thread.sleep(7000);
-                    System.out.println(">> waking up");
-                    selector.wakeup();
-                } catch (InterruptedException ie) { throw new RuntimeException(ie); }
-            }
+        new Thread(() -> {
+            try {
+                Thread.sleep(7000);
+                System.out.println(">> waking up");
+                selector.wakeup();
+            } catch (InterruptedException ie) { throw new RuntimeException(ie); }
         }).start();
 
         System.out.println(">> selecting");

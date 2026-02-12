@@ -51,13 +51,13 @@ public class ResetStartTimeTest implements CracTest {
     @Override
     public void test() throws Exception {
         CracBuilder builder = new CracBuilder().vmOption("--add-opens").vmOption("java.base/jdk.internal.perf=ALL-UNNAMED");
-        builder.startCheckpoint().waitForCheckpointed();
+        builder.doCheckpoint();
         if (!resetUptime) {
             builder.vmOption("-XX:+UnlockDiagnosticVMOptions");
             builder.vmOption("-XX:-CRaCResetStartTime");
         }
-        builder.captureOutput(true).doRestore().waitForSuccess()
-                .outputAnalyzer().shouldContain(RESTORED_MESSAGE);
+        builder.captureOutput(true).doRestoreToAnalyze()
+                .shouldHaveExitValue(0).shouldContain(RESTORED_MESSAGE);
     }
 
     @Override

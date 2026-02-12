@@ -67,7 +67,8 @@ public class MXBean implements CracTest {
 
         OutputAnalyzer output = new CracBuilder().engine(CracEngine.SIMULATE)
                 .captureOutput(true)
-                .startCheckpoint().waitForSuccess().outputAnalyzer();
+                .doCheckpointToAnalyze();
+        output.shouldHaveExitValue(0);
 
         long restoreUptime = Long.parseLong(output.firstMatch("UptimeSinceRestore ([0-9-]+)", 1));
         if (restoreUptime < 0 || TIME_TOLERANCE < restoreUptime) {

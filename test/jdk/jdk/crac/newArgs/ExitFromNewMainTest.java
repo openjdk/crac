@@ -51,9 +51,10 @@ public class ExitFromNewMainTest implements CracTest {
         builder.doCheckpoint();
 
         final var out = builder
-            .startRestoreWithArgs(null, List.of(NEW_MAIN_CLASS, Boolean.toString(useExit)))
-            .waitForSuccess().outputAnalyzer();
+            .startRestoreWithArgs(List.of(), List.of(NEW_MAIN_CLASS, Boolean.toString(useExit)))
+            .outputAnalyzer();
 
+        out.shouldHaveExitValue(0);
         out.stdoutShouldContain(RESTORE_NEW_MSG);
         if (useExit) {
             out.stdoutShouldNotContain(RESTORE_OLD_MSG);

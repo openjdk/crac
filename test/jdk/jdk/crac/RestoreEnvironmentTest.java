@@ -24,8 +24,6 @@
 import jdk.test.lib.crac.CracBuilder;
 import jdk.test.lib.crac.CracTest;
 
-import java.io.IOException;
-
 /*
  * @test RestoreEnvironmentTest
  * @summary the test checks that actual environment variables are propagated into a restored process.
@@ -49,7 +47,8 @@ public class RestoreEnvironmentTest implements CracTest {
         builder.doCheckpoint();
         builder.env(TEST_VAR_NAME + 1, AFTER_RESTORE);
         builder.env(TEST_VAR_NAME + 2, NEW_VALUE);
-        builder.doRestore().outputAnalyzer()
+        builder.doRestoreToAnalyze()
+                .shouldHaveExitValue(0)
                 .shouldContain(PREFIX + TEST_VAR_NAME + "0=" + BEFORE_CHECKPOINT)
                 .shouldContain(PREFIX + TEST_VAR_NAME + "1=" + AFTER_RESTORE)
                 .shouldContain(PREFIX + TEST_VAR_NAME + "2=" + NEW_VALUE);
@@ -66,7 +65,7 @@ public class RestoreEnvironmentTest implements CracTest {
 
         for (int i = 0; i < 3; ++i) {
             var testVar = java.lang.System.getenv(TEST_VAR_NAME + i);
-            System.out.println(PREFIX + TEST_VAR_NAME + i + "=" + testVar + "");
+            System.out.println(PREFIX + TEST_VAR_NAME + i + "=" + testVar);
         }
     }
 }

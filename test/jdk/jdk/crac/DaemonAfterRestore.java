@@ -23,12 +23,9 @@
 
 import jdk.crac.*;
 import jdk.test.lib.crac.CracBuilder;
-import jdk.test.lib.crac.CracProcess;
 import jdk.test.lib.crac.CracTest;
 
-import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.TimeUnit;
 
 import static jdk.test.lib.Asserts.assertFalse;
 
@@ -48,24 +45,15 @@ public class DaemonAfterRestore implements CracTest {
     public void test() throws Exception {
         CracBuilder builder = new CracBuilder().captureOutput(true);
 
-        CompletableFuture<?> firstOutputFuture = new CompletableFuture<Void>();
-        CracProcess checkpointProcess = builder.startCheckpoint().watch(
-            outline -> {
-                System.out.println(outline);
-                if (outline.equals(MAIN_THREAD_FINISH)) {
-                    firstOutputFuture.complete(null);
-                }
-            },
-            errline -> {
-                System.err.println("ERROR: " + errline);
-                firstOutputFuture.cancel(false);
-            });
-        firstOutputFuture.get(10, TimeUnit.SECONDS);
-        builder.checkpointViaJcmd(checkpointProcess.pid());
-        checkpointProcess.waitForCheckpointed();
+        try (var checkpointProcess = builder.startCheckpoint()) {
+            checkpointProcess.waitForStdout(MAIN_THREAD_FINISH, false);
+            builder.checkpointViaJcmd(checkpointProcess.pid());
+            checkpointProcess.waitForCheckpointed();
+        }
 
-        builder.startRestore().waitForSuccess()
-            .outputAnalyzer().shouldContain(AFTER_RESTORE_MESSAGE);
+        builder.doRestoreToAnalyze()
+                    .shouldHaveExitValue(0)
+                    .shouldContain(AFTER_RESTORE_MESSAGE);
     }
 
     @Override

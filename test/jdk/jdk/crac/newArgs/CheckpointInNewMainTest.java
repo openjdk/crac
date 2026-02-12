@@ -52,11 +52,10 @@ public class CheckpointInNewMainTest implements CracTest {
         // Checkpoint in the old main
         builder.doCheckpoint();
         // Restore from the old main and checkpoint in the new main
-        builder.startRestoreWithArgs(null, List.of(NEW_MAIN_CLASS)).waitForCheckpointed();
+        builder.startRestoreWithArgs(List.of(), List.of(NEW_MAIN_CLASS)).waitForCheckpointed();
         // Restore from the new main
-        final var out = builder.doRestore().outputAnalyzer();
-
-        out.shouldContain(RESTORE_OLD_MSG).shouldContain(RESTORE_NEW_MSG);
+        builder.doRestoreToAnalyze().shouldHaveExitValue(0)
+                .shouldContain(RESTORE_OLD_MSG).shouldContain(RESTORE_NEW_MSG);
     }
 
     @Override

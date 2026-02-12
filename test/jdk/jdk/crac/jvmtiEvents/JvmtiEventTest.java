@@ -26,7 +26,6 @@ import java.io.File;
 import jdk.crac.Core;
 import jdk.test.lib.crac.CracBuilder;
 import jdk.test.lib.crac.CracEngine;
-import jdk.test.lib.crac.CracProcess;
 import jdk.test.lib.crac.CracTest;
 
  /*
@@ -44,12 +43,10 @@ public class JvmtiEventTest implements CracTest {
 
     @Override
     public void test() throws Exception {
-        CracBuilder builder = new CracBuilder().engine(CracEngine.SIMULATE);
-        builder.vmOption("-agentpath:" + JAVA_LIBRARY_PATH + System.mapLibraryName("CracJvmtiAgent"));
-
-        CracProcess process = builder.captureOutput(true).startCheckpoint();
-        process.waitForSuccess();
-        process.outputAnalyzer()
+        new CracBuilder().engine(CracEngine.SIMULATE).captureOutput(true)
+                .vmOption("-agentpath:" + JAVA_LIBRARY_PATH + System.mapLibraryName("CracJvmtiAgent"))
+                .doCheckpointToAnalyze()
+                .shouldHaveExitValue(0)
                 .shouldContain(AGENT_CALLBACK_BEFORE_CHECKPOINT)
                 .shouldContain(AGENT_CALLBACK_AFTER_RESTORE)
                 .shouldContain(RESTORED_MESSAGE);

@@ -27,7 +27,6 @@ import jdk.test.lib.crac.CracEngine;
 import jdk.test.lib.crac.CracProcess;
 import jdk.test.lib.crac.CracTest;
 import jdk.test.lib.crac.CracTestArg;
-import jdk.test.lib.process.OutputAnalyzer;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -75,8 +74,7 @@ public class PerfMemoryRestoreTest implements CracTest {
             checkMapped(pid, perfdata.toString());
         }
 
-        checkpoint.input().write('\n');
-        checkpoint.input().flush();
+        checkpoint.sendNewline();
         checkpoint.waitForCheckpointed();
         assertFalse(perfdata.toFile().exists());
 
@@ -100,12 +98,11 @@ public class PerfMemoryRestoreTest implements CracTest {
             Thread.sleep(PERFDATA_CREATE_DELAY_MS);
             assertFalse(perfdata.toFile().exists(), "Perf data file exists although we run with -XX:+PerfDisableSharedMem");
         }
-        restored.input().write('\n');
-        restored.input().flush();
-        restored.waitForSuccess();
-        OutputAnalyzer out = restored.outputAnalyzer();
-        out.stderrShouldBeEmpty();
-        out.stdoutShouldBeEmpty();
+        restored.sendNewline();
+        restored.outputAnalyzer()
+                .shouldHaveExitValue(0)
+                .stderrShouldBeEmpty()
+                .stdoutShouldBeEmpty();
     }
 
     private static void waitForFile(Path perfdata) throws InterruptedException {

@@ -298,7 +298,7 @@ public class CracContainerBuilder extends CracBuilderBase<CracContainerBuilder> 
     }
 
     @Override
-    public CracProcess startCheckpoint(List<String> javaPrefix) throws Exception {
+    public CracProcess startCheckpoint(String... javaPrefix) throws Exception {
         if (runContainerDirectly) {
             prepareContainer();
         } else {

@@ -25,7 +25,6 @@
 import jdk.crac.Core;
 import jdk.test.lib.crac.CracBuilder;
 import jdk.test.lib.crac.CracEngine;
-import jdk.test.lib.crac.CracProcess;
 import jdk.test.lib.crac.CracTest;
 import jdk.test.lib.crac.CracTestArg;
 
@@ -53,36 +52,37 @@ public class FlightRecorderJcmdTest extends FlightRecorderTestBase implements Cr
     public void test() throws Exception {
         File jfr = File.createTempFile("flight", ".jfr");
         assertTrue(jfr.delete());
-        CracBuilder builder = new CracBuilder().engine(engine).captureOutput(true);
-        CracProcess first = builder.startCheckpoint();
-        first.waitForStdout(TEST_STARTED);
-        builder.runJcmd(String.valueOf(first.pid()), "JFR.start", "name=xxx", "dumponexit=true", "filename=" + jfr)
-                .shouldHaveExitValue(0)
-                .shouldContain("Started recording");
-        first.input().write('\n');
-        first.input().flush();
-        first.waitForCheckpointed();
-        assertRecording(jfr);
-        CracProcess second = new CracBuilder().engine(engine).captureOutput(true).startRestore();
-        second.waitForStdout(RESTORED_MESSAGE, false);
 
-        File jfrOther = File.createTempFile("other", ".jfr");
-        assertTrue(jfrOther.delete());
-        // CRIU restored with the same PID
-        String restoredPid = null;
-        if (engine == CracEngine.CRIU) {
-            restoredPid = String.valueOf(first.pid());
-        } else {
-            fail("Unexpected engine " + engine);
+        String firstPid;
+        try (var first = new CracBuilder().engine(engine).captureOutput(true).startCheckpoint()) {
+            firstPid = String.valueOf(first.pid());
+            first.waitForStdout(TEST_STARTED, true);
+            new CracBuilder().runJcmd(firstPid, "JFR.start", "name=xxx", "dumponexit=true", "filename=" + jfr)
+                    .shouldHaveExitValue(0)
+                    .shouldContain("Started recording");
+            first.sendNewline();
+            first.waitForCheckpointed();
+            assertRecording(jfr);
         }
-        builder.runJcmd(restoredPid, "JFR.dump", "name=xxx", "filename=" + jfrOther)
-                .shouldHaveExitValue(0)
-                .shouldContain("Dumped recording \"xxx\"");
-        assertRecording(jfrOther);
-        second.input().write('\n');
-        second.input().flush();
-        second.waitForSuccess();
-        assertRecording(jfr);
+
+        try (var second = new CracBuilder().engine(engine).captureOutput(true).startRestore()) {
+            second.waitForStdout(RESTORED_MESSAGE, false);
+
+            File jfrOther = File.createTempFile("other", ".jfr");
+            assertTrue(jfrOther.delete());
+            // CRIU restored with the same PID
+            String restoredPid = switch (engine) {
+                case CracEngine.CRIU -> firstPid;
+                default -> throw new IllegalArgumentException("Unexpected engine " + engine);
+            };
+            new CracBuilder().runJcmd(restoredPid, "JFR.dump", "name=xxx", "filename=" + jfrOther)
+                    .shouldHaveExitValue(0)
+                    .shouldContain("Dumped recording \"xxx\"");
+            assertRecording(jfrOther);
+            second.sendNewline();
+            second.waitForSuccess();
+            assertRecording(jfr);
+        }
     }
 
     @Override

@@ -22,7 +22,6 @@
  */
 
 import jdk.test.lib.crac.*;
-import jdk.test.lib.process.OutputAnalyzer;
 
 /*
  * @test id=NAMED
@@ -110,9 +109,7 @@ public class SimpleCPUFeaturesTest implements CracTest {
         if (glibcTunables != null && !"--".equals(glibcTunables)) {
             builder.env("GLIBC_TUNABLES", glibcTunables);
         }
-        CracProcess process = builder.startPlain();
-        process.waitFor();
-        OutputAnalyzer oa = process.outputAnalyzer();
+        final var oa = builder.doPlainToAnalyze();
         if (error == null) {
             oa.shouldHaveExitValue(0)
                     .stdoutShouldContain(SUCCESS);

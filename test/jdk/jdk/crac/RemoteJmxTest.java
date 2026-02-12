@@ -28,15 +28,12 @@ import jdk.crac.management.*;
 
 import jdk.test.lib.crac.CracBuilder;
 import jdk.test.lib.crac.CracEngine;
-import jdk.test.lib.crac.CracProcess;
 import jdk.test.lib.crac.CracTest;
 import jdk.test.lib.crac.CracTestArg;
 
 import java.io.IOException;
 import java.util.HashMap;
 import java.util.Map;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.TimeUnit;
 import javax.management.JMX;
 import javax.management.MalformedObjectNameException;
 import javax.management.ObjectName;
@@ -72,36 +69,19 @@ public class RemoteJmxTest implements CracTest {
             javaOptions(portBefore).forEach(builder::javaOption);
         }
 
-        CracProcess process = builder.startCheckpoint();
-        try {
-            final var bootedFuture = new CompletableFuture<>();
-            final var restoredFuture = new CompletableFuture<>();
-            process.watch(
-                    (line) -> {
-                        System.out.println("[CHILD STDOUT] " + line);
-                        if (!bootedFuture.isDone()) {
-                            if (BOOTED.equals(line)) bootedFuture.complete(null);
-                        } else if (!restoredFuture.isDone()) {
-                            if (RESTORED.equals(line)) restoredFuture.complete(null);
-                        }
-                    },
-                    (line) -> System.out.println("[CHILD STDERR] " + line)
-            );
-
-            bootedFuture.get(30, TimeUnit.SECONDS);
+        try (var process = builder.startCheckpoint();) {
+            process.waitForStdout(BOOTED, true);
             if (!NONE.equals(portBefore)) {
                 assertEquals(-1L, getUptimeFromRestoreFromJmx(portBefore));
             }
             process.sendNewline();
 
-            restoredFuture.get(30, TimeUnit.SECONDS);
+            process.waitForStdout(RESTORED, false /* skip checkpoint log */);
             String currentPort = NONE.equals(portAfter) ? portBefore : portAfter;
             assertGreaterThanOrEqual(getUptimeFromRestoreFromJmx(currentPort), 0L);
             process.sendNewline();
 
             process.waitForSuccess();
-        } finally {
-            process.destroyForcibly();
         }
     }
 

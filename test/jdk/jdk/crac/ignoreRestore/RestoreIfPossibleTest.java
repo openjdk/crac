@@ -55,17 +55,18 @@ public class RestoreIfPossibleTest {
             .forwardClasspathOnRestore(true)
             .captureOutput(true);
         if (makeRestorePossible) {
-            final var checkpointProcess = builder.main(Main.class).args("true").startCheckpoint();
-            checkpointProcess.waitForCheckpointed();
-            final var out = checkpointProcess.outputAnalyzer();
-            out.stdoutShouldContain(WARMUP_MSG).stdoutShouldNotContain(MAIN_MSG);
-        } else if (Files.exists(builder.imageDir())) { // Existance depends on the order of @run tags
+            try (var checkpointProcess = builder.main(Main.class).args("true").startCheckpoint()) {
+                checkpointProcess.waitForCheckpointed();
+                final var out = checkpointProcess.outputAnalyzer();
+                out.stdoutShouldContain(WARMUP_MSG).stdoutShouldNotContain(MAIN_MSG);
+            }
+        } else if (Files.exists(builder.imageDir())) { // Existence depends on the order of @run tags
             FileUtils.deleteFileTreeWithRetry(builder.imageDir());
         }
 
-        final var out = builder.startRestoreWithArgs(null, List.of(Main.class.getName(), "false"))
-            .waitForSuccess().outputAnalyzer();
-        out.stdoutShouldNotContain(WARMUP_MSG);
+        final var out = builder.startRestoreWithArgs(List.of(), List.of(Main.class.getName(), "false"))
+            .outputAnalyzer();
+        out.shouldHaveExitValue(0).stdoutShouldNotContain(WARMUP_MSG);
 
         // Check the count to ensure a new main is not launched on successful restore
         final var mainMsgCount = Collections.frequency(out.stdoutAsLines(), MAIN_MSG);

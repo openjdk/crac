@@ -34,9 +34,7 @@ import jdk.test.lib.util.FileUtils;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.concurrent.LinkedBlockingQueue;
 
-import static jdk.test.lib.Asserts.assertEquals;
 import static jdk.test.lib.Asserts.assertTrue;
 
 /**
@@ -62,14 +60,7 @@ public class JcmdArgsTest implements CracTest {
         }
 
         CracProcess process = new CracBuilder().engine(CracEngine.SIMULATE).captureOutput(true).startCheckpoint();
-        var queue = new LinkedBlockingQueue<String>();
-        process.watch(line -> {
-            System.out.println(line);
-            if (line.startsWith("TEST:")) {
-                queue.add(line);
-            }
-        }, System.err::println);
-        assertEquals(READY, queue.take());
+        process.waitForStdout(READY, false);
         String[] args;
         if (useFile) {
             Path metricsPath = createTemp("metrics", "dummy\t=45\n   foo.bar = 123.0 \n");
@@ -79,9 +70,8 @@ public class JcmdArgsTest implements CracTest {
             args = new String[] { "metrics=foo.bar=123", "labels=xxx=yyy" };
         }
         new CracBuilder().engine(CracEngine.SIMULATE).checkpointViaJcmd(process.pid(), args);
-        assertEquals(CHECKPOINTED, queue.take());
-        process.input().write('\n');
-        process.input().flush();
+        process.waitForStdout(CHECKPOINTED, false);
+        process.sendNewline();
         process.waitForSuccess();
 
         assertTrue(Files.readAllLines(imageDir.resolve("score")).stream()

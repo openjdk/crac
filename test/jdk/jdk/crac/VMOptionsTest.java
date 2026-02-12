@@ -27,8 +27,8 @@ import com.sun.management.VMOption;
 import jdk.crac.*;
 import jdk.test.lib.Utils;
 import jdk.test.lib.crac.CracBuilder;
-import jdk.test.lib.crac.CracProcess;
 import jdk.test.lib.crac.CracTest;
+import jdk.test.lib.process.OutputAnalyzer;
 
 import java.lang.management.ManagementFactory;
 import java.nio.file.Files;
@@ -113,39 +113,39 @@ public class VMOptionsTest implements CracTest {
         // Only restore-settable options => should succeed
         builder.clearVmOptions();
         setVmOptions(builder, OPTIONS_RESTORE);
-        checkRestoreOutput(builder.doRestore());
+        checkRestoreOutput(builder.doRestoreToAnalyze());
 
         // Adding a non-restore-settable option => should fail
         builder.vmOption("-XX:NativeMemoryTracking=summary");
-        builder.startRestore().outputAnalyzer().shouldHaveExitValue(1).stderrShouldContain(
+        builder.doRestoreToAnalyze().shouldHaveExitValue(1).stderrShouldContain(
             "VM option 'NativeMemoryTracking' is not restore-settable and is not available on restore"
         );
 
         // Non-restore-settable option from before + allowing restore to fail => should succeed
         builder.vmOption("-XX:+CRaCIgnoreRestoreIfUnavailable");
-        checkRestoreOutput(builder.doRestore());
+        checkRestoreOutput(builder.doRestoreToAnalyze());
 
         // Only restore-settable options coming from a settings file => should succeed
         builder.clearVmOptions();
         builder.vmOption("-XX:Flags=" + createSettingsFile(OPTIONS_RESTORE));
-        checkRestoreOutput(builder.doRestore());
+        checkRestoreOutput(builder.doRestoreToAnalyze());
 
         // Only restore-settable options coming from a VM options file => should succeed
         builder.clearVmOptions();
         builder.vmOption("-XX:VMOptionsFile=" + createVMOptionsFile(OPTIONS_RESTORE));
-        checkRestoreOutput(builder.doRestore());
+        checkRestoreOutput(builder.doRestoreToAnalyze());
 
         // Unrecognized option => should fail
         builder.clearVmOptions();
         setVmOptions(builder, OPTIONS_RESTORE);
         builder.vmOption("-XX:SomeNonExistentOption=abc");
-        builder.startRestore().outputAnalyzer().shouldHaveExitValue(1).stderrShouldContain(
+        builder.doRestoreToAnalyze().shouldHaveExitValue(1).stderrShouldContain(
             "Unrecognized VM option 'SomeNonExistentOption=abc'"
         );
 
         // Unrecognized option from before + IgnoreUnrecognizedVMOptions => should succeed
         builder.vmOption("-XX:+IgnoreUnrecognizedVMOptions");
-        checkRestoreOutput(builder.doRestore());
+        checkRestoreOutput(builder.doRestoreToAnalyze());
     }
 
     @Override
@@ -191,8 +191,9 @@ public class VMOptionsTest implements CracTest {
         }
     }
 
-    private static void checkRestoreOutput(CracProcess restored) throws Exception {
-        restored.outputAnalyzer()
+    private static void checkRestoreOutput(OutputAnalyzer output) throws Exception {
+        output
+            .shouldHaveExitValue(0)
             .shouldNotContain("[warning]")
             .shouldNotContain("[error]")
             .stdoutShouldContain(RESTORE_MSG);

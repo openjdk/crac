@@ -42,9 +42,8 @@ import java.util.concurrent.CountDownLatch;
 public class OpenSocketDetectionTest implements CracTest {
     @Override
     public void test() throws Exception {
-        CracProcess cp = new CracBuilder().engine(CracEngine.SIMULATE).captureOutput(true)
-                .startCheckpoint();
-        cp.outputAnalyzer()
+        new CracBuilder().engine(CracEngine.SIMULATE).captureOutput(true)
+                .doCheckpointToAnalyze()
                 .shouldHaveExitValue(1)
                 .shouldMatch("CheckpointOpenSocketException: [A-Za-z0-9.$]+\\[addr=[A-Za-z0-9/:.]+,port=[0-9]+,localport=[0-9]+\\]");
     }

@@ -24,7 +24,6 @@
 import jdk.crac.Core;
 import jdk.internal.crac.OpenResourcePolicies;
 import jdk.test.lib.crac.CracBuilder;
-import jdk.test.lib.crac.CracProcess;
 import jdk.test.lib.crac.CracTest;
 import jdk.test.lib.crac.CracTestArg;
 
@@ -32,7 +31,6 @@ import java.io.FileReader;
 import java.io.FileWriter;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.concurrent.CountDownLatch;
 
 import static jdk.test.lib.Asserts.assertEquals;
 
@@ -63,26 +61,17 @@ public class ReopenNamedFifoTest extends FDPolicyTestBase implements CracTest {
         CracBuilder builder = new CracBuilder()
                 .javaOption(OpenResourcePolicies.PROPERTY, config.toString())
                 .args(CracTest.args(fifo));
-        CracProcess cp = builder.startCheckpoint();
 
-        try (var writer = new FileWriter(fifo)) {
+        try (var cp = builder.startCheckpoint(); var writer = new FileWriter(fifo)) {
             writer.write("Hello ");
             writer.flush();
             cp.waitForCheckpointed();
-            CracProcess rp = builder.captureOutput(true).startRestore();
-            CountDownLatch latch = new CountDownLatch(1);
-            rp.watch(output -> {
-                if (output.contains("RESTORED")) {
-                    latch.countDown();
-                }
-            }, error -> {
-                System.err.println(error);
-                latch.countDown();
-            });
-            latch.await();
-            writer.write("world!");
-            writer.flush();
-            rp.waitForSuccess();
+            try (var rp = builder.captureOutput(true).startRestore()) {
+                rp.waitForStdout("RESTORED", false);
+                writer.write("world!");
+                writer.flush();
+                rp.waitForSuccess();
+            }
         } finally {
             Files.deleteIfExists(pipePath);
             Files.deleteIfExists(tempDirectory);

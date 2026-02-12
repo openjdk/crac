@@ -194,16 +194,23 @@ public abstract class CracBuilderBase<T extends CracBuilderBase<T>> {
     }
 
     public void doCheckpoint(String... javaPrefix) throws Exception {
-        startCheckpoint(javaPrefix).waitForCheckpointed();
+        try (var process = startCheckpoint(javaPrefix)) {
+            if (engine == null || engine == CracEngine.CRIU) {
+                process.waitForCheckpointed();
+            } else {
+                process.waitForSuccess();
+            }
+        }
+    }
+
+    public OutputAnalyzer doCheckpointToAnalyze(String... javaPrefix) throws Exception {
+        try (var process = startCheckpoint(javaPrefix)) {
+            return process.outputAnalyzer();
+        }
     }
 
     public CracProcess startCheckpoint(String... javaPrefix) throws Exception {
-        List<String> list = javaPrefix.length == 0 ? null : Arrays.asList(javaPrefix);
-        return startCheckpoint(list);
-    }
-
-    public CracProcess startCheckpoint(List<String> javaPrefix) throws Exception {
-        List<String> cmd = prepareCommand(javaPrefix, false);
+        List<String> cmd = prepareCommand(false, javaPrefix);
         if (imageDir != null) {
             cmd.add("-XX:CRaCCheckpointTo=" + imageDir);
         }
@@ -224,27 +231,28 @@ public abstract class CracBuilderBase<T extends CracBuilderBase<T>> {
         }
     }
 
-    public CracProcess doRestore(String... javaPrefix) throws Exception {
-        return startRestore(javaPrefix).waitForSuccess();
+    public void doRestore(String... javaPrefix) throws Exception {
+        try (var process = startRestore(javaPrefix)) {
+            process.waitForSuccess();
+        }
+    }
+
+    public OutputAnalyzer doRestoreToAnalyze(String... javaPrefix) throws Exception {
+        try (var process = startRestore(javaPrefix)) {
+            return process.outputAnalyzer();
+        }
     }
 
     public CracProcess startRestore(String... javaPrefix) throws Exception {
-        List<String> list = javaPrefix.length == 0 ? null : Arrays.asList(javaPrefix);
-        return startRestore(list);
-    }
-
-    public CracProcess startRestore(List<String> javaPrefix) throws Exception {
-        return startRestoreWithArgs(javaPrefix, null);
+        return startRestoreWithArgs(Arrays.asList(javaPrefix), List.of());
     }
 
     public CracProcess startRestoreWithArgs(List<String> javaPrefix, List<String> args) throws Exception {
-        List<String> cmd = prepareCommand(javaPrefix, true);
+        List<String> cmd = prepareCommand(true, javaPrefix.toArray(new String[0]));
         if (imageDir != null) {
             cmd.add("-XX:CRaCRestoreFrom=" + imageDir);
         }
-        if (null != args) {
-            cmd.addAll(args);
-        }
+        cmd.addAll(args);
         log("Starting restored process:");
         log(String.join(" ", cmd));
         return new CracProcess(this, cmd);
@@ -283,12 +291,20 @@ public abstract class CracBuilderBase<T extends CracBuilderBase<T>> {
         return Utils.TEST_CLASS_PATH;
     }
 
-    public CracProcess doPlain() throws IOException, InterruptedException {
-        return startPlain().waitForSuccess();
+    public void doPlain() throws IOException, InterruptedException {
+        try (var process = startPlain()) {
+            process.waitForSuccess();
+        }
     }
 
-    private List<String> prepareCommand(List<String> javaPrefix, boolean isRestore) {
-        List<String> cmd = new ArrayList<>(javaPrefix != null ? javaPrefix : getDefaultJavaPrefix());
+    public OutputAnalyzer doPlainToAnalyze() throws IOException, InterruptedException {
+        try (var process = startPlain()) {
+            return process.outputAnalyzer();
+        }
+    }
+
+    private List<String> prepareCommand(boolean isRestore, String... javaPrefix) {
+        List<String> cmd = new ArrayList<>(javaPrefix.length > 0 ? Arrays.asList(javaPrefix) : getDefaultJavaPrefix());
         cmd.add("-ea");
         if (engine != null) {
             cmd.add("-XX:CRaCEngine=" + engine.engine);

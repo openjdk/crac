@@ -81,7 +81,7 @@ public class WakeupByCloseTest implements CracTest {
         if (skipCR) {
             builder.doPlain();
         } else {
-            builder.startCheckpoint().waitForSuccess();
+            builder.doCheckpoint();
         }
     }
 

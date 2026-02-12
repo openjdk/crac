@@ -32,10 +32,7 @@ import jdk.test.lib.util.FileUtils;
 
 import java.io.File;
 import java.lang.reflect.Method;
-import java.nio.file.Path;
-import java.util.concurrent.Callable;
 
-import static jdk.test.lib.Asserts.assertEquals;
 import static jdk.test.lib.Asserts.assertTrue;
 
 /**
@@ -78,14 +75,14 @@ public class CheckpointRestorePathTest implements CracTest {
 
     void checkNotConfigured(CracBuilder builder) throws Exception {
         builder.captureOutput(true)
-                .startCheckpoint().outputAnalyzer()
+                .doCheckpointToAnalyze()
                 .shouldHaveExitValue(1)
                 .stderrShouldContain("C/R is not configured");
     }
 
     void testDeep() throws Exception {
         new CracBuilder().engine(CracEngine.SIMULATE).imageDir(DEEPLY_NESTED_CR).captureOutput(true)
-                .startCheckpoint().outputAnalyzer()
+                .doCheckpointToAnalyze()
                 .shouldHaveExitValue(1)
                 // unified logging going to standard output rather than stderr by default
                 .stdoutShouldContain("Cannot create CRaCCheckpointTo=" + DEEPLY_NESTED_CR);
@@ -95,14 +92,14 @@ public class CheckpointRestorePathTest implements CracTest {
         // Empty CRaCRestoreFrom should result in default java usage output
         // as if the VM option was missing (we won't test that case)
         new CracBuilder().engine(CracEngine.PAUSE).imageDir("").captureOutput(true)
-                .startRestore().outputAnalyzer()
+                .doRestoreToAnalyze()
                 .shouldHaveExitValue(1)
                 .stderrShouldContain("Usage: java");
     }
 
     void testRestoreNoDir() throws Exception {
         new CracBuilder().engine(CracEngine.PAUSE).imageDir(NON_EXISTENT_CR).captureOutput(true)
-                .startRestore().outputAnalyzer()
+                .doRestoreToAnalyze()
                 .shouldHaveExitValue(1)
                 .stdoutShouldContain("Cannot open CRaCRestoreFrom=" + NON_EXISTENT_CR)
                 .stdoutShouldContain("Failed to restore from " + NON_EXISTENT_CR);
@@ -125,7 +122,7 @@ public class CheckpointRestorePathTest implements CracTest {
         if (skipCpuFeatures) {
             builder.vmOption("-XX:+UnlockExperimentalVMOptions").vmOption("-XX:CheckCPUFeatures=skip");
         }
-        builder.captureOutput(true).startRestore().outputAnalyzer()
+        builder.captureOutput(true).doRestoreToAnalyze()
                 .shouldHaveExitValue(1)
                 .stderrShouldContain(errMessage);
     }

@@ -25,7 +25,6 @@ import jdk.test.lib.Container;
 import jdk.test.lib.Platform;
 import jdk.test.lib.containers.docker.Common;
 import jdk.test.lib.crac.CracContainerBuilder;
-import jdk.test.lib.crac.CracProcess;
 import jdk.test.lib.crac.CracTest;
 
 import java.nio.file.Files;
@@ -33,8 +32,8 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
-import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.Condition;
 import java.util.concurrent.locks.LockSupport;
@@ -75,37 +74,28 @@ public class TimedWaitingTest implements CracTest {
 
             Files.writeString(bootIdFile, "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx\n");
             // We need to preload the library before checkpoint
-            CracProcess checkpointed = builder.startCheckpoint(Container.ENGINE_COMMAND, "exec",
+            try (var checkpointed = builder.startCheckpoint(Container.ENGINE_COMMAND, "exec",
                     "-e", "LD_PRELOAD=/opt/path-mapping-quiet.so",
                     "-e", "PATH_MAPPING=/proc/sys/kernel/random/boot_id:/fake_boot_id",
                     CracContainerBuilder.CONTAINER_NAME,
                     "unshare", "--fork", "--time", "--monotonic", "86400", "--boottime", "86400",
-                    CracContainerBuilder.DOCKER_JAVA);
-            CountDownLatch latch = new CountDownLatch(1);
-            checkpointed.watch(out -> {
-                System.out.println(out);
-                if (WAITING.equals(out)) {
-                    latch.countDown();
-                }
-            }, System.err::println);
-            latch.await();
-            builder.checkpointViaJcmd();
-            checkpointed.waitForCheckpointed();
+                    CracContainerBuilder.DOCKER_JAVA)) {
+                checkpointed.waitForStdout(WAITING, false);
+                builder.checkpointViaJcmd();
+                checkpointed.waitForCheckpointed();
+            }
 
             Files.writeString(bootIdFile, "yyyyyyyy-yyyy-yyyy-yyyy-yyyyyyyyyyyy\n");
 
-            CracProcess restore = builder.startRestore();
-            CompletableFuture<Void> future = new CompletableFuture<>();
-            new Thread(() -> {
-                try {
-                    restore.waitForSuccess();
-                    System.err.print(restore.outputAnalyzer().getStderr());
-                    future.complete(null);
-                } catch (Throwable t) {
-                    future.completeExceptionally(t);
-                }
-            }).start();
-            future.get(10, TimeUnit.SECONDS);
+            try (var restore = builder.startRestore(); var executor = Executors.newSingleThreadExecutor()) {
+                executor.submit(() -> {
+                    try {
+                        restore.waitForSuccess();
+                    } catch (Throwable t) {
+                        throw new RuntimeException(t);
+                    }
+                }).get(10, TimeUnit.SECONDS);
+            }
         } finally {
             builder.ensureContainerKilled();
             assertTrue(bootIdFile.toFile().delete());
@@ -141,9 +131,9 @@ public class TimedWaitingTest implements CracTest {
         List<Thread> threads = new ArrayList<>();
         CountDownLatch latch = new CountDownLatch(6);
 
-        startThread("Thread.sleep", threads, latch, () -> {
-            timedWait(() -> Thread.sleep(WAIT_TIME_MILLIS), exceptions, false);
-        });
+        startThread("Thread.sleep", threads, latch, () ->
+            timedWait(() -> Thread.sleep(WAIT_TIME_MILLIS), exceptions, false)
+        );
 
         startThread("Thread.join", threads, latch, () -> {
             Thread daemon = new Thread(() -> {

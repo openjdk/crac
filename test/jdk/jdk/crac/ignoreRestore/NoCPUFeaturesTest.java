@@ -47,8 +47,9 @@ public class NoCPUFeaturesTest {
         // Create an empty image without CPU features data
         Files.createDirectory(builder.imageDir());
 
-        builder.startRestoreWithArgs(null, List.of(Main.class.getName(), "false"))
-            .waitForSuccess().outputAnalyzer()
+        builder.startRestoreWithArgs(List.of(), List.of(Main.class.getName(), "false"))
+            .outputAnalyzer()
+            .shouldHaveExitValue(0)
             .shouldContain("cannot open cr/tags in mode r").shouldContain(MAIN_MSG);
     }
 

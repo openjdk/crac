@@ -25,10 +25,13 @@
  */
 #include <cerrno>
 #include <cstdio>
+#include <cstring>
 #include <spawn.h>
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <unistd.h>
+
+#include "crcommon.hpp"
 
 static constexpr char SLASH = '/';
 static constexpr const char SEP[] = { SLASH, '\0' };
@@ -56,7 +59,7 @@ char **get_environ() {
 bool exec_child_process_and_wait(const char *path, char * const argv[], char * const env[]) {
   pid_t pid;
   if (posix_spawn(&pid, path, nullptr, nullptr, argv, env) != 0) {
-    perror("Cannot spawn cracengine");
+    LOG("Cannot spawn cracengine: %s", strerror(errno));
     return false;
   }
 

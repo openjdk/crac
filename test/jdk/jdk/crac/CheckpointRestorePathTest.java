@@ -115,7 +115,7 @@ public class CheckpointRestorePathTest implements CracTest {
     }
 
     void testRestoreNoImageSkipCpuFeaturesCheck() throws Exception {
-        testRestoreNoImage(true, "pauseengine: fopen pidfile: No such file or directory");
+        testRestoreNoImage(true, "simengine: fopen pidfile: No such file or directory");
     }
 
     void testRestoreNoImage(boolean skipCpuFeatures, String errMessage) throws Exception {

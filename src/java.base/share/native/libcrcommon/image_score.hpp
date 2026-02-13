@@ -29,8 +29,8 @@
 #include <cstdlib>
 #include <cstdint>
 
-#include "crexec.hpp"
-#include "crlib/crlib_image_constraints.h"
+#include "crcommon.hpp"
+#include "crlib/crlib_image_score.h"
 #include "linkedlist.hpp"
 
 class ImageScore {
@@ -59,14 +59,14 @@ public:
   bool set_score(const char* name, double value) {
     char* name_copy = strdup(name);
     if (name_copy == nullptr) {
-      fprintf(stderr, CREXEC "Cannot allocate copy of metric name\n");
+      LOG("Cannot allocate copy of metric name");
       return false;
     }
     // Truncate metric name
     char *newline = strchr(name_copy, '\n');
     if (newline != nullptr) {
       *newline = '\0';
-      fprintf(stderr, CREXEC "warning: metric name '%s' contains a newline, truncating to '%s'\n", name, name_copy);
+      LOG("warning: metric name '%s' contains a newline, truncating to '%s'", name, name_copy);
     }
     // We don't have expandable hashtable, so we'll sort out duplicates
     // in persist() when we have all the keys.

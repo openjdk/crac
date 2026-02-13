@@ -1,6 +1,6 @@
 /*
- * Copyright (c) 2021, Azul Systems, Inc. All rights reserved.
- * Copyright (c) 2021, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2021, 2026, Azul Systems, Inc. All rights reserved.
+ * Copyright (c) 2021, 2026, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -23,49 +23,43 @@
  * or visit www.oracle.com if you need additional information or have any
  * questions.
  */
-
-#include <string.h>
-#include <stdio.h>
-#include <stdlib.h>
-#ifdef LINUX
+#include <errno.h>
 #include <signal.h>
-#include <unistd.h>
-#endif // LINUX
+#include <string.h>
 
-#define SIMENGINE "simengine: "
+#include "crcommon.hpp"
 
+// pause is supported only on Linux.
+// OSX does not define SIGRTMIN nor sigwaitinfo
+// FIXME: it would be better to implement this using another (standard) IPC mechanism, e.g. named pipe
 #ifdef LINUX
-#define RESTORE_SIGNAL   (SIGRTMIN + 2)
 
-static int kickjvm(pid_t jvm, int code) {
+#define RESTORE_SIGNAL (SIGRTMIN + 2)
+
+int kickjvm(pid_t jvm, int code) {
     union sigval sv = { .sival_int = code };
     if (-1 == sigqueue(jvm, RESTORE_SIGNAL, sv)) {
-        perror(SIMENGINE "sigqueue");
+        LOG("sigqueue: %s", strerror(errno));
         return 1;
     }
     return 0;
 }
-#endif // LINUX
 
-int main(int argc, char *argv[]) {
-    char* action = argv[1];
+int waitjvm() {
+    siginfo_t info;
+    sigset_t waitmask;
+    sigemptyset(&waitmask);
+    sigaddset(&waitmask, RESTORE_SIGNAL);
 
-    if (!strcmp(action, "checkpoint")) {
-#ifdef LINUX
-        const char* argsidstr = getenv("CRAC_NEW_ARGS_ID");
-        int argsid = argsidstr ? atoi(argsidstr) : 0;
-        pid_t jvm = getppid();
-        kickjvm(jvm, argsid);
-#endif // LINUX
-    } else if (!strcmp(action, "restore")) {
-        fprintf(stderr,
-            SIMENGINE "restore is not supported as a separate action by this engine, "
-            "it always restores a process immediately after checkpointing it\n");
-        return 1;
-    } else {
-        fprintf(stderr, SIMENGINE "unknown action: %s\n", action);
-        return 1;
+    int sig;
+    do {
+        sig = sigwaitinfo(&waitmask, &info);
+    } while (sig == -1 && errno == EINTR);
+
+    if (info.si_code != SI_QUEUE) {
+        return -1;
     }
-
-    return 0;
+    return info.si_int;
 }
+
+#endif // LINUX

@@ -106,17 +106,6 @@ endif
 ################################################################################
 
 ifeq ($(OPENJDK_TARGET_OS), linux)
-  $(eval $(call SetupJdkExecutable, BUILD_PAUSEENGINE, \
-      NAME := pauseengine, \
-      SRC := $(TOPDIR)/src/$(MODULE)/linux/native/pauseengine, \
-      INCLUDE_FILES := pauseengine.c, \
-      OPTIMIZATION := LOW, \
-      CFLAGS := $(CFLAGS_JDKEXE), \
-      LDFLAGS := $(LDFLAGS_JDKEXE), \
-      OUTPUT_DIR := $(SUPPORT_OUTPUTDIR)/modules_libs/$(MODULE), \
-  ))
-  TARGETS += $(BUILD_PAUSEENGINE)
-
   $(eval $(call SetupJdkExecutable, BUILD_CRIUENGINE, \
       NAME := criuengine, \
       SRC := $(TOPDIR)/src/$(MODULE)/linux/native/criuengine, \
@@ -136,17 +125,6 @@ ifeq ($(call isTargetOs, macosx linux windows), true)
   else
     CRAC_ENGINE_DIR = modules_libs
   endif
-
-  $(eval $(call SetupJdkExecutable, BUILD_SIMENGINE, \
-      NAME := simengine, \
-      SRC := $(TOPDIR)/src/$(MODULE)/share/native/simengine, \
-      INCLUDE_FILES := simengine.c, \
-      OPTIMIZATION := LOW, \
-      CFLAGS := $(CFLAGS_JDKEXE), \
-      LDFLAGS := $(LDFLAGS_JDKEXE), \
-      OUTPUT_DIR := $(SUPPORT_OUTPUTDIR)/$(CRAC_ENGINE_DIR)/$(MODULE), \
-  ))
-  TARGETS += $(BUILD_SIMENGINE)
 
   ifneq ($(USE_CRIU_CRAC),)
 

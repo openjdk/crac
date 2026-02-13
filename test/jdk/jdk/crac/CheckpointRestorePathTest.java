@@ -24,6 +24,7 @@
  */
 
 import jdk.crac.Core;
+import jdk.test.lib.Platform;
 import jdk.test.lib.crac.CracBuilder;
 import jdk.test.lib.crac.CracEngine;
 import jdk.test.lib.crac.CracTest;
@@ -106,7 +107,8 @@ public class CheckpointRestorePathTest implements CracTest {
     }
 
     void testRestoreNoImage() throws Exception {
-        testRestoreNoImage(false, "cannot open cr/tags");
+        // TODO: make the engine check pidfile before tags to have the same message regardless of CPU features check
+        testRestoreNoImage(false, Platform.isX64() ? "cannot open cr/tags" : "fopen pidfile: No such file or directory");
     }
 
     void testRestoreNoImageSkipCpuFeaturesCheck() throws Exception {

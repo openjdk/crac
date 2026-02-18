@@ -96,9 +96,9 @@ public class CracProcess implements Closeable {
                             }
                         }
                     }
-                    final var nanoTime = System.nanoTime();
-                    if (nanoTime < nanoTimeThreshold) {
-                        lines.wait(TimeUnit.NANOSECONDS.toMillis(nanoTimeThreshold - nanoTime));
+                    final var waitTime = TimeUnit.NANOSECONDS.toMillis(nanoTimeThreshold - System.nanoTime());
+                    if (waitTime > 0) {
+                        lines.wait(waitTime);
                     }
                 }
             }

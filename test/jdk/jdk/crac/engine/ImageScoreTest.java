@@ -49,8 +49,6 @@ public class ImageScoreTest implements CracTest {
     private static final String JDK_CRAC_GLOBAL_CONTEXT_SIZE = "jdk.crac.globalContext.size";
     private static final String TEST_SCORE_AAA = "test.score.aaa";
     private static final String TEST_SCORE_BBB = "test.score.bbb";
-    public static final String RESTORE1 = "RESTORE1";
-    public static final String RESTORE2 = "RESTORE2";
 
     @CracTestArg
     boolean usePerfData;
@@ -80,15 +78,17 @@ public class ImageScoreTest implements CracTest {
             assertEquals(42.0   , getScore(score1, TEST_SCORE_BBB));
 
             builder.doRestore();
-            process.waitForStdout(RESTORE1, false);
-            builder.doRestore();
-            process.waitForStdout(RESTORE2, false);
+            process.clearPausePid();
+            process.sendNewline();
+            process.waitForPausePid();
 
             List<String> score2 = Files.readAllLines(builder.imageDir().resolve("score"));
             int context2 = getScore(score2, JDK_CRAC_GLOBAL_CONTEXT_SIZE).intValue();
             assertEquals(context1 + 1, context2);
             assertEquals(456.789, getScore(score2, TEST_SCORE_AAA));
             assertTrue(score2.stream().noneMatch(line -> line.startsWith(TEST_SCORE_BBB)));
+
+            builder.doRestore();
             process.waitForSuccess();
         }
     }
@@ -107,9 +107,10 @@ public class ImageScoreTest implements CracTest {
         Score.setScore(TEST_SCORE_BBB, 42);
         Core.checkpointRestore();
 
+        assertEquals(System.in.read(), (int) '\n');
+
         Score.resetAll();
         Score.setScore(TEST_SCORE_AAA, 456.789);
-        System.out.println(RESTORE1);
         Resource dummy = new Resource() {
             @Override
             public void beforeCheckpoint(Context<? extends Resource> context) {
@@ -123,6 +124,5 @@ public class ImageScoreTest implements CracTest {
         Core.checkpointRestore();
 
         Reference.reachabilityFence(dummy);
-        System.out.println(RESTORE2);
     }
 }

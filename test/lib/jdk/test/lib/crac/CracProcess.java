@@ -47,6 +47,8 @@ import java.util.stream.Stream;
 import static jdk.test.lib.Asserts.*;
 
 public class CracProcess implements Closeable {
+    private static final String PAUSE_PID_FILE = "pid";
+
     private final Process process;
 
     // Saved from CracBuilderBase because that can be modified
@@ -176,15 +178,15 @@ public class CracProcess implements Closeable {
     }
 
     public void waitForPausePid() throws IOException, InterruptedException {
-        assertEquals(CracEngine.PAUSE, engine, "Pause PID file created only with pauseengine");
+        assertEquals(CracEngine.PAUSE, engine, "Pause PID file is created only with pauseengine");
 
         // (at least on Windows) we need to wait to avoid os::prepare_checkpoint() interference with mkdir/rmdir calls
         Thread.sleep(500);
 
         try (WatchService watcher = FileSystems.getDefault().newWatchService()) {
             Path absImageDir = imageDir.toAbsolutePath();
-            waitForFileCreated(watcher, absImageDir.getParent(), path -> "cr".equals(path.toFile().getName()));
-            waitForFileCreated(watcher, absImageDir, path -> "pid".equals(path.toFile().getName()));
+            waitForFileCreated(watcher, absImageDir.getParent(), path -> path.getFileName().equals(imageDir.getFileName()));
+            waitForFileCreated(watcher, absImageDir, path -> path.getFileName().toString().equals(PAUSE_PID_FILE));
         }
     }
 
@@ -352,5 +354,10 @@ public class CracProcess implements Closeable {
             System.out.println("Exception thrown while dumping the app");
             e.printStackTrace();
         }
+    }
+
+    public void clearPausePid() throws IOException {
+        assertEquals(CracEngine.PAUSE, engine, "Pause PID file is created only with pauseengine");
+        Files.delete(imageDir.resolve(PAUSE_PID_FILE));
     }
 }

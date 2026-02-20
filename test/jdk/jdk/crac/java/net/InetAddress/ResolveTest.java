@@ -24,7 +24,6 @@
 import jdk.test.lib.Utils;
 import jdk.test.lib.containers.docker.Common;
 import jdk.test.lib.crac.CracContainerBuilder;
-import jdk.test.lib.crac.CracProcess;
 import jdk.test.lib.crac.CracTest;
 import jdk.test.lib.crac.CracTestArg;
 
@@ -32,7 +31,6 @@ import java.net.InetAddress;
 import java.net.UnknownHostException;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.concurrent.*;
 
 /*
  * @test
@@ -63,32 +61,22 @@ public class ResolveTest implements CracTest {
                 .inDockerImage(imageName)
                 .dockerOptions("--add-host", TEST_HOSTNAME + ":192.168.12.34")
                 .containerUsePrivileged(true)
-                .captureOutput(true)
                 .args(CracTest.args(TEST_HOSTNAME, "/second-run"));
 
         try {
-            CompletableFuture<?> firstOutputFuture = new CompletableFuture<Void>();
             builder.vmOption("-XX:CRaCMinPid=100");
-            CracProcess checkpointed = builder.startCheckpoint().watch(line -> {
-                System.out.println("OUTPUT: " + line);
-                if (line.equals("192.168.12.34")) {
-                    firstOutputFuture.complete(null);
-                }
-            }, error -> {
-                System.err.println("ERROR: " + error);
-                firstOutputFuture.cancel(false);
-            });
-            firstOutputFuture.get(10, TimeUnit.SECONDS);
-            builder.checkpointViaJcmd();
-            checkpointed.waitForCheckpointed();
+            try (var checkpointed = builder.startCheckpoint()) {
+                checkpointed.waitForStdout("192.168.12.34", false);
+                builder.checkpointViaJcmd();
+                checkpointed.waitForCheckpointed();
+            }
 
             builder.clearVmOptions();
             builder.recreateContainer(imageName,
                     "--add-host", TEST_HOSTNAME + ":192.168.56.78",
                     "--volume", Utils.TEST_CLASSES + ":/second-run"); // any file/dir suffices
 
-
-            builder.startRestore().outputAnalyzer()
+            builder.doRestoreToAnalyze()
                     .shouldHaveExitValue(0)
                     .shouldContain("192.168.56.78");
         } finally {

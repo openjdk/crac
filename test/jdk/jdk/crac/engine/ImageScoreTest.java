@@ -32,7 +32,6 @@ import java.lang.ref.Reference;
 import java.nio.file.Files;
 import java.util.List;
 import java.util.Optional;
-import java.util.concurrent.CompletableFuture;
 
 import static jdk.test.lib.Asserts.*;
 
@@ -50,15 +49,13 @@ public class ImageScoreTest implements CracTest {
     private static final String JDK_CRAC_GLOBAL_CONTEXT_SIZE = "jdk.crac.globalContext.size";
     private static final String TEST_SCORE_AAA = "test.score.aaa";
     private static final String TEST_SCORE_BBB = "test.score.bbb";
-    public static final String RESTORE1 = "RESTORE1";
-    public static final String RESTORE2 = "RESTORE2";
 
     @CracTestArg
     boolean usePerfData;
 
     @Override
     public void test() throws Exception {
-        final CracBuilder builder = new CracBuilder().engine(CracEngine.PAUSE).captureOutput(true);
+        final CracBuilder builder = new CracBuilder().engine(CracEngine.PAUSE);
         builder.vmOption("-XX:" + (usePerfData ? '+' : '-') + "UsePerfData");
         builder.vmOption("--add-opens=java.base/jdk.internal.crac=ALL-UNNAMED");
 
@@ -66,39 +63,34 @@ public class ImageScoreTest implements CracTest {
         if (pidFile.exists()) {
             assertTrue(pidFile.delete());
         }
-        final CracProcess process = builder.startCheckpoint();
-        builder.clearVmOptions();
-        process.waitForPausePid();
 
-        List<String> score1 = Files.readAllLines(builder.imageDir().resolve("score"));
-        assertGT(score1.size(), 10); // at least 10 items
-        assertEquals(1L, score1.stream().filter(line -> line.startsWith("vm.uptime=")).count());
-        int context1 = getScore(score1, JDK_CRAC_GLOBAL_CONTEXT_SIZE).intValue();
-        // overwritten value should be there only once
-        assertEquals(1L, score1.stream().filter(line-> line.startsWith(TEST_SCORE_AAA)).count());
-        assertEquals(123.456, getScore(score1, TEST_SCORE_AAA));
-        assertEquals(42.0   , getScore(score1, TEST_SCORE_BBB));
-        builder.doRestore();
-        CompletableFuture<?> f = new CompletableFuture<>();
-        process.watch(line -> {
-            if (line.equals(RESTORE1)) {
-                try {
-                    builder.doRestore();
-                } catch (Exception e) {
-                    f.completeExceptionally(e);
-                }
-            } else if (line.equals(RESTORE2)) {
-                f.complete(null);
-            }
-        }, System.err::println);
-        assertNull(f.get());
+        try (var process = builder.startCheckpoint()) {
+            builder.clearVmOptions();
+            process.waitForPausePid();
 
-        List<String> score2 = Files.readAllLines(builder.imageDir().resolve("score"));
-        int context2 = getScore(score2, JDK_CRAC_GLOBAL_CONTEXT_SIZE).intValue();
-        assertEquals(context1 + 1, context2);
-        assertEquals(456.789, getScore(score2, TEST_SCORE_AAA));
-        assertTrue(score2.stream().noneMatch(line -> line.startsWith(TEST_SCORE_BBB)));
-        process.waitForSuccess();
+            List<String> score1 = Files.readAllLines(builder.imageDir().resolve("score"));
+            assertGT(score1.size(), 10); // at least 10 items
+            assertEquals(1L, score1.stream().filter(line -> line.startsWith("vm.uptime=")).count());
+            int context1 = getScore(score1, JDK_CRAC_GLOBAL_CONTEXT_SIZE).intValue();
+            // overwritten value should be there only once
+            assertEquals(1L, score1.stream().filter(line-> line.startsWith(TEST_SCORE_AAA)).count());
+            assertEquals(123.456, getScore(score1, TEST_SCORE_AAA));
+            assertEquals(42.0   , getScore(score1, TEST_SCORE_BBB));
+
+            builder.doRestore();
+            process.clearPausePid();
+            process.sendNewline();
+            process.waitForPausePid();
+
+            List<String> score2 = Files.readAllLines(builder.imageDir().resolve("score"));
+            int context2 = getScore(score2, JDK_CRAC_GLOBAL_CONTEXT_SIZE).intValue();
+            assertEquals(context1 + 1, context2);
+            assertEquals(456.789, getScore(score2, TEST_SCORE_AAA));
+            assertTrue(score2.stream().noneMatch(line -> line.startsWith(TEST_SCORE_BBB)));
+
+            builder.doRestore();
+            process.waitForSuccess();
+        }
     }
 
     private static Double getScore(List<String> score1, String metric) {
@@ -115,9 +107,10 @@ public class ImageScoreTest implements CracTest {
         Score.setScore(TEST_SCORE_BBB, 42);
         Core.checkpointRestore();
 
+        assertEquals(System.in.read(), (int) '\n');
+
         Score.resetAll();
         Score.setScore(TEST_SCORE_AAA, 456.789);
-        System.out.println(RESTORE1);
         Resource dummy = new Resource() {
             @Override
             public void beforeCheckpoint(Context<? extends Resource> context) {
@@ -131,6 +124,5 @@ public class ImageScoreTest implements CracTest {
         Core.checkpointRestore();
 
         Reference.reachabilityFence(dummy);
-        System.out.println(RESTORE2);
     }
 }

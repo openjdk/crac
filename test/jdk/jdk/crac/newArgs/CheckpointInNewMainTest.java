@@ -43,7 +43,7 @@ public class CheckpointInNewMainTest implements CracTest {
 
     @Override
     public void test() throws Exception {
-        final var builder = new CracBuilder().engine(CracEngine.CRIU).captureOutput(true)
+        final var builder = new CracBuilder().engine(CracEngine.CRIU)
             // Disabling direct_map to be able to overwrite the first image,
             // otherwise the second image will depend on the first one,
             // and we will get errors on the second restore
@@ -52,11 +52,10 @@ public class CheckpointInNewMainTest implements CracTest {
         // Checkpoint in the old main
         builder.doCheckpoint();
         // Restore from the old main and checkpoint in the new main
-        builder.startRestoreWithArgs(null, List.of(NEW_MAIN_CLASS)).waitForCheckpointed();
+        builder.startRestoreWithArgs(List.of(), List.of(NEW_MAIN_CLASS)).waitForCheckpointed();
         // Restore from the new main
-        final var out = builder.doRestore().outputAnalyzer();
-
-        out.shouldContain(RESTORE_OLD_MSG).shouldContain(RESTORE_NEW_MSG);
+        builder.doRestoreToAnalyze().shouldHaveExitValue(0)
+                .shouldContain(RESTORE_OLD_MSG).shouldContain(RESTORE_NEW_MSG);
     }
 
     @Override

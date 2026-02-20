@@ -29,10 +29,7 @@ import jdk.internal.ref.CleanerFactory;
 import jdk.internal.ref.CleanerImpl;
 import jdk.test.lib.crac.CracBuilder;
 import jdk.test.lib.crac.CracEngine;
-import jdk.test.lib.crac.CracProcess;
 import jdk.test.lib.crac.CracTest;
-
-import static jdk.test.lib.Asserts.*;
 
 import java.lang.reflect.Field;
 
@@ -49,18 +46,13 @@ public class LinkedCleanableRefTest implements CracTest {
 
     @Override
     public void test() throws Exception {
-        CracBuilder builder = new CracBuilder().engine(CracEngine.SIMULATE).captureOutput(true);
-        builder.vmOption("--add-opens=java.base/jdk.internal.ref=ALL-UNNAMED");
-        builder.vmOption("--add-opens=java.base/java.lang.ref=ALL-UNNAMED");
-        CracProcess process = builder.startCheckpoint();
-        try {
-            process.waitForSuccess();
-            process.outputAnalyzer()
-                    .shouldContain(RESTORED)
-                    .shouldContain(CLEAN + "true");
-        } finally {
-            process.destroyForcibly();
-        }
+        new CracBuilder().engine(CracEngine.SIMULATE)
+                .vmOption("--add-opens=java.base/jdk.internal.ref=ALL-UNNAMED")
+                .vmOption("--add-opens=java.base/java.lang.ref=ALL-UNNAMED")
+                .doCheckpointToAnalyze()
+                .shouldHaveExitValue(0)
+                .shouldContain(RESTORED)
+                .shouldContain(CLEAN + "true");
     }
 
     private static class Closer implements Runnable {

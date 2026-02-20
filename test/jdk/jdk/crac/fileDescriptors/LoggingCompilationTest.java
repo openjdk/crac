@@ -65,7 +65,7 @@ public class LoggingCompilationTest implements CracTest {
                 builder.vmOption("-XX:+LogCompilation");
                 builder.vmOption("-XX:LogFile=" + logPathO);
             }
-            builder.startCheckpoint().waitForCheckpointed();
+            builder.doCheckpoint();
             if (vmLogOnCheckpoint) {
                 assertNotEquals(0L, Files.size(logPathO));
                 Files.deleteIfExists(logPathO);
@@ -79,7 +79,8 @@ public class LoggingCompilationTest implements CracTest {
                 builder.vmOption("-XX:+LogVMOutput");
                 builder.vmOption("-XX:LogFile=" + logPathR);
             }
-            var oa =builder.captureOutput(true).doRestore().outputAnalyzer()
+            builder.doRestoreToAnalyze()
+                    .shouldHaveExitValue(0)
                     .shouldNotContain("CRaC closing file descriptor")
                     .shouldNotContain("Could not flush log")
                     .shouldNotContain("Could not close log file")

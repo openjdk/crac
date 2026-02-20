@@ -74,7 +74,7 @@ public class CompilationLevelTest implements CracTest {
         new CracBuilder().engine(CracEngine.SIMULATE)
             .vmOption("-Xbootclasspath/a:wb.jar").vmOption("-XX:+UnlockDiagnosticVMOptions").vmOption("-XX:+WhiteBoxAPI")
             .javaOption("jdk.crac.recompilation-delay-ms", "0")
-            .startCheckpoint().waitForSuccess();
+            .doCheckpoint();
     }
 
     @Override

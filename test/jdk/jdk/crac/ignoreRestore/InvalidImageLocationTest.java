@@ -50,8 +50,7 @@ public class InvalidImageLocationTest {
 
         final var builder = new CracBuilder()
             .vmOption("-XX:+CRaCIgnoreRestoreIfUnavailable")
-            .forwardClasspathOnRestore(true)
-            .captureOutput(true);
+            .forwardClasspathOnRestore(true);
 
         // Existance depends on the order of @run tags
         if (variant == Variant.IMAGE_NOT_EXISTS) {
@@ -65,8 +64,9 @@ public class InvalidImageLocationTest {
             case IMAGE_IS_NOT_DIR -> "CRaCRestoreFrom=" + builder.imageDir() + " is not a directory";
         };
 
-        builder.startRestoreWithArgs(null, List.of(Main.class.getName()))
-            .waitForSuccess().outputAnalyzer()
+        builder.startRestoreWithArgs(List.of(), List.of(Main.class.getName()))
+            .outputAnalyzer()
+            .shouldHaveExitValue(0)
             .shouldContain(errMsg).shouldContain(MAIN_MSG);
     }
 

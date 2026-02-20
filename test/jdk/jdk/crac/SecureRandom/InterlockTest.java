@@ -23,7 +23,6 @@ import jdk.test.lib.crac.CracBuilder;
 import jdk.test.lib.crac.CracTest;
 import jdk.test.lib.crac.CracTestArg;
 
-import java.io.IOException;
 import java.security.SecureRandom;
 
 /*

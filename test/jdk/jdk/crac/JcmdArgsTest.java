@@ -32,9 +32,9 @@ import jdk.test.lib.crac.CracTestArg;
 import jdk.test.lib.util.FileUtils;
 
 import java.io.IOException;
+import java.lang.ref.Reference;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.concurrent.LinkedBlockingQueue;
 
 import static jdk.test.lib.Asserts.assertEquals;
 import static jdk.test.lib.Asserts.assertTrue;
@@ -61,15 +61,8 @@ public class JcmdArgsTest implements CracTest {
             FileUtils.deleteFileTreeWithRetry(imageDir);
         }
 
-        CracProcess process = new CracBuilder().engine(CracEngine.SIMULATE).captureOutput(true).startCheckpoint();
-        var queue = new LinkedBlockingQueue<String>();
-        process.watch(line -> {
-            System.out.println(line);
-            if (line.startsWith("TEST:")) {
-                queue.add(line);
-            }
-        }, System.err::println);
-        assertEquals(READY, queue.take());
+        CracProcess process = new CracBuilder().engine(CracEngine.SIMULATE).startCheckpoint();
+        process.waitForStdout(READY, false);
         String[] args;
         if (useFile) {
             Path metricsPath = createTemp("metrics", "dummy\t=45\n   foo.bar = 123.0 \n");
@@ -79,9 +72,8 @@ public class JcmdArgsTest implements CracTest {
             args = new String[] { "metrics=foo.bar=123", "labels=xxx=yyy" };
         }
         new CracBuilder().engine(CracEngine.SIMULATE).checkpointViaJcmd(process.pid(), args);
-        assertEquals(CHECKPOINTED, queue.take());
-        process.input().write('\n');
-        process.input().flush();
+        process.waitForStdout(CHECKPOINTED, false);
+        process.sendNewline();
         process.waitForSuccess();
 
         assertTrue(Files.readAllLines(imageDir.resolve("score")).stream()
@@ -99,17 +91,19 @@ public class JcmdArgsTest implements CracTest {
 
     @Override
     public void exec() throws Exception {
-        Core.getGlobalContext().register(new Resource() {
+        final var resource = new Resource() {
             @Override
             public void beforeCheckpoint(Context<? extends Resource> context) {
             }
 
             @Override
-            public void afterRestore(Context<? extends Resource> context) throws Exception {
+            public void afterRestore(Context<? extends Resource> context) {
                 System.out.println(CHECKPOINTED);
             }
-        });
+        };
+        Core.getGlobalContext().register(resource);
         System.out.println(READY);
-        System.in.read();
+        assertEquals((int) '\n', System.in.read());
+        Reference.reachabilityFence(resource);
     }
 }

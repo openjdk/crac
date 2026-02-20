@@ -45,7 +45,14 @@ public abstract class CracBuilderBase<T extends CracBuilderBase<T>> {
     // when the whole suite is executed.
     private static final Class<CracTestArg> dummyWorkaround = CracTestArg.class;
 
-    boolean verbose = true;
+    static void log(String fmt, Object... args) {
+        if (args.length == 0) {
+            System.err.println(fmt);
+        } else {
+            System.err.printf(fmt + "%n", args);
+        }
+    }
+
     boolean debug = false;
     final List<String> classpathEntries;
     final Map<String, String> env;
@@ -58,7 +65,6 @@ public abstract class CracBuilderBase<T extends CracBuilderBase<T>> {
     boolean forwardClasspathOnRestore;
     Class<?> main;
     String[] args;
-    boolean captureOutput;
     // make sure to update copy constructor when adding new fields
 
     protected abstract T self();
@@ -73,7 +79,6 @@ public abstract class CracBuilderBase<T extends CracBuilderBase<T>> {
     }
 
     protected CracBuilderBase(T other) {
-        verbose = other.verbose;
         debug = other.debug;
         classpathEntries = new ArrayList<>(other.classpathEntries);
         env = new HashMap<>(other.env);
@@ -86,12 +91,6 @@ public abstract class CracBuilderBase<T extends CracBuilderBase<T>> {
         forwardClasspathOnRestore = other.forwardClasspathOnRestore;
         main = other.main;
         args = other.args == null ? null : Arrays.copyOf(other.args, other.args.length);
-        captureOutput = other.captureOutput;
-    }
-
-    public T verbose(boolean verbose) {
-        this.verbose = verbose;
-        return self();
     }
 
     public T debug(boolean debug) {
@@ -188,22 +187,24 @@ public abstract class CracBuilderBase<T extends CracBuilderBase<T>> {
         return args != null ? args : CracTest.args();
     }
 
-    public T captureOutput(boolean captureOutput) {
-        this.captureOutput = captureOutput;
-        return self();
+    public void doCheckpoint(String... javaPrefix) throws Exception {
+        try (var process = startCheckpoint(javaPrefix)) {
+            if (engine == null || engine == CracEngine.CRIU) {
+                process.waitForCheckpointed();
+            } else {
+                process.waitForSuccess();
+            }
+        }
     }
 
-    public void doCheckpoint(String... javaPrefix) throws Exception {
-        startCheckpoint(javaPrefix).waitForCheckpointed();
+    public OutputAnalyzer doCheckpointToAnalyze(String... javaPrefix) throws Exception {
+        try (var process = startCheckpoint(javaPrefix)) {
+            return process.outputAnalyzer();
+        }
     }
 
     public CracProcess startCheckpoint(String... javaPrefix) throws Exception {
-        List<String> list = javaPrefix.length == 0 ? null : Arrays.asList(javaPrefix);
-        return startCheckpoint(list);
-    }
-
-    public CracProcess startCheckpoint(List<String> javaPrefix) throws Exception {
-        List<String> cmd = prepareCommand(javaPrefix, false);
+        List<String> cmd = prepareCommand(false, javaPrefix);
         if (imageDir != null) {
             cmd.add("-XX:CRaCCheckpointTo=" + imageDir);
         }
@@ -214,37 +215,28 @@ public abstract class CracBuilderBase<T extends CracBuilderBase<T>> {
         return new CracProcess(this, cmd);
     }
 
-    void log(String fmt, Object... args) {
-        if (verbose) {
-            if (args.length == 0) {
-                System.err.println(fmt);
-            } else {
-                System.err.printf(fmt, args);
-            }
+    public void doRestore(String... javaPrefix) throws Exception {
+        try (var process = startRestore(javaPrefix)) {
+            process.waitForSuccess();
         }
     }
 
-    public CracProcess doRestore(String... javaPrefix) throws Exception {
-        return startRestore(javaPrefix).waitForSuccess();
+    public OutputAnalyzer doRestoreToAnalyze(String... javaPrefix) throws Exception {
+        try (var process = startRestore(javaPrefix)) {
+            return process.outputAnalyzer();
+        }
     }
 
     public CracProcess startRestore(String... javaPrefix) throws Exception {
-        List<String> list = javaPrefix.length == 0 ? null : Arrays.asList(javaPrefix);
-        return startRestore(list);
-    }
-
-    public CracProcess startRestore(List<String> javaPrefix) throws Exception {
-        return startRestoreWithArgs(javaPrefix, null);
+        return startRestoreWithArgs(Arrays.asList(javaPrefix), List.of());
     }
 
     public CracProcess startRestoreWithArgs(List<String> javaPrefix, List<String> args) throws Exception {
-        List<String> cmd = prepareCommand(javaPrefix, true);
+        List<String> cmd = prepareCommand(true, javaPrefix.toArray(new String[0]));
         if (imageDir != null) {
             cmd.add("-XX:CRaCRestoreFrom=" + imageDir);
         }
-        if (null != args) {
-            cmd.addAll(args);
-        }
+        cmd.addAll(args);
         log("Starting restored process:");
         log(String.join(" ", cmd));
         return new CracProcess(this, cmd);
@@ -283,12 +275,20 @@ public abstract class CracBuilderBase<T extends CracBuilderBase<T>> {
         return Utils.TEST_CLASS_PATH;
     }
 
-    public CracProcess doPlain() throws IOException, InterruptedException {
-        return startPlain().waitForSuccess();
+    public void doPlain() throws IOException, InterruptedException {
+        try (var process = startPlain()) {
+            process.waitForSuccess();
+        }
     }
 
-    private List<String> prepareCommand(List<String> javaPrefix, boolean isRestore) {
-        List<String> cmd = new ArrayList<>(javaPrefix != null ? javaPrefix : getDefaultJavaPrefix());
+    public OutputAnalyzer doPlainToAnalyze() throws IOException, InterruptedException {
+        try (var process = startPlain()) {
+            return process.outputAnalyzer();
+        }
+    }
+
+    private List<String> prepareCommand(boolean isRestore, String... javaPrefix) {
+        List<String> cmd = new ArrayList<>(javaPrefix.length > 0 ? Arrays.asList(javaPrefix) : getDefaultJavaPrefix());
         cmd.add("-ea");
         if (engine != null) {
             cmd.add("-XX:CRaCEngine=" + engine.engine);

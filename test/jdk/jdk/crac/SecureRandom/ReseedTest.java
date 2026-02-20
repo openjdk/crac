@@ -45,9 +45,8 @@ public class ReseedTest implements CracTest {
     public void test() throws Exception {
         CracBuilder builder = new CracBuilder();
         builder.doCheckpoint();
-        builder.captureOutput(true);
-        String e1 = builder.doRestore().outputAnalyzer().getStdout();
-        String e2 = builder.doRestore().outputAnalyzer().getStdout();
+        String e1 = builder.doRestoreToAnalyze().shouldHaveExitValue(0).getStdout();
+        String e2 = builder.doRestoreToAnalyze().shouldHaveExitValue(0).getStdout();
         if (reseed) {
             assertEquals(e1, e2);
         } else {

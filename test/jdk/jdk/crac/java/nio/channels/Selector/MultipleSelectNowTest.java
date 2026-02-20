@@ -72,7 +72,7 @@ public class MultipleSelectNowTest implements CracTest {
         if (skipCR) {
             builder.doPlain();
         } else {
-            builder.startCheckpoint().waitForSuccess();
+            builder.doCheckpoint();
         }
     }
 

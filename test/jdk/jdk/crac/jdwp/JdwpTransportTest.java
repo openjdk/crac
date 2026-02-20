@@ -22,22 +22,17 @@
  */
 
 import jdk.crac.*;
-import jdk.test.lib.crac.AsyncStreamReader;
 import jdk.test.lib.crac.CracBuilder;
 import jdk.test.lib.crac.CracEngine;
-import jdk.test.lib.crac.CracProcess;
 import jdk.test.lib.crac.CracTest;
 import jdk.test.lib.crac.CracTestArg;
 
 import com.sun.jdi.Bootstrap;
 import com.sun.jdi.connect.AttachingConnector;
 import com.sun.jdi.connect.Connector;
-import com.sun.jdi.connect.IllegalConnectorArgumentsException;
 import com.sun.jdi.VirtualMachine;
 import com.sun.jdi.VMDisconnectedException;
 
-import java.io.InputStreamReader;
-import java.io.BufferedReader;
 import java.util.Map;
 import java.util.concurrent.TimeoutException;
 
@@ -86,80 +81,51 @@ public class JdwpTransportTest implements CracTest {
         return vm;
     }
 
-    private void waitForString(AsyncStreamReader reader, String str, long timeoutMillis) throws Exception {
-        while (true) {
-            String line = reader.readLine(timeoutMillis);
-            System.out.println(line);
-            if (line.contains(str))
-                break;
-        }
-    }
-
-    private void waitForString(AsyncStreamReader reader, String str) throws Exception {
-        final long timeoutMillis = 30000;
-        waitForString(reader, str, timeoutMillis);
-    }
-
     @Override
     public void test() throws Exception {
         final String suspendArg = ",suspend=" + (suspendOnJdwpStart ? "y" : "n");
         CracBuilder builder = new CracBuilder().engine(CracEngine.SIMULATE)
             .vmOption("-agentlib:jdwp=transport=dt_socket,server=y,address=0.0.0.0:" + PORT + suspendArg);
 
-        CracProcess process = builder.captureOutput(true).startCheckpoint();
-        var errReader = new AsyncStreamReader(process.errOutput());
-        var reader = new AsyncStreamReader(process.output());
-        try {
-            if (!suspendOnJdwpStart) {
-                waitForString(reader, STARTED);
-            } else {
-                waitForString(reader, DEBUGEE);
-                VirtualMachine vm = attachDebugger();
-                if (keepDebuggingBeforeCheckpoint) {
-                    vm.resume();
-                    System.out.println("TEST: Debugger resume.");
-                    try {
-                        waitForString(reader, CHECKPOINT);
-                        vm.dispose();
-                        fail("VMDisconnectedException isn't thrown. The debugger should be disconnected by a debuggee.");
-                    } catch (VMDisconnectedException e) {
-                    }
-                } else {
-                    vm.dispose();
-                    vm = null;
-                    System.out.println("TEST: Debugger done.");
-
-                    waitForString(reader, STARTED);
-                }
-            }
-
-            // After checkpoint/restore
-            waitForString(reader, DEBUGEE);
-            VirtualMachine vm = attachDebugger();
-            vm.dispose();
-            System.out.println("TEST: Debugger done.");
-            System.out.flush();
-            process.input().write(0); // Resume app
-            process.input().flush();
-
-            process.waitForSuccess();
-        } catch (TimeoutException e) {
-            System.err.println("reader.isRunning()=" + reader.isRunning());
-            process.printThreadDump();
-            process.dumpProcess();
-            throw e;
-        } finally {
+        try (var process = builder.startCheckpoint()) {
             try {
-                final long timeoutMillis = 1000;
-                while (true) {
-                    System.err.println("APP STDERR: " + errReader.readLine(timeoutMillis));
+                if (!suspendOnJdwpStart) {
+                    process.waitForStdout((line) -> line.contains(STARTED), 10);
+                } else {
+                    process.waitForStdout((line) -> line.contains(DEBUGEE), 10);
+                    VirtualMachine vm = attachDebugger();
+                    if (keepDebuggingBeforeCheckpoint) {
+                        vm.resume();
+                        System.out.println("TEST: Debugger resume.");
+                        try {
+                            process.waitForStdout((line) -> line.contains(CHECKPOINT), 10);
+                            vm.dispose();
+                            fail("VMDisconnectedException isn't thrown. The debugger should be disconnected by a debuggee.");
+                        } catch (VMDisconnectedException e) {
+                        }
+                    } else {
+                        vm.dispose();
+                        vm = null;
+                        System.out.println("TEST: Debugger done.");
+
+                        process.waitForStdout((line) -> line.contains(STARTED), 10);
+                    }
                 }
+
+                // After checkpoint/restore
+                process.waitForStdout((line) -> line.contains(DEBUGEE), 10);
+                VirtualMachine vm = attachDebugger();
+                vm.dispose();
+                System.out.println("TEST: Debugger done.");
+                System.out.flush();
+                process.sendNewline(); // Resume app
+
+                process.waitForSuccess();
             } catch (TimeoutException e) {
-                // do nothing
+                process.printThreadDump();
+                process.dumpProcess();
+                throw e;
             }
-            reader.close();
-            errReader.close();
-            process.destroyForcibly();
         }
     }
 

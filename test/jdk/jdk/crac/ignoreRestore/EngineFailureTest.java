@@ -58,7 +58,6 @@ public class EngineFailureTest {
             .vmOption("-XX:CRaCEngine=crexec")
             .vmOption("-XX:+CRaCIgnoreRestoreIfUnavailable")
             .forwardClasspathOnRestore(true)
-            .captureOutput(true)
             .startRestoreWithArgs(List.of(), List.of(Main.class.getName(), "false"))
             .outputAnalyzer()
             .shouldHaveExitValue(0)

@@ -75,14 +75,14 @@ public class CheckpointRestorePathTest implements CracTest {
     }
 
     void checkNotConfigured(CracBuilder builder) throws Exception {
-        builder.captureOutput(true)
+        builder
                 .doCheckpointToAnalyze()
                 .shouldHaveExitValue(1)
                 .stderrShouldContain("C/R is not configured");
     }
 
     void testDeep() throws Exception {
-        new CracBuilder().engine(CracEngine.SIMULATE).imageDir(DEEPLY_NESTED_CR).captureOutput(true)
+        new CracBuilder().engine(CracEngine.SIMULATE).imageDir(DEEPLY_NESTED_CR)
                 .doCheckpointToAnalyze()
                 .shouldHaveExitValue(1)
                 // unified logging going to standard output rather than stderr by default
@@ -92,14 +92,14 @@ public class CheckpointRestorePathTest implements CracTest {
     void testRestoreEmpty() throws Exception {
         // Empty CRaCRestoreFrom should result in default java usage output
         // as if the VM option was missing (we won't test that case)
-        new CracBuilder().engine(CracEngine.PAUSE).imageDir("").captureOutput(true)
+        new CracBuilder().engine(CracEngine.PAUSE).imageDir("")
                 .doRestoreToAnalyze()
                 .shouldHaveExitValue(1)
                 .stderrShouldContain("Usage: java");
     }
 
     void testRestoreNoDir() throws Exception {
-        new CracBuilder().engine(CracEngine.PAUSE).imageDir(NON_EXISTENT_CR).captureOutput(true)
+        new CracBuilder().engine(CracEngine.PAUSE).imageDir(NON_EXISTENT_CR)
                 .doRestoreToAnalyze()
                 .shouldHaveExitValue(1)
                 .stdoutShouldContain("Cannot open CRaCRestoreFrom=" + NON_EXISTENT_CR)
@@ -124,7 +124,7 @@ public class CheckpointRestorePathTest implements CracTest {
         if (skipCpuFeatures) {
             builder.vmOption("-XX:+UnlockExperimentalVMOptions").vmOption("-XX:CheckCPUFeatures=skip");
         }
-        builder.captureOutput(true).doRestoreToAnalyze()
+        builder.doRestoreToAnalyze()
                 .shouldHaveExitValue(1)
                 .stderrShouldContain(errMessage);
     }

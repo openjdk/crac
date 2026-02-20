@@ -52,8 +52,7 @@ public class RestoreIfPossibleTest {
 
         final var builder = new CracBuilder()
             .vmOption("-XX:+CRaCIgnoreRestoreIfUnavailable")
-            .forwardClasspathOnRestore(true)
-            .captureOutput(true);
+            .forwardClasspathOnRestore(true);
         if (makeRestorePossible) {
             try (var checkpointProcess = builder.main(Main.class).args("true").startCheckpoint()) {
                 checkpointProcess.waitForCheckpointed();

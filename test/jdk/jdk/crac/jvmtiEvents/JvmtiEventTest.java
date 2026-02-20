@@ -43,7 +43,7 @@ public class JvmtiEventTest implements CracTest {
 
     @Override
     public void test() throws Exception {
-        new CracBuilder().engine(CracEngine.SIMULATE).captureOutput(true)
+        new CracBuilder().engine(CracEngine.SIMULATE)
                 .vmOption("-agentpath:" + JAVA_LIBRARY_PATH + System.mapLibraryName("CracJvmtiAgent"))
                 .doCheckpointToAnalyze()
                 .shouldHaveExitValue(0)

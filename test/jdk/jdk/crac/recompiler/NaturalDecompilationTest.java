@@ -86,7 +86,7 @@ public class NaturalDecompilationTest implements CracTest {
 
     @Override
     public void test() throws Exception {
-        final var builder = new CracBuilder().engine(CracEngine.SIMULATE).captureOutput(true)
+        final var builder = new CracBuilder().engine(CracEngine.SIMULATE)
             .vmOption("-Xbootclasspath/a:wb.jar").vmOption("-XX:+UnlockDiagnosticVMOptions").vmOption("-XX:+WhiteBoxAPI")
             .javaOption("jdk.crac.recompilation-delay-ms", "0")
             .vmOption("-XX:+UnlockExperimentalVMOptions")

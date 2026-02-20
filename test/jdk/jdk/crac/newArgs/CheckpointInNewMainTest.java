@@ -43,7 +43,7 @@ public class CheckpointInNewMainTest implements CracTest {
 
     @Override
     public void test() throws Exception {
-        final var builder = new CracBuilder().engine(CracEngine.CRIU).captureOutput(true)
+        final var builder = new CracBuilder().engine(CracEngine.CRIU)
             // Disabling direct_map to be able to overwrite the first image,
             // otherwise the second image will depend on the first one,
             // and we will get errors on the second restore

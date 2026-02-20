@@ -48,7 +48,7 @@ public class FileWatcherThreadTest implements CracTest {
 
     @Override
     public void test() throws Exception {
-        CracBuilder builder = new CracBuilder().verbose(true);
+        CracBuilder builder = new CracBuilder();
         builder.doCheckpointAndRestore();
     }
 

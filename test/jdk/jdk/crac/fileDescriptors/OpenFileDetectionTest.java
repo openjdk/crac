@@ -39,7 +39,7 @@ import java.io.RandomAccessFile;
 public class OpenFileDetectionTest implements CracTest {
     @Override
     public void test() throws Exception {
-        new CracBuilder().engine(CracEngine.SIMULATE).captureOutput(true)
+        new CracBuilder().engine(CracEngine.SIMULATE)
                 .javaOption("jdk.crac.collect-fd-stacktraces", "true")
                 .doCheckpointToAnalyze()
                 .shouldHaveExitValue(1)

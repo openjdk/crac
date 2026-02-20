@@ -46,7 +46,7 @@ public class LinkedCleanableRefTest implements CracTest {
 
     @Override
     public void test() throws Exception {
-        new CracBuilder().engine(CracEngine.SIMULATE).captureOutput(true)
+        new CracBuilder().engine(CracEngine.SIMULATE)
                 .vmOption("--add-opens=java.base/jdk.internal.ref=ALL-UNNAMED")
                 .vmOption("--add-opens=java.base/java.lang.ref=ALL-UNNAMED")
                 .doCheckpointToAnalyze()

@@ -54,7 +54,7 @@ public class FlightRecorderJcmdTest extends FlightRecorderTestBase implements Cr
         assertTrue(jfr.delete());
 
         String firstPid;
-        try (var first = new CracBuilder().engine(engine).captureOutput(true).startCheckpoint()) {
+        try (var first = new CracBuilder().engine(engine).startCheckpoint()) {
             firstPid = String.valueOf(first.pid());
             first.waitForStdout(TEST_STARTED, true);
             new CracBuilder().runJcmd(firstPid, "JFR.start", "name=xxx", "dumponexit=true", "filename=" + jfr)
@@ -65,7 +65,7 @@ public class FlightRecorderJcmdTest extends FlightRecorderTestBase implements Cr
             assertRecording(jfr);
         }
 
-        try (var second = new CracBuilder().engine(engine).captureOutput(true).startRestore()) {
+        try (var second = new CracBuilder().engine(engine).startRestore()) {
             second.waitForStdout(RESTORED_MESSAGE, false);
 
             File jfrOther = File.createTempFile("other", ".jfr");

@@ -64,7 +64,7 @@ public class RemoteJmxTest implements CracTest {
 
     @Override
     public void test() throws Exception {
-        CracBuilder builder = new CracBuilder().captureOutput(true).engine(CracEngine.SIMULATE);
+        CracBuilder builder = new CracBuilder().engine(CracEngine.SIMULATE);
         if (!NONE.equals(portBefore)) {
             javaOptions(portBefore).forEach(builder::javaOption);
         }

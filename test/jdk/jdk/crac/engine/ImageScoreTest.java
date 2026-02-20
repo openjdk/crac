@@ -55,7 +55,7 @@ public class ImageScoreTest implements CracTest {
 
     @Override
     public void test() throws Exception {
-        final CracBuilder builder = new CracBuilder().engine(CracEngine.PAUSE).captureOutput(true);
+        final CracBuilder builder = new CracBuilder().engine(CracEngine.PAUSE);
         builder.vmOption("-XX:" + (usePerfData ? '+' : '-') + "UsePerfData");
         builder.vmOption("--add-opens=java.base/jdk.internal.crac=ALL-UNNAMED");
 

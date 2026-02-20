@@ -47,7 +47,7 @@ public class ExitFromNewMainTest implements CracTest {
 
     @Override
     public void test() throws Exception {
-        final var builder = new CracBuilder().captureOutput(true);
+        final var builder = new CracBuilder();
         builder.doCheckpoint();
 
         final var out = builder

@@ -58,7 +58,7 @@ public class FailedCheckpointRestoreTest implements CracTest {
 
     @Override
     public void test() throws Exception {
-        final CracBuilder builder = new CracBuilder().captureOutput(true);
+        final CracBuilder builder = new CracBuilder();
         final OutputAnalyzer out;
         if (variant == Variant.CHECKPOINT_EXCEPTION) {
             out = builder.doCheckpointToAnalyze();

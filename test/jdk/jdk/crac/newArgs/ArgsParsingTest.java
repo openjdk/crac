@@ -42,7 +42,7 @@ public class ArgsParsingTest implements CracTest {
         final String ARG0 = "test arg";
         final String ARG1 = "\\ another\\ \"test\\\\arg ";
         final String ARG2 = "  ano\007ther  'yet  arg  \\";
-        CracBuilder builder = new CracBuilder().captureOutput(true);
+        CracBuilder builder = new CracBuilder();
         builder.doCheckpoint();
         builder.startRestoreWithArgs(List.of(), List.of(NEW_MAIN_CLASS, ARG0, ARG1, ARG2))
             .outputAnalyzer()

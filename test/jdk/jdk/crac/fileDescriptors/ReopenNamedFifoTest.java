@@ -66,7 +66,7 @@ public class ReopenNamedFifoTest extends FDPolicyTestBase implements CracTest {
             writer.write("Hello ");
             writer.flush();
             cp.waitForCheckpointed();
-            try (var rp = builder.captureOutput(true).startRestore()) {
+            try (var rp = builder.startRestore()) {
                 rp.waitForStdout("RESTORED", false);
                 writer.write("world!");
                 writer.flush();

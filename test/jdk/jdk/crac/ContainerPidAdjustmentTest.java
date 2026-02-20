@@ -91,9 +91,6 @@ public class ContainerPidAdjustmentTest implements CracTest {
             if (needSetMinPid) {
                 builder.vmOption("-XX:CRaCMinPid=" + createLastPidValue(lastPid));
             }
-            if (0 > expectedLastPid) {
-                builder.captureOutput(true);
-            }
             if (null != lastPidSetup) {
                 // Set up the initial last pid,
                 // create a non-privileged user,

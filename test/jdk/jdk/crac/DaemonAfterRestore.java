@@ -43,7 +43,7 @@ public class DaemonAfterRestore implements CracTest {
 
     @Override
     public void test() throws Exception {
-        CracBuilder builder = new CracBuilder().captureOutput(true);
+        CracBuilder builder = new CracBuilder();
 
         try (var checkpointProcess = builder.startCheckpoint()) {
             checkpointProcess.waitForStdout(MAIN_THREAD_FINISH, false);

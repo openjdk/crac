@@ -54,7 +54,7 @@ public class IgnoredFileDescriptorsTest implements CracTest {
 
         CracBuilder builder = new CracBuilder();
         builder.doCheckpoint(prefix);
-        builder.captureOutput(true).doRestoreToAnalyze().shouldHaveExitValue(0).shouldContain(RESTORED_MESSAGE);
+        builder.doRestoreToAnalyze().shouldHaveExitValue(0).shouldContain(RESTORED_MESSAGE);
     }
 
     @Override

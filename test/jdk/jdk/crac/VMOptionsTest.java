@@ -106,7 +106,7 @@ public class VMOptionsTest implements CracTest {
 
     @Override
     public void test() throws Exception {
-        final var builder = new CracBuilder().captureOutput(true);
+        final var builder = new CracBuilder();
         setVmOptions(builder, OPTIONS_CHECKPOINT);
         builder.doCheckpoint();
 

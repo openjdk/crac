@@ -50,8 +50,7 @@ public class InvalidImageLocationTest {
 
         final var builder = new CracBuilder()
             .vmOption("-XX:+CRaCIgnoreRestoreIfUnavailable")
-            .forwardClasspathOnRestore(true)
-            .captureOutput(true);
+            .forwardClasspathOnRestore(true);
 
         // Existance depends on the order of @run tags
         if (variant == Variant.IMAGE_NOT_EXISTS) {

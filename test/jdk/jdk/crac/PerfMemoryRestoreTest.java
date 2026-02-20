@@ -55,7 +55,7 @@ public class PerfMemoryRestoreTest implements CracTest {
 
     @Override
     public void test() throws Exception {
-        CracBuilder builder = new CracBuilder().engine(engine).captureOutput(true);
+        CracBuilder builder = new CracBuilder().engine(engine);
         if (perfDisableSharedMem) {
             builder.vmOption("-XX:+PerfDisableSharedMem");
         } else {

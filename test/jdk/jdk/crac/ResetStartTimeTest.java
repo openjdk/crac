@@ -56,7 +56,7 @@ public class ResetStartTimeTest implements CracTest {
             builder.vmOption("-XX:+UnlockDiagnosticVMOptions");
             builder.vmOption("-XX:-CRaCResetStartTime");
         }
-        builder.captureOutput(true).doRestoreToAnalyze()
+        builder.doRestoreToAnalyze()
                 .shouldHaveExitValue(0).shouldContain(RESTORED_MESSAGE);
     }
 

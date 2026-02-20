@@ -71,7 +71,7 @@ public class CheckpointWithOpenFdsTest implements CracTest {
         CracBuilder builder = new CracBuilder();
         builder.classpathEntry(relative).classpathEntry(absolute).args(CracTest.args(relative, absolute));
         builder.doCheckpoint(EXTRA_FD_WRAPPER, CracBuilder.JAVA);
-        builder.captureOutput(true).doRestoreToAnalyze().shouldHaveExitValue(0).shouldContain(RESTORED_MESSAGE);
+        builder.doRestoreToAnalyze().shouldHaveExitValue(0).shouldContain(RESTORED_MESSAGE);
     }
 
     @Override

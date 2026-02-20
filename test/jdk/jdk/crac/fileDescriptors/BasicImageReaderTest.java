@@ -56,7 +56,7 @@ public class BasicImageReaderTest implements CracTest {
 
     @Override
     public void test() throws Exception {
-        new CracBuilder().engine(CracEngine.SIMULATE).captureOutput(true)
+        new CracBuilder().engine(CracEngine.SIMULATE)
                 .vmOption("--add-opens=java.base/jdk.internal.jimage=ALL-UNNAMED")
                 .doCheckpoint();
     }

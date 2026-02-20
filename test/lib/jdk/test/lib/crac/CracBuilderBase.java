@@ -45,7 +45,14 @@ public abstract class CracBuilderBase<T extends CracBuilderBase<T>> {
     // when the whole suite is executed.
     private static final Class<CracTestArg> dummyWorkaround = CracTestArg.class;
 
-    boolean verbose = true;
+    static void log(String fmt, Object... args) {
+        if (args.length == 0) {
+            System.err.println(fmt);
+        } else {
+            System.err.printf(fmt + "%n", args);
+        }
+    }
+
     boolean debug = false;
     final List<String> classpathEntries;
     final Map<String, String> env;
@@ -58,7 +65,6 @@ public abstract class CracBuilderBase<T extends CracBuilderBase<T>> {
     boolean forwardClasspathOnRestore;
     Class<?> main;
     String[] args;
-    boolean captureOutput;
     // make sure to update copy constructor when adding new fields
 
     protected abstract T self();
@@ -73,7 +79,6 @@ public abstract class CracBuilderBase<T extends CracBuilderBase<T>> {
     }
 
     protected CracBuilderBase(T other) {
-        verbose = other.verbose;
         debug = other.debug;
         classpathEntries = new ArrayList<>(other.classpathEntries);
         env = new HashMap<>(other.env);
@@ -86,12 +91,6 @@ public abstract class CracBuilderBase<T extends CracBuilderBase<T>> {
         forwardClasspathOnRestore = other.forwardClasspathOnRestore;
         main = other.main;
         args = other.args == null ? null : Arrays.copyOf(other.args, other.args.length);
-        captureOutput = other.captureOutput;
-    }
-
-    public T verbose(boolean verbose) {
-        this.verbose = verbose;
-        return self();
     }
 
     public T debug(boolean debug) {
@@ -188,11 +187,6 @@ public abstract class CracBuilderBase<T extends CracBuilderBase<T>> {
         return args != null ? args : CracTest.args();
     }
 
-    public T captureOutput(boolean captureOutput) {
-        this.captureOutput = captureOutput;
-        return self();
-    }
-
     public void doCheckpoint(String... javaPrefix) throws Exception {
         try (var process = startCheckpoint(javaPrefix)) {
             if (engine == null || engine == CracEngine.CRIU) {
@@ -219,16 +213,6 @@ public abstract class CracBuilderBase<T extends CracBuilderBase<T>> {
         log("Starting process to be checkpointed:");
         log(String.join(" ", cmd));
         return new CracProcess(this, cmd);
-    }
-
-    void log(String fmt, Object... args) {
-        if (verbose) {
-            if (args.length == 0) {
-                System.err.println(fmt);
-            } else {
-                System.err.printf(fmt, args);
-            }
-        }
     }
 
     public void doRestore(String... javaPrefix) throws Exception {

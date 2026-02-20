@@ -49,8 +49,7 @@ public class CracLogTest implements CracTest {
     @Override
     public void test() throws Exception {
         var builder = new CracBuilder()
-                .engine(CracEngine.SIMULATE)
-                .captureOutput(true);
+                .engine(CracEngine.SIMULATE);
         if (!logLevelStr.equals("not-set")) {
             builder = builder.vmOption("-Xlog:crac=" + logLevelStr);
         }

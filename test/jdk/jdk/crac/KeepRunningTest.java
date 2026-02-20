@@ -43,7 +43,7 @@ public class KeepRunningTest implements CracTest {
 
     @Override
     public void test() throws Exception {
-        CracBuilder builder = new CracBuilder().engine(engine).engineOptions("keep_running=true").captureOutput(true);
+        CracBuilder builder = new CracBuilder().engine(engine).engineOptions("keep_running=true");
         builder.doCheckpointToAnalyze().shouldHaveExitValue(0).shouldContain(RESTORED_MESSAGE);
         builder.engineOptions().doRestoreToAnalyze().shouldHaveExitValue(0).shouldContain(RESTORED_MESSAGE);
     }

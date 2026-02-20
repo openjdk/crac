@@ -57,7 +57,7 @@ public class JrtFsTest implements CracTest {
 
     @Override
     public void test() throws Exception {
-        new CracBuilder().engine(CracEngine.SIMULATE).captureOutput(true).doCheckpoint();
+        new CracBuilder().engine(CracEngine.SIMULATE).doCheckpoint();
     }
 
     @Override

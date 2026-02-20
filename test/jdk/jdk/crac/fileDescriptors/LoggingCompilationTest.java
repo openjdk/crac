@@ -79,7 +79,7 @@ public class LoggingCompilationTest implements CracTest {
                 builder.vmOption("-XX:+LogVMOutput");
                 builder.vmOption("-XX:LogFile=" + logPathR);
             }
-            builder.captureOutput(true).doRestoreToAnalyze()
+            builder.doRestoreToAnalyze()
                     .shouldHaveExitValue(0)
                     .shouldNotContain("CRaC closing file descriptor")
                     .shouldNotContain("Could not flush log")

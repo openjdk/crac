@@ -59,7 +59,7 @@ public class JcmdArgsTest implements CracTest {
             FileUtils.deleteFileTreeWithRetry(imageDir);
         }
 
-        CracProcess process = new CracBuilder().engine(CracEngine.SIMULATE).captureOutput(true).startCheckpoint();
+        CracProcess process = new CracBuilder().engine(CracEngine.SIMULATE).startCheckpoint();
         process.waitForStdout(READY, false);
         String[] args;
         if (useFile) {

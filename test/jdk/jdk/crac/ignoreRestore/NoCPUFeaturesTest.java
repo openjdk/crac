@@ -41,8 +41,7 @@ public class NoCPUFeaturesTest {
     public static void main(String[] args) throws Exception {
         final var builder = new CracBuilder()
             .vmOption("-XX:+CRaCIgnoreRestoreIfUnavailable")
-            .forwardClasspathOnRestore(true)
-            .captureOutput(true);
+            .forwardClasspathOnRestore(true);
 
         // Create an empty image without CPU features data
         Files.createDirectory(builder.imageDir());

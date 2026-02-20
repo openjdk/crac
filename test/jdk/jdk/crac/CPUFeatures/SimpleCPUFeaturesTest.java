@@ -103,7 +103,6 @@ public class SimpleCPUFeaturesTest implements CracTest {
     @Override
     public void test() throws Exception {
         CracBuilder builder = new CracBuilder()
-                .captureOutput(true)
                 .vmOption("-XX:CPUFeatures=" + cpuFeatures)
                 .vmOption("-XX:+ShowCPUFeatures");
         if (glibcTunables != null && !"--".equals(glibcTunables)) {

@@ -43,7 +43,7 @@ public class LoggingVMlogOpenSimulTest implements CracTest {
     public void test() throws Exception {
         Path logPathO = Files.createTempFile(getClass().getName(), "-vmlog1.txt");
         try {
-            CracBuilder builder = new CracBuilder().captureOutput(true);
+            CracBuilder builder = new CracBuilder();
             builder.engine(CracEngine.SIMULATE);
             builder.vmOption("-XX:+UnlockDiagnosticVMOptions");
             builder.vmOption("-XX:+LogVMOutput");

@@ -89,7 +89,6 @@ public class PatchModuleTest implements CracTest {
 
         // 4. Build the process with --patch-module
         CracBuilder builder = new CracBuilder()
-                .captureOutput(true)
                 .printResources(true)
                 .vmOption("--patch-module=java.base=" + patchJar.getAbsolutePath());
 

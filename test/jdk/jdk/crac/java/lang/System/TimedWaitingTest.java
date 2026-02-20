@@ -69,8 +69,7 @@ public class TimedWaitingTest implements CracTest {
                     .dockerOptions("-v", bootIdFile + ":/fake_boot_id")
                     .inDockerImage(imageName)
                     // we need a privileged container for unshare
-                    .containerUsePrivileged(true)
-                    .captureOutput(true);
+                    .containerUsePrivileged(true);
 
             Files.writeString(bootIdFile, "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx\n");
             // We need to preload the library before checkpoint

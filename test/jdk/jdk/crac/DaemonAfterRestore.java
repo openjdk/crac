@@ -25,9 +25,11 @@ import jdk.crac.*;
 import jdk.test.lib.crac.CracBuilder;
 import jdk.test.lib.crac.CracTest;
 
+import java.lang.ref.Reference;
 import java.util.concurrent.CountDownLatch;
 
 import static jdk.test.lib.Asserts.assertFalse;
+import static jdk.test.lib.Asserts.assertTrue;
 
 /**
  * @test
@@ -60,6 +62,21 @@ public class DaemonAfterRestore implements CracTest {
     public void exec() throws RestoreException, CheckpointException {
         CountDownLatch start = new CountDownLatch(1);
         CountDownLatch finish = new CountDownLatch(1);
+
+        Resource resource = new Resource() {
+            @Override
+            public void beforeCheckpoint(Context<? extends Resource> context) throws Exception {
+                assertTrue(Thread.currentThread().isDaemon(), "beforeCheckpoint is expected to be called from daemon thread");
+                finish.countDown();
+            }
+            @Override
+            public void afterRestore(Context<? extends Resource> context) throws Exception {
+                Thread.sleep(3000);
+                System.out.println(AFTER_RESTORE_MESSAGE);
+            }
+        };
+        Core.getGlobalContext().register(resource);
+
         Thread workerThread = new Thread(() -> {
             System.out.println("worker thread start");
             start.countDown();
@@ -68,6 +85,7 @@ public class DaemonAfterRestore implements CracTest {
             } catch (InterruptedException e) {
                 throw new RuntimeException(e);
             }
+            Reference.reachabilityFence(resource);
             System.out.println("worker thread finish");
         });
         assertFalse(workerThread.isDaemon());
@@ -78,21 +96,6 @@ public class DaemonAfterRestore implements CracTest {
         } catch (InterruptedException e) {
             throw new RuntimeException(e);
         }
-
-        Resource resource = new Resource() {
-            @Override
-            public void beforeCheckpoint(Context<? extends Resource> context) throws Exception {
-                assert Thread.currentThread().isDaemon() : "beforeCheckpoint is expected to be called from daemon thread";
-                finish.countDown();
-            }
-            @Override
-            public void afterRestore(Context<? extends Resource> context) throws Exception {
-                Thread.sleep(3000);
-                System.out.println(AFTER_RESTORE_MESSAGE);
-            }
-        };
-
-        Core.getGlobalContext().register(resource);
 
         System.out.println(MAIN_THREAD_FINISH);
     }

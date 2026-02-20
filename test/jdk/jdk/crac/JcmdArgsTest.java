@@ -32,9 +32,11 @@ import jdk.test.lib.crac.CracTestArg;
 import jdk.test.lib.util.FileUtils;
 
 import java.io.IOException;
+import java.lang.ref.Reference;
 import java.nio.file.Files;
 import java.nio.file.Path;
 
+import static jdk.test.lib.Asserts.assertEquals;
 import static jdk.test.lib.Asserts.assertTrue;
 
 /**
@@ -89,17 +91,19 @@ public class JcmdArgsTest implements CracTest {
 
     @Override
     public void exec() throws Exception {
-        Core.getGlobalContext().register(new Resource() {
+        final var resource = new Resource() {
             @Override
             public void beforeCheckpoint(Context<? extends Resource> context) {
             }
 
             @Override
-            public void afterRestore(Context<? extends Resource> context) throws Exception {
+            public void afterRestore(Context<? extends Resource> context) {
                 System.out.println(CHECKPOINTED);
             }
-        });
+        };
+        Core.getGlobalContext().register(resource);
         System.out.println(READY);
-        System.in.read();
+        assertEquals((int) '\n', System.in.read());
+        Reference.reachabilityFence(resource);
     }
 }

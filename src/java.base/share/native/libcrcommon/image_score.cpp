@@ -31,31 +31,31 @@
 #include <xlocale.h>
 #endif // MACOSX
 
-#include "crexec.hpp"
+#include "crcommon.hpp"
 #include "hashtable.hpp"
 #include "image_score.hpp"
 
 bool ImageScore::persist(const char* image_location) const {
   char fname[PATH_MAX];
   if (snprintf(fname, sizeof(fname), "%s/score", image_location) >= (int) sizeof(fname) - 1) {
-    fprintf(stderr, CREXEC "filename too long: %s/score\n", image_location);
+    LOG("filename too long: %s/score", image_location);
     return false;
   }
   FILE* f = fopen(fname, "w");
   if (f == nullptr) {
-    fprintf(stderr, CREXEC "cannot open %s for writing: %s\n", fname, strerror(errno));
+    LOG("cannot open %s for writing: %s", fname, strerror(errno));
     return false;
   }
   auto close_f = defer([&] {
     if (fclose(f)) {
-     fprintf(stderr, CREXEC "cannot close %s/score: %s\n", image_location, strerror(errno));
+     LOG("cannot close %s/score: %s", image_location, strerror(errno));
     }
   });
   // Handle duplicates
   bool result = true;
   const char **keys = new(std::nothrow) const char*[_score.size()];
   if (keys == nullptr) {
-    fprintf(stderr, CREXEC "cannot allocate array of metrics\n");
+    LOG("cannot allocate array of metrics");
     return false;
   }
   auto delete_keys = defer([&] { delete[] keys; });
@@ -65,7 +65,7 @@ bool ImageScore::persist(const char* image_location) const {
   });
   Hashtable<double> ht(keys, _score.size(), _score.size() * 3 / 2);
   if (!ht.is_initialized()) {
-    fprintf(stderr, CREXEC "cannot create score hashtable (allocation failure)\n");
+    LOG("cannot create score hashtable (allocation failure)");
     return false;
   }
   _score.foreach([&](const Score& score) {

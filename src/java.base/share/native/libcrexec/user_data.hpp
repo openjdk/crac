@@ -1,5 +1,6 @@
 /*
- * Copyright (c) 2025, Azul Systems, Inc. All rights reserved.
+ * Copyright (c) 2023, 2026, Azul Systems, Inc. All rights reserved.
+ * Copyright (c) 2023, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -22,36 +23,33 @@
  * or visit www.oracle.com if you need additional information or have any
  * questions.
  */
-#ifndef CREXEC_HPP
-#define CREXEC_HPP
+#ifndef USER_DATA_HPP
+#define USER_DATA_HPP
 
-#include <utility>
+#include "crlib/crlib_user_data.h"
 
-#define ARRAY_SIZE(x) (sizeof(x) / sizeof(*(x)))
+class UserData;
+struct user_data_chunk;
 
-#define CREXEC "crexec: "
-
-// For Windows
-#if !defined(PATH_MAX) && defined(MAX_PATH)
-# define PATH_MAX MAX_PATH
-#elif !defined(PATH_MAX)
-# define PATH_MAX 1024
-#endif
-
-template<typename F> class Deferred;
-template<typename F> inline Deferred<F> defer(F&& f);
-
-template<typename F> class Deferred {
-friend Deferred<F> defer<F>(F&& f);
-private:
-  F _f;
-  inline explicit Deferred(F f): _f(f) {}
-public:
-  inline ~Deferred() { _f(); }
+struct crlib_user_data_storage {
+  UserData *user_data;
+  struct user_data_chunk *chunk;
 };
 
-template<typename F> inline Deferred<F> defer(F&& f) {
-  return Deferred<F>(std::forward<F>(f));
-}
+class UserData {
+private:
+    const char **_image_location;
 
-#endif // CREXEC_HPP
+    const char *image_location() {
+        return *_image_location;
+    }
+public:
+    explicit UserData(const char **image_location): _image_location(image_location) {}
+
+    bool set_user_data(const char *name, const void *data, size_t size);
+    crlib_user_data_storage_t *load_user_data();
+    bool lookup_user_data(crlib_user_data_storage_t *user_data, const char *name, const void **data_p, size_t *size_p);
+    void destroy_user_data(crlib_user_data_storage_t *user_data);
+};
+
+#endif // USER_DATA_HPP

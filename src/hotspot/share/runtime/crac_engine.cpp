@@ -46,6 +46,7 @@
   OPT(exec_location) \
 
 #define DIRECT_MAP "direct_map"
+#define PAUSE "pause"
 
 #define ARRAY_ELEM(opt) #opt,
 static constexpr const char * const vm_controlled_engine_opts[] = {
@@ -57,11 +58,22 @@ static constexpr const char * const vm_controlled_engine_opts[] = {
 VM_CONTROLLED_ENGINE_OPTS(DEFINE_OPT_VAR)
 #undef DEFINE_OPT_VAR
 
-static bool find_engine(const char *dll_dir, char *path, size_t path_size, bool *is_library) {
+#define MAX_ENGINE_LENGTH 128
+#define CREXEC "crexec"
+#define SIMENGINE "simengine"
+
+#ifdef LINUX
+static bool is_pauseengine() {
+  assert(JDK_Version::current().major_version() < 28, "pauseengine shall be expired in JDK 28");
+  return !strcmp(CRaCEngine, "pause") || !strcmp(CRaCEngine, "pauseengine");
+}
+#endif // LINUX
+
+static bool find_engine(const char *dll_dir, char *path, size_t path_size, bool *is_library, char *resolved_engine, size_t resolved_engine_size) {
+  const size_t engine_length = strlen(CRaCEngine);
   // Try to interpret as a file path
   if (os::is_path_absolute(CRaCEngine)) {
-    const size_t path_len = strlen(CRaCEngine);
-    if (path_len + 1 > path_size) {
+    if (engine_length + 1 > path_size) {
       log_error(crac)("CRaCEngine file path is too long: %s", CRaCEngine);
       return false;
     }
@@ -81,21 +93,80 @@ static bool find_engine(const char *dll_dir, char *path, size_t path_size, bool 
       basename = last_slash + strlen(os::file_separator());
     }
     *is_library = strncmp(basename, JNI_LIB_PREFIX, strlen(JNI_LIB_PREFIX)) == 0 &&
-      strcmp(path + path_len - strlen(JNI_LIB_SUFFIX), JNI_LIB_SUFFIX) == 0;
+      strcmp(path + engine_length - strlen(JNI_LIB_SUFFIX), JNI_LIB_SUFFIX) == 0;
     log_debug(crac)("CRaCEngine path %s is %s library", CRaCEngine, *is_library ? "a" : "not a");
+
+    if (*is_library) {
+      size_t engine_name_length = strlen(basename) - strlen(JNI_LIB_PREFIX) - strlen(JNI_LIB_SUFFIX);
+      if (engine_name_length < resolved_engine_size) {
+        memcpy(resolved_engine, basename + strlen(JNI_LIB_PREFIX), engine_name_length);
+        resolved_engine[engine_name_length] = '\0';
+      } else {
+        log_error(crac)("CRaCEngine name is too long: %s", basename);
+        return false;
+      }
+    } else {
+      assert(sizeof(CREXEC) <= resolved_engine_size, "must be");
+      memcpy(resolved_engine, CREXEC, sizeof(CREXEC));
+    }
 
     return true;
   }
 
+#ifdef LINUX
+  if (is_pauseengine()) {
+    assert(sizeof(SIMENGINE) <= resolved_engine_size, "must be");
+    memcpy(resolved_engine, SIMENGINE, sizeof(SIMENGINE));
+    log_warning(crac)("-XX:CRaCEngine=pause/pauseengine is deprecated and will be removed in version 28; use -XX:CRaCEngine=simengine -XX:CRaCEngineOptions=pause=true");
+  } else /* intentional line break */
+#endif // LINUX
+  if (engine_length < resolved_engine_size) {
+    memcpy(resolved_engine, CRaCEngine, engine_length);
+    resolved_engine[engine_length] = '\0';
+  } else {
+    log_error(crac)("CRaCEngine name is too long: %s", CRaCEngine);
+    return false;
+  }
+
+  if (is_vm_statically_linked()) {
+    // FIXME: We need to hardcode this because file lookup won't work and we would fallback
+    // to exec variant. When exec variant is removed, we can succeed here in static build
+    // and fail during dynamic function name lookup.
+    if (!strcmp("sim", resolved_engine)) {
+      assert(sizeof(SIMENGINE) <= resolved_engine_size, "must be");
+      memcpy(resolved_engine, SIMENGINE, sizeof(SIMENGINE));
+    }
+    if (!strcmp(SIMENGINE, resolved_engine)) {
+      log_debug(crac)("Using static simengine");
+      *is_library = true;
+      os::jvm_path(path, static_cast<jint>(path_size));
+      return true;
+    }
+  }
+
+  log_debug(crac)("Resolved engine name '%s'", resolved_engine);
   // Try to interpret as a library name
-  if (os::dll_locate_lib(path, path_size, dll_dir, CRaCEngine)) {
+  if (os::dll_locate_lib(path, path_size, dll_dir, resolved_engine)) {
     *is_library = true;
-    log_debug(crac)("Found CRaCEngine %s as a library in %s", CRaCEngine, path);
+    log_debug(crac)("Found CRaCEngine %s as a library in %s", resolved_engine, path);
     return true;
+  }
+  // Alternative for engines without the `engine` suffix.
+  // Let's just skip it with weird long engine parameter.
+  // Note: resource mark allocation is not possible here (too early in JVM boot)
+  if (strlen(CRaCEngine) + strlen("engine") + 1 <= resolved_engine_size) {
+    os::snprintf_checked(resolved_engine, resolved_engine_size, "%sengine", CRaCEngine);
+    if (os::dll_locate_lib(path, path_size, dll_dir, resolved_engine)) {
+      *is_library = true;
+      log_debug(crac)("Found CRaCEngine %s as a library in %s", resolved_engine, path);
+      return true;
+    }
   }
 
   *is_library = false;
   log_debug(crac)("CRaCEngine %s is not a library in %s", CRaCEngine, dll_dir);
+  assert(sizeof(CREXEC) <= resolved_engine_size, "must be");
+  memcpy(resolved_engine, CREXEC, sizeof(CREXEC));
 
   constexpr const char suffix[] = WINDOWS_ONLY(".exe") NOT_WINDOWS("");
 #ifndef S_ISREG
@@ -171,6 +242,17 @@ static crlib_conf_t *create_conf(const crlib_api_t &api, const char *exec_locati
   if (CRaCEngineOptions != nullptr && (!strcmp(CRaCEngineOptions, "help") || !strncmp(CRaCEngineOptions, "help=", 5))) {
     return conf;
   }
+
+#ifdef LINUX
+  if (is_pauseengine()) {
+    guarantee(api.can_configure(conf, PAUSE), "simengine must support option " PAUSE);
+    if (!api.configure(conf, PAUSE, "true")) {
+      log_error(crac)("simengine failed to configure: '" PAUSE "' = 'true'");
+      api.destroy_conf(conf);
+      return nullptr;
+    }
+  }
+#endif // LINUX
 
   if (exec_location != nullptr) { // Only passed when using crexec
     guarantee(api.can_configure(conf, engine_opt_exec_location),
@@ -257,20 +339,25 @@ CracEngine::CracEngine(bool for_restore) {
   }
 
   char path[JVM_MAXPATHLEN];
+  // In static builds the name of API entry function may differ
+  char resolved_engine_func[sizeof(CRLIB_API_FUNC) + MAX_ENGINE_LENGTH];
+  memcpy(resolved_engine_func, CRLIB_API_FUNC, sizeof(CRLIB_API_FUNC));
+  if (is_vm_statically_linked()) {
+    resolved_engine_func[sizeof(CRLIB_API_FUNC) - 1] = '_';
+  }
+
   bool is_library;
-  if (!find_engine(dll_dir, path, sizeof(path), &is_library)) {
+  if (!find_engine(dll_dir, path, sizeof(path), &is_library,
+      resolved_engine_func + sizeof(CRLIB_API_FUNC), MAX_ENGINE_LENGTH)) {
     log_error(crac)("Cannot find CRaC engine %s", CRaCEngine);
     return;
   }
   postcond(path[0] != '\0');
 
-  bool is_static_crexec = false; // true when using statically linked crexec
-
   char exec_path[JVM_MAXPATHLEN] = "\0";
   if (!is_library) {
     strcpy(exec_path, path); // Save to later pass it to crexec
     if (is_vm_statically_linked()) {
-      is_static_crexec = true;
       os::jvm_path(path, sizeof(path)); // points to bin/java for static JDK
     } else if (!os::dll_locate_lib(path, sizeof(path), dll_dir, "crexec")) {
       log_error(crac)("Cannot find crexec library to use CRaCEngine executable");
@@ -279,16 +366,16 @@ CracEngine::CracEngine(bool for_restore) {
   }
 
   char error_buf[1024];
-  void * const lib = is_static_crexec ? os::get_default_process_handle() : os::dll_load(path, error_buf, sizeof(error_buf));
+  void * const lib = is_vm_statically_linked() ? os::get_default_process_handle() : os::dll_load(path, error_buf, sizeof(error_buf));
   if (lib == nullptr) {
     log_error(crac)("Cannot load CRaC engine library from %s: %s", path, error_buf);
     return;
   }
 
   using api_func_t = decltype(&CRLIB_API);
-  const auto api_func = reinterpret_cast<api_func_t>(os::dll_lookup(lib, CRLIB_API_FUNC));
+  const auto api_func = reinterpret_cast<api_func_t>(os::dll_lookup(lib, resolved_engine_func));
   if (api_func == nullptr) {
-    log_error(crac)("Cannot load CRaC engine library entrypoint '" CRLIB_API_FUNC "' from %s", path);
+    log_error(crac)("Cannot load CRaC engine library entrypoint '%s' from %s", resolved_engine_func, path);
     os::dll_unload(lib);
     return;
   }

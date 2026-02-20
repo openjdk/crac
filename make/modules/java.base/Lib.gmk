@@ -209,13 +209,38 @@ endif
 ################################################################################
 
 # CFLAGS_windows from make/autoconf/flags-cflags.m4#FLAGS_SETUP_CFLAGS_HELPER
-$(eval $(call SetupJdkLibrary, BUILD_LIBCREXEC, \
-    NAME := crexec, \
+$(eval $(call SetupJdkLibrary, BUILD_LIBCRCOMMON, \
+    NAME := crcommon, \
     LINK_TYPE := C++, \
     EXTRA_HEADER_DIRS := libjvm, \
+    CXXFLAGS := $(CXXFLAGS_JDKLIB) -DCRLIB_IS_IMPL -DCRCOMMON_IMPL, \
+    CXXFLAGS_windows := -D_WINDOWS -DWIN32, \
+    CXXFLAGS_macosx := -DMACOSX, \
+    LDFLAGS := $(LDFLAGS_JDKLIB), \
+))
+TARGETS += $(BUILD_LIBCRCOMMON)
+
+$(eval $(call SetupJdkLibrary, BUILD_LIBSIMENGINE, \
+    NAME := simengine, \
+    LINK_TYPE := C++, \
+    EXTRA_HEADER_DIRS := libjvm libcrcommon, \
     CXXFLAGS := $(CXXFLAGS_JDKLIB) -DCRLIB_IS_IMPL, \
     CXXFLAGS_windows := -D_WINDOWS -DWIN32, \
     CXXFLAGS_macosx := -DMACOSX, \
     LDFLAGS := $(LDFLAGS_JDKLIB), \
+    JDK_LIBS := java.base:libcrcommon, \
+))
+TARGETS += $(BUILD_LIBSIMENGINE)
+
+# CFLAGS_windows from make/autoconf/flags-cflags.m4#FLAGS_SETUP_CFLAGS_HELPER
+$(eval $(call SetupJdkLibrary, BUILD_LIBCREXEC, \
+    NAME := crexec, \
+    LINK_TYPE := C++, \
+    EXTRA_HEADER_DIRS := libjvm libcrcommon, \
+    CXXFLAGS := $(CXXFLAGS_JDKLIB) -DCRLIB_IS_IMPL, \
+    CXXFLAGS_windows := -D_WINDOWS -DWIN32, \
+    CXXFLAGS_macosx := -DMACOSX, \
+    LDFLAGS := $(LDFLAGS_JDKLIB), \
+    JDK_LIBS := java.base:libcrcommon, \
 ))
 TARGETS += $(BUILD_LIBCREXEC)

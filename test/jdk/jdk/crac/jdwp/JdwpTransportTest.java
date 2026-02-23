@@ -90,15 +90,15 @@ public class JdwpTransportTest implements CracTest {
         try (var process = builder.startCheckpoint()) {
             try {
                 if (!suspendOnJdwpStart) {
-                    process.waitForStdout((line) -> line.contains(STARTED), 10);
+                    process.waitForStdout((line) -> line.contains(STARTED));
                 } else {
-                    process.waitForStdout((line) -> line.contains(DEBUGEE), 10);
+                    process.waitForStdout((line) -> line.contains(DEBUGEE));
                     VirtualMachine vm = attachDebugger();
                     if (keepDebuggingBeforeCheckpoint) {
                         vm.resume();
                         System.out.println("TEST: Debugger resume.");
                         try {
-                            process.waitForStdout((line) -> line.contains(CHECKPOINT), 10);
+                            process.waitForStdout((line) -> line.contains(CHECKPOINT));
                             vm.dispose();
                             fail("VMDisconnectedException isn't thrown. The debugger should be disconnected by a debuggee.");
                         } catch (VMDisconnectedException e) {
@@ -108,12 +108,12 @@ public class JdwpTransportTest implements CracTest {
                         vm = null;
                         System.out.println("TEST: Debugger done.");
 
-                        process.waitForStdout((line) -> line.contains(STARTED), 10);
+                        process.waitForStdout((line) -> line.contains(STARTED));
                     }
                 }
 
                 // After checkpoint/restore
-                process.waitForStdout((line) -> line.contains(DEBUGEE), 10);
+                process.waitForStdout((line) -> line.contains(DEBUGEE));
                 VirtualMachine vm = attachDebugger();
                 vm.dispose();
                 System.out.println("TEST: Debugger done.");

@@ -45,14 +45,6 @@ public abstract class CracBuilderBase<T extends CracBuilderBase<T>> {
     // when the whole suite is executed.
     private static final Class<CracTestArg> dummyWorkaround = CracTestArg.class;
 
-    static void log(String fmt, Object... args) {
-        if (args.length == 0) {
-            System.err.println(fmt);
-        } else {
-            System.err.printf(fmt + "%n", args);
-        }
-    }
-
     boolean debug = false;
     final List<String> classpathEntries;
     final Map<String, String> env;
@@ -210,8 +202,7 @@ public abstract class CracBuilderBase<T extends CracBuilderBase<T>> {
         }
         cmd.add(main().getName());
         cmd.addAll(Arrays.asList(args()));
-        log("Starting process to be checkpointed:");
-        log(String.join(" ", cmd));
+        System.err.println("Starting process to be checkpointed:\n" + String.join(" ", cmd));
         return new CracProcess(this, cmd);
     }
 
@@ -237,8 +228,7 @@ public abstract class CracBuilderBase<T extends CracBuilderBase<T>> {
             cmd.add("-XX:CRaCRestoreFrom=" + imageDir);
         }
         cmd.addAll(args);
-        log("Starting restored process:");
-        log(String.join(" ", cmd));
+        System.err.println("Starting restored process:\n" + String.join(" ", cmd));
         return new CracProcess(this, cmd);
     }
 
@@ -257,8 +247,7 @@ public abstract class CracBuilderBase<T extends CracBuilderBase<T>> {
         }
         cmd.add(main().getName());
         cmd.addAll(Arrays.asList(args()));
-        log("Starting process without CRaC:");
-        log(String.join(" ", cmd));
+        System.err.println("Starting process without CRaC:\n" + String.join(" ", cmd));
         return new CracProcess(this, cmd);
     }
 
@@ -333,7 +322,7 @@ public abstract class CracBuilderBase<T extends CracBuilderBase<T>> {
         cmd.add(Utils.TEST_JDK + "/bin/jcmd");
         cmd.add(id);
         cmd.addAll(Arrays.asList(command));
-        log("Executing JCMD command for PID " + id + ": " + String.join(" ", List.of(command)));
+        System.err.println("Executing JCMD command for PID " + id + ":\n" + String.join(" ", List.of(command)));
         return new OutputAnalyzer(new ProcessBuilder(cmd).start());
     }
 }

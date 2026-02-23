@@ -67,7 +67,7 @@ public class CracProcess implements Closeable {
             future = new StreamPumper(is).addPump(new StreamPumper.LinePump() {
                 @Override
                 protected void processLine(String line) {
-                    CracBuilderBase.log("%s %s", logPrefix, line);
+                    System.err.printf("%s %s%n", logPrefix, line);
                     synchronized (lines) {
                         lines.add(line);
                         lines.notifyAll();
@@ -79,6 +79,9 @@ public class CracProcess implements Closeable {
         @Override
         public void close() {
             future.cancel(true);
+            synchronized (lines) {
+                lines.notifyAll();
+            }
         }
 
         void waitForLine(Predicate<String> predicate, int start, long timeout, TimeUnit unit) throws InterruptedException, EOFException, TimeoutException {
@@ -104,6 +107,11 @@ public class CracProcess implements Closeable {
                 }
             }
             if (future.isDone()) {
+                try {
+                    future.get(); // Throws a proper error if the processing completed abruptly
+                } catch (ExecutionException e) {
+                    throw new RuntimeException(e);
+                }
                 throw new EOFException("Process finished before printing required line");
             }
             throw new TimeoutException("Required line was not printed in time");
@@ -126,7 +134,7 @@ public class CracProcess implements Closeable {
         ProcessBuilder pb = new ProcessBuilder();
         pb.environment().putAll(builder.env);
         process = pb.command(cmd).start();
-        CracBuilderBase.log("Started process " + process.pid());
+        System.err.println("Started process " + process.pid());
 
         stdoutProcessor = new StreamProcessor(process.getInputStream(), "[" + process.pid() + " OUT]");
         stderrProcessor = new StreamProcessor(process.getErrorStream(), "[" + process.pid() + " ERR]");
@@ -150,7 +158,7 @@ public class CracProcess implements Closeable {
         if (engine == null || engine == CracEngine.CRIU) {
             final var exitValue = process.waitFor();
             assertEquals(137, exitValue, "Checkpointed process was not killed as expected.");
-            CracBuilderBase.log("Process %d completed with exit value %d", process.pid(), exitValue);
+            System.err.printf("Process %d completed with exit value %d%n", process.pid(), exitValue);
         } else {
             fail("With engine " + engine.engine + " use the async version.");
         }
@@ -209,15 +217,23 @@ public class CracProcess implements Closeable {
     public void waitForSuccess() throws InterruptedException {
         int exitValue = process.waitFor();
         assertEquals(0, exitValue, "Process returned unexpected exit code: " + exitValue);
-        CracBuilderBase.log("Process %d completed with exit value %d", process.pid(), exitValue);
+        System.err.printf("Process %d completed with exit value %d%n", process.pid(), exitValue);
     }
 
     public void waitForStdout(Predicate<String> predicate, long timeoutSec) throws InterruptedException, EOFException, TimeoutException {
         stdoutProcessor.waitForLine(predicate, -1, timeoutSec, TimeUnit.SECONDS);
     }
 
-    public void waitForStdout(String str, boolean failOnUnexpected) throws InterruptedException {
+    public void waitForStdout(Predicate<String> predicate) throws InterruptedException, EOFException {
         final var timeoutSec = (long) (10 * Utils.TIMEOUT_FACTOR);
+        try {
+            waitForStdout(predicate, timeoutSec);
+        } catch (TimeoutException e) {
+            fail("Timeout " + timeoutSec + "s waiting for stdout of process " + pid() + " - you can use TIMEOUT_FACTOR to change the timeout");
+        }
+    }
+
+    public void waitForStdout(String str, boolean failOnUnexpected) throws InterruptedException {
         try {
             waitForStdout((line) -> {
                 if (line.equals(str)) {
@@ -226,11 +242,9 @@ public class CracProcess implements Closeable {
                     fail("Unexpected stdout of process " + pid() + ": '" + line + "' - does not contain '" + str + "'");
                 }
                 return false;
-            }, timeoutSec);
+            });
         } catch (EOFException e) {
             fail("Unexpected stdout of process " + pid() + ": exited before printing '" + str + "'");
-        } catch (TimeoutException e) {
-            fail("Timeout " + timeoutSec + "s waiting for stdout of process " + pid() + " to produce '" + str + "' - you can use TIMEOUT_FACTOR to change the timeout");
         }
     }
 
@@ -270,15 +284,15 @@ public class CracProcess implements Closeable {
         final long pid = this.pid();
         boolean isAlive = ProcessHandle.of(pid).map(ProcessHandle::isAlive).orElse(false);
         if (!isAlive) {
-            CracBuilderBase.log("Cannot print thread dump: process " + pid + " is not alive");
+            System.err.println("Cannot print thread dump: process " + pid + " is not alive");
         } else {
-            CracBuilderBase.log("Running: jcmd " + pid + " Thread.print");
+            System.err.println("Running: jcmd " + pid + " Thread.print");
             Process jcmdProc = new ProcessBuilder(jdk.test.lib.Utils.TEST_JDK + "/bin/jcmd", String.valueOf(pid), "Thread.print")
                     .redirectErrorStream(true)
                     .start();
             try (BufferedReader reader = new BufferedReader(new InputStreamReader(jcmdProc.getInputStream()))) {
                 for (String line = reader.readLine(); null != line; line = reader.readLine()) {
-                    CracBuilderBase.log("[JCMD for " + pid + "] " + line);
+                    System.err.println("[JCMD for " + pid + "] " + line);
                 }
             }
         }
@@ -292,14 +306,14 @@ public class CracProcess implements Closeable {
             String line = reader.readLine();
             int exitCode = checker.waitFor();
             if (exitCode == 0 && line != null && !line.trim().isEmpty()) {
-                CracBuilderBase.log("gcore is available.");
+                System.err.println("gcore is available.");
                 return true;
             } else {
-                CracBuilderBase.log("gcore is NOT available.");
+                System.err.println("gcore is NOT available.");
                 return false;
             }
         } catch (IOException | InterruptedException e) {
-            CracBuilderBase.log("Could not run 'which gcore' or was interrupted");
+            System.err.println("Could not run 'which gcore' or was interrupted");
             return false;
         }
     }
@@ -316,18 +330,18 @@ public class CracProcess implements Closeable {
             int exitCode = dumper.waitFor();
             try {
                 while (true) {
-                    CracBuilderBase.log("dumpProcess: " + reader.readLine(100));
+                    System.err.println("dumpProcess: " + reader.readLine(100));
                 }
             } catch (Exception e) {
                 // do nothing
             }
             if (exitCode == 0) {
-                CracBuilderBase.log("Core dump seems to be created successfully for pid=" + pid);
+                System.err.println("Core dump seems to be created successfully for pid=" + pid);
             } else {
-                CracBuilderBase.log("Something went wrong while dumping pid=" + pid);
+                System.err.println("Something went wrong while dumping pid=" + pid);
             }
         } catch (IOException | InterruptedException e) {
-            CracBuilderBase.log("Exception thrown while dumping pid=" + pid);
+            System.err.println("Exception thrown while dumping pid=" + pid);
             e.printStackTrace();
         }
     }

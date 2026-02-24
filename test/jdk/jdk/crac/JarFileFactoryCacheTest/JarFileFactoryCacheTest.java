@@ -41,8 +41,7 @@ import java.nio.file.Path;
 public class JarFileFactoryCacheTest implements CracTest {
     @Override
     public void test() throws Exception {
-        new CracBuilder().engine(CracEngine.SIMULATE).printResources(true)
-                .startCheckpoint().waitForSuccess();
+        new CracBuilder().engine(CracEngine.SIMULATE).printResources(true).doCheckpoint();
     }
 
     @Override

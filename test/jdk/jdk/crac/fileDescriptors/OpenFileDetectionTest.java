@@ -24,7 +24,6 @@
 import jdk.crac.Core;
 import jdk.test.lib.crac.CracBuilder;
 import jdk.test.lib.crac.CracEngine;
-import jdk.test.lib.crac.CracProcess;
 import jdk.test.lib.crac.CracTest;
 
 import java.io.File;
@@ -40,10 +39,9 @@ import java.io.RandomAccessFile;
 public class OpenFileDetectionTest implements CracTest {
     @Override
     public void test() throws Exception {
-        CracProcess cp = new CracBuilder().engine(CracEngine.SIMULATE).captureOutput(true)
+        new CracBuilder().engine(CracEngine.SIMULATE)
                 .javaOption("jdk.crac.collect-fd-stacktraces", "true")
-                .startCheckpoint();
-        cp.outputAnalyzer()
+                .doCheckpointToAnalyze()
                 .shouldHaveExitValue(1)
                 .shouldMatch("CheckpointOpenFileException: filename1.txt") // RandomAccessFile should have the expected format
                 .shouldMatch("filename2.txt") // others are allowed to specify the path in some format

@@ -75,7 +75,7 @@ public class RecompilationFlagsTest implements CracTest {
             .vmOption("--add-opens=java.base/jdk.internal.crac.mirror=ALL-UNNAMED")
             .javaOption("jdk.crac.enable-recompilation", Boolean.toString(enableRecompilation))
             .javaOption("jdk.crac.recompilation-delay-ms", Long.toString(delayMs))
-            .startCheckpoint().waitForSuccess();
+            .doCheckpoint();
     }
 
     @Override

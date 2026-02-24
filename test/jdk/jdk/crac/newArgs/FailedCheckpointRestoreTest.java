@@ -58,16 +58,15 @@ public class FailedCheckpointRestoreTest implements CracTest {
 
     @Override
     public void test() throws Exception {
-        final CracBuilder builder = new CracBuilder().captureOutput(true);
+        final CracBuilder builder = new CracBuilder();
         final OutputAnalyzer out;
         if (variant == Variant.CHECKPOINT_EXCEPTION) {
-            out = builder.startCheckpoint().waitForSuccess().outputAnalyzer();
+            out = builder.doCheckpointToAnalyze();
         } else {
             builder.doCheckpoint();
-            out = builder.startRestoreWithArgs(null, List.of(NEW_MAIN_CLASS))
-                .waitForSuccess().outputAnalyzer();
+            out = builder.startRestoreWithArgs(List.of(), List.of(NEW_MAIN_CLASS)).outputAnalyzer();
         }
-        out.stdoutShouldNotContain(RESTORE_NEW_MSG).stdoutShouldNotContain(RESTORE_OLD_MSG);
+        out.shouldHaveExitValue(0).stdoutShouldNotContain(RESTORE_NEW_MSG).stdoutShouldNotContain(RESTORE_OLD_MSG);
     }
 
     @Override

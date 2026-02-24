@@ -40,11 +40,12 @@ public class PauseEngineTest implements CracTest {
     @Override
     public void test() throws Exception {
         final CracBuilder builder = new CracBuilder().engine(CracEngine.PAUSE);
-        final CracProcess process = builder.startCheckpoint();
-        process.waitForPausePid();
-        Thread.sleep(PAUSE_TIME_MS);
-        builder.doRestore();
-        process.waitForSuccess();
+        try (var process = builder.startCheckpoint()) {
+            process.waitForPausePid();
+            Thread.sleep(PAUSE_TIME_MS);
+            builder.doRestore();
+            process.waitForSuccess();
+        }
     }
 
     @Override

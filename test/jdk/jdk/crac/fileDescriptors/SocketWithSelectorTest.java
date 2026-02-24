@@ -25,7 +25,6 @@ import jdk.crac.CheckpointException;
 import jdk.crac.Core;
 import jdk.internal.crac.OpenResourcePolicies;
 import jdk.test.lib.crac.CracBuilder;
-import jdk.test.lib.crac.CracProcess;
 import jdk.test.lib.crac.CracTest;
 import jdk.test.lib.crac.CracTestArg;
 
@@ -63,12 +62,11 @@ public class SocketWithSelectorTest extends FDPolicyTestBase implements CracTest
                 localAddress: $loopback
                 action: close
                 """.replace("$loopback", loopback));
-        try {
-            CracBuilder builder = new CracBuilder();
-            if (closeSocket) {
-                builder.javaOption(OpenResourcePolicies.PROPERTY, config.toString());
-            }
-            CracProcess checkpointed = builder.startCheckpoint();
+        CracBuilder builder = new CracBuilder();
+        if (closeSocket) {
+            builder.javaOption(OpenResourcePolicies.PROPERTY, config.toString());
+        }
+        try (var checkpointed = builder.startCheckpoint()) {
             if (closeSocket) {
                 checkpointed.waitForCheckpointed();
                 builder.doRestore();

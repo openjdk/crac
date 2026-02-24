@@ -30,7 +30,6 @@ import static jdk.test.lib.Asserts.assertTrue;
 
 import jdk.test.lib.crac.CracBuilder;
 import jdk.test.lib.crac.CracEngine;
-import jdk.test.lib.crac.CracProcess;
 import jdk.test.lib.crac.CracTest;
 import jdk.test.lib.crac.CracTestArg;
 
@@ -57,11 +56,9 @@ public class BasicImageReaderTest implements CracTest {
 
     @Override
     public void test() throws Exception {
-        CracProcess cp = new CracBuilder().engine(CracEngine.SIMULATE).captureOutput(true)
-            .vmOption("--add-opens=java.base/jdk.internal.jimage=ALL-UNNAMED")
-            .startCheckpoint();
-        cp.outputAnalyzer()
-            .shouldHaveExitValue(0);
+        new CracBuilder().engine(CracEngine.SIMULATE)
+                .vmOption("--add-opens=java.base/jdk.internal.jimage=ALL-UNNAMED")
+                .doCheckpoint();
     }
 
     @Override

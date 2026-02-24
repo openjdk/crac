@@ -67,7 +67,7 @@ public class KeyAfterRestoreTest implements CracTest {
         if (selectorImpl != null) {
             builder.javaOption(SelectorProvider.class.getName(), selectorImpl);
         }
-        builder.startCheckpoint().waitForSuccess();
+        builder.doCheckpoint();
     }
 
     @Override

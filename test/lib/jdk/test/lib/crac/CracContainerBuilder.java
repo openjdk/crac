@@ -169,7 +169,7 @@ public class CracContainerBuilder extends CracBuilderBase<CracContainerBuilder> 
         if (!containerStarted) {
             prepareContainer();
             List<String> cmd = prepareContainerCommand(dockerImageName, dockerOptions);
-            log("Starting docker container:\n" + String.join(" ", cmd));
+            System.err.println("Starting docker container:\n" + String.join(" ", cmd));
             try (final var p = new ProcessBuilder().inheritIO().command(cmd).start()) {
                 assertEquals(0, p.waitFor());
             }
@@ -267,7 +267,7 @@ public class CracContainerBuilder extends CracBuilderBase<CracContainerBuilder> 
             List<String> cmd = new ArrayList<>();
             cmd.addAll(Arrays.asList(Container.ENGINE_COMMAND, "exec", CONTAINER_NAME));
             cmd.addAll(containerSetupCommand);
-            log("Container set up:\n" + String.join(" ", cmd));
+            System.err.println("Container set up:\n" + String.join(" ", cmd));
             DockerTestUtils.execute(cmd).shouldHaveExitValue(0);
         }
     }
@@ -291,14 +291,14 @@ public class CracContainerBuilder extends CracBuilderBase<CracContainerBuilder> 
         } while (oa.getStdout().contains(CONTAINER_NAME));
 
         List<String> cmd = prepareContainerCommand(imageName, List.of(options));
-        log("Recreating docker container:\n" + String.join(" ", cmd));
+        System.err.println("Recreating docker container:\n" + String.join(" ", cmd));
         try (final var p = new ProcessBuilder().inheritIO().command(cmd).start()) {
             assertEquals(0, p.waitFor());
         }
     }
 
     @Override
-    public CracProcess startCheckpoint(List<String> javaPrefix) throws Exception {
+    public CracProcess startCheckpoint(String... javaPrefix) throws Exception {
         if (runContainerDirectly) {
             prepareContainer();
         } else {

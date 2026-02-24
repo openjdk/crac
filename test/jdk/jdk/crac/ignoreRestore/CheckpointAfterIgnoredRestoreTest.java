@@ -45,7 +45,7 @@ public class CheckpointAfterIgnoredRestoreTest {
             .forwardClasspathOnRestore(true);
         assertTrue(Files.notExists(builder.imageDir()), "Image should not exist yet: " + builder.imageDir());
         builder
-            .startRestoreWithArgs(null, List.of("-XX:CRaCCheckpointTo=" + builder.imageDir(), Main.class.getName()))
+            .startRestoreWithArgs(List.of(), List.of("-XX:CRaCCheckpointTo=" + builder.imageDir(), Main.class.getName()))
             .waitForCheckpointed();
         builder.doRestore();
     }

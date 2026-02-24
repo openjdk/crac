@@ -60,7 +60,7 @@ public class PollerTest implements CracTest {
         new CracBuilder()
                 .engine(CracEngine.SIMULATE)
                 .javaOption("jdk.pollerMode", pollerMode)
-                .startCheckpoint().waitForSuccess();
+                .doCheckpoint();
     }
 
     @FunctionalInterface

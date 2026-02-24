@@ -131,7 +131,7 @@ static bool find_engine(const char *dll_dir, char *path, size_t path_size, char 
       log_warning(crac)("Engine name '%s' (without the engine suffix) is deprecated and will be removed in version 28, please use -XX:CRaCEngine=%s", CRaCEngine, resolved_engine);
     }
     log_debug(crac)("VM is statically linked, not doing any library lookup");
-    os::jvm_path(path, path_size); // points to bin/java for static JDK
+    os::jvm_path(path, static_cast<jint>(path_size)); // points to bin/java for static JDK
     return true;
   }
 

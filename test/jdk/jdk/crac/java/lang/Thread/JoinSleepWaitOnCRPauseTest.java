@@ -26,6 +26,7 @@ import jdk.test.lib.crac.CracTest;
 import jdk.test.lib.crac.CracTestArg;
 
 import java.util.concurrent.CountDownLatch;
+
 /*
  * @test JoinSleepWaitOnCRPauseTest.java
  * @requires (os.family == "linux")

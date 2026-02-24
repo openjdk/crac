@@ -26,9 +26,7 @@ package crac.fileDescriptors;
 import jdk.crac.Core;
 import jdk.test.lib.compiler.CompilerUtils;
 import jdk.test.lib.crac.CracBuilder;
-import jdk.test.lib.crac.CracProcess;
 import jdk.test.lib.crac.CracTest;
-import jdk.test.lib.process.OutputAnalyzer;
 
 import java.io.File;
 import java.nio.file.Files;
@@ -91,30 +89,20 @@ public class PatchModuleTest implements CracTest {
 
         // 4. Build the process with --patch-module
         CracBuilder builder = new CracBuilder()
-                .captureOutput(true)
                 .printResources(true)
                 .vmOption("--patch-module=java.base=" + patchJar.getAbsolutePath());
 
-        // 5. Start the checkpoint process
-        CracProcess checkpointProcess = builder.startCheckpoint();
+        // 5.Perform checkpoint
+        builder.doCheckpointToAnalyze()
+                // Verify that the checkpoint process did not fail
+                .shouldNotContain("CheckpointException")
+                // Verify Java-level fix: PersistentJarFile is used
+                .shouldContain(patchJar.getAbsolutePath() + " is recorded as always available on restore")
+                // Verify Native-level fix: check_fds reports the FD as ok
+                .shouldMatch("JVM: FD fd=[0-9]+ type=regular path=\"" + patchJar.getAbsolutePath()
+                        + "\" OK: claimed by patch-module");
 
-        // 6. Analyze the output of the checkpointing process to verify fixes
-        OutputAnalyzer checkpointOutput = checkpointProcess.outputAnalyzer();
-
-        // Verify that the checkpoint process did not fail
-        checkpointOutput.shouldNotContain("CheckpointException");
-
-        // Verify Java-level fix: PersistentJarFile is used
-        checkpointOutput.shouldContain(patchJar.getAbsolutePath() + " is recorded as always available on restore");
-
-        // Verify Native-level fix: check_fds reports the FD as ok
-        checkpointOutput.shouldMatch("JVM: FD fd=[0-9]+ type=regular path=\"" + patchJar.getAbsolutePath()
-                + "\" OK: claimed by patch-module");
-
-        // Let the checkpoint finish
-        checkpointProcess.waitForCheckpointed();
-
-        // 7. Perform restore
+        // 6. Perform restore
         builder.doRestore();
     }
 

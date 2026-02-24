@@ -25,7 +25,6 @@ import jdk.crac.Core;
 import jdk.test.lib.Platform;
 import jdk.test.lib.crac.CracBuilder;
 import jdk.test.lib.crac.CracEngine;
-import jdk.test.lib.crac.CracProcess;
 import jdk.test.lib.crac.CracTest;
 import jdk.test.lib.crac.CracTestArg;
 import jdk.test.lib.util.FileUtils;
@@ -63,29 +62,33 @@ public class CheckCPUFeaturesTest implements CracTest {
 
     @Override
     public void test() throws Exception {
-        CracBuilder builder = new CracBuilder().engine(CracEngine.PAUSE);
-        if (builder.imageDir().toFile().exists()) {
-            FileUtils.deleteFileTreeWithRetry(builder.imageDir());
-        }
-        CracProcess checkpoint = builder.vmOption("-XX:CPUFeatures=" + features).startCheckpoint();
-        checkpoint.waitForPausePid();
-
-        builder.clearVmOptions();
-        if ("skip-experimental".equals(check)) {
-            builder.vmOption("-XX:+UnlockExperimentalVMOptions");
-            check = "skip";
-        }
-        CracProcess restore = builder.vmOption("-XX:CheckCPUFeatures=" + check).startRestore();
         boolean success = "pass".equals(result);
         if (!Platform.isX86() && !Platform.isX64()) {
             success = success || "fail-x86".equals(result);
         }
-        if (success) {
-            restore.waitForSuccess();
-            checkpoint.waitForSuccess();
-        } else {
-            assertEquals(1, restore.waitFor());
-            checkpoint.destroyForcibly();
+
+        CracBuilder builder = new CracBuilder().engine(CracEngine.PAUSE);
+        if (builder.imageDir().toFile().exists()) {
+            FileUtils.deleteFileTreeWithRetry(builder.imageDir());
+        }
+
+        try (var checkpoint = builder.vmOption("-XX:CPUFeatures=" + features).startCheckpoint()) {
+            checkpoint.waitForPausePid();
+
+            builder.clearVmOptions();
+            if ("skip-experimental".equals(check)) {
+                builder.vmOption("-XX:+UnlockExperimentalVMOptions");
+                check = "skip";
+            }
+            try (var restore = builder.vmOption("-XX:CheckCPUFeatures=" + check).startRestore()) {
+                if (success) {
+                    restore.waitForSuccess();
+                    checkpoint.waitForSuccess();
+                } else {
+                    assertEquals(1, restore.waitFor());
+                    checkpoint.destroyForcibly();
+                }
+            }
         }
     }
 

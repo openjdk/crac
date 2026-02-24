@@ -55,7 +55,7 @@ public abstract class ReopenListeningTestBase<ServerType extends Closeable> exte
                     .engine(CracEngine.SIMULATE)
                     .javaOption(OpenResourcePolicies.PROPERTY, config.toString())
                     .javaOption("jdk.crac.collect-fd-stacktraces", "true")
-                    .startCheckpoint().waitForSuccess();
+                    .doCheckpoint();
         } finally {
             Files.deleteIfExists(config);
         }

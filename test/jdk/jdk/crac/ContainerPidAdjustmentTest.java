@@ -25,12 +25,10 @@ import jdk.test.lib.Platform;
 import jdk.test.lib.containers.docker.Common;
 import jdk.test.lib.crac.CracContainerBuilder;
 import jdk.test.lib.crac.CracEngine;
-import jdk.test.lib.crac.CracProcess;
 import jdk.test.lib.crac.CracTest;
 import jdk.test.lib.crac.CracTestArg;
 import jdk.test.lib.process.OutputAnalyzer;
 
-import static jdk.test.lib.Asserts.assertEquals;
 import static jdk.test.lib.Asserts.assertLessThan;
 
 /*
@@ -93,9 +91,6 @@ public class ContainerPidAdjustmentTest implements CracTest {
             if (needSetMinPid) {
                 builder.vmOption("-XX:CRaCMinPid=" + createLastPidValue(lastPid));
             }
-            if (0 > expectedLastPid) {
-                builder.captureOutput(true);
-            }
             if (null != lastPidSetup) {
                 // Set up the initial last pid,
                 // create a non-privileged user,
@@ -113,14 +108,14 @@ public class ContainerPidAdjustmentTest implements CracTest {
             }
 
             if (0 < expectedLastPid) {
-                builder.startCheckpoint().waitForSuccess();
+                // Cannot use doCheckpoint because for CRIU it expects the process to be killed on checkpoint
+                try (var p = builder.startCheckpoint()) {
+                    p.waitForSuccess();
+                }
             } else {
                 final int expectedExitValue = (int)java.lang.Math.abs(expectedLastPid);
-                CracProcess process = builder.startCheckpoint();
-                final int exitValue = process.waitFor();
-                assertEquals(expectedExitValue, exitValue, "Process returned unexpected exit code: " + exitValue);
-                OutputAnalyzer oa = process.outputAnalyzer();
-                oa.shouldNotContain(CURRENT_PID_MESSAGE);
+                OutputAnalyzer oa = builder.doCheckpointToAnalyze();
+                oa.shouldHaveExitValue(expectedExitValue).shouldNotContain(CURRENT_PID_MESSAGE);
                 if (null != lastPidSetup) {
                     oa.shouldContain("spin_last_pid: Invalid argument (" + lastPid + ")");
                 }

@@ -52,16 +52,15 @@ public class EngineFailureTest {
         // CPU features, for example.
         new CracBuilder().engine(CracEngine.SIMULATE)
             .main(Main.class).args("true")
-            .startCheckpoint().waitForSuccess();
+            .doCheckpoint();
 
         new CracBuilder()
             .vmOption("-XX:CRaCEngine=crexec")
             .vmOption("-XX:+CRaCIgnoreRestoreIfUnavailable")
             .forwardClasspathOnRestore(true)
-            .captureOutput(true)
-            .startRestoreWithArgs(null, List.of(Main.class.getName(), "false"))
-            .waitForSuccess()
+            .startRestoreWithArgs(List.of(), List.of(Main.class.getName(), "false"))
             .outputAnalyzer()
+            .shouldHaveExitValue(0)
             .shouldContain("CRaC engine failed to restore")
             .shouldContain(MAIN_MSG);
     }

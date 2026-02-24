@@ -22,12 +22,10 @@
  */
 
 import jdk.crac.Core;
-import jdk.internal.crac.JDKFdResource;
 import jdk.test.lib.crac.CracBuilder;
 import jdk.test.lib.crac.CracTest;
 import jdk.test.lib.crac.CracEngine;
 
-import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 
@@ -45,13 +43,14 @@ public class LoggingVMlogOpenSimulTest implements CracTest {
     public void test() throws Exception {
         Path logPathO = Files.createTempFile(getClass().getName(), "-vmlog1.txt");
         try {
-            CracBuilder builder = new CracBuilder().captureOutput(true);
+            CracBuilder builder = new CracBuilder();
             builder.engine(CracEngine.SIMULATE);
             builder.vmOption("-XX:+UnlockDiagnosticVMOptions");
             builder.vmOption("-XX:+LogVMOutput");
             builder.vmOption("-XX:LogFile=" + logPathO);
-            var oa = builder.startCheckpoint().waitForSuccess().outputAnalyzer();
-            oa.shouldContain(RESTORED_MESSAGE);
+            builder.doCheckpointToAnalyze()
+                    .shouldHaveExitValue(0)
+                    .shouldContain(RESTORED_MESSAGE);
             assertNotEquals(0, Files.size(logPathO));
         } finally {
             Files.deleteIfExists(logPathO);

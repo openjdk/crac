@@ -39,7 +39,7 @@ public class HelpTest {
     }
 
     private static void test(String... opts) throws Exception {
-        List<String> optsList = new ArrayList(Arrays.asList(opts));
+        List<String> optsList = new ArrayList<>(Arrays.asList(opts));
         optsList.add("-XX:CRaCEngineOptions=help");
         optsList.add("-Xlog:crac=debug");
         // Limited to not get non-restore-settable flags with CRaCRestoreFrom

@@ -23,14 +23,13 @@
 
 import jdk.crac.*;
 import jdk.test.lib.crac.CracBuilder;
-import jdk.test.lib.crac.CracProcess;
 import jdk.test.lib.crac.CracTest;
 
-import java.util.concurrent.CompletableFuture;
+import java.lang.ref.Reference;
 import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.TimeUnit;
 
 import static jdk.test.lib.Asserts.assertFalse;
+import static jdk.test.lib.Asserts.assertTrue;
 
 /**
  * @test
@@ -46,32 +45,38 @@ public class DaemonAfterRestore implements CracTest {
 
     @Override
     public void test() throws Exception {
-        CracBuilder builder = new CracBuilder().captureOutput(true);
+        CracBuilder builder = new CracBuilder();
 
-        CompletableFuture<?> firstOutputFuture = new CompletableFuture<Void>();
-        CracProcess checkpointProcess = builder.startCheckpoint().watch(
-            outline -> {
-                System.out.println(outline);
-                if (outline.equals(MAIN_THREAD_FINISH)) {
-                    firstOutputFuture.complete(null);
-                }
-            },
-            errline -> {
-                System.err.println("ERROR: " + errline);
-                firstOutputFuture.cancel(false);
-            });
-        firstOutputFuture.get(10, TimeUnit.SECONDS);
-        builder.checkpointViaJcmd(checkpointProcess.pid());
-        checkpointProcess.waitForCheckpointed();
+        try (var checkpointProcess = builder.startCheckpoint()) {
+            checkpointProcess.waitForStdout(MAIN_THREAD_FINISH, false);
+            builder.checkpointViaJcmd(checkpointProcess.pid());
+            checkpointProcess.waitForCheckpointed();
+        }
 
-        builder.startRestore().waitForSuccess()
-            .outputAnalyzer().shouldContain(AFTER_RESTORE_MESSAGE);
+        builder.doRestoreToAnalyze()
+                    .shouldHaveExitValue(0)
+                    .shouldContain(AFTER_RESTORE_MESSAGE);
     }
 
     @Override
     public void exec() throws RestoreException, CheckpointException {
         CountDownLatch start = new CountDownLatch(1);
         CountDownLatch finish = new CountDownLatch(1);
+
+        Resource resource = new Resource() {
+            @Override
+            public void beforeCheckpoint(Context<? extends Resource> context) throws Exception {
+                assertTrue(Thread.currentThread().isDaemon(), "beforeCheckpoint is expected to be called from daemon thread");
+                finish.countDown();
+            }
+            @Override
+            public void afterRestore(Context<? extends Resource> context) throws Exception {
+                Thread.sleep(3000);
+                System.out.println(AFTER_RESTORE_MESSAGE);
+            }
+        };
+        Core.getGlobalContext().register(resource);
+
         Thread workerThread = new Thread(() -> {
             System.out.println("worker thread start");
             start.countDown();
@@ -80,6 +85,7 @@ public class DaemonAfterRestore implements CracTest {
             } catch (InterruptedException e) {
                 throw new RuntimeException(e);
             }
+            Reference.reachabilityFence(resource);
             System.out.println("worker thread finish");
         });
         assertFalse(workerThread.isDaemon());
@@ -90,21 +96,6 @@ public class DaemonAfterRestore implements CracTest {
         } catch (InterruptedException e) {
             throw new RuntimeException(e);
         }
-
-        Resource resource = new Resource() {
-            @Override
-            public void beforeCheckpoint(Context<? extends Resource> context) throws Exception {
-                assert Thread.currentThread().isDaemon() : "beforeCheckpoint is expected to be called from daemon thread";
-                finish.countDown();
-            }
-            @Override
-            public void afterRestore(Context<? extends Resource> context) throws Exception {
-                Thread.sleep(3000);
-                System.out.println(AFTER_RESTORE_MESSAGE);
-            }
-        };
-
-        Core.getGlobalContext().register(resource);
 
         System.out.println(MAIN_THREAD_FINISH);
     }

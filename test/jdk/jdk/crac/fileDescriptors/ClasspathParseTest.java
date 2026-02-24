@@ -22,17 +22,13 @@
  */
 
 import jdk.crac.Core;
-import jdk.test.lib.Utils;
 import jdk.test.lib.crac.CracBuilder;
 import jdk.test.lib.crac.CracEngine;
 import jdk.test.lib.crac.CracTest;
 
 import java.io.File;
 import java.io.FileInputStream;
-import java.io.IOException;
 import java.util.Arrays;
-
-import static jdk.test.lib.Asserts.assertEquals;
 
 /**
  * @test
@@ -42,8 +38,6 @@ import static jdk.test.lib.Asserts.assertEquals;
  * @run driver jdk.test.lib.crac.CracTest
  */
 public class ClasspathParseTest implements CracTest {
-    public static final String JAVA = Utils.TEST_JDK + "/bin/java";
-
     @Override
     public void test() throws Exception {
         String someJar = Arrays.stream(System.getProperty("java.class.path").split(File.pathSeparator))
@@ -55,7 +49,7 @@ public class ClasspathParseTest implements CracTest {
                 .classpathEntry(ClasspathParseTest.class.getProtectionDomain().getCodeSource().getLocation().getPath())
                 .classpathEntry("file:/C:\\some\\invalid/path")
                 .classpathEntry(someJar)
-                .startCheckpoint().waitForSuccess();
+                .doCheckpoint();
     }
 
     @Override

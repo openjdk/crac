@@ -50,7 +50,6 @@ public class ContainerOOMETest implements CracTest {
         DockerTestUtils.checkCanUseResourceLimits();
         final String imageName = Common.imageName("oome-test");
         CracContainerBuilder builder = new CracContainerBuilder()
-                .captureOutput(true)
                 .inDockerImage(imageName)
                 .dockerOptions("-m", "256M")
                 .runContainerDirectly(true)
@@ -60,10 +59,10 @@ public class ContainerOOMETest implements CracTest {
                 .vmOption("-Xmx4G")
                 .vmOption("-XX:CRaCMaxHeapSizeBeforeCheckpoint=128M");
         try {
-            builder.startCheckpoint().outputAnalyzer()
+            builder.doCheckpointToAnalyze()
                     .shouldHaveExitValue(137) // checkpoint
                     .stderrShouldContain(AFTER_OOME);
-            builder.clearDockerOptions().clearVmOptions().captureOutput(false);
+            builder.clearDockerOptions().clearVmOptions();
             builder.doRestore();
         } finally {
             builder.ensureContainerKilled();

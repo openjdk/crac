@@ -44,8 +44,7 @@ public class RecursiveCheckpointTest implements Resource, CracTest {
 
     @Override
     public void test() throws Exception {
-        final CracBuilder builder = new CracBuilder().engine(CracEngine.SIMULATE);
-        builder.startCheckpoint().waitForSuccess();
+        new CracBuilder().engine(CracEngine.SIMULATE).doCheckpoint();
     }
 
     private static class TestThread extends Thread {
@@ -108,7 +107,7 @@ public class RecursiveCheckpointTest implements Resource, CracTest {
         }
 
         if (!throwables.isEmpty()) {
-            final var aggregated = new IllegalStateException("" + throwables.size() + " test threads failed");
+            final var aggregated = new IllegalStateException(throwables.size() + " test threads failed");
             for (final var t : throwables) {
                 aggregated.addSuppressed(t);
             }

@@ -23,7 +23,6 @@
 
 import java.io.File;
 import java.io.FileOutputStream;
-import java.io.IOException;
 
 import jdk.crac.*;
 import jdk.test.lib.crac.CracBuilder;
@@ -50,8 +49,7 @@ public class DryRunTest implements CracTest {
 
     @Override
     public void test() throws Exception {
-        new CracBuilder().engine(CracEngine.SIMULATE).printResources(true)
-                .startCheckpoint().waitForSuccess();
+        new CracBuilder().engine(CracEngine.SIMULATE).printResources(true).doCheckpoint();
     }
 
     @Override

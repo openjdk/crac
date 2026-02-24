@@ -30,13 +30,11 @@ import jdk.test.lib.crac.CracTest;
 import jdk.test.lib.util.FileUtils;
 
 import java.io.File;
-import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.text.SimpleDateFormat;
 import java.util.*;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicInteger;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -64,7 +62,10 @@ public class PathPatternTest implements CracTest {
         if (pause) {
             builder.vmOption("-Dtest.pause=true");
         }
-        return builder.startCheckpoint().waitForSuccess().pid();
+        try (var process = builder.startCheckpoint()) {
+            process.waitForSuccess();
+            return process.pid();
+        }
     }
 
     @Override

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2023-2025, Azul Systems, Inc. All rights reserved.
+ * Copyright (c) 2023, 2026, Azul Systems, Inc. All rights reserved.
  * Copyright (c) 2023, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
@@ -56,8 +56,8 @@
 #define UNCHECKED_OPTIONS(OPT) \
   OPT(image_location, const char *, nullptr, CRLIB_OPTION_FLAG_CHECKPOINT | CRLIB_OPTION_FLAG_RESTORE, "path", "no default", \
     "path to a directory with checkpoint/restore files.") \
-  OPT(criu_location, const char *, nullptr, CRLIB_OPTION_FLAG_CHECKPOINT | CRLIB_OPTION_FLAG_RESTORE, "path", "no default", \
-    "path to this engine library (self).") \
+  OPT(criu_location, const char *, nullptr, CRLIB_OPTION_FLAG_CHECKPOINT | CRLIB_OPTION_FLAG_RESTORE, "path", "<engine dir>/../lib/criu", \
+    "path to the CRIU executable.") \
   OPT(args, const char *, nullptr, CRLIB_OPTION_FLAG_CHECKPOINT | CRLIB_OPTION_FLAG_RESTORE, "string", "\"\"", \
     "free space-separated arguments passed directly to the engine executable, e.g. \"--arg1 --arg2 --arg3\".") \
 
@@ -105,6 +105,105 @@ static bool parse_bool(const char *str, Option<bool> *result) {
   LOG("expected '%s' to be either 'true' or 'false'", str);
   return false;
 }
+
+class ArgsBuilder {
+  const char *_args[32];
+  const char **_next = _args;
+  const char ** const _end = _args + ARRAY_SIZE(_args) - 1;
+  char *_from_env = nullptr;
+  char *_from_opts = nullptr;
+  bool _failed = false;
+
+  void fill_args(const char* from, char* copy) {
+    char* saveptr = nullptr;
+    char* arg = strtok_r(copy, " ", &saveptr);
+    while (arg) {
+      if (_next < _end) {
+        *_next++ = arg;
+      } else {
+        LOG("Warning: too many arguments for CRIU (dropped '%s' from %s)\n", arg, from);
+      }
+      arg = strtok_r(NULL, " ", &saveptr);
+    }
+  }
+
+public:
+  ~ArgsBuilder() {
+    free(_from_env);
+    free(_from_opts);
+  }
+
+  bool failed() const {
+    return _failed;
+  }
+
+  size_t remaining() const {
+    return _end - _next;
+  }
+
+  ArgsBuilder &append(const char *arg) {
+    if (_next < _end) {
+      *_next++ = arg;
+    }
+    *_next = nullptr;
+    return *this;
+  }
+
+  ArgsBuilder &append_all(const char* args) {
+    const char *criu_opts = getenv("CRAC_CRIU_OPTS");
+    if (criu_opts && criu_opts[0]) {
+      LOG("CRAC_CRIU_OPTS is deprecated, will be obsoleted in JDK 28 and removed in JDK 29. Use -XX:CRaCEngineOptions=args=...");
+      _from_env = strdup_checked(criu_opts);
+      if (_from_env == nullptr) {
+        _failed = true;
+        return *this;
+      }
+      fill_args("CRAC_CRIU_OPTS", _from_env);
+    }
+    // applying args later (these have higher priority)
+    if (args != nullptr) {
+      _from_opts = strdup_checked(args);
+      if (_from_opts == nullptr) {
+        _failed = true;
+        return *this;
+      }
+      fill_args("args option", _from_opts);
+    }
+    assert(_next < _args + ARRAY_SIZE(_args));
+    *_next = nullptr;
+    return *this;
+  }
+
+  char* const* argv() const {
+    assert(_next <= _end);
+    return const_cast<char* const*>(_args);
+  }
+
+  void print() const {
+    fprintf(stderr, "%s: Command: ", crcommon_log_prefix());
+    for (const char * const *argp = _args; *argp != NULL; ++argp) {
+      const char *s = *argp;
+      if (argp != _args) {
+          fputc(' ', stderr);
+      }
+      // https://unix.stackexchange.com/a/357932/296319
+      if (!strpbrk(s, " \t\n!\"#$&'()*,;<=>?[\\]^`{|}~")) {
+          fputs(s, stderr);
+          continue;
+      }
+      fputc('\'', stderr);
+      for (; *s; ++s) {
+          if (*s != '\'') {
+              fputc(*s, stderr);
+          } else {
+              fputs("'\\''", stderr);
+          }
+      }
+      fputc('\'', stderr);
+    }
+    fputc('\n', stderr);
+  }
+};
 
 class criuengine: public crlib_base {
 private:
@@ -205,7 +304,7 @@ public:
   int checkpoint();
   int restore();
   const char *get_criu();
-  bool execute_criu(const char **argv) const;
+  bool execute_criu(const ArgsBuilder &args) const;
 
 private:
   bool configure_str(const char *value, char **field) {
@@ -347,39 +446,46 @@ static const char* check_criu_executable(const char *path) {
   return path;
 }
 
-const char *criuengine::get_criu() {
+static char* get_relative_file(const char *rel) {
+  Dl_info symbol_info;
+  // any function in this file would work
+  if (!dladdr(reinterpret_cast<const void*>(::get_relative_file), &symbol_info)) {
+    LOG("Failed to get criuengine location: %s", dlerror());
+    return nullptr;
+  }
+  const char *fname = symbol_info.dli_fname;
+  const char *last_slash = strrchr(fname, '/');
+  if (last_slash == nullptr) {
+    LOG("Invalid criuengine location (missing '/'): %s", fname);
+    return nullptr;
+  }
+  size_t rel_size = strlen(rel) + 1;
+  char *buf = static_cast<char*>(malloc(last_slash - fname + 1 + rel_size));
+  if (buf == nullptr) {
+    LOG("Cannot allocate memory for path to %s", rel);
+    return nullptr;
+  }
+  char *end = static_cast<char*>(mempcpy(buf, fname, last_slash - fname + 1));
+  memcpy(end, rel, rel_size);
+  return buf;
+}
+
+const char* criuengine::get_criu() {
   char *criu = _criu_location;
   if (criu == nullptr) {
     criu = getenv("CRAC_CRIU_PATH");
+    if (criu != nullptr) {
+      LOG("CRAC_CRIU_PATH is deprecated, will be obsoleted in JDK 28 and removed in JDK 29. Use -XX:CRaCEngineOptions=criu_location=...");
+    }
   }
   if (criu != nullptr) {
     return check_criu_executable(criu);
   }
-  Dl_info symbol_info;
-  if (dladdr(reinterpret_cast<const void*>(::checkpoint), &symbol_info)) {
-    const char *fname = symbol_info.dli_fname;
-    const char *last_slash = strrchr(fname, '/');
-    if (last_slash == nullptr) {
-      LOG("Invalid engine library location (missing '/'): %s", fname);
-      return nullptr;
-    }
-    // We need to use the ../lib because static build would find this code in `java` executable
-    // in the bin folder.
-    static constexpr const char criu_suffix[] = "../lib/criu";
-    assert(!strcmp("libcriuengine.so", last_slash + 1) || !strcmp("java", last_slash + 1));
-    // let's cache the value in _criu_location, and release it in dtor
-    _criu_location = static_cast<char*>(malloc(last_slash - fname + 1 + sizeof(criu_suffix)));
-    if (_criu_location == nullptr) {
-      LOG("Cannot allocate memory for criu location");
-      return nullptr;
-    }
-    char *end = static_cast<char*>(mempcpy(_criu_location, fname, last_slash - fname + 1));
-    memcpy(end, criu_suffix, sizeof(criu_suffix));
-    return check_criu_executable(_criu_location);
-  } else {
-    LOG("Failed to find engine library location: %s", dlerror());
-    return nullptr;
-  }
+  // We need to use the ../lib because static build would find this code in `java` executable
+  // in the bin folder.
+  // let's cache the value in _criu_location, and release it in dtor
+  _criu_location = get_relative_file("../lib/criu");
+  return _criu_location == nullptr ? nullptr : check_criu_executable(_criu_location);
 }
 
 static int kickjvm(pid_t jvm, int code) {
@@ -391,53 +497,12 @@ static int kickjvm(pid_t jvm, int code) {
   return 0;
 }
 
-static void print_args_to_stderr(const char **args) {
-  fprintf(stderr, "Command: ");
-  for (const char **argp = args; *argp != NULL; ++argp) {
-    const char *s = *argp;
-    if (argp != args) {
-        fputc(' ', stderr);
-    }
-    // https://unix.stackexchange.com/a/357932/296319
-    if (!strpbrk(s, " \t\n!\"#$&'()*,;<=>?[\\]^`{|}~")) {
-        fputs(s, stderr);
-        continue;
-    }
-    fputc('\'', stderr);
-    for (; *s; ++s) {
-        if (*s != '\'') {
-            fputc(*s, stderr);
-        } else {
-            fputs("'\\''", stderr);
-        }
-    }
-    fputc('\'', stderr);
-  }
-  fputc('\n', stderr);
+static const char *resolve(const char *rel, char resolved[PATH_MAX]) {
+    char *abs = realpath(rel, resolved);
+    return abs ? abs : rel;
 }
 
-static const char *join_path(const char *path1, const char *path2) {
-    char *retval;
-    if (asprintf(&retval, "%s/%s", path1, path2) == -1) {
-        perror("asprintf");
-        exit(1);
-    }
-    return retval;
-}
-
-static const char *path_abs(const char *rel) {
-    if (rel[0] == '/') {
-        return rel;
-    }
-    char *cwd = get_current_dir_name();
-    if (!cwd) {
-        perror("get_current_dir_name");
-        exit(1);
-    }
-    return join_path(cwd, rel);
-}
-
-bool criuengine::execute_criu(const char **argv) const {
+bool criuengine::execute_criu(const ArgsBuilder &args) const {
   pid_t jvm_pid = getpid();
   pid_t child_pid = fork();
   if (child_pid < 0) {
@@ -473,7 +538,7 @@ bool criuengine::execute_criu(const char **argv) const {
   }
 
   if (parent == parent_before) {
-    fprintf(stderr, "can't move out of JVM process hierarchy");
+    LOG("can't move out of JVM process hierarchy");
     kickjvm(jvm_pid, -1);
     exit(0);
   }
@@ -484,26 +549,28 @@ bool criuengine::execute_criu(const char **argv) const {
   // for CRIU exit code.
   pid_t child = fork();
   if (!child) {
-      execv(argv[0], const_cast<char**>(argv));
-      LOG("Cannot execute CRIU");
-      print_args_to_stderr(argv);
-      fprintf(stderr, "\": %s\n", strerror(errno));
+      execv(args.argv()[0], args.argv());
+      LOG("Cannot execute CRIU: %s", strerror(errno));
+      args.print();
       exit(SUPPRESS_ERROR_IN_PARENT);
   }
 
   int status;
   if (child != wait(&status)) {
       LOG("Error waiting for CRIU: %s", strerror(errno));
-      print_args_to_stderr(argv);
+      args.print();
       kickjvm(jvm_pid, -1);
-  } else if (!WIFEXITED(status)) {
-      LOG("CRIU has not properly exited, waitpid status was %d - check %s/dump4.log", status, path_abs(_image_location));
-      print_args_to_stderr(argv);
+      exit(0);
+  }
+  char resolved[PATH_MAX];
+  if (!WIFEXITED(status)) {
+      LOG("CRIU has not properly exited, waitpid status was %d - check %s/dump4.log", status, resolve(_image_location, resolved));
+      args.print();
       kickjvm(jvm_pid, -1);
   } else if (WEXITSTATUS(status)) {
       if (WEXITSTATUS(status) != SUPPRESS_ERROR_IN_PARENT) {
-          LOG("CRIU failed with exit code %d - check %s/dump4.log", WEXITSTATUS(status), path_abs(_image_location));
-          print_args_to_stderr(argv);
+          LOG("CRIU failed with exit code %d - check %s/dump4.log", WEXITSTATUS(status), resolve(_image_location, resolved));
+          args.print();
       }
       kickjvm(jvm_pid, -1);
   } else if (keep_running()) {
@@ -512,53 +579,6 @@ bool criuengine::execute_criu(const char **argv) const {
 
   exit(0);
 }
-
-class ArgsAppender {
-  char *_from_env = nullptr;
-  char *_from_opts = nullptr;
-
-  const char** fill_args(const char* from, char* copy, const char** next, const char** end) {
-    char* saveptr = nullptr;
-    char* arg = strtok_r(copy, " ", &saveptr);
-    while (arg) {
-      if (next < end - 1) { /* account for trailing NULL */
-        *next++ = arg;
-      } else {
-        LOG("Warning: too many arguments for CRIU (dropped '%s' from %s)\n", arg, from);
-      }
-      arg = strtok_r(NULL, " ", &saveptr);
-    }
-    return next;
-  }
-
-public:
-  ~ArgsAppender() {
-    free(_from_env);
-    free(_from_opts);
-  }
-
-  const char** append(const char** next, const char** const end, const char* args) {
-    const char *criu_opts = getenv("CRAC_CRIU_OPTS");
-    if (criu_opts) {
-      _from_env = strdup_checked(criu_opts);
-      if (_from_env == nullptr) {
-        return nullptr;
-      }
-      next = fill_args("CRAC_CRIU_OPTS", _from_env, next, end);
-    }
-    // applying args later (these have higher priority)
-    if (args != nullptr) {
-      _from_opts = strdup_checked(args);
-      if (_from_opts == nullptr) {
-        return nullptr;
-      }
-      next = fill_args("args option", _from_opts, next, end);
-    }
-    assert(next < end);
-    *next = nullptr;
-    return next;
-  }
-};
 
 int criuengine::checkpoint() {
   const char *criu = get_criu();
@@ -583,28 +603,26 @@ int criuengine::checkpoint() {
   char jvmpidchar[32];
   snprintf(jvmpidchar, sizeof(jvmpidchar), "%d", getpid());
 
-  const char* args[32] = {
-      criu,
-      "dump",
-      "-t", jvmpidchar,
-      // -D without -W makes criu cd to image dir for logs
-      "-D", _image_location,
-      // will be overwritten with any later log-related args
-      "-v4", "-o", "dump4.log",
-      "--shell-job",
-  };
-  const char** next = args + 10;
+  ArgsBuilder args;
+  args
+    .append(criu).append("dump")
+    .append("-t").append(jvmpidchar)
+    // -D without -W makes criu cd to image dir for logs
+    .append("-D").append(_image_location)
+    // will be overwritten with any later log-related args
+    .append("-v4").append("-o").append("dump4.log")
+    .append("--shell-job");
 
   if (keep_running()) {
-      *next++ = "-R";
+      args.append("-R");
   }
 
-  ArgsAppender appender;
-  if (!appender.append(next, args + ARRAY_SIZE(args), _args)) {
+  args.append_all(_args);
+  if (args.failed()) {
     return -1;
   }
 
-  print_args_to_stderr(args);
+  args.print();
 
   if (!execute_criu(args)) {
     return -1;
@@ -621,7 +639,7 @@ int criuengine::checkpoint() {
   } while (sig == -1 && errno == EINTR);
 
   if (info.si_code != SI_QUEUE) {
-    return false;
+    return -1;
   }
   {
 #ifndef NDEBUG
@@ -656,54 +674,40 @@ int criuengine::restore() {
     return -1;
   }
 
-  char criuhelper[PATH_MAX];
-  Dl_info symbol_info;
-  if (dladdr(reinterpret_cast<const void*>(::restore), &symbol_info)) {
-    const char *fname = symbol_info.dli_fname;
-    const char *last_slash = strrchr(fname, '/');
-    if (last_slash == nullptr) {
-      LOG("Invalid engine library location (missing '/'): %s", fname);
-      return -1;
-    }
-    // We need to use ../lib for static build
-    static const char criuhelper_str[] = "../lib/criuhelper";
-    const size_t dir_length = last_slash - fname + 1;
-    assert(dir_length + sizeof(criuhelper_str) < sizeof(criuhelper));
-    memcpy(criuhelper, fname, dir_length);
-    memcpy(criuhelper + dir_length, criuhelper_str, sizeof(criuhelper_str));
+  // We need to use ../lib for static build
+  // This buffer is not free'd but we don't care since we'll execve
+  char *criuhelper = get_relative_file("../lib/criuhelper");
+  if (criuhelper == nullptr) {
+    return -1;
   }
 
-  const char* args[32] = {
-    criu,
-    "restore",
-    "-W", ".",
-    "--shell-job",
-    "--action-script", criuhelper,
-    "-D", _image_location,
+  ArgsBuilder args;
+  args
+    .append(criu)
+    .append("restore")
+    .append("-W").append(".")
+    .append("--shell-job")
+    .append("--action-script").append(criuhelper)
+    .append("-D").append(_image_location)
     // XSAVE is not needed when the snapshot is being made / restored
-    "--cpu-cap=none",
-    "-v1", // errors-only by default, can be overwritten through -XX:CRaCEngineOptions=args=-v4
-  };
-  const char** next = args + 11;
+    .append("--cpu-cap=none")
+     // errors-only by default, can be overwritten through -XX:CRaCEngineOptions=args=-v4
+    .append("-v1");
+
   if (!direct_map()) {
-    *(next++) = "--no-mmap-page-image";
+    args.append("--no-mmap-page-image");
   }
 
-  ArgsAppender appender;
-  next = appender.append(next, args + ARRAY_SIZE(args), _args);
-  if (next == nullptr) {
+  args.append_all(_args);
+  if (args.failed()) {
     return -1;
   }
-  if (next + 4 >= args + ARRAY_SIZE(args)) {
+  if (args.remaining() < 4) {
     LOG("Too many arguments to CRIU");
-    print_args_to_stderr(args);
+    args.print();
     return -1;
   }
-  *(next++) = "--exec-cmd";
-  *(next++) = "--";
-  *(next++) = criuhelper;
-  *(next++) = "restorewait";
-  *next = nullptr;
+  args.append("--exec-cmd").append("--").append(criuhelper).append("restorewait");
 
   if (setenv("CRAC_NEW_ARGS_ID", restore_data_str, 1)) {
     LOG("Cannot set CRAC_NEW_ARGS_ID: %s", strerror(errno));
@@ -711,10 +715,10 @@ int criuengine::restore() {
   }
 
   fflush(stderr);
-  execve(criu, const_cast<char* const*>(args), environ);
+  execve(criu, args.argv(), environ);
 
   LOG("Cannot execute CRIU: %s", strerror(errno));
-  print_args_to_stderr(args);
+  args.print();
   return -1;
 }
 

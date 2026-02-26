@@ -92,7 +92,7 @@ static bool find_engine(const char *dll_dir, char *path, size_t path_size, char 
     }
     if (strncmp(basename, JNI_LIB_PREFIX, strlen(JNI_LIB_PREFIX)) ||
         strcmp(CRaCEngine + engine_length - strlen(JNI_LIB_SUFFIX), JNI_LIB_SUFFIX)) {
-      log_error(crac)("CRaCEngine path %s is not a library", CRaCEngine);
+      log_error(crac)("CRaCEngine=%s is not a library: expected " JNI_LIB_PREFIX "<name>" JNI_LIB_SUFFIX, CRaCEngine);
       return false;
     }
 

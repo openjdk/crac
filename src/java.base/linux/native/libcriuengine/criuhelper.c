@@ -52,7 +52,7 @@ static int kickjvm(pid_t jvm, int code) {
     return 0;
 }
 
-#define MSGPREFIX ""
+#define MSGPREFIX "criuhelper: "
 
 static int post_resume(void) {
     char *pidstr = getenv("CRTOOLS_INIT_PID");
@@ -66,7 +66,7 @@ static int post_resume(void) {
     return kickjvm(pid, strid ? atoi(strid) : 0);
 }
 
-static void sighandler(int sig, siginfo_t *info, void *uc) {
+static void sighandler(int sig) {
     if (0 <= g_pid) {
         kill(g_pid, sig);
     }
@@ -81,8 +81,8 @@ static int restorewait(void) {
 
     struct sigaction sigact;
     sigfillset(&sigact.sa_mask);
-    sigact.sa_flags = SA_SIGINFO;
-    sigact.sa_sigaction = sighandler;
+    sigact.sa_flags = 0;
+    sigact.sa_handler = sighandler;
 
     int sig;
     for (sig = 1; sig <= 31; ++sig) {
@@ -90,7 +90,7 @@ static int restorewait(void) {
             continue;
         }
         if (-1 == sigaction(sig, &sigact, NULL)) {
-            perror("sigaction");
+            perror(MSGPREFIX "sigaction");
         }
     }
 
@@ -135,7 +135,7 @@ int main(int argc, char *argv[]) {
         if (!strcmp(action, "restorewait")) { // called by CRIU --exec-cmd
             return restorewait();
         } else {
-            fprintf(stderr, "unknown command-line action: %s\n", action);
+            fprintf(stderr, MSGPREFIX "unknown command-line action: %s\n", action);
             return 1;
         }
     } else if ((action = getenv("CRTOOLS_SCRIPT_ACTION"))) { // called by CRIU --action-script
@@ -146,7 +146,7 @@ int main(int argc, char *argv[]) {
             return 0;
         }
     } else {
-        fprintf(stderr, "unknown context\n");
+        fprintf(stderr, MSGPREFIX "unknown context\n");
     }
 
     return 1;

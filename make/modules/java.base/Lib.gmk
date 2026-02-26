@@ -205,47 +205,53 @@ ifeq ($(call isTargetOs, linux)+$(call isTargetCpu, x86_64)+$(INCLUDE_COMPILER2)
 endif
 
 ################################################################################
-# Build checkpoint/restore exec library
+# Build crcommon library
 ################################################################################
 
 # CFLAGS_windows from make/autoconf/flags-cflags.m4#FLAGS_SETUP_CFLAGS_HELPER
 $(eval $(call SetupJdkLibrary, BUILD_LIBCRCOMMON, \
-    NAME := crcommon, \
-    LINK_TYPE := C++, \
-    EXTRA_HEADER_DIRS := libjvm, \
-    CXXFLAGS := $(CXXFLAGS_JDKLIB) -DCRLIB_IS_IMPL -DCRCOMMON_IMPL, \
-    CXXFLAGS_windows := -D_WINDOWS -DWIN32, \
-    CXXFLAGS_macosx := -DMACOSX, \
-    LDFLAGS := $(LDFLAGS_JDKLIB), \
+  NAME := crcommon, \
+  LINK_TYPE := C++, \
+  EXTRA_HEADER_DIRS := libjvm, \
+  CXXFLAGS := $(CXXFLAGS_JDKLIB) -DCRLIB_IS_IMPL -DCRCOMMON_IMPL, \
+  CXXFLAGS_windows := -D_WINDOWS -DWIN32, \
+  CXXFLAGS_macosx := -DMACOSX, \
+  LDFLAGS := $(LDFLAGS_JDKLIB), \
 ))
 TARGETS += $(BUILD_LIBCRCOMMON)
 
+################################################################################
+# Build simengine library
+################################################################################
+
 $(eval $(call SetupJdkLibrary, BUILD_LIBSIMENGINE, \
-    NAME := simengine, \
+  NAME := simengine, \
+  LINK_TYPE := C++, \
+  EXTRA_HEADER_DIRS := libjvm libcrcommon, \
+  CXXFLAGS := $(CXXFLAGS_JDKLIB) -DCRLIB_IS_IMPL, \
+  CXXFLAGS_windows := -D_WINDOWS -DWIN32, \
+  CXXFLAGS_macosx := -DMACOSX, \
+  LDFLAGS := $(LDFLAGS_JDKLIB), \
+  JDK_LIBS := java.base:libcrcommon, \
+))
+TARGETS += $(BUILD_LIBSIMENGINE)
+
+ifeq ($(OPENJDK_TARGET_OS), linux)
+  ################################################################################
+  # Build criuengine library
+  ################################################################################
+
+  # CFLAGS_windows from make/autoconf/flags-cflags.m4#FLAGS_SETUP_CFLAGS_HELPER
+  $(eval $(call SetupJdkLibrary, BUILD_LIBCRIUENGINE, \
+    NAME := criuengine, \
     LINK_TYPE := C++, \
     EXTRA_HEADER_DIRS := libjvm libcrcommon, \
+    EXCLUDE_FILES := criuhelper.c, \
     CXXFLAGS := $(CXXFLAGS_JDKLIB) -DCRLIB_IS_IMPL, \
     CXXFLAGS_windows := -D_WINDOWS -DWIN32, \
     CXXFLAGS_macosx := -DMACOSX, \
     LDFLAGS := $(LDFLAGS_JDKLIB), \
     JDK_LIBS := java.base:libcrcommon, \
-))
-TARGETS += $(BUILD_LIBSIMENGINE)
-
-ifeq ($(OPENJDK_TARGET_OS), linux)
-
-    # CFLAGS_windows from make/autoconf/flags-cflags.m4#FLAGS_SETUP_CFLAGS_HELPER
-    $(eval $(call SetupJdkLibrary, BUILD_LIBCRIUENGINE, \
-        NAME := criuengine, \
-        LINK_TYPE := C++, \
-        EXTRA_HEADER_DIRS := libjvm libcrcommon, \
-        EXCLUDE_FILES := criuhelper.c, \
-        CXXFLAGS := $(CXXFLAGS_JDKLIB) -DCRLIB_IS_IMPL, \
-        CXXFLAGS_windows := -D_WINDOWS -DWIN32, \
-        CXXFLAGS_macosx := -DMACOSX, \
-        LDFLAGS := $(LDFLAGS_JDKLIB), \
-        JDK_LIBS := java.base:libcrcommon, \
-    ))
-    TARGETS += $(BUILD_LIBCRIUENGINE)
-
+  ))
+  TARGETS += $(BUILD_LIBCRIUENGINE)
 endif

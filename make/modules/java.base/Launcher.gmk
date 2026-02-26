@@ -103,40 +103,34 @@ ifeq ($(call isTargetOsType, unix), true)
   TARGETS += $(BUILD_JSPAWNHELPER)
 endif
 
-################################################################################
-
 ifeq ($(OPENJDK_TARGET_OS), linux)
+  ##############################################################################
+  ## Build criuhelper
+  ##############################################################################
 
-    $(eval $(call SetupJdkExecutable, BUILD_CRIUHELPER, \
-        NAME := criuhelper, \
-        SRC := $(TOPDIR)/src/$(MODULE)/linux/native/libcriuengine, \
-        INCLUDE_FILES := criuhelper.c, \
-        OPTIMIZATION := HIGH, \
-        LD_SET_ORIGIN := false, \
-        OUTPUT_DIR := $(SUPPORT_OUTPUTDIR)/modules_libs/$(MODULE), \
-        STATIC_LIB := false, \
-    ))
-    TARGETS += $(BUILD_CRIUHELPER)
-
+  $(eval $(call SetupJdkExecutable, BUILD_CRIUHELPER, \
+      NAME := criuhelper, \
+      SRC := $(TOPDIR)/src/$(MODULE)/linux/native/libcriuengine, \
+      INCLUDE_FILES := criuhelper.c, \
+      OPTIMIZATION := HIGH, \
+      LD_SET_ORIGIN := false, \
+      OUTPUT_DIR := $(SUPPORT_OUTPUTDIR)/modules_libs/$(MODULE), \
+      STATIC_LIB := false, \
+  ))
+  TARGETS += $(BUILD_CRIUHELPER)
 endif
 
-################################################################################
-
-ifeq ($(call isTargetOs, macosx linux windows), true)
-  ifeq ($(OPENJDK_TARGET_OS), windows)
-    CRAC_ENGINE_DIR = modules_cmds
-  else
-    CRAC_ENGINE_DIR = modules_libs
-  endif
-
-  ifneq ($(USE_CRIU_CRAC),)
-
-    CRIU_CRAC_BIN := $(SUPPORT_OUTPUTDIR)/modules_libs/$(MODULE)/criu
-    TARGETS += $(CRIU_CRAC_BIN)
+ifneq ($(USE_CRIU_CRAC),)
+  ##############################################################################
+  ## Copy CRIU to lib/
+  ##############################################################################
+  CRIU_CRAC_BIN := $(SUPPORT_OUTPUTDIR)/modules_libs/$(MODULE)/criu
+  TARGETS += $(CRIU_CRAC_BIN)
 
 $(CRIU_CRAC_BIN) : $(USE_CRIU_CRAC)
 	$(call MakeTargetDir)
 	$(CP) $(USE_CRIU_CRAC) $(CRIU_CRAC_BIN)
 
-  endif
 endif
+
+################################################################################

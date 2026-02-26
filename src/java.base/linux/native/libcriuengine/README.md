@@ -1,6 +1,6 @@
 # CRIU Engine Library
 
-This is an implementation the C/R API (see `src/hotspot/share/include/crlib/`) that is used as Checkpoint/Restore Engine for CRaC. This implements the checkpoint and restore through invocation of CRIU executable.
+This is an implementation of the C/R API (see `src/hotspot/share/include/crlib/`) that is used as Checkpoint/Restore Engine for CRaC. This implements the checkpoint and restore through invocation of CRIU executable.
 
 Besides the `libcriuengine.so` (or static linking into `java` executable) this uses `criuhelper` executable for certain callback invocations from CRIU.
 

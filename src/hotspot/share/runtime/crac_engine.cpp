@@ -57,7 +57,6 @@ DEFINE_OPT_VAR(direct_map)
 DEFINE_OPT_VAR(pause)
 #undef DEFINE_OPT_VAR
 
-#define MAX_ENGINE_LENGTH 128
 #define SIMENGINE "simengine"
 
 #ifdef LINUX
@@ -292,11 +291,13 @@ CracEngine::CracEngine(bool for_restore) {
     resolved_engine_func[sizeof(CRLIB_API_FUNC) - 1] = '_';
   }
 
-  if (!find_engine(dll_dir, path, sizeof(path), resolved_engine_func + sizeof(CRLIB_API_FUNC), MAX_ENGINE_LENGTH)) {
+  if (!find_engine(dll_dir, path, sizeof(path), _name, sizeof(_name))) {
     log_error(crac)("Cannot find CRaC engine %s", CRaCEngine);
     return;
   }
+  postcond(_name[0] != '\0');
   postcond(path[0] != '\0');
+  memcpy(resolved_engine_func + sizeof(CRLIB_API_FUNC), _name, strlen(_name) + 1);
 
   char error_buf[1024];
   void * const lib = is_vm_statically_linked() ? os::get_default_process_handle() : os::dll_load(path, error_buf, sizeof(error_buf));
@@ -315,6 +316,8 @@ CracEngine::CracEngine(bool for_restore) {
       static constexpr const char engine_suffix[] = "engine";
       if (strlen(resolved_engine_func) + sizeof(engine_suffix) <= sizeof(resolved_engine_func)) {
         strcat(resolved_engine_func, engine_suffix);
+        assert(strlen(_name) + sizeof(engine_suffix) <= sizeof(_name), "name too long");
+        strcat(_name, engine_suffix);
         api_func = reinterpret_cast<api_func_t>(os::dll_lookup(lib, resolved_engine_func));
         if (api_func != nullptr) {
           log_warning(crac)("Engine name '%s' (without the engine suffix) is deprecated and will be removed in version 28, please use -XX:CRaCEngine=%s",
@@ -370,18 +373,77 @@ bool CracEngine::is_initialized() const {
   return _lib != nullptr;
 }
 
+static int open_engine_file(const char *dir, int oflag, const char *purpose) {
+  char path[PATH_MAX];
+  os::snprintf_checked(path, sizeof(path), "%s/engine", dir);
+  int fd = os::open(path, oflag, S_IRUSR | S_IWUSR);
+  if (fd < 0) {
+    log_error(crac)("Cannot open %s for %s", path, purpose);
+  }
+  return fd;
+}
+
+static bool record_engine(const char *name, const char *dir) {
+  assert(dir != nullptr, "Not configured");
+  int fd = open_engine_file(dir, O_WRONLY | O_CREAT | O_TRUNC, "writing");
+  if (fd < 0 || !os::write(fd, name, strlen(name))) {
+    log_error(crac)("Cannot record engine name (%s): %s", name, os::strerror(errno));
+    ::close(fd);
+    return false;
+  }
+  ::close(fd);
+  return true;
+}
+
+static bool check_engine(const char *name, const char *dir) {
+  int fd = open_engine_file(dir, O_RDONLY, "reading");
+  if (fd < 0) {
+    return -1;
+  }
+  char buf[MAX_ENGINE_LENGTH];
+  size_t rd = 0;
+  do {
+    ssize_t r = ::read(fd, buf + rd, sizeof(buf) - rd);
+    if (r == 0) {
+      break;
+    } else if (r < 0) {
+      if (errno == EINTR) {
+        continue;
+      }
+      log_error(crac)("I/O error reading engine file: %s", os::strerror(errno));
+      return false;
+    }
+    rd += r;
+  } while (rd < sizeof(buf));
+  ::close(fd);
+  buf[rd] = '\0';
+  if (strcmp(name, buf)) {
+    log_error(crac)("Image format does not match; saved image with engine %s, restoring with %s", buf, name);
+    return false;
+  }
+  return true;
+}
+
 int CracEngine::checkpoint() const {
   precond(is_initialized());
+  if (!record_engine(_name, _image_location)) {
+    return -1;
+  }
   return _api->checkpoint(_conf);
 }
 
 int CracEngine::restore() const {
   precond(is_initialized());
+  if (!check_engine(_name, _image_location)) {
+    return -1;
+  }
   return _api->restore(_conf);
 }
 
-bool CracEngine::configure_image_location(const char *image_location) const {
+bool CracEngine::configure_image_location(const char *image_location) {
   precond(is_initialized());
+  os::free(_image_location);
+  _image_location = os::strdup_check_oom(image_location);
   return ::configure_image_location(*_api, _conf, image_location);
 }
 

@@ -37,6 +37,8 @@
 #include <cstddef>
 #include <cstdint>
 
+#define MAX_ENGINE_LENGTH 128
+
 // CRaC engine library wrapper.
 class CracEngine : public CHeapObj<mtInternal> {
 public:
@@ -52,7 +54,7 @@ public:
   // Operations supported by all engines
   int checkpoint() const;
   int restore() const;
-  bool configure_image_location(const char *image_location) const;
+  bool configure_image_location(const char *image_location);
   GrowableArrayCHeap<const char *, MemTag::mtInternal> *vm_controlled_options() const;
 
   // Optionally-supported operations
@@ -78,9 +80,11 @@ public:
   bool set_score(const char* metric, double value);
 
 private:
+  char _name[MAX_ENGINE_LENGTH];
   void *_lib = nullptr;
   crlib_api_t *_api = nullptr;
   crlib_conf_t *_conf = nullptr;
+  char *_image_location = nullptr;
 
   crlib_restore_data_t *_restore_data_api = nullptr;
   crlib_description_t *_description_api = nullptr;

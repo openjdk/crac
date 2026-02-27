@@ -40,6 +40,8 @@ import java.lang.management.ManagementFactory;
  */
 module jdk.management {
     requires transitive java.management;
+    // transitive needed because of the throwing exceptions
+    requires transitive jdk.crac;
 
     exports com.sun.management;
     exports jdk.crac.management;

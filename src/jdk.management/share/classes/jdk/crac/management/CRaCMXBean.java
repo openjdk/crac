@@ -29,6 +29,9 @@ import java.lang.management.ManagementFactory;
 import java.lang.management.PlatformManagedObject;
 import java.lang.management.RuntimeMXBean;
 
+import jdk.crac.CheckpointException;
+import jdk.crac.RestoreException;
+
 /**
  * Management interface for the CRaC functionality of the Java virtual machine.
  */
@@ -62,4 +65,14 @@ public interface CRaCMXBean extends PlatformManagedObject {
         return ManagementFactory.getPlatformMXBean(CRaCMXBean.class);
     }
 
+    /**
+     * Requests checkpoint and returns upon a successful restore.
+     * May throw an exception if the checkpoint or restore are unsuccessful.
+     *
+     * @throws CheckpointException           if an exception occurred during checkpoint
+     *                                       notification and the execution continues in the original Java instance.
+     * @throws RestoreException              if an exception occurred during restore
+     *                                       notification and execution continues in a new Java instance.
+     */
+    void checkpointRestore() throws CheckpointException, RestoreException;
 }

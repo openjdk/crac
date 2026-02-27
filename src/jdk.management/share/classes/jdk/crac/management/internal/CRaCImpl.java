@@ -26,6 +26,9 @@
 package jdk.crac.management.internal;
 
 import com.sun.management.internal.PlatformMBeanProviderImpl;
+import jdk.crac.CheckpointException;
+import jdk.crac.Core;
+import jdk.crac.RestoreException;
 import jdk.crac.management.CRaCMXBean;
 import sun.management.Util;
 import sun.management.VMManagement;
@@ -47,6 +50,11 @@ public class CRaCImpl implements CRaCMXBean {
     @Override
     public long getRestoreTime() {
         return vm.getRestoreTime();
+    }
+
+    @Override
+    public void checkpointRestore() throws RestoreException, CheckpointException {
+        Core.checkpointRestore();
     }
 
     @Override

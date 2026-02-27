@@ -1595,7 +1595,7 @@ static void signal_sets_init() {
   sigemptyset(&blocked_sigs);
 // RESTORE_SIGNAL is used only on Linux, other platform don't send this
 #ifdef LINUX
-  // The signal is used with default crexec library, other CRaCEngines might use
+  // The signal is used with default simengine and criuengine library, other CRaCEngines might use
   // signals in a different way and having this signal blocked could interfere.
   const char *signal_engines[] = { "criu", "criuengine", "sim", "simengine", "pause", "pauseengine", nullptr };
   for (int i = 0; signal_engines[i] != nullptr; ++i) {

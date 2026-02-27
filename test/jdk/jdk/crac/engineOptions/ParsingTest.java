@@ -42,8 +42,12 @@ import java.util.*;
 public class ParsingTest {
     @BeforeClass
     public static void checkCriu() {
-        final boolean hasCriu = Path.of(Utils.TEST_JDK, "lib", "criuengine").toFile().exists();
-        assertEquals("CRIU exists iff we are on Linux", Platform.isLinux(), hasCriu);
+        if (!Platform.isStatic()) {
+            final boolean hasLibCriuengine = Path.of(Utils.TEST_JDK, "lib", "libcriuengine.so").toFile().exists();
+            assertEquals("libcriuengine present iff we are on Linux", Platform.isLinux(), hasLibCriuengine);
+        }
+        final boolean hasCriuHelper = Path.of(Utils.TEST_JDK, "lib", "criuhelper").toFile().exists();
+        assertEquals("CRIU helper present iff we are on Linux", Platform.isLinux(), hasCriuHelper);
     }
 
     @Test
@@ -57,12 +61,12 @@ public class ParsingTest {
 
     @Test
     public void test_engines() throws Exception {
-        test("sim");
+        test("sim", Collections.emptyList(), 0, List.of("Engine name 'sim' (without the engine suffix) is deprecated"), List.of("[error]"));
         test("simengine");
         if (Platform.isLinux()) {
             test("pause", Collections.emptyList(), 0, List.of("pauseengine is deprecated"), List.of("[error]"));
             test("pauseengine", Collections.emptyList(), 0, List.of("pauseengine is deprecated"), List.of("[error"));
-            test("criu");
+            test("criu", Collections.emptyList(), 0, List.of("Engine name 'criu' (without the engine suffix) is deprecated"), List.of("[error]"));
             test("criuengine");
         }
 
@@ -73,9 +77,13 @@ public class ParsingTest {
             test(absolute);
         }
 
-        test("unknown", null, 1, "Cannot find CRaC engine unknown");
-        test("simengine,--arg", null, 1, "Cannot find CRaC engine simengine,--arg");
-        test("one two", null, 1, "Cannot find CRaC engine one two");
+        if (Platform.isStatic()) {
+            test("unknown", null, 1, "Cannot load CRaC engine API entrypoint");
+        } else {
+            test("unknown", null, 1, "Cannot find CRaC engine unknown");
+            test("simengine,--arg", null, 1, "Cannot find CRaC engine simengine,--arg");
+            test("one two", null, 1, "Cannot find CRaC engine one two");
+        }
         test("", null, 1, "CRaCEngine must not be empty");
     }
 

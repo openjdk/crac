@@ -136,9 +136,9 @@ class DatagramChannelImpl
     private static final int ST_CLOSED = 3;
     private int state;
 
-    // IDs of native threads doing reads and writes, for signalling
-    private long readerThread;
-    private long writerThread;
+    // Threads doing reads and writes, for signalling
+    private Thread readerThread;
+    private Thread writerThread;
 
     // Local and remote (connected) address
     private InetSocketAddress localAddress;
@@ -525,7 +525,7 @@ class DatagramChannelImpl
             if (localAddress == null)
                 bindInternal(null);
             if (blocking)
-                readerThread = NativeThread.current();
+                readerThread = NativeThread.threadToSignal();
         }
         return remote;
     }
@@ -540,7 +540,7 @@ class DatagramChannelImpl
     {
         if (blocking) {
             synchronized (stateLock) {
-                readerThread = 0;
+                readerThread = null;
                 if (state == ST_CLOSING) {
                     tryFinishClose();
                 }
@@ -1032,7 +1032,7 @@ class DatagramChannelImpl
             if (localAddress == null)
                 bindInternal(null);
             if (blocking)
-                writerThread = NativeThread.current();
+                writerThread = NativeThread.threadToSignal();
         }
         return remote;
     }
@@ -1047,7 +1047,7 @@ class DatagramChannelImpl
     {
         if (blocking) {
             synchronized (stateLock) {
-                writerThread = 0;
+                writerThread = null;
                 if (state == ST_CLOSING) {
                     tryFinishClose();
                 }
@@ -1716,7 +1716,7 @@ class DatagramChannelImpl
      */
     private boolean tryClose() throws IOException {
         assert Thread.holdsLock(stateLock) && state == ST_CLOSING;
-        if ((readerThread == 0) && (writerThread == 0) && !isRegistered()) {
+        if ((readerThread == null) && (writerThread == null) && !isRegistered()) {
             state = ST_CLOSED;
             try {
                 // close socket

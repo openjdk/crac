@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1997, 2025, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 1997, 2026, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -939,7 +939,8 @@ address nmethod::continuation_for_implicit_exception(address pc, bool for_div0_c
     stringStream ss;
     ss.print_cr("implicit exception happened at " INTPTR_FORMAT, p2i(pc));
     print_on(&ss);
-    method()->print_codes_on(&ss);
+    // Buffering to a stringStream, disable internal buffering so it's not done twice.
+    method()->print_codes_on(&ss, 0, false);
     print_code_on(&ss);
     print_pcs_on(&ss);
     tty->print("%s", ss.as_string()); // print all at once
@@ -2138,6 +2139,9 @@ void nmethod::make_deoptimized() {
   ResourceMark rm;
   RelocIterator iter(this, oops_reloc_begin());
 
+  // Assume there will be some calls to make deoptimized.
+  MACOS_AARCH64_ONLY(os::thread_wx_enable_write());
+
   while (iter.next()) {
 
     switch (iter.type()) {
@@ -2214,6 +2218,7 @@ void nmethod::verify_clean_inline_caches() {
 }
 
 void nmethod::mark_as_maybe_on_stack() {
+  MACOS_AARCH64_ONLY(os::thread_wx_enable_write());
   AtomicAccess::store(&_gc_epoch, CodeCache::gc_epoch());
 }
 
@@ -2305,6 +2310,8 @@ bool nmethod::make_not_entrant(InvalidationReason invalidation_reason, bool can_
     // No need for fencing either.
     return false;
   }
+
+  MACOS_AARCH64_ONLY(os::thread_wx_enable_write());
 
   {
     // Enter critical section.  Does not block for safepoint.
@@ -2744,6 +2751,8 @@ bool nmethod::is_unloading() {
   state_unloading_cycle = current_cycle;
   state_is_unloading = IsUnloadingBehaviour::is_unloading(this);
   uint8_t new_state = IsUnloadingState::create(state_is_unloading, state_unloading_cycle);
+
+  MACOS_AARCH64_ONLY(os::thread_wx_enable_write());
 
   // Note that if an nmethod has dead oops, everyone will agree that the
   // nmethod is_unloading. However, the is_cold heuristics can yield

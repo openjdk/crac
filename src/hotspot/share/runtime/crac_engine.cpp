@@ -374,9 +374,12 @@ bool CracEngine::is_initialized() const {
 }
 
 static int open_engine_file(const char *dir, int oflag, const char *purpose) {
+#ifndef PATH_MAX
+# define PATH_MAX 1024
+#endif
   char path[PATH_MAX];
   os::snprintf_checked(path, sizeof(path), "%s/engine", dir);
-  int fd = os::open(path, oflag, S_IRUSR | S_IWUSR);
+  int fd = os::open(path, oflag, 0600);
   if (fd < 0) {
     log_error(crac)("Cannot open %s for %s", path, purpose);
   }

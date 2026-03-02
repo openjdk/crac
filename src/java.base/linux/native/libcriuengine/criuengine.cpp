@@ -33,6 +33,7 @@
 #include <dlfcn.h>
 #include <new>
 #include <spawn.h>
+#include <sys/syscall.h>
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <unistd.h>
@@ -67,6 +68,10 @@
   OPT(direct_map, bool, true, CRLIB_OPTION_FLAG_RESTORE, "true/false", "true", \
     "on restore, map process data directly from saved files. This may speedup the restore " \
     "but the resulting process will not be the same as before the checkpoint.") \
+  OPT(legacy_criu, bool, false, CRLIB_OPTION_FLAG_CHECKPOINT | CRLIB_OPTION_FLAG_RESTORE, "true/false", "false", \
+    "use CRIU options suitable for legacy version (< 4.0).") \
+  OPT(print_command, bool, false, CRLIB_OPTION_FLAG_CHECKPOINT | CRLIB_OPTION_FLAG_RESTORE, "true/false", "false", \
+    "print CRIU command (for debugging).")
 
 #define CONFIGURE_OPTIONS(OPT) UNCHECKED_OPTIONS(OPT) CHECKED_OPTIONS(OPT)
 
@@ -345,6 +350,14 @@ private:
     return parse_bool(direct_map_str, &_direct_map);
   }
 
+  bool configure_legacy_criu(const char* legacy) {
+    return parse_bool(legacy, &_legacy_criu);
+  }
+
+  bool configure_print_command(const char* print) {
+    return parse_bool(print, &_print_command);
+  }
+
   bool configure_args(const char* args) {
     return configure_str(args, &_args);
   }
@@ -431,18 +444,22 @@ static void destroy_user_data(crlib_user_data_storage_t* storage) {
   return storage->user_data->destroy_user_data(storage);
 }
 
-static const char* check_criu_executable(const char* path) {
+static const char* check_criu_executable(const char* path, bool quiet) {
   struct stat st;
   if (stat(path, &st)) {
-    if (errno == ENOENT) {
-      LOG("CRIU executable does not exist in %s", path);
-    } else {
-      LOG("Cannot stat %s: %s", path, strerror(errno));
+    if (!quiet) {
+      if (errno == ENOENT) {
+        LOG("CRIU executable does not exist in %s", path);
+      } else {
+        LOG("Cannot stat %s: %s", path, strerror(errno));
+      }
     }
     return nullptr;
   }
   if ((st.st_mode & S_IXUSR) == 0) {
-    LOG("CRIU at %s is not executable", path);
+    if (!quiet) {
+      LOG("CRIU at %s is not executable", path);
+    }
     return nullptr;
   }
   if ((st.st_mode & S_ISUID) == 0 && getuid() != 0) {
@@ -487,13 +504,34 @@ const char* criuengine::get_criu() {
     }
   }
   if (criu != nullptr) {
-    return check_criu_executable(criu);
+    return check_criu_executable(criu, false);
   }
-  // We need to use the ../lib because static build would find this code in `java` executable
-  // in the bin folder.
-  // let's cache the value in _criu_location, and release it in dtor
-  _criu_location = get_relative_file("../lib/criu");
-  return _criu_location == nullptr ? nullptr : check_criu_executable(_criu_location);
+  const char* const_path = getenv("PATH");
+  if (const_path == NULL) {
+    LOG("Error: the PATH environment variable is not set, cannot lookup CRIU");
+    return nullptr;
+  }
+  char* path = strdup(const_path);
+  if (path == NULL) {
+    LOG("Cannot copy PATH; out of memory");
+    return nullptr;
+  }
+  char* save_ptr = nullptr;
+  char* prefix = strtok_r(path, ":", &save_ptr);
+  while (prefix != nullptr) {
+    if (asprintf(&criu, "%s/criu", prefix) < 0) {
+      LOG("Cannot allocate string with CRIU location starting with %s", prefix);
+    } else {
+      free(_criu_location);
+      _criu_location = criu;
+      if (check_criu_executable(criu, true) != nullptr) {
+        return _criu_location;
+      }
+    }
+    prefix = strtok_r(nullptr, ":", &save_ptr);
+  }
+  LOG("Cannot find CRIU executable on the PATH");
+  return nullptr;
 }
 
 static int kickjvm(pid_t jvm, int code) {
@@ -588,6 +626,69 @@ bool criuengine::execute_criu(const ArgsBuilder& args) const {
   exit(0);
 }
 
+#define CRAC_FAKE_STDIN  "crac_fake_stdin"
+#define CRAC_FAKE_STDOUT "crac_fake_stdout"
+#define CRAC_FAKE_STDERR "crac_fake_stderr"
+
+static void maybe_reopen(int fd, int flags) {
+  char path[64];
+  int mnt_id = -1;
+  {
+    snprintf(path, sizeof(path), "/proc/thread-self/fdinfo/%d", fd);
+    FILE *f = fopen(path, "r");
+    if (!f) {
+      LOG("Cannot read %s to check mountinfo", path);
+      return;
+    }
+    char line[256];
+    while (fgets(line, sizeof(line), f)) {
+      if (sscanf(line, "mnt_id:\t%d", &mnt_id) == 1) {
+        break;
+      }
+    }
+    fclose(f);
+  }
+  if (mnt_id != -1) {
+    FILE *f = fopen("/proc/thread-self/mountinfo", "r");
+    if (!f) {
+      LOG("Cannot read own mountinfo");
+      return;
+    }
+    char line[1024];
+    bool is_continue = false;
+    while (fgets(line, sizeof(line), f)) {
+      if (!is_continue && atoi(line) == mnt_id) {
+        // mnt_id found, nothing needs to be done
+        fclose(f);
+        return;
+      }
+      is_continue = (line[strlen(line) - 1] != '\n');
+    }
+    fclose(f);
+  }
+  snprintf(path, sizeof(path), "/proc/thread-self/fd/%d", fd);
+  char target[PATH_MAX];
+  ssize_t len = readlink(path, target, sizeof(target));
+  if (len < 0) {
+    LOG("Cannot readlink %s: %s", path, strerror(errno));
+    return;
+  }
+  target[len] = '\0'; // readlink does not append terminating char
+  static const char pipe[] = "pipe:";
+  if (!strncmp(pipe, target, sizeof(pipe) - 1)) {
+    // cannot reopen a pipe but CRIU will handle this OK
+    return;
+  }
+  int new_fd = open(target, flags);
+  if (new_fd < 0) {
+    LOG("Cannot reopen %s: %s", target, strerror(errno));
+  } else if (dup2(new_fd, fd) != fd) {
+    LOG("Cannot dup2 %d (%s) -> %d: %s", new_fd, target, fd, strerror(errno));
+  } else {
+    close(new_fd);
+  }
+}
+
 int criuengine::checkpoint() {
   const char* criu = get_criu();
   if (criu == nullptr) {
@@ -622,7 +723,10 @@ int criuengine::checkpoint() {
     .append("--shell-job");
 
   if (keep_running()) {
-      args.append("-R");
+    args.append("-R");
+  }
+  if (!legacy_criu()) {
+    args.append("--unprivileged");
   }
 
   args.append_all(_args);
@@ -630,7 +734,44 @@ int criuengine::checkpoint() {
     return -1;
   }
 
+  if (print_command()) {
+    args.print();
+  }
+  fflush(stderr);
+
+  // With upstream CRIU the restored process does not inherit FDs 0-2 if the TTY
+  // is not attached. We will create some fake FDs and let CRIU replace them;
+  // we will use those if replaced after restore or just close when not (or when kept running).
+  int fake_fds[3] = { -1, -1, -1 };
+  if (!legacy_criu()) {
+#ifndef MFD_CLOEXEC
+#define MFD_CLOEXEC 0x0001U
+#endif
+    fake_fds[0] = syscall(SYS_memfd_create, CRAC_FAKE_STDIN, MFD_CLOEXEC);
+    fake_fds[1] = syscall(SYS_memfd_create, CRAC_FAKE_STDOUT, MFD_CLOEXEC);
+    fake_fds[2] = syscall(SYS_memfd_create, CRAC_FAKE_STDERR, MFD_CLOEXEC);
+    if (fake_fds[0] < 0 || fake_fds[1] < 0 || fake_fds[2] < 0) {
+      LOG("Cannot create fake FDs for non-shell jobs: %s", strerror(errno));
+    }
+    // Also sometimes (in containers) the mnt_id in /proc/<pid>/fdinfo/X and /proc/<pid>/mntinfo
+    // does not match; CRIU won't handle that if this is not a tty. Let's try to detect and reopen
+    maybe_reopen(0, O_RDONLY);
+    maybe_reopen(1, O_WRONLY);
+    maybe_reopen(2, O_WRONLY);
+
+    // When executed without a TTY, CRIU won't use --shell-job; however in this situation
+    // it won't restore with --shell-job and restore will get stuck when synchronizing
+    // a helper process created to establish SID. Becoming own session leader here prevents
+    // this (though it might have some other effects).
+    if (getsid(0) != getpid()) {
+      setpgid(0, setsid());
+    }
+  }
+
   if (!execute_criu(args)) {
+    for (size_t i = 0; i < ARRAY_SIZE(fake_fds); ++i) {
+      close(fake_fds[i]);
+    }
     return -1;
   }
 
@@ -643,6 +784,18 @@ int criuengine::checkpoint() {
   do {
     sig = sigwaitinfo(&waitmask, &info);
   } while (sig == -1 && errno == EINTR);
+
+  for (unsigned i = 0; i < ARRAY_SIZE(fake_fds); ++i) {
+    if (fake_fds[i] < 0) {
+      continue;
+    } else if (fcntl(fake_fds[i], F_GET_SEALS) >= 0) {
+      // this is memfd => not replaced, just close
+    } else if (dup2(fake_fds[i], i) < -1) {
+      // you probably wouldn't see this message, though
+      LOG("Failed to dup2(%d, %d): %s", fake_fds[i], i, strerror(errno));
+    }
+    close(fake_fds[i]);
+  }
 
   if (info.si_code != SI_QUEUE) {
     return -1;
@@ -692,7 +845,6 @@ int criuengine::restore() {
     .append(criu)
     .append("restore")
     .append("-W").append(".")
-    .append("--shell-job")
     .append("--action-script").append(criuhelper)
     .append("-D").append(_image_location)
     // XSAVE is not needed when the snapshot is being made / restored
@@ -700,7 +852,30 @@ int criuengine::restore() {
      // errors-only by default, can be overwritten through -XX:CRaCEngineOptions=args=-v4
     .append("-v1");
 
+  if (legacy_criu()) {
+    // always works with legacy CRIU
+    args.append("--shell-job");
+  } else {
+    args.append("--unprivileged");
+    // When tty-info is not present we can't use --shell-job and must need to inherit FDs manually
+    char tty_info[PATH_MAX];
+    if ((size_t) snprintf(tty_info, sizeof(tty_info), "%s/tty-info.img", _image_location) >= sizeof(tty_info)) {
+      LOG("Cannot form path to tty-info.img");
+      return -1;
+    }
+    struct stat st;
+    if (stat(tty_info, &st) && errno == ENOENT) {
+      args.append("--inherit-fd").append("fd[0]:/memfd:" CRAC_FAKE_STDIN);
+      args.append("--inherit-fd").append("fd[1]:/memfd:" CRAC_FAKE_STDOUT);
+      args.append("--inherit-fd").append("fd[2]:/memfd:" CRAC_FAKE_STDERR);
+    } else {
+      args.append("--shell-job");
+    }
+  }
   if (!direct_map()) {
+    if (!legacy_criu()) {
+      LOG("Warning: direct mapping of image might not be supported");
+    }
     args.append("--no-mmap-page-image");
   }
 
@@ -720,6 +895,9 @@ int criuengine::restore() {
     return -1;
   }
 
+  if (print_command()) {
+    args.print();
+  }
   fflush(stderr);
   execve(criu, args.argv(), environ);
 

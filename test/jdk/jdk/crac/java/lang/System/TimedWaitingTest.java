@@ -63,9 +63,7 @@ public class TimedWaitingTest implements CracTest {
         CracContainerBuilder builder = new CracContainerBuilder();
         Path bootIdFile = Files.createTempFile("TimedWaitingTest-", "-boot_id");
         try {
-            String baseImage = Platform.isMusl() ? "ghcr.io/crac/test-base-musl" : "ghcr.io/crac/test-base";
             builder
-                    .withBaseImage(baseImage, "latest")
                     .dockerOptions("-v", bootIdFile + ":/fake_boot_id")
                     .inDockerImage(imageName)
                     // we need a privileged container for unshare

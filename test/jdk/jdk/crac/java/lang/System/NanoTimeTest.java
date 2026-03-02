@@ -69,9 +69,7 @@ public class NanoTimeTest implements CracTest {
         String imageName = Common.imageName("system-nanotime");
 
         try {
-            // TODO: use more official image
-            String baseImage = Platform.isMusl() ? "ghcr.io/crac/test-base-musl" : "ghcr.io/crac/test-base";
-            builder.withBaseImage(baseImage, "latest")
+            builder
                     .dockerOptions("-v", bootIdFile + ":/fake_boot_id")
                     // unshare requires privileged
                     .containerUsePrivileged(true)

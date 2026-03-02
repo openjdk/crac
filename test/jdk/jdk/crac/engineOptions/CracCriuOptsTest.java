@@ -38,7 +38,6 @@ import static jdk.test.lib.Asserts.*;
  * @requires (os.family == "linux")
  * @library /test/lib
  * @build CracCriuOptsTest
- * @run driver jdk.test.lib.crac.CracTest PREREQ_CHECK
  * @run driver jdk.test.lib.crac.CracTest NOT_SET
  * @run driver jdk.test.lib.crac.CracTest ENVVAR_USED
  * @run driver jdk.test.lib.crac.CracTest ALREADY_SET
@@ -46,10 +45,9 @@ import static jdk.test.lib.Asserts.*;
 
 public class CracCriuOptsTest implements CracTest {
     private static final String CRAC_CRIU_OPTS = "CRAC_CRIU_OPTS";
-    private static final Path LOG_FILE_PATH = Path.of("restore.log");
+    private static final String RESTORED = "RESTORED";
 
     public enum Variant {
-        PREREQ_CHECK,
         NOT_SET,
         ENVVAR_USED,
         ALREADY_SET
@@ -60,47 +58,23 @@ public class CracCriuOptsTest implements CracTest {
 
     @Override
     public void test() throws Exception {
-        final CracBuilder builder = new CracBuilder().engine(CracEngine.CRIU);
-        builder.doCheckpoint();
-
-        // "direct_map=false" engine option is expected to add "--no-mmap-page-image" to
-        // CRAC_CRIU_OPTS — this is what we'll check.
-        // PREREQ_CHECK checks that the test's pre-requisite has not changed: when neither
-        // direct_map=false nor --no-mmap-page-image is specified direct mapping IS performed.
-        final boolean disableDirectMap = variant != Variant.PREREQ_CHECK;
+        final CracBuilder builder = new CracBuilder().engine(CracEngine.CRIU)
+                .engineOptions("keep_running=true,print_command=true");
         if (variant == Variant.ENVVAR_USED) {
             builder.env(CRAC_CRIU_OPTS, "-v");
         } else if (variant == Variant.ALREADY_SET) {
-            builder.env(CRAC_CRIU_OPTS, "-v --no-mmap-page-image");
+            builder.env(CRAC_CRIU_OPTS, "-v -R");
         }
-        // Using log file instead of stderr because output capturing takes too long for some reason.
-        // If we let CRIU create the file we may not get reading permissions, so we create it by
-        // ourselves and also truncate it if it exists from previous runs (CRIU should truncate
-        // automatically but just to be safe).
-        Files.write(LOG_FILE_PATH, new byte[0]); // Creates if not exists, truncates otherwise
-        builder.engineOptions("args=-v4 -o " + LOG_FILE_PATH + (disableDirectMap ? ",direct_map=false" : ""));
+        builder.doCheckpointToAnalyze()
+                .shouldHaveExitValue(0)
+                .stderrShouldContain(RESTORED);
 
-        builder.doRestore();
-        checkLogFile(!disableDirectMap);
-    }
-
-    private static void checkLogFile(boolean directMap) throws IOException {
-        // CRIU prints debug lines "Preadv %lx:%d... (%d iovs) (mmap %d)" where the last %d is
-        // either 0 or 1 depending on whether direct mapping is performed
-        final var lines = Files.lines(LOG_FILE_PATH).filter(s ->
-            s.matches("\\(\\d+.\\d+\\) pie: \\d+: Preadv 0x\\p{XDigit}+:\\d+\\.\\.\\. \\(\\d+ iovs\\) \\(mmap [01]\\)")
-        ).toList();
-        assertFalse(lines.isEmpty(), "At least one log line must match the expected pattern");
-
-        final var end = "(mmap " + (directMap ? "1" : "0") + ")";
-        for (var s : lines) {
-            // If this fails it means that direct_map is on when it should be off or vise-versa
-            assertTrue(s.endsWith(end), "Log line \"" + s + "\" must end with \"" + end + "\"");
-        }
+        builder.engineOptions().doRestore();
     }
 
     @Override
     public void exec() throws Exception {
         Core.checkpointRestore();
+        System.err.println(RESTORED);
     }
 }

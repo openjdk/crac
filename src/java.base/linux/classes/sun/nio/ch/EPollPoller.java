@@ -24,7 +24,6 @@
  */
 package sun.nio.ch;
 
-import java.io.FileDescriptor;
 import java.io.IOException;
 import java.lang.ref.Cleaner.Cleanable;
 import jdk.internal.ref.CleanerFactory;
@@ -41,19 +40,14 @@ class EPollPoller extends Poller {
     private final int event;
     private final int maxEvents;
     private final long address;
-<<<<<<< HEAD
-    private long stopPipe;
-||||||| 62c7e9aefd4
-=======
     private final EventFD eventfd;  // wakeup event, used for shutdown
->>>>>>> jdk-27+11
 
     // close action, and cleaner if this is subpoller
     private final Runnable closer;
     private final Cleanable cleaner;
 
     EPollPoller(Poller.Mode mode, boolean subPoller, boolean read) throws IOException {
-        boolean wakeable = (mode == Mode.POLLER_PER_CARRIER) && subPoller;
+        boolean cleanable = (mode == Mode.POLLER_PER_CARRIER) && subPoller;
         int maxEvents = (subPoller) ? 16 : 64;
 
         int epfd = EPoll.create();
@@ -63,11 +57,11 @@ class EPollPoller extends Poller {
             address = EPoll.allocatePollArray(maxEvents);
 
             // register one end of the pipe with epoll to allow for wakeup
-            if (wakeable) {
-                eventfd = new EventFD();
-                IOUtil.configureBlocking(eventfd.efd(), false);
-                EPoll.ctl(epfd, EPOLL_CTL_ADD, eventfd.efd(), EPOLLIN);
-            }
+            eventfd = new EventFD();
+            IOUtil.configureBlocking(eventfd.efd(), false);
+            int err = EPoll.ctl(epfd, EPOLL_CTL_ADD, eventfd.efd(), EPOLLIN);
+            if (err != 0)
+                throw new IOException("epoll_ctl failed: " + err);
         } catch (Throwable e) {
             FileDispatcherImpl.closeIntFD(epfd);
             if (address != 0L) EPoll.freePollArray(address);
@@ -81,9 +75,9 @@ class EPollPoller extends Poller {
         this.address = address;
         this.eventfd = eventfd;
 
-        // create action to close epoll instance, register cleaner when wakeable
+        // create action to close epoll instance, register cleaner when cleanable
         this.closer = closer(epfd, address, eventfd);
-        if (wakeable) {
+        if (cleanable) {
             this.cleaner = CleanerFactory.cleaner().register(this, closer);
         } else {
             this.cleaner = null;
@@ -98,7 +92,7 @@ class EPollPoller extends Poller {
             try {
                 FileDispatcherImpl.closeIntFD(epfd);
                 EPoll.freePollArray(address);
-                if (eventfd != null) eventfd.close();
+                eventfd.close();
             } catch (IOException _) { }
         };
     }
@@ -118,34 +112,8 @@ class EPollPoller extends Poller {
     }
 
     @Override
-<<<<<<< HEAD
-    protected void stop() throws IOException {
-        super.stop();
-        stopPipe = IOUtil.makePipe(true);
-        int err = EPoll.ctl(epfd, EPOLL_CTL_ADD, (int)(stopPipe >> 32), EPOLLIN | EPOLLONESHOT);
-        if (err != 0) {
-            throw new IOException("epoll_ctl failed: " + err);
-        }
-        IOUtil.write1((int) stopPipe, (byte) 0);
-    }
-
-    @Override
-    protected void closeFds() throws IOException {
-        Poller.nd.close(IOUtil.newFD((int) (stopPipe >> 32)));
-        Poller.nd.close(IOUtil.newFD((int) stopPipe));
-        super.closeFds();
-    }
-
-    @Override
-    void implRegister(int fdVal) throws IOException {
-        // re-arm
-||||||| 62c7e9aefd4
-    void implRegister(int fdVal) throws IOException {
-        // re-arm
-=======
     void implStartPoll(int fdVal) throws IOException {
         // re-enable if already registered but disabled (previously polled)
->>>>>>> jdk-27+11
         int err = EPoll.ctl(epfd, EPOLL_CTL_MOD, fdVal, (event | EPOLLONESHOT));
         if (err == ENOENT)
             err = EPoll.ctl(epfd, EPOLL_CTL_ADD, fdVal, (event | EPOLLONESHOT));
@@ -163,9 +131,6 @@ class EPollPoller extends Poller {
 
     @Override
     void wakeupPoller() throws IOException {
-        if (eventfd == null) {
-            throw new UnsupportedOperationException();
-        }
         eventfd.set();
     }
 
@@ -177,7 +142,7 @@ class EPollPoller extends Poller {
         while (i < n) {
             long eventAddress = EPoll.getEvent(address, i);
             int fd = EPoll.getDescriptor(eventAddress);
-            if (eventfd == null || fd != eventfd.efd()) {
+            if (fd != eventfd.efd()) {
                 polled(fd);
                 polled++;
             }

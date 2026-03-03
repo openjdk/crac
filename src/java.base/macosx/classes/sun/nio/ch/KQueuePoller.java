@@ -25,13 +25,8 @@
 package sun.nio.ch;
 
 import java.io.IOException;
-<<<<<<< HEAD
-
-||||||| 62c7e9aefd4
-=======
 import java.lang.ref.Cleaner.Cleanable;
 import jdk.internal.ref.CleanerFactory;
->>>>>>> jdk-27+11
 import static sun.nio.ch.KQueue.*;
 
 /**
@@ -42,7 +37,6 @@ class KQueuePoller extends Poller {
     private final int filter;
     private final int maxEvents;
     private final long address;
-    private long stopPipe;
 
     // file descriptors used for wakeup during shutdown
     private final int fd0;
@@ -53,7 +47,7 @@ class KQueuePoller extends Poller {
     private final Cleanable cleaner;
 
     KQueuePoller(Poller.Mode mode, boolean subPoller, boolean read) throws IOException {
-        boolean wakeable = (mode == Mode.POLLER_PER_CARRIER) && subPoller;
+        boolean cleanable = (mode == Mode.POLLER_PER_CARRIER) && subPoller;
         int maxEvents = (subPoller) ? 16 : 64;
 
         int kqfd = KQueue.create();
@@ -64,12 +58,12 @@ class KQueuePoller extends Poller {
             address = KQueue.allocatePollArray(maxEvents);
 
             // register one end of the pipe with kqueue to allow for wakeup
-            if (wakeable) {
-                long fds = IOUtil.makePipe(false);
-                fd0 = (int) (fds >>> 32);
-                fd1 = (int) fds;
-                KQueue.register(kqfd, fd0, EVFILT_READ, EV_ADD);
-            }
+            long fds = IOUtil.makePipe(false);
+            fd0 = (int) (fds >>> 32);
+            fd1 = (int) fds;
+            int err = KQueue.register(kqfd, fd0, EVFILT_READ, EV_ADD);
+            if (err != 0)
+                throw new IOException("kevent failed: " + err);
         } catch (Throwable e) {
             FileDispatcherImpl.closeIntFD(kqfd);
             if (address != 0L) KQueue.freePollArray(address);
@@ -85,9 +79,9 @@ class KQueuePoller extends Poller {
         this.fd0 = fd0;
         this.fd1 = fd1;
 
-        // create action to close kqueue, register cleaner when wakeable
+        // create action to close kqueue, register cleaner when cleanable
         this.closer = closer(kqfd, address, fd0, fd1);
-        if (wakeable) {
+        if (cleanable) {
             this.cleaner = CleanerFactory.cleaner().register(this, closer);
         } else {
             this.cleaner = null;
@@ -123,31 +117,7 @@ class KQueuePoller extends Poller {
     }
 
     @Override
-<<<<<<< HEAD
-    protected void stop() throws IOException {
-        super.stop();
-        stopPipe = IOUtil.makePipe(true);
-        int err = KQueue.register(kqfd, (int)(stopPipe >> 32), EVFILT_READ, (EV_ADD|EV_ONESHOT));
-        if (err != 0) {
-            throw new IOException("kqueue_register failed: " + err);
-        }
-        IOUtil.write1((int) stopPipe, (byte) 0);
-    }
-
-    @Override
-    protected void closeFds() throws IOException {
-        Poller.nd.close(IOUtil.newFD((int) (stopPipe >> 32)));
-        Poller.nd.close(IOUtil.newFD((int) stopPipe));
-        super.closeFds();
-    }
-
-    @Override
-    void implRegister(int fdVal) throws IOException {
-||||||| 62c7e9aefd4
-    void implRegister(int fdVal) throws IOException {
-=======
     void implStartPoll(int fdVal) throws IOException {
->>>>>>> jdk-27+11
         int err = KQueue.register(kqfd, fdVal, filter, (EV_ADD|EV_ONESHOT));
         if (err != 0)
             throw new IOException("kevent failed: " + err);
@@ -163,9 +133,6 @@ class KQueuePoller extends Poller {
 
     @Override
     void wakeupPoller() throws IOException {
-        if (fd1 < 0) {
-            throw new UnsupportedOperationException();
-        }
         IOUtil.write1(fd1, (byte)0);
     }
 

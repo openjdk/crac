@@ -451,64 +451,6 @@ protected:
     decl(FLUSHOPT,          clflushopt,        42) /* flusopth instruction */ \
     decl(CLWB,              clwb,              43) /* clwb instruction */ \
                                                      \
-<<<<<<< HEAD
-    decl(AVX512_VBMI2,      "avx512_vbmi2",      44) /* VBMI2 shift left double instructions */ \
-    decl(AVX512_VBMI,       "avx512_vbmi",       45) /* Vector BMI instructions */ \
-    decl(HV,                "hv",                46) /* Hypervisor instructions */ \
-    decl(SERIALIZE,         "serialize",         47) /* CPU SERIALIZE */ \
-    decl(RDTSCP,            "rdtscp",            48) /* RDTSCP instruction */ \
-    decl(RDPID,             "rdpid",             49) /* RDPID instruction */ \
-    decl(FSRM,              "fsrm",              50) /* Fast Short REP MOV */ \
-    decl(GFNI,              "gfni",              51) /* Vector GFNI instructions */ \
-    decl(AVX512_BITALG,     "avx512_bitalg",     52) /* Vector sub-word popcount and bit gather instructions */\
-    decl(F16C,              "f16c",              53) /* Half-precision and single precision FP conversion instructions*/ \
-    decl(PKU,               "pku",               54) /* Protection keys for user-mode pages */ \
-    decl(OSPKE,             "ospke",             55) /* OS enables protection keys */ \
-    decl(CET_IBT,           "cet_ibt",           56) /* Control Flow Enforcement - Indirect Branch Tracking */ \
-    decl(CET_SS,            "cet_ss",            57) /* Control Flow Enforcement - Shadow Stack */ \
-    decl(AVX512_IFMA,       "avx512_ifma",       58) /* Integer Vector FMA instructions*/ \
-    decl(AVX_IFMA,          "avx_ifma",          59) /* 256-bit VEX-coded variant of AVX512-IFMA*/ \
-    decl(APX_F,             "apx_f",             60) /* Intel Advanced Performance Extensions*/ \
-    decl(SHA512,            "sha512",            61) /* SHA512 instructions*/ \
-    decl(AVX512_FP16,       "avx512_fp16",       62) /* AVX512 FP16 ISA support*/ \
-    decl(AVX10_1,           "avx10_1",           63) /* AVX10 512 bit vector ISA Version 1 support*/ \
-    decl(AVX10_2,           "avx10_2",           64) /* AVX10 512 bit vector ISA Version 2 support*/ \
-    decl(HYBRID,            "hybrid",            65) /* Hybrid architecture */ \
-    decl(FMA4,              "fma4",              66) \
-    decl(MOVBE,             "movbe",             67) \
-    decl(OSXSAVE,           "osxsave",           68) \
-    decl(IBT,               "ibt",               69) \
-    decl(SHSTK,             "shstk",             70) /* Also known as cet_ss */ \
-    decl(XSAVE,             "xsave",             71) \
-    decl(CMPXCHG16,         "cmpxchg16",         72) /* Also known in cpuinfo as cx16 and in glibc as cmpxchg16b */ \
-    decl(LAHFSAHF,          "lahfsahf",          73) /* Also known in cpuinfo as lahf_lm and in glibc as lahf64_sahf64 */ \
-    decl(HTT,               "htt",               74) /* hotspot calls it 'ht' but that is affected by threads_per_core() */ \
-    decl(XSAVEC,            "xsavec",            75) \
-    decl(AVX_Fast_Unaligned_Load, "avx_fast_unaligned_load", 76)
-||||||| 62c7e9aefd4
-    decl(AVX512_VBMI2,      "avx512_vbmi2",      44) /* VBMI2 shift left double instructions */ \
-    decl(AVX512_VBMI,       "avx512_vbmi",       45) /* Vector BMI instructions */ \
-    decl(HV,                "hv",                46) /* Hypervisor instructions */ \
-    decl(SERIALIZE,         "serialize",         47) /* CPU SERIALIZE */ \
-    decl(RDTSCP,            "rdtscp",            48) /* RDTSCP instruction */ \
-    decl(RDPID,             "rdpid",             49) /* RDPID instruction */ \
-    decl(FSRM,              "fsrm",              50) /* Fast Short REP MOV */ \
-    decl(GFNI,              "gfni",              51) /* Vector GFNI instructions */ \
-    decl(AVX512_BITALG,     "avx512_bitalg",     52) /* Vector sub-word popcount and bit gather instructions */\
-    decl(F16C,              "f16c",              53) /* Half-precision and single precision FP conversion instructions*/ \
-    decl(PKU,               "pku",               54) /* Protection keys for user-mode pages */ \
-    decl(OSPKE,             "ospke",             55) /* OS enables protection keys */ \
-    decl(CET_IBT,           "cet_ibt",           56) /* Control Flow Enforcement - Indirect Branch Tracking */ \
-    decl(CET_SS,            "cet_ss",            57) /* Control Flow Enforcement - Shadow Stack */ \
-    decl(AVX512_IFMA,       "avx512_ifma",       58) /* Integer Vector FMA instructions*/ \
-    decl(AVX_IFMA,          "avx_ifma",          59) /* 256-bit VEX-coded variant of AVX512-IFMA*/ \
-    decl(APX_F,             "apx_f",             60) /* Intel Advanced Performance Extensions*/ \
-    decl(SHA512,            "sha512",            61) /* SHA512 instructions*/ \
-    decl(AVX512_FP16,       "avx512_fp16",       62) /* AVX512 FP16 ISA support*/ \
-    decl(AVX10_1,           "avx10_1",           63) /* AVX10 512 bit vector ISA Version 1 support*/ \
-    decl(AVX10_2,           "avx10_2",           64) /* AVX10 512 bit vector ISA Version 2 support*/ \
-    decl(HYBRID,            "hybrid",            65) /* Hybrid architecture */
-=======
     decl(AVX512_VBMI2,      avx512_vbmi2,      44) /* VBMI2 shift left double instructions */ \
     decl(AVX512_VBMI,       avx512_vbmi,       45) /* Vector BMI instructions */ \
     decl(HV,                hv,                46) /* Hypervisor instructions */ \
@@ -530,8 +472,18 @@ protected:
     decl(AVX512_FP16,       avx512_fp16,       62) /* AVX512 FP16 ISA support*/ \
     decl(AVX10_1,           avx10_1,           63) /* AVX10 512 bit vector ISA Version 1 support*/ \
     decl(AVX10_2,           avx10_2,           64) /* AVX10 512 bit vector ISA Version 2 support*/ \
-    decl(HYBRID,            hybrid,            65) /* Hybrid architecture */
->>>>>>> jdk-27+11
+    decl(HYBRID,            hybrid,            65) /* Hybrid architecture */ \
+    decl(FMA4,              fma4,              66) \
+    decl(MOVBE,             movbe,             67) \
+    decl(OSXSAVE,           osxsave,           68) \
+    decl(IBT,               ibt,               69) \
+    decl(SHSTK,             shstk,             70) /* Also known as cet_ss */ \
+    decl(XSAVE,             xsave,             71) \
+    decl(CMPXCHG16,         cmpxchg16,         72) /* Also known in cpuinfo as cx16 and in glibc as cmpxchg16b */ \
+    decl(LAHFSAHF,          lahfsahf,          73) /* Also known in cpuinfo as lahf_lm and in glibc as lahf64_sahf64 */ \
+    decl(HTT,               htt,               74) /* hotspot calls it 'ht' but that is affected by threads_per_core() */ \
+    decl(XSAVEC,            xsavec,            75) \
+    decl(AVX_Fast_Unaligned_Load, avx_fast_unaligned_load, 76)
 
 #define DECLARE_CPU_FEATURE_FLAG(id, name, bit) CPU_##id = (bit),
     CPU_FEATURE_FLAGS(DECLARE_CPU_FEATURE_FLAG)
@@ -623,7 +575,15 @@ protected:
       int idx = index(feature);
       return (_features_bitmap[idx] & bit_mask(feature)) != 0;
     }
-<<<<<<< HEAD
+
+    bool supports_features(VM_Features* features_to_test) {
+      for (int i = 0; i < features_bitmap_element_count(); i++) {
+        if ((_features_bitmap[i] & features_to_test->_features_bitmap[i]) != features_to_test->_features_bitmap[i]) {
+          return false;
+       }
+      }
+      return true;
+    }
 
     void set_all_features() {
       apply_to_all_features([](uint64_t &u, int idx) {
@@ -679,18 +639,6 @@ protected:
     void print_numbers(outputStream &os, bool hexonly = false) const;
 
     const char *print_numbers() const;
-||||||| 62c7e9aefd4
-=======
-
-    bool supports_features(VM_Features* features_to_test) {
-      for (int i = 0; i < features_bitmap_element_count(); i++) {
-        if ((_features_bitmap[i] & features_to_test->_features_bitmap[i]) != features_to_test->_features_bitmap[i]) {
-          return false;
-       }
-      }
-      return true;
-    }
->>>>>>> jdk-27+11
   };
 
   // CPU feature flags vector, can be affected by VM settings.

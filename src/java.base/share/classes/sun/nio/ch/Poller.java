@@ -24,45 +24,29 @@
  */
 package sun.nio.ch;
 
-import java.io.FileDescriptor;
 import java.io.IOException;
-<<<<<<< HEAD
-import java.util.ArrayList;
-||||||| 62c7e9aefd4
-=======
 import java.io.UncheckedIOException;
 import java.lang.ref.Reference;
->>>>>>> jdk-27+11
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
-<<<<<<< HEAD
-import java.util.concurrent.*;
-||||||| 62c7e9aefd4
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.Executor;
-import java.util.concurrent.Executors;
-import java.util.concurrent.ThreadFactory;
-=======
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.Executor;
+import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ThreadFactory;
->>>>>>> jdk-27+11
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.LockSupport;
 import java.util.function.BooleanSupplier;
-<<<<<<< HEAD
-import jdk.internal.crac.JDKResource;
-import jdk.internal.crac.Core;
-import jdk.internal.crac.mirror.Context;
-import jdk.internal.crac.mirror.Resource;
-||||||| 62c7e9aefd4
-=======
+import java.util.stream.Stream;
+
 import jdk.internal.access.JavaLangAccess;
 import jdk.internal.access.SharedSecrets;
->>>>>>> jdk-27+11
+import jdk.internal.crac.Core;
+import jdk.internal.crac.JDKResource;
+import jdk.internal.crac.mirror.Context;
+import jdk.internal.crac.mirror.Resource;
 import jdk.internal.misc.InnocuousThread;
 import jdk.internal.misc.TerminatingThreadLocal;
 import jdk.internal.vm.Continuation;
@@ -73,46 +57,39 @@ import jdk.internal.vm.annotation.Stable;
  * I/O poller to allow virtual threads park until a file descriptor is ready for I/O.
  */
 public abstract class Poller {
-<<<<<<< HEAD
-    static final NativeDispatcher nd = new SocketDispatcher();
-
-    private static final Pollers POLLERS;
-    static {
-        try {
-            var pollers = new Pollers();
-            pollers.start();
-            POLLERS = pollers;
-        } catch (IOException ioe) {
-            throw new ExceptionInInitializerError(ioe);
-        }
-    }
-||||||| 62c7e9aefd4
-    private static final Pollers POLLERS;
-    static {
-        try {
-            var pollers = new Pollers();
-            pollers.start();
-            POLLERS = pollers;
-        } catch (IOException ioe) {
-            throw new ExceptionInInitializerError(ioe);
-        }
-    }
-=======
     private static final JavaLangAccess JLA = SharedSecrets.getJavaLangAccess();
->>>>>>> jdk-27+11
 
     // the poller group for the I/O pollers and poller threads
-    private static final PollerGroup POLLER_GROUP = createPollerGroup();
+    private static PollerGroup POLLER_GROUP = createPollerGroup();
 
-    // the poller or sub-poller thread (used for observability only)
+    // the poller or sub-poller thread
     private @Stable Thread owner;
 
     // maps file descriptors to parked Thread
     private final Map<Integer, Thread> map = new ConcurrentHashMap<>();
-    private volatile boolean stop = false;
 
     // shutdown (if supported by poller group)
     private volatile boolean shutdown;
+
+    private static final JDKResource resource = new JDKResource() {
+        @Override
+        public void beforeCheckpoint(Context<? extends Resource> context) throws Exception {
+            // TODO: handle existing/concurrently-starting polling. Currently this is left for the
+            //  user to handle, and if not handled, some polling threads wake up (possibly
+            //  prematurely), some remain parked forever. But ideally new polling attempts should
+            //  fail and existing ones should abort the checkpoint.
+            POLLER_GROUP.shutdown();
+            POLLER_GROUP = null;
+        }
+
+        @Override
+        public void afterRestore(Context<? extends Resource> context) {
+            POLLER_GROUP = createPollerGroup();
+        }
+    };
+    static {
+        Core.Priority.NORMAL.getContext().register(resource);
+    }
 
     /**
      * Poller mode.
@@ -262,18 +239,6 @@ public abstract class Poller {
     }
 
     /**
-     * Implementation is expected to override this method adding wakeup
-     * code for the thread (natively) waiting in {@link #poll(int)}.
-     */
-    protected void stop() throws IOException {
-        stop = true;
-    }
-
-    protected void closeFds() throws IOException {
-        nd.close(IOUtil.newFD(fdVal()));
-    }
-
-    /**
      * Parks the current thread until a file descriptor is ready for the given op.
      * @param fdVal the file descriptor
      * @param event POLLIN or POLLOUT
@@ -356,13 +321,7 @@ public abstract class Poller {
     private void pollerLoop() {
         setOwner();
         try {
-<<<<<<< HEAD
-            while (!stop) {
-||||||| 62c7e9aefd4
-            for (;;) {
-=======
             while (!isShutdown()) {
->>>>>>> jdk-27+11
                 poll(-1);
             }
         } catch (Exception e) {
@@ -384,21 +343,13 @@ public abstract class Poller {
         setOwner();
         try {
             int polled = 0;
-<<<<<<< HEAD
-            while (!stop) {
-||||||| 62c7e9aefd4
-            for (;;) {
-=======
             while (!isShutdown()) {
->>>>>>> jdk-27+11
                 if (polled == 0) {
                     masterPoller.poll(fdVal(), 0, () -> true);  // park
                 } else {
                     Thread.yield();
                 }
-                if (!stop) {
-                    polled = poll(0);
-                }
+                polled = poll(0);
             }
         } catch (Exception e) {
             e.printStackTrace();
@@ -421,130 +372,15 @@ public abstract class Poller {
     /**
      * A group of poller threads that support virtual threads polling file descriptors.
      */
-<<<<<<< HEAD
-    private static class Pollers implements JDKResource {
-||||||| 62c7e9aefd4
-    private static class Pollers {
-=======
     private static abstract class PollerGroup {
->>>>>>> jdk-27+11
         private final PollerProvider provider;
-<<<<<<< HEAD
-        private final Poller.Mode pollerMode;
-        private Poller masterPoller;
-        private final Poller[] readPollers;
-        private final Poller[] writePollers;
-        private final List<Thread> threads = new ArrayList<>();
-
-        // used by start method to executor is kept alive
-        private ExecutorService executor;
-
-        /**
-         * Creates the Poller instances based on configuration.
-         */
-        Pollers() throws IOException {
-            PollerProvider provider = PollerProvider.provider();
-            Poller.Mode mode;
-            String s = System.getProperty("jdk.pollerMode");
-            if (s != null) {
-                if (s.equalsIgnoreCase(Mode.SYSTEM_THREADS.name()) || s.equals("1")) {
-                    mode = Mode.SYSTEM_THREADS;
-                } else if (s.equalsIgnoreCase(Mode.VTHREAD_POLLERS.name()) || s.equals("2")) {
-                    mode = Mode.VTHREAD_POLLERS;
-                } else {
-                    throw new RuntimeException("Can't parse '" + s + "' as polling mode");
-                }
-            } else {
-                mode = provider.defaultPollerMode();
-            }
-
-            // vthread poller mode needs a master poller
-            Poller masterPoller = (mode == Mode.VTHREAD_POLLERS)
-                    ? provider.readPoller(false)
-                    : null;
-
-            // read pollers (or sub-pollers)
-            int readPollerCount = pollerCount("jdk.readPollers", provider.defaultReadPollers(mode));
-            Poller[] readPollers = new Poller[readPollerCount];
-            for (int i = 0; i < readPollerCount; i++) {
-                readPollers[i] = provider.readPoller(mode == Mode.VTHREAD_POLLERS);
-            }
-
-            // write pollers (or sub-pollers)
-            int writePollerCount = pollerCount("jdk.writePollers", provider.defaultWritePollers(mode));
-            Poller[] writePollers = new Poller[writePollerCount];
-            for (int i = 0; i < writePollerCount; i++) {
-                writePollers[i] = provider.writePoller(mode == Mode.VTHREAD_POLLERS);
-            }
-||||||| 62c7e9aefd4
-        private final Poller.Mode pollerMode;
-        private final Poller masterPoller;
-        private final Poller[] readPollers;
-        private final Poller[] writePollers;
-
-        // used by start method to executor is kept alive
-        private Executor executor;
-
-        /**
-         * Creates the Poller instances based on configuration.
-         */
-        Pollers() throws IOException {
-            PollerProvider provider = PollerProvider.provider();
-            Poller.Mode mode;
-            String s = System.getProperty("jdk.pollerMode");
-            if (s != null) {
-                if (s.equalsIgnoreCase(Mode.SYSTEM_THREADS.name()) || s.equals("1")) {
-                    mode = Mode.SYSTEM_THREADS;
-                } else if (s.equalsIgnoreCase(Mode.VTHREAD_POLLERS.name()) || s.equals("2")) {
-                    mode = Mode.VTHREAD_POLLERS;
-                } else {
-                    throw new RuntimeException("Can't parse '" + s + "' as polling mode");
-                }
-            } else {
-                mode = provider.defaultPollerMode();
-            }
-
-            // vthread poller mode needs a master poller
-            Poller masterPoller = (mode == Mode.VTHREAD_POLLERS)
-                    ? provider.readPoller(false)
-                    : null;
-
-            // read pollers (or sub-pollers)
-            int readPollerCount = pollerCount("jdk.readPollers", provider.defaultReadPollers(mode));
-            Poller[] readPollers = new Poller[readPollerCount];
-            for (int i = 0; i < readPollerCount; i++) {
-                readPollers[i] = provider.readPoller(mode == Mode.VTHREAD_POLLERS);
-            }
-
-            // write pollers (or sub-pollers)
-            int writePollerCount = pollerCount("jdk.writePollers", provider.defaultWritePollers(mode));
-            Poller[] writePollers = new Poller[writePollerCount];
-            for (int i = 0; i < writePollerCount; i++) {
-                writePollers[i] = provider.writePoller(mode == Mode.VTHREAD_POLLERS);
-            }
-=======
->>>>>>> jdk-27+11
 
         PollerGroup(PollerProvider provider) {
             this.provider = provider;
-<<<<<<< HEAD
-            this.pollerMode = mode;
-            this.masterPoller = masterPoller;
-            this.readPollers = readPollers;
-            this.writePollers = writePollers;
-
-            Core.Priority.NORMAL.getContext().register(this);
-||||||| 62c7e9aefd4
-            this.pollerMode = mode;
-            this.masterPoller = masterPoller;
-            this.readPollers = readPollers;
-            this.writePollers = writePollers;
-=======
         }
 
         final PollerProvider provider() {
             return provider;
->>>>>>> jdk-27+11
         }
 
         /**
@@ -567,26 +403,6 @@ public abstract class Poller {
         /**
          * Starts a platform thread to run the given task.
          */
-<<<<<<< HEAD
-        private void startPlatformThread(String name, Runnable task) {
-            try {
-                Thread thread = InnocuousThread.newSystemThread(name, task);
-                thread.setDaemon(true);
-                thread.setUncaughtExceptionHandler((t, e) -> e.printStackTrace());
-                thread.start();
-                threads.add(thread);
-            } catch (Exception e) {
-                throw new InternalError(e);
-||||||| 62c7e9aefd4
-        private void startPlatformThread(String name, Runnable task) {
-            try {
-                Thread thread = InnocuousThread.newSystemThread(name, task);
-                thread.setDaemon(true);
-                thread.setUncaughtExceptionHandler((t, e) -> e.printStackTrace());
-                thread.start();
-            } catch (Exception e) {
-                throw new InternalError(e);
-=======
         protected final void startPlatformThread(String name, Runnable task) {
             Thread thread = InnocuousThread.newSystemThread(name, task);
             thread.setDaemon(true);
@@ -619,64 +435,35 @@ public abstract class Poller {
                         poller.close();
                     } catch (IOException _) { }
                 }
->>>>>>> jdk-27+11
             }
         }
 
-        @Override
-        public void beforeCheckpoint(Context<? extends Resource> context) throws Exception {
-            for (int i = 0; i < readPollers.length; i++) {
-                if (masterPoller != null) {
-                    masterPoller.wakeup(readPollers[i].fdVal());
-                }
-                readPollers[i].stop();
+        /**
+         * Shutdown all pollers and release their resources.
+         * <p>
+         * Assumes no polling is in progress or can be started concurrently.
+         */
+        void shutdown() throws IOException, InterruptedException {
+            final var pollers = Stream.concat(readPollers().stream(), writePollers().stream()).toList();
+            for (Poller poller : pollers) {
+                poller.setShutdown();
             }
-            for (int i = 0; i < writePollers.length; i++) {
-                if (masterPoller != null) {
-                    masterPoller.wakeup(writePollers[i].fdVal());
-                }
-                writePollers[i].stop();
+            if (masterPoller() != null) {
+                masterPoller().setShutdown();
+                masterPoller().wakeupAll(); // wake up sub-poller threads (assuming no other threads are polling)
+                masterPoller().wakeupPoller(); // wake up master poller thread
             }
-            if (masterPoller != null) {
-                masterPoller.stop();
+            for (Poller poller : pollers) {
+                poller.wakeupPoller();
             }
-            if (executor != null) {
-                executor.shutdownNow();
-                if (!executor.awaitTermination(10, TimeUnit.SECONDS)) {
-                    throw new TimeoutException("Poller executor did not complete");
-                }
+            for (Poller poller : pollers) {
+                poller.owner.join();
+                poller.close();
             }
-            for (Thread t : threads) {
-                t.interrupt();
-                t.join();
+            if (masterPoller() != null) {
+                masterPoller().owner.join();
+                masterPoller().close();
             }
-            threads.clear();
-            for (int i = 0; i < readPollers.length; i++) {
-                readPollers[i].closeFds();
-                readPollers[i] = null;
-            }
-            for (int i = 0; i < writePollers.length; i++) {
-                writePollers[i].closeFds();
-                writePollers[i] = null;
-            }
-            if (masterPoller != null) {
-                masterPoller.closeFds();
-                masterPoller = null;
-            }
-        }
-
-        @Override
-        public void afterRestore(Context<? extends Resource> context) throws Exception {
-            if (pollerMode == Mode.VTHREAD_POLLERS) {
-                masterPoller = provider.readPoller(false);
-            }
-            for (int i = 0; i < readPollers.length; i++) {
-                readPollers[i] = provider.readPoller(pollerMode == Mode.VTHREAD_POLLERS);
-            }
-            for (int i = 0; i < writePollers.length; i++) {
-                writePollers[i] = provider.writePoller(pollerMode == Mode.VTHREAD_POLLERS);
-            }
-            start();
         }
     }
 
@@ -766,7 +553,7 @@ public abstract class Poller {
         private final Poller[] writePollers;
 
         // keep virtual thread pollers alive
-        private final Executor executor;
+        private final ExecutorService executor;
 
         VThreadsPollerGroup(PollerProvider provider,
                             int readPollerCount,
@@ -849,6 +636,16 @@ public abstract class Poller {
         @Override
         List<Poller> writePollers() {
             return List.of(writePollers);
+        }
+
+        @Override
+        void shutdown() throws IOException, InterruptedException {
+            super.shutdown();
+            executor.shutdown();
+            // All threads should be shut down already
+            if (!executor.awaitTermination(0, TimeUnit.SECONDS)) {
+                throw new InternalError("Poller threads did not terminate");
+            }
         }
     }
 

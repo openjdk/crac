@@ -37,16 +37,24 @@ import java.util.concurrent.atomic.AtomicReference;
  * @test id=SYSTEM_THREADS
  * @library /test/lib
  * @build PollerTest
- * @run driver/timeout=10 jdk.test.lib.crac.CracTest false SYSTEM_THREADS
- * @run driver/timeout=10 jdk.test.lib.crac.CracTest true SYSTEM_THREADS
+ * @run driver/timeout=10 jdk.test.lib.crac.CracTest false 1
+ * @run driver/timeout=10 jdk.test.lib.crac.CracTest true  1
  */
 /**
  * @test id=VTHREAD_POLLERS
  * @requires os.family == "linux" | os.family == "mac"
  * @library /test/lib
  * @build PollerTest
- * @run driver/timeout=10 jdk.test.lib.crac.CracTest false VTHREAD_POLLERS
- * @run driver/timeout=10 jdk.test.lib.crac.CracTest true VTHREAD_POLLERS
+ * @run driver/timeout=10 jdk.test.lib.crac.CracTest false 2
+ * @run driver/timeout=10 jdk.test.lib.crac.CracTest true  2
+ */
+/**
+ * @test id=POLLER_PER_CARRIER
+ * @requires os.family == "linux" | os.family == "mac"
+ * @library /test/lib
+ * @build PollerTest
+ * @run driver/timeout=10 jdk.test.lib.crac.CracTest false 3
+ * @run driver/timeout=10 jdk.test.lib.crac.CracTest true  3
  */
 public class PollerTest implements CracTest {
     @CracTestArg(0)

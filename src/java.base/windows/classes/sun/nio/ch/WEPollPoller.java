@@ -38,6 +38,8 @@ class WEPollPoller extends Poller {
     private final long handle;
     private final int event;
     private final long address;
+
+    // used for wakeup during shutdown
     private PipeImpl stopPipe;
 
     WEPollPoller(boolean read) throws IOException {
@@ -56,37 +58,19 @@ class WEPollPoller extends Poller {
     }
 
     @Override
-<<<<<<< HEAD
-    protected void stop() throws IOException {
-        super.stop();
-        stopPipe = new PipeImpl(DefaultSelectorProvider.get(), true, false);
-        int err = WEPoll.ctl(handle, EPOLL_CTL_ADD, stopPipe.source().getFDVal(), EPOLLIN | EPOLLONESHOT);
-        if (err != 0) {
-            throw new IOException("epoll_ctl failed: " + err);
-        }
-        stopPipe.sink().write(ByteBuffer.allocate(1).put((byte) 0).flip());
-    }
-
-    @Override
-    protected void closeFds() throws IOException {
-        stopPipe.source().close();
-        stopPipe.sink().close();
-        WEPoll.close(handle);
-    }
-
-    @Override
-    void implRegister(int fdVal) throws IOException {
-||||||| 62c7e9aefd4
-    void implRegister(int fdVal) throws IOException {
-=======
     void close() {
         WEPoll.close(handle);
         WEPoll.freePollArray(address);
+        if (stopPipe != null) {
+            try {
+                stopPipe.source().close();
+                stopPipe.sink().close();
+            } catch (IOException _) { }
+        }
     }
 
     @Override
     void implStartPoll(int fdVal) throws IOException {
->>>>>>> jdk-27+11
         int err = WEPoll.ctl(handle, EPOLL_CTL_ADD, fdVal, (event | EPOLLONESHOT));
         if (err != 0)
             throw new IOException("epoll_ctl failed: " + err);
@@ -95,6 +79,22 @@ class WEPollPoller extends Poller {
     @Override
     void implStopPoll(int fdVal, boolean polled) {
         WEPoll.ctl(handle, EPOLL_CTL_DEL, fdVal, 0);
+    }
+
+    @Override
+    void wakeupPoller() throws IOException {
+        // In contrast to implementations on other platforms:
+        // - the pipe cannot be set up on initialization because its implementation uses polling
+        // - this method is only called once, on shutdown
+        assert stopPipe == null;
+        stopPipe = new PipeImpl(DefaultSelectorProvider.get(), true, false);
+        stopPipe.source().configureBlocking(false);
+        stopPipe.sink().configureBlocking(false);
+        int err = WEPoll.ctl(handle, EPOLL_CTL_ADD, stopPipe.source().getFDVal(), EPOLLIN | EPOLLONESHOT);
+        if (err != 0) {
+            throw new IOException("epoll_ctl failed: " + err);
+        }
+        stopPipe.sink().write(ByteBuffer.allocate(1).put((byte) 0).flip());
     }
 
     @Override

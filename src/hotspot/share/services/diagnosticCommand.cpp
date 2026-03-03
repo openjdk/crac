@@ -1093,7 +1093,7 @@ CheckpointDCmd::CheckpointDCmd(outputStream* output, bool heap) :
 struct LocaleGuard {
 #ifndef _WINDOWS
   locale_t _new, _old;
-  LocaleGuard(): _new(newlocale(LC_ALL_MASK, "C", 0)), _old(uselocale(_new)) {}
+  LocaleGuard(): _new(newlocale(LC_ALL_MASK, "C", nullptr)), _old(uselocale(_new)) {}
 #else
   LocaleGuard() {}
 #endif // _WINDOWS

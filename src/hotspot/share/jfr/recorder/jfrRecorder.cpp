@@ -80,7 +80,11 @@ bool JfrRecorder::is_enabled() {
 }
 
 bool JfrRecorder::is_started_on_commandline() {
-  return StartFlightRecording != nullptr;
+  // CRaC makes it possible to set StartFlightRecording on restore and not on
+  // startup. In such case callers expect this method to return false. Thus a
+  // better name for the method would be is_started_on_vm_creation().
+  assert(!Arguments::has_jfr_option() || StartFlightRecording != nullptr, "StartFlightRecording cannot be unset");
+  return Arguments::has_jfr_option();
 }
 
 bool JfrRecorder::create_oop_storages() {

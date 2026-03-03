@@ -39,17 +39,23 @@ public class NoCPUFeaturesTest {
     private static final String MAIN_MSG = "Hello, world!";
 
     public static void main(String[] args) throws Exception {
+        test("criuengine", "cannot open cr/tags in mode r");
+    }
+
+    public static void test(String engine, String expectedMessage) throws Exception {
         final var builder = new CracBuilder()
+            .vmOption("-XX:CRaCEngine=" + engine)
             .vmOption("-XX:+CRaCIgnoreRestoreIfUnavailable")
             .forwardClasspathOnRestore(true);
 
         // Create an empty image without CPU features data
         Files.createDirectory(builder.imageDir());
+        Files.writeString(builder.imageDir().resolve("engine"), engine);
 
         builder.startRestoreWithArgs(List.of(), List.of(Main.class.getName(), "false"))
             .outputAnalyzer()
             .shouldHaveExitValue(0)
-            .shouldContain("cannot open cr/tags in mode r").shouldContain(MAIN_MSG);
+            .shouldContain(expectedMessage).shouldContain(MAIN_MSG);
     }
 
     public static class Main {

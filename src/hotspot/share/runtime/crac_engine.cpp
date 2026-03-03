@@ -401,12 +401,12 @@ static bool record_engine(const char *name, const char *dir) {
 static bool check_engine(const char *name, const char *dir) {
   int fd = open_engine_file(dir, O_RDONLY, "reading");
   if (fd < 0) {
-    return -1;
+    return false;
   }
   char buf[MAX_ENGINE_LENGTH];
   size_t rd = 0;
   do {
-    ssize_t r = ::read(fd, buf + rd, sizeof(buf) - rd);
+    ssize_t r = ::read(fd, buf + rd, static_cast<unsigned int>(sizeof(buf) - rd));
     if (r == 0) {
       break;
     } else if (r < 0) {

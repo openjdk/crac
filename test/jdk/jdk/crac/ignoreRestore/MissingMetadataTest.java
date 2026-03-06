@@ -26,6 +26,7 @@
 import java.nio.file.Files;
 import java.util.List;
 
+import jdk.test.lib.Platform;
 import jdk.test.lib.crac.CracBuilder;
 import jdk.test.lib.util.FileUtils;
 
@@ -33,7 +34,7 @@ import jdk.test.lib.util.FileUtils;
  * @test
  * @summary If CRaCIgnoreRestoreIfUnavailable is specified and either the engine file is missing,
  *          has wrong content or there are no CPU features recorded in the image VM should proceed without restoring.
- * @requires (os.family == "linux") & (os.arch == "amd64" | os.arch == "x86_64")
+ * @requires (os.family == "linux")
  * @library /test/lib
  */
 public class MissingMetadataTest {
@@ -42,7 +43,7 @@ public class MissingMetadataTest {
     public static void main(String[] args) throws Exception {
         test("criuengine", null, "Cannot open file cr/engine");
         test("criuengine", "badengine", "Image format does not match");
-        test("criuengine", "criuengine", "cannot open cr/tags in mode r");
+        test("criuengine", "criuengine", Platform.isX64() ? "cannot open cr/tags in mode r" : "");
     }
 
     public static void test(String engine, String recordedEngine, String expectedMessage) throws Exception {

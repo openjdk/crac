@@ -304,6 +304,7 @@ class fileStream : public outputStream {
   }
   ~fileStream();
   fileStream& operator=(fileStream&& o) {
+    close();
     _file = o._file;
     _need_close = o._need_close;
     o._file = nullptr;

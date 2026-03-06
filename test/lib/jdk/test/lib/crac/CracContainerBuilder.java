@@ -252,6 +252,8 @@ public class CracContainerBuilder extends CracBuilderBase<CracContainerBuilder> 
         if (engine == null || engine == CracEngine.CRIU) {
             cmd.addAll(Arrays.asList("--volume", CRIU_PATH + ":/criu"));
             cmd.addAll(Arrays.asList("--env", "CRAC_CRIU_PATH=/criu"));
+            cmd.addAll(Arrays.asList("--tmpfs", "/dont/load/libs"));
+            cmd.addAll(Arrays.asList("--env", "CRIU_LIBS_DIR=/dont/load/libs"));
         }
         cmd.addAll(Arrays.asList("--name", CONTAINER_NAME));
         if (debug) {

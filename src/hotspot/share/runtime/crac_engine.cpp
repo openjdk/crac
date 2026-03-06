@@ -361,6 +361,7 @@ CracEngine::~CracEngine() {
     os::dll_unload(_lib);
   }
   FREE_C_HEAP_ARRAY(crlib_conf_option_t, _options);
+  os::free(_image_location);
 }
 
 bool CracEngine::is_initialized() const {
@@ -382,7 +383,6 @@ static bool record_engine(const char *name, const char *dir) {
   assert(dir != nullptr, "Not configured");
   fileStream fs = open_engine_file(dir, "w");
   if (!fs.is_open()) {
-    log_error(crac)("Cannot record engine name (%s): %s", name, os::strerror(errno));
     return false;
   }
   fs.write(name, strlen(name));

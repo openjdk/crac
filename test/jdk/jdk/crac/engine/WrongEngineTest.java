@@ -43,16 +43,13 @@ public class WrongEngineTest implements CracTest {
     @Override
     public void test() throws Exception {
         new CracBuilder().doCheckpoint();
-
         // The check for engine fails before we enter the engine itself
-        try (var restore = new CracBuilder().engine(CracEngine.SIMULATE).startRestore()) {
-            assertEquals(1, restore.waitFor());
-        }
+        new CracBuilder().engine(CracEngine.SIMULATE).doRestoreToAnalyze().shouldHaveExitValue(1);
 
         FileUtils.deleteFileTreeWithRetry(new CracBuilder().imageDir());
         // The other direction
         new CracBuilder().engine(CracEngine.SIMULATE).doCheckpoint();
-        new CracBuilder().engine(CracEngine.SIMULATE).doRestoreToAnalyze().shouldHaveExitValue(1);
+        new CracBuilder().doRestoreToAnalyze().shouldHaveExitValue(1);
     }
 
     @Override

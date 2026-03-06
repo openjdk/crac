@@ -89,7 +89,8 @@ static bool find_engine(const char *dll_dir, char *path, size_t path_size, char 
     } else {
       basename = last_slash + strlen(os::file_separator());
     }
-    if (strncmp(basename, JNI_LIB_PREFIX, strlen(JNI_LIB_PREFIX)) ||
+    if (strlen(basename) <= strlen(JNI_LIB_PREFIX) + strlen(JNI_LIB_SUFFIX) ||
+        strncmp(basename, JNI_LIB_PREFIX, strlen(JNI_LIB_PREFIX)) ||
         strcmp(CRaCEngine + engine_length - strlen(JNI_LIB_SUFFIX), JNI_LIB_SUFFIX)) {
       log_error(crac)("CRaCEngine=%s is not a library: expected " JNI_LIB_PREFIX "<name>" JNI_LIB_SUFFIX, CRaCEngine);
       return false;
@@ -114,7 +115,10 @@ static bool find_engine(const char *dll_dir, char *path, size_t path_size, char 
     log_warning(crac)("-XX:CRaCEngine=pause/pauseengine is deprecated and will be removed in version 28; use -XX:CRaCEngine=simengine -XX:CRaCEngineOptions=pause=true");
   } else /* intentional line break */
 #endif // LINUX
-  if (engine_length < resolved_engine_size) {
+  if (engine_length == 0) {
+    log_error(crac)("CRaCEngine is empty");
+    return false;
+  } else if (engine_length < resolved_engine_size) {
     memcpy(resolved_engine, CRaCEngine, engine_length);
     resolved_engine[engine_length] = '\0';
   } else {
@@ -155,15 +159,6 @@ static bool find_engine(const char *dll_dir, char *path, size_t path_size, char 
 
   log_error(crac)("Did not find CRaCEngine %s in %s", CRaCEngine, dll_dir);
   return false;
-}
-
-static bool configure_image_location(const crlib_api_t &api, crlib_conf_t *conf, const char *image_location) {
-  precond(image_location != nullptr && image_location[0] != '\0');
-  if (!api.configure(conf, engine_opt_image_location, image_location)) {
-    log_error(crac)("CRaC engine failed to configure: '%s' = '%s'", engine_opt_image_location, image_location);
-    return false;
-  }
-  return true;
 }
 
 // These functions are used in a template instantiation and need to have external linkage. Otherwise
@@ -316,6 +311,7 @@ CracEngine::CracEngine(bool for_restore) {
       static constexpr const char engine_suffix[] = "engine";
       if (strlen(resolved_engine_func) + sizeof(engine_suffix) <= sizeof(resolved_engine_func)) {
         strcat(resolved_engine_func, engine_suffix);
+        // resolved_engine_func should be concat(CRLIB_API_FUNC, _name) so the check above should already do
         assert(strlen(_name) + sizeof(engine_suffix) <= sizeof(_name), "name too long");
         strcat(_name, engine_suffix);
         api_func = reinterpret_cast<api_func_t>(os::dll_lookup(lib, resolved_engine_func));
@@ -373,52 +369,35 @@ bool CracEngine::is_initialized() const {
   return _lib != nullptr;
 }
 
-static int open_engine_file(const char *dir, int oflag, const char *purpose) {
+static fileStream open_engine_file(const char *dir, const char *opentype) {
 #ifndef PATH_MAX
 # define PATH_MAX 1024
 #endif
   char path[PATH_MAX];
   os::snprintf_checked(path, sizeof(path), "%s/engine", dir);
-  int fd = os::open(path, oflag, 0600);
-  if (fd < 0) {
-    log_error(crac)("Cannot open %s for %s", path, purpose);
-  }
-  return fd;
+  return fileStream(path, opentype);
 }
 
 static bool record_engine(const char *name, const char *dir) {
   assert(dir != nullptr, "Not configured");
-  int fd = open_engine_file(dir, O_WRONLY | O_CREAT | O_TRUNC, "writing");
-  if (fd < 0 || !os::write(fd, name, strlen(name))) {
+  fileStream fs = open_engine_file(dir, "w");
+  if (!fs.is_open()) {
     log_error(crac)("Cannot record engine name (%s): %s", name, os::strerror(errno));
-    ::close(fd);
     return false;
   }
-  ::close(fd);
+  fs.write(name, strlen(name));
   return true;
 }
 
 static bool check_engine(const char *name, const char *dir) {
-  int fd = open_engine_file(dir, O_RDONLY, "reading");
-  if (fd < 0) {
+  fileStream fs = open_engine_file(dir, "r");
+  if (!fs.is_open()) {
     return false;
   }
-  char buf[MAX_ENGINE_LENGTH];
-  size_t rd = 0;
-  do {
-    ssize_t r = ::read(fd, buf + rd, static_cast<unsigned int>(sizeof(buf) - rd));
-    if (r == 0) {
-      break;
-    } else if (r < 0) {
-      if (errno == EINTR) {
-        continue;
-      }
-      log_error(crac)("I/O error reading engine file: %s", os::strerror(errno));
-      return false;
-    }
-    rd += r;
-  } while (rd < sizeof(buf));
-  ::close(fd);
+  char buf[CracEngine::MAX_ENGINE_LENGTH];
+  size_t rd = fs.read(buf, sizeof(buf) - 1);
+  // fileStream does not have a good error API but this is not critical check
+  assert(rd < sizeof(buf), "unexpected size read");
   buf[rd] = '\0';
   if (strcmp(name, buf)) {
     log_error(crac)("Image format does not match; saved image with engine %s, restoring with %s", buf, name);
@@ -445,9 +424,15 @@ int CracEngine::restore() const {
 
 bool CracEngine::configure_image_location(const char *image_location) {
   precond(is_initialized());
+  precond(image_location != nullptr && image_location[0] != '\0');
+  if (!_api->configure(_conf, engine_opt_image_location, image_location)) {
+    log_error(crac)("CRaC engine failed to configure: '%s' = '%s'", engine_opt_image_location, image_location);
+    return false;
+  }
+
   os::free(_image_location);
   _image_location = os::strdup_check_oom(image_location);
-  return ::configure_image_location(*_api, _conf, image_location);
+  return true;
 }
 
 GrowableArrayCHeap<const char *, MemTag::mtInternal> *CracEngine::vm_controlled_options() const {

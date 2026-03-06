@@ -27,30 +27,38 @@ import java.nio.file.Files;
 import java.util.List;
 
 import jdk.test.lib.crac.CracBuilder;
+import jdk.test.lib.util.FileUtils;
 
 /**
  * @test
- * @summary If CRaCIgnoreRestoreIfUnavailable is specified and there are no CPU
- *          features recorded in the image VM should proceed without restoring.
+ * @summary If CRaCIgnoreRestoreIfUnavailable is specified and either the engine file is missing,
+ *          has wrong content or there are no CPU features recorded in the image VM should proceed without restoring.
  * @requires (os.family == "linux") & (os.arch == "amd64" | os.arch == "x86_64")
  * @library /test/lib
  */
-public class NoCPUFeaturesTest {
+public class MissingMetadataTest {
     private static final String MAIN_MSG = "Hello, world!";
 
     public static void main(String[] args) throws Exception {
-        test("criuengine", "cannot open cr/tags in mode r");
+        test("criuengine", null, "Cannot open file cr/engine");
+        test("criuengine", "badengine", "Image format does not match");
+        test("criuengine", "criuengine", "cannot open cr/tags in mode r");
     }
 
-    public static void test(String engine, String expectedMessage) throws Exception {
+    public static void test(String engine, String recordedEngine, String expectedMessage) throws Exception {
         final var builder = new CracBuilder()
             .vmOption("-XX:CRaCEngine=" + engine)
             .vmOption("-XX:+CRaCIgnoreRestoreIfUnavailable")
             .forwardClasspathOnRestore(true);
 
+        if (Files.exists(builder.imageDir())) {
+            FileUtils.deleteFileTreeWithRetry(builder.imageDir());
+        }
         // Create an empty image without CPU features data
         Files.createDirectory(builder.imageDir());
-        Files.writeString(builder.imageDir().resolve("engine"), engine);
+        if (recordedEngine != null) {
+            Files.writeString(builder.imageDir().resolve("engine"), recordedEngine);
+        }
 
         builder.startRestoreWithArgs(List.of(), List.of(Main.class.getName(), "false"))
             .outputAnalyzer()

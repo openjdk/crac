@@ -37,11 +37,11 @@
 #include <cstddef>
 #include <cstdint>
 
-#define MAX_ENGINE_LENGTH 128
-
 // CRaC engine library wrapper.
 class CracEngine : public CHeapObj<mtInternal> {
 public:
+  static constexpr const size_t MAX_ENGINE_LENGTH = 128;
+
   CracEngine(bool for_restore);
   ~CracEngine();
 

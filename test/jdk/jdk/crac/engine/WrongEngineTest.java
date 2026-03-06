@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2025, Azul Systems, Inc. All rights reserved.
+ * Copyright (c) 2026, Azul Systems, Inc. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -52,9 +52,7 @@ public class WrongEngineTest implements CracTest {
         FileUtils.deleteFileTreeWithRetry(new CracBuilder().imageDir());
         // The other direction
         new CracBuilder().engine(CracEngine.SIMULATE).doCheckpoint();
-        try (var restore = new CracBuilder().startRestore()) {
-            assertEquals(1, restore.waitFor());
-        }
+        new CracBuilder().engine(CracEngine.SIMULATE).doRestoreToAnalyze().shouldHaveExitValue(1);
     }
 
     @Override

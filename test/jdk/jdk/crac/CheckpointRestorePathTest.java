@@ -33,6 +33,7 @@ import jdk.test.lib.util.FileUtils;
 
 import java.io.File;
 import java.lang.reflect.Method;
+import java.nio.file.Files;
 
 import static jdk.test.lib.Asserts.assertTrue;
 
@@ -107,21 +108,21 @@ public class CheckpointRestorePathTest implements CracTest {
     }
 
     void testRestoreNoImage() throws Exception {
-        // TODO: make the engine check pidfile before tags to have the same message regardless of CPU features check
-        testRestoreNoImage(false, Platform.isX64() ? "cannot open cr/tags" : "fopen pidfile: No such file or directory");
+        testRestoreNoImage(false, "Cannot open file cr/engine");
     }
 
     void testRestoreNoImageSkipCpuFeaturesCheck() throws Exception {
         testRestoreNoImage(true, "simengine: fopen pidfile: No such file or directory");
     }
 
-    void testRestoreNoImage(boolean skipCpuFeatures, String errMessage) throws Exception {
+    void testRestoreNoImage(boolean skipMetadataChecks, String errMessage) throws Exception {
         CracBuilder builder = new CracBuilder().engine(CracEngine.PAUSE);
         if (builder.imageDir().toFile().exists()) {
             FileUtils.deleteFileTreeWithRetry(builder.imageDir());
         }
         assertTrue(new File("cr").mkdir());
-        if (skipCpuFeatures) {
+        if (skipMetadataChecks) {
+            Files.writeString(builder.imageDir().resolve("engine"), "simengine");
             builder.vmOption("-XX:+UnlockExperimentalVMOptions").vmOption("-XX:CheckCPUFeatures=skip");
         }
         builder.doRestoreToAnalyze()

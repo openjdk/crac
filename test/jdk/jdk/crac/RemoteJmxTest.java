@@ -77,7 +77,6 @@ public class RemoteJmxTest implements CracTest {
     @Override
     public void test() throws Exception {
         CracBuilder builder = new CracBuilder().engine(CracEngine.SIMULATE);
-        builder.javaOption("java.util.logging.config.file", "/home/rvansa/work/crac/test/jdk/jdk/crac/logging.properties");
         if (!NONE.equals(portBefore)) {
             javaOptions(portBefore).forEach(builder::javaOption);
         }

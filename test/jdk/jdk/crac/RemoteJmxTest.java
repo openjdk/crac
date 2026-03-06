@@ -23,7 +23,11 @@
  * questions.
  */
 
-import jdk.crac.*;
+import jdk.crac.CheckpointException;
+import jdk.crac.Context;
+import jdk.crac.Core;
+import jdk.crac.Resource;
+import jdk.crac.RestoreException;
 import jdk.crac.management.*;
 
 import jdk.test.lib.crac.CracBuilder;
@@ -31,9 +35,16 @@ import jdk.test.lib.crac.CracEngine;
 import jdk.test.lib.crac.CracTest;
 import jdk.test.lib.crac.CracTestArg;
 
+import java.io.EOFException;
 import java.io.IOException;
+import java.lang.ref.Reference;
+import java.lang.reflect.UndeclaredThrowableException;
+import java.rmi.UnmarshalException;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
+import java.util.function.Function;
 import javax.management.JMX;
 import javax.management.MalformedObjectNameException;
 import javax.management.ObjectName;
@@ -54,6 +65,7 @@ import static jdk.test.lib.Asserts.*;
 public class RemoteJmxTest implements CracTest {
     private static final String BOOTED = "BOOTED";
     private static final String RESTORED = "RESTORED";
+
     public static final String NONE = "none";
 
     @CracTestArg(0)
@@ -72,13 +84,26 @@ public class RemoteJmxTest implements CracTest {
         try (var process = builder.startCheckpoint();) {
             process.waitForStdout(BOOTED, true);
             if (!NONE.equals(portBefore)) {
-                assertEquals(-1L, getUptimeFromRestoreFromJmx(portBefore));
+                try {
+                    withCRaCMXBean(portBefore, bean -> {
+                        assertEquals(-1L, bean.getUptimeSinceRestore());
+                        try {
+                            bean.checkpointRestore();
+                        } catch (CheckpointException | RestoreException e) {
+                            throw new RuntimeException(e);
+                        }
+                        return null;
+                    });
+                } catch (UndeclaredThrowableException e) {
+                    assertEquals(UnmarshalException.class, e.getCause().getClass());
+                    assertEquals(EOFException.class, e.getCause().getCause().getClass());
+                }
             }
             process.sendNewline();
 
             process.waitForStdout(RESTORED, false /* skip checkpoint log */);
             String currentPort = NONE.equals(portAfter) ? portBefore : portAfter;
-            assertGreaterThanOrEqual(getUptimeFromRestoreFromJmx(currentPort), 0L);
+            assertGreaterThanOrEqual(withCRaCMXBean(currentPort, CRaCMXBean::getUptimeSinceRestore), 0L);
             process.sendNewline();
 
             process.waitForSuccess();
@@ -99,21 +124,50 @@ public class RemoteJmxTest implements CracTest {
         return opts;
     }
 
-    private long getUptimeFromRestoreFromJmx(String port) throws IOException, MalformedObjectNameException {
-        JMXConnector conn = JMXConnectorFactory.connect(new JMXServiceURL("service:jmx:rmi:///jndi/rmi://localhost:" + port + "/jmxrmi"));
-        CRaCMXBean cracBean = JMX.newMBeanProxy(conn.getMBeanServerConnection(), new ObjectName("jdk.management:type=CRaC"), CRaCMXBean.class);
-        return cracBean.getUptimeSinceRestore();
+    private static <T> T withCRaCMXBean(String port, Function<CRaCMXBean, T> consumer) throws IOException, MalformedObjectNameException {
+        try (JMXConnector conn = JMXConnectorFactory.connect(new JMXServiceURL("service:jmx:rmi:///jndi/rmi://localhost:" + port + "/jmxrmi"))) {
+            return consumer.apply(JMX.newMBeanProxy(conn.getMBeanServerConnection(), new ObjectName("jdk.management:type=CRaC"), CRaCMXBean.class));
+        }
     }
 
     @Override
     public void exec() throws Exception {
+        CountDownLatch latch = new CountDownLatch(1);
+        Resource resource = new Resource() {
+            @Override
+            public void beforeCheckpoint(Context<? extends Resource> context) {
+            }
+
+            @Override
+            public void afterRestore(Context<? extends Resource> context) {
+                latch.countDown();
+            }
+        };
+        Core.getGlobalContext().register(resource);
         System.out.println(BOOTED);
-        assertEquals((int)'\n', System.in.read());
         if (!NONE.equals(portAfter)) {
             javaOptions(portAfter).forEach(System::setProperty);
         }
-        Core.checkpointRestore();
+        assertEquals((int)'\n', System.in.read());
+        if (NONE.equals(portBefore)) {
+            Core.checkpointRestore();
+        } else {
+            /* checkpoint remotely triggered here - let's just wait for that */
+            assertTrue(latch.await(30, TimeUnit.SECONDS));
+            /* Busy wait until we can connect to ourselves */
+            while (true) {
+                String currentPort = NONE.equals(portAfter) ? portBefore : portAfter;
+                try {
+                    withCRaCMXBean(currentPort, CRaCMXBean::getRestoreTime);
+                    break;
+                } catch (IOException e) {
+                    Thread.sleep(100);
+                }
+            }
+        }
+        /* RESTORED must not be printed until the restore fully completes; JMX server is started only after all resources */
         System.out.println(RESTORED);
         assertEquals((int)'\n', System.in.read());
+        Reference.reachabilityFence(resource);
     }
 }

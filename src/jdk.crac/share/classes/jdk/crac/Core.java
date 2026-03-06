@@ -26,9 +26,6 @@
 
 package jdk.crac;
 
-import jdk.internal.crac.mirror.impl.BlockingOrderedContext;
-import jdk.internal.crac.mirror.impl.OrderedContext;
-
 /**
  * The coordination service.
  */

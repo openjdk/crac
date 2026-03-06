@@ -85,6 +85,7 @@ public class Core {
         // FIXME: Keep BlockingOrderedContext refusing registrations during checkpoint
         //        but allow new resources to be added during restore.
         SOCKETS(new OrderedContext<>()),
+        PRE_SOCKETS(new BlockingOrderedContext<>()),
         NORMAL(new BlockingOrderedContext<>());
 
         private final Context<JDKResource> context;

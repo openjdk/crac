@@ -123,6 +123,7 @@ public class TCPTransport extends Transport {
     /** table mapping endpoints to channels */
     private final Map<TCPEndpoint,Reference<TCPChannel>> channelTable =
         new WeakHashMap<>();
+    private Thread acceptLoop;
 
     static final RMISocketFactory defaultSocketFactory =
         RMISocketFactory.getDefaultSocketFactory();
@@ -270,10 +271,16 @@ public class TCPTransport extends Transport {
                     tcpLog.log(Log.BRIEF, "server socket close: " + ss);
                 }
                 ss.close();
+                acceptLoop.join();
             } catch (IOException e) {
                 if (tcpLog.isLoggable(Log.BRIEF)) {
                     tcpLog.log(Log.BRIEF,
                             "server socket close throws: " + e);
+                }
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                if (tcpLog.isLoggable(Log.BRIEF)) {
+                    tcpLog.log(Log.BRIEF, "interrupted waiting for the accept loop to finish");
                 }
             }
         }
@@ -307,9 +314,9 @@ public class TCPTransport extends Transport {
                  * "port in use" will cause export to hang if an
                  * RMIFailureHandler is not installed.
                  */
-                Thread t = RuntimeUtil.newSystemThread(
+                acceptLoop = RuntimeUtil.newSystemThread(
                     new AcceptLoop(server), "TCP Accept-" + port, true);
-                t.start();
+                acceptLoop.start();
             } catch (java.net.BindException e) {
                 throw new ExportException("Port already in use: " + port, e);
             } catch (IOException e) {
@@ -612,7 +619,10 @@ public class TCPTransport extends Transport {
         ConnectionHandler(Socket socket, String remoteHost) {
             this.socket = socket;
             this.remoteHost = remoteHost;
-            Core.Priority.NORMAL.getContext().register(this);
+            // There might be a connection registered from the AcceptLoop during checkpoint;
+            // had we used the NORMAL priority this would block the AcceptLoop thread and server checkpoint
+            // (registered as NORMAL) would not be able to complete.
+            Core.Priority.PRE_SOCKETS.getContext().register(this);
         }
 
         String getClientHost() {

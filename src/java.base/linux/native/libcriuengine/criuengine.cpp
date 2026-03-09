@@ -65,11 +65,11 @@
 #define CHECKED_OPTIONS(OPT) \
   OPT(keep_running, bool, false, CRLIB_OPTION_FLAG_CHECKPOINT, "true/false", "false", \
     "keep the process running after the checkpoint or kill it.") \
-  OPT(direct_map, bool, true, CRLIB_OPTION_FLAG_RESTORE, "true/false", "true", \
+  OPT(direct_map, bool, false, CRLIB_OPTION_FLAG_RESTORE, "true/false", "false", \
     "on restore, map process data directly from saved files. This may speedup the restore " \
     "but the resulting process will not be the same as before the checkpoint.") \
   OPT(legacy_criu, bool, false, CRLIB_OPTION_FLAG_CHECKPOINT | CRLIB_OPTION_FLAG_RESTORE, "true/false", "false", \
-    "use CRIU options suitable for legacy version (< 4.0).") \
+    "use when criu_location points to a legacy version (from https://github.com/crac/criu).") \
   OPT(print_command, bool, false, CRLIB_OPTION_FLAG_CHECKPOINT | CRLIB_OPTION_FLAG_RESTORE, "true/false", "false", \
     "print CRIU command (for debugging).")
 
@@ -675,18 +675,32 @@ static void maybe_reopen(int fd, int flags) {
     return;
   }
   target[len] = '\0'; // readlink does not append terminating char
+  static const char deleted[] = " (deleted)";
+  if (!strcmp(target + len - sizeof(deleted), deleted)) {
+    // deleted file will be replaced by /dev/null to avoid accidentally overwriting
+    // other file
+    strcpy(target, "/dev/null");
+  }
   static const char pipe[] = "pipe:";
-  if (!strncmp(pipe, target, sizeof(pipe) - 1)) {
+  if (!strncmp(target, pipe, sizeof(pipe) - 1)) {
     // cannot reopen a pipe but CRIU will handle this OK
     return;
   }
   int new_fd = open(target, flags);
   if (new_fd < 0) {
     LOG("Cannot reopen %s: %s", target, strerror(errno));
+    return;
   } else if (dup2(new_fd, fd) != fd) {
     LOG("Cannot dup2 %d (%s) -> %d: %s", new_fd, target, fd, strerror(errno));
-  } else {
-    close(new_fd);
+  }
+  close(new_fd);
+}
+
+static void close_fds(int *fds, size_t num) {
+  for (size_t i = 0; i < num; ++i) {
+    if (fds[i] >= 0) {
+      close(fds[i]);
+    }
   }
 }
 
@@ -752,29 +766,33 @@ int criuengine::checkpoint() {
     fake_fds[1] = syscall(SYS_memfd_create, CRAC_FAKE_STDOUT, MFD_CLOEXEC);
     fake_fds[2] = syscall(SYS_memfd_create, CRAC_FAKE_STDERR, MFD_CLOEXEC);
     if (fake_fds[0] < 0 || fake_fds[1] < 0 || fake_fds[2] < 0) {
-      LOG("Cannot create fake FDs for non-shell jobs: %s", strerror(errno));
+      LOG("Warning: Cannot create fake FDs, standard streams might be defunct after restore: %s", strerror(errno));
     }
     // Also sometimes (in containers) the mnt_id in /proc/<pid>/fdinfo/X and /proc/<pid>/mntinfo
     // does not match; CRIU won't handle that if this is not a tty. Let's try to detect and reopen
     maybe_reopen(0, O_RDONLY);
-    maybe_reopen(1, O_WRONLY);
-    maybe_reopen(2, O_WRONLY);
+    maybe_reopen(1, O_WRONLY | O_APPEND);
+    maybe_reopen(2, O_WRONLY | O_APPEND);
 
     // When executed without a TTY, CRIU won't use --shell-job; however in this situation
     // it won't restore with --shell-job and restore will get stuck when synchronizing
     // a helper process created to establish SID. Becoming own session leader here prevents
     // this (though it might have some other effects).
-    if (getsid(0) != getpid()) {
-      setpgid(0, setsid());
+    pid_t pid = getpid();
+    pid_t pgid = getpgid(0);
+    if (pgid != pid) {
+      if (setsid() < 0) {
+        LOG("Error: Cannot become the session leader (PID %d PGID %d SID %d): %s", pid, pgid, getsid(0), strerror(errno));
+        close_fds(fake_fds, ARRAY_SIZE(fake_fds));
+        return -1;
+      } else {
+        assert(pid == getpgid(0));
+      }
     }
   }
 
   if (!execute_criu(args)) {
-    for (size_t i = 0; i < ARRAY_SIZE(fake_fds); ++i) {
-      if (fake_fds[i] >= 0) {
-        close(fake_fds[i]);
-      }
-    }
+    close_fds(fake_fds, ARRAY_SIZE(fake_fds));
     return -1;
   }
 
@@ -868,6 +886,7 @@ int criuengine::restore() {
     }
     struct stat st;
     if (stat(tty_info, &st) && errno == ENOENT) {
+      assert(args.remaining() >= 6);
       args.append("--inherit-fd").append("fd[0]:/memfd:" CRAC_FAKE_STDIN);
       args.append("--inherit-fd").append("fd[1]:/memfd:" CRAC_FAKE_STDOUT);
       args.append("--inherit-fd").append("fd[2]:/memfd:" CRAC_FAKE_STDERR);
@@ -875,11 +894,15 @@ int criuengine::restore() {
       args.append("--shell-job");
     }
   }
-  if (!direct_map()) {
+  if (!_direct_map.is_default) {
     if (!legacy_criu()) {
       LOG("Warning: direct mapping of image might not be supported");
     }
-    args.append("--no-mmap-page-image");
+    if (direct_map()) {
+      args.append("--mmap-page-image");
+    } else {
+      args.append("--no-mmap-page-image");
+    }
   }
 
   args.append_all(_args);

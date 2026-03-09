@@ -22,7 +22,6 @@
  */
 
 import jdk.test.lib.Container;
-import jdk.test.lib.Platform;
 import jdk.test.lib.containers.docker.Common;
 import jdk.test.lib.crac.CracContainerBuilder;
 import jdk.test.lib.crac.CracTest;

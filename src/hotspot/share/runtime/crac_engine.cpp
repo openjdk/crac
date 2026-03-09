@@ -53,7 +53,6 @@ static constexpr const char * const vm_controlled_engine_opts[] = {
 #define DEFINE_OPT_VAR(opt) static constexpr const char engine_opt_##opt[] = #opt;
 VM_CONTROLLED_ENGINE_OPTS(DEFINE_OPT_VAR)
 
-DEFINE_OPT_VAR(direct_map)
 DEFINE_OPT_VAR(pause)
 #undef DEFINE_OPT_VAR
 
@@ -244,14 +243,6 @@ static crlib_conf_t *create_conf(const crlib_api_t &api, bool for_restore) {
       }
       log_debug(crac)("CRaC engine option: '%s' = '%s'", key, value);
     } while (engine_options != nullptr);
-  }
-
-  if (for_restore && !keys.contains(engine_opt_direct_map) && api.can_configure(conf, engine_opt_direct_map)) {
-    if (!api.configure(conf, engine_opt_direct_map, "true")) {
-      log_error(crac)("CRaC engine failed to configure: '%s' = 'true'", engine_opt_direct_map);
-      api.destroy_conf(conf);
-      return nullptr;
-    }
   }
 
   os::free(engine_options_start);
@@ -487,10 +478,6 @@ const crlib_conf_option_t *CracEngine::configuration_options() {
       continue;
     }
     memcpy(dst, src, sizeof(*src));
-    if (!strcmp(dst->key, engine_opt_direct_map)) {
-      // JVM is overriding the direct_map default in all engines
-      dst->default_value = "true";
-    }
   }
   // last element should be zeroes
   memset(dst, 0, sizeof(*dst));

@@ -2,21 +2,7 @@
 
 ## Prerequisites
 
-CRaC uses a pluggable mechanism for process snapshotting (checkpoint); currently this is implemented on Linux using the [CRIU](https://criu.org) project. Please install a recent version of CRIU (4.0+) using your package manager, or build it from sources:
-
-### Ubuntu
-```
-sudo apt-get update
-sudo apt-get install -y software-properties-common
-sudo add-apt-repository -y ppa:criu/ppa
-sudo apt-get update
-sudo apt-get install -y criu
-```
-
-### Fedora
-```
-sudo yum install -y criu
-```
+CRaC uses a pluggable mechanism for process snapshotting (checkpoint); currently this is implemented on Linux using the [CRIU](https://criu.org) project. Please install a recent version of CRIU (4.0+) using your package manager, or build it from sources.
 
 ### Granting privileges
 

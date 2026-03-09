@@ -21,17 +21,11 @@
  * questions.
  */
 
-import java.io.IOException;
-import java.nio.file.Files;
-import java.nio.file.Path;
-
 import jdk.crac.*;
 import jdk.test.lib.crac.CracBuilder;
 import jdk.test.lib.crac.CracEngine;
 import jdk.test.lib.crac.CracTest;
 import jdk.test.lib.crac.CracTestArg;
-
-import static jdk.test.lib.Asserts.*;
 
 /**
  * @test Testing CracEngineOptions influenced by CRAC_CRIU_OPTS env variable.

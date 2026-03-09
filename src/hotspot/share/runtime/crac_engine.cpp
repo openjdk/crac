@@ -57,7 +57,6 @@ DEFINE_OPT_VAR(direct_map)
 DEFINE_OPT_VAR(pause)
 #undef DEFINE_OPT_VAR
 
-#define MAX_ENGINE_LENGTH 128
 #define SIMENGINE "simengine"
 
 #ifdef LINUX
@@ -90,7 +89,8 @@ static bool find_engine(const char *dll_dir, char *path, size_t path_size, char 
     } else {
       basename = last_slash + strlen(os::file_separator());
     }
-    if (strncmp(basename, JNI_LIB_PREFIX, strlen(JNI_LIB_PREFIX)) ||
+    if (strlen(basename) <= strlen(JNI_LIB_PREFIX) + strlen(JNI_LIB_SUFFIX) ||
+        strncmp(basename, JNI_LIB_PREFIX, strlen(JNI_LIB_PREFIX)) ||
         strcmp(CRaCEngine + engine_length - strlen(JNI_LIB_SUFFIX), JNI_LIB_SUFFIX)) {
       log_error(crac)("CRaCEngine=%s is not a library: expected " JNI_LIB_PREFIX "<name>" JNI_LIB_SUFFIX, CRaCEngine);
       return false;
@@ -115,7 +115,10 @@ static bool find_engine(const char *dll_dir, char *path, size_t path_size, char 
     log_warning(crac)("-XX:CRaCEngine=pause/pauseengine is deprecated and will be removed in version 28; use -XX:CRaCEngine=simengine -XX:CRaCEngineOptions=pause=true");
   } else /* intentional line break */
 #endif // LINUX
-  if (engine_length < resolved_engine_size) {
+  if (engine_length == 0) {
+    log_error(crac)("CRaCEngine is empty");
+    return false;
+  } else if (engine_length < resolved_engine_size) {
     memcpy(resolved_engine, CRaCEngine, engine_length);
     resolved_engine[engine_length] = '\0';
   } else {
@@ -156,15 +159,6 @@ static bool find_engine(const char *dll_dir, char *path, size_t path_size, char 
 
   log_error(crac)("Did not find CRaCEngine %s in %s", CRaCEngine, dll_dir);
   return false;
-}
-
-static bool configure_image_location(const crlib_api_t &api, crlib_conf_t *conf, const char *image_location) {
-  precond(image_location != nullptr && image_location[0] != '\0');
-  if (!api.configure(conf, engine_opt_image_location, image_location)) {
-    log_error(crac)("CRaC engine failed to configure: '%s' = '%s'", engine_opt_image_location, image_location);
-    return false;
-  }
-  return true;
 }
 
 // These functions are used in a template instantiation and need to have external linkage. Otherwise
@@ -292,11 +286,13 @@ CracEngine::CracEngine(bool for_restore) {
     resolved_engine_func[sizeof(CRLIB_API_FUNC) - 1] = '_';
   }
 
-  if (!find_engine(dll_dir, path, sizeof(path), resolved_engine_func + sizeof(CRLIB_API_FUNC), MAX_ENGINE_LENGTH)) {
+  if (!find_engine(dll_dir, path, sizeof(path), _name, sizeof(_name))) {
     log_error(crac)("Cannot find CRaC engine %s", CRaCEngine);
     return;
   }
+  postcond(_name[0] != '\0');
   postcond(path[0] != '\0');
+  memcpy(resolved_engine_func + sizeof(CRLIB_API_FUNC), _name, strlen(_name) + 1);
 
   char error_buf[1024];
   void * const lib = is_vm_statically_linked() ? os::get_default_process_handle() : os::dll_load(path, error_buf, sizeof(error_buf));
@@ -315,6 +311,9 @@ CracEngine::CracEngine(bool for_restore) {
       static constexpr const char engine_suffix[] = "engine";
       if (strlen(resolved_engine_func) + sizeof(engine_suffix) <= sizeof(resolved_engine_func)) {
         strcat(resolved_engine_func, engine_suffix);
+        // resolved_engine_func should be concat(CRLIB_API_FUNC, _name) so the check above should already do
+        assert(strlen(_name) + sizeof(engine_suffix) <= sizeof(_name), "name too long");
+        strcat(_name, engine_suffix);
         api_func = reinterpret_cast<api_func_t>(os::dll_lookup(lib, resolved_engine_func));
         if (api_func != nullptr) {
           log_warning(crac)("Engine name '%s' (without the engine suffix) is deprecated and will be removed in version 28, please use -XX:CRaCEngine=%s",
@@ -362,6 +361,7 @@ CracEngine::~CracEngine() {
     os::dll_unload(_lib);
   }
   FREE_C_HEAP_ARRAY(crlib_conf_option_t, _options);
+  os::free(_image_location);
 }
 
 bool CracEngine::is_initialized() const {
@@ -370,19 +370,69 @@ bool CracEngine::is_initialized() const {
   return _lib != nullptr;
 }
 
+static fileStream open_engine_file(const char *dir, const char *opentype) {
+#ifndef PATH_MAX
+# define PATH_MAX 1024
+#endif
+  char path[PATH_MAX];
+  os::snprintf_checked(path, sizeof(path), "%s/engine", dir);
+  return fileStream(path, opentype);
+}
+
+static bool record_engine(const char *name, const char *dir) {
+  assert(dir != nullptr, "Not configured");
+  fileStream fs = open_engine_file(dir, "w");
+  if (!fs.is_open()) {
+    return false;
+  }
+  fs.write(name, strlen(name));
+  return true;
+}
+
+static bool check_engine(const char *name, const char *dir) {
+  fileStream fs = open_engine_file(dir, "r");
+  if (!fs.is_open()) {
+    return false;
+  }
+  char buf[CracEngine::MAX_ENGINE_LENGTH];
+  size_t rd = fs.read(buf, sizeof(buf) - 1);
+  // fileStream does not have a good error API but this is not critical check
+  assert(rd < sizeof(buf), "unexpected size read");
+  buf[rd] = '\0';
+  if (strcmp(name, buf)) {
+    log_error(crac)("Image format does not match; saved image with engine %s, restoring with %s", buf, name);
+    return false;
+  }
+  return true;
+}
+
 int CracEngine::checkpoint() const {
   precond(is_initialized());
+  if (!record_engine(_name, _image_location)) {
+    return -1;
+  }
   return _api->checkpoint(_conf);
 }
 
 int CracEngine::restore() const {
   precond(is_initialized());
+  if (!check_engine(_name, _image_location)) {
+    return -1;
+  }
   return _api->restore(_conf);
 }
 
-bool CracEngine::configure_image_location(const char *image_location) const {
+bool CracEngine::configure_image_location(const char *image_location) {
   precond(is_initialized());
-  return ::configure_image_location(*_api, _conf, image_location);
+  precond(image_location != nullptr && image_location[0] != '\0');
+  if (!_api->configure(_conf, engine_opt_image_location, image_location)) {
+    log_error(crac)("CRaC engine failed to configure: '%s' = '%s'", engine_opt_image_location, image_location);
+    return false;
+  }
+
+  os::free(_image_location);
+  _image_location = os::strdup_check_oom(image_location);
+  return true;
 }
 
 GrowableArrayCHeap<const char *, MemTag::mtInternal> *CracEngine::vm_controlled_options() const {

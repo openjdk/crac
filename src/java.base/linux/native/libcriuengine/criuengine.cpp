@@ -669,7 +669,7 @@ static void maybe_reopen(int fd, int flags) {
   }
   snprintf(path, sizeof(path), "/proc/thread-self/fd/%d", fd);
   char target[PATH_MAX];
-  ssize_t len = readlink(path, target, sizeof(target));
+  ssize_t len = readlink(path, target, sizeof(target) - 1);
   if (len < 0) {
     LOG("Cannot readlink %s: %s", path, strerror(errno));
     return;

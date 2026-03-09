@@ -508,7 +508,7 @@ const char* criuengine::get_criu() {
   }
   const char* const_path = getenv("PATH");
   if (const_path == NULL) {
-    LOG("Error: the PATH environment variable is not set, cannot lookup CRIU");
+    LOG("Error: cannot find CRIU: neither criu_location option nor PATH environment variable is set");
     return nullptr;
   }
   char* path = strdup(const_path);
@@ -522,15 +522,16 @@ const char* criuengine::get_criu() {
     if (asprintf(&criu, "%s/criu", prefix) < 0) {
       LOG("Cannot allocate string with CRIU location starting with %s", prefix);
     } else {
-      free(_criu_location);
-      _criu_location = criu;
       if (check_criu_executable(criu, true) != nullptr) {
+        free(_criu_location);
+        _criu_location = criu;
         return _criu_location;
       }
+      free(criu);
     }
     prefix = strtok_r(nullptr, ":", &save_ptr);
   }
-  LOG("Cannot find CRIU executable on the PATH");
+  LOG("Cannot find CRIU executable: criu_location option not set, not found on PATH");
   return nullptr;
 }
 
@@ -770,7 +771,9 @@ int criuengine::checkpoint() {
 
   if (!execute_criu(args)) {
     for (size_t i = 0; i < ARRAY_SIZE(fake_fds); ++i) {
-      close(fake_fds[i]);
+      if (fake_fds[i] >= 0) {
+        close(fake_fds[i]);
+      }
     }
     return -1;
   }

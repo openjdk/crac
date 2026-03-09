@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012, 2025, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2012, 2026, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -80,7 +80,11 @@ bool JfrRecorder::is_enabled() {
 }
 
 bool JfrRecorder::is_started_on_commandline() {
-  return StartFlightRecording != nullptr;
+  // CRaC makes it possible to set StartFlightRecording on restore and not on
+  // startup. In such case callers expect this method to return false. Thus a
+  // better name for the method would be is_started_on_vm_creation().
+  assert(!Arguments::has_jfr_option() || StartFlightRecording != nullptr, "StartFlightRecording cannot be unset");
+  return Arguments::has_jfr_option();
 }
 
 bool JfrRecorder::create_oop_storages() {
@@ -100,6 +104,9 @@ bool JfrRecorder::on_create_vm_1() {
 
   if (is_started_on_commandline()) {
     if (!create_checkpoint_manager()) {
+      return false;
+    }
+    if (!JfrSymbolTable::create()) {
       return false;
     }
   }
@@ -240,7 +247,7 @@ bool JfrRecorder::on_create_vm_2() {
 }
 
 bool JfrRecorder::on_create_vm_3() {
-  JVMTI_ONLY( assert(JvmtiEnvBase::get_phase() == JVMTI_PHASE_LIVE, "invalid init sequence"); )
+  JVMTI_ONLY( assert(JvmtiEnvBase::get_phase() == JVMTI_PHASE_LIVE, "invalid init sequence, phase is %d", (int)JvmtiEnvBase::get_phase()); )
   return CDSConfig::is_dumping_archive() || launch_command_line_recordings(JavaThread::current());
 }
 
@@ -316,10 +323,7 @@ bool JfrRecorder::create_components() {
   if (!create_thread_group_manager()) {
     return false;
   }
-  if (!create_symbol_table()) {
-    return false;
-  }
-  return true;
+  return create_symbol_table();
 }
 
 // subsystems
@@ -418,7 +422,13 @@ bool JfrRecorder::create_thread_group_manager() {
 }
 
 bool JfrRecorder::create_symbol_table() {
-  return JfrSymbolTable::create();
+  return !is_started_on_commandline() ? JfrSymbolTable::create() : true;
+}
+
+void JfrRecorder::destroy_symbol_table() {
+  if (!is_started_on_commandline()) {
+    JfrSymbolTable::destroy();
+  }
 }
 
 void JfrRecorder::destroy_components() {
@@ -461,7 +471,7 @@ void JfrRecorder::destroy_components() {
   }
   JfrEventThrottler::destroy();
   JfrThreadGroupManager::destroy();
-  JfrSymbolTable::destroy();
+  destroy_symbol_table();
 }
 
 bool JfrRecorder::create_recorder_thread() {

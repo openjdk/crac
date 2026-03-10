@@ -90,7 +90,7 @@ public class Core {
 
         private final Context<JDKResource> context;
         Priority(Context<JDKResource> context) {
-            jdk.internal.crac.mirror.Core.getGlobalContext().register(context);
+            Context.getGlobalContext().register(context);
             this.context = context;
         }
 

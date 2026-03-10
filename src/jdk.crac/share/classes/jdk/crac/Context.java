@@ -55,4 +55,8 @@ public abstract class Context<R extends Resource> implements Resource {
      * @throws NullPointerException if {@code resource} is {@code null}
      */
     public abstract void register(R resource);
+
+    public static Context<Resource> getGlobalContext() {
+        return Core.globalContext;
+    }
 }

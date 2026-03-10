@@ -70,8 +70,6 @@ public class Core {
             Boolean.parseBoolean(System.getProperty(ENABLE_RECOMPILATION_PROPERTY, "true"));
     }
 
-    private static final Context<Resource> globalContext = GlobalContext.createGlobalContextImpl(null);
-
     private static class ReferenceHandlerResource implements JDKResource {
         @Override
         public void beforeCheckpoint(Context<? extends Resource> context) throws Exception {
@@ -127,9 +125,11 @@ public class Core {
      * Gets the global {@code Context} for checkpoint/restore notifications.
      *
      * @return the global {@code Context}
+     * @deprecated Use {@link Context#getGlobalContext()}
      */
+    @Deprecated
     public static Context<Resource> getGlobalContext() {
-        return globalContext;
+        return GlobalContext.instance;
     }
 
     private static List<String> parseNewArguments(String newArguments) {
@@ -177,7 +177,7 @@ public class Core {
 
         jdk.internal.crac.Core.setClaimedFDs(claimedFDs);
         try {
-            globalContext.beforeCheckpoint(null);
+            GlobalContext.instance.beforeCheckpoint(null);
         } catch (CheckpointException ce) {
             checkpointException.handle(ce);
         }
@@ -226,7 +226,7 @@ public class Core {
 
         ExceptionHolder<RestoreException> restoreException = new ExceptionHolder<>(RestoreException::new);
         try {
-            globalContext.afterRestore(null);
+            GlobalContext.instance.afterRestore(null);
         } catch (RestoreException re) {
             if (checkpointException.hasException()) {
                 checkpointException.resuppress(re);

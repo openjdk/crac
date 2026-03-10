@@ -32,7 +32,7 @@ import java.util.*;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 
-import static jdk.internal.crac.mirror.Core.getGlobalContext;
+import static jdk.internal.crac.mirror.Context.getGlobalContext;
 import static jdk.internal.crac.Core.Priority.*;
 import static jdk.test.lib.Asserts.*;
 

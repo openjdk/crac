@@ -35,18 +35,20 @@ public class Core {
     private Core() {
     }
 
-    private static final Context<Resource> globalContext = new ContextWrapper(
+    static final Context<Resource> globalContext = new ContextWrapper(
         jdk.internal.crac.mirror.impl.GlobalContext.createGlobalContextImpl("jdk.crac.globalContext"));
 
     static {
-        jdk.internal.crac.mirror.Core.getGlobalContext().register(new ResourceWrapper(null, globalContext));
+        jdk.internal.crac.mirror.Context.getGlobalContext().register(new ResourceWrapper(null, globalContext));
     }
 
     /**
      * Gets the global {@code Context} for checkpoint/restore notifications.
      *
      * @return the global {@code Context}
+     * @deprecated Use {@link Context#getGlobalContext()}
      */
+    @Deprecated
     public static Context<Resource> getGlobalContext() {
         return globalContext;
     }

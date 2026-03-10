@@ -204,18 +204,17 @@ public class BasicImageReader implements AutoCloseable {
     }
 
     private void registerIfPublicCracPresent() {
-        Class<?> cracCoreClass = null;
+        Class<?> ctxClass = null;
         try {
-            cracCoreClass = Class.forName("jdk.crac.Core");
+            ctxClass = Class.forName("jdk.crac.Context");
         } catch (ClassNotFoundException e) {
             // there is no public CRaC; suppress an exception
             return;
         }
         try {
             Class<?> resourceClass = Class.forName("jdk.crac.Resource");
-            Method getGlobalContextMethod = cracCoreClass.getMethod("getGlobalContext");
+            Method getGlobalContextMethod = ctxClass.getMethod("getGlobalContext");
             Object ctx = getGlobalContextMethod.invoke(null);
-            Class<?> ctxClass = Class.forName("jdk.crac.Context");
 
             registerCracResource(resourceClass, ctxClass, ctx);
         } catch (IllegalAccessException e) {

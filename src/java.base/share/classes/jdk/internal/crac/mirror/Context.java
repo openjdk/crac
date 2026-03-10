@@ -26,6 +26,8 @@
 
 package jdk.internal.crac.mirror;
 
+import jdk.internal.crac.mirror.impl.GlobalContext;
+
 /**
  * A {@code Resource} that allows other {@code Resource}s to be registered with it.
  *
@@ -55,4 +57,13 @@ public abstract class Context<R extends Resource> implements Resource {
      * @throws NullPointerException if {@code resource} is {@code null}
      */
     public abstract void register(R resource);
+
+    /**
+     * Gets the global {@code Context} for checkpoint/restore notifications.
+     *
+     * @return the global {@code Context}
+     */
+    public static Context<Resource> getGlobalContext() {
+        return GlobalContext.instance;
+    }
 }

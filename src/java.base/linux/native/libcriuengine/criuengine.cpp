@@ -675,18 +675,29 @@ static void maybe_reopen(int fd, int flags) {
     return;
   }
   target[len] = '\0'; // readlink does not append terminating char
+  static const char pipe[] = "pipe:";
+  if (!strncmp(target, pipe, sizeof(pipe) - 1)) {
+    // cannot reopen a pipe but CRIU will handle this OK
+    return;
+  }
+  int current_flags = fcntl(fd, F_GETFL);
+  if (current_flags < 0) {
+    LOG("Cannot find current flags for FD %d -> %s", fd, target);
+    return;
+  }
+  // We force read-only or appending write-only - CRIU would fail restore
+  // if the file does not exist or the size does not match
+  current_flags &= ~(O_RDONLY | O_WRONLY | O_RDWR);
+  // If writing to the file we want to continue appending, not truncate/fail
+  // fcntl should not return file creation flags, though
+  assert((current_flags & (O_TRUNC | O_EXCL)) == 0);
   static const char deleted[] = " (deleted)";
   if (!strcmp(target + len - sizeof(deleted), deleted)) {
     // deleted file will be replaced by /dev/null to avoid accidentally overwriting
     // other file
     strcpy(target, "/dev/null");
   }
-  static const char pipe[] = "pipe:";
-  if (!strncmp(target, pipe, sizeof(pipe) - 1)) {
-    // cannot reopen a pipe but CRIU will handle this OK
-    return;
-  }
-  int new_fd = open(target, flags);
+  int new_fd = open(target, flags | current_flags);
   if (new_fd < 0) {
     LOG("Cannot reopen %s: %s", target, strerror(errno));
     return;
@@ -776,18 +787,14 @@ int criuengine::checkpoint() {
 
     // When executed without a TTY, CRIU won't use --shell-job; however in this situation
     // it won't restore with --shell-job and restore will get stuck when synchronizing
-    // a helper process created to establish SID. Becoming own session leader here prevents
+    // a helper process created to establish SID/PGID. Becoming own process group leader here prevents
     // this (though it might have some other effects).
     pid_t pid = getpid();
     pid_t pgid = getpgid(0);
-    if (pgid != pid) {
-      if (setsid() < 0) {
-        LOG("Error: Cannot become the session leader (PID %d PGID %d SID %d): %s", pid, pgid, getsid(0), strerror(errno));
-        close_fds(fake_fds, ARRAY_SIZE(fake_fds));
-        return -1;
-      } else {
-        assert(pid == getpgid(0));
-      }
+    if (pgid != pid && setpgid(0, 0) < 0) {
+      LOG("Error: Cannot become the process group leader (PID %d PGID %d SID %d): %s", pid, pgid, getsid(0), strerror(errno));
+      close_fds(fake_fds, ARRAY_SIZE(fake_fds));
+      return -1;
     }
   }
 

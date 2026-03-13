@@ -33,41 +33,25 @@ inputs:
 runs:
   using: composite
   steps:
-    - name: 'Get CRIU URL configuration'
-      id: criu_url
-      uses: ./.github/actions/config
-      with:
-        var: LINUX_X64_CRIU_URL
-
-    - name: 'Get CRIU SHA256 configuration'
-      id: criu_sha256
-      uses: ./.github/actions/config
-      with:
-        var: LINUX_X64_CRIU_SHA256
-
     - name: Restore CRIU from cache
       id: criu_cache
       uses: actions/cache@v3
       with:
-        path: ~/criu/criu
-        key: criu-${{ runner.os }}-${{ steps.criu_url.outputs.value }}
+        path: /usr/sbin/criu
+        key: criu-${{ runner.os }}
 
-    - name: Download CRIU
+    - name: Install CRIU
       run: |
-        CRIU_URL=${{ steps.criu_url.outputs.value }}
-        CRIU_FILENAME=$(basename $CRIU_URL)
-        wget --progress=dot:mega $CRIU_URL
-        echo "${{ steps.criu_sha256.outputs.value }} $CRIU_FILENAME" | sha256sum -c >/dev/null -
-        mkdir -p criu/
-        tar -xf $CRIU_FILENAME -C criu
-        mv $(find criu/ -type f -name criu) criu/criu
+        export DEBIAN_FRONTEND=noninteractive
+        sudo apt-get update
+        sudo apt-get install --no-install-recommends -y software-properties-common
+        sudo add-apt-repository -y ppa:criu/ppa
+        sudo apt-get update
+        sudo apt-get install -y criu
       shell: bash
-      if: steps.criu.outputs.cache-hit != 'true'
+      if: steps.criu_cache.outputs.cache-hit != 'true'
 
-    - name: Setup CRIU
+    - name: Set SUID bit on CRIU
       run: |
-        JDK_CRIU=${{ inputs.jdk-path }}/lib/criu
-        cp criu/criu $JDK_CRIU
-        sudo chown root:root $JDK_CRIU
-        sudo chmod u+s $JDK_CRIU
+        sudo chmod u+s /usr/sbin/criu
       shell: bash

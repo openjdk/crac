@@ -24,7 +24,6 @@
 import jdk.crac.*;
 import jdk.crac.management.CRaCMXBean;
 import jdk.test.lib.Container;
-import jdk.test.lib.Platform;
 import jdk.test.lib.containers.docker.Common;
 import jdk.test.lib.crac.CracContainerBuilder;
 import jdk.test.lib.crac.CracTest;
@@ -69,9 +68,7 @@ public class NanoTimeTest implements CracTest {
         String imageName = Common.imageName("system-nanotime");
 
         try {
-            // TODO: use more official image
-            String baseImage = Platform.isMusl() ? "ghcr.io/crac/test-base-musl" : "ghcr.io/crac/test-base";
-            builder.withBaseImage(baseImage, "latest")
+            builder
                     .dockerOptions("-v", bootIdFile + ":/fake_boot_id")
                     // unshare requires privileged
                     .containerUsePrivileged(true)

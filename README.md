@@ -1,27 +1,26 @@
 # CRaC JDK
 
+## Prerequisites
+
+CRaC uses a pluggable mechanism for process snapshotting (checkpoint); currently this is implemented on Linux using the [CRIU](https://criu.org) project. Please install a recent version of CRIU (4.0+) using your package manager, or build it from sources.
+
+### Granting privileges
+
+Checkpoint or restore requires privileges (capabilities) normally belonging only to the `root` user. If you are not running your Java application using the `root` user, you need to grant the privileges to the CRIU binary by setting the SUID bit:
+
+```
+sudo chown root:root /usr/sbin/criu
+sudo chmod u+s /usr/sbin/criu
+```
+
+### Legacy CRIU
+
+Historically the CRaC project maintained a [fork of CRIU](https://github.com/CRaC/criu/releases) with modifications for CRaC. The maintenance of this fork is discontinued; if you need to use the version from this fork please add this to the VM options:
+```
+-XX:CRaCEngineOptions=criu_location=/path/to/criu,legacy_criu=true
+```
+
 ## Build
-
-CRaC JDK have extended build procedure.
-
-1. Build JDK as usual
-```
-bash configure
-make images
-mv build/linux-x86_64-server-release/images/jdk/ .
-```
-2. Download a build of [modified CRIU](https://github.com/CRaC/criu/releases/tag/release-1.4)
-3. Extract and copy `criu` binary over a same named file in the JDK
-```
-cp criu-dist/sbin/criu jdk/lib/criu
-```
-Grant permissions to allow regular user to run it
-```
-sudo chown root:root jdk/lib/criu
-sudo chmod u+s jdk/lib/criu
-```
-
-# JDK
 
 For build instructions please see the
 [online documentation](https://git.openjdk.org/jdk/blob/master/doc/building.md),

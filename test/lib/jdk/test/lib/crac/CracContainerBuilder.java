@@ -24,6 +24,7 @@
 package jdk.test.lib.crac;
 
 import jdk.test.lib.Container;
+import jdk.test.lib.Platform;
 import jdk.test.lib.Utils;
 import jdk.test.lib.containers.docker.DockerTestUtils;
 import jdk.test.lib.containers.docker.DockerfileConfig;
@@ -60,23 +61,8 @@ public class CracContainerBuilder extends CracBuilderBase<CracContainerBuilder> 
     // without rebuilding it.
     public static final boolean REUSE_IMAGE_IF_EXIST = Boolean.getBoolean("jdk.test.crac.reuse.image");
 
-    private static final List<String> CRIU_CANDIDATES = List.of(Utils.TEST_JDK + "/lib/criu", "/usr/sbin/criu", "/sbin/criu");
-    private static final String CRIU_PATH;
-    static {
-        String path = System.getenv("CRAC_CRIU_PATH");
-        if (path == null) {
-            for (String candidate : CRIU_CANDIDATES) {
-                if (new File(candidate).exists()) {
-                    path = candidate;
-                    break;
-                }
-            }
-        }
-        CRIU_PATH = path;
-    }
-
-    String dockerImageBaseName;
-    String dockerImageBaseVersion;
+    String dockerImageBaseName = Platform.isMusl() ? "ghcr.io/crac/test-base-musl" : "ghcr.io/crac/test-base";
+    String dockerImageBaseVersion = "latest";
     String dockerImageName;
     private List<String> dockerOptions; // Immutable
     private List<String> dockerCheckpointOptions; // Immutable
@@ -118,8 +104,6 @@ public class CracContainerBuilder extends CracBuilderBase<CracContainerBuilder> 
     }
 
     public CracContainerBuilder withBaseImage(String name, String tag) {
-        assertNull(dockerImageBaseName);
-        assertNull(dockerImageBaseVersion);
         dockerImageBaseName = name;
         dockerImageBaseVersion = tag;
         return this;
@@ -163,9 +147,6 @@ public class CracContainerBuilder extends CracBuilderBase<CracContainerBuilder> 
 
     public void ensureContainerStarted() throws Exception {
         assertNotNull(dockerImageName, "Docker image name must be specified");
-        if (engine == CracEngine.CRIU && CRIU_PATH == null) {
-            fail("CRAC_CRIU_PATH is not set and cannot find criu executable in any of: " + CRIU_CANDIDATES);
-        }
         if (!containerStarted) {
             prepareContainer();
             List<String> cmd = prepareContainerCommand(dockerImageName, dockerOptions);
@@ -249,12 +230,6 @@ public class CracContainerBuilder extends CracBuilderBase<CracContainerBuilder> 
         }
         new File(System.getProperty("user.dir") + "/cr").mkdirs(); // create "cr" dir under the current user, to be able to delete it later.
         cmd.addAll(Arrays.asList("--volume", System.getProperty("user.dir") + "/cr:/cr"));
-        if (engine == null || engine == CracEngine.CRIU) {
-            cmd.addAll(Arrays.asList("--volume", CRIU_PATH + ":/criu"));
-            cmd.addAll(Arrays.asList("--env", "CRAC_CRIU_PATH=/criu"));
-            cmd.addAll(Arrays.asList("--tmpfs", "/dont/load/libs"));
-            cmd.addAll(Arrays.asList("--env", "CRIU_LIBS_DIR=/dont/load/libs"));
-        }
         cmd.addAll(Arrays.asList("--name", CONTAINER_NAME));
         if (debug) {
             cmd.addAll(Arrays.asList("--publish", "5005:5005"));

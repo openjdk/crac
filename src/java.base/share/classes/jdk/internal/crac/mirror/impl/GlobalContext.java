@@ -32,6 +32,8 @@ import jdk.internal.crac.mirror.Resource;
 public class GlobalContext {
     private static final String GLOBAL_CONTEXT_IMPL_PROP = "jdk.crac.globalContext.impl";
 
+    public static final Context<Resource> instance = createGlobalContextImpl(null);
+
     // Strong reference to the resource
     private static Score scoreSingleton;
 

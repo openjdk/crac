@@ -122,14 +122,14 @@ public class Core {
     }
 
     /**
-     * Gets the global {@code Context} for checkpoint/restore notifications.
+     * Provides the global {@code Context} for checkpoint/restore notifications.
      *
      * @return the global {@code Context}
      * @deprecated Use {@link Context#getGlobalContext()}
      */
     @Deprecated
     public static Context<Resource> getGlobalContext() {
-        return GlobalContext.instance;
+        return Context.getGlobalContext();
     }
 
     private static List<String> parseNewArguments(String newArguments) {

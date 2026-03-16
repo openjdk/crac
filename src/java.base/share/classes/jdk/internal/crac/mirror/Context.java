@@ -59,7 +59,7 @@ public abstract class Context<R extends Resource> implements Resource {
     public abstract void register(R resource);
 
     /**
-     * Gets the global {@code Context} for checkpoint/restore notifications.
+     * Provides the global {@code Context} for checkpoint/restore notifications.
      *
      * @return the global {@code Context}
      */

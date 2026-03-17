@@ -23,6 +23,7 @@
 
 import java.util.List;
 
+import jdk.crac.management.CRaCMXBean;
 import jdk.test.lib.crac.CracBuilder;
 import jdk.test.lib.crac.CracTest;
 
@@ -55,7 +56,7 @@ public class ArgsParsingTest implements CracTest {
 
     @Override
     public void exec() throws Exception {
-        jdk.crac.Core.checkpointRestore();
+        CRaCMXBean.getCRaCMXBean().checkpointRestore();
         System.out.println("RESTORED");
     }
 

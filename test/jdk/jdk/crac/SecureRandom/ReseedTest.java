@@ -18,7 +18,9 @@
 // CA 94089 USA or visit www.azul.com if you need additional information or
 // have any questions.
 
-import jdk.crac.*;
+import jdk.crac.CheckpointException;
+import jdk.crac.RestoreException;
+import jdk.crac.management.CRaCMXBean;
 import jdk.test.lib.crac.CracBuilder;
 import jdk.test.lib.crac.CracTest;
 import jdk.test.lib.crac.CracTestArg;
@@ -63,7 +65,7 @@ public class ReseedTest implements CracTest {
         sr.nextInt();
 
         try {
-            jdk.crac.Core.checkpointRestore();
+            CRaCMXBean.getCRaCMXBean().checkpointRestore();
         } catch (CheckpointException e) {
             e.printStackTrace(System.out);
             throw new RuntimeException("Checkpoint ERROR " + e);

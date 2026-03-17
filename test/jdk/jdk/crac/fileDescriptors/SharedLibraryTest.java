@@ -21,7 +21,7 @@
  * questions.
  */
 
-import jdk.crac.Core;
+import jdk.crac.management.CRaCMXBean;
 import jdk.test.lib.Utils;
 import jdk.test.lib.crac.CracBuilder;
 import jdk.test.lib.crac.CracTest;
@@ -50,7 +50,7 @@ public class SharedLibraryTest implements CracTest {
     @Override
     public void exec() throws Exception {
         checkNativeMemory();
-        Core.checkpointRestore();
+        CRaCMXBean.getCRaCMXBean().checkpointRestore();
         checkNativeMemory();
     }
 

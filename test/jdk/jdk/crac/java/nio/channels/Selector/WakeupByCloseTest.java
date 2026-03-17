@@ -18,6 +18,7 @@
 // CA 94089 USA or visit www.azul.com if you need additional information or
 // have any questions.
 
+import jdk.crac.management.CRaCMXBean;
 import jdk.test.lib.crac.CracBuilder;
 import jdk.test.lib.crac.CracEngine;
 import jdk.test.lib.crac.CracTest;
@@ -108,7 +109,9 @@ public class WakeupByCloseTest implements CracTest {
 
         Thread.sleep(3000);
 
-        if (!skipCR) { jdk.crac.Core.checkpointRestore(); }
+        if (!skipCR) {
+            CRaCMXBean.getCRaCMXBean().checkpointRestore();
+        }
 
         // close() must wakeup the selector
         Thread tClose = new Thread(new Runnable() {

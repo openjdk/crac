@@ -21,7 +21,7 @@
  * have any questions.
  */
 
-import jdk.crac.Core;
+import jdk.crac.management.CRaCMXBean;
 import jdk.test.lib.Asserts;
 import jdk.test.lib.crac.CracBuilder;
 import jdk.test.lib.crac.CracTest;
@@ -57,7 +57,7 @@ public class NewPropertiesTest implements CracTest {
         Asserts.assertNull(System.getProperty("new2"));
         Asserts.assertNull(System.getProperty("new3"));
 
-        Core.checkpointRestore();
+        CRaCMXBean.getCRaCMXBean().checkpointRestore();
 
         Asserts.assertEquals(System.getProperty("old"), "new val");
         Asserts.assertEquals(System.getProperty("new1"), "foo=bar");

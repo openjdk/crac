@@ -21,7 +21,7 @@
  * questions.
  */
 
-import jdk.crac.Core;
+import jdk.crac.management.CRaCMXBean;
 import jdk.internal.perf.Perf;
 import jdk.test.lib.crac.CracBuilder;
 import jdk.test.lib.crac.CracTest;
@@ -66,7 +66,7 @@ public class ResetStartTimeTest implements CracTest {
         final long uptime0 = ManagementFactory.getRuntimeMXBean().getUptime();
         final long counter0 = Perf.getPerf().highResCounter();
 
-        Core.checkpointRestore();
+        CRaCMXBean.getCRaCMXBean().checkpointRestore();
         final long uptime1 = ManagementFactory.getRuntimeMXBean().getUptime();
         final long counter1 = Perf.getPerf().highResCounter();
 

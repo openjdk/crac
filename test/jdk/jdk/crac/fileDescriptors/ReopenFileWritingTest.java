@@ -21,7 +21,7 @@
  * questions.
  */
 
-import jdk.crac.Core;
+import jdk.crac.management.CRaCMXBean;
 import jdk.internal.crac.OpenResourcePolicies;
 import jdk.test.lib.crac.CracBuilder;
 import jdk.test.lib.crac.CracTest;
@@ -130,7 +130,7 @@ public class ReopenFileWritingTest extends FDPolicyTestBase implements CracTest 
             });
             FileChannel ch5 = fos5.getChannel();
             ch5.write(ByteBuffer.wrap("Hello ".getBytes(StandardCharsets.UTF_8)));
-            Core.checkpointRestore();
+            CRaCMXBean.getCRaCMXBean().checkpointRestore();
             Stream.of(w1, w2, w3, w4).forEach(w -> {
                 try {
                     w.write("world!");

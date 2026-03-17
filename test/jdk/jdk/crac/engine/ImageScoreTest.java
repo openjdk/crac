@@ -22,8 +22,8 @@
  */
 
 import jdk.crac.Context;
-import jdk.crac.Core;
 import jdk.crac.Resource;
+import jdk.crac.management.CRaCMXBean;
 import jdk.internal.crac.Score;
 import jdk.test.lib.crac.*;
 
@@ -105,7 +105,9 @@ public class ImageScoreTest implements CracTest {
         Score.setScore(TEST_SCORE_AAA, 0.001); // should be overwritten
         Score.setScore(TEST_SCORE_AAA, 123.456);
         Score.setScore(TEST_SCORE_BBB, 42);
-        Core.checkpointRestore();
+        // Force user-facing global context instantiation
+        Context<Resource> globalContext = Context.getGlobalContext();
+        CRaCMXBean.getCRaCMXBean().checkpointRestore();
 
         assertEquals(System.in.read(), (int) '\n');
 
@@ -120,8 +122,8 @@ public class ImageScoreTest implements CracTest {
             public void afterRestore(Context<? extends Resource> context) {
             }
         };
-        Core.getGlobalContext().register(dummy);
-        Core.checkpointRestore();
+        globalContext.register(dummy);
+        CRaCMXBean.getCRaCMXBean().checkpointRestore();
 
         Reference.reachabilityFence(dummy);
     }

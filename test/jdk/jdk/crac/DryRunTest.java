@@ -24,7 +24,10 @@
 import java.io.File;
 import java.io.FileOutputStream;
 
-import jdk.crac.*;
+import jdk.crac.CheckpointException;
+import jdk.crac.Context;
+import jdk.crac.Resource;
+import jdk.crac.management.CRaCMXBean;
 import jdk.test.lib.crac.CracBuilder;
 import jdk.test.lib.crac.CracEngine;
 import jdk.test.lib.crac.CracTest;
@@ -55,7 +58,7 @@ public class DryRunTest implements CracTest {
     @Override
     public void exec() throws Exception {
         Resource resource = new CRResource();
-        Core.getGlobalContext().register(resource);
+        Context.getGlobalContext().register(resource);
 
         File tempFile = File.createTempFile("jtreg-DryRunTest", null);
         FileOutputStream stream = new FileOutputStream(tempFile);
@@ -64,7 +67,7 @@ public class DryRunTest implements CracTest {
         int exceptions = 0;
 
         try {
-            Core.checkpointRestore();
+            CRaCMXBean.getCRaCMXBean().checkpointRestore();
         } catch (CheckpointException ce) {
 
             ce.printStackTrace();

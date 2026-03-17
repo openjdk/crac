@@ -21,7 +21,10 @@
  * questions.
  */
 
-import jdk.crac.*;
+import jdk.crac.CheckpointException;
+import jdk.crac.Context;
+import jdk.crac.Resource;
+import jdk.crac.RestoreException;
 import jdk.test.lib.crac.CracBuilder;
 import jdk.test.lib.crac.CracTest;
 
@@ -75,7 +78,7 @@ public class DaemonAfterRestore implements CracTest {
                 System.out.println(AFTER_RESTORE_MESSAGE);
             }
         };
-        Core.getGlobalContext().register(resource);
+        Context.getGlobalContext().register(resource);
 
         Thread workerThread = new Thread(() -> {
             System.out.println("worker thread start");

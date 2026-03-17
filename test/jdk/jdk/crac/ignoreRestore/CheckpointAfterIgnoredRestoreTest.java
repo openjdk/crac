@@ -26,8 +26,9 @@
 import java.nio.file.Files;
 import java.util.List;
 
-import jdk.crac.Core;
 import static jdk.test.lib.Asserts.*;
+
+import jdk.crac.management.CRaCMXBean;
 import jdk.test.lib.crac.CracBuilder;
 
 /**
@@ -52,7 +53,7 @@ public class CheckpointAfterIgnoredRestoreTest {
 
     public static class Main {
         public static void main(String[] args) throws Exception {
-            Core.checkpointRestore();
+            CRaCMXBean.getCRaCMXBean().checkpointRestore();
         }
     }
 }

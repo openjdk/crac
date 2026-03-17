@@ -23,7 +23,6 @@
  * questions.
  */
 
-import jdk.crac.*;
 import jdk.crac.management.*;
 import jdk.internal.ref.CleanerFactory;
 import jdk.internal.ref.CleanerImpl;
@@ -92,7 +91,7 @@ public class LinkedCleanableRefTest implements CracTest {
         setReferentToNull(ref2);
         obj = null;
 
-        Core.checkpointRestore();
+        CRaCMXBean.getCRaCMXBean().checkpointRestore();
         System.out.println("RESTORED");
     }
 }

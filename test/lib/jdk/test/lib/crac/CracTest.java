@@ -1,7 +1,5 @@
 package jdk.test.lib.crac;
 
-import jdk.crac.Core;
-
 import java.lang.reflect.*;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -41,7 +39,7 @@ public interface CracTest {
 
     /**
      * This method is invoked in the subprocess; this is where you're likely to call
-     * {@link Core#checkpointRestore()}.
+     * {@link jdk.crac.management.CRaCMXBean#checkpointRestore()}.
      *
      * @throws Exception
      */

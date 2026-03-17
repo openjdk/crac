@@ -21,7 +21,7 @@
  * questions.
  */
 
-import jdk.crac.*;
+import jdk.crac.management.CRaCMXBean;
 import jdk.test.lib.crac.CracBuilder;
 import jdk.test.lib.crac.CracEngine;
 import jdk.test.lib.crac.CracTest;
@@ -132,7 +132,7 @@ public class JdwpTransportTest implements CracTest {
     @Override
     public void exec() throws Exception {
         System.out.println(STARTED + ", pid=" + ProcessHandle.current().pid());
-        Core.checkpointRestore();
+        CRaCMXBean.getCRaCMXBean().checkpointRestore();
         System.out.println("APP: Restored");
         System.in.read(); // Wait for debugger is attached and done
         System.out.println("APP: Finished");

@@ -22,7 +22,6 @@
  */
 
 import jdk.crac.Context;
-import jdk.crac.Core;
 import jdk.crac.Resource;
 import jdk.test.lib.crac.CracBuilder;
 import jdk.test.lib.crac.CracEngine;
@@ -101,7 +100,7 @@ public class JcmdArgsTest implements CracTest {
                 System.out.println(CHECKPOINTED);
             }
         };
-        Core.getGlobalContext().register(resource);
+        Context.getGlobalContext().register(resource);
         System.out.println(READY);
         assertEquals((int) '\n', System.in.read());
         Reference.reachabilityFence(resource);

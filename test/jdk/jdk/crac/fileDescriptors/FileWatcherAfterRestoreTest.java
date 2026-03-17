@@ -21,7 +21,7 @@
  * questions.
  */
 
- import jdk.crac.Core;
+ import jdk.crac.management.CRaCMXBean;
  import jdk.test.lib.Asserts;
  import jdk.test.lib.crac.CracBuilder;
  import jdk.test.lib.crac.CracTest;
@@ -69,7 +69,7 @@ public class FileWatcherAfterRestoreTest implements CracTest {
         directory.register(watchService, StandardWatchEventKinds.ENTRY_CREATE);
         Asserts.assertTrue(isMatchFound(watchService, directory));
 
-        Core.checkpointRestore();
+        CRaCMXBean.getCRaCMXBean().checkpointRestore();
 
         if (deleteFolder) {
             directory.toFile().mkdir();

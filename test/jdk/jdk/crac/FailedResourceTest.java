@@ -23,6 +23,7 @@
 
 
 import jdk.crac.*;
+import jdk.crac.management.CRaCMXBean;
 import jdk.test.lib.crac.CracBuilder;
 import jdk.test.lib.crac.CracEngine;
 import jdk.test.lib.crac.CracTest;
@@ -62,9 +63,9 @@ public class FailedResourceTest implements CracTest {
                 ranAfter.set(true);
             }
         };
-        Core.getGlobalContext().register(resource);
+        Context.getGlobalContext().register(resource);
         try {
-            Core.checkpointRestore();
+            CRaCMXBean.getCRaCMXBean().checkpointRestore();
             fail("Was supposed to throw");
         } catch (CheckpointException e) {
             assertEquals(1, e.getSuppressed().length, Arrays.toString(e.getSuppressed()));

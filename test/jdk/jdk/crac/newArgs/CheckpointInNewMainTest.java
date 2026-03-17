@@ -23,7 +23,7 @@
 
 import java.util.List;
 
-import jdk.crac.Core;
+import jdk.crac.management.CRaCMXBean;
 import jdk.test.lib.crac.CracBuilder;
 import jdk.test.lib.crac.CracEngine;
 import jdk.test.lib.crac.CracTest;
@@ -55,13 +55,13 @@ public class CheckpointInNewMainTest implements CracTest {
 
     @Override
     public void exec() throws Exception {
-        Core.checkpointRestore();
+        CRaCMXBean.getCRaCMXBean().checkpointRestore();
         System.out.println(RESTORE_OLD_MSG);
     }
 
     public static class InternalMain {
         public static void main(String[] args) throws Exception {
-            Core.checkpointRestore();
+            CRaCMXBean.getCRaCMXBean().checkpointRestore();
             System.out.println(RESTORE_NEW_MSG);
         }
     }

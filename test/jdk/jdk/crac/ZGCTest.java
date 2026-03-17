@@ -24,6 +24,7 @@
  */
 
 import jdk.crac.Core;
+import jdk.crac.management.CRaCMXBean;
 import jdk.test.lib.crac.CracBuilder;
 import jdk.test.lib.crac.CracTest;
 
@@ -45,6 +46,6 @@ public class ZGCTest implements CracTest {
 
     @Override
     public void exec() throws Exception {
-        Core.checkpointRestore();
+        CRaCMXBean.getCRaCMXBean().checkpointRestore();
     }
 }

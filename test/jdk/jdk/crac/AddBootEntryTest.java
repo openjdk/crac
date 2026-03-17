@@ -21,7 +21,7 @@
  * questions.
  */
 
-import jdk.crac.Core;
+import jdk.crac.management.CRaCMXBean;
 import jdk.test.lib.Utils;
 import jdk.test.lib.crac.CracBuilder;
 import jdk.test.lib.crac.CracTest;
@@ -81,7 +81,7 @@ public class AddBootEntryTest implements CracTest {
 
     @Override
     public void exec() throws Exception {
-        Core.checkpointRestore();
+        CRaCMXBean.getCRaCMXBean().checkpointRestore();
     }
 
     public static class Agent {

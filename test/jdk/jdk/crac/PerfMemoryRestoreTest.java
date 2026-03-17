@@ -22,6 +22,7 @@
  */
 
 import jdk.crac.*;
+import jdk.crac.management.CRaCMXBean;
 import jdk.test.lib.crac.CracBuilder;
 import jdk.test.lib.crac.CracEngine;
 import jdk.test.lib.crac.CracProcess;
@@ -126,7 +127,7 @@ public class PerfMemoryRestoreTest implements CracTest {
     @Override
     public void exec() throws Exception {
         assertEquals(System.in.read(), (int) '\n');
-        Core.checkpointRestore();
+        CRaCMXBean.getCRaCMXBean().checkpointRestore();
         assertEquals(System.in.read(), (int) '\n');
     }
 }

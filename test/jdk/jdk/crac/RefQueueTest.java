@@ -26,7 +26,7 @@ import java.lang.ref.Cleaner;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 
-import jdk.crac.*;
+import jdk.crac.management.CRaCMXBean;
 import jdk.test.lib.crac.CracBuilder;
 import jdk.test.lib.crac.CracEngine;
 import jdk.test.lib.crac.CracTest;
@@ -64,7 +64,7 @@ public class RefQueueTest implements CracTest {
         });
 
         // should close the file and only then go to the native checkpoint
-        Core.checkpointRestore();
+        CRaCMXBean.getCRaCMXBean().checkpointRestore();
 
         // ensure that the cleaner starts working eventually
         CountDownLatch latch = new CountDownLatch(1);

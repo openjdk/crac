@@ -21,7 +21,7 @@
  * questions.
  */
 
-import jdk.crac.Core;
+import jdk.crac.management.CRaCMXBean;
 import jdk.internal.crac.OpenResourcePolicies;
 import jdk.test.lib.crac.CracBuilder;
 import jdk.test.lib.crac.CracEngine;
@@ -75,7 +75,7 @@ public abstract class ReopenListeningTestBase<ServerType extends Closeable> exte
         Thread.sleep(100);
         assertFalse(cf.isDone());
 
-        Core.checkpointRestore();
+        CRaCMXBean.getCRaCMXBean().checkpointRestore();
         connectClient(serverSocket);
         assertFalse(cf.get());
 

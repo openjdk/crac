@@ -22,7 +22,7 @@
  */
 
 
-import jdk.crac.Core;
+import jdk.crac.management.CRaCMXBean;
 import jdk.test.lib.crac.CracBuilder;
 import jdk.test.lib.crac.CracEngine;
 import jdk.test.lib.crac.CracTest;
@@ -31,7 +31,6 @@ import jdk.test.lib.crac.CracTestArg;
 import java.io.File;
 
 import static jdk.test.lib.Asserts.assertTrue;
-import static jdk.test.lib.Asserts.fail;
 
 /**
  * @test FlightRecorderJcmdTest
@@ -89,7 +88,7 @@ public class FlightRecorderJcmdTest extends FlightRecorderTestBase implements Cr
     public void exec() throws Exception {
         System.out.println(TEST_STARTED);
         System.in.read();
-        Core.checkpointRestore();
+        CRaCMXBean.getCRaCMXBean().checkpointRestore();
         System.out.println(RESTORED_MESSAGE);
         System.in.read();
     }

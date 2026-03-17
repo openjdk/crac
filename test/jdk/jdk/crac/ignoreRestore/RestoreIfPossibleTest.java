@@ -27,9 +27,9 @@ import java.nio.file.Files;
 import java.util.Collections;
 import java.util.List;
 
-import jdk.crac.Core;
-
 import static jdk.test.lib.Asserts.*;
+
+import jdk.crac.management.CRaCMXBean;
 import jdk.test.lib.crac.CracBuilder;
 import jdk.test.lib.util.FileUtils;
 
@@ -80,7 +80,7 @@ public class RestoreIfPossibleTest {
             final var shouldCheckpoint = Boolean.parseBoolean(args[0]);
             if (shouldCheckpoint) {
                 System.out.println(WARMUP_MSG);
-                Core.checkpointRestore();
+                CRaCMXBean.getCRaCMXBean().checkpointRestore();
             }
             System.out.println(MAIN_MSG);
         }

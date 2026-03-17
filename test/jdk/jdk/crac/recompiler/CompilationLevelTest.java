@@ -22,9 +22,10 @@
  */
 
 import jdk.crac.Context;
-import jdk.crac.Core;
 import jdk.crac.Resource;
 import static jdk.test.lib.Asserts.*;
+
+import jdk.crac.management.CRaCMXBean;
 import jdk.test.lib.crac.CracBuilder;
 import jdk.test.lib.crac.CracEngine;
 import jdk.test.lib.crac.CracTest;
@@ -123,9 +124,9 @@ public class CompilationLevelTest implements CracTest {
                 );
             }
         };
-        Core.getGlobalContext().register(resource);
+        Context.getGlobalContext().register(resource);
 
-        Core.checkpointRestore();
+        CRaCMXBean.getCRaCMXBean().checkpointRestore();
 
         final var expectedCompilationLevel = shouldRecompile ? preCrCompilationLevel : inCrCompilationLevel;
         assertEquals(

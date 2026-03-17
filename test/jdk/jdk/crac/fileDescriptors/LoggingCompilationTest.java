@@ -24,11 +24,12 @@
 import java.nio.file.Files;
 import java.nio.file.Path;
 
-import jdk.crac.Core;
 import static jdk.test.lib.Asserts.assertEquals;
 import static jdk.test.lib.Asserts.assertFalse;
 import static jdk.test.lib.Asserts.assertNotEquals;
 import static jdk.test.lib.Asserts.assertTrue;
+
+import jdk.crac.management.CRaCMXBean;
 import jdk.test.lib.crac.CracBuilder;
 import jdk.test.lib.crac.CracTest;
 import jdk.test.lib.crac.CracTestArg;
@@ -100,7 +101,7 @@ public class LoggingCompilationTest implements CracTest {
 
     @Override
     public void exec() throws Exception {
-        Core.checkpointRestore();
+        CRaCMXBean.getCRaCMXBean().checkpointRestore();
         System.out.println(RESTORED_MESSAGE);
     }
 }

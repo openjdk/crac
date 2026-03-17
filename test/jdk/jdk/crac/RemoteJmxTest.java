@@ -25,7 +25,6 @@
 
 import jdk.crac.CheckpointException;
 import jdk.crac.Context;
-import jdk.crac.Core;
 import jdk.crac.Resource;
 import jdk.crac.RestoreException;
 import jdk.crac.management.*;
@@ -143,14 +142,14 @@ public class RemoteJmxTest implements CracTest {
                 latch.countDown();
             }
         };
-        Core.getGlobalContext().register(resource);
+        Context.getGlobalContext().register(resource);
         System.out.println(BOOTED);
         if (!NONE.equals(portAfter)) {
             javaOptions(portAfter).forEach(System::setProperty);
         }
         assertEquals((int)'\n', System.in.read());
         if (NONE.equals(portBefore)) {
-            Core.checkpointRestore();
+            CRaCMXBean.getCRaCMXBean().checkpointRestore();
         } else {
             /* checkpoint remotely triggered here - let's just wait for that */
             assertTrue(latch.await(30, TimeUnit.SECONDS));

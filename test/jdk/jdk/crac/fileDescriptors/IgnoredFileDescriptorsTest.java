@@ -21,7 +21,7 @@
  * questions.
  */
 
-import jdk.crac.Core;
+import jdk.crac.management.CRaCMXBean;
 import jdk.test.lib.Utils;
 import jdk.test.lib.crac.CracBuilder;
 import jdk.test.lib.crac.CracTest;
@@ -80,7 +80,7 @@ public class IgnoredFileDescriptorsTest implements CracTest {
                 throw new IllegalStateException("Missing /dev/urandom");
             }
         }
-        Core.checkpointRestore();
+        CRaCMXBean.getCRaCMXBean().checkpointRestore();
         System.out.println(RESTORED_MESSAGE);
     }
 }

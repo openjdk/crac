@@ -21,7 +21,7 @@
  * questions.
  */
 
-import jdk.crac.Core;
+import jdk.crac.management.CRaCMXBean;
 import jdk.internal.crac.OpenResourcePolicies;
 import jdk.test.lib.crac.CracBuilder;
 import jdk.test.lib.crac.CracTest;
@@ -96,7 +96,7 @@ public class ReopenFileReadingTest extends FDPolicyTestBase implements CracTest 
             readFully(channel, byteBuffer);
             assertEquals("Hel", new String(buf2, StandardCharsets.UTF_8));
 
-            Core.checkpointRestore();
+            CRaCMXBean.getCRaCMXBean().checkpointRestore();
             readContents(reader);
             assertEquals(buf.length, reader.read(buf));
             assertEquals("world!", new String(buf));

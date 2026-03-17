@@ -1,5 +1,5 @@
 import java.util.Arrays;
-import jdk.crac.Core;
+import jdk.crac.management.CRaCMXBean;
 
 public class JavaCompilerCRaC {
 
@@ -24,6 +24,6 @@ public class JavaCompilerCRaC {
             runJavac(Arrays.copyOfRange(args, startIdx, args.length));
         }
 
-        Core.checkpointRestore();
+        CRaCMXBean.getCRaCMXBean().checkpointRestore();
     }
 }

@@ -21,7 +21,7 @@
  * questions.
  */
 
-import jdk.crac.Core;
+import jdk.crac.management.CRaCMXBean;
 import jdk.internal.crac.OpenResourcePolicies;
 import jdk.test.lib.crac.CracBuilder;
 import jdk.test.lib.crac.CracTest;
@@ -80,7 +80,7 @@ public class CloseUdpSocketTest extends FDPolicyTestBase implements CracTest {
                 byte[] buf = "Hello".getBytes();
                 clientSocket.send(new DatagramPacket(buf, buf.length));
                 latch.await();
-                Core.checkpointRestore();
+                CRaCMXBean.getCRaCMXBean().checkpointRestore();
             }
         }
     }

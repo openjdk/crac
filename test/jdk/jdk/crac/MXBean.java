@@ -50,7 +50,7 @@ public class MXBean implements CracTest {
     public void exec() throws CheckpointException, RestoreException {
         CRaCMXBean cracMXBean = CRaCMXBean.getCRaCMXBean();
 
-        Core.checkpointRestore();
+        cracMXBean.checkpointRestore();
 
         System.out.println("UptimeSinceRestore " + cracMXBean.getUptimeSinceRestore());
 

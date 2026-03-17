@@ -29,10 +29,10 @@ import java.nio.file.Path;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Map;
-import jdk.crac.Core;
 
 import static jdk.test.lib.Asserts.assertTrue;
 
+import jdk.crac.management.CRaCMXBean;
 import jdk.test.lib.crac.CracBuilder;
 import jdk.test.lib.crac.CracEngine;
 import jdk.test.lib.crac.CracTest;
@@ -75,7 +75,7 @@ public class JrtFsTest implements CracTest {
             System.out.println("Read " + classBytes1.length + " bytes from Object.class");
         }
 
-        Core.checkpointRestore();
+        CRaCMXBean.getCRaCMXBean().checkpointRestore();
         System.out.println("RESTORED");
 
         byte[] classBytes2;

@@ -21,7 +21,7 @@
  * questions.
  */
 
-import jdk.crac.Core;
+import jdk.crac.management.CRaCMXBean;
 import jdk.test.lib.crac.CracBuilder;
 import jdk.test.lib.crac.CracEngine;
 import jdk.test.lib.crac.CracTest;
@@ -79,10 +79,11 @@ public class PollerTest implements CracTest {
     @Override
     public void exec() throws Exception {
         execInVirtual(this::useSockets);
+        CRaCMXBean bean = CRaCMXBean.getCRaCMXBean();
         if (checkpointVirtual) {
-            execInVirtual(Core::checkpointRestore);
+            execInVirtual(bean::checkpointRestore);
         } else {
-            Core.checkpointRestore();
+            bean.checkpointRestore();
         }
         execInVirtual(this::useSockets);
     }

@@ -21,6 +21,7 @@
  * questions.
  */
 
+import jdk.crac.management.CRaCMXBean;
 import jdk.test.lib.crac.CracBuilder;
 import jdk.test.lib.crac.CracTest;
 import jdk.test.lib.crac.CracTestArg;
@@ -142,7 +143,7 @@ public class JoinSleepWaitOnCRPauseTest implements CracTest {
 
         long tBeforeCheckpoint = System.nanoTime();
 
-        jdk.crac.Core.checkpointRestore();
+        CRaCMXBean.getCRaCMXBean().checkpointRestore();
 
         long tAfterRestore = System.nanoTime();
 

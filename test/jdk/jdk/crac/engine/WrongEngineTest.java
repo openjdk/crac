@@ -20,16 +20,11 @@
  * CA 94089 USA or visit www.azul.com if you need additional information or
  * have any questions.
  */
-import jdk.crac.Core;
+import jdk.crac.management.CRaCMXBean;
 import jdk.test.lib.crac.CracBuilder;
 import jdk.test.lib.crac.CracEngine;
 import jdk.test.lib.crac.CracTest;
 import jdk.test.lib.util.FileUtils;
-
-import java.nio.file.Path;
-
-import static jdk.test.lib.Asserts.assertEquals;
-
 
 /*
  * @test WrongEngineTest
@@ -54,6 +49,6 @@ public class WrongEngineTest implements CracTest {
 
     @Override
     public void exec() throws Exception {
-        Core.checkpointRestore();
+        CRaCMXBean.getCRaCMXBean().checkpointRestore();
     }
 }

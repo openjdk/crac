@@ -21,7 +21,7 @@
  * questions.
  */
 
-import jdk.crac.Core;
+import jdk.crac.management.CRaCMXBean;
 import jdk.test.lib.crac.CracBuilder;
 import jdk.test.lib.crac.CracEngine;
 import jdk.test.lib.crac.CracTest;
@@ -62,7 +62,7 @@ public class ClasspathParseTest implements CracTest {
         String someJar = Arrays.stream(cp.split(File.pathSeparator)).filter(f -> f.endsWith(".jar")).findAny()
                 .orElseThrow(() -> new AssertionError("jar file should be provided on classpath"));
         try (var fis = new FileInputStream(someJar)) {
-            Core.checkpointRestore();
+            CRaCMXBean.getCRaCMXBean().checkpointRestore();
         }
     }
 }

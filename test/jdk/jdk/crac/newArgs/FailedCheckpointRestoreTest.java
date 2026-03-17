@@ -25,10 +25,11 @@ import java.util.List;
 
 import jdk.crac.CheckpointException;
 import jdk.crac.Context;
-import jdk.crac.Core;
 import jdk.crac.Resource;
 import jdk.crac.RestoreException;
 import static jdk.test.lib.Asserts.*;
+
+import jdk.crac.management.CRaCMXBean;
 import jdk.test.lib.crac.CracBuilder;
 import jdk.test.lib.crac.CracTest;
 import jdk.test.lib.crac.CracTestArg;
@@ -89,10 +90,10 @@ public class FailedCheckpointRestoreTest implements CracTest {
                 }
             }
         };
-        Core.getGlobalContext().register(failingResource);
+        Context.getGlobalContext().register(failingResource);
 
         try {
-            Core.checkpointRestore();
+            CRaCMXBean.getCRaCMXBean().checkpointRestore();
             System.out.println(RESTORE_OLD_MSG);
         } catch (CheckpointException ex) {
             assertEquals(Variant.CHECKPOINT_EXCEPTION, variant, "Checkpoint failed unexpectedly", ex);

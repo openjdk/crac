@@ -21,7 +21,7 @@
  * have any questions.
  */
 
-import jdk.crac.Core;
+import jdk.crac.management.CRaCMXBean;
 import jdk.test.lib.containers.docker.Common;
 import jdk.test.lib.containers.docker.DockerTestUtils;
 import jdk.test.lib.crac.CracContainerBuilder;
@@ -78,7 +78,7 @@ public class ContainerOOMETest implements CracTest {
             // ignore the error
         }
         System.err.println(AFTER_OOME);
-        Core.checkpointRestore();
+        CRaCMXBean.getCRaCMXBean().checkpointRestore();
         lotOfAllocations();
     }
 

@@ -22,7 +22,7 @@
  */
 
 import com.sun.management.OperatingSystemMXBean;
-import jdk.crac.Core;
+import jdk.crac.management.CRaCMXBean;
 import jdk.test.lib.crac.*;
 
 import java.lang.management.ManagementFactory;
@@ -48,7 +48,7 @@ public class OperatingSystemMxBeanTest implements CracTest {
         OperatingSystemMXBean bean = ManagementFactory.getPlatformMXBean(OperatingSystemMXBean.class);
         System.out.println("System CPU load:  " + bean.getCpuLoad());
         System.out.println("Process CPU load: " + bean.getProcessCpuLoad());
-        Core.checkpointRestore();
+        CRaCMXBean.getCRaCMXBean().checkpointRestore();
         // We're restoring on the same system, so total CPU load should not have failed
         assertLTE(0.0, bean.getCpuLoad());
         // Per process ticks should be lower after restore than before checkpoint => load unavailable

@@ -23,7 +23,7 @@
 
 package crac.fileDescriptors;
 
-import jdk.crac.Core;
+import jdk.crac.management.CRaCMXBean;
 import jdk.test.lib.compiler.CompilerUtils;
 import jdk.test.lib.crac.CracBuilder;
 import jdk.test.lib.crac.CracTest;
@@ -113,7 +113,7 @@ public class PatchModuleTest implements CracTest {
         assertEquals(PATCH_MESSAGE, infoBefore, "Patch should be active before checkpoint.");
 
         // Perform checkpoint and restore
-        Core.checkpointRestore();
+        CRaCMXBean.getCRaCMXBean().checkpointRestore();
 
         // Verify the patch is still active after restore
         String infoAfter = invokePatchedMethod();

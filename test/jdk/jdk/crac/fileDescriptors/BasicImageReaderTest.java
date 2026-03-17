@@ -24,10 +24,10 @@
 import java.nio.ByteBuffer;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import jdk.crac.Core;
 
 import static jdk.test.lib.Asserts.assertTrue;
 
+import jdk.crac.management.CRaCMXBean;
 import jdk.test.lib.crac.CracBuilder;
 import jdk.test.lib.crac.CracEngine;
 import jdk.test.lib.crac.CracTest;
@@ -72,7 +72,7 @@ public class BasicImageReaderTest implements CracTest {
         readClass(reader, "java.base", "java/lang/String.class");
         readClass(reader, "java.logging", "java/util/logging/Logger.class");
 
-        Core.checkpointRestore();
+        CRaCMXBean.getCRaCMXBean().checkpointRestore();
         System.out.println("RESTORED");
 
         readClass(reader, "java.base", "java/lang/String.class");

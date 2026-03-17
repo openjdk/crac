@@ -28,18 +28,14 @@ package jdk.crac;
 
 /**
  * The coordination service.
+ *
+ * @deprecated Use {@link Context#getGlobalContext()} or {@code CRaCMXBean.getCRaCMXBean().checkpointRestore()}
  */
+@Deprecated
 public class Core {
 
     /** This class is not instantiable. */
     private Core() {
-    }
-
-    static final Context<Resource> globalContext = new ContextWrapper(
-        jdk.internal.crac.mirror.impl.GlobalContext.createGlobalContextImpl("jdk.crac.globalContext"));
-
-    static {
-        jdk.internal.crac.mirror.Context.getGlobalContext().register(new ResourceWrapper(null, globalContext));
     }
 
     /**
@@ -50,7 +46,7 @@ public class Core {
      */
     @Deprecated
     public static Context<Resource> getGlobalContext() {
-        return globalContext;
+        return Context.getGlobalContext();
     }
 
     /**
@@ -64,7 +60,10 @@ public class Core {
      * @throws UnsupportedOperationException if checkpoint/restore is not
      * supported, no notification performed and the execution continues in
      * the original Java instance.
+     *
+     * @deprecated Use {@code CRaCMXBean.getCRaCMXBean().checkpointRestore()} instead.
      */
+    @Deprecated
     public static void checkpointRestore() throws
             CheckpointException,
             RestoreException {

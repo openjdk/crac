@@ -21,7 +21,7 @@
  * questions.
  */
 
-import jdk.crac.Core;
+import jdk.crac.management.CRaCMXBean;
 import jdk.test.lib.Asserts;
 import jdk.test.lib.crac.CracBuilder;
 import jdk.test.lib.crac.CracTest;
@@ -100,14 +100,14 @@ public class FileWatcherThreadTest implements CracTest {
 
         if (checkpointWithoutKey) {
             barrier.await(); // Wait for the WatchService to be ready
-            Core.checkpointRestore(); // Restore from checkpoint
+            CRaCMXBean.getCRaCMXBean().checkpointRestore(); // Restore from checkpoint
             Files.createTempFile(directory, "temp", ".txt");
             Asserts.assertFalse(caughtSecond.isDone());
         } else {
             Files.createTempFile(directory, "temp", ".txt");
             try {
                 Asserts.assertTrue(caughtFirst.get(10, TimeUnit.SECONDS));
-                Core.checkpointRestore();
+                CRaCMXBean.getCRaCMXBean().checkpointRestore();
                 Files.createTempFile(directory, "temp", ".txt");
                 Asserts.assertTrue(caughtSecond.get(10, TimeUnit.SECONDS));
             } catch (TimeoutException e) {

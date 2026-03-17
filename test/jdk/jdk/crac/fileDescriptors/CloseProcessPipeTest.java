@@ -21,7 +21,7 @@
  * questions.
  */
 
-import jdk.crac.Core;
+import jdk.crac.management.CRaCMXBean;
 import jdk.internal.crac.JDKFdResource;
 import jdk.internal.crac.OpenResourcePolicies;
 import jdk.test.lib.crac.CracBuilder;
@@ -65,7 +65,7 @@ public class CloseProcessPipeTest extends FDPolicyTestBase implements CracTest {
         byte[] buffer = new byte[1024];
         int read1 = process.getInputStream().read(buffer);
         assertGreaterThan(read1, 0);
-        Core.checkpointRestore();
+        CRaCMXBean.getCRaCMXBean().checkpointRestore();
         int read2, total = read1;
         // Some data might got buffered from /dev/zero, we will still read those.
         try {

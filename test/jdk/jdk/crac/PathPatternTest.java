@@ -21,7 +21,7 @@
  * questions.
  */
 
-import jdk.crac.Core;
+import jdk.crac.management.CRaCMXBean;
 import jdk.test.lib.Platform;
 import jdk.test.lib.Unit;
 import jdk.test.lib.crac.CracBuilder;
@@ -159,10 +159,11 @@ public class PathPatternTest implements CracTest {
     @Override
     public void exec() throws Exception {
         // Do two checkpoint-restores to ensure code behaves correctly after repeated execution
-        Core.checkpointRestore();
+        CRaCMXBean bean = CRaCMXBean.getCRaCMXBean();
+        bean.checkpointRestore();
         if (Boolean.getBoolean("test.pause")) {
             Thread.sleep(1000);
         }
-        Core.checkpointRestore();
+        bean.checkpointRestore();
     }
 }

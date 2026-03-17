@@ -22,7 +22,7 @@
  */
 
 import jdk.crac.CheckpointException;
-import jdk.crac.Core;
+import jdk.crac.management.CRaCMXBean;
 import jdk.internal.crac.OpenResourcePolicies;
 import jdk.test.lib.crac.CracBuilder;
 import jdk.test.lib.crac.CracTest;
@@ -87,7 +87,7 @@ public class SocketWithSelectorTest extends FDPolicyTestBase implements CracTest
         serverChannel.configureBlocking(false);
         serverChannel.register(selector, SelectionKey.OP_ACCEPT);
         try {
-            Core.checkpointRestore();
+            CRaCMXBean.getCRaCMXBean().checkpointRestore();
         } catch (CheckpointException e) {
             assertEquals(1L, Arrays.stream(e.getSuppressed()).filter(e2 -> e2.getMessage().contains("has registered keys from channels")).count());
             assertEquals(2L, Arrays.stream(e.getSuppressed()).filter(e2 -> e2.getMessage().contains("with registered keys")).count());

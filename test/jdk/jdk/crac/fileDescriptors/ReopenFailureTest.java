@@ -21,8 +21,8 @@
  * questions.
  */
 
-import jdk.crac.Core;
 import jdk.crac.RestoreException;
+import jdk.crac.management.CRaCMXBean;
 import jdk.internal.crac.OpenResourcePolicies;
 import jdk.test.lib.crac.CracBuilder;
 import jdk.test.lib.crac.CracTest;
@@ -86,7 +86,7 @@ public class ReopenFailureTest extends FDPolicyTestBase implements CracTest {
             writer2.write("Hello!");
             writer2.flush();
             try {
-                Core.checkpointRestore();
+                CRaCMXBean.getCRaCMXBean().checkpointRestore();
                 fail("Should throw");
             } catch (RestoreException ex) {
                 // When running this as root we get only one exception for the missing file

@@ -18,7 +18,11 @@
 // CA 94089 USA or visit www.azul.com if you need additional information or
 // have any questions.
 
-import jdk.crac.*;
+import jdk.crac.CheckpointException;
+import jdk.crac.Context;
+import jdk.crac.Resource;
+import jdk.crac.RestoreException;
+import jdk.crac.management.CRaCMXBean;
 import jdk.test.lib.crac.CracBuilder;
 import jdk.test.lib.crac.CracTest;
 import jdk.test.lib.crac.CracTestArg;
@@ -73,7 +77,7 @@ public class InterlockTest implements Resource, CracTest {
 
         TestThread2() throws Exception {
             sr = SecureRandom.getInstance(algName);
-            Core.getGlobalContext().register(this);
+            Context.getGlobalContext().register(this);
         }
 
         @Override
@@ -125,7 +129,7 @@ public class InterlockTest implements Resource, CracTest {
     @Override
     public void exec() throws Exception {
         sr = SecureRandom.getInstance(algName);
-        Core.getGlobalContext().register(this);
+        Context.getGlobalContext().register(this);
 
         Thread[] threads = new Thread[numThreads];
         for(int i = 0; i < numThreads; i++) {
@@ -143,7 +147,7 @@ public class InterlockTest implements Resource, CracTest {
             public void run() {
                 synchronized (checkpointLock) {
                     try {
-                        jdk.crac.Core.checkpointRestore();
+                        CRaCMXBean.getCRaCMXBean().checkpointRestore();
                     } catch (CheckpointException e) {
                         throw new RuntimeException("Checkpoint ERROR " + e);
                     } catch (RestoreException e) {

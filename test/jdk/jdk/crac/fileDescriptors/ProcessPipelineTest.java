@@ -22,7 +22,7 @@
  */
 
 import jdk.crac.CheckpointException;
-import jdk.crac.Core;
+import jdk.crac.management.CRaCMXBean;
 import jdk.test.lib.crac.CracBuilder;
 import jdk.test.lib.crac.CracTest;
 
@@ -64,7 +64,7 @@ public class ProcessPipelineTest implements CracTest {
             writer.flush();
             assertEquals("Hello world", reader.readLine());
             try {
-                Core.checkpointRestore();
+                CRaCMXBean.getCRaCMXBean().checkpointRestore();
                 fail("Should have failed");
             } catch (CheckpointException e) {
                 // One for pipe to the first process, another for pipe from the last
@@ -72,7 +72,7 @@ public class ProcessPipelineTest implements CracTest {
             }
         }
         // This time it should succeed
-        Core.checkpointRestore();
+        CRaCMXBean.getCRaCMXBean().checkpointRestore();
         assertEquals(0, processes.get(0).waitFor());
         assertEquals(0, processes.get(1).waitFor());
         assertEquals(0, processes.get(2).waitFor());

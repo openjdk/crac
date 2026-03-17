@@ -22,7 +22,9 @@ import java.nio.channels.*;
 import java.io.IOException;
 import java.nio.channels.spi.SelectorProvider;
 
-import jdk.crac.*;
+import jdk.crac.Context;
+import jdk.crac.Resource;
+import jdk.crac.management.CRaCMXBean;
 import jdk.test.lib.crac.CracBuilder;
 import jdk.test.lib.crac.CracEngine;
 import jdk.test.lib.crac.CracTest;
@@ -89,12 +91,7 @@ public class KeyAfterRestoreTest implements CracTest {
 
         ch.register(selector);
 
-        try {
-            Core.checkpointRestore();
-        } catch (CheckpointException | RestoreException e) {
-            e.printStackTrace();
-            throw e;
-        }
+        CRaCMXBean.getCRaCMXBean().checkpointRestore();
 
         Thread.sleep(200);
 
@@ -112,7 +109,7 @@ public class KeyAfterRestoreTest implements CracTest {
         private Object att = new Integer(123);
 
         public ChannelResource() {
-            Core.getGlobalContext().register(this);
+            Context.getGlobalContext().register(this);
         }
 
         public void open() throws IOException {

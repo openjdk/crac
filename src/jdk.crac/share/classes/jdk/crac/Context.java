@@ -35,6 +35,13 @@ package jdk.crac;
  */
 public abstract class Context<R extends Resource> implements Resource {
 
+    private static final Context<Resource> globalContext = new ContextWrapper(
+        jdk.internal.crac.mirror.impl.GlobalContext.createGlobalContextImpl("jdk.crac.globalContext"));
+
+    static {
+        jdk.internal.crac.mirror.Context.getGlobalContext().register(new ResourceWrapper(null, globalContext));
+    }
+
     /** Creates a {@code Context}.
      */
     protected Context() {
@@ -62,6 +69,6 @@ public abstract class Context<R extends Resource> implements Resource {
      * @return the global {@code Context}
      */
     public static Context<Resource> getGlobalContext() {
-        return Core.globalContext;
+        return globalContext;
     }
 }

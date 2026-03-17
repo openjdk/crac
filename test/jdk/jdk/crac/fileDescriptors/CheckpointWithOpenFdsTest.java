@@ -21,7 +21,7 @@
  * questions.
  */
 
-import jdk.crac.Core;
+import jdk.crac.management.CRaCMXBean;
 import jdk.test.lib.Utils;
 import jdk.test.lib.crac.CracBuilder;
 import jdk.test.lib.crac.CracTest;
@@ -82,7 +82,7 @@ public class CheckpointWithOpenFdsTest implements CracTest {
         String relative = cwd.relativize(Path.of(absolutePathToSomeJar)).toString();
         try (var file1 = new RandomAccessFile(absolute, "r");
              var file2 = new RandomAccessFile(relative, "r")) {
-            Core.checkpointRestore();
+            CRaCMXBean.getCRaCMXBean().checkpointRestore();
             System.out.println(RESTORED_MESSAGE);
         }
     }

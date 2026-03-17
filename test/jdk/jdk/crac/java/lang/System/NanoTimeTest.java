@@ -107,7 +107,7 @@ public class NanoTimeTest implements CracTest {
         long boottimeBefore = readSystemUptime();
 
         long before = System.nanoTime();
-        Core.checkpointRestore();
+        CRaCMXBean.getCRaCMXBean().checkpointRestore();
         long after = System.nanoTime();
         System.out.println("Before: " + before);
         System.out.println("After: " + after);

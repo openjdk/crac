@@ -25,6 +25,7 @@ import com.sun.management.HotSpotDiagnosticMXBean;
 import com.sun.management.VMOption;
 
 import jdk.crac.*;
+import jdk.crac.management.CRaCMXBean;
 import jdk.test.lib.Utils;
 import jdk.test.lib.crac.CracBuilder;
 import jdk.test.lib.crac.CracTest;
@@ -164,7 +165,7 @@ public class VMOptionsTest implements CracTest {
             assertEquals(expectedOrigin, opt.getOrigin(), optSpec.name() + ": unexpected origin before checkpoint");
         }
 
-        Core.checkpointRestore();
+        CRaCMXBean.getCRaCMXBean().checkpointRestore();
         System.out.println(RESTORE_MSG);
 
         for (final var optSpec : OPTIONS_CHECKPOINT) {

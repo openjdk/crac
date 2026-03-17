@@ -21,7 +21,7 @@
  * questions.
  */
 
-import jdk.crac.Core;
+import jdk.crac.management.CRaCMXBean;
 import jdk.test.lib.crac.CracBuilder;
 import jdk.test.lib.crac.CracEngine;
 import jdk.test.lib.crac.CracTest;
@@ -55,7 +55,7 @@ public class OpenFileDetectionTest implements CracTest {
 
         try (var file1 = new RandomAccessFile("filename1.txt", "r");
              var file2 = new FileInputStream("filename2.txt")) {
-            Core.checkpointRestore();
+            CRaCMXBean.getCRaCMXBean().checkpointRestore();
         }
     }
 }

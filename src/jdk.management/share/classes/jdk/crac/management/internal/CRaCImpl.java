@@ -27,13 +27,13 @@ package jdk.crac.management.internal;
 
 import com.sun.management.internal.PlatformMBeanProviderImpl;
 import jdk.crac.CheckpointException;
-import jdk.crac.Core;
 import jdk.crac.RestoreException;
 import jdk.crac.management.CRaCMXBean;
 import sun.management.Util;
 import sun.management.VMManagement;
 
 import javax.management.ObjectName;
+import java.util.Arrays;
 
 public class CRaCImpl implements CRaCMXBean {
     private final VMManagement vm;
@@ -54,7 +54,17 @@ public class CRaCImpl implements CRaCMXBean {
 
     @Override
     public void checkpointRestore() throws RestoreException, CheckpointException {
-        Core.checkpointRestore();
+        try {
+            jdk.internal.crac.mirror.Core.checkpointRestore();
+        } catch (jdk.internal.crac.mirror.CheckpointException e) {
+            CheckpointException newException = new CheckpointException();
+            Arrays.asList(e.getSuppressed()).forEach(newException::addSuppressed);
+            throw newException;
+        } catch (jdk.internal.crac.mirror.RestoreException e) {
+            RestoreException newException = new RestoreException();
+            Arrays.asList(e.getSuppressed()).forEach(newException::addSuppressed);
+            throw newException;
+        }
     }
 
     @Override

@@ -414,6 +414,7 @@ module java.base {
         java.rmi,
         jdk.crac,
         jdk.jfr,
+        jdk.management,
         jdk.management.agent;
 
     exports jdk.internal.crac.mirror.impl to

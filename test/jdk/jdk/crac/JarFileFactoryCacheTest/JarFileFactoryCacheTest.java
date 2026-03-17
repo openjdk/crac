@@ -21,7 +21,7 @@
  * questions.
  */
 
-import jdk.crac.*;
+import jdk.crac.management.CRaCMXBean;
 import jdk.test.lib.crac.CracBuilder;
 import jdk.test.lib.crac.CracEngine;
 import jdk.test.lib.crac.CracTest;
@@ -71,6 +71,6 @@ public class JarFileFactoryCacheTest implements CracTest {
         inputStream = null;
         url = null;
 
-        Core.checkpointRestore();
+        CRaCMXBean.getCRaCMXBean().checkpointRestore();
     }
 }

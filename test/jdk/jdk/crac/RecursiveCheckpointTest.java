@@ -23,6 +23,7 @@ import java.util.Collections;
 import java.util.List;
 
 import jdk.crac.*;
+import jdk.crac.management.CRaCMXBean;
 import jdk.test.lib.crac.*;
 import static jdk.test.lib.Asserts.*;
 
@@ -59,7 +60,7 @@ public class RecursiveCheckpointTest implements Resource, CracTest {
         @Override
         public void run() {
             try {
-                Core.checkpointRestore();
+                CRaCMXBean.getCRaCMXBean().checkpointRestore();
             } catch (CheckpointException | RestoreException e) {
                 throw new IllegalStateException("C/R failed", e);
             }
@@ -71,7 +72,7 @@ public class RecursiveCheckpointTest implements Resource, CracTest {
         assertEquals(1, counter.incrementAndGet(), "Concurrent checkpoint detected");
         Thread.sleep(100);
         try {
-            Core.checkpointRestore();
+            CRaCMXBean.getCRaCMXBean().checkpointRestore();
             fail("Recursive checkpoint should fail");
         } catch (CheckpointException e) {
             // Expected exception
@@ -83,7 +84,7 @@ public class RecursiveCheckpointTest implements Resource, CracTest {
         try {
             Thread.sleep(100);
             try {
-                Core.checkpointRestore();
+                CRaCMXBean.getCRaCMXBean().checkpointRestore();
                 fail("Recursive checkpoint should fail");
             } catch (CheckpointException e) {
                 // Expected exception
@@ -95,7 +96,7 @@ public class RecursiveCheckpointTest implements Resource, CracTest {
 
     @Override
     public void exec() throws Exception {
-        Core.getGlobalContext().register(new RecursiveCheckpointTest());
+        Context.getGlobalContext().register(new RecursiveCheckpointTest());
 
         final var threads = new TestThread[numThreads];
         for (int i = 0; i < numThreads; i++) {

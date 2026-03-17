@@ -21,8 +21,12 @@
  * questions.
  */
 
+import jdk.crac.CheckpointException;
+import jdk.crac.RestoreException;
+import jdk.crac.management.CRaCMXBean;
 import jdk.internal.crac.JDKResource;
-import jdk.internal.crac.mirror.*;
+import jdk.internal.crac.mirror.Context;
+import jdk.internal.crac.mirror.Resource;
 import jdk.internal.crac.mirror.impl.BlockingOrderedContext;
 import jdk.internal.crac.mirror.impl.OrderedContext;
 import jdk.test.lib.Utils;
@@ -68,7 +72,7 @@ public class ContextOrderTest {
         // this child should run as it has higher priority
         NORMAL.getContext().register(new CreatingResource<>(recorder, "jdk-create", SEEDER_HOLDER.getContext()));
 
-        Core.checkpointRestore();
+        CRaCMXBean.getCRaCMXBean().checkpointRestore();
 
         assertEquals("regular2-before", recorder.poll());
         assertEquals("regular1-before", recorder.poll());
@@ -92,7 +96,7 @@ public class ContextOrderTest {
         assertNull(recorder.poll());
 
         // second checkpoint - whatever was registered in first afterRestore is now notified
-        Core.checkpointRestore();
+        CRaCMXBean.getCRaCMXBean().checkpointRestore();
         assertTrue(recorder.stream().anyMatch("jdk-create-child2-before"::equals));
         assertTrue(recorder.stream().anyMatch("regular2-child2-before"::equals));
     }
@@ -122,7 +126,7 @@ public class ContextOrderTest {
         AtomicReference<Throwable> exceptionHolder = new AtomicReference<>();
         assertWaits(() -> {
             try {
-                Core.checkpointRestore();
+                CRaCMXBean.getCRaCMXBean().checkpointRestore();
             } catch (Exception e) {
                 exceptionHolder.set(e);
             }
@@ -175,7 +179,7 @@ public class ContextOrderTest {
         SECURE_RANDOM.getContext().register(new MockResource(recorder, "jdk2"));
 
         try {
-            Core.checkpointRestore();
+            CRaCMXBean.getCRaCMXBean().checkpointRestore();
             fail("Expected to throw CheckpointException");
         } catch (CheckpointException e) {
             assertEquals(4, e.getSuppressed().length);
@@ -243,7 +247,7 @@ public class ContextOrderTest {
             }
         });
 
-        Core.checkpointRestore();
+        CRaCMXBean.getCRaCMXBean().checkpointRestore();
         assertEquals("normal-before", recorder.poll());
         assertEquals("child-before", recorder.poll());
         assertEquals("child-after", recorder.poll());

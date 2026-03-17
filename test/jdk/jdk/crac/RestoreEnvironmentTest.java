@@ -21,6 +21,7 @@
  * have any questions.
  */
 
+import jdk.crac.management.CRaCMXBean;
 import jdk.test.lib.crac.CracBuilder;
 import jdk.test.lib.crac.CracTest;
 
@@ -61,7 +62,7 @@ public class RestoreEnvironmentTest implements CracTest {
             System.out.println("(before checkpoint) " + TEST_VAR_NAME + i + "=" + testVar);
         }
 
-        jdk.crac.Core.checkpointRestore();
+        CRaCMXBean.getCRaCMXBean().checkpointRestore();
 
         for (int i = 0; i < 3; ++i) {
             var testVar = java.lang.System.getenv(TEST_VAR_NAME + i);

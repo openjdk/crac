@@ -23,7 +23,7 @@
 
 import java.io.File;
 
-import jdk.crac.Core;
+import jdk.crac.management.CRaCMXBean;
 import jdk.test.lib.crac.CracBuilder;
 import jdk.test.lib.crac.CracEngine;
 import jdk.test.lib.crac.CracTest;
@@ -55,7 +55,7 @@ public class JvmtiEventTest implements CracTest {
     @Override
     public void exec() throws Exception {
         System.out.println("Started");
-        Core.checkpointRestore();
+        CRaCMXBean.getCRaCMXBean().checkpointRestore();
         System.out.println(RESTORED_MESSAGE);
     }
 }

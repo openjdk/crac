@@ -24,9 +24,10 @@
 import java.lang.reflect.Method;
 
 import jdk.crac.Context;
-import jdk.crac.Core;
 import jdk.crac.Resource;
 import static jdk.test.lib.Asserts.*;
+
+import jdk.crac.management.CRaCMXBean;
 import jdk.test.lib.Utils;
 import jdk.test.lib.crac.CracBuilder;
 import jdk.test.lib.crac.CracEngine;
@@ -115,9 +116,9 @@ public class RecompilationFlagsTest implements CracTest {
                 }
             }
         };
-        Core.getGlobalContext().register(resource);
+        Context.getGlobalContext().register(resource);
 
-        Core.checkpointRestore();
+        CRaCMXBean.getCRaCMXBean().checkpointRestore();
 
         if (delayMs > 0) {
             assertEquals(

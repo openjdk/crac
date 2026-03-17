@@ -21,7 +21,7 @@
  * have any questions.
  */
 
-import jdk.crac.Core;
+import jdk.crac.management.CRaCMXBean;
 import jdk.test.lib.crac.*;
 
 import static jdk.test.lib.Asserts.*;
@@ -51,7 +51,7 @@ public class PauseEngineTest implements CracTest {
     @Override
     public void exec() throws Exception {
         final long before = System.nanoTime();
-        Core.checkpointRestore();
+        CRaCMXBean.getCRaCMXBean().checkpointRestore();
         final long after = System.nanoTime();
         final long pauseTimeMs = (after - before) / 1_000_000;
         assertGTE(pauseTimeMs, PAUSE_TIME_MS,

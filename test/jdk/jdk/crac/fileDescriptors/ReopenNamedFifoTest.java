@@ -21,7 +21,7 @@
  * questions.
  */
 
-import jdk.crac.Core;
+import jdk.crac.management.CRaCMXBean;
 import jdk.internal.crac.OpenResourcePolicies;
 import jdk.test.lib.crac.CracBuilder;
 import jdk.test.lib.crac.CracTest;
@@ -85,7 +85,7 @@ public class ReopenNamedFifoTest extends FDPolicyTestBase implements CracTest {
             char[] buf = new char[6];
             assertEquals(buf.length, reader.read(buf));
             assertEquals("Hello ", new String(buf));
-            Core.checkpointRestore();
+            CRaCMXBean.getCRaCMXBean().checkpointRestore();
             System.out.println("RESTORED");
             assertEquals(buf.length, reader.read(buf));
             assertEquals("world!", new String(buf));

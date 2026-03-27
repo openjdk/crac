@@ -92,11 +92,17 @@ class outputStream : public CHeapObjBase {
    // Automatic indentation. Returns old autoindent state.
    bool set_autoindent(bool value);
 
+ private:
+   void reset();
+
  public:
    class TestSupport;  // Unit test support
 
    // creation
    outputStream(bool has_time_stamps = false);
+   outputStream(outputStream &&o);
+
+   outputStream& operator=(outputStream &&o);
 
    // indentation
    outputStream& indent();
@@ -296,7 +302,7 @@ class fileStream : public outputStream {
   fileStream(const char* file_name);
   fileStream(const char* file_name, const char* opentype);
   fileStream(FILE* file, bool need_close = false) { _file = file; _need_close = need_close; }
-  fileStream(fileStream&& o) {
+  fileStream(fileStream&& o): outputStream(std::move(o)) {
     _file = o._file;
     _need_close = o._need_close;
     o._file = nullptr;
@@ -304,6 +310,10 @@ class fileStream : public outputStream {
   }
   ~fileStream();
   fileStream& operator=(fileStream&& o) {
+    if (this == &o) {
+      return *this;
+    }
+    outputStream::operator=(std::move(o));
     close();
     _file = o._file;
     _need_close = o._need_close;

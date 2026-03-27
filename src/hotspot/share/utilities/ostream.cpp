@@ -43,6 +43,16 @@
 extern "C" void jio_print(const char* s, size_t len);
 extern "C" int jio_printf(const char *fmt, ...);
 
+void outputStream::reset() {
+  _indentation = 0;
+  _autoindent = false;
+  _position = 0;
+  _precount = 0;
+  // keep o._stamp
+  _scratch = nullptr;
+  _scratch_len = 0;
+}
+
 outputStream::outputStream(bool has_time_stamps) {
   _position    = 0;
   _precount    = 0;
@@ -51,6 +61,27 @@ outputStream::outputStream(bool has_time_stamps) {
   _scratch     = nullptr;
   _scratch_len = 0;
   if (has_time_stamps)  _stamp.update();
+}
+
+outputStream::outputStream(outputStream &&o): _indentation(o._indentation), _autoindent(o._autoindent),
+  _position(o._position), _precount(o._precount), _scratch(o._scratch), _scratch_len(o._scratch_len) {
+  _stamp = o._stamp;
+  o.reset();
+}
+
+outputStream& outputStream::operator=(outputStream &&o) {
+  if (this == &o) {
+    return *this;
+  }
+  this->_indentation = o._indentation;
+  this->_autoindent = o._autoindent;
+  this->_position = o._position;
+  this->_precount = o._precount;
+  this->_stamp = o._stamp;
+  this->_scratch = o._scratch;
+  this->_scratch_len = o._scratch_len;
+  o.reset();
+  return *this;
 }
 
 bool outputStream::update_position(const char* s, size_t len) {

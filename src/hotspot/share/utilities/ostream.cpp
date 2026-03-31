@@ -43,16 +43,6 @@
 extern "C" void jio_print(const char* s, size_t len);
 extern "C" int jio_printf(const char *fmt, ...);
 
-void outputStream::reset() {
-  _indentation = 0;
-  _autoindent = false;
-  _position = 0;
-  _precount = 0;
-  // keep o._stamp
-  _scratch = nullptr;
-  _scratch_len = 0;
-}
-
 outputStream::outputStream(bool has_time_stamps) {
   _position    = 0;
   _precount    = 0;
@@ -61,27 +51,6 @@ outputStream::outputStream(bool has_time_stamps) {
   _scratch     = nullptr;
   _scratch_len = 0;
   if (has_time_stamps)  _stamp.update();
-}
-
-outputStream::outputStream(outputStream &&o): _indentation(o._indentation), _autoindent(o._autoindent),
-  _position(o._position), _precount(o._precount), _scratch(o._scratch), _scratch_len(o._scratch_len) {
-  _stamp = o._stamp;
-  o.reset();
-}
-
-outputStream& outputStream::operator=(outputStream &&o) {
-  if (this == &o) {
-    return *this;
-  }
-  this->_indentation = o._indentation;
-  this->_autoindent = o._autoindent;
-  this->_position = o._position;
-  this->_precount = o._precount;
-  this->_stamp = o._stamp;
-  this->_scratch = o._scratch;
-  this->_scratch_len = o._scratch_len;
-  o.reset();
-  return *this;
 }
 
 bool outputStream::update_position(const char* s, size_t len) {
@@ -614,17 +583,8 @@ const char* make_log_name(const char* log_name, const char* force_directory) {
                                 timestr);
 }
 
-fileStream::fileStream(const char* file_name) {
-  _file = os::fopen(file_name, "w");
-  if (_file != nullptr) {
-    _need_close = true;
-  } else {
-    warning("Cannot open file %s due to %s\n", file_name, os::strerror(errno));
-    _need_close = false;
-  }
-}
-
-fileStream::fileStream(const char* file_name, const char* opentype) {
+bool fileStream::open(const char* file_name, const char* opentype) {
+  guarantee(_file == nullptr && _need_close == false, "should call on closed instance");
   _file = os::fopen(file_name, opentype);
   if (_file != nullptr) {
     _need_close = true;
@@ -632,6 +592,7 @@ fileStream::fileStream(const char* file_name, const char* opentype) {
     warning("Cannot open file %s due to %s\n", file_name, os::strerror(errno));
     _need_close = false;
   }
+  return _need_close;
 }
 
 void fileStream::write(const char* s, size_t len) {

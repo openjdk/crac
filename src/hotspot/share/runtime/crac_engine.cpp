@@ -361,28 +361,28 @@ bool CracEngine::is_initialized() const {
   return _lib != nullptr;
 }
 
-static fileStream open_engine_file(const char *dir, const char *opentype) {
+static bool open_engine_file(const char* dir, const char* opentype, fileStream& fs) {
 #ifndef PATH_MAX
 # define PATH_MAX 1024
 #endif
   char path[PATH_MAX];
   os::snprintf_checked(path, sizeof(path), "%s/engine", dir);
-  return fileStream(path, opentype);
+  return fs.open(path, opentype);
 }
 
-static bool record_engine(const char *name, const char *dir) {
+static bool record_engine(const char* name, const char* dir) {
   assert(dir != nullptr, "Not configured");
-  fileStream fs = open_engine_file(dir, "w");
-  if (!fs.is_open()) {
+  fileStream fs;
+  if (!open_engine_file(dir, "w", fs)) {
     return false;
   }
   fs.write(name, strlen(name));
   return true;
 }
 
-static bool check_engine(const char *name, const char *dir) {
-  fileStream fs = open_engine_file(dir, "r");
-  if (!fs.is_open()) {
+static bool check_engine(const char* name, const char* dir) {
+  fileStream fs;
+  if (!open_engine_file(dir, "r", fs)) {
     return false;
   }
   char buf[CracEngine::MAX_ENGINE_LENGTH];

@@ -293,8 +293,8 @@ class fileStream : public outputStream {
   bool  _need_close;
  public:
   fileStream() { _file = nullptr; _need_close = false; }
-  fileStream(const char* file_name): fileStream() { open(file_name, "w"); };
-  fileStream(const char* file_name, const char* opentype): fileStream() { open(file_name, opentype); };
+  fileStream(const char* file_name): fileStream() { open(file_name, "w"); }
+  fileStream(const char* file_name, const char* opentype): fileStream() { open(file_name, opentype); }
   fileStream(FILE* file, bool need_close = false) { _file = file; _need_close = need_close; }
   ~fileStream();
   bool open(const char* file_name, const char* opentype);

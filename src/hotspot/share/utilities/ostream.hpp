@@ -293,24 +293,11 @@ class fileStream : public outputStream {
   bool  _need_close;
  public:
   fileStream() { _file = nullptr; _need_close = false; }
-  fileStream(const char* file_name);
-  fileStream(const char* file_name, const char* opentype);
+  fileStream(const char* file_name): fileStream() { open(file_name, "w"); }
+  fileStream(const char* file_name, const char* opentype): fileStream() { open(file_name, opentype); }
   fileStream(FILE* file, bool need_close = false) { _file = file; _need_close = need_close; }
-  fileStream(fileStream&& o) {
-    _file = o._file;
-    _need_close = o._need_close;
-    o._file = nullptr;
-    o._need_close = false;
-  }
   ~fileStream();
-  fileStream& operator=(fileStream&& o) {
-    close();
-    _file = o._file;
-    _need_close = o._need_close;
-    o._file = nullptr;
-    o._need_close = false;
-    return *this;
-  }
+  bool open(const char* file_name, const char* opentype);
   bool is_open() const { return _file != nullptr; }
   virtual void write(const char* c, size_t len);
   // unlike other classes in this file, fileStream can perform input as well as output

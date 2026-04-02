@@ -583,17 +583,8 @@ const char* make_log_name(const char* log_name, const char* force_directory) {
                                 timestr);
 }
 
-fileStream::fileStream(const char* file_name) {
-  _file = os::fopen(file_name, "w");
-  if (_file != nullptr) {
-    _need_close = true;
-  } else {
-    warning("Cannot open file %s due to %s\n", file_name, os::strerror(errno));
-    _need_close = false;
-  }
-}
-
-fileStream::fileStream(const char* file_name, const char* opentype) {
+bool fileStream::open(const char* file_name, const char* opentype) {
+  guarantee(_file == nullptr && _need_close == false, "should call on closed instance");
   _file = os::fopen(file_name, opentype);
   if (_file != nullptr) {
     _need_close = true;
@@ -601,6 +592,7 @@ fileStream::fileStream(const char* file_name, const char* opentype) {
     warning("Cannot open file %s due to %s\n", file_name, os::strerror(errno));
     _need_close = false;
   }
+  return _need_close;
 }
 
 void fileStream::write(const char* s, size_t len) {

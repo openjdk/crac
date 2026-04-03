@@ -24,6 +24,7 @@
  */
 
 import jdk.crac.management.CRaCMXBean;
+import jdk.test.lib.Platform;
 import jdk.test.lib.crac.CracBuilder;
 import jdk.test.lib.crac.CracEngine;
 import jdk.test.lib.crac.CracTest;
@@ -53,7 +54,10 @@ public class EngineFailureTest implements CracTest {
         try (final var p = builder.startRestoreWithArgs(List.of(), List.of(MissingMetadataTest.Main.class.getName()))) {
             p.outputAnalyzer()
                     .shouldHaveExitValue(0)
-                    .shouldContain("restore requires -XX:CRaCEngineOptions=pause=true").shouldContain(MAIN_MSG);
+                    .shouldContain(Platform.isLinux() ?
+                            "restore requires -XX:CRaCEngineOptions=pause=true" :
+                            "restore is not supported")
+                    .shouldContain(MAIN_MSG);
         }
     }
 

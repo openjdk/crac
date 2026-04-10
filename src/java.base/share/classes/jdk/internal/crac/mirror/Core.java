@@ -32,6 +32,7 @@ import jdk.internal.crac.JDKResource;
 import jdk.internal.crac.LoggerContainer;
 import jdk.internal.crac.mirror.impl.*;
 import jdk.internal.misc.InnocuousThread;
+import jdk.internal.module.Modules;
 
 import java.io.PrintWriter;
 import java.io.StringWriter;
@@ -340,7 +341,10 @@ public class Core {
 
     private static void tryStartManagementAgent() {
         try {
-            Class<?> agentClass = Class.forName("jdk.internal.agent.Agent");
+            // Force loading the module, needed when running in JRE. The classes will be
+            // loaded in the platform class loader (.getClassLoader() returns null)
+            Modules.loadModule("jdk.management.agent");
+            Class<?> agentClass = ClassLoader.getPlatformClassLoader().loadClass("jdk.internal.agent.Agent");
             Method startAgent = agentClass.getMethod("startAgent");
             startAgent.setAccessible(true);
             startAgent.invoke(null);

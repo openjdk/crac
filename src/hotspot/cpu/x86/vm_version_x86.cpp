@@ -963,8 +963,20 @@ VM_Version::VM_Features VM_Version::CPUFeatures_parse(const char *str) {
   vm_exit_during_initialization("This OS does not support any arch-specific -XX:CPUFeatures options");
   return {};
 #else // LINUX
-  int count = VM_Version::VM_Features::features_bitmap_element_count();
+
   VM_Version::VM_Features retval;
+#ifdef AMD64
+  const char *microarch_prefix="x86-64-v";
+  const size_t microarch_prefix_len = strlen(microarch_prefix);
+  if (strncmp(str, microarch_prefix, strlen(microarch_prefix)) == 0 &&
+    (strlen(str) == microarch_prefix_len + 1)) {
+      set_michroarch_features(str[microarch_prefix_len], retval);
+
+      return retval;
+  }
+#endif
+
+  int count = VM_Version::VM_Features::features_bitmap_element_count();
   const char *str_orig = str;
   for (int idx = 0;; ++idx) {
     static_assert(sizeof(uint64_t) == sizeof(unsigned long long), "unexpected arch");
@@ -993,6 +1005,37 @@ VM_Version::VM_Features VM_Version::CPUFeatures_parse(const char *str) {
   return {};
 #endif // LINUX
 }
+
+#if defined(LINUX) && defined(AMD64)
+static void VM_Version::set_michroarch_features(const char microarch_level, VM_Version::VM_Features &features) {
+  switch(microarch_level) {
+    case '4':
+    case '3':
+    case '2':
+      features.set_feature(CPU_CMPXCHG16);
+      features.set_feature(CPU_LAHFSAHF);
+      features.set_feature(CPU_POPCNT);
+      features.set_feature(CPU_SSE3);
+      features.set_feature(CPU_SSE4_1);
+      features.set_feature(CPU_SSE4_2);
+      features.set_feature(CPU_SSSE3);
+    case '1':
+      features.set_feature(CPU_CMOV);
+      features.set_feature(CPU_CX8);
+      features.set_feature(CPU_FPU);
+      features.set_feature(CPU_FXSR);
+      features.set_feature(CPU_MMX);
+      // features.set_feature(CPU_OSFXSR);
+      // features.set_feature(CPU_SCE);
+      features.set_feature(CPU_SSE);
+      features.set_feature(CPU_SSE2);
+      break;
+    default:
+    // TODO should not happen
+      break;
+  }
+}
+#endif
 
 bool VM_Version::_ignore_glibc_not_using = false;
 #ifdef LINUX
@@ -3470,6 +3513,9 @@ VM_Version::VM_Features VM_Version::CpuidInfo::feature_flags() const {
     vm_features.set_feature(CPU_CMOV);
   if (std_cpuid1_edx.bits.clflush != 0)
     vm_features.set_feature(CPU_FLUSH);
+  if (std_cpuid1_edx.bits.fpu != 0 || (is_amd_family() &&
+    ext_cpuid1_edx.bits.fpu != 0))
+    vm_features.set_feature(CPU_FPU);
   // clflush should always be available on x86_64
   // if not we are in real trouble because we rely on it
   // to flush the code cache.

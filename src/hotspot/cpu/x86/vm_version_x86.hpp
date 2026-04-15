@@ -105,7 +105,8 @@ class VM_Version : public Abstract_VM_Version {
   union StdCpuid1Edx {
     uint32_t value;
     struct {
-      uint32_t          : 4,
+      uint32_t fpu      : 1,
+                        : 3,
                tsc      : 1,
                         : 3,
                cmpxchg8 : 1,
@@ -181,7 +182,8 @@ class VM_Version : public Abstract_VM_Version {
   union ExtCpuid1Edx {
     uint32_t value;
     struct {
-      uint32_t           : 22,
+      uint32_t fpu       : 1,
+                         : 21,
                mmx_amd   : 1,
                mmx       : 1,
                fxsr      : 1,
@@ -483,7 +485,8 @@ protected:
     decl(LAHFSAHF,          lahfsahf,          73) /* Also known in cpuinfo as lahf_lm and in glibc as lahf64_sahf64 */ \
     decl(HTT,               htt,               74) /* hotspot calls it 'ht' but that is affected by threads_per_core() */ \
     decl(XSAVEC,            xsavec,            75) \
-    decl(AVX_Fast_Unaligned_Load, avx_fast_unaligned_load, 76)
+    decl(AVX_Fast_Unaligned_Load, avx_fast_unaligned_load, 76) \
+    decl(FPU,               fpu,               77)
 
 #define DECLARE_CPU_FEATURE_FLAG(id, name, bit) CPU_##id = (bit),
     CPU_FEATURE_FLAGS(DECLARE_CPU_FEATURE_FLAG)
@@ -849,6 +852,11 @@ private:
   static void get_processor_features_hotspot();
 
   static VM_Features CPUFeatures_parse(const char *str);
+
+#if defined(LINUX) && defined(AMD64)
+  static void set_michroarch_features(const char microarch_level, VM_Version::VM_Features &features);
+#endif
+
 #ifdef LINUX
   static bool glibc_not_using();
   static bool glibc_env_set(char *disable_str);

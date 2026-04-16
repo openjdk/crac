@@ -1015,6 +1015,7 @@ void VM_Version::set_microarch_features(const char microarch_level, VM_Version::
       features.set_feature(CPU_AVX512CD);
       features.set_feature(CPU_AVX512DQ);
       features.set_feature(CPU_AVX512VL);
+      /* FALLTHROUGH */
     case '3':
       features.set_feature(CPU_AVX);
       features.set_feature(CPU_AVX2);
@@ -1025,6 +1026,7 @@ void VM_Version::set_microarch_features(const char microarch_level, VM_Version::
       features.set_feature(CPU_LZCNT);
       features.set_feature(CPU_MOVBE);
       features.set_feature(CPU_OSXSAVE);
+      /* FALLTHROUGH */
     case '2':
       features.set_feature(CPU_CMPXCHG16);
       features.set_feature(CPU_LAHFSAHF);
@@ -1033,20 +1035,19 @@ void VM_Version::set_microarch_features(const char microarch_level, VM_Version::
       features.set_feature(CPU_SSE4_1);
       features.set_feature(CPU_SSE4_2);
       features.set_feature(CPU_SSSE3);
+      /* FALLTHROUGH */
     case '1':
       features.set_feature(CPU_CMOV);
       features.set_feature(CPU_CX8);
       features.set_feature(CPU_FPU);
       features.set_feature(CPU_FXSR);
       features.set_feature(CPU_MMX);
-      // features.set_feature(CPU_OSFXSR);
-      // features.set_feature(CPU_SCE);
       features.set_feature(CPU_SSE);
       features.set_feature(CPU_SSE2);
       break;
     default:
-    vm_exit_during_initialization(err_msg("VM option 'CPUFeatures=x86-64-v%c' is invalid:"
-      "supported levels are x86-64-v1 through x86-64-v4", microarch_level));
+      vm_exit_during_initialization(err_msg("VM option 'CPUFeatures=x86-64-v%c' is invalid: "
+        "supported levels are x86-64-v1 through x86-64-v4", microarch_level));
   }
 }
 #endif

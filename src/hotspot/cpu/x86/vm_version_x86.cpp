@@ -1045,8 +1045,8 @@ void VM_Version::set_microarch_features(const char microarch_level, VM_Version::
       features.set_feature(CPU_SSE2);
       break;
     default:
-    // TODO should not happen
-      break;
+    vm_exit_during_initialization(err_msg("VM option 'CPUFeatures=%s' is invalid:"
+      "supported levels are x86-64-v1 through x86-64-v4", str));
   }
 }
 #endif
@@ -1383,6 +1383,7 @@ bool VM_Version::glibc_not_using() {
   GLIBC_UNSUPPORTED(SSE              );
   GLIBC_UNSUPPORTED(CMPXCHG16        );
   GLIBC_UNSUPPORTED(LAHFSAHF         );
+  GLIBC_UNSUPPORTED(FPU         );
 #undef GLIBC_UNSUPPORTED
 
   VM_Version::VM_Features all_features;

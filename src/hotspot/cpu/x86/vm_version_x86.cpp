@@ -1045,8 +1045,8 @@ void VM_Version::set_microarch_features(const char microarch_level, VM_Version::
       features.set_feature(CPU_SSE2);
       break;
     default:
-    vm_exit_during_initialization(err_msg("VM option 'CPUFeatures=%s' is invalid:"
-      "supported levels are x86-64-v1 through x86-64-v4", str));
+    vm_exit_during_initialization(err_msg("VM option 'CPUFeatures=x86-64-v%c' is invalid:"
+      "supported levels are x86-64-v1 through x86-64-v4", microarch_level));
   }
 }
 #endif

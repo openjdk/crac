@@ -1007,7 +1007,7 @@ VM_Version::VM_Features VM_Version::CPUFeatures_parse(const char *str) {
 }
 
 #if defined(LINUX) && defined(AMD64)
-static void VM_Version::set_michroarch_features(const char microarch_level, VM_Version::VM_Features &features) {
+void VM_Version::set_michroarch_features(const char microarch_level, VM_Version::VM_Features &features) {
   switch(microarch_level) {
     case '4':
     case '3':

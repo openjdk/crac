@@ -1010,7 +1010,21 @@ VM_Version::VM_Features VM_Version::CPUFeatures_parse(const char *str) {
 void VM_Version::set_michroarch_features(const char microarch_level, VM_Version::VM_Features &features) {
   switch(microarch_level) {
     case '4':
+      features.set_feature(CPU_AVX512F);
+      features.set_feature(CPU_AVX512BW);
+      features.set_feature(CPU_AVX512CD);
+      features.set_feature(CPU_AVX512DQ);
+      features.set_feature(CPU_AVX512VL);
     case '3':
+      features.set_feature(CPU_AVX);
+      features.set_feature(CPU_AVX2);
+      features.set_feature(CPU_BMI1);
+      features.set_feature(CPU_BMI2);
+      features.set_feature(CPU_F16C);
+      features.set_feature(CPU_FMA);
+      features.set_feature(CPU_LZCNT);
+      features.set_feature(CPU_MOVBE);
+      features.set_feature(CPU_OSXSAVE);
     case '2':
       features.set_feature(CPU_CMPXCHG16);
       features.set_feature(CPU_LAHFSAHF);

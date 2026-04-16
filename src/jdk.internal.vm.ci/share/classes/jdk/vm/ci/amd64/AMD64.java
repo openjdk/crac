@@ -299,7 +299,8 @@ public class AMD64 extends Architecture {
         LAHFSAHF,
         HTT,
         XSAVEC,
-        AVX_Fast_Unaligned_Load
+        AVX_Fast_Unaligned_Load,
+        FPU
     }
 
     private final EnumSet<CPUFeature> features;

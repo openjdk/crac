@@ -70,7 +70,7 @@ public class CPUInfoTest {
                     "sha512",       "hybrid",           "fma4",              "movbe",
                     "osxsave",      "ibt",              "shstk",             "xsave",
                     "cmpxchg16",    "lahfsahf",         "htt",               "xsavec",
-                    "avx_fast_unaligned_load"
+                    "avx_fast_unaligned_load", "fpu"
                     );
             // @formatter:on
             // Checkstyle: resume

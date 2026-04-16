@@ -854,7 +854,7 @@ private:
   static VM_Features CPUFeatures_parse(const char *str);
 
 #if defined(LINUX) && defined(AMD64)
-  static void set_michroarch_features(const char microarch_level, VM_Version::VM_Features &features);
+  static void set_microarch_features(const char microarch_level, VM_Version::VM_Features &features);
 #endif
 
 #ifdef LINUX

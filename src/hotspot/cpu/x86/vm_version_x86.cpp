@@ -970,7 +970,7 @@ VM_Version::VM_Features VM_Version::CPUFeatures_parse(const char *str) {
   const size_t microarch_prefix_len = strlen(microarch_prefix);
   if (strncmp(str, microarch_prefix, strlen(microarch_prefix)) == 0 &&
     (strlen(str) == microarch_prefix_len + 1)) {
-      set_michroarch_features(str[microarch_prefix_len], retval);
+      set_microarch_features(str[microarch_prefix_len], retval);
 
       return retval;
   }
@@ -1007,7 +1007,7 @@ VM_Version::VM_Features VM_Version::CPUFeatures_parse(const char *str) {
 }
 
 #if defined(LINUX) && defined(AMD64)
-void VM_Version::set_michroarch_features(const char microarch_level, VM_Version::VM_Features &features) {
+void VM_Version::set_microarch_features(const char microarch_level, VM_Version::VM_Features &features) {
   switch(microarch_level) {
     case '4':
       features.set_feature(CPU_AVX512F);

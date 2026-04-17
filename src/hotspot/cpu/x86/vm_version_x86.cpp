@@ -944,17 +944,7 @@ VM_Version::VM_Features VM_Version::CPUFeatures_parse(const char *str) {
     // 32-bit x86 cannot rely on anything.
     VM_Version::VM_Features retval;
 #ifdef AMD64
-      // The following options are all in /proc/cpuinfo of one of the first 64-bit CPUs - Atom D2700 (and Opteron 1352): https://superuser.com/q/1572306/1015048
-    retval.set_feature(CPU_SSE); // enabled in 'gcc -Q --help=target', used by OpenJDK
-    retval.set_feature(CPU_SSE2); // enabled in 'gcc -Q --help=target', required by OpenJDK
-    retval.set_feature(CPU_FXSR); // enabled in 'gcc -Q --help=target', not used by OpenJDK
-    retval.set_feature(CPU_MMX); // enabled in 'gcc -Q --help=target', used only by 32-bit x86 OpenJDK
-    retval.set_feature(CPU_TSC); // not used by gcc, used by OpenJDK
-    retval.set_feature(CPU_CX8); // gcc detects it to set cpu "pentium" (=32-bit only), used by OpenJDK
-    retval.set_feature(CPU_CMOV); // gcc detects it to set cpu "pentiumpro" (=32-bit only), used by OpenJDK
-    retval.set_feature(CPU_FLUSH); // ="clflush" in cpuinfo, not used by gcc, required by OpenJDK
-    // CPU_MOVBE is disabled in 'gcc -Q --help=target' and for example i7-720QM does not support it
-    // CPU_LAHFSAHF is disabled in 'gcc -Q --help=target' and "Early Intel Pentium 4 CPUs with Intel 64 support ... lacked the LAHF and SAHF instructions"
+    set_generic_features(retval);
 #endif // AMD64
     return retval;
 #endif // LINUX
@@ -1036,13 +1026,7 @@ void VM_Version::get_microarch_features(const char microarch_level) {
       features.set_feature(CPU_SSSE3);
       /* FALLTHROUGH */
     case '1':
-      features.set_feature(CPU_CMOV);
-      features.set_feature(CPU_CX8);
-      features.set_feature(CPU_FPU);
-      features.set_feature(CPU_FXSR);
-      features.set_feature(CPU_MMX);
-      features.set_feature(CPU_SSE);
-      features.set_feature(CPU_SSE2);
+      set_generic_features(features);
       break;
     default:
       vm_exit_during_initialization(err_msg("VM option 'CPUFeatures=x86-64-v%c' is invalid: "
@@ -3530,9 +3514,6 @@ VM_Version::VM_Features VM_Version::CpuidInfo::feature_flags() const {
     vm_features.set_feature(CPU_CMOV);
   if (std_cpuid1_edx.bits.clflush != 0)
     vm_features.set_feature(CPU_FLUSH);
-  if (std_cpuid1_edx.bits.fpu != 0 || (is_amd_family() &&
-    ext_cpuid1_edx.bits.fpu != 0))
-    vm_features.set_feature(CPU_FPU);
   // clflush should always be available on x86_64
   // if not we are in real trouble because we rely on it
   // to flush the code cache.

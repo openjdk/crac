@@ -105,8 +105,7 @@ class VM_Version : public Abstract_VM_Version {
   union StdCpuid1Edx {
     uint32_t value;
     struct {
-      uint32_t fpu      : 1,
-                        : 3,
+      uint32_t          : 4,
                tsc      : 1,
                         : 3,
                cmpxchg8 : 1,
@@ -182,8 +181,7 @@ class VM_Version : public Abstract_VM_Version {
   union ExtCpuid1Edx {
     uint32_t value;
     struct {
-      uint32_t fpu       : 1,
-                         : 21,
+      uint32_t           : 22,
                mmx_amd   : 1,
                mmx       : 1,
                fxsr      : 1,
@@ -485,8 +483,7 @@ protected:
     decl(LAHFSAHF,          lahfsahf,          73) /* Also known in cpuinfo as lahf_lm and in glibc as lahf64_sahf64 */ \
     decl(HTT,               htt,               74) /* hotspot calls it 'ht' but that is affected by threads_per_core() */ \
     decl(XSAVEC,            xsavec,            75) \
-    decl(AVX_Fast_Unaligned_Load, avx_fast_unaligned_load, 76) \
-    decl(FPU,               fpu,               77)
+    decl(AVX_Fast_Unaligned_Load, avx_fast_unaligned_load, 76)
 
 #define DECLARE_CPU_FEATURE_FLAG(id, name, bit) CPU_##id = (bit),
     CPU_FEATURE_FLAGS(DECLARE_CPU_FEATURE_FLAG)
@@ -855,6 +852,19 @@ private:
 
 #if defined(LINUX) && defined(AMD64)
   static void get_microarch_features(const char microarch_level);
+
+  // The following options are all in /proc/cpuinfo of one of the first 64-bit CPUs - Atom D2700 (and Opteron 1352): https://superuser.com/q/1572306/1015048
+  #define set_generic_features(features) \  
+    features.set_feature(CPU_SSE); /* enabled in 'gcc -Q --help=target', used by OpenJDK */ \
+    features.set_feature(CPU_SSE2); /* enabled in 'gcc -Q --help=target', required by OpenJDK */ \
+    features.set_feature(CPU_FXSR); /* enabled in 'gcc -Q --help=target', not used by OpenJDK */ \
+    features.set_feature(CPU_MMX); /* enabled in 'gcc -Q --help=target', used only by 32-bit x86 OpenJDK */ \
+    features.set_feature(CPU_TSC); /* not used by gcc, used by OpenJDK */ \
+    features.set_feature(CPU_CX8); /* gcc detects it to set cpu "pentium" (=32-bit only), used by OpenJDK */ \
+    features.set_feature(CPU_CMOV); /* gcc detects it to set cpu "pentiumpro" (=32-bit only), used by OpenJDK */ \
+    features.set_feature(CPU_FLUSH); /* ="clflush" in cpuinfo, not used by gcc, required by OpenJDK */
+    // CPU_MOVBE is disabled in 'gcc -Q --help=target' and for example i7-720QM does not support it
+    // CPU_LAHFSAHF is disabled in 'gcc -Q --help=target' and "Early Intel Pentium 4 CPUs with Intel 64 support ... lacked the LAHF and SAHF instructions"
 #endif
 
 #ifdef LINUX

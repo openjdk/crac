@@ -995,7 +995,7 @@ VM_Version::VM_Features VM_Version::CPUFeatures_parse(const char *str) {
 }
 
 #if defined(LINUX) && defined(AMD64)
-void VM_Version::get_microarch_features(const char microarch_level) {
+VM_Version::VM_Features VM_Version::get_microarch_features(const char microarch_level) {
   VM_Version::VM_Features features;
   switch(microarch_level) {
     case '4':
@@ -1026,6 +1026,7 @@ void VM_Version::get_microarch_features(const char microarch_level) {
       features.set_feature(CPU_SSSE3);
       /* FALLTHROUGH */
     case '1':
+      // generic and x86-64-v1 have the same set of features
       set_generic_features(features);
       break;
     default:

@@ -1370,7 +1370,6 @@ bool VM_Version::glibc_not_using() {
   GLIBC_UNSUPPORTED(SSE              );
   GLIBC_UNSUPPORTED(CMPXCHG16        );
   GLIBC_UNSUPPORTED(LAHFSAHF         );
-  GLIBC_UNSUPPORTED(FPU         );
 #undef GLIBC_UNSUPPORTED
 
   VM_Version::VM_Features all_features;

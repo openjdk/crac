@@ -964,19 +964,17 @@ VM_Version::VM_Features VM_Version::CPUFeatures_parse(const char *str) {
   return {};
 #else // LINUX
 
-  VM_Version::VM_Features retval;
 #ifdef AMD64
   const char *microarch_prefix="x86-64-v";
   const size_t microarch_prefix_len = strlen(microarch_prefix);
   if (strncmp(str, microarch_prefix, strlen(microarch_prefix)) == 0 &&
     (strlen(str) == microarch_prefix_len + 1)) {
-      set_microarch_features(str[microarch_prefix_len], retval);
-
-      return retval;
+      return get_microarch_features(str[microarch_prefix_len]);
   }
 #endif
 
   int count = VM_Version::VM_Features::features_bitmap_element_count();
+  VM_Version::VM_Features retval;
   const char *str_orig = str;
   for (int idx = 0;; ++idx) {
     static_assert(sizeof(uint64_t) == sizeof(unsigned long long), "unexpected arch");
@@ -1007,7 +1005,8 @@ VM_Version::VM_Features VM_Version::CPUFeatures_parse(const char *str) {
 }
 
 #if defined(LINUX) && defined(AMD64)
-void VM_Version::set_microarch_features(const char microarch_level, VM_Version::VM_Features &features) {
+void VM_Version::get_microarch_features(const char microarch_level) {
+  VM_Version::VM_Features features;
   switch(microarch_level) {
     case '4':
       features.set_feature(CPU_AVX512F);
@@ -1049,6 +1048,8 @@ void VM_Version::set_microarch_features(const char microarch_level, VM_Version::
       vm_exit_during_initialization(err_msg("VM option 'CPUFeatures=x86-64-v%c' is invalid: "
         "supported levels are x86-64-v1 through x86-64-v4", microarch_level));
   }
+
+  return features;
 }
 #endif
 

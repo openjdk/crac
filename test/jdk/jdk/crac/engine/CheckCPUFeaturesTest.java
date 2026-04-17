@@ -49,6 +49,23 @@ import static jdk.test.lib.Asserts.*;
  * @run driver jdk.test.lib.crac.CracTest ignore  exact             fail-x86
  * @run driver jdk.test.lib.crac.CracTest ignore  skip              fail
  * @run driver jdk.test.lib.crac.CracTest ignore  skip-experimental pass
+ * @run driver jdk.test.lib.crac.CracTest x86-64-v1 compatible      pass
+ * @run driver jdk.test.lib.crac.CracTest x86-64-v1 exact           fail-x86
+ * @run driver jdk.test.lib.crac.CracTest x86-64-v1 skip            fail
+ * @run driver jdk.test.lib.crac.CracTest x86-64-v1 skip-experimental pass
+ * @run driver jdk.test.lib.crac.CracTest x86-64-v2 compatible      pass
+ * @run driver jdk.test.lib.crac.CracTest x86-64-v2 exact           fail-x86
+ * @run driver jdk.test.lib.crac.CracTest x86-64-v2 skip            fail
+ * @run driver jdk.test.lib.crac.CracTest x86-64-v2 skip-experimental pass
+ * @run driver jdk.test.lib.crac.CracTest x86-64-v3 compatible      pass
+ * @run driver jdk.test.lib.crac.CracTest x86-64-v3 exact           fail-x86
+ * @run driver jdk.test.lib.crac.CracTest x86-64-v3 skip            fail
+ * @run driver jdk.test.lib.crac.CracTest x86-64-v3 skip-experimental pass
+ * @run driver jdk.test.lib.crac.CracTest x86-64-v4 compatible      pass
+ * @run driver jdk.test.lib.crac.CracTest x86-64-v4 exact           fail-x86
+ * @run driver jdk.test.lib.crac.CracTest x86-64-v4 skip            fail
+ * @run driver jdk.test.lib.crac.CracTest x86-64-v4 skip-experimental pass
+
  */
 public class CheckCPUFeaturesTest implements CracTest {
     @CracTestArg(0)

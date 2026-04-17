@@ -851,7 +851,7 @@ private:
   static VM_Features CPUFeatures_parse(const char *str);
 
 #if defined(LINUX) && defined(AMD64)
-  static void get_microarch_features(const char microarch_level);
+  static VM_Version::VM_Features get_microarch_features(const char microarch_level);
 
   // The following options are all in /proc/cpuinfo of one of the first 64-bit CPUs - Atom D2700 (and Opteron 1352): https://superuser.com/q/1572306/1015048
   #define set_generic_features(features) \  

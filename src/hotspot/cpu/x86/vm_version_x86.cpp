@@ -957,7 +957,7 @@ VM_Version::VM_Features VM_Version::CPUFeatures_parse(const char *str) {
 #ifdef AMD64
   const char *microarch_prefix="x86-64-v";
   const size_t microarch_prefix_len = strlen(microarch_prefix);
-  if (strncmp(str, microarch_prefix, strlen(microarch_prefix)) == 0 &&
+  if ((strncmp(str, microarch_prefix, microarch_prefix_len) == 0) &&
     (strlen(str) == microarch_prefix_len + 1)) {
       return get_microarch_features(str[microarch_prefix_len]);
   }

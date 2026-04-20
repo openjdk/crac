@@ -62,6 +62,23 @@ import static jdk.test.lib.Asserts.*;
  * @run driver jdk.test.lib.crac.CracTest x86-64-v3 skip            fail
  * @run driver jdk.test.lib.crac.CracTest x86-64-v3 skip-experimental pass
  */
+
+/*
+ * @test
+ * @summary Check combinations of CPUFeatures and CheckCPUFeatures VM options
+ * @requires (os.family == "linux")
+ * @requires (vm.cpu.features ~= ".*avx512f.*")
+ * @requires (vm.cpu.features ~= ".*avx512bw.*")
+ * @requires (vm.cpu.features ~= ".*avx512cd.*")
+ * @requires (vm.cpu.features ~= ".*avx512dq.*")
+ * @requires (vm.cpu.features ~= ".*avx512vl.*")
+ * @library /test/lib
+ * @build CheckCPUFeaturesTest
+ * @run driver jdk.test.lib.crac.CracTest x86-64-v4 compatible      pass
+ * @run driver jdk.test.lib.crac.CracTest x86-64-v4 exact           fail-x86
+ * @run driver jdk.test.lib.crac.CracTest x86-64-v4 skip            fail
+ * @run driver jdk.test.lib.crac.CracTest x86-64-v4 skip-experimental pass
+ */
 public class CheckCPUFeaturesTest implements CracTest {
     @CracTestArg(0)
     private String features;

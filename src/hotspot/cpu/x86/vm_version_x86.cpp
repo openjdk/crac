@@ -3677,8 +3677,10 @@ VM_Version::VM_Features VM_Version::CpuidInfo::feature_flags() const {
   if (std_cpuid1_ecx.bits.cmpxchg16 != 0) {
     vm_features.set_feature(CPU_CMPXCHG16);
   }
-  if (ext_cpuid1_ecx.bits.fma4 != 0) {
-    vm_features.set_feature(CPU_FMA4);
+  if (is_amd_family()) {
+    if (ext_cpuid1_ecx.bits.fma4 != 0) {
+      vm_features.set_feature(CPU_FMA4);
+    }
   }
   if (ext_cpuid1_ecx.bits.LahfSahf != 0) {
     vm_features.set_feature(CPU_LAHFSAHF);

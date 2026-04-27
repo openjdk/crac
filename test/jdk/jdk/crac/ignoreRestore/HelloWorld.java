@@ -26,7 +26,7 @@
 public class HelloWorld {
     public static final String MESSAGE = "Hello, world!";
 
-    public static void main() {
+    public static void main(String[] args) {
         System.out.println(MESSAGE);
     }
 }

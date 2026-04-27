@@ -37,6 +37,7 @@ import jdk.test.lib.util.FileUtils;
  * @requires (os.family == "linux")
  * @library /test/lib
  * @build HelloWorld
+ * @run main MissingMetadataTest
  */
 public class MissingMetadataTest {
     public static void main(String[] args) throws Exception {

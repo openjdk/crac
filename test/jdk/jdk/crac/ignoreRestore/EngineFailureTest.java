@@ -36,12 +36,10 @@ import java.util.List;
  * @summary If CRaCIgnoreRestoreIfUnavailable is specified and an error occurs inside the engine,
  *          VM should proceed without restoring.
  * @library /test/lib
- * @build EngineFailureTest
+ * @build EngineFailureTest HelloWorld
  * @run driver jdk.test.lib.crac.CracTest
  */
 public class EngineFailureTest implements CracTest {
-    private static final String MAIN_MSG = "Hello, world!";
-
     @Override
     public void test() throws Exception {
         final var builder = new CracBuilder()
@@ -51,24 +49,18 @@ public class EngineFailureTest implements CracTest {
         // Create a minimal C/R image (engine file, CPU features...)
         builder.doCheckpoint();
         // Try to restore without pause=true which should make simengine fail
-        try (final var p = builder.startRestoreWithArgs(List.of(), List.of(MissingMetadataTest.Main.class.getName()))) {
+        try (final var p = builder.startRestoreWithArgs(List.of(), List.of(HelloWorld.class.getName()))) {
             p.outputAnalyzer()
                     .shouldHaveExitValue(0)
                     .shouldContain(Platform.isLinux() ?
                             "restore requires -XX:CRaCEngineOptions=pause=true" :
                             "restore is not supported")
-                    .shouldContain(MAIN_MSG);
+                    .shouldContain(HelloWorld.MESSAGE);
         }
     }
 
     @Override
     public void exec() throws Exception {
         CRaCMXBean.getCRaCMXBean().checkpointRestore();
-    }
-
-    public static class Main {
-        public static void main(String[] args) throws Exception {
-            System.out.println(MAIN_MSG);
-        }
     }
 }

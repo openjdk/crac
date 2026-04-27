@@ -36,10 +36,9 @@ import jdk.test.lib.util.FileUtils;
  *          has wrong content or there are no CPU features recorded in the image VM should proceed without restoring.
  * @requires (os.family == "linux")
  * @library /test/lib
+ * @build HelloWorld
  */
 public class MissingMetadataTest {
-    private static final String MAIN_MSG = "Hello, world!";
-
     public static void main(String[] args) throws Exception {
         test("criuengine", null, "Cannot open file cr/engine");
         test("criuengine", "badengine", "Image format does not match");
@@ -61,15 +60,9 @@ public class MissingMetadataTest {
             Files.writeString(builder.imageDir().resolve("engine"), recordedEngine);
         }
 
-        builder.startRestoreWithArgs(List.of(), List.of(Main.class.getName(), "false"))
+        builder.startRestoreWithArgs(List.of(), List.of(HelloWorld.class.getName()))
             .outputAnalyzer()
             .shouldHaveExitValue(0)
-            .shouldContain(expectedMessage).shouldContain(MAIN_MSG);
-    }
-
-    public static class Main {
-        public static void main(String[] args) throws Exception {
-            System.out.println(MAIN_MSG);
-        }
+            .shouldContain(expectedMessage).shouldContain(HelloWorld.MESSAGE);
     }
 }

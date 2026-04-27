@@ -34,12 +34,11 @@ import jdk.test.lib.crac.CracBuilder;
  *          points to an invalid location VM should proceed without restoring.
  * @requires (os.family == "linux")
  * @library /test/lib
+ * @build HelloWorld
  * @run main InvalidImageLocationTest IMAGE_NOT_EXISTS
  * @run main InvalidImageLocationTest IMAGE_IS_NOT_DIR
  */
 public class InvalidImageLocationTest {
-    private static final String MAIN_MSG = "Hello, world!";
-
     private enum Variant {
         IMAGE_NOT_EXISTS,
         IMAGE_IS_NOT_DIR,
@@ -64,15 +63,9 @@ public class InvalidImageLocationTest {
             case IMAGE_IS_NOT_DIR -> "CRaCRestoreFrom=" + builder.imageDir() + " is not a directory";
         };
 
-        builder.startRestoreWithArgs(List.of(), List.of(Main.class.getName()))
+        builder.startRestoreWithArgs(List.of(), List.of(HelloWorld.class.getName()))
             .outputAnalyzer()
             .shouldHaveExitValue(0)
-            .shouldContain(errMsg).shouldContain(MAIN_MSG);
-    }
-
-    public static class Main {
-        public static void main(String[] args) {
-            System.out.println(MAIN_MSG);
-        }
+            .shouldContain(errMsg).shouldContain(HelloWorld.MESSAGE);
     }
 }

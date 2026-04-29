@@ -260,16 +260,16 @@
           "(Deprecated) Optimize heap options for long-running memory "     \
           "intensive apps")                                                 \
                                                                             \
-  product(size_t, ErgoHeapSizeLimit, 0,                                     \
+  product(size_t, ErgoHeapSizeLimit, 0, RESTORE_SETTABLE,                   \
           "Maximum ergonomically set heap size (in bytes); zero means use " \
           "(System RAM) * MaxRAMPercentage / 100")                          \
           range(0, max_uintx)                                               \
                                                                             \
-  product(double, MaxRAMPercentage, 25.0,                                   \
+  product(double, MaxRAMPercentage, 25.0, RESTORE_SETTABLE,                 \
           "Maximum percentage of real memory used for maximum heap size")   \
           range(0.0, 100.0)                                                 \
                                                                             \
-  product(double, MinRAMPercentage, 50.0,                                   \
+  product(double, MinRAMPercentage, 50.0, RESTORE_SETTABLE,                 \
           "Minimum percentage of real memory used for maximum heap"         \
           "size on systems with small physical memory size")                \
           range(0.0, 100.0)                                                 \

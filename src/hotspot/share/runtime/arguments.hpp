@@ -284,6 +284,7 @@ class Arguments : AllStatic {
   static size_t limit_heap_by_allocatable_memory(size_t size);
   // Setup heap size
   static void set_heap_size();
+  static size_t calculate_default_heap_size(size_t avail_mem);
 
   // Bytecode rewriting
   static void set_bytecode_flags();
@@ -406,6 +407,8 @@ class Arguments : AllStatic {
   static size_t conservative_max_heap_alignment() { return _conservative_max_heap_alignment; }
   // Return the maximum size a heap with compressed oops can take
   static size_t max_heap_for_compressed_oops();
+  // What would be the default heap size using ergo algorithm now
+  static size_t default_heap_size();
 
   // return a char* array containing all options
   static char** jvm_flags_array()          { return _jvm_flags_array; }

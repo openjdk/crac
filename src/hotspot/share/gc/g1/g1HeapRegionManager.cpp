@@ -34,6 +34,7 @@
 #include "jfr/jfrEvents.hpp"
 #include "logging/logStream.hpp"
 #include "memory/allocation.hpp"
+#include "runtime/arguments.hpp"
 #include "runtime/mutexLocker.hpp"
 #include "runtime/orderAccess.hpp"
 #include "utilities/bitMap.inline.hpp"
@@ -96,7 +97,18 @@ void G1HeapRegionManager::initialize(G1RegionToSpaceMapper* heap_storage,
 }
 
 void G1HeapRegionManager::after_restore() {
-  _max_available_regions = (uint) _regions.length();
+  uint old_regions = _max_available_regions;
+  if (CRaCHeapErgonomics) {
+    size_t new_regions = MAX2((size_t) _max_available_regions, Arguments::default_heap_size() / G1HeapRegion::GrainBytes);
+    _max_available_regions = (uint) MIN2(new_regions, _regions.length());
+  } else {
+    _max_available_regions = (uint) _regions.length();
+  }
+  if (old_regions != _max_available_regions) {
+    size_t new_size_in_megabytes = (_max_available_regions * G1HeapRegion::GrainBytes) >> 20;
+    log_info(gc, heap)("Changing heap threshold from %u to %u regions (%zu MB)",
+      old_regions, _max_available_regions, new_size_in_megabytes);
+  }
 }
 
 G1HeapRegion* G1HeapRegionManager::allocate_free_region(G1HeapRegionType type, uint requested_node_index) {

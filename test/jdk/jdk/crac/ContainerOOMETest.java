@@ -26,6 +26,7 @@ import jdk.test.lib.containers.docker.Common;
 import jdk.test.lib.containers.docker.DockerTestUtils;
 import jdk.test.lib.crac.CracContainerBuilder;
 import jdk.test.lib.crac.CracTest;
+import jdk.test.lib.crac.CracTestArg;
 
 import java.util.HashMap;
 
@@ -40,10 +41,28 @@ import static jdk.test.lib.Asserts.*;
  * @library /test/lib
  * @modules java.base/jdk.internal.platform
  * @build ContainerOOMETest
- * @run driver/timeout=120 jdk.test.lib.crac.CracTest
+ * @run driver/timeout=120 jdk.test.lib.crac.CracTest    -  -  -  -
+ * @run driver/timeout=120 jdk.test.lib.crac.CracTest 128M  -  -  -
+ * @run driver/timeout=120 jdk.test.lib.crac.CracTest 128M  - 1G  -
+ * @run driver/timeout=120 jdk.test.lib.crac.CracTest 128M  - 4G  -
+ * @run driver/timeout=120 jdk.test.lib.crac.CracTest 128M  - 1G  -
+ * @run driver/timeout=120 jdk.test.lib.crac.CracTest 128M 80 1G  -
+ * @run driver/timeout=120 jdk.test.lib.crac.CracTest 128M  - 1G 80
  */
 public class ContainerOOMETest implements CracTest {
     private static final String AFTER_OOME = "AFTER OOME";
+
+    @CracTestArg(0)
+    String checkpointHeapLimit;
+
+    @CracTestArg(1)
+    String checkpointMaxRAMPercentage;
+
+    @CracTestArg(2)
+    String restoreContainerMemory;
+
+    @CracTestArg(3)
+    String restoreMaxRAMPercentage;
 
     @Override
     public void test() throws Exception {
@@ -56,40 +75,68 @@ public class ContainerOOMETest implements CracTest {
                 .containerUsePrivileged(true)
                 // Without specific request for G1 we would get Serial on 256M
                 .vmOption("-XX:+UseG1GC")
-                .vmOption("-Xmx4G")
-                .vmOption("-XX:CRaCMaxHeapSizeBeforeCheckpoint=128M");
+                .vmOption("-Xmx4G");
+        addVmOption(builder, "-XX:CRaCMaxHeapSizeBeforeCheckpoint=", checkpointHeapLimit);
+        addVmOption(builder, "-XX:MaxRAMPercentage=", checkpointMaxRAMPercentage);
+        if ("-".equals(checkpointHeapLimit)) {
+            // Killed by Docker's OOME killer without JVM catching this
+            builder.doCheckpointToAnalyze()
+                    .shouldHaveExitValue(137)
+                    .stderrShouldNotContain(AFTER_OOME);
+            return;
+        }
         try {
             builder.doCheckpointToAnalyze()
                     .shouldHaveExitValue(137) // checkpoint
                     .stderrShouldContain(AFTER_OOME);
             builder.clearDockerOptions().clearVmOptions();
-            builder.doRestore();
+            if (!"-".equals(restoreContainerMemory)) {
+                builder.dockerOptions("-m", restoreContainerMemory);
+            }
+            addVmOption(builder, "-XX:MaxRAMPercentage=", restoreMaxRAMPercentage);
+            builder.doRestoreToAnalyze().shouldHaveExitValue(0);
         } finally {
             builder.ensureContainerKilled();
         }
     }
 
-    @Override
-    public void exec() throws Exception {
-        try {
-            lotOfAllocations();
-            fail("Should have OOMEd");
-        } catch (OutOfMemoryError error) {
-            // ignore the error
+    private void addVmOption(CracContainerBuilder builder, String option, String value) {
+        if (!"-".equals(value)) {
+            builder.vmOption(option + value);
         }
-        System.err.println(AFTER_OOME);
-        CRaCMXBean.getCRaCMXBean().checkpointRestore();
-        lotOfAllocations();
     }
 
-    private static void lotOfAllocations() {
-        HashMap<String, String> map = new HashMap<>();
-        for (int i = 0; i < 10000000; ++i) {
-            String str = String.valueOf(i);
-            map.put(str, str);
-            if (i % 1000000 == 0) {
-                System.err.println(i + ": " + Runtime.getRuntime().totalMemory());
-            }
+    @Override
+    public void exec() throws Exception {
+        assertGreaterThan(lotOfAllocations(5_000_000), 0, "Should have OOMEd");
+        System.err.println(AFTER_OOME);
+        CRaCMXBean.getCRaCMXBean().checkpointRestore();
+        int allocationsLeft = lotOfAllocations(5_000_000);
+        if ("-".equals(restoreContainerMemory) || "4G".equals(restoreContainerMemory)) {
+            // no restraints - allocations should succeed (assuming >= 4GB physical RAM on testing machine)
+            assertEquals(0, allocationsLeft);
+        } else if (!"-".equals(checkpointMaxRAMPercentage) || !"-".equals(restoreMaxRAMPercentage)) {
+            // With non-default MaxRAMPercentage it should fit into memory
+            assertEquals(0, allocationsLeft);
+        } else if ("1G".equals(restoreContainerMemory)) {
+            // 1 GB, default MaxRAMPercentage = 25% => allocations shouldn't succeed
+            assertGreaterThan(allocationsLeft, 0, "Should have OOMEd");
+        } else {
+            fail("Unexpected memory size");
         }
+    }
+
+    private static int lotOfAllocations(int countdown) {
+        HashMap<String, String> map = new HashMap<>();
+        try {
+            for (; countdown > 0; --countdown) {
+                // Same width for each instance: 80 bytes = 24 String, 24 byte[], 32 HashMap$Node
+                String str = String.format("%08x", countdown);
+                map.put(str, str);
+            }
+        } catch (OutOfMemoryError e) {
+            // ignore the error, just return
+        }
+        return countdown;
     }
 }

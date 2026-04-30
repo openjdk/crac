@@ -1544,8 +1544,6 @@ size_t Arguments::calculate_default_heap_size(size_t avail_mem) {
   uint64_t min_memory = (uint64_t)(((double)avail_mem * MinRAMPercentage) / 100);
   uint64_t max_memory = (uint64_t)(((double)avail_mem * MaxRAMPercentage) / 100);
 
-  log_debug(gc, heap)("Avail %zu Min %lu max %lu", avail_mem, min_memory, max_memory);
-
   const size_t reasonable_min = clamp_by_size_t_max(min_memory);
   size_t reasonable_max = clamp_by_size_t_max(max_memory);
 

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2019, 2021, Azul Systems, Inc. All rights reserved.
+ * Copyright (c) 2019, 2026, Azul Systems, Inc. All rights reserved.
  * Copyright (c) 2021, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
@@ -33,6 +33,20 @@ import jdk.internal.crac.mirror.impl.OrderedContext;
 public class Core {
     private static ClaimedFDs claimedFDs;
     private static final JfrResource jfrResource = new JfrResource();
+    private static final Runnable internalResourceCounter = () -> {
+        int resources = 0;
+        for (var p : Priority.values()) {
+            if (p.getContext() instanceof OrderedContext<?> octx) {
+                resources += octx.size();
+            } else {
+                throw new InternalError("Unexpected internal context type: " + p.getContext().getClass());
+            }
+        }
+        Score.setScore("jdk.crac.internalResources", resources);
+    };
+    static {
+        Score.addScoreProvider(internalResourceCounter);
+    }
 
     /**
      * Called by JDK FD resources
@@ -67,8 +81,6 @@ public class Core {
      * Most resources should use priority NORMAL (the lowest priority).
      */
     public enum Priority {
-        // Other resources can record score in the beforeCheckpoint
-        SCORE(Score.getContext()),
         FILE_DESCRIPTORS(new BlockingOrderedContext<>()),
         PRE_FILE_DESCRIPTORS(new BlockingOrderedContext<>()),
         // We use OrderedContext to not cause failure when PlatformRecorder tries to

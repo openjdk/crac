@@ -30,8 +30,9 @@ import jdk.test.lib.crac.*;
 import java.io.File;
 import java.lang.ref.Reference;
 import java.nio.file.Files;
+import java.util.HashMap;
 import java.util.List;
-import java.util.Optional;
+import java.util.Map;
 
 import static jdk.test.lib.Asserts.*;
 
@@ -46,9 +47,17 @@ import static jdk.test.lib.Asserts.*;
  * @run driver jdk.test.lib.crac.CracTest false
  */
 public class ImageScoreTest implements CracTest {
+    private static final String VM_UPTIME = "vm.uptime";
     private static final String JDK_CRAC_GLOBAL_CONTEXT_SIZE = "jdk.crac.globalContext.size";
     private static final String TEST_SCORE_AAA = "test.score.aaa";
     private static final String TEST_SCORE_BBB = "test.score.bbb";
+    private static final String TEST_SCORE_CCC = "test.score.ccc";
+
+    private static final double TEST_SCORE_AAA_VALUE_1 = 123.456;
+    private static final double TEST_SCORE_BBB_VALUE_1 = 42.0;
+    private static final double TEST_SCORE_CCC_VALUE_1 = 1.0;
+    private static final double TEST_SCORE_AAA_VALUE_2 = 456.789;
+    private static final double TEST_SCORE_CCC_VALUE_2 = 2.0;
 
     @CracTestArg
     boolean usePerfData;
@@ -68,36 +77,21 @@ public class ImageScoreTest implements CracTest {
             builder.clearVmOptions();
             process.waitForPausePid();
 
-            List<String> score1 = Files.readAllLines(builder.imageDir().resolve("score"));
-            assertGT(score1.size(), 10); // at least 10 items
-            assertEquals(1L, score1.stream().filter(line -> line.startsWith("vm.uptime=")).count());
-            int context1 = getScore(score1, JDK_CRAC_GLOBAL_CONTEXT_SIZE).intValue();
-            // overwritten value should be there only once
-            assertEquals(1L, score1.stream().filter(line-> line.startsWith(TEST_SCORE_AAA)).count());
-            assertEquals(123.456, getScore(score1, TEST_SCORE_AAA));
-            assertEquals(42.0   , getScore(score1, TEST_SCORE_BBB));
+            final var score1 = parseRecordedScore(Files.readAllLines(builder.imageDir().resolve("score")));
+            checkScore1(score1);
 
             builder.doRestore();
             process.clearPausePid();
             process.sendNewline();
             process.waitForPausePid();
 
-            List<String> score2 = Files.readAllLines(builder.imageDir().resolve("score"));
-            int context2 = getScore(score2, JDK_CRAC_GLOBAL_CONTEXT_SIZE).intValue();
-            assertEquals(context1 + 1, context2);
-            assertEquals(456.789, getScore(score2, TEST_SCORE_AAA));
-            assertTrue(score2.stream().noneMatch(line -> line.startsWith(TEST_SCORE_BBB)));
+            final var score2 = parseRecordedScore(Files.readAllLines(builder.imageDir().resolve("score")));
+            checkScore2(score2);
+            assertEquals(score1.get(JDK_CRAC_GLOBAL_CONTEXT_SIZE).intValue() + 1, score2.get(JDK_CRAC_GLOBAL_CONTEXT_SIZE).intValue());
 
             builder.doRestore();
             process.waitForSuccess();
         }
-    }
-
-    private static Double getScore(List<String> score1, String metric) {
-        Optional<Double> contextSize = score1.stream().filter(line -> line.startsWith(metric + '='))
-                .findFirst().map(line -> Double.parseDouble(line.substring(line.indexOf('=') + 1)));
-        assertTrue(contextSize.isPresent());
-        return contextSize.orElseThrow(() -> new AssertionError("context size not found"));
     }
 
     @Override
@@ -105,14 +99,19 @@ public class ImageScoreTest implements CracTest {
         Score.setScore(TEST_SCORE_AAA, 0.001); // should be overwritten
         Score.setScore(TEST_SCORE_AAA, 123.456);
         Score.setScore(TEST_SCORE_BBB, 42);
+        final double[] cccValue = new double[] {1};
+        final Runnable cccProvider = () -> Score.setScore(TEST_SCORE_CCC, cccValue[0]);
+        Score.addScoreProvider(cccProvider);
         // Force user-facing global context instantiation
         Context<Resource> globalContext = Context.getGlobalContext();
+        checkScore1(Score.getScore());
         CRaCMXBean.getCRaCMXBean().checkpointRestore();
 
         assertEquals(System.in.read(), (int) '\n');
 
-        Score.resetAll();
+        Score.removeScore(TEST_SCORE_BBB);
         Score.setScore(TEST_SCORE_AAA, 456.789);
+        cccValue[0] = 2; // Provider should set the updated value
         Resource dummy = new Resource() {
             @Override
             public void beforeCheckpoint(Context<? extends Resource> context) {
@@ -123,8 +122,36 @@ public class ImageScoreTest implements CracTest {
             }
         };
         globalContext.register(dummy);
+        checkScore2(Score.getScore());
         CRaCMXBean.getCRaCMXBean().checkpointRestore();
 
+        Reference.reachabilityFence(cccProvider);
         Reference.reachabilityFence(dummy);
+    }
+
+    private static Map<String, Double> parseRecordedScore(List<String> lines) {
+        final var score = new HashMap<String, Double>();
+        for (var line : lines) {
+            final var metric = line.substring(0, line.indexOf('='));
+            final var value = Double.parseDouble(line.substring(line.indexOf('=') + 1));
+            assertNull(score.put(metric, value), metric + " recorded multiple times");
+        }
+        return score;
+    }
+
+    private static void checkScore1(Map<String, Double> score) {
+        assertGT(score.size(), 10); // at least 10 items
+        assertTrue(score.containsKey(VM_UPTIME));
+        assertEquals(TEST_SCORE_AAA_VALUE_1, score.get(TEST_SCORE_AAA));
+        assertEquals(TEST_SCORE_BBB_VALUE_1, score.get(TEST_SCORE_BBB));
+        assertEquals(TEST_SCORE_CCC_VALUE_1, score.get(TEST_SCORE_CCC));
+    }
+
+    private static void checkScore2(Map<String, Double> score) {
+        assertGT(score.size(), 10); // at least 10 items
+        assertTrue(score.containsKey(VM_UPTIME));
+        assertEquals(TEST_SCORE_AAA_VALUE_2, score.get(TEST_SCORE_AAA));
+        assertTrue(score.keySet().stream().noneMatch(m -> m.startsWith(TEST_SCORE_BBB)));
+        assertEquals(TEST_SCORE_CCC_VALUE_2, score.get(TEST_SCORE_CCC));
     }
 }

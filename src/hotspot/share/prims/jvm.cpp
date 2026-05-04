@@ -3676,7 +3676,7 @@ JVM_ENTRY(jboolean, JVM_IsCRaCScoreSupported(JNIEnv *env))
   return crac::is_image_score_supported();
 JVM_END
 
-JVM_ENTRY(jobjectArray, JVM_GetJVMCRaCScore(JNIEnv *env))
+JVM_ENTRY(jobjectArray, JVM_GetCRaCScore(JNIEnv *env))
   ResourceMark rm;
   const GrowableArray<crac::score> score = crac::collect_image_score_from_jvm();
   const objArrayHandle score_pairs = oopFactory::new_objArray_handle(Universe::objectArrayKlass(), score.length(), CHECK_NULL);
@@ -3695,9 +3695,9 @@ JVM_ENTRY(jobjectArray, JVM_GetJVMCRaCScore(JNIEnv *env))
   return checked_cast<jobjectArray>(JNIHandles::make_local(THREAD, score_pairs()));
 JVM_END
 
-JVM_ENTRY(void, JVM_RecordJavaCRaCScore(JNIEnv *env, jobjectArray metrics, jdoubleArray values))
+JVM_ENTRY(void, JVM_RecordCRaCScore(JNIEnv *env, jobjectArray metrics, jdoubleArray values))
   // Not supported is ok: this is used internally, helps avoid another JNI call checking the support
-  if (crac::is_image_score_supported() && !crac::record_image_score_from_java(metrics, values)) {
+  if (crac::is_image_score_supported() && !crac::record_image_score(metrics, values)) {
     THROW_MSG(vmSymbols::java_lang_RuntimeException(), err_msg("CRaC engine failed to record score"));
   }
 JVM_END

@@ -40,14 +40,47 @@ import java.util.*;
  * use does not support storing metadata. In such case score will be ignored.
  */
 public class Score {
-    /**
-     * Values of metrics provided by the user and Java classes of JDK.
-     * <p>
-     * JVM provides some metrics as well - they are not stored here,
-     * {@link #getJvmScore()} is used to retrieve those.
-     */
     private static final Map<String, Double> score = new HashMap<>();
     private static final Set<Runnable> scoreProviders = Collections.newSetFromMap(new WeakHashMap<>());
+    // CDS assert fails during VM initialization if this is a lambda
+    private static final Runnable jvmScoreProvider = new Runnable() {
+        @Override
+        public void run() {
+            final var jvmScore = getJvmScore();
+            for (final var pair : jvmScore) {
+                setScore((String) pair[0], (Double) pair[1]);
+            }
+        }
+    };
+
+    static {
+        addScoreProvider(jvmScoreProvider);
+    }
+
+    private static final Context<JDKResource> context = new Context<>() {
+        @Override
+        public void beforeCheckpoint(Context<? extends Resource> context) {
+            final var scoreSnapshot = getScore();
+            final var metrics = new String[scoreSnapshot.size()];
+            final var values = new double[scoreSnapshot.size()];
+            int i = 0;
+            for (var e : scoreSnapshot.entrySet()) {
+                metrics[i] = e.getKey();
+                values[i] = e.getValue();
+                ++i;
+            }
+            record(metrics, values);
+        }
+
+        @Override
+        public void afterRestore(Context<? extends Resource> context) {
+        }
+
+        @Override
+        public void register(JDKResource resource) {
+            throw new UnsupportedOperationException("Score is a singleton context");
+        }
+    };
 
     private Score() {
     }
@@ -67,11 +100,10 @@ public class Score {
      * On checkpoint the metrics are not reset; if that is desired use
      * {@link #removeScore(String)}.
      *
-     * @implNote Metrics {@code java.*}, {@code jdk.*}, {@code sun.*},
-     * {@code vm.*} are reserved to be set by the JDK itself.
-     *
      * @param metric Name of the metric.
      * @param value  Numeric value of the metric.
+     * @implNote Metrics {@code java.*}, {@code jdk.*}, {@code sun.*},
+     * {@code vm.*} are reserved to be set by the JDK itself.
      */
     public static synchronized void setScore(String metric, double value) {
         score.put(metric, value);
@@ -112,18 +144,6 @@ public class Score {
      * @return snapshot of the recorded score.
      */
     public static Map<String, Double> getScore() {
-        // The same JVM after Java order is used for the actual score recording. It matters when there are collisions,
-        // i.e. when custom metrics use reserved names. Technically that would be a user's fault but better to be
-        // consistent.
-        final Map<String, Double> scoreSnapshot = getJavaScore();
-        final var jvmScore = getJvmScore();
-        for (final var pair : jvmScore) {
-            scoreSnapshot.put((String) pair[0], (Double) pair[1]);
-        }
-        return scoreSnapshot;
-    }
-
-    private static Map<String, Double> getJavaScore() {
         // Take a snapshot in case a provider adds new providers
         final Set<Runnable> providersSnapshot;
         synchronized (Score.class) {
@@ -140,38 +160,11 @@ public class Score {
         return scoreSnapshot;
     }
 
-    /**
-     * @return Pairs of {@link String} and {@link Double}.
-     */
     private static native Object[][] getJvmScore();
 
-    private static final JDKResource resource = new JDKResource() {
-        @Override
-        public void beforeCheckpoint(Context<? extends Resource> context) {
-            recordJavaScore(); // JVM score will be recorded by JVM itself
-        }
+    private static native void record(String[] metrics, double[] values);
 
-        @Override
-        public void afterRestore(Context<? extends Resource> context) {
-        }
-    };
-
-    static {
-        Core.Priority.NORMAL.getContext().register(resource);
+    static Context<JDKResource> getContext() {
+        return context;
     }
-
-    private static void recordJavaScore() {
-        final var scoreSnapshot = getJavaScore();
-        final var metrics = new String[scoreSnapshot.size()];
-        final var values = new double[scoreSnapshot.size()];
-        int i = 0;
-        for (var e : scoreSnapshot.entrySet()) {
-            metrics[i] = e.getKey();
-            values[i] = e.getValue();
-            ++i;
-        }
-        recordJavaScore(metrics, values);
-    }
-
-    private static native void recordJavaScore(String[] metrics, double[] values);
 }

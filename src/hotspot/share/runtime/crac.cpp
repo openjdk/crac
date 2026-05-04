@@ -654,15 +654,6 @@ Handle crac::checkpoint(jarray fd_arr, jobjectArray obj_arr, bool dry_run, jlong
     return ret_cr(JVM_CHECKPOINT_NONE, Handle(), Handle(), Handle(), Handle(), THREAD);
   }
 
-  if (is_image_score_supported()) {
-    ResourceMark rm;
-    for (const auto &s : collect_image_score_from_jvm()) {
-      if (!_engine->set_score(s.metric, s.value)) {
-        return ret_cr(JVM_CHECKPOINT_ERROR, Handle(), Handle(), Handle(), Handle(), THREAD);
-      }
-    }
-  }
-
 #if INCLUDE_JVMTI
   JvmtiExport::post_crac_before_checkpoint();
 #endif
@@ -820,7 +811,7 @@ GrowableArray<crac::score> crac::collect_image_score_from_jvm() {
   return score;
 }
 
-bool crac::record_image_score_from_java(jobjectArray metrics, jdoubleArray values) {
+bool crac::record_image_score(jobjectArray metrics, jdoubleArray values) {
   assert(crac::is_image_score_supported(), "CRaC engine does not support score recording");
   ResourceMark rm;
   objArrayOop metrics_oops = oop_cast<objArrayOop>(JNIHandles::resolve_non_null(metrics));

@@ -38,8 +38,6 @@ public class Core {
         for (var p : Priority.values()) {
             if (p.getContext() instanceof OrderedContext<?> octx) {
                 resources += octx.size();
-            } else {
-                throw new InternalError("Unexpected internal context type: " + p.getContext().getClass());
             }
         }
         Score.setScore("jdk.crac.internalResources", resources);
@@ -81,6 +79,9 @@ public class Core {
      * Most resources should use priority NORMAL (the lowest priority).
      */
     public enum Priority {
+        // Collect score as close to checkpoint as possible for the most up-to-date
+        // values.
+        SCORE(Score.getContext()),
         FILE_DESCRIPTORS(new BlockingOrderedContext<>()),
         PRE_FILE_DESCRIPTORS(new BlockingOrderedContext<>()),
         // We use OrderedContext to not cause failure when PlatformRecorder tries to

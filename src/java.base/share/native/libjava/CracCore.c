@@ -56,10 +56,10 @@ Java_jdk_internal_crac_Score_isSupported(JNIEnv *env, jclass ignore) {
 
 JNIEXPORT jobjectArray JNICALL
 Java_jdk_internal_crac_Score_getJvmScore(JNIEnv *env, jclass ignore) {
-    return JVM_GetJVMCRaCScore(env);
+    return JVM_GetCRaCScore(env);
 }
 
 JNIEXPORT void JNICALL
-Java_jdk_internal_crac_Score_recordJavaScore(JNIEnv *env, jclass ignore, jobjectArray metrics, jdoubleArray values) {
-    JVM_RecordJavaCRaCScore(env, metrics, values);
+Java_jdk_internal_crac_Score_record(JNIEnv *env, jclass ignore, jobjectArray metrics, jdoubleArray values) {
+    JVM_RecordCRaCScore(env, metrics, values);
 }

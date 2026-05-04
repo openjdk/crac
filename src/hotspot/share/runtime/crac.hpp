@@ -52,7 +52,7 @@ public:
     double value;
   };
   static GrowableArray<score> collect_image_score_from_jvm();
-  static bool record_image_score_from_java(jobjectArray metrics, jdoubleArray values);
+  static bool record_image_score(jobjectArray metrics, jdoubleArray values);
 
   struct crac_restore_data {
     jlong restore_time;

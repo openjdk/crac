@@ -351,7 +351,7 @@ CracEngine::~CracEngine() {
     _api->destroy_conf(_conf);
     os::dll_unload(_lib);
   }
-  FREE_C_HEAP_ARRAY(crlib_conf_option_t, _options);
+  FREE_C_HEAP_ARRAY(_options);
   os::free(_image_location);
 }
 

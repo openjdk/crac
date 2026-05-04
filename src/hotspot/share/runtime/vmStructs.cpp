@@ -163,8 +163,7 @@
   /******************************************************************/                                                               \
                                                                                                                                      \
   volatile_nonstatic_field(oopDesc,            _mark,                                         markWord)                              \
-  volatile_nonstatic_field(oopDesc,            _metadata._klass,                              Klass*)                                \
-  volatile_nonstatic_field(oopDesc,            _metadata._compressed_klass,                   narrowKlass)                           \
+  volatile_nonstatic_field(oopDesc,            _compressed_klass,                             narrowKlass)                           \
   static_field(BarrierSet,                     _barrier_set,                                  BarrierSet*)                           \
   nonstatic_field(ArrayKlass,                  _dimension,                                    const int)                             \
   volatile_nonstatic_field(ArrayKlass,         _higher_dimension,                             ObjArrayKlass*)                        \
@@ -2088,10 +2087,10 @@ static int recursiveFindType(VMTypeEntry* origtypes, const char* typeName, bool 
     s[len-1] = '\0';
     // tty->print_cr("checking \"%s\" for \"%s\"", s, typeName);
     if (recursiveFindType(origtypes, s, true) == 1) {
-      FREE_C_HEAP_ARRAY(char, s);
+      FREE_C_HEAP_ARRAY(s);
       return 1;
     }
-    FREE_C_HEAP_ARRAY(char, s);
+    FREE_C_HEAP_ARRAY(s);
   }
   const char* start = nullptr;
   if (strstr(typeName, "GrowableArray<") == typeName) {
@@ -2107,10 +2106,10 @@ static int recursiveFindType(VMTypeEntry* origtypes, const char* typeName, bool 
     s[len-1] = '\0';
     // tty->print_cr("checking \"%s\" for \"%s\"", s, typeName);
     if (recursiveFindType(origtypes, s, true) == 1) {
-      FREE_C_HEAP_ARRAY(char, s);
+      FREE_C_HEAP_ARRAY(s);
       return 1;
     }
-    FREE_C_HEAP_ARRAY(char, s);
+    FREE_C_HEAP_ARRAY(s);
   }
   if (strstr(typeName, "const ") == typeName) {
     const char * s = typeName + strlen("const ");

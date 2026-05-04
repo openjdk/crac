@@ -105,7 +105,7 @@ class CracRestoreParameters : public CHeapObj<mtInternal> {
 
   ~CracRestoreParameters() {
     if (_raw_content) {
-      FREE_C_HEAP_ARRAY(char, _raw_content);
+      FREE_C_HEAP_ARRAY(_raw_content);
     }
     delete _properties;
   }

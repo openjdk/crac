@@ -727,7 +727,7 @@ Handle crac::checkpoint(jarray fd_arr, jobjectArray obj_arr, bool dry_run, jlong
   for (int i = 0; i < failures->length(); ++i) {
     codes->int_at_put(i, failures->at(i)._type);
     oop msgObj = java_lang_String::create_oop_from_str(failures->at(i)._msg, CHECK_NH);
-    FREE_C_HEAP_ARRAY(char, failures->at(i)._msg);
+    FREE_C_HEAP_ARRAY(failures->at(i)._msg);
     msgs->obj_at_put(i, msgObj);
   }
 
@@ -920,7 +920,7 @@ bool CracRestoreParameters::read_from(int fd) {
   char *contents = NEW_C_HEAP_ARRAY(char, st.st_size, mtInternal);
   if (read(fd, contents, st.st_size) < 0) {
     perror("read (ignoring restore parameters)");
-    FREE_C_HEAP_ARRAY(char, contents);
+    FREE_C_HEAP_ARRAY(contents);
     return false;
   }
 

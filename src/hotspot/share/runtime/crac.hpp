@@ -51,8 +51,8 @@ public:
     const char *metric;
     double value;
   };
-  static GrowableArray<score> collect_image_score_from_jvm();
-  static bool record_image_score(jobjectArray metrics, jdoubleArray values);
+  static GrowableArray<score> get_image_scores_from_jvm();
+  static bool record_image_scores(jobjectArray metrics, jdoubleArray values);
 
   struct crac_restore_data {
     jlong restore_time;

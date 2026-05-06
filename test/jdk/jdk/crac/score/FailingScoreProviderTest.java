@@ -29,7 +29,7 @@ import static jdk.test.lib.Asserts.*;
 
 /*
  * @test
- * @summary Tests score computation in presence of failing score providers.
+ * @summary Tests scores computation in presence of failing score providers.
  * @modules java.base/jdk.internal.crac:+open
  * @library /test/lib
  */
@@ -52,18 +52,18 @@ public class FailingScoreProviderTest {
         // Provider exceptions should be ignored
         Score.addScoreProvider(FAILING_PROVIDER);
         Score.addScoreProvider(NORMAL_PROVIDER);
-        checkScore(Score.getScore());
+        checkScores(Score.getScores());
 
         // Provider errors should be propagated
         Score.addScoreProvider(CRASHING_PROVIDER);
-        assertThrows(ExpectedError.class, Score::getScore);
+        assertThrows(ExpectedError.class, Score::getScores);
     }
 
-    private static void checkScore(Map<String, Double> score) {
-        assertGT(score.size(), 10, score.toString()); // at least 10 items
-        assertTrue(score.containsKey(VM_UPTIME), score.toString());
-        assertTrue(score.containsKey(JDK_CRAC_INTERNAL_CONTEXT_SIZE), score.toString());
-        assertEquals(TEST_SCORE_VALUE, score.get(TEST_SCORE), score.toString());
+    private static void checkScores(Map<String, Double> scores) {
+        assertGT(scores.size(), 10, scores.toString()); // at least 10 items
+        assertTrue(scores.containsKey(VM_UPTIME), scores.toString());
+        assertTrue(scores.containsKey(JDK_CRAC_INTERNAL_CONTEXT_SIZE), scores.toString());
+        assertEquals(TEST_SCORE_VALUE, scores.get(TEST_SCORE), scores.toString());
     }
 
     private static class ExpectedError extends Error {

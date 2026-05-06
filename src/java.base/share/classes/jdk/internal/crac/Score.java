@@ -37,18 +37,18 @@ import java.util.*;
  * expected to perform best.
  * <p>
  * All methods of this class can be safely called even if the CRaC Engine in
- * use does not support storing metadata. In such case score will be ignored.
+ * use does not support storing metadata. In such case scores will be ignored.
  */
 public class Score {
-    private static final Map<String, Double> score = new HashMap<>();
+    private static final Map<String, Double> scores = new HashMap<>();
     private static final Set<Runnable> scoreProviders = Collections.newSetFromMap(new WeakHashMap<>());
     // CDS assert fails during VM initialization if this is a lambda
     private static final Runnable jvmScoreProvider = new Runnable() {
         @Override
         public void run() {
-            final var jvmScore = getJvmScore();
-            for (var i = 0; i < jvmScore.length; i++) {
-                setScore((String) jvmScore[2 * i], (Double) jvmScore[2 * i + 1]);
+            final var jvmScores = getJvmScores();
+            for (var i = 0; i < jvmScores.length; i++) {
+                setScore((String) jvmScores[2 * i], (Double) jvmScores[2 * i + 1]);
             }
         }
     };
@@ -60,11 +60,11 @@ public class Score {
     private static final Context<JDKResource> context = new Context<>() {
         @Override
         public void beforeCheckpoint(Context<? extends Resource> context) {
-            final var scoreSnapshot = getScore();
-            final var metrics = new String[scoreSnapshot.size()];
-            final var values = new double[scoreSnapshot.size()];
+            final var scoresSnapshot = getScores();
+            final var metrics = new String[scoresSnapshot.size()];
+            final var values = new double[scoresSnapshot.size()];
             int i = 0;
-            for (var e : scoreSnapshot.entrySet()) {
+            for (var e : scoresSnapshot.entrySet()) {
                 metrics[i] = e.getKey();
                 values[i] = e.getValue();
                 ++i;
@@ -93,11 +93,11 @@ public class Score {
     public static native boolean isSupported();
 
     /**
-     * Records a value to be stored in the image metadata on checkpoint.
-     * Repeated invocations with the same {@code metric} overwrite previous
+     * Records a score to be stored in the image metadata on checkpoint.
+     * Repeated invocations with the same {@code metric} overwrite the previous
      * value.
      * <p>
-     * On checkpoint the metrics are not reset; if that is desired use
+     * On checkpoint the scores are not reset; if that is desired use
      * {@link #removeScore(String)}.
      *
      * @param metric Name of the metric.
@@ -106,7 +106,7 @@ public class Score {
      * {@code vm.*} are reserved to be set by the JDK itself.
      */
     public static synchronized void setScore(String metric, double value) {
-        score.put(metric, value);
+        scores.put(metric, value);
     }
 
     /**
@@ -116,14 +116,14 @@ public class Score {
      * @return {@code true} if the metric was present.
      */
     public static synchronized boolean removeScore(String metric) {
-        return score.remove(metric) != null;
+        return scores.remove(metric) != null;
     }
 
     /**
-     * Adds a runnable which will be invoked each time just before a score is
-     * read to provide an up-to-date value of some metrics.
+     * Adds a runnable which will be invoked each time just before scores are
+     * read to provide up-to-date scores.
      * <p>
-     * The provider is expected to add or update the score by invoking
+     * The provider is expected to add or update the scores by invoking
      * {@link #setScore(String, double)}, possibly multiple times.
      * <p>
      * The provider is recorded through a weak reference. The caller is
@@ -143,12 +143,12 @@ public class Score {
     }
 
     /**
-     * Returns a snapshot of the recorded score. Future changes to the score
+     * Returns a snapshot of the recorded scores. Future changes to the scores
      * will not be reflected in the snapshot and vice versa.
      *
-     * @return snapshot of the recorded score.
+     * @return current snapshot of the recorded scores.
      */
-    public static Map<String, Double> getScore() {
+    public static Map<String, Double> getScores() {
         // Take a snapshot in case a provider adds new providers
         final Set<Runnable> providersSnapshot;
         synchronized (Score.class) {
@@ -161,14 +161,14 @@ public class Score {
             }
         }
 
-        final Map<String, Double> scoreSnapshot;
+        final Map<String, Double> scoresSnapshot;
         synchronized (Score.class) {
-            scoreSnapshot = new HashMap<>(score);
+            scoresSnapshot = new HashMap<>(scores);
         }
-        return scoreSnapshot;
+        return scoresSnapshot;
     }
 
-    private static native Object[] getJvmScore();
+    private static native Object[] getJvmScores();
 
     private static native void record(String[] metrics, double[] values);
 

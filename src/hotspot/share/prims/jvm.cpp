@@ -3676,27 +3676,27 @@ JVM_ENTRY(jboolean, JVM_IsCRaCScoreSupported(JNIEnv *env))
   return crac::is_image_score_supported();
 JVM_END
 
-JVM_ENTRY(jobjectArray, JVM_GetCRaCScore(JNIEnv *env))
+JVM_ENTRY(jobjectArray, JVM_GetCRaCScores(JNIEnv *env))
   ResourceMark rm;
-  const GrowableArray<crac::score> score = crac::collect_image_score_from_jvm();
-  const objArrayOop score_flat_oop = oopFactory::new_objectArray(2 * score.length(), CHECK_NULL);
-  const objArrayHandle score_flat(THREAD, score_flat_oop);
-  for (int i = 0; i < score.length(); i++) {
-    const crac::score &score_i = score.at(i);
-    Handle metric = java_lang_String::create_from_str(score_i.metric, CHECK_NULL);
+  const GrowableArray<crac::score> scores = crac::get_image_scores_from_jvm();
+  const objArrayOop scores_flat_oop = oopFactory::new_objectArray(2 * scores.length(), CHECK_NULL);
+  const objArrayHandle scores_flat(THREAD, scores_flat_oop);
+  for (int i = 0; i < scores.length(); i++) {
+    const crac::score &score = scores.at(i);
+    Handle metric = java_lang_String::create_from_str(score.metric, CHECK_NULL);
     jvalue value_jval;
-    value_jval.d = score_i.value;
+    value_jval.d = score.value;
     oop value = java_lang_boxing_object::create(T_DOUBLE, &value_jval, CHECK_NULL);
-    score_flat->obj_at_put(2 * i, metric());
-    score_flat->obj_at_put(2 * i + 1, value);
+    scores_flat->obj_at_put(2 * i, metric());
+    scores_flat->obj_at_put(2 * i + 1, value);
   }
-  return checked_cast<jobjectArray>(JNIHandles::make_local(THREAD, score_flat()));
+  return checked_cast<jobjectArray>(JNIHandles::make_local(THREAD, scores_flat()));
 JVM_END
 
-JVM_ENTRY(void, JVM_RecordCRaCScore(JNIEnv *env, jobjectArray metrics, jdoubleArray values))
+JVM_ENTRY(void, JVM_RecordCRaCScores(JNIEnv *env, jobjectArray metrics, jdoubleArray values))
   // Not supported is ok: this is used internally, helps avoid another JNI call checking the support
-  if (crac::is_image_score_supported() && !crac::record_image_score(metrics, values)) {
-    THROW_MSG(vmSymbols::java_lang_RuntimeException(), err_msg("CRaC engine failed to record score"));
+  if (crac::is_image_score_supported() && !crac::record_image_scores(metrics, values)) {
+    THROW_MSG(vmSymbols::java_lang_RuntimeException(), err_msg("CRaC engine failed to record scores"));
   }
 JVM_END
 

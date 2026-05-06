@@ -1084,9 +1084,9 @@ void DumpSharedArchiveDCmd::execute(DCmdSource source, TRAPS) {
 
 CheckpointDCmd::CheckpointDCmd(outputStream* output, bool heap) :
   DCmdWithParser(output, heap),
-  _metrics("metrics", "Extra image metrics to record (key1=value2,key2=value2,... or @/path/to/file)", "STRING", false),
+  _scores("scores", "Extra image scores to record (metric1=value2,metric2=value2,... or @/path/to/file)", "STRING", false),
   _labels("labels", "Extra labels to record (label1=value1,label2=value2,... or @/path/to/file)", "STRING", false) {
-  _dcmdparser.add_dcmd_option(&_metrics);
+  _dcmdparser.add_dcmd_option(&_scores);
   _dcmdparser.add_dcmd_option(&_labels);
 }
 
@@ -1106,28 +1106,28 @@ struct LocaleGuard {
 };
 
 void CheckpointDCmd::execute(DCmdSource source, TRAPS) {
-  const char *metrics = _metrics.value();
-  if (metrics != nullptr) {
+  const char *scores = _scores.value();
+  if (scores != nullptr) {
     if (crac::is_image_score_supported()) {
       // This guard ensures that we are parsing the floating point values
       // with '.' as the decimal point (some other locales use ',')
       LocaleGuard lg;
-      if (metrics[0] == '@') {
-        parse_pairs_from_file("metric", metrics + 1, CheckpointDCmd::accept_metric, CHECK);
+      if (scores[0] == '@') {
+        parse_pairs_from_file("scores", scores + 1, CheckpointDCmd::accept_score, CHECK);
       } else {
-        parse_pairs("metric", metrics, CheckpointDCmd::accept_metric, CHECK);
+        parse_pairs("scores", scores, CheckpointDCmd::accept_score, CHECK);
       }
     } else {
-      output()->print_cr("Warning: metrics are not supported by current C/R engine");
+      output()->print_cr("Warning: scores are not supported by current C/R engine");
     }
   }
   const char *labels = _labels.value();
   if (labels != nullptr) {
     if (crac::is_image_constraints_supported()) {
       if (labels[0] == '@') {
-        parse_pairs_from_file("label", labels + 1, CheckpointDCmd::accept_label, CHECK);
+        parse_pairs_from_file("labels", labels + 1, CheckpointDCmd::accept_label, CHECK);
       } else {
-        parse_pairs("label", labels, CheckpointDCmd::accept_label, CHECK);
+        parse_pairs("labels", labels, CheckpointDCmd::accept_label, CHECK);
       }
     } else {
       output()->print_cr("Warning: labels are not supported by current C/R engine");
@@ -1159,7 +1159,7 @@ void CheckpointDCmd::execute(DCmdSource source, TRAPS) {
   }
 }
 
-void CheckpointDCmd::accept_metric(const char* key, char* str, TRAPS) {
+void CheckpointDCmd::accept_score(const char* key, char* str, TRAPS) {
   char *endptr;
   double value = strtod(str, &endptr);
   while (isspace(*endptr)) ++endptr;
@@ -1191,11 +1191,11 @@ void CheckpointDCmd::parse_pairs(const char* what, const char* pairs, accept_fun
   while ((key_value = strsep(&copy, ",")) != nullptr) {
     char *key = strsep(&key_value, "=");
     if (*key == '\0') {
-      THROW_MSG(vmSymbols::java_lang_IllegalArgumentException(), err_msg("Empty %s name", what));
+      THROW_MSG(vmSymbols::java_lang_IllegalArgumentException(), err_msg("Empty key in %s", what));
     }
     if (key_value == nullptr) {
       THROW_MSG(vmSymbols::java_lang_IllegalArgumentException(),
-                err_msg("Missing value for %s '%s'", what, key));
+                err_msg("Missing value for key '%s' in %s", key, what));
     }
     accept(key, key_value, CHECK);
   }
@@ -1232,7 +1232,7 @@ void CheckpointDCmd::parse_pairs_from_file(const char* what, const char* path, a
     while (isspace(*key)) ++key;
     for (char *end = line - 2; end >= key && isspace(*end); --end) *end = '\0';
     if (*key == '\0') {
-      THROW_MSG(vmSymbols::java_lang_IllegalArgumentException(), err_msg("Empty %s name", what));
+      THROW_MSG(vmSymbols::java_lang_IllegalArgumentException(), err_msg("Empty key in %s", what));
     }
     accept(key, line, CHECK);
   }

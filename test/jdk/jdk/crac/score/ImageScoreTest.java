@@ -77,17 +77,20 @@ public class ImageScoreTest implements CracTest {
             builder.clearVmOptions();
             process.waitForPausePid();
 
-            final var score1 = parseRecordedScore(Files.readAllLines(builder.imageDir().resolve("score")));
-            checkScore1(score1);
+            final var scores1 = parseRecordedScores(Files.readAllLines(builder.imageDir().resolve("score")));
+            checkScores1(scores1);
 
             builder.doRestore();
             process.clearPausePid();
             process.sendNewline();
             process.waitForPausePid();
 
-            final var score2 = parseRecordedScore(Files.readAllLines(builder.imageDir().resolve("score")));
-            checkScore2(score2);
-            assertEquals(score1.get(JDK_CRAC_GLOBAL_CONTEXT_SIZE).intValue() + 1, score2.get(JDK_CRAC_GLOBAL_CONTEXT_SIZE).intValue());
+            final var scores2 = parseRecordedScores(Files.readAllLines(builder.imageDir().resolve("score")));
+            checkScores2(scores2);
+            assertEquals(
+                    scores1.get(JDK_CRAC_GLOBAL_CONTEXT_SIZE).intValue() + 1,
+                    scores2.get(JDK_CRAC_GLOBAL_CONTEXT_SIZE).intValue()
+            );
 
             builder.doRestore();
             process.waitForSuccess();
@@ -104,7 +107,7 @@ public class ImageScoreTest implements CracTest {
         Score.addScoreProvider(cccProvider);
         // Force user-facing global context instantiation
         Context<Resource> globalContext = Context.getGlobalContext();
-        checkScore1(Score.getScore());
+        checkScores1(Score.getScores());
         CRaCMXBean.getCRaCMXBean().checkpointRestore();
 
         assertEquals(System.in.read(), (int) '\n');
@@ -122,36 +125,36 @@ public class ImageScoreTest implements CracTest {
             }
         };
         globalContext.register(dummy);
-        checkScore2(Score.getScore());
+        checkScores2(Score.getScores());
         CRaCMXBean.getCRaCMXBean().checkpointRestore();
 
         Reference.reachabilityFence(cccProvider);
         Reference.reachabilityFence(dummy);
     }
 
-    private static Map<String, Double> parseRecordedScore(List<String> lines) {
-        final var score = new HashMap<String, Double>();
+    private static Map<String, Double> parseRecordedScores(List<String> lines) {
+        final var scores = new HashMap<String, Double>();
         for (var line : lines) {
             final var metric = line.substring(0, line.indexOf('='));
             final var value = Double.parseDouble(line.substring(line.indexOf('=') + 1));
-            assertNull(score.put(metric, value), metric + " recorded multiple times");
+            assertNull(scores.put(metric, value), metric + " recorded multiple times");
         }
-        return score;
+        return scores;
     }
 
-    private static void checkScore1(Map<String, Double> score) {
-        assertGT(score.size(), 10, score.toString()); // at least 10 items
-        assertTrue(score.containsKey(VM_UPTIME), score.toString());
-        assertEquals(TEST_SCORE_AAA_VALUE_1, score.get(TEST_SCORE_AAA), score.toString());
-        assertEquals(TEST_SCORE_BBB_VALUE_1, score.get(TEST_SCORE_BBB), score.toString());
-        assertEquals(TEST_SCORE_CCC_VALUE_1, score.get(TEST_SCORE_CCC), score.toString());
+    private static void checkScores1(Map<String, Double> scores) {
+        assertGT(scores.size(), 10, scores.toString()); // at least 10 items
+        assertTrue(scores.containsKey(VM_UPTIME), scores.toString());
+        assertEquals(TEST_SCORE_AAA_VALUE_1, scores.get(TEST_SCORE_AAA), scores.toString());
+        assertEquals(TEST_SCORE_BBB_VALUE_1, scores.get(TEST_SCORE_BBB), scores.toString());
+        assertEquals(TEST_SCORE_CCC_VALUE_1, scores.get(TEST_SCORE_CCC), scores.toString());
     }
 
-    private static void checkScore2(Map<String, Double> score) {
-        assertGT(score.size(), 10, score.toString()); // at least 10 items
-        assertTrue(score.containsKey(VM_UPTIME), score.toString());
-        assertEquals(TEST_SCORE_AAA_VALUE_2, score.get(TEST_SCORE_AAA), score.toString());
-        assertTrue(score.keySet().stream().noneMatch(m -> m.startsWith(TEST_SCORE_BBB)), score.toString());
-        assertEquals(TEST_SCORE_CCC_VALUE_2, score.get(TEST_SCORE_CCC), score.toString());
+    private static void checkScores2(Map<String, Double> scores) {
+        assertGT(scores.size(), 10, scores.toString()); // at least 10 items
+        assertTrue(scores.containsKey(VM_UPTIME), scores.toString());
+        assertEquals(TEST_SCORE_AAA_VALUE_2, scores.get(TEST_SCORE_AAA), scores.toString());
+        assertTrue(scores.keySet().stream().noneMatch(m -> m.startsWith(TEST_SCORE_BBB)), scores.toString());
+        assertEquals(TEST_SCORE_CCC_VALUE_2, scores.get(TEST_SCORE_CCC), scores.toString());
     }
 }

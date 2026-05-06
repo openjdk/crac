@@ -1191,10 +1191,10 @@ JNIEXPORT jboolean JNICALL
 JVM_IsCRaCScoreSupported(JNIEnv *env);
 
 JNIEXPORT jobjectArray JNICALL
-JVM_GetCRaCScore(JNIEnv *env);
+JVM_GetCRaCScores(JNIEnv *env);
 
 JNIEXPORT void JNICALL
-JVM_RecordCRaCScore(JNIEnv *env, jobjectArray metrics, jdoubleArray values);
+JVM_RecordCRaCScores(JNIEnv *env, jobjectArray metrics, jdoubleArray values);
 
 #ifdef __cplusplus
 } /* extern "C" */

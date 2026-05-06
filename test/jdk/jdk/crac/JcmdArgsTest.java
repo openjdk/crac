@@ -64,11 +64,11 @@ public class JcmdArgsTest implements CracTest {
         process.waitForStdout(READY, false);
         String[] args;
         if (useFile) {
-            Path metricsPath = createTemp("metrics", "dummy\t=45\n   foo.bar = 123.0 \n");
+            Path scoresPath = createTemp("scores", "dummy\t=45\n   foo.bar = 123.0 \n");
             Path labelsPath = createTemp("labels", " xxx= yyy\naaa=bbb");
-            args = new String[] { "metrics=@" + metricsPath, "labels=@" + labelsPath };
+            args = new String[] { "scores=@" + scoresPath, "labels=@" + labelsPath };
         } else {
-            args = new String[] { "metrics=foo.bar=123", "labels=xxx=yyy" };
+            args = new String[] { "scores=foo.bar=123", "labels=xxx=yyy" };
         }
         new CracBuilder().engine(CracEngine.SIMULATE).checkpointViaJcmd(process.pid(), args);
         process.waitForStdout(CHECKPOINTED, false);

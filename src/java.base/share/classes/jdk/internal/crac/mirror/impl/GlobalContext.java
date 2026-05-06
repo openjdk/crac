@@ -54,6 +54,7 @@ public class GlobalContext {
                 // In JDK this should be called only once with a non-null name. If the implementation changes
                 // let's make scoreProvider use a collection of name/ctx pairs.
                 assert sizeProvider == null;
+                assert !name.equals("jdk.crac.internalContext") : "Duplicates internal resources number metric";
                 sizeProvider = () -> Score.setScore(name + ".size", ctx.size());
                 Score.addScoreProvider(sizeProvider);
             }

@@ -3679,20 +3679,18 @@ JVM_END
 JVM_ENTRY(jobjectArray, JVM_GetCRaCScore(JNIEnv *env))
   ResourceMark rm;
   const GrowableArray<crac::score> score = crac::collect_image_score_from_jvm();
-  const objArrayHandle score_pairs = oopFactory::new_objArray_handle(Universe::objectArrayKlass(), score.length(), CHECK_NULL);
+  const objArrayOop score_flat_oop = oopFactory::new_objectArray(2 * score.length(), CHECK_NULL);
+  const objArrayHandle score_flat(THREAD, score_flat_oop);
   for (int i = 0; i < score.length(); i++) {
     const crac::score &score_i = score.at(i);
     Handle metric = java_lang_String::create_from_str(score_i.metric, CHECK_NULL);
     jvalue value_jval;
     value_jval.d = score_i.value;
-    oop value_oop = java_lang_boxing_object::create(T_DOUBLE, &value_jval, CHECK_NULL);
-    Handle value(THREAD, value_oop);
-    objArrayOop score_pair = oopFactory::new_objectArray(2, CHECK_NULL);
-    score_pair->obj_at_put(0, metric());
-    score_pair->obj_at_put(1, value());
-    score_pairs->obj_at_put(i, score_pair);
+    oop value = java_lang_boxing_object::create(T_DOUBLE, &value_jval, CHECK_NULL);
+    score_flat->obj_at_put(2 * i, metric());
+    score_flat->obj_at_put(2 * i + 1, value);
   }
-  return checked_cast<jobjectArray>(JNIHandles::make_local(THREAD, score_pairs()));
+  return checked_cast<jobjectArray>(JNIHandles::make_local(THREAD, score_flat()));
 JVM_END
 
 JVM_ENTRY(void, JVM_RecordCRaCScore(JNIEnv *env, jobjectArray metrics, jdoubleArray values))

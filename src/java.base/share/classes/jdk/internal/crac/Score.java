@@ -47,8 +47,8 @@ public class Score {
         @Override
         public void run() {
             final var jvmScore = getJvmScore();
-            for (final var pair : jvmScore) {
-                setScore((String) pair[0], (Double) pair[1]);
+            for (var i = 0; i < jvmScore.length; i++) {
+                setScore((String) jvmScore[2 * i], (Double) jvmScore[2 * i + 1]);
             }
         }
     };
@@ -113,9 +113,10 @@ public class Score {
      * Drops the value of the specified metric, if one is recorded.
      *
      * @param metric Name of the metric.
+     * @return {@code true} if the metric was present.
      */
-    public static synchronized void removeScore(String metric) {
-        score.remove(metric);
+    public static synchronized boolean removeScore(String metric) {
+        return score.remove(metric) != null;
     }
 
     /**
@@ -129,7 +130,11 @@ public class Score {
      * responsible for storing a strong reference while the provider functions.
      * <p>
      * The order in which the providers are called is indeterminate and can
-     * change.
+     * change, they may even be called concurrently.
+     * <p>
+     * If a provider throws an {@link Exception} it is ignored and the score
+     * computation proceeds. Other kinds of {@link Throwable} interrupt the
+     * score computation and are propagated.
      *
      * @param provider The score provider to be recorded.
      */
@@ -150,7 +155,10 @@ public class Score {
             providersSnapshot = new HashSet<>(scoreProviders);
         }
         for (final var provider : providersSnapshot) {
-            provider.run();
+            try {
+                provider.run();
+            } catch (Exception _) {
+            }
         }
 
         final Map<String, Double> scoreSnapshot;
@@ -160,7 +168,7 @@ public class Score {
         return scoreSnapshot;
     }
 
-    private static native Object[][] getJvmScore();
+    private static native Object[] getJvmScore();
 
     private static native void record(String[] metrics, double[] values);
 

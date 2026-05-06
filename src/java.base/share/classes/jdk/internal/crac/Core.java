@@ -33,18 +33,6 @@ import jdk.internal.crac.mirror.impl.OrderedContext;
 public class Core {
     private static ClaimedFDs claimedFDs;
     private static final JfrResource jfrResource = new JfrResource();
-    private static final Runnable internalResourceCounter = () -> {
-        int resources = 0;
-        for (var p : Priority.values()) {
-            if (p.getContext() instanceof OrderedContext<?> octx) {
-                resources += octx.size();
-            }
-        }
-        Score.setScore("jdk.crac.internalResources", resources);
-    };
-    static {
-        Score.addScoreProvider(internalResourceCounter);
-    }
 
     /**
      * Called by JDK FD resources
@@ -102,6 +90,23 @@ public class Core {
         NORMAL(new BlockingOrderedContext<>());
 
         private final Context<JDKResource> context;
+        // CDS assert fails during VM initialization if this is a lambda
+        private static final Runnable internalResourceCounter = new Runnable() {
+            @Override
+            public void run() {
+                int resources = 0;
+                for (var p : Priority.values()) {
+                    if (p.getContext() instanceof OrderedContext<?> octx) {
+                        resources += octx.size();
+                    }
+                }
+                Score.setScore("jdk.crac.internalContext.size", resources);
+            }
+        };
+        static {
+            Score.addScoreProvider(internalResourceCounter);
+        }
+
         Priority(Context<JDKResource> context) {
             Context.getGlobalContext().register(context);
             this.context = context;

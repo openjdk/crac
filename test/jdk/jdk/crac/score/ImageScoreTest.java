@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2025, Azul Systems, Inc. All rights reserved.
+ * Copyright (c) 2025, 2026, Azul Systems, Inc. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -140,18 +140,18 @@ public class ImageScoreTest implements CracTest {
     }
 
     private static void checkScore1(Map<String, Double> score) {
-        assertGT(score.size(), 10); // at least 10 items
-        assertTrue(score.containsKey(VM_UPTIME));
-        assertEquals(TEST_SCORE_AAA_VALUE_1, score.get(TEST_SCORE_AAA));
-        assertEquals(TEST_SCORE_BBB_VALUE_1, score.get(TEST_SCORE_BBB));
-        assertEquals(TEST_SCORE_CCC_VALUE_1, score.get(TEST_SCORE_CCC));
+        assertGT(score.size(), 10, score.toString()); // at least 10 items
+        assertTrue(score.containsKey(VM_UPTIME), score.toString());
+        assertEquals(TEST_SCORE_AAA_VALUE_1, score.get(TEST_SCORE_AAA), score.toString());
+        assertEquals(TEST_SCORE_BBB_VALUE_1, score.get(TEST_SCORE_BBB), score.toString());
+        assertEquals(TEST_SCORE_CCC_VALUE_1, score.get(TEST_SCORE_CCC), score.toString());
     }
 
     private static void checkScore2(Map<String, Double> score) {
-        assertGT(score.size(), 10); // at least 10 items
-        assertTrue(score.containsKey(VM_UPTIME));
-        assertEquals(TEST_SCORE_AAA_VALUE_2, score.get(TEST_SCORE_AAA));
-        assertTrue(score.keySet().stream().noneMatch(m -> m.startsWith(TEST_SCORE_BBB)));
-        assertEquals(TEST_SCORE_CCC_VALUE_2, score.get(TEST_SCORE_CCC));
+        assertGT(score.size(), 10, score.toString()); // at least 10 items
+        assertTrue(score.containsKey(VM_UPTIME), score.toString());
+        assertEquals(TEST_SCORE_AAA_VALUE_2, score.get(TEST_SCORE_AAA), score.toString());
+        assertTrue(score.keySet().stream().noneMatch(m -> m.startsWith(TEST_SCORE_BBB)), score.toString());
+        assertEquals(TEST_SCORE_CCC_VALUE_2, score.get(TEST_SCORE_CCC), score.toString());
     }
 }

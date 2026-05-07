@@ -1547,15 +1547,13 @@ size_t Arguments::calculate_default_heap_size(size_t avail_mem) {
   const size_t reasonable_min = clamp_by_size_t_max(min_memory);
   size_t reasonable_max = clamp_by_size_t_max(max_memory);
 
-  // There is no straightforward API to get the default value of MaxHeapSize
-  const size_t default_max_heap_size = ScaleForWordSize(96*M);
-  if (reasonable_min < default_max_heap_size) {
+  if (reasonable_min < defaultMaxHeapSize) {
     // Small physical memory, so use a minimum fraction of it for the heap
     reasonable_max = reasonable_min;
   } else {
     // Not-small physical memory, so require a heap at least
     // as large as MaxHeapSize
-    reasonable_max = MAX2(reasonable_max, default_max_heap_size);
+    reasonable_max = MAX2(reasonable_max, defaultMaxHeapSize);
   }
 
   if (!FLAG_IS_DEFAULT(ErgoHeapSizeLimit) && ErgoHeapSizeLimit != 0) {
@@ -1623,9 +1621,9 @@ void Arguments::set_heap_size() {
       if (reasonable_max > max_coop_heap) {
         if (FLAG_IS_ERGO(UseCompressedOops) && has_ram_limit) {
           log_debug(gc, heap, coops)("UseCompressedOops disabled due to "
-                                      "max heap %zu > compressed oop heap %zu. "
-                                      "Please check the setting of MaxRAMPercentage %5.2f.",
-                                      reasonable_max, (size_t)max_coop_heap, MaxRAMPercentage);
+                                     "max heap %zu > compressed oop heap %zu. "
+                                     "Please check the setting of MaxRAMPercentage %5.2f.",
+                                     reasonable_max, (size_t)max_coop_heap, MaxRAMPercentage);
           FLAG_SET_ERGO(UseCompressedOops, false);
         } else {
           reasonable_max = max_coop_heap;

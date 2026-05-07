@@ -46,6 +46,8 @@
 #include "gc/z/z_globals.hpp"
 #endif
 
+const size_t defaultMaxHeapSize = ScaleForWordSize(96*M);
+
 #define GC_FLAGS(develop,                                                   \
                  develop_pd,                                                \
                  product,                                                   \
@@ -444,7 +446,7 @@
           "Initial heap size (in bytes); zero means use ergonomics")        \
           constraint(InitialHeapSizeConstraintFunc,AfterErgo)               \
                                                                             \
-  product(size_t, MaxHeapSize, ScaleForWordSize(96*M),                      \
+  product(size_t, MaxHeapSize, defaultMaxHeapSize,                          \
           "Maximum heap size (in bytes)")                                   \
           constraint(MaxHeapSizeConstraintFunc,AfterErgo)                   \
                                                                             \
@@ -460,6 +462,12 @@
           "Maximum new generation size (in bytes), max_uintx means set "    \
           "ergonomically")                                                  \
           range(0, max_uintx)                                               \
+                                                                            \
+  product(size_t, CRaCMaxHeapSizeBeforeCheckpoint, 0, "Maximum size "       \
+          "of heap before checkpoint. By default equals to -Xmx.")          \
+                                                                            \
+  product(bool, CRaCHeapErgonomics, true, RESTORE_SETTABLE, "Recalculate "  \
+          "heap limit after restore.")                                      \
                                                                             \
   product_pd(size_t, HeapBaseMinAddress,                                    \
           "OS specific low limit for heap base address")                    \

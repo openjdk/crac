@@ -2002,12 +2002,6 @@ const int ObjectAlignmentInBytes = 8;
   product(bool, CRaCPauseOnCheckpointError, false, DIAGNOSTIC,              \
           "Pauses the checkpoint when a problem is found on VM level.")     \
                                                                             \
-  product(size_t, CRaCMaxHeapSizeBeforeCheckpoint, 0, "Maximum size "       \
-          "of heap before checkpoint. By default equals to -Xmx.")          \
-                                                                            \
-  product(bool, CRaCHeapErgonomics, true, RESTORE_SETTABLE, "Recalculate "  \
-          "heap limit after restore.")                                      \
-                                                                            \
   product(ccstr, CPUFeatures, nullptr, "CPU feature set, "                  \
           "Limit set of CPU features to make the CRaC image compatible "    \
           "for running on a machine with different CPU:"                    \

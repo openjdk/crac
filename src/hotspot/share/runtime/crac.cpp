@@ -505,6 +505,9 @@ void VM_Crac::doit() {
   }
 
   memory_restore();
+  if (CRaCHeapErgonomics) {
+
+  }
 
   wakeup_threads_in_timedwait_vm();
 

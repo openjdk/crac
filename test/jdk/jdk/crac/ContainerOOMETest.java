@@ -45,7 +45,6 @@ import static jdk.test.lib.Asserts.*;
  * @run driver/timeout=120 jdk.test.lib.crac.CracTest 128M  -  -  -
  * @run driver/timeout=120 jdk.test.lib.crac.CracTest 128M  - 1G  -
  * @run driver/timeout=120 jdk.test.lib.crac.CracTest 128M  - 4G  -
- * @run driver/timeout=120 jdk.test.lib.crac.CracTest 128M  - 1G  -
  * @run driver/timeout=120 jdk.test.lib.crac.CracTest 128M 80 1G  -
  * @run driver/timeout=120 jdk.test.lib.crac.CracTest 128M  - 1G 80
  */

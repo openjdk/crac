@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2019, 2021, Azul Systems, Inc. All rights reserved.
+ * Copyright (c) 2019, 2026, Azul Systems, Inc. All rights reserved.
  * Copyright (c) 2021, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
@@ -67,7 +67,8 @@ public class Core {
      * Most resources should use priority NORMAL (the lowest priority).
      */
     public enum Priority {
-        // Other resources can record score in the beforeCheckpoint
+        // Collect score as close to checkpoint as possible for the most up-to-date
+        // values.
         SCORE(Score.getContext()),
         FILE_DESCRIPTORS(new BlockingOrderedContext<>()),
         PRE_FILE_DESCRIPTORS(new BlockingOrderedContext<>()),
@@ -89,6 +90,23 @@ public class Core {
         NORMAL(new BlockingOrderedContext<>());
 
         private final Context<JDKResource> context;
+        // CDS assert fails during VM initialization if this is a lambda
+        private static final Runnable internalResourceCounter = new Runnable() {
+            @Override
+            public void run() {
+                int resources = 0;
+                for (var p : Priority.values()) {
+                    if (p.getContext() instanceof OrderedContext<?> octx) {
+                        resources += octx.size();
+                    }
+                }
+                Score.setScore("jdk.crac.internalContext.size", resources);
+            }
+        };
+        static {
+            Score.addScoreProvider(internalResourceCounter);
+        }
+
         Priority(Context<JDKResource> context) {
             Context.getGlobalContext().register(context);
             this.context = context;

@@ -879,7 +879,7 @@ public:
 #endif // LINUX, WINDOWS or MACOS
 
 class CheckpointDCmd : public DCmdWithParser {
-  DCmdArgument<char*> _metrics;
+  DCmdArgument<char*> _scores;
   DCmdArgument<char*> _labels;
 
 public:
@@ -895,12 +895,12 @@ public:
   virtual void execute(DCmdSource source, TRAPS);
 
 private:
-  typedef bool (*accept_func)(CheckpointDCmd*, const char*, char*);
+  using accept_func = void (*)(const char*, char*, TRAPS);
 
-  bool parse_pairs(const char* what, const char* pairs, accept_func accept);
-  bool parse_pairs_from_file(const char* what, const char* path, accept_func accept);
-  static bool accept_metric(CheckpointDCmd* self, const char* key, char* str);
-  static bool accept_label(CheckpointDCmd* self, const char* key, char* str);
+  static void parse_pairs(const char* what, const char* pairs, accept_func accept, TRAPS);
+  static void parse_pairs_from_file(const char* what, const char* path, accept_func accept, TRAPS);
+  static void accept_score(const char* key, char* str, TRAPS);
+  static void accept_label(const char* key, char* str, TRAPS);
 };
 
 #endif // SHARE_SERVICES_DIAGNOSTICCOMMAND_HPP

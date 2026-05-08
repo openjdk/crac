@@ -27,28 +27,49 @@ package jdk.internal.crac;
 
 import jdk.internal.crac.mirror.Context;
 import jdk.internal.crac.mirror.Resource;
-import jdk.internal.crac.mirror.impl.OrderedContext;
 
-import java.util.HashMap;
-import java.util.Map;
+import java.util.*;
 
 /**
- * CRaC Engine can support storing additional metadata about the image.
- * This can help the infrastructure to further refine the set of feasible images
- * (constrained by CPU architecture and features) and select the image that is expected to perform best.
+ * CRaC Engine can support storing additional metadata about the image. This
+ * can help the infrastructure to further refine the set of feasible images
+ * (constrained by CPU architecture and features) and select the image that is
+ * expected to perform best.
+ * <p>
+ * All methods of this class can be safely called even if the CRaC Engine in
+ * use does not support storing metadata. In such case scores will be ignored.
  */
 public class Score {
-    private static final Map<String, Double> score = new HashMap<>();
+    private static final Map<String, Double> scores = new HashMap<>();
+    private static final Set<Runnable> scoreProviders = Collections.newSetFromMap(new WeakHashMap<>());
+    // CDS assert fails during VM initialization if this is a lambda
+    private static final Runnable jvmScoreProvider = new Runnable() {
+        @Override
+        public void run() {
+            final var jvmScores = getJvmScores();
+            for (var i = 0; i < jvmScores.length; i++) {
+                setScore((String) jvmScores[2 * i], (Double) jvmScores[2 * i + 1]);
+            }
+        }
+    };
 
-    // There shouldn't be anyone else to register at Core.Priority.SCORE.
-    // We need to class-load this class every time, to store common metrics.
-    private static final Context<JDKResource> resource = new Context<>() {
+    static {
+        addScoreProvider(jvmScoreProvider);
+    }
+
+    private static final Context<JDKResource> context = new Context<>() {
         @Override
         public void beforeCheckpoint(Context<? extends Resource> context) {
-            if (isSupported()) {
-                setJdkResourceScore();
-                record();
+            final var scoresSnapshot = getScores();
+            final var metrics = new String[scoresSnapshot.size()];
+            final var values = new double[scoresSnapshot.size()];
+            int i = 0;
+            for (var e : scoresSnapshot.entrySet()) {
+                metrics[i] = e.getKey();
+                values[i] = e.getValue();
+                ++i;
             }
+            record(metrics, values);
         }
 
         @Override
@@ -57,63 +78,101 @@ public class Score {
 
         @Override
         public void register(JDKResource resource) {
-            throw new UnsupportedOperationException("Score is a singleton resource");
+            throw new UnsupportedOperationException("Score is a singleton context");
         }
     };
 
-    private static void setJdkResourceScore() {
-        int resources = 0;
-        for (var p : Core.Priority.values()) {
-            if (p.getContext() instanceof OrderedContext<?> octx) {
-                resources += octx.size();
-            }
-        }
-        setScore("jdk.crac.internalResources", resources);
+    private Score() {
     }
 
-    private Score() {}
-
+    /**
+     * Returns {@code true} if the CRaC Engine in use supports score recording.
+     *
+     * @return {@code true} if the CRaC Engine in use supports score recording.
+     */
     public static native boolean isSupported();
 
-    private static native boolean record(String[] metrics, double[] values);
-
-    private static synchronized void record() {
-        String[] metrics = new String[score.size()];
-        double[] values = new double[score.size()];
-        int i = 0;
-        for (var e : score.entrySet()) {
-            metrics[i] = e.getKey();
-            values[i] = e.getValue();
-            ++i;
-        }
-        if (!record(metrics, values)) {
-            throw new RuntimeException("Cannot record image score");
-        }
-    }
-
     /**
-     * Record value to be stored in the image metadata on checkpoint. Repeated invocations
-     * with the same {@code metric} overwrite previous value. This method can be safely
-     * called even if the C/R engine does not support recording metadata.
-     * On checkpoint the metrics are not reset; if that is desired invoke {@link #resetAll()}
-     * manually.
+     * Records a score to be stored in the image metadata on checkpoint.
+     * Repeated invocations with the same {@code metric} overwrite the previous
+     * value.
+     * <p>
+     * On checkpoint the scores are not reset; if that is desired use
+     * {@link #removeScore(String)}.
      *
      * @param metric Name of the metric.
-     * @param value Numeric value of the metric.
+     * @param value  Numeric value of the metric.
+     * @implNote Metrics {@code java.*}, {@code jdk.*}, {@code sun.*},
+     * {@code vm.*} are reserved to be set by the JDK itself.
      */
     public static synchronized void setScore(String metric, double value) {
-        score.put(metric, value);
+        scores.put(metric, value);
     }
 
     /**
-     * Drop all currently stored metrics. This method can be safely called
-     * even if the C/R engine does not support recording metadata.
+     * Drops the value of the specified metric, if one is recorded.
+     *
+     * @param metric Name of the metric.
+     * @return {@code true} if the metric was present.
      */
-    public static synchronized void resetAll() {
-        score.clear();
+    public static synchronized boolean removeScore(String metric) {
+        return scores.remove(metric) != null;
     }
 
+    /**
+     * Adds a runnable which will be invoked each time just before scores are
+     * read to provide up-to-date scores.
+     * <p>
+     * The provider is expected to add or update the scores by invoking
+     * {@link #setScore(String, double)}, possibly multiple times.
+     * <p>
+     * The provider is recorded through a weak reference. The caller is
+     * responsible for storing a strong reference while the provider functions.
+     * <p>
+     * The order in which the providers are called is indeterminate and can
+     * change, they may even be called concurrently.
+     * <p>
+     * If a provider throws an {@link Exception} it is ignored and the score
+     * computation proceeds. Other kinds of {@link Throwable} interrupt the
+     * score computation and are propagated.
+     *
+     * @param provider The score provider to be recorded.
+     */
+    public static synchronized void addScoreProvider(Runnable provider) {
+        scoreProviders.add(provider);
+    }
+
+    /**
+     * Returns a snapshot of the recorded scores. Future changes to the scores
+     * will not be reflected in the snapshot and vice versa.
+     *
+     * @return current snapshot of the recorded scores.
+     */
+    public static Map<String, Double> getScores() {
+        // Take a snapshot in case a provider adds new providers
+        final Set<Runnable> providersSnapshot;
+        synchronized (Score.class) {
+            providersSnapshot = new HashSet<>(scoreProviders);
+        }
+        for (final var provider : providersSnapshot) {
+            try {
+                provider.run();
+            } catch (Exception _) {
+            }
+        }
+
+        final Map<String, Double> scoresSnapshot;
+        synchronized (Score.class) {
+            scoresSnapshot = new HashMap<>(scores);
+        }
+        return scoresSnapshot;
+    }
+
+    private static native Object[] getJvmScores();
+
+    private static native void record(String[] metrics, double[] values);
+
     static Context<JDKResource> getContext() {
-        return resource;
+        return context;
     }
 }

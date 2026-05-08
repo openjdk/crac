@@ -22,6 +22,8 @@
  */
 
 #include "classfile/classLoader.hpp"
+#include "classfile/systemDictionary.hpp"
+#include "classfile/vmSymbols.hpp"
 #include "compiler/compileBroker.hpp"
 #include "jfr/jfr.hpp"
 #include "jvm.h"
@@ -30,6 +32,7 @@
 #include "logging/logConfiguration.hpp"
 #include "memory/allocation.hpp"
 #include "memory/oopFactory.hpp"
+#include "memory/resourceArea.hpp"
 #include "nmt/memTag.hpp"
 #include "oops/oopCast.inline.hpp"
 #include "oops/typeArrayOop.inline.hpp"
@@ -38,8 +41,10 @@
 #include "runtime/crac_engine.hpp"
 #include "runtime/crac_structs.hpp"
 #include "runtime/globals.hpp"
+#include "runtime/handles.hpp"
 #include "runtime/interfaceSupport.inline.hpp"
 #include "runtime/java.hpp"
+#include "runtime/javaCalls.hpp"
 #include "runtime/jniHandles.hpp"
 #include "runtime/jniHandles.inline.hpp"
 #include "runtime/os.inline.hpp"
@@ -51,6 +56,7 @@
 #include "utilities/debug.hpp"
 #include "utilities/decoder.hpp"
 #include "utilities/defaultStream.hpp"
+#include "utilities/exceptions.hpp"
 #include "utilities/globalDefinitions.hpp"
 #include "utilities/growableArray.hpp"
 #include "utilities/ostream.hpp"
@@ -750,10 +756,63 @@ bool crac::is_image_score_supported() {
   return _engine != nullptr && _engine->prepare_image_score_api() == CracEngine::ApiStatus::OK;
 }
 
-bool crac::record_image_score(jobjectArray metrics, jdoubleArray values) {
-  if (_engine == nullptr || _engine->prepare_image_score_api() != CracEngine::ApiStatus::OK) {
-    return false;
+void crac::set_image_score(const char *metric, double value, TRAPS) {
+  Klass* const k = SystemDictionary::resolve_or_fail(vmSymbols::jdk_internal_crac_Score(), true, CHECK);
+
+  JavaCallArguments args;
+  const Handle metric_h = java_lang_String::create_from_str(metric, CHECK);
+  args.push_oop(metric_h);
+  args.push_double(value);
+
+  JavaValue result(T_VOID);
+  JavaCalls::call_static(&result,
+                         k, vmSymbols::setScore_name(), vmSymbols::setScore_signature(),
+                         &args,
+                         CHECK);
+}
+
+GrowableArray<crac::score> crac::get_image_scores_from_jvm() {
+  GrowableArray<crac::score> scores(21);
+
+  scores.append({"java.lang.Runtime.availableProcessors", static_cast<double>(os::active_processor_count())});
+  scores.append({"java.lang.Runtime.totalMemory", static_cast<double>(Universe::heap()->capacity())});
+  scores.append({"java.lang.Runtime.maxMemory", static_cast<double>(Universe::heap()->max_capacity())});
+
+  const double uptime = TimeHelper::counter_to_millis(os::elapsed_counter());
+  scores.append({"vm.boot_time", os::javaTimeMillis() - uptime});
+  scores.append({"vm.uptime", uptime});
+  scores.append({"vm.uptime_since_restore", TimeHelper::counter_to_millis(os::elapsed_counter_since_restore())});
+
+#if INCLUDE_MANAGEMENT
+  const jlong shared_loaded_classes = ClassLoadingService::loaded_shared_class_count();
+  const jlong shared_unloaded_classes = ClassLoadingService::unloaded_shared_class_count();
+  // The keys match what jcmd <pid> PerfCounter.print would use
+  scores.append({"java.cls.loadedClasses", static_cast<double>(ClassLoadingService::loaded_class_count() - shared_loaded_classes)});
+  scores.append({"java.cls.sharedLoadedClasses", static_cast<double>(shared_loaded_classes)});
+  scores.append({"java.cls.unloadedClasses", static_cast<double>(ClassLoadingService::unloaded_class_count() - shared_unloaded_classes)});
+  scores.append({"java.cls.sharedUnloadedClasses", static_cast<double>(shared_unloaded_classes)});
+#endif // INCLUDE_MANAGEMENT
+  if (ClassLoader::perf_app_classload_count() != nullptr) {
+    scores.append({"sun.cls.appClassLoadCount", static_cast<double>(ClassLoader::perf_app_classload_count()->get_value())});
   }
+
+  scores.append({"sun.ci.totalCompiles", static_cast<double>(CompileBroker::get_total_compile_count())});
+  scores.append({"sun.ci.totalBailouts", static_cast<double>(CompileBroker::get_total_bailout_count())});
+  scores.append({"sun.ci.totalInvalidates", static_cast<double>(CompileBroker::get_total_invalidated_count())});
+  // CompileBroker::get_total_native_compile_count() is never incremented?
+  scores.append({"sun.ci.osrCompiles", static_cast<double>(CompileBroker::get_total_osr_compile_count())});
+  scores.append({"sun.ci.standardCompiles", static_cast<double>(CompileBroker::get_total_standard_compile_count())});
+  scores.append({"sun.ci.osrBytes", static_cast<double>(CompileBroker::get_sum_osr_bytes_compiled())});
+  scores.append({"sun.ci.standardBytes", static_cast<double>(CompileBroker::get_sum_standard_bytes_compiled())});
+  scores.append({"sun.ci.nmethodSize", static_cast<double>(CompileBroker::get_sum_nmethod_size())});
+  scores.append({"sun.ci.nmethodCodeSize", static_cast<double>(CompileBroker::get_sum_nmethod_code_size())});
+  scores.append({"java.ci.totalTime", static_cast<double>(CompileBroker::get_total_compilation_time())});
+
+  return scores;
+}
+
+bool crac::record_image_scores(jobjectArray metrics, jdoubleArray values) {
+  assert(crac::is_image_score_supported(), "CRaC engine does not support score recording");
   ResourceMark rm;
   objArrayOop metrics_oops = oop_cast<objArrayOop>(JNIHandles::resolve_non_null(metrics));
   typeArrayOop values_oops = oop_cast<typeArrayOop>(JNIHandles::resolve_non_null(values));
@@ -767,49 +826,7 @@ bool crac::record_image_score(jobjectArray metrics, jdoubleArray values) {
       return false;
     }
   }
-
-  bool result = true;
-  result = result && _engine->set_score("java.lang.Runtime.availableProcessors", os::active_processor_count());
-  result = result && _engine->set_score("java.lang.Runtime.totalMemory", Universe::heap()->capacity());
-  result = result && _engine->set_score("java.lang.Runtime.maxMemory", Universe::heap()->max_capacity());
-
-  double uptime = TimeHelper::counter_to_millis(os::elapsed_counter());
-  result = result && _engine->set_score("vm.boot_time", os::javaTimeMillis() - uptime);
-  result = result && _engine->set_score("vm.uptime", uptime);
-  result = result && _engine->set_score("vm.uptime_since_restore", TimeHelper::counter_to_millis(os::elapsed_counter_since_restore()));
-
-#if INCLUDE_MANAGEMENT
-  jlong shared_loaded_classes = ClassLoadingService::loaded_shared_class_count();
-  jlong shared_unloaded_classes = ClassLoadingService::unloaded_shared_class_count();
-  // The keys match what jcmd <pid> PerfCounter.print would use
-  result = result && _engine->set_score("java.cls.loadedClasses", ClassLoadingService::loaded_class_count() - shared_loaded_classes);
-  result = result && _engine->set_score("java.cls.sharedLoadedClasses", shared_loaded_classes);
-  result = result && _engine->set_score("java.cls.unloadedClasses", ClassLoadingService::unloaded_class_count() - shared_unloaded_classes);
-  result = result && _engine->set_score("java.cls.sharedUnloadedClasses", shared_unloaded_classes);
-#endif // INCLUDE_MANAGEMENT
-  if (ClassLoader::perf_app_classload_count() != nullptr) {
-    result = result && _engine->set_score("sun.cls.appClassLoadCount", ClassLoader::perf_app_classload_count()->get_value());
-  }
-
-  result = result && _engine->set_score("sun.ci.totalCompiles", CompileBroker::get_total_compile_count());
-  result = result && _engine->set_score("sun.ci.totalBailouts", CompileBroker::get_total_bailout_count());
-  result = result && _engine->set_score("sun.ci.totalInvalidates", CompileBroker::get_total_invalidated_count());
-  // CompileBroker::get_total_native_compile_count() is never incremented?
-  result = result && _engine->set_score("sun.ci.osrCompiles", CompileBroker::get_total_osr_compile_count());
-  result = result && _engine->set_score("sun.ci.standardCompiles", CompileBroker::get_total_standard_compile_count());
-  result = result && _engine->set_score("sun.ci.osrBytes", CompileBroker::get_sum_osr_bytes_compiled());
-  result = result && _engine->set_score("sun.ci.standardBytes", CompileBroker::get_sum_standard_bytes_compiled());
-  result = result && _engine->set_score("sun.ci.nmethodSize", CompileBroker::get_sum_nmethod_size());
-  result = result && _engine->set_score("sun.ci.nmethodCodeSize", CompileBroker::get_sum_nmethod_code_size());
-  result = result && _engine->set_score("java.ci.totalTime", CompileBroker::get_total_compilation_time());
-  return result;
-}
-
-bool crac::record_image_score(const char *metric, double value) {
-  if (_engine == nullptr || _engine->prepare_image_score_api() != CracEngine::ApiStatus::OK) {
-    return false;
-  }
-  return _engine->set_score(metric, value);
+  return true;
 }
 
 void crac::prepare_restore(crac_restore_data& restore_data) {

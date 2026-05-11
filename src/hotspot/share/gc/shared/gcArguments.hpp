@@ -49,6 +49,7 @@ protected:
 public:
   virtual void set_heap_size();
   virtual void initialize();
+  // What would be the default heap size using ergo algorithm now
   virtual size_t default_heap_size();
 
   // Return the (conservative) maximum heap alignment

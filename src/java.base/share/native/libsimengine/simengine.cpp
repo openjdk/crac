@@ -36,6 +36,7 @@
 #endif // LINUX
 
 #include "crcommon.hpp"
+#include "crlib/crlib_checkpointable_data.h"
 #include "crlib/crlib_restore_data.h"
 #include "crlib/crlib_description.h"
 #include "jni.h"
@@ -288,11 +289,24 @@ static crlib_description_t description_extension = {
   configuration_options,
 };
 
+checkpointable_status_t get_checkpointable_status(crlib_conf_t *) {
+  return ready;
+}
+
+static crlib_checkpointable_data_t checkpointable_data_extension = {
+  {
+    CRLIB_EXTENSION_CHECKPOINTABLE_DATA_NAME,
+    sizeof(checkpointable_data_extension)
+  },
+  get_checkpointable_status,
+};
+
 static const crlib_extension_t *extensions[] = {
   &restore_data_extension.header,
   &image_constraints_extension.header,
   &image_score_extension.header,
   &description_extension.header,
+  &checkpointable_data_extension.header,
   nullptr
 };
 

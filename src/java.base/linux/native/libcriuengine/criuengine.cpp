@@ -38,7 +38,7 @@
 #include <sys/wait.h>
 #include <unistd.h>
 
-#include "crlib_checkpointable_data.h"
+#include "crlib/crlib_checkpointable_data.h"
 #include "crlib/crlib_description.h"
 #include "crlib/crlib_restore_data.h"
 #include "crlib/crlib_user_data.h"

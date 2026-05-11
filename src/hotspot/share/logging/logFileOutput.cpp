@@ -160,8 +160,8 @@ static uint next_file_number(const char* filename,
     }
   }
 
-  FREE_C_HEAP_ARRAY(char, oldest_name);
-  FREE_C_HEAP_ARRAY(char, archive_name);
+  FREE_C_HEAP_ARRAY(oldest_name);
+  FREE_C_HEAP_ARRAY(archive_name);
   return next_num;
 }
 
@@ -485,7 +485,7 @@ void LogFileOutput::reopen() {
   // Open the active log file using the same stream as before
   jlong the_time = os::javaTimeMillis();
   LogFileOutput::set_file_name_parameters(the_time);
-  FREE_C_HEAP_ARRAY(char, _file_name);
+  FREE_C_HEAP_ARRAY(_file_name);
   _file_name = make_file_name(_name + strlen(Prefix), _pid_str, _vm_start_time_str);
   _stream = os::fopen(_file_name, FileOpenMode);
   if (_stream == nullptr) {

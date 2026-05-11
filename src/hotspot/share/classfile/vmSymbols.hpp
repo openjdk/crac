@@ -702,6 +702,7 @@ class SerializeClosure;
   template(appendToClassPathForInstrumentation_name,   "appendToClassPathForInstrumentation")                     \
   do_alias(appendToClassPathForInstrumentation_signature, string_void_signature)                                  \
   template(serializePropertiesToByteArray_name,        "serializePropertiesToByteArray")                          \
+  template(serializeSecurityPropertiesToByteArray_name, "serializeSecurityPropertiesToByteArray")                 \
   template(serializeAgentPropertiesToByteArray_name,   "serializeAgentPropertiesToByteArray")                     \
   template(encodeThrowable_name,                       "encodeThrowable")                                         \
   template(encodeThrowable_signature,                  "(Ljava/lang/Throwable;JI)I")                              \
@@ -741,9 +742,13 @@ class SerializeClosure;
   template(toFileURL_name,                                  "toFileURL")                                          \
   template(toFileURL_signature,                             "(Ljava/lang/String;)Ljava/net/URL;")                 \
                                                                                                                   \
+  /* CRaC */                                                                                                      \
   template(jdk_internal_crac_mirror_Core,          "jdk/internal/crac/mirror/Core")                               \
   template(checkpointRestoreInternal_name,         "checkpointRestoreInternal")                                   \
   template(checkpointRestoreInternal_signature,    "(J)Ljava/lang/String;")                                       \
+  template(jdk_internal_crac_Score,                "jdk/internal/crac/Score")                                     \
+  template(setScore_name,                          "setScore")                                                    \
+  template(setScore_signature,                     "(Ljava/lang/String;D)V")                                      \
                                                                                                                   \
   /* jcmd Thread.dump_to_file */                                                                                  \
   template(jdk_internal_vm_ThreadDumper,           "jdk/internal/vm/ThreadDumper")                                \

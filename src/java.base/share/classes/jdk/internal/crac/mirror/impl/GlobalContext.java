@@ -25,7 +25,7 @@
  */
 package jdk.internal.crac.mirror.impl;
 
-import jdk.internal.crac.JDKResource;
+import jdk.internal.crac.Score;
 import jdk.internal.crac.mirror.Context;
 import jdk.internal.crac.mirror.Resource;
 
@@ -34,27 +34,8 @@ public class GlobalContext {
 
     public static final Context<Resource> instance = createGlobalContextImpl(null);
 
-    // Strong reference to the resource
-    private static Score scoreSingleton;
-
-    public static class Score implements JDKResource {
-        private final String name;
-        private final OrderedContext<?> ctx;
-
-        private Score(String name, OrderedContext<?> ctx) {
-            this.name = name;
-            this.ctx = ctx;
-        }
-
-        @Override
-        public void beforeCheckpoint(Context<? extends Resource> context) {
-            jdk.internal.crac.Score.setScore(name + ".size", ctx.size());
-        }
-
-        @Override
-        public void afterRestore(Context<? extends Resource> context) {
-        }
-    }
+    // Strong reference to the provider
+    private static Runnable sizeProvider;
 
     private GlobalContext() {}
 
@@ -65,19 +46,18 @@ public class GlobalContext {
             case "OrderedContext" -> new OrderedContext<>();
             default -> new OrderedContext<>(); // cannot report as System.out/err are not initialized yet
         };
-        // The 'internal' context from jdk.internal.crac.mirror.Core should host only the Core.Priority contexts
-        // and the context created by jdk.crac.Core (the 'user' global context). We won't record score for
-        // the internal context as if registered here, beforeCheckpoint would be called after Core.Priority.SCORE
-        // and the score would not be recorded.
+        // The null-named context (the 'internal' global context) only hosts jdk.internal.crac.Core.Priority contexts
+        // and the context created by jdk.crac.Core (the 'user' global context). We won't record the size of the
+        // internal context since it is basically fixed and thus not interesting.
         if (name != null) {
-            Score score = new Score(name, ctx);
             synchronized (GlobalContext.class) {
                 // In JDK this should be called only once with a non-null name. If the implementation changes
-                // let's turn scoreSingleton into a map.
-                assert scoreSingleton == null;
-                scoreSingleton = score;
+                // let's make scoreProvider use a collection of name/ctx pairs.
+                assert sizeProvider == null;
+                assert !name.equals("jdk.crac.internalContext") : "Duplicates internal resources number metric";
+                sizeProvider = () -> Score.setScore(name + ".size", ctx.size());
+                Score.addScoreProvider(sizeProvider);
             }
-            ctx.register(score);
         }
         return ctx;
     }

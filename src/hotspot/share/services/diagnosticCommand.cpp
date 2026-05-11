@@ -109,6 +109,7 @@ void DCmd::register_dcmds() {
   DCmdFactory::register_DCmdFactory(new DCmdFactoryImpl<VersionDCmd>(full_export));
   DCmdFactory::register_DCmdFactory(new DCmdFactoryImpl<CommandLineDCmd>(full_export));
   DCmdFactory::register_DCmdFactory(new DCmdFactoryImpl<PrintSystemPropertiesDCmd>(full_export));
+  DCmdFactory::register_DCmdFactory(new DCmdFactoryImpl<PrintSecurityPropertiesDCmd>(full_export));
   DCmdFactory::register_DCmdFactory(new DCmdFactoryImpl<PrintVMFlagsDCmd>(full_export));
   DCmdFactory::register_DCmdFactory(new DCmdFactoryImpl<SetVMFlagDCmd>(full_export));
   DCmdFactory::register_DCmdFactory(new DCmdFactoryImpl<VMDynamicLibrariesDCmd>(full_export));
@@ -346,8 +347,8 @@ void JVMTIAgentLoadDCmd::execute(DCmdSource source, TRAPS) {
 #endif // INCLUDE_JVMTI
 #endif // INCLUDE_SERVICES
 
-void PrintSystemPropertiesDCmd::execute(DCmdSource source, TRAPS) {
-  // load VMSupport
+// helper method for printing system and security properties
+static void print_properties(Symbol* method_name, outputStream* out, TRAPS) {
   Symbol* klass = vmSymbols::jdk_internal_vm_VMSupport();
   Klass* k = SystemDictionary::resolve_or_fail(klass, true, CHECK);
   InstanceKlass* ik = InstanceKlass::cast(k);
@@ -355,39 +356,36 @@ void PrintSystemPropertiesDCmd::execute(DCmdSource source, TRAPS) {
     ik->initialize(THREAD);
   }
   if (HAS_PENDING_EXCEPTION) {
-    java_lang_Throwable::print(PENDING_EXCEPTION, output());
-    output()->cr();
+    java_lang_Throwable::print(PENDING_EXCEPTION, out);
+    out->cr();
     CLEAR_PENDING_EXCEPTION;
     return;
   }
-
-  // invoke the serializePropertiesToByteArray method
   JavaValue result(T_OBJECT);
   JavaCallArguments args;
-
   Symbol* signature = vmSymbols::void_byte_array_signature();
-  JavaCalls::call_static(&result,
-                         ik,
-                         vmSymbols::serializePropertiesToByteArray_name(),
-                         signature,
-                         &args,
-                         THREAD);
+  JavaCalls::call_static(&result, ik, method_name, signature, &args, THREAD);
+
   if (HAS_PENDING_EXCEPTION) {
-    java_lang_Throwable::print(PENDING_EXCEPTION, output());
-    output()->cr();
+    java_lang_Throwable::print(PENDING_EXCEPTION, out);
+    out->cr();
     CLEAR_PENDING_EXCEPTION;
     return;
   }
-
-  // The result should be a [B
   oop res = result.get_oop();
-  assert(res->is_typeArray(), "just checking");
-  assert(TypeArrayKlass::cast(res->klass())->element_type() == T_BYTE, "just checking");
-
-  // copy the bytes to the output stream
+  assert(res->is_typeArray(), "should be a byte array");
+  assert(TypeArrayKlass::cast(res->klass())->element_type() == T_BYTE, "should be a byte array");
   typeArrayOop ba = typeArrayOop(res);
-  jbyte* addr = typeArrayOop(res)->byte_at_addr(0);
-  output()->print_raw((const char*)addr, ba->length());
+  jbyte* addr = ba->byte_at_addr(0);
+  out->print_raw((const char*)addr, ba->length());
+}
+
+void PrintSystemPropertiesDCmd::execute(DCmdSource source, TRAPS) {
+  print_properties(vmSymbols::serializePropertiesToByteArray_name(), output(), THREAD);
+}
+
+void PrintSecurityPropertiesDCmd::execute(DCmdSource source, TRAPS) {
+  print_properties(vmSymbols::serializeSecurityPropertiesToByteArray_name(), output(), THREAD);
 }
 
 VMUptimeDCmd::VMUptimeDCmd(outputStream* output, bool heap) :
@@ -1084,9 +1082,9 @@ void DumpSharedArchiveDCmd::execute(DCmdSource source, TRAPS) {
 
 CheckpointDCmd::CheckpointDCmd(outputStream* output, bool heap) :
   DCmdWithParser(output, heap),
-  _metrics("metrics", "Extra image metrics to record (key1=value2,key2=value2,... or @/path/to/file)", "STRING", false),
+  _scores("scores", "Extra image scores to record (metric1=value2,metric2=value2,... or @/path/to/file)", "STRING", false),
   _labels("labels", "Extra labels to record (label1=value1,label2=value2,... or @/path/to/file)", "STRING", false) {
-  _dcmdparser.add_dcmd_option(&_metrics);
+  _dcmdparser.add_dcmd_option(&_scores);
   _dcmdparser.add_dcmd_option(&_labels);
 }
 
@@ -1106,36 +1104,28 @@ struct LocaleGuard {
 };
 
 void CheckpointDCmd::execute(DCmdSource source, TRAPS) {
-  const char *metrics = _metrics.value();
-  if (metrics != nullptr) {
+  const char *scores = _scores.value();
+  if (scores != nullptr) {
     if (crac::is_image_score_supported()) {
       // This guard ensures that we are parsing the floating point values
       // with '.' as the decimal point (some other locales use ',')
       LocaleGuard lg;
-      if (metrics[0] == '@') {
-        if (!parse_pairs_from_file("metric", metrics + 1, CheckpointDCmd::accept_metric)) {
-          return;
-        }
+      if (scores[0] == '@') {
+        parse_pairs_from_file("scores", scores + 1, CheckpointDCmd::accept_score, CHECK);
       } else {
-        if (!parse_pairs("metric", metrics, CheckpointDCmd::accept_metric)) {
-          return;
-        }
+        parse_pairs("scores", scores, CheckpointDCmd::accept_score, CHECK);
       }
     } else {
-      output()->print_cr("Warning: metrics are not supported by current C/R engine");
+      output()->print_cr("Warning: scores are not supported by current C/R engine");
     }
   }
   const char *labels = _labels.value();
   if (labels != nullptr) {
     if (crac::is_image_constraints_supported()) {
       if (labels[0] == '@') {
-        if (!parse_pairs_from_file("label", labels + 1, CheckpointDCmd::accept_label)) {
-          return;
-        }
+        parse_pairs_from_file("labels", labels + 1, CheckpointDCmd::accept_label, CHECK);
       } else {
-        if (!parse_pairs("label", labels, CheckpointDCmd::accept_label)) {
-          return;
-        }
+        parse_pairs("labels", labels, CheckpointDCmd::accept_label, CHECK);
       }
     } else {
       output()->print_cr("Warning: labels are not supported by current C/R engine");
@@ -1167,22 +1157,18 @@ void CheckpointDCmd::execute(DCmdSource source, TRAPS) {
   }
 }
 
-bool CheckpointDCmd::accept_metric(CheckpointDCmd* self, const char* key, char* str) {
+void CheckpointDCmd::accept_score(const char* key, char* str, TRAPS) {
   char *endptr;
   double value = strtod(str, &endptr);
   while (isspace(*endptr)) ++endptr;
   if (*endptr) {
-    self->output()->print_cr("Cannot convert '%s' into double value for metric '%s'", str, key);
-    return false;
+    THROW_MSG(vmSymbols::java_lang_IllegalArgumentException(),
+              err_msg("Cannot convert '%s' into double value for metric '%s'", str, key));
   }
-  if (!crac::record_image_score(key, value)) {
-    self->output()->print_cr("Cannot record metric %s=%f", key, value);
-    return false;
-  }
-  return true;
+  crac::set_image_score(key, value, CHECK);
 }
 
-bool CheckpointDCmd::accept_label(CheckpointDCmd* self, const char* key, char* str) {
+void CheckpointDCmd::accept_label(const char* key, char* str, TRAPS) {
   while (isspace(*str)) ++str;
   char *end = str + strlen(str) - 1;
   while (end >= str && isspace(*end)) {
@@ -1190,39 +1176,34 @@ bool CheckpointDCmd::accept_label(CheckpointDCmd* self, const char* key, char* s
     --end;
   }
   if (!crac::record_image_label(key, str)) {
-    self->output()->print_cr("Cannot record label %s=%s", key, str);
-    return false;
+    THROW_MSG(vmSymbols::java_lang_RuntimeException(),
+              err_msg("Cannot record label %s=%s", key, str));
   }
-  return true;
 }
 
-bool CheckpointDCmd::parse_pairs(const char* what, const char* str, accept_func accept) {
+void CheckpointDCmd::parse_pairs(const char* what, const char* pairs, accept_func accept, TRAPS) {
   ResourceMark rm;
-  size_t len = strlen(str);
-  char *copy = strcpy(NEW_RESOURCE_ARRAY(char, len + 1), str);
+  size_t len = strlen(pairs);
+  char *copy = strcpy(NEW_RESOURCE_ARRAY(char, len + 1), pairs);
   char *key_value;
   while ((key_value = strsep(&copy, ",")) != nullptr) {
     char *key = strsep(&key_value, "=");
     if (*key == '\0') {
-      output()->print_cr("Empty %s name", what);
-      return false;
+      THROW_MSG(vmSymbols::java_lang_IllegalArgumentException(), err_msg("Empty key in %s", what));
     }
     if (key_value == nullptr) {
-      output()->print_cr("Missing value for %s '%s'", what, key);
-      return false;
+      THROW_MSG(vmSymbols::java_lang_IllegalArgumentException(),
+                err_msg("Missing value for key '%s' in %s", key, what));
     }
-    if (!accept(this, key, key_value)) {
-      return false;
-    }
+    accept(key, key_value, CHECK);
   }
-  return true;
 }
 
-bool CheckpointDCmd::parse_pairs_from_file(const char* what, const char* path, accept_func accept) {
+void CheckpointDCmd::parse_pairs_from_file(const char* what, const char* path, accept_func accept, TRAPS) {
   FILE *file = os::fopen(path, "r");
   if (file == nullptr) {
-    output()->print_cr("Cannot open %s: %s", path, os::strerror(errno));
-    return false;
+    THROW_MSG(vmSymbols::java_io_IOException(),
+              err_msg("Cannot open %s: %s", path, os::strerror(errno)));
   }
   struct FileCloser: StackObj {
     FILE *_file;
@@ -1234,29 +1215,25 @@ bool CheckpointDCmd::parse_pairs_from_file(const char* what, const char* path, a
     char *line = linebuf;
     size_t line_length = strlen(line);
     if (line_length >= sizeof(linebuf) - 1 && line[line_length - 1] != '\n') {
-      output()->print_cr("Line %d starting with '%s' is too long", linenum, line);
-      return false;
+      THROW_MSG(vmSymbols::java_io_IOException(),
+                err_msg("Line %d starting with '%s' is too long", linenum, line));
     } else if (line[line_length - 1] == '\n') {
       // don't print newline in error message
       line[line_length - 1] = '\0';
     }
     char *key = strsep(&line, "=");
     if (line == nullptr) {
-      output()->print_cr("Invalid line %d in %s (no '=' separator)", linenum, path);
-      return false;
+      THROW_MSG(vmSymbols::java_lang_IllegalArgumentException(),
+                err_msg("Invalid line %d in %s (no '=' separator)", linenum, path));
     }
     // truncate whitespace in key
     while (isspace(*key)) ++key;
     for (char *end = line - 2; end >= key && isspace(*end); --end) *end = '\0';
     if (*key == '\0') {
-      output()->print_cr("Empty %s name", what);
-      return false;
+      THROW_MSG(vmSymbols::java_lang_IllegalArgumentException(), err_msg("Empty key in %s", what));
     }
-    if (!accept(this, key, line)) {
-      return false;
-    }
+    accept(key, line, CHECK);
   }
-  return true;
 }
 
 ThreadDumpToFileDCmd::ThreadDumpToFileDCmd(outputStream* output, bool heap) :

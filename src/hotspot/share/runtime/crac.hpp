@@ -28,6 +28,7 @@
 #include "runtime/crac_engine.hpp"
 #include "runtime/handles.hpp"
 #include "utilities/exceptions.hpp"
+#include "utilities/growableArray.hpp"
 
 // xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
 #define UUID_LENGTH 36
@@ -45,8 +46,13 @@ public:
   static bool record_image_label(const char *label, const char *value);
 
   static bool is_image_score_supported();
-  static bool record_image_score(jobjectArray metrics, jdoubleArray values);
-  static bool record_image_score(const char *metric, double value);
+  static void set_image_score(const char *metric, double value, TRAPS);
+  struct score {
+    const char *metric;
+    double value;
+  };
+  static GrowableArray<score> get_image_scores_from_jvm();
+  static bool record_image_scores(jobjectArray metrics, jdoubleArray values);
 
   struct crac_restore_data {
     jlong restore_time;

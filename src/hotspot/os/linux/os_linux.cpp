@@ -719,14 +719,14 @@ void os::init_system_properties_values() {
     char *ld_library_path = NEW_C_HEAP_ARRAY(char, pathsize, mtInternal);
     os::snprintf_checked(ld_library_path, pathsize, "%s%s" SYS_EXT_DIR "/lib:" DEFAULT_LIBPATH, v, v_colon);
     Arguments::set_library_path(ld_library_path);
-    FREE_C_HEAP_ARRAY(char, ld_library_path);
+    FREE_C_HEAP_ARRAY(ld_library_path);
   }
 
   // Extensions directories.
   os::snprintf_checked(buf, bufsize, "%s" EXTENSIONS_DIR ":" SYS_EXT_DIR EXTENSIONS_DIR, Arguments::get_java_home());
   Arguments::set_ext_dirs(buf);
 
-  FREE_C_HEAP_ARRAY(char, buf);
+  FREE_C_HEAP_ARRAY(buf);
 
 #undef DEFAULT_LIBPATH
 #undef SYS_EXT_DIR
@@ -1322,7 +1322,7 @@ bool os::is_primordial_thread(void) {
 // Find the virtual memory area that contains addr
 static bool find_vma(address addr, address* vma_low, address* vma_high) {
   FILE *fp = os::fopen("/proc/self/maps", "r");
-  if (fp) {
+  if (fp != nullptr) {
     address low, high;
     while (!feof(fp)) {
       if (fscanf(fp, "%p-%p", &low, &high) == 2) {
@@ -1335,7 +1335,7 @@ static bool find_vma(address addr, address* vma_low, address* vma_high) {
       }
       for (;;) {
         int ch = fgetc(fp);
-        if (ch == EOF || ch == (int)'\n') break;
+        if (ch == EOF || ch == '\n') break;
       }
     }
     fclose(fp);
@@ -2179,8 +2179,6 @@ void os::print_os_info(outputStream* st) {
   os::Linux::print_libversion_info(st);
 
   os::Posix::print_rlimit_info(st);
-
-  os::print_open_file_descriptors(st);
 
   os::Posix::print_load_average(st);
   st->cr();
@@ -3454,7 +3452,7 @@ void os::Linux::rebuild_cpu_to_node_map() {
       }
     }
   }
-  FREE_C_HEAP_ARRAY(unsigned long, cpu_map);
+  FREE_C_HEAP_ARRAY(cpu_map);
 }
 
 int os::Linux::numa_node_to_cpus(int node, unsigned long *buffer, int bufferlen) {
@@ -4401,7 +4399,7 @@ int os::Linux::get_namespace_pid(int vmid) {
   os::snprintf_checked(fname, sizeof(fname), "/proc/%d/status", vmid);
   FILE *fp = os::fopen(fname, "r");
 
-  if (fp) {
+  if (fp != nullptr) {
     int pid, nspid;
     int ret;
     while (!feof(fp) && !ferror(fp)) {
@@ -4415,7 +4413,7 @@ int os::Linux::get_namespace_pid(int vmid) {
       }
       for (;;) {
         int ch = fgetc(fp);
-        if (ch == EOF || ch == (int)'\n') break;
+        if (ch == EOF || ch == '\n') break;
       }
     }
     fclose(fp);

@@ -3676,8 +3676,28 @@ JVM_ENTRY(jboolean, JVM_IsCRaCScoreSupported(JNIEnv *env))
   return crac::is_image_score_supported();
 JVM_END
 
-JVM_ENTRY(jboolean, JVM_RecordCRaCScore(JNIEnv *env, jobjectArray metrics, jdoubleArray values))
-  return crac::record_image_score(metrics, values);
+JVM_ENTRY(jobjectArray, JVM_GetCRaCScores(JNIEnv *env))
+  ResourceMark rm;
+  const GrowableArray<crac::score> scores = crac::get_image_scores_from_jvm();
+  const objArrayOop scores_flat_oop = oopFactory::new_objectArray(2 * scores.length(), CHECK_NULL);
+  const objArrayHandle scores_flat(THREAD, scores_flat_oop);
+  for (int i = 0; i < scores.length(); i++) {
+    const crac::score &score = scores.at(i);
+    Handle metric = java_lang_String::create_from_str(score.metric, CHECK_NULL);
+    jvalue value_jval;
+    value_jval.d = score.value;
+    oop value = java_lang_boxing_object::create(T_DOUBLE, &value_jval, CHECK_NULL);
+    scores_flat->obj_at_put(2 * i, metric());
+    scores_flat->obj_at_put(2 * i + 1, value);
+  }
+  return checked_cast<jobjectArray>(JNIHandles::make_local(THREAD, scores_flat()));
+JVM_END
+
+JVM_ENTRY(void, JVM_RecordCRaCScores(JNIEnv *env, jobjectArray metrics, jdoubleArray values))
+  // Not supported is ok: this is used internally, helps avoid another JNI call checking the support
+  if (crac::is_image_score_supported() && !crac::record_image_scores(metrics, values)) {
+    THROW_MSG(vmSymbols::java_lang_RuntimeException(), err_msg("CRaC engine failed to record scores"));
+  }
 JVM_END
 
 JVM_ENTRY(void, JVM_VirtualThreadEndFirstTransition(JNIEnv* env, jobject vthread))

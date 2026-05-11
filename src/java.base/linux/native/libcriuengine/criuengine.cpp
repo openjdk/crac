@@ -38,6 +38,7 @@
 #include <sys/wait.h>
 #include <unistd.h>
 
+#include "crlib_checkpointable_data.h"
 #include "crlib/crlib_description.h"
 #include "crlib/crlib_restore_data.h"
 #include "crlib/crlib_user_data.h"
@@ -493,6 +494,10 @@ static char* get_relative_file(const char* rel) {
   char* end = static_cast<char*>(mempcpy(buf, fname, last_slash - fname + 1));
   memcpy(end, rel, rel_size);
   return buf;
+}
+
+checkpointable_status_t get_checkpointable_status(crlib_conf_t *) {
+  return ready;
 }
 
 const char* criuengine::get_criu() {
@@ -974,12 +979,21 @@ static crlib_user_data_t user_data_extension = {
   destroy_user_data,
 };
 
+static crlib_checkpointable_data_t checkpointable_data_extension = {
+  {
+    CRLIB_EXTENSION_CHECKPOINTABLE_DATA_NAME,
+    sizeof(checkpointable_data_extension)
+  },
+  get_checkpointable_status,
+};
+
 static const crlib_extension_t* extensions[] = {
   &restore_data_extension.header,
   &image_constraints_extension.header,
   &image_score_extension.header,
   &user_data_extension.header,
   &description_extension.header,
+  &checkpointable_data_extension.header,
   nullptr
 };
 

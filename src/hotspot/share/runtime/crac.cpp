@@ -449,6 +449,23 @@ void VM_Crac::doit() {
   DefaultStreamHandler defStreamHandler;
 
   Decoder::before_checkpoint();
+  if (crac::_generation > 1) {
+    CracEngine engine(false);
+    checkpointable_status_t status = engine.get_checkpointable_status();
+    switch (status) {
+      case never:
+        ok = false;
+        os::message_box("Checkpoint failed", "Current engine doesn't support more than 2 checkpoints.");
+        break;
+      case ready:
+        os::message_box("Checkpoint continue", "Current engine supports more than 2 checkpoints.");
+      break;
+      case ready_later:
+        ok = false;
+        os::message_box("Checkpoint failed", "Current engine is bussy, try checkpoint later.");
+      break;
+    }
+  }
   if (!check_fds()) {
     ok = false;
   }

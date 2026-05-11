@@ -606,3 +606,13 @@ CracEngine::ApiStatus CracEngine::prepare_image_score_api() {
 bool CracEngine::set_score(const char* metric, double value) {
   return _image_score_api->set_score(_conf, metric, value);
 }
+
+CracEngine::ApiStatus CracEngine::prepare_checkpointable_data_api() {
+  prepare_extension_api(_checkpointable_data_api, CRLIB_EXTENSION_RESTORE_DATA_NAME)
+  require_method(get_checkpointable_status)
+  complete_extension_api(_checkpointable_data_api)
+}
+
+checkpointable_status_t CracEngine::get_checkpointable_status() {
+  return _checkpointable_data_api->get_checkpointable_status(_conf);
+}

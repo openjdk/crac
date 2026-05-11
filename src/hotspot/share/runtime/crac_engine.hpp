@@ -25,6 +25,7 @@
 #define SHARE_RUNTIME_CRAC_ENGINE_HPP
 
 #include "crlib/crlib.h"
+#include "crlib/crlib_checkpointable_data.h"
 #include "crlib/crlib_description.h"
 #include "crlib/crlib_image_constraints.h"
 #include "crlib/crlib_image_score.h"
@@ -79,6 +80,9 @@ public:
   ApiStatus prepare_image_score_api();
   bool set_score(const char* metric, double value);
 
+  ApiStatus prepare_checkpointable_data_api();
+  checkpointable_status_t get_checkpointable_status();
+
 private:
   char _name[MAX_ENGINE_LENGTH];
   void *_lib = nullptr;
@@ -90,6 +94,7 @@ private:
   crlib_description_t *_description_api = nullptr;
   crlib_image_constraints_t *_image_constraints_api = nullptr;
   crlib_image_score_t *_image_score_api = nullptr;
+  crlib_checkpointable_data_t *_checkpointable_data_api = nullptr;
 
   crlib_conf_option_t *_options = nullptr;
 };

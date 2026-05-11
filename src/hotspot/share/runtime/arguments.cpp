@@ -1595,10 +1595,10 @@ void Arguments::set_heap_size() {
         if (HeapBaseMinAddress < DefaultHeapBaseMinAddress) {
           // matches compressed oops printing flags
           log_debug(gc, heap, coops)("HeapBaseMinAddress must be at least %zu "
-                                      "(%zuG) which is greater than value given %zu",
-                                      DefaultHeapBaseMinAddress,
-                                      DefaultHeapBaseMinAddress/G,
-                                      HeapBaseMinAddress);
+                                     "(%zuG) which is greater than value given %zu",
+                                     DefaultHeapBaseMinAddress,
+                                     DefaultHeapBaseMinAddress/G,
+                                     HeapBaseMinAddress);
           FLAG_SET_ERGO(HeapBaseMinAddress, DefaultHeapBaseMinAddress);
         }
       }

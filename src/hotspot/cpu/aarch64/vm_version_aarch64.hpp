@@ -32,11 +32,46 @@
 
 #include <initializer_list>
 
+class VM_Feature_Flag {
+public:
+#define CPU_FEATURE_FLAGS(decl)            \
+    decl(FP,            fp,            0)  \
+    decl(ASIMD,         asimd,         1)  \
+    decl(EVTSTRM,       evtstrm,       2)  \
+    decl(AES,           aes,           3)  \
+    decl(PMULL,         pmull,         4)  \
+    decl(SHA1,          sha1,          5)  \
+    decl(SHA2,          sha256,        6)  \
+    decl(CRC32,         crc32,         7)  \
+    decl(LSE,           lse,           8)  \
+    decl(FPHP,          fphp,          9)  \
+    decl(ASIMDHP,       asimdhp,       10) \
+    decl(DCPOP,         dcpop,         11) \
+    decl(SHA3,          sha3,          12) \
+    decl(SHA512,        sha512,        13) \
+    decl(SVE,           sve,           14) \
+    decl(SB,            sb,            15) \
+    decl(PACA,          paca,          16) \
+    decl(SVEBITPERM,    svebitperm,    17) \
+    decl(SVE2,          sve2,          18) \
+    decl(A53MAC,        a53mac,        19) \
+    /**/
+
+  enum Feature_Flag {
+  #define DECLARE_CPU_FEATURE_FLAG(id, name, bit) CPU_##id = bit,
+    CPU_FEATURE_FLAGS(DECLARE_CPU_FEATURE_FLAG)
+  #undef DECLARE_CPU_FEATURE_FLAG
+    MAX_CPU_FEATURES
+  };
+};
+
+#include "runtime/vm_features.inline.hpp"
+
 class stringStream;
 
 #define BIT_MASK(flag) (1ULL<<(flag))
 
-class VM_Version : public Abstract_VM_Version {
+class VM_Version : public Abstract_VM_Version, public VM_Feature_Flag {
   friend class VMStructs;
   friend class JVMCIVMStructs;
 
@@ -78,13 +113,27 @@ protected:
 
 public:
   // Initialization
+  typedef ::VM_Features VM_Features;
   static void initialize();
-  struct VM_Features: public Zero_Features {};
-  static bool cpu_features_binary(VM_Features *data) { return false; }
-  static bool ignore_cpu_features() { return true; }
+  static bool cpu_features_binary(VM_Features *data);
+  static bool check_cpu_features_skip() {
+    return _ignore_glibc_not_using;
+  }
   static void check_virtualizations();
 
-  static void insert_features_names(uint64_t features, stringStream& ss);
+  static VM_Features CPUFeatures_generic();
+  static void glibc_patch(VM_Features &shouldnotuse) {}
+  static VM_Features CPUFeatures_parse(const char *str);
+#ifdef LINUX
+  static bool glibc_not_using();
+  static bool glibc_env_set(char *disable_str);
+  [[noreturn]] static void glibc_reexec();
+  static constexpr char glibc_prefix[] = ":glibc.cpu.hwcaps=";
+  static constexpr size_t glibc_prefix_len = strlen(glibc_prefix);
+#endif //LINUX
+  static bool _ignore_glibc_not_using;
+  static void print_using_features_cr();
+  static void insert_features_names(VM_Version::VM_Features features, stringStream& ss);
 
   static void print_platform_virtualization_info(outputStream*);
 
@@ -147,38 +196,12 @@ public:
     CPU_MODEL_ARM_NEOVERSE_N3   = 0xd8e,
   };
 
-#define CPU_FEATURE_FLAGS(decl)            \
-    decl(FP,            fp            )    \
-    decl(ASIMD,         asimd         )    \
-    decl(EVTSTRM,       evtstrm       )    \
-    decl(AES,           aes           )    \
-    decl(PMULL,         pmull         )    \
-    decl(SHA1,          sha1          )    \
-    decl(SHA2,          sha256        )    \
-    decl(CRC32,         crc32         )    \
-    decl(LSE,           lse           )    \
-    decl(FPHP,          fphp          )    \
-    decl(ASIMDHP,       asimdhp       )    \
-    decl(DCPOP,         dcpop         )    \
-    decl(SHA3,          sha3          )    \
-    decl(SHA512,        sha512        )    \
-    decl(SVE,           sve           )    \
-    decl(SB,            sb            )    \
-    decl(PACA,          paca          )    \
-    decl(SVEBITPERM,    svebitperm    )    \
-    decl(SVE2,          sve2          )    \
-    decl(A53MAC,        a53mac        )    \
-    decl(ECV,           ecv           )    \
-    decl(WFXT,          wfxt          )
-
-  enum Feature_Flag {
-#define DECLARE_CPU_FEATURE_FLAG(id, name) CPU_##id,
-    CPU_FEATURE_FLAGS(DECLARE_CPU_FEATURE_FLAG)
-#undef DECLARE_CPU_FEATURE_FLAG
-    MAX_CPU_FEATURES
-  };
-
   STATIC_ASSERT(sizeof(_features) * BitsPerByte >= MAX_CPU_FEATURES);
+
+  // CPU feature flags vector, can be affected by VM settings.
+  static VM_Features _features;
+
+  static void cpu_features_init(Feature_Flag clear_feature);
 
   static const char* _features_names[];
 
@@ -189,13 +212,13 @@ public:
 #undef CPU_FEATURE_DETECTION
 
   static void set_feature(Feature_Flag flag) {
-    _features |= BIT_MASK(flag);
+    _features.set_feature(flag);
   }
   static void clear_feature(Feature_Flag flag) {
-    _features &= (~BIT_MASK(flag));
+    _features.clear_feature(flag);
   }
   static bool supports_feature(Feature_Flag flag) {
-    return (_features & BIT_MASK(flag)) != 0;
+    return _features.supports_feature(flag);
   }
   static bool supports_feature(uint64_t features, Feature_Flag flag) {
     return (features & BIT_MASK(flag)) != 0;

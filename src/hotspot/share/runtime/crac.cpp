@@ -328,7 +328,7 @@ int crac::checkpoint_restore(int *shmid) {
 
   // Setup CPU arch & features only during the first checkpoint; the feature set
   // cannot change after initial boot (and we don't support switching the engine).
-  if (_generation == 1 && !VM_Version::ignore_cpu_features()) {
+  if (_generation == 1 && !VM_Version::check_cpu_features_skip()) {
     VM_Version::VM_Features current_features;
     if (VM_Version::cpu_features_binary(&current_features)) {
       switch (_engine->prepare_image_constraints_api()) {
@@ -853,7 +853,11 @@ void crac::restore(crac_restore_data& restore_data) {
     return;
   }
 
-  bool ignore = VM_Version::ignore_cpu_features();
+  // Previously IgnoreCPUFeatures didn't disable the check completely; the difference
+  // was printed out but continued even despite features not being satisfied.
+  // Since the check itself is delegated to the C/R Engine we will simply
+  // skip the check here.
+  bool ignore = VM_Version::check_cpu_features_skip();
   bool exact = false;
   if (CheckCPUFeatures == nullptr || !strcmp(CheckCPUFeatures, "compatible")) {
     // default, compatible

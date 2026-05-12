@@ -502,7 +502,7 @@ private:
   static void initialize_cpu_information();
   struct VM_Features: public Zero_Features {};
   static bool cpu_features_binary(VM_Features *data) { return false; }
-  static bool ignore_cpu_features() { return true; }
+  static bool check_cpu_features_skip() { return true; }
 
   constexpr static bool supports_stack_watermark_barrier() { return true; }
 

@@ -2031,6 +2031,13 @@ const int ObjectAlignmentInBytes = 8;
           "skip: don't check features at all (requires "                    \
           "-XX:+UnlockExperimentalVMOptions).")                             \
                                                                             \
+  product(ccstr, CheckCPUFeaturesMessage, nullptr, RESTORE_SETTABLE,        \
+          "Message reported when CPU features checks fails. This string "   \
+          "can contain placeholders '%c', '%s' or '%m' for current CPU "    \
+          "features, features stored in the image or common (intersection " \
+          "of current & stored) features respectively. A special value "    \
+          "'quiet' suppresses the failure message entirely.")               \
+                                                                            \
   product(bool, UseObjectMonitorTable, true, DIAGNOSTIC,                    \
           "Use a table to record inflated monitors rather than the first "  \
           "word of the object.")                                            \

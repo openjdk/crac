@@ -568,7 +568,7 @@ void CracEngine::require_cpuinfo(const VM_Version::VM_Features *current_features
     reinterpret_cast<const unsigned char *>(current_features), sizeof(*current_features), exact ? EQUALS : SUBSET);
 }
 
-void CracEngine::check_cpuinfo(const VM_Version::VM_Features *current_features, bool exact) const {
+void CracEngine::check_cpuinfo(const VM_Version::VM_Features *current_features, bool exact, const char *features_message) const {
   if (_image_constraints_api == nullptr) {
     // When CPU features are ignored
     return;
@@ -577,19 +577,54 @@ void CracEngine::check_cpuinfo(const VM_Version::VM_Features *current_features, 
     log_error(crac)("Restore failed due to wrong or missing CPU architecture (current architecture is " ARCHPROPNAME ")");
   }
   if (_image_constraints_api->is_failed(_conf, cpufeatures_name)) {
+    const char *error_message;
     VM_Version::VM_Features image_features;
     size_t image_features_size = _image_constraints_api->get_failed_bitmap(_conf, cpufeatures_name, reinterpret_cast<unsigned char *>(&image_features), sizeof(image_features));
-    if (image_features_size == sizeof(image_features)) {
-      ResourceMark rm;
-      if (!exact) {
-        image_features &= *current_features;
+    if (features_message != nullptr) {
+      error_message = features_message;
+    } else if (image_features_size == sizeof(image_features)) {
+      if (exact) {
+        error_message = "Restore failed due to incompatible or missing CPU features, try using -XX:CPUFeatures=%c on checkpoint.";
       } else {
-        image_features = *current_features;
+        error_message = "Restore failed due to incompatible or missing CPU features, try using -XX:CPUFeatures=%m on checkpoint.";
       }
-      log_error(crac)("Restore failed due to incompatible or missing CPU features, try using -XX:CPUFeatures=%s on checkpoint.", image_features.print_numbers());
     } else {
-      log_error(crac)("Restore failed due to incompatible or missing CPU features.");
+      error_message = "Restore failed due to incompatible or missing CPU features.";
     }
+    VM_Version::VM_Features common_features = image_features;
+    common_features &= *current_features;
+    // Reparse the message
+    ResourceMark rm;
+    stringStream ss;
+    const char *percent = strchr(error_message, '%');
+    while (percent != nullptr) {
+      ss.print_raw(error_message, percent - error_message);
+      switch (percent[1]) {
+        case '\0':
+          ss.print_raw("<invalid trailing % char>");
+          percent = percent - 1; // next cycle will point at the '\0'
+          break;
+        case '%':
+          ss.put('%');
+          break;
+        case 'c':
+          current_features->print_numbers(ss);
+          break;
+        case 's':
+          image_features.print_numbers(ss);
+          break;
+        case 'm':
+          common_features.print_numbers(ss);
+          break;
+        default:
+          ss.print("<invalid formatting char '%c'>", percent[1]);
+          break;
+      }
+      error_message = &percent[2];
+      percent = strchr(error_message, '%');
+    }
+    ss.print_raw(error_message);
+    log_error(crac)("%s", ss.as_string());
   }
 }
 

@@ -147,7 +147,7 @@ void VM_Version::initialize() {
   get_os_cpu_info();
   _cpu_features = _features;
 
-  cpu_features_init(MAX_CPU_FEATURES /* no-op */);
+  cpu_features_init();
 
   int dcache_line = dcache_line_size();
 

@@ -201,7 +201,7 @@ public:
   // CPU feature flags vector, can be affected by VM settings.
   static VM_Features _features;
 
-  static void cpu_features_init(Feature_Flag clear_feature);
+  static void cpu_features_init();
 
   static const char* _features_names[];
 

@@ -516,7 +516,7 @@ protected:
     _cpu_features = VM_Features();
   }
 
-  static void cpu_features_init(Feature_Flag clear_feature);
+  static void cpu_features_init();
 
   enum Extended_Family {
     // AMD

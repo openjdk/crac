@@ -2221,9 +2221,7 @@ void VM_Version::check_virtualizations() {
 }
 
 bool VM_Version::cpu_features_binary(VM_Version::VM_Features *data) {
-  *data = _features;
-  // Workaround JDK-8311164: CPU_HT is set randomly on hybrid CPUs like Alder Lake.
-  data->clear_feature(CPU_HT);
+  *data = _features.aot_code_cache_features();
   return true;
 }
 
@@ -2274,8 +2272,7 @@ void VM_Version::initialize() {
   assert(_features.empty(), "_features should be zero at startup");
   get_processor_features_hardware();
 
-  // Workaround JDK-8311164: CPU_HT is set randomly on hybrid CPUs like Alder Lake.
-  cpu_features_init(CPU_HT);
+  cpu_features_init();
 
   get_processor_features_hotspot();
 

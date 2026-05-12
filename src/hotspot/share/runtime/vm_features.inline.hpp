@@ -111,6 +111,22 @@ class VM_Features : protected VM_Feature_Flag {
     return (_features_bitmap[idx] & bit_mask(feature)) != 0;
   }
 
+  bool verify_aot_code_cache_features(VM_Features* features_to_test) {
+    for (int i = 0; i < features_bitmap_element_count(); i++) {
+      if (_features_bitmap[i] != features_to_test->_features_bitmap[i]) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  VM_Features aot_code_cache_features() {
+    VM_Features copy = *this;
+    // HT does not result in incompatibility of aot code cache
+    copy.clear_feature(CPU_HT);
+    return copy;
+  }
+
   void set_all_features() {
     apply_to_all_features([](uint64_t &u, int idx) {
       u = index_mask(idx);

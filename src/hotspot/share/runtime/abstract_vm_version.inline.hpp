@@ -284,15 +284,13 @@ void VM_Version::print_using_features_cr() {
   }
 }
 
-void VM_Version::cpu_features_init(Feature_Flag clear_feature) {
+void VM_Version::cpu_features_init() {
   assert(!CPUFeatures == FLAG_IS_DEFAULT(CPUFeatures), "CPUFeatures parsing");
 
   VM_Features CPUFeatures_parsed = CPUFeatures_parse(CPUFeatures);
   VM_Features features_missing = CPUFeatures_parsed & ~_features;
 
-  if (clear_feature != MAX_CPU_FEATURES) {
-    features_missing.clear_feature(clear_feature);
-  }
+  features_missing = features_missing.aot_code_cache_features();
 
   if (!features_missing.empty()) {
     stringStream ss;

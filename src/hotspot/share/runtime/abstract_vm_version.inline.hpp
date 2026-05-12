@@ -182,6 +182,7 @@ void VM_Version::glibc_reexec() {
   execv(EXEC, argv);
   vm_exit_during_initialization(err_msg("Cannot re-execute " EXEC ": %m"));
 #undef EXEC
+  ShouldNotReachHere(); // vm_exit_during_initialization should be [[noreturn]]
 }
 
 // Returns whether we should have got set a GLIBC_TUNABLES environment variables but did not get any.

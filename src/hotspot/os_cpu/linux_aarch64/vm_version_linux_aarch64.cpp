@@ -151,11 +151,11 @@ void VM_Version::get_os_cpu_info() {
   update_feature(auxv,  CPU_SHA3,       HWCAP_SHA3       );
   update_feature(auxv,  CPU_SHA512,     HWCAP_SHA512     );
   update_feature(auxv,  CPU_SVE,        HWCAP_SVE        );
-  update_feature(auxv,  CPU_SB,         HWCAP_SB         );
+  // CPU_SB is missing but there exists HWCAP_SB
   update_feature(auxv,  CPU_PACA,       HWCAP_PACA       );
   update_feature(auxv2, CPU_SVEBITPERM, HWCAP2_SVEBITPERM);
   update_feature(auxv2, CPU_SVE2,       HWCAP2_SVE2      );
-  update_feature(auxv2, CPU_A53MAC,     HWCAP2_A53MAC    );
+  // CPU_A53MAC is missing as there is no HWCAP*_A53MAC
   update_feature(auxv2, CPU_ECV,        HWCAP2_ECV       );
   update_feature(auxv2, CPU_WFXT,       HWCAP2_WFXT      );
 

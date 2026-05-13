@@ -35,26 +35,28 @@
 class VM_Feature_Flag {
 public:
 #define CPU_FEATURE_FLAGS(decl)     \
-    decl(FP,            fp,       ) \
-    decl(ASIMD,         asimd,    ) \
-    decl(EVTSTRM,       evtstrm,  ) \
-    decl(AES,           aes,      ) \
-    decl(PMULL,         pmull,    ) \
-    decl(SHA1,          sha1,     ) \
-    decl(SHA2,          sha256,   ) \
-    decl(CRC32,         crc32,    ) \
-    decl(LSE,           lse,      ) \
-    decl(FPHP,          fphp,     ) \
-    decl(ASIMDHP,       asimdhp,  ) \
-    decl(DCPOP,         dcpop,    ) \
-    decl(SHA3,          sha3,     ) \
-    decl(SHA512,        sha512,   ) \
-    decl(SVE,           sve,      ) \
-    decl(SB,            sb,       ) \
-    decl(PACA,          paca,     ) \
+    decl(FP,            fp        ) \
+    decl(ASIMD,         asimd     ) \
+    decl(EVTSTRM,       evtstrm   ) \
+    decl(AES,           aes       ) \
+    decl(PMULL,         pmull     ) \
+    decl(SHA1,          sha1      ) \
+    decl(SHA2,          sha256    ) \
+    decl(CRC32,         crc32     ) \
+    decl(LSE,           lse       ) \
+    decl(FPHP,          fphp      ) \
+    decl(ASIMDHP,       asimdhp   ) \
+    decl(DCPOP,         dcpop     ) \
+    decl(SHA3,          sha3      ) \
+    decl(SHA512,        sha512    ) \
+    decl(SVE,           sve       ) \
+    decl(SB,            sb        ) \
+    decl(PACA,          paca      ) \
     decl(SVEBITPERM,    svebitperm) \
-    decl(SVE2,          sve2,     ) \
-    decl(A53MAC,        a53mac,   ) \
+    decl(SVE2,          sve2      ) \
+    decl(A53MAC,        a53mac    ) \
+    decl(ECV,           ecv       ) \
+    decl(WFXT,          wfxt      ) \
     /**/
 
   enum Feature_Flag {
@@ -201,6 +203,9 @@ public:
   // CPU feature flags vector, can be affected by VM settings.
   static VM_Features _features;
 
+  // Preserved original CPU feature flags vector.
+  static VM_Features _cpu_features;
+
   static void cpu_features_init();
 
   static const char* _features_names[];
@@ -220,9 +225,10 @@ public:
   static bool supports_feature(Feature_Flag flag) {
     return _features.supports_feature(flag);
   }
-  static bool supports_feature(uint64_t features, Feature_Flag flag) {
-    return (features & BIT_MASK(flag)) != 0;
+  static bool supports_feature(const VM_Features &features, Feature_Flag flag) {
+    return features.supports_feature(flag);
   }
+  static void update_feature(uint64_t hwcap, Feature_Flag flag, uint64_t hwcap_bitmask);
 
   static bool cpu_supports_aes()      { return supports_feature(_cpu_features, CPU_AES); }
 

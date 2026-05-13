@@ -123,11 +123,11 @@ int VM_Version::set_and_get_current_sve_vector_length(int length) {
   return new_length;
 }
 
-static uint64_t check_feature(uint64_t hwcap, uint64_t feature_bit_mask, uint64_t hwcap_bitmask) {
+void VM_Version::update_feature(uint64_t hwcap, Feature_Flag flag, uint64_t hwcap_bitmask) {
   if (hwcap & hwcap_bitmask) {
-    return feature_bit_mask;
+    _features.set_feature(flag);
   } else {
-    return 0;
+    _features.clear_feature(flag);
   }
 }
 
@@ -136,39 +136,26 @@ void VM_Version::get_os_cpu_info() {
   uint64_t auxv = getauxval(AT_HWCAP);
   uint64_t auxv2 = getauxval(AT_HWCAP2);
 
-  assert(_features.empty(), "_features must be passed as empty");
-#define SET_IF_AUXV_param(auxv_which, hwcap_which, name) if ((auxv_which & hwcap_which##_##name) != 0) { \
-    _features.set_feature(CPU_##name);               \
-  }
-#define SET_IF_AUXV(name)  SET_IF_AUXV_param(auxv , HWCAP , name)
-#define SET_IF_AUXV2(name) SET_IF_AUXV_param(auxv2, HWCAP2, name)
-  SET_IF_AUXV(FP     );
-  SET_IF_AUXV(ASIMD  );
-  SET_IF_AUXV(EVTSTRM);
-  SET_IF_AUXV(AES    );
-  SET_IF_AUXV(PMULL  );
-  SET_IF_AUXV(SHA1   );
-  SET_IF_AUXV(SHA2   );
-  SET_IF_AUXV(CRC32  );
-  if ((auxv & HWCAP_ATOMICS) != 0) {
-    _features.set_feature(CPU_LSE);
-  }
-  SET_IF_AUXV(DCPOP  );
-  SET_IF_AUXV(SHA3   );
-  SET_IF_AUXV(SHA512 );
-  SET_IF_AUXV(SVE    );
-  SET_IF_AUXV(SB     );
-  SET_IF_AUXV(PACA   );
-  SET_IF_AUXV(FPHP   );
-  SET_IF_AUXV(ASIMDHP);
-  SET_IF_AUXV2(SVE2      );
-  SET_IF_AUXV2(SVEBITPERM);
-  SET_IF_AUXV2(ECV       );
-  SET_IF_AUXV2(WFXT      );
-
-#undef SET_IF_AUXV2
-#undef SET_IF_AUXV
-#undef SET_IF_AUXV_param
+  update_feature(auxv,  CPU_FP,         HWCAP_FP);
+  update_feature(auxv,  CPU_ASIMD,      HWCAP_ASIMD);
+  update_feature(auxv,  CPU_EVTSTRM,    HWCAP_EVTSTRM);
+  update_feature(auxv,  CPU_AES,        HWCAP_AES);
+  update_feature(auxv,  CPU_PMULL,      HWCAP_PMULL);
+  update_feature(auxv,  CPU_SHA1,       HWCAP_SHA1);
+  update_feature(auxv,  CPU_SHA2,       HWCAP_SHA2);
+  update_feature(auxv,  CPU_CRC32,      HWCAP_CRC32);
+  update_feature(auxv,  CPU_LSE,        HWCAP_ATOMICS);
+  update_feature(auxv,  CPU_DCPOP,      HWCAP_DCPOP);
+  update_feature(auxv,  CPU_SHA3,       HWCAP_SHA3);
+  update_feature(auxv,  CPU_SHA512,     HWCAP_SHA512);
+  update_feature(auxv,  CPU_SVE,        HWCAP_SVE);
+  update_feature(auxv,  CPU_PACA,       HWCAP_PACA);
+  update_feature(auxv,  CPU_FPHP,       HWCAP_FPHP);
+  update_feature(auxv,  CPU_ASIMDHP,    HWCAP_ASIMDHP);
+  update_feature(auxv2, CPU_SVE2,       HWCAP2_SVE2);
+  update_feature(auxv2, CPU_SVEBITPERM, HWCAP2_SVEBITPERM);
+  update_feature(auxv2, CPU_ECV,        HWCAP2_ECV);
+  update_feature(auxv2, CPU_WFXT,       HWCAP2_WFXT);
 
   uint64_t ctr_el0;
   uint64_t dczid_el0;

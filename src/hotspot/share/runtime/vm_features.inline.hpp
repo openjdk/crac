@@ -122,8 +122,9 @@ class VM_Features : protected VM_Feature_Flag {
 
   VM_Features aot_code_cache_features() {
     VM_Features copy = *this;
-    // HT does not result in incompatibility of aot code cache
-    copy.clear_feature(CPU_HT);
+#ifdef AOT_CODE_CACHE_CLEAR
+    copy.clear_feature(AOT_CODE_CACHE_CLEAR);
+#endif
     return copy;
   }
 

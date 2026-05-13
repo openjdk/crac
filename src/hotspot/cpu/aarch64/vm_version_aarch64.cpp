@@ -59,6 +59,8 @@
   GLIBC_UNSUPPORTED(SVEBITPERM); \
   GLIBC_UNSUPPORTED(SVE2      ); \
   GLIBC_UNSUPPORTED(A53MAC    ); \
+  GLIBC_UNSUPPORTED(ECV       ); \
+  GLIBC_UNSUPPORTED(WFXT      ); \
   /**/
 #include "runtime/abstract_vm_version.inline.hpp"
 
@@ -84,6 +86,7 @@ bool VM_Version::_cache_idc_enabled;
 bool VM_Version::_ic_ivau_trapped;
 
 VM_Version::VM_Features VM_Version::_features;
+VM_Version::VM_Features VM_Version::_cpu_features;
 
 #define DECLARE_CPU_FEATURE_NAME(id, name) XSTR(name),
 const char* VM_Version::_features_names[] = { CPU_FEATURE_FLAGS(DECLARE_CPU_FEATURE_NAME)};
@@ -774,19 +777,19 @@ void VM_Version::initialize() {
 }
 
 void VM_Version::get_cpu_features_name(void* features_buffer, stringStream& ss) {
-  uint64_t features = *(uint64_t*)features_buffer;
-  insert_features_names(features, ss);
+  VM_Features* features = (VM_Features*)features_buffer;
+  insert_features_names(*features, ss);
 }
 
 void VM_Version::get_missing_features_name(void* features_set1, void* features_set2, stringStream& ss) {
-  uint64_t vm_features_set1 = *(uint64_t*)features_set1;
-  uint64_t vm_features_set2 = *(uint64_t*)features_set2;
+  VM_Features* vm_features_set1 = (VM_Features*)features_set1;
+  VM_Features* vm_features_set2 = (VM_Features*)features_set2;
   int i = 0;
   ss.join([&]() {
     const char* str = nullptr;
     while ((i < MAX_CPU_FEATURES) && (str == nullptr)) {
       Feature_Flag flag = (Feature_Flag)i;
-      if (supports_feature(vm_features_set1, flag) && !supports_feature(vm_features_set2, flag)) {
+      if (supports_feature(*vm_features_set1, flag) && !supports_feature(*vm_features_set2, flag)) {
         str = _features_names[i];
       }
       i += 1;
@@ -800,11 +803,11 @@ int VM_Version::cpu_features_size() {
 }
 
 void VM_Version::store_cpu_features(void* buf) {
-  *(uint64_t*)buf = _features;
+  *(VM_Features*)buf = _features;
 }
 
 bool VM_Version::verify_aot_code_cache_features(void* features_buffer) {
-  uint64_t features_to_test = *(uint64_t*)features_buffer;
+  VM_Features features_to_test = *(VM_Features*)features_buffer;
   return (_features == features_to_test);
 }
 

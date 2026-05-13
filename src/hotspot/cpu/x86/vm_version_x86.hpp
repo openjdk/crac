@@ -138,6 +138,9 @@ public:
   };
 };
 
+// HT does not result in incompatibility of aot code cache
+#define AOT_CODE_CACHE_CLEAR CPU_HT
+
 #include "runtime/vm_features.inline.hpp"
 
 class stringStream;

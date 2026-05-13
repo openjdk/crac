@@ -279,8 +279,21 @@ void VM_Version::cpu_features_init() {
 
   VM_Features CPUFeatures_parsed = CPUFeatures_parse(CPUFeatures);
   VM_Features features_missing = CPUFeatures_parsed & ~_features;
-
   features_missing = features_missing.aot_code_cache_features();
+
+#ifdef __aarch64__
+  if (!FLAG_IS_DEFAULT(UsePAC)) {
+    if (UsePAC) {
+      CPUFeatures_parsed.set_feature(CPU_PACA);
+      CPUFeatures_parsed.clear_feature(CPU_NOTPACA);
+    } else {
+      CPUFeatures_parsed.set_feature(CPU_NOTPACA);
+      CPUFeatures_parsed.clear_feature(CPU_PACA);
+    }
+  }
+  features_missing.clear_feature(CPU_PACA);
+  features_missing.clear_feature(CPU_NOTPACA);
+#endif // __aarch64__
 
   if (!features_missing.empty()) {
     stringStream ss;

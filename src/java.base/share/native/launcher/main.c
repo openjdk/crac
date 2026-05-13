@@ -111,6 +111,7 @@ static bool is_restore = false;
 static const int crac_min_pid_default = 128;
 static int crac_min_pid = 0;
 static bool is_min_pid_set = false;
+static bool disable_pac = false;
 
 static inline const char *find_option(const char *arg, const char *vmoption) {
     const int len = strlen(vmoption);
@@ -121,18 +122,39 @@ static inline const char *find_option(const char *arg, const char *vmoption) {
 }
 
 static void parse_crac(const char *arg) {
+    const char *value;
     if (!is_checkpoint && find_option(arg, "-XX:CRaCCheckpointTo")) {
         is_checkpoint = true;
     } else if (!is_restore && find_option(arg, "-XX:CRaCRestoreFrom")) {
         is_restore = true;
-    } else if (!is_min_pid_set) {
-        const char *value = find_option(arg, "-XX:CRaCMinPid=");
-        if (value != NULL) {
-            crac_min_pid = atoi(value);
-            is_min_pid_set = true;
-        }
+    } else if (!is_min_pid_set && (value = find_option(arg, "-XX:CRaCMinPid=")) != NULL) {
+        crac_min_pid = atoi(value);
+        is_min_pid_set = true;
+#ifdef __aarch64__
+    } else if (find_option(arg, "-XX:-UsePAC")) {
+        disable_pac = true;
+#endif // aarch64
     }
 }
+
+#if defined(LINUX) && defined(__aarch64__)
+#include <sys/prctl.h>
+#ifndef PR_PAC_SET_ENABLED_KEYS
+#define PR_PAC_SET_ENABLED_KEYS 60
+#endif // PR_PAC_SET_ENABLED_KEYS
+#ifndef PR_PAC_APIAKEY
+#define PR_PAC_APIAKEY			(1UL << 0)
+#define PR_PAC_APIBKEY			(1UL << 1)
+#define PR_PAC_APDAKEY			(1UL << 2)
+#define PR_PAC_APDBKEY			(1UL << 3)
+#endif // PR_PAC_APIKEY
+
+bool should_disable_pointer_authentication() {
+    // We need to disable both on checkpoint and restore
+    // Add code here if CRaCEngine cannot restore PAC
+    return disable_pac;
+}
+#endif // LINUX && __aarch64__
 
 static pid_t g_child_pid = -1;
 
@@ -429,9 +451,21 @@ main(int argc, char **argv)
             return 1;
         }
     }
+    #endif /* not WIN32 */
+#ifdef __aarch64__
+    bool disable_pac = should_disable_pointer_authentication();
+    if (disable_pac) {
+        // PR_PAC_APGAKEY cannot be disabled through this syscall
+        if (prctl(PR_PAC_SET_ENABLED_KEYS, PR_PAC_APIAKEY | PR_PAC_APIBKEY | PR_PAC_APDAKEY | PR_PAC_APDBKEY, 0, 0, 0)) {
+            if (errno != EINVAL) { // Systems without PAC support return EINVAL
+                perror("prctl PR_PAC_SET_ENABLED_KEYS");
+                return 1;
+            }
+        }
+    }
+#endif // __aarch64__
 #endif /* LINUX */
-#endif /* not WIN32 */
-    return JLI_Launch(margc, margv,
+    int exit_code = JLI_Launch(margc, margv,
                    jargc, jargs,
                    0, NULL,
                    VERSION_STRING,
@@ -440,4 +474,8 @@ main(int argc, char **argv)
                    launcher,
                    jargc > 0,
                    cpwildcard, javaw, 0);
+    // If pointer authentication is used on aarch64 we must not return from
+    // current frame, we would get SIGILL.
+    exit(exit_code);
+    return exit_code;
 }

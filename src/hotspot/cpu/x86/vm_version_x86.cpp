@@ -1355,7 +1355,10 @@ void VM_Version::print_using_features_cr() {
     tty->print_raw_cr("CPU features are being kept intact as requested by -XX:CPUFeatures=ignore");
   } else {
     tty->print_raw("CPU features being used are: -XX:CPUFeatures=");
-    _features.print_numbers(*tty);
+    // Workaround JDK-8311164: CPU_HT is set randomly on hybrid CPUs like Alder Lake.
+    VM_Features features = _features;
+    features.clear_feature(CPU_HT);
+    features.print_numbers(*tty);
     tty->cr();
   }
 }

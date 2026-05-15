@@ -24,6 +24,9 @@
  */
 
 
+// AI Tools Used:
+// - Claude Sonnet 4.6, 2026-05-14
+//   * Added disable_pac() call before CRaC restore to handle PAC on aarch64.
 /*
  * This file contains the main entry point into the launcher code
  * this is the only file which will be repeatedly compiled by other
@@ -105,6 +108,7 @@ WinMain(HINSTANCE inst, HINSTANCE previnst, LPSTR cmdline, int cmdshow)
 #ifndef _WIN32
 #include <stdbool.h>
 #include <sys/wait.h>
+#include "pac.h"
 
 static bool is_checkpoint = false;
 static bool is_restore = false;
@@ -430,6 +434,24 @@ main(int argc, char **argv)
         }
     }
 #endif /* LINUX */
+#endif /* not WIN32 */
+#ifndef _WIN32
+    // PAC must be disabled before restore so that restored JVM code and
+    // stack pointers are not authenticated with the launcher's PAC keys.
+    // After disable_pac() the glibc bootstrap frames cannot be unwound,
+    // so we use exit() rather than return for the restore path.
+    if (is_restore) {
+        disable_pac();
+        exit(JLI_Launch(margc, margv,
+                       jargc, jargs,
+                       0, NULL,
+                       VERSION_STRING,
+                       DOT_VERSION,
+                       progname,
+                       launcher,
+                       jargc > 0,
+                       cpwildcard, javaw, 0));
+    }
 #endif /* not WIN32 */
     return JLI_Launch(margc, margv,
                    jargc, jargs,

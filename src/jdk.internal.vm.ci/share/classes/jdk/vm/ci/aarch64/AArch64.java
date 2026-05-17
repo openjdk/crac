@@ -188,6 +188,7 @@ public class AArch64 extends Architecture {
         WFXT,
         FPHP,
         ASIMDHP,
+        NOTPACA,
     }
 
     private final EnumSet<CPUFeature> features;

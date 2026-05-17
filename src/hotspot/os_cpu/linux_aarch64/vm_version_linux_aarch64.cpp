@@ -158,6 +158,7 @@ void VM_Version::get_os_cpu_info() {
   // CPU_A53MAC is missing as there is no HWCAP*_A53MAC
   update_feature(auxv2, CPU_ECV,        HWCAP2_ECV       );
   update_feature(auxv2, CPU_WFXT,       HWCAP2_WFXT      );
+  update_feature(~auxv, CPU_NOTPACA,    HWCAP_PACA       );
 
   uint64_t ctr_el0;
   uint64_t dczid_el0;

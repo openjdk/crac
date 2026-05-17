@@ -57,6 +57,7 @@ public:
     decl(A53MAC,        a53mac    ) \
     decl(ECV,           ecv       ) \
     decl(WFXT,          wfxt      ) \
+    decl(NOTPACA,       notpaca   ) \
     /**/
 
   enum Feature_Flag {

@@ -151,6 +151,18 @@ void VM_Version::initialize() {
   _cpu_features = _features;
 
   cpu_features_init();
+  if (supports_paca() == supports_notpaca()) {
+    ss.print_raw("-XX:CPUFeatures bits PACA (");
+    VM_Features paca;
+    paca.set_feature(CPU_PACA);
+    paca.print_numbers(ss);
+    ss.print_raw(") and NOTPACA (");
+    VM_Features notpaca;
+    notpaca.set_feature(CPU_PACA);
+    notpaca.print_numbers(ss);
+    ss.print_raw_cr(") are mutually exclusive!");
+    vm_exit_during_initialization(ss.base());
+  }
 
   int dcache_line = dcache_line_size();
 
@@ -889,5 +901,6 @@ VM_Features VM_Version::CPUFeatures_generic() {
   VM_Features retval;
   retval.set_feature(CPU_FP);
   retval.set_feature(CPU_ASIMD);
+  retval.set_feature(CPU_NOTPACA);
   return retval;
 }

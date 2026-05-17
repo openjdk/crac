@@ -90,7 +90,7 @@ public class PathPatternTest implements CracTest {
         runCheckpoints("foo/%u_%f_", false);
         try (var stream = Files.list(foo)) {
             Set<String> uuids = new HashSet<>();
-            String featuresPattern = Platform.isX64() ? "\\p{XDigit}{32}" : "";
+            String featuresPattern = Platform.isX64() ? "\\p{XDigit}{32}" : Platform.isAArch64() ? "\\p{XDigit}{16}" : "";
             Pattern p = Pattern.compile("(\\p{XDigit}{8}-\\p{XDigit}{4}-\\p{XDigit}{4}-\\p{XDigit}{4}-\\p{XDigit}{12})_" + featuresPattern + "_");
             assertTrue(stream.allMatch(d -> {
                 Matcher matcher = p.matcher(d.getFileName().toString());

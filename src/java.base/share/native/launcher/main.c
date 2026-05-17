@@ -24,9 +24,6 @@
  */
 
 
-// AI Tools Used:
-// - Claude Sonnet 4.6, 2026-05-14
-//   * Added disable_pac() call before CRaC restore to handle PAC on aarch64.
 /*
  * This file contains the main entry point into the launcher code
  * this is the only file which will be repeatedly compiled by other
@@ -115,6 +112,10 @@ static bool is_restore = false;
 static const int crac_min_pid_default = 128;
 static int crac_min_pid = 0;
 static bool is_min_pid_set = false;
+#if defined(AARCH64) && defined(LINUX)
+static bool have_cpu_features = false;
+static uint64_t cpu_features;
+#endif
 
 static inline const char *find_option(const char *arg, const char *vmoption) {
     const int len = strlen(vmoption);
@@ -136,6 +137,15 @@ static void parse_crac(const char *arg) {
             is_min_pid_set = true;
         }
     }
+#if defined(AARCH64) && defined(LINUX)
+    if (!have_cpu_features) {
+        const char *value = find_option(arg, "-XX:CPUFeatures=";
+        if (value != NULL) {
+            cpu_features = atoi(value);
+            have_cpu_features = true;
+        }
+    }
+#endif
 }
 
 static pid_t g_child_pid = -1;
@@ -435,25 +445,16 @@ main(int argc, char **argv)
     }
 #endif /* LINUX */
 #endif /* not WIN32 */
-#ifndef _WIN32
+#if defined(AARCH64) && defined(LINUX)
     // PAC must be disabled before restore so that restored JVM code and
     // stack pointers are not authenticated with the launcher's PAC keys.
     // After disable_pac() the glibc bootstrap frames cannot be unwound,
     // so we use exit() rather than return for the restore path.
-    if (is_restore) {
+    if (have_cpu_features && (cpu_features & ((uint64_t) 1 << VM_Version::CPU_PACA) == 0)) {
         disable_pac();
-        exit(JLI_Launch(margc, margv,
-                       jargc, jargs,
-                       0, NULL,
-                       VERSION_STRING,
-                       DOT_VERSION,
-                       progname,
-                       launcher,
-                       jargc > 0,
-                       cpwildcard, javaw, 0));
     }
-#endif /* not WIN32 */
-    return JLI_Launch(margc, margv,
+#endif /* AARCH64 && LINUX */
+    exit(JLI_Launch(margc, margv,
                    jargc, jargs,
                    0, NULL,
                    VERSION_STRING,
@@ -461,5 +462,5 @@ main(int argc, char **argv)
                    progname,
                    launcher,
                    jargc > 0,
-                   cpwildcard, javaw, 0);
+                   cpwildcard, javaw, 0));
 }

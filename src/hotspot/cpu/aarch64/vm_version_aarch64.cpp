@@ -61,6 +61,7 @@
   GLIBC_UNSUPPORTED(A53MAC    ); \
   GLIBC_UNSUPPORTED(ECV       ); \
   GLIBC_UNSUPPORTED(WFXT      ); \
+  GLIBC_UNSUPPORTED(NOTPACA   ); \
   /**/
 #include "runtime/abstract_vm_version.inline.hpp"
 
@@ -151,18 +152,21 @@ void VM_Version::initialize() {
   _cpu_features = _features;
 
   cpu_features_init();
+#if 0
   if (supports_paca() == supports_notpaca()) {
-    ss.print_raw("-XX:CPUFeatures bits PACA (");
+    stringStream ss;
+    ss.print_raw("For -XX:CPUFeatures, exactly one of the bits PACA (");
     VM_Features paca;
     paca.set_feature(CPU_PACA);
     paca.print_numbers(ss);
     ss.print_raw(") and NOTPACA (");
     VM_Features notpaca;
-    notpaca.set_feature(CPU_PACA);
+    notpaca.set_feature(CPU_NOTPACA);
     notpaca.print_numbers(ss);
-    ss.print_raw_cr(") are mutually exclusive!");
+    ss.print_raw_cr(") must be set.");
     vm_exit_during_initialization(ss.base());
   }
+#endif
 
   int dcache_line = dcache_line_size();
 

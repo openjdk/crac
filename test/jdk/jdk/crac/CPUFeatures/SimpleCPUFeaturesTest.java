@@ -67,13 +67,23 @@ import jdk.test.lib.crac.*;
  * @run driver jdk.test.lib.crac.CracTest 0x20000000080,0x0 -- OS_DOES_NOT_SUPPORT
  */
 /*
- * @test id=AARCH64
+ * @test id=AARCH64-LINUX
+ * @requires os.family == "linux"
  * @requires os.arch=="aarch64"
  * @library /test/lib
  * @build SimpleCPUFeaturesTest
  * @run driver jdk.test.lib.crac.CracTest 0x0
  * @run driver jdk.test.lib.crac.CracTest 0x0,0x0 -- INVALID_FORMAT1
  * @run driver jdk.test.lib.crac.CracTest foobar  -- INVALID_FORMAT1
+ */
+/*
+ * @test id=AARCH64-NON-LINUX
+ * @requires os.family != "linux"
+ * @requires os.arch=="aarch64"
+ * @library /test/lib
+ * @build SimpleCPUFeaturesTest
+ * @run driver jdk.test.lib.crac.CracTest 0x0     -- OS_DOES_NOT_SUPPORT
+ * @run driver jdk.test.lib.crac.CracTest foobar  -- OS_DOES_NOT_SUPPORT
  */
 public class SimpleCPUFeaturesTest implements CracTest {
     private static final String SUCCESS = "SUCCESS";

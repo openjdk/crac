@@ -34,6 +34,11 @@
 #include "jli_util.h"
 #include "jni.h"
 
+#if defined(aarch64) && defined(LINUX)
+// FIXME
+#include "../../cpu/aarch64/vm_version_aarch64.hpp"
+#endif
+
 #include <errno.h>
 
 // Unused, but retained for JLI_Launch compatibility
@@ -113,7 +118,8 @@ static const int crac_min_pid_default = 128;
 static int crac_min_pid = 0;
 static bool is_min_pid_set = false;
 #if defined(aarch64) && defined(LINUX)
-static bool have_disable_pac = false;
+static bool have_cpu_features = false;
+static uint64_t cpu_features;
 #endif
 
 static inline const char *find_option(const char *arg, const char *vmoption) {
@@ -137,10 +143,12 @@ static void parse_crac(const char *arg) {
         }
     }
 #if defined(aarch64) && defined(LINUX)
-    if (find_option(arg, "-XX:-UsePAC")) {
-        have_disable_pac = true;
-    } else if (find_option(arg, "-XX:+UsePAC")) {
-        have_disable_pac = false;
+    if (!have_cpu_features) {
+        const char *value = find_option(arg, "-XX:CPUFeatures=");
+        if (value != NULL) {
+            cpu_features = atol(value);
+            have_cpu_features = true;
+        }
     }
 #endif /* aarch64 && LINUX */
 }
@@ -446,10 +454,14 @@ main(int argc, char **argv)
     // PAC must be disabled before restore so that restored JVM code and
     // stack pointers are not authenticated with the launcher's PAC keys.
     // After disable_pac() the glibc bootstrap frames cannot be unwound,
-    // so we use exit() rather than return.
-    if (have_disable_pac) {
+    // so we use exit() rather than return for the restore path.
+    if (have_cpu_features && (cpu_features & ((uint64_t) 1 << VM_Version::CPU_PACA) == 0)) {
+fprintf(stderr,"Disabling PAC\n");
         disable_pac();
     }
+else fprintf(stderr,"Kept PAC\n");
+#else
+#error "FIXME"
 #endif /* aarch64 && LINUX */
     exit(JLI_Launch(margc, margv,
                    jargc, jargs,

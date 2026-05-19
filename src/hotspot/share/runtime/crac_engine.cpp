@@ -581,19 +581,12 @@ void CracEngine::check_cpuinfo(const VM_Version::VM_Features *current_features, 
     size_t image_features_size = _image_constraints_api->get_failed_bitmap(_conf, cpufeatures_name, reinterpret_cast<unsigned char *>(&image_features), sizeof(image_features));
     if (image_features_size == sizeof(image_features)) {
       ResourceMark rm;
-      const char *no_pac_hint = "";
-#ifdef AARCH64
-      if (image_features.supports_feature(VM_Feature_Flag::CPU_PACA)
-          && !current_features->supports_feature(VM_Feature_Flag::CPU_PACA)) {
-        no_pac_hint = " -XX:-UsePAC";
-      }
-#endif
       if (!exact) {
         image_features &= *current_features;
       } else {
         image_features = *current_features;
       }
-      log_error(crac)("Restore failed due to incompatible or missing CPU features, try using -XX:CPUFeatures=%s%s on checkpoint.", image_features.print_numbers(), no_pac_hint);
+      log_error(crac)("Restore failed due to incompatible or missing CPU features, try using -XX:CPUFeatures=%s on checkpoint.", image_features.print_numbers());
     } else {
       log_error(crac)("Restore failed due to incompatible or missing CPU features.");
     }

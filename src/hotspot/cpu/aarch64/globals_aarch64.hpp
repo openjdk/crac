@@ -129,7 +129,7 @@ define_pd_global(intx, InlineSmallCode,          1000);
           range(1, 1000)                                                \
   product(ccstr, UseBranchProtection, "none",                           \
           "Branch Protection to use: none, standard, pac-ret")          \
-  product(bool, UsePAC, true, DIAGNOSTIC |  RESTORE_SETTABLE,           \
+  product(bool, UsePAC, true,                                           \
           "Use Pointer Authentication Code for CRaC checkpoint/restore; "  \
           "disable when restoring on a machine without PAC support")    \
   product(bool, AlwaysMergeDMB, true, DIAGNOSTIC,                       \

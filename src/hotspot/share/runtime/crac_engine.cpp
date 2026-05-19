@@ -581,6 +581,14 @@ void CracEngine::check_cpuinfo(const VM_Version::VM_Features *current_features, 
     size_t image_features_size = _image_constraints_api->get_failed_bitmap(_conf, cpufeatures_name, reinterpret_cast<unsigned char *>(&image_features), sizeof(image_features));
     if (image_features_size == sizeof(image_features)) {
       ResourceMark rm;
+#ifdef AARCH64
+      if (image_features.supports_feature(VM_Feature_Flag::CPU_PACA)
+          != current_features->supports_feature(VM_Feature_Flag::CPU_PACA)) {
+        VM_Features paca;
+        paca.set_feature(VM_Feature_Flag::CPU_PACA);
+        log_error(crac)("Restore failed due to incompatible aarch64 CPU feature PACA (%s); these CPUs each require a separate image.", paca.print_numbers());
+      }
+#endif
       if (!exact) {
         image_features &= *current_features;
       } else {

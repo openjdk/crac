@@ -496,8 +496,11 @@ static char* get_relative_file(const char* rel) {
   return buf;
 }
 
-checkpointable_status_t get_checkpointable_status(crlib_conf_t *) {
-  return ready;
+static checkpointable_status_t get_checkpointable_status(crlib_conf_t * conf) {
+  if (!conf->direct_map()) {
+    return ready;
+  }
+  return never;
 }
 
 const char* criuengine::get_criu() {

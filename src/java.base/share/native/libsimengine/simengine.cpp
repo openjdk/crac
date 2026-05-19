@@ -289,7 +289,7 @@ static crlib_description_t description_extension = {
   configuration_options,
 };
 
-checkpointable_status_t get_checkpointable_status(crlib_conf_t *) {
+static checkpointable_status_t get_checkpointable_status(crlib_conf_t *) {
   return ready;
 }
 

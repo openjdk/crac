@@ -157,7 +157,8 @@ void VM_Version::initialize() {
     paca.set_feature(CPU_PACA);
     VM_Features notpaca;
     notpaca.set_feature(CPU_NOTPACA);
-    ss.print_raw_cr("For -XX:CPUFeatures, exactly one of the bits PACA (%s) and NOTPACA (%s) must be set.", paca.print_numbers(), notpaca.print_numbers());
+    stringStream ss;
+    ss.print_cr("For -XX:CPUFeatures, exactly one of the bits PACA (%s) and NOTPACA (%s) must be set.", paca.print_numbers(), notpaca.print_numbers());
     vm_exit_during_initialization(ss.base());
   }
 

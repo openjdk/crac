@@ -919,11 +919,11 @@ void crac::restore(crac_restore_data& restore_data) {
   }
 
   const int ret = engine.restore();
-  if (ret != 0 && (CheckCPUFeaturesMessage == nullptr || strcmp("quiet", CheckCPUFeaturesMessage))) {
+  if (ret != 0) {
     log_error(crac)("CRaC engine failed to restore from %s: error %d", CRaCRestoreFrom, ret);
     VM_Version::VM_Features current_features;
     VM_Version::cpu_features_binary(&current_features); // ignore return value
-    engine.check_cpuinfo(&current_features, exact, CheckCPUFeaturesMessage);
+    engine.check_cpuinfo(&current_features, exact);
   }
 }
 

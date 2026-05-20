@@ -568,7 +568,7 @@ void CracEngine::require_cpuinfo(const VM_Version::VM_Features *current_features
     reinterpret_cast<const unsigned char *>(current_features), sizeof(*current_features), exact ? EQUALS : SUBSET);
 }
 
-void CracEngine::check_cpuinfo(const VM_Version::VM_Features *current_features, bool exact, const char *features_message) const {
+void CracEngine::check_cpuinfo(const VM_Version::VM_Features *current_features, bool exact) const {
   if (_image_constraints_api == nullptr) {
     // When CPU features are ignored
     return;
@@ -580,8 +580,8 @@ void CracEngine::check_cpuinfo(const VM_Version::VM_Features *current_features, 
     const char *error_message;
     VM_Version::VM_Features image_features;
     size_t image_features_size = _image_constraints_api->get_failed_bitmap(_conf, cpufeatures_name, reinterpret_cast<unsigned char *>(&image_features), sizeof(image_features));
-    if (features_message != nullptr) {
-      error_message = features_message;
+    if (CheckCPUFeaturesMessage != nullptr) {
+      error_message = CheckCPUFeaturesMessage;
     } else if (image_features_size == sizeof(image_features)) {
       if (exact) {
         error_message = "Restore failed due to incompatible or missing CPU features, try using -XX:CPUFeatures=%c on checkpoint.";

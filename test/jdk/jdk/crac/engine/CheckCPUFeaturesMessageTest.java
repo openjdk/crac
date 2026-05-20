@@ -65,16 +65,16 @@ public class CheckCPUFeaturesMessageTest implements CracTest {
     }
 
     private void testQuiet(CracBuilder builder) throws Exception {
-        builder.vmOption("-XX:CheckCPUFeaturesMessage=quiet")
+        builder.vmOption("-Xlog:crac=Off")
                 .doRestoreToAnalyze()
                 .shouldHaveExitValue(1)
-                .shouldNotContain("quiet")
                 .shouldNotContain("CRaC engine failed to restore");
     }
 
     private CracBuilder mustFail(CracBuilder builder) {
         return builder.clearVmOptions().vmOption("-XX:CheckCPUFeatures=exact");
     }
+
     @Override
     public void test() throws Exception {
         CracBuilder builder = new CracBuilder()

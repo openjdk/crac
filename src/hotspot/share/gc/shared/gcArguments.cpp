@@ -75,6 +75,41 @@ static size_t clamp_by_size_t_max(uint64_t value) {
   return (size_t)MIN2(value, (uint64_t)std::numeric_limits<size_t>::max());
 }
 
+size_t GCArguments::calculate_default_heap_size(size_t avail_mem) {
+  uint64_t min_memory = (uint64_t)(((double)avail_mem * MinRAMPercentage) / 100);
+  uint64_t max_memory = (uint64_t)(((double)avail_mem * MaxRAMPercentage) / 100);
+
+  const size_t reasonable_min = clamp_by_size_t_max(min_memory);
+  size_t reasonable_max = clamp_by_size_t_max(max_memory);
+
+  if (reasonable_min < defaultMaxHeapSize) {
+    // Small physical memory, so use a minimum fraction of it for the heap
+    reasonable_max = reasonable_min;
+  } else {
+    // Not-small physical memory, so require a heap at least
+    // as large as MaxHeapSize
+    reasonable_max = MAX2(reasonable_max, defaultMaxHeapSize);
+  }
+
+  if (!FLAG_IS_DEFAULT(ErgoHeapSizeLimit) && ErgoHeapSizeLimit != 0) {
+    // Limit the heap size to ErgoHeapSizeLimit
+    reasonable_max = MIN2(reasonable_max, ErgoHeapSizeLimit);
+  }
+
+  reasonable_max = limit_heap_by_allocatable_memory(reasonable_max);
+
+  if (!FLAG_IS_DEFAULT(InitialHeapSize)) {
+    // An initial heap size was specified on the command line,
+    // so be sure that the maximum size is consistent.  Done
+    // after call to limit_heap_by_allocatable_memory because that
+    // method might reduce the allocation size.
+    reasonable_max = MAX2(reasonable_max, InitialHeapSize);
+  } else if (!FLAG_IS_DEFAULT(MinHeapSize)) {
+    reasonable_max = MAX2(reasonable_max, MinHeapSize);
+  }
+  return reasonable_max;
+}
+
 void GCArguments::set_heap_size() {
   // Check if the user has configured any limit on the amount of RAM we may use.
   bool has_ram_limit = !FLAG_IS_DEFAULT(MaxRAMPercentage) ||
@@ -87,38 +122,7 @@ void GCArguments::set_heap_size() {
   // fraction of the size of physical memory, respecting the maximum and
   // minimum sizes of the heap.
   if (FLAG_IS_DEFAULT(MaxHeapSize)) {
-    uint64_t min_memory = (uint64_t)(((double)avail_mem * MinRAMPercentage) / 100);
-    uint64_t max_memory = (uint64_t)(((double)avail_mem * MaxRAMPercentage) / 100);
-
-    const size_t reasonable_min = clamp_by_size_t_max(min_memory);
-    size_t reasonable_max = clamp_by_size_t_max(max_memory);
-
-    if (reasonable_min < MaxHeapSize) {
-      // Small physical memory, so use a minimum fraction of it for the heap
-      reasonable_max = reasonable_min;
-    } else {
-      // Not-small physical memory, so require a heap at least
-      // as large as MaxHeapSize
-      reasonable_max = MAX2(reasonable_max, MaxHeapSize);
-    }
-
-    if (!FLAG_IS_DEFAULT(ErgoHeapSizeLimit) && ErgoHeapSizeLimit != 0) {
-      // Limit the heap size to ErgoHeapSizeLimit
-      reasonable_max = MIN2(reasonable_max, ErgoHeapSizeLimit);
-    }
-
-    reasonable_max = limit_heap_by_allocatable_memory(reasonable_max);
-
-    if (!FLAG_IS_DEFAULT(InitialHeapSize)) {
-      // An initial heap size was specified on the command line,
-      // so be sure that the maximum size is consistent.  Done
-      // after call to limit_heap_by_allocatable_memory because that
-      // method might reduce the allocation size.
-      reasonable_max = MAX2(reasonable_max, InitialHeapSize);
-    } else if (!FLAG_IS_DEFAULT(MinHeapSize)) {
-      reasonable_max = MAX2(reasonable_max, MinHeapSize);
-    }
-
+    size_t reasonable_max = calculate_default_heap_size(avail_mem);
 #ifdef _LP64
     if (UseCompressedOops) {
       // HeapBaseMinAddress can be greater than default but not less than.
@@ -191,6 +195,15 @@ void GCArguments::set_heap_size() {
       log_trace(gc, heap)("  Minimum heap size %zu", MinHeapSize);
     }
   }
+}
+
+size_t GCArguments::default_heap_size() {
+  // Arguments::set_heap_size adjusts the heap size to help
+  // CompressedOops; after the CompressedOops::Mode is selected
+  // and upper heap limit is set we don't need this anymore.
+  // (the number returned from this will be capped by current
+  // MaxHeapSize anyway).
+  return calculate_default_heap_size(os::physical_memory());
 }
 
 void GCArguments::initialize_heap_sizes() {

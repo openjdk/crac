@@ -123,11 +123,11 @@ int VM_Version::set_and_get_current_sve_vector_length(int length) {
   return new_length;
 }
 
-static uint64_t check_feature(uint64_t hwcap, uint64_t feature_bit_mask, uint64_t hwcap_bitmask) {
+void VM_Version::update_feature(uint64_t hwcap, Feature_Flag flag, uint64_t hwcap_bitmask) {
   if (hwcap & hwcap_bitmask) {
-    return feature_bit_mask;
+    _features.set_feature(flag);
   } else {
-    return 0;
+    _features.clear_feature(flag);
   }
 }
 
@@ -136,27 +136,28 @@ void VM_Version::get_os_cpu_info() {
   uint64_t auxv = getauxval(AT_HWCAP);
   uint64_t auxv2 = getauxval(AT_HWCAP2);
 
-  _features =
-      check_feature(auxv,  BIT_MASK(CPU_FP),         HWCAP_FP) |
-      check_feature(auxv,  BIT_MASK(CPU_ASIMD),      HWCAP_ASIMD) |
-      check_feature(auxv,  BIT_MASK(CPU_EVTSTRM),    HWCAP_EVTSTRM) |
-      check_feature(auxv,  BIT_MASK(CPU_AES),        HWCAP_AES) |
-      check_feature(auxv,  BIT_MASK(CPU_PMULL),      HWCAP_PMULL) |
-      check_feature(auxv,  BIT_MASK(CPU_SHA1),       HWCAP_SHA1) |
-      check_feature(auxv,  BIT_MASK(CPU_SHA2),       HWCAP_SHA2) |
-      check_feature(auxv,  BIT_MASK(CPU_CRC32),      HWCAP_CRC32) |
-      check_feature(auxv,  BIT_MASK(CPU_LSE),        HWCAP_ATOMICS) |
-      check_feature(auxv,  BIT_MASK(CPU_DCPOP),      HWCAP_DCPOP) |
-      check_feature(auxv,  BIT_MASK(CPU_SHA3),       HWCAP_SHA3) |
-      check_feature(auxv,  BIT_MASK(CPU_SHA512),     HWCAP_SHA512) |
-      check_feature(auxv,  BIT_MASK(CPU_SVE),        HWCAP_SVE) |
-      check_feature(auxv,  BIT_MASK(CPU_PACA),       HWCAP_PACA) |
-      check_feature(auxv,  BIT_MASK(CPU_FPHP),       HWCAP_FPHP) |
-      check_feature(auxv,  BIT_MASK(CPU_ASIMDHP),    HWCAP_ASIMDHP) |
-      check_feature(auxv2, BIT_MASK(CPU_SVE2),       HWCAP2_SVE2) |
-      check_feature(auxv2, BIT_MASK(CPU_SVEBITPERM), HWCAP2_SVEBITPERM) |
-      check_feature(auxv2, BIT_MASK(CPU_ECV),        HWCAP2_ECV) |
-      check_feature(auxv2, BIT_MASK(CPU_WFXT),       HWCAP2_WFXT);
+  update_feature(auxv,  CPU_FP,         HWCAP_FP         );
+  update_feature(auxv,  CPU_ASIMD,      HWCAP_ASIMD      );
+  update_feature(auxv,  CPU_EVTSTRM,    HWCAP_EVTSTRM    );
+  update_feature(auxv,  CPU_AES,        HWCAP_AES        );
+  update_feature(auxv,  CPU_PMULL,      HWCAP_PMULL      );
+  update_feature(auxv,  CPU_SHA1,       HWCAP_SHA1       );
+  update_feature(auxv,  CPU_SHA2,       HWCAP_SHA2       );
+  update_feature(auxv,  CPU_CRC32,      HWCAP_CRC32      );
+  update_feature(auxv,  CPU_LSE,        HWCAP_ATOMICS    );
+  update_feature(auxv,  CPU_FPHP,       HWCAP_FPHP       );
+  update_feature(auxv,  CPU_ASIMDHP,    HWCAP_ASIMDHP    );
+  update_feature(auxv,  CPU_DCPOP,      HWCAP_DCPOP      );
+  update_feature(auxv,  CPU_SHA3,       HWCAP_SHA3       );
+  update_feature(auxv,  CPU_SHA512,     HWCAP_SHA512     );
+  update_feature(auxv,  CPU_SVE,        HWCAP_SVE        );
+  // CPU_SB is missing but there exists HWCAP_SB
+  update_feature(auxv,  CPU_PACA,       HWCAP_PACA       );
+  update_feature(auxv2, CPU_SVEBITPERM, HWCAP2_SVEBITPERM);
+  update_feature(auxv2, CPU_SVE2,       HWCAP2_SVE2      );
+  // CPU_A53MAC is missing as there is no HWCAP*_A53MAC
+  update_feature(auxv2, CPU_ECV,        HWCAP2_ECV       );
+  update_feature(auxv2, CPU_WFXT,       HWCAP2_WFXT      );
 
   uint64_t ctr_el0;
   uint64_t dczid_el0;

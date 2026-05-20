@@ -31,9 +31,121 @@
 #include "utilities/macros.hpp"
 #include "utilities/sizes.hpp"
 
+/*
+ * Update following files when declaring new flags:
+ * test/lib-test/jdk/test/whitebox/CPUInfoTest.java
+ * src/jdk.internal.vm.ci/share/classes/jdk/vm/ci/amd64/AMD64.java
+ */
+class VM_Feature_Flag {
+public:
+  enum Feature_Flag {
+#define CPU_FEATURE_FLAGS(decl) \
+    decl(CX8,               cx8              ) /*  next bits are from cpuid 1 (EDX) */ \
+    decl(CMOV,              cmov             ) \
+    decl(FXSR,              fxsr             ) \
+    decl(HT,                ht               ) \
+                                               \
+    decl(MMX,               mmx              ) \
+    decl(3DNOW_PREFETCH,    3dnowpref        ) /* Processor supports 3dnow prefetch and prefetchw instructions */ \
+                                               /* may not necessarily support other 3dnow instructions */ \
+    decl(SSE,               sse              ) \
+    decl(SSE2,              sse2             ) \
+                                               \
+    decl(SSE3,              sse3             ) /* SSE3 comes from cpuid 1 (ECX) */ \
+    decl(SSSE3,             ssse3            ) \
+    decl(SSE4A,             sse4a            ) \
+    decl(SSE4_1,            sse4.1           ) \
+                                               \
+    decl(SSE4_2,            sse4.2           ) \
+    decl(POPCNT,            popcnt           ) \
+    decl(LZCNT,             lzcnt            ) \
+    decl(TSC,               tsc              ) \
+                                               \
+    decl(TSCINV_BIT,        tscinvbit        ) \
+    decl(TSCINV,            tscinv           ) \
+    decl(AVX,               avx              ) \
+    decl(AVX2,              avx2             ) \
+                                               \
+    decl(AES,               aes              ) \
+    decl(ERMS,              erms             ) /* enhanced 'rep movsb/stosb' instructions */ \
+    decl(CLMUL,             clmul            ) /* carryless multiply for CRC */ \
+    decl(BMI1,              bmi1             ) \
+                                               \
+    decl(BMI2,              bmi2             ) \
+    decl(RTM,               rtm              ) /* Restricted Transactional Memory instructions */ \
+    decl(ADX,               adx              ) \
+    decl(AVX512F,           avx512f          ) /* AVX 512bit foundation instructions */ \
+                                               \
+    decl(AVX512DQ,          avx512dq         ) \
+    decl(AVX512PF,          avx512pf         ) \
+    decl(AVX512ER,          avx512er         ) \
+    decl(AVX512CD,          avx512cd         ) \
+                                               \
+    decl(AVX512BW,          avx512bw         ) /* Byte and word vector instructions */ \
+    decl(AVX512VL,          avx512vl         ) /* EVEX instructions with smaller vector length */ \
+    decl(SHA,               sha              ) /* SHA instructions */ \
+    decl(FMA,               fma              ) /* FMA instructions */ \
+                                               \
+    decl(VZEROUPPER,        vzeroupper       ) /* Vzeroupper instruction */ \
+    decl(AVX512_VPOPCNTDQ,  avx512_vpopcntdq ) /* Vector popcount */ \
+    decl(AVX512_VPCLMULQDQ, avx512_vpclmulqdq) /* Vector carryless multiplication */ \
+    decl(AVX512_VAES,       avx512_vaes      ) /* Vector AES instruction */ \
+                                               \
+    decl(AVX512_VNNI,       avx512_vnni      ) /* Vector Neural Network Instructions */ \
+    decl(FLUSH,             clflush          ) /* flush instruction */ \
+    decl(FLUSHOPT,          clflushopt       ) /* flusopth instruction */ \
+    decl(CLWB,              clwb             ) /* clwb instruction */ \
+                                               \
+    decl(AVX512_VBMI2,      avx512_vbmi2     ) /* VBMI2 shift left double instructions */ \
+    decl(AVX512_VBMI,       avx512_vbmi      ) /* Vector BMI instructions */ \
+    decl(HV,                hv               ) /* Hypervisor instructions */ \
+    decl(SERIALIZE,         serialize        ) /* CPU SERIALIZE */ \
+    decl(RDTSCP,            rdtscp           ) /* RDTSCP instruction */ \
+    decl(RDPID,             rdpid            ) /* RDPID instruction */ \
+    decl(FSRM,              fsrm             ) /* Fast Short REP MOV */ \
+    decl(GFNI,              gfni             ) /* Vector GFNI instructions */ \
+    decl(AVX512_BITALG,     avx512_bitalg    ) /* Vector sub-word popcount and bit gather instructions */\
+    decl(F16C,              f16c             ) /* Half-precision and single precision FP conversion instructions*/ \
+    decl(PKU,               pku              ) /* Protection keys for user-mode pages */ \
+    decl(OSPKE,             ospke            ) /* OS enables protection keys */ \
+    decl(CET_IBT,           cet_ibt          ) /* Control Flow Enforcement - Indirect Branch Tracking */ \
+    decl(CET_SS,            cet_ss           ) /* Control Flow Enforcement - Shadow Stack */ \
+    decl(AVX512_IFMA,       avx512_ifma      ) /* Integer Vector FMA instructions*/ \
+    decl(AVX_IFMA,          avx_ifma         ) /* 256-bit VEX-coded variant of AVX512-IFMA*/ \
+    decl(APX_F,             apx_f            ) /* Intel Advanced Performance Extensions*/ \
+    decl(SHA512,            sha512           ) /* SHA512 instructions*/ \
+    decl(AVX512_FP16,       avx512_fp16      ) /* AVX512 FP16 ISA support*/ \
+    decl(AVX10_1,           avx10_1          ) /* AVX10 512 bit vector ISA Version 1 support*/ \
+    decl(AVX10_2,           avx10_2          ) /* AVX10 512 bit vector ISA Version 2 support*/ \
+    decl(HYBRID,            hybrid           ) /* Hybrid architecture */ \
+    decl(FMA4,              fma4             ) \
+    decl(MOVBE,             movbe            ) \
+    decl(OSXSAVE,           osxsave          ) \
+    decl(IBT,               ibt              ) \
+    decl(SHSTK,             shstk            ) /* Also known as cet_ss */ \
+    decl(XSAVE,             xsave            ) \
+    decl(CMPXCHG16,         cmpxchg16        ) /* Also known in cpuinfo as cx16 and in glibc as cmpxchg16b */ \
+    decl(LAHFSAHF,          lahfsahf         ) /* Also known in cpuinfo as lahf_lm and in glibc as lahf64_sahf64 */ \
+    decl(HTT,               htt              ) /* hotspot calls it 'ht' but that is affected by threads_per_core() */ \
+    decl(XSAVEC,            xsavec           ) \
+    decl(AVX_Fast_Unaligned_Load, avx_fast_unaligned_load) \
+    /**/
+
+#define DECLARE_CPU_FEATURE_FLAG(id, name) CPU_##id,
+    CPU_FEATURE_FLAGS(DECLARE_CPU_FEATURE_FLAG)
+#undef DECLARE_CPU_FEATURE_FLAG
+    MAX_CPU_FEATURES
+  };
+};
+
+// HT does not result in incompatibility of aot code cache
+#define AOT_CODE_CACHE_CLEAR CPU_HT
+
+#include "runtime/vm_features.inline.hpp"
+
 class stringStream;
 
-class VM_Version : public Abstract_VM_Version {
+class VM_Version : public Abstract_VM_Version, protected VM_Feature_Flag {
   friend class VMStructs;
   friend class JVMCIVMStructs;
   friend class CracEngine;
@@ -376,6 +488,8 @@ class VM_Version : public Abstract_VM_Version {
     } bits;
   };
 
+  typedef ::VM_Features VM_Features;
+
 protected:
   static int _cpu;
   static int _model;
@@ -388,268 +502,8 @@ protected:
   static address   _cpuinfo_segv_addr_apx; // address of instruction which causes APX specific SEGV
   static address   _cpuinfo_cont_addr_apx; // address of instruction after the one which causes APX specific SEGV
 
-  /*
-   * Update following files when declaring new flags:
-   * test/lib-test/jdk/test/whitebox/CPUInfoTest.java
-   * src/jdk.internal.vm.ci/share/classes/jdk/vm/ci/amd64/AMD64.java
-   */
-  enum Feature_Flag {
-#define CPU_FEATURE_FLAGS(decl) \
-    decl(CX8,               cx8               )  /*  next bits are from cpuid 1 (EDX) */ \
-    decl(CMOV,              cmov              )  \
-    decl(FXSR,              fxsr              )  \
-    decl(HT,                ht                )  \
-                                                 \
-    decl(MMX,               mmx               )  \
-    decl(3DNOW_PREFETCH,    3dnowpref         )  /* Processor supports 3dnow prefetch and prefetchw instructions */ \
-                                                 /* may not necessarily support other 3dnow instructions */ \
-    decl(SSE,               sse               )  \
-    decl(SSE2,              sse2              )  \
-                                                 \
-    decl(SSE3,              sse3              ) /* SSE3 comes from cpuid 1 (ECX) */ \
-    decl(SSSE3,             ssse3             ) \
-    decl(SSE4A,             sse4a             ) \
-    decl(SSE4_1,            sse4.1            ) \
-                                                \
-    decl(SSE4_2,            sse4.2            ) \
-    decl(POPCNT,            popcnt            ) \
-    decl(LZCNT,             lzcnt             ) \
-    decl(TSC,               tsc               ) \
-                                                \
-    decl(TSCINV_BIT,        tscinvbit         ) \
-    decl(TSCINV,            tscinv            ) \
-    decl(AVX,               avx               ) \
-    decl(AVX2,              avx2              ) \
-                                                \
-    decl(AES,               aes               ) \
-    decl(ERMS,              erms              ) /* enhanced 'rep movsb/stosb' instructions */ \
-    decl(CLMUL,             clmul             ) /* carryless multiply for CRC */ \
-    decl(BMI1,              bmi1              ) \
-                                                 \
-    decl(BMI2,              bmi2              ) \
-    decl(RTM,               rtm               ) /* Restricted Transactional Memory instructions */ \
-    decl(ADX,               adx               ) \
-    decl(AVX512F,           avx512f           ) /* AVX 512bit foundation instructions */ \
-                                                 \
-    decl(AVX512DQ,          avx512dq          ) \
-    decl(AVX512PF,          avx512pf          ) \
-    decl(AVX512ER,          avx512er          ) \
-    decl(AVX512CD,          avx512cd          ) \
-                                                \
-    decl(AVX512BW,          avx512bw          ) /* Byte and word vector instructions */ \
-    decl(AVX512VL,          avx512vl          ) /* EVEX instructions with smaller vector length */ \
-    decl(SHA,               sha               ) /* SHA instructions */ \
-    decl(FMA,               fma               ) /* FMA instructions */ \
-                                                \
-    decl(VZEROUPPER,        vzeroupper        ) /* Vzeroupper instruction */ \
-    decl(AVX512_VPOPCNTDQ,  avx512_vpopcntdq  ) /* Vector popcount */ \
-    decl(AVX512_VPCLMULQDQ, avx512_vpclmulqdq ) /* Vector carryless multiplication */ \
-    decl(AVX512_VAES,       avx512_vaes       ) /* Vector AES instruction */ \
-                                                \
-    decl(AVX512_VNNI,       avx512_vnni       ) /* Vector Neural Network Instructions */ \
-    decl(FLUSH,             clflush           ) /* flush instruction */ \
-    decl(FLUSHOPT,          clflushopt        ) /* flusopth instruction */ \
-    decl(CLWB,              clwb              ) /* clwb instruction */ \
-                                                \
-    decl(AVX512_VBMI2,      avx512_vbmi2      ) /* VBMI2 shift left double instructions */ \
-    decl(AVX512_VBMI,       avx512_vbmi       ) /* Vector BMI instructions */ \
-    decl(HV,                hv                ) /* Hypervisor instructions */ \
-    decl(SERIALIZE,         serialize         ) /* CPU SERIALIZE */ \
-    decl(RDTSCP,            rdtscp            ) /* RDTSCP instruction */ \
-    decl(RDPID,             rdpid             ) /* RDPID instruction */ \
-    decl(FSRM,              fsrm              ) /* Fast Short REP MOV */ \
-    decl(GFNI,              gfni              ) /* Vector GFNI instructions */ \
-    decl(AVX512_BITALG,     avx512_bitalg     ) /* Vector sub-word popcount and bit gather instructions */\
-    decl(F16C,              f16c              ) /* Half-precision and single precision FP conversion instructions*/ \
-    decl(PKU,               pku               ) /* Protection keys for user-mode pages */ \
-    decl(OSPKE,             ospke             ) /* OS enables protection keys */ \
-    decl(CET_IBT,           cet_ibt           ) /* Control Flow Enforcement - Indirect Branch Tracking */ \
-    decl(CET_SS,            cet_ss            ) /* Control Flow Enforcement - Shadow Stack */ \
-    decl(AVX512_IFMA,       avx512_ifma       ) /* Integer Vector FMA instructions*/ \
-    decl(AVX_IFMA,          avx_ifma          ) /* 256-bit VEX-coded variant of AVX512-IFMA*/ \
-    decl(APX_F,             apx_f             ) /* Intel Advanced Performance Extensions*/ \
-    decl(SHA512,            sha512            ) /* SHA512 instructions*/ \
-    decl(AVX512_FP16,       avx512_fp16       ) /* AVX512 FP16 ISA support*/ \
-    decl(AVX10_1,           avx10_1           ) /* AVX10 512 bit vector ISA Version 1 support*/ \
-    decl(AVX10_2,           avx10_2           ) /* AVX10 512 bit vector ISA Version 2 support*/ \
-    decl(HYBRID,            hybrid            ) /* Hybrid architecture */ \
-    decl(FMA4,              fma4              ) \
-    decl(MOVBE,             movbe             ) \
-    decl(OSXSAVE,           osxsave           ) \
-    decl(IBT,               ibt               ) \
-    decl(SHSTK,             shstk             ) /* Also known as cet_ss */ \
-    decl(XSAVE,             xsave             ) \
-    decl(CMPXCHG16,         cmpxchg16         ) /* Also known in cpuinfo as cx16 and in glibc as cmpxchg16b */ \
-    decl(LAHFSAHF,          lahfsahf          ) /* Also known in cpuinfo as lahf_lm and in glibc as lahf64_sahf64 */ \
-    decl(HTT,               htt               ) /* hotspot calls it 'ht' but that is affected by threads_per_core() */ \
-    decl(XSAVEC,            xsavec            ) \
-    decl(AVX_Fast_Unaligned_Load, avx_fast_unaligned_load)
-
-#define DECLARE_CPU_FEATURE_FLAG(id, name) CPU_##id,
-    CPU_FEATURE_FLAGS(DECLARE_CPU_FEATURE_FLAG)
-#undef DECLARE_CPU_FEATURE_FLAG
-    MAX_CPU_FEATURES
-  };
-
-  class VM_Features {
-    friend class VMStructs;
-    friend class JVMCIVMStructs;
-
-   private:
-    uint64_t _features_bitmap[(MAX_CPU_FEATURES + BitsPerLong - 1) / BitsPerLong];
-
-    STATIC_ASSERT(sizeof(_features_bitmap) * BitsPerByte >= MAX_CPU_FEATURES);
-
-    constexpr static int features_bitmap_element_shift_count() {
-      return LogBitsPerLong;
-    }
-
-    constexpr static uint64_t features_bitmap_element_mask() {
-      return (1ULL << features_bitmap_element_shift_count()) - 1;
-    }
-
-    static int index(Feature_Flag feature) {
-      int idx = feature >> features_bitmap_element_shift_count();
-      assert(idx < features_bitmap_element_count(), "Features array index out of bounds");
-      return idx;
-    }
-
-    static uint64_t bit_mask(Feature_Flag feature) {
-      return (1ULL << (feature & features_bitmap_element_mask()));
-    }
-
-    static int _features_bitmap_size; // for JVMCI purposes
-
-    static uint64_t index_mask(int idx) {
-      assert(idx < features_bitmap_element_count(), "Features array index out of bounds");
-      if (idx + 1 < features_bitmap_element_count()) {
-        return -1LL;
-      }
-      // It is equivalent to 'bit_mask(MAX_CPU_FEATURES) - 1'.
-      return ((bit_mask((Feature_Flag) ((int) MAX_CPU_FEATURES - 1)) - 1) << 1) | 1;
-    }
-
-    // We do not use std::forward<> as we just call 'func'.
-    template <typename T, typename F>
-    static void apply_to_all_features(T&& t, F&& func) {
-      for (int idx = 0; idx < t.features_bitmap_element_count(); ++idx) {
-        func(t._features_bitmap[idx], idx);
-      }
-    }
-
-    // We do not use std::forward<> as we just call 'func'.
-    template <typename F>
-    void apply_to_all_features(F&& func) {
-      apply_to_all_features(*this, func);
-    }
-
-    // We do not use std::forward<> as we just call 'func'.
-    template <typename F>
-    void apply_to_all_features(F&& func) const {
-      apply_to_all_features(*this, func);
-    }
-
-   public:
-    VM_Features() {
-      apply_to_all_features([](uint64_t &u, int idx) {
-        u = 0;
-      });
-    }
-
-    // Number of 8-byte elements in _bitmap.
-    constexpr static int features_bitmap_element_count() {
-      return sizeof(_features_bitmap) / sizeof(uint64_t);
-    }
-
-    void set_feature(Feature_Flag feature) {
-      int idx = index(feature);
-      _features_bitmap[idx] |= bit_mask(feature);
-    }
-
-    void clear_feature(VM_Version::Feature_Flag feature) {
-      int idx = index(feature);
-      _features_bitmap[idx] &= ~bit_mask(feature);
-    }
-
-    bool supports_feature(VM_Version::Feature_Flag feature) {
-      int idx = index(feature);
-      return (_features_bitmap[idx] & bit_mask(feature)) != 0;
-    }
-
-    bool verify_aot_code_cache_features(VM_Features* features_to_test) {
-      for (int i = 0; i < features_bitmap_element_count(); i++) {
-        if (_features_bitmap[i] != features_to_test->_features_bitmap[i]) {
-          return false;
-        }
-      }
-      return true;
-    }
-
-    VM_Features aot_code_cache_features() {
-      VM_Features copy = *this;
-      // HT does not result in incompatibility of aot code cache
-      copy.clear_feature(CPU_HT);
-      return copy;
-    }
-
-    void set_all_features() {
-      apply_to_all_features([](uint64_t &u, int idx) {
-        u = index_mask(idx);
-      });
-    }
-
-    void set_feature_idx(int idx, uint64_t val) {
-      assert(idx < features_bitmap_element_count(), "Features array index out of bounds");
-      _features_bitmap[idx] = val;
-    }
-
-    VM_Features operator ~() const {
-      VM_Features retval = *this;
-      apply_to_all_features(retval, [](uint64_t &u, int idx) {
-        u ^= index_mask(idx);
-      });
-      return retval;
-    }
-
-    VM_Features operator &(const VM_Features &other) const {
-      VM_Features retval = *this;
-      apply_to_all_features(retval, [&other](uint64_t &u, int idx) {
-        u &= other._features_bitmap[idx];
-      });
-      return retval;
-    }
-
-    VM_Features &operator &=(const VM_Features &other) {
-      *this = *this & other;
-      return *this;
-    }
-
-    bool operator ==(const VM_Features &other) const {
-      bool retval = true;
-      apply_to_all_features([&other, &retval](uint64_t u, int idx) {
-        if (u != other._features_bitmap[idx]) {
-          retval = false;
-        }
-      });
-      return retval;
-    }
-
-    bool operator !=(const VM_Features &other) const {
-      return !(*this == other);
-    }
-
-    bool empty() const {
-      VM_Features empty_features;
-      return *this == empty_features;
-    }
-
-    void print_numbers(outputStream &os, bool hexonly = false) const;
-
-    const char *print_numbers() const;
-  };
-
   // CPU feature flags vector, can be affected by VM settings.
-  static VM_Features _features, _features_saved;
+  static VM_Features _features;
 
   // Original CPU feature flags vector, not affected by VM settings.
   static VM_Features _cpu_features;
@@ -664,6 +518,8 @@ protected:
     _features = VM_Features();
     _cpu_features = VM_Features();
   }
+
+  static void cpu_features_init();
 
   enum Extended_Family {
     // AMD
@@ -859,18 +715,19 @@ private:
   static void get_processor_features_hardware();
   static void get_processor_features_hotspot();
 
+  static VM_Features CPUFeatures_generic();
+  static void glibc_patch(VM_Features &shouldnotuse);
   static VM_Features CPUFeatures_parse(const char *str);
 #ifdef LINUX
   static bool glibc_not_using();
   static bool glibc_env_set(char *disable_str);
-  /*[[noreturn]]*/ static void glibc_reexec();
-  // C++17: Make glibc_prefix and glibc_prefix_len constexpr.
-  static const char glibc_prefix[];
-  static const size_t glibc_prefix_len;
+  [[noreturn]] static void glibc_reexec();
+  static constexpr char glibc_prefix[] = ":glibc.cpu.hwcaps=";
+  static constexpr size_t glibc_prefix_len = strlen(glibc_prefix);
 #endif //LINUX
-  // C++17: Make _ignore_glibc_not_using inline.
   static bool _ignore_glibc_not_using;
   static void print_using_features_cr();
+  static void insert_features_names(VM_Version::VM_Features features, stringStream& ss);
 
   static bool os_supports_avx_vectors();
   static bool os_supports_apx_egprs();
@@ -950,12 +807,9 @@ public:
   // Initialization
   static void initialize();
   static bool cpu_features_binary(VM_Features *data);
-  static bool ignore_cpu_features() {
-    // This gets triggered by -XX:CPUFeatures=ignore, not writing the features & arch
-    // on checkpoint into the image at all, and skipping the check on restore.
+  static bool check_cpu_features_skip() {
     return _ignore_glibc_not_using;
   }
-  static void restore_check(const char* str, const char* msg_prefix);
 
   // Override Abstract_VM_Version implementation
   static void print_platform_virtualization_info(outputStream*);
@@ -1119,8 +973,6 @@ public:
   }
 
   static bool is_intel_tsc_synched_at_init();
-
-  static void insert_features_names(VM_Version::VM_Features features, stringStream& ss);
 
   // This checks if the JVM is potentially affected by an erratum on Intel CPUs (SKX102)
   // that causes unpredictable behaviour when jcc crosses 64 byte boundaries. Its microcode

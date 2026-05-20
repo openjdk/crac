@@ -53,7 +53,7 @@ import jdk.test.lib.crac.*;
  * @build SimpleCPUFeaturesTest
  * @comment FLUSH and SSE2 must be present
  * @run driver jdk.test.lib.crac.CracTest 0x20000000080,0x0
- * @run driver jdk.test.lib.crac.CracTest foobar              -- INVALID_FORMAT
+ * @run driver jdk.test.lib.crac.CracTest foobar              -- INVALID_FORMAT2
  * @run driver jdk.test.lib.crac.CracTest 0xfffff,0x0         -- MISSING_FEATURES
  * @run driver jdk.test.lib.crac.CracTest 0x20000000080,0xfff -- MISSING_FEATURES
  */
@@ -67,19 +67,31 @@ import jdk.test.lib.crac.*;
  * @run driver jdk.test.lib.crac.CracTest 0x20000000080,0x0 -- OS_DOES_NOT_SUPPORT
  */
 /*
- * @test id=AARCH64
+ * @test id=AARCH64-LINUX
+ * @requires os.family == "linux"
  * @requires os.arch=="aarch64"
  * @library /test/lib
  * @build SimpleCPUFeaturesTest
- * @run driver jdk.test.lib.crac.CracTest 0x0,0x0 -- ARCH_DOES_NOT_SUPPORT
- * @run driver jdk.test.lib.crac.CracTest foobar  -- ARCH_DOES_NOT_SUPPORT
+ * @run driver jdk.test.lib.crac.CracTest 0x0
+ * @run driver jdk.test.lib.crac.CracTest 0x0,0x0 -- INVALID_FORMAT1
+ * @run driver jdk.test.lib.crac.CracTest foobar  -- INVALID_FORMAT1
+ */
+/*
+ * @test id=AARCH64-NON-LINUX
+ * @requires os.family != "linux"
+ * @requires os.arch=="aarch64"
+ * @library /test/lib
+ * @build SimpleCPUFeaturesTest
+ * @run driver jdk.test.lib.crac.CracTest 0x0     -- OS_DOES_NOT_SUPPORT
+ * @run driver jdk.test.lib.crac.CracTest foobar  -- OS_DOES_NOT_SUPPORT
  */
 public class SimpleCPUFeaturesTest implements CracTest {
     private static final String SUCCESS = "SUCCESS";
 
     // jtreg does not respect quoted strings
     private enum ErrorMsg {
-        INVALID_FORMAT("must be of the form: 0xNUM,0xNUM"),
+        INVALID_FORMAT1("must be of the form: 0xNUM"),
+        INVALID_FORMAT2("must be of the form: 0xNUM,0xNUM"),
         MISSING_FEATURES("missing features of this CPU are"),
         ARCH_DOES_NOT_SUPPORT("This architecture does not support any arch-specific"),
         OS_DOES_NOT_SUPPORT("This OS does not support"),

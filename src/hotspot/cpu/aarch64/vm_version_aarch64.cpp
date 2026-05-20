@@ -36,6 +36,34 @@
 #include "utilities/macros.hpp"
 #include "utilities/ostream.hpp"
 
+// 'glibc.cpu.hwcaps' is not supported on aarch64.
+#define EXCESSIVE_LIST
+#define GLIBC_UNSUPPORTED_LIST \
+  GLIBC_UNSUPPORTED(FP        ); \
+  GLIBC_UNSUPPORTED(ASIMD     ); \
+  GLIBC_UNSUPPORTED(EVTSTRM   ); \
+  GLIBC_UNSUPPORTED(AES       ); \
+  GLIBC_UNSUPPORTED(PMULL     ); \
+  GLIBC_UNSUPPORTED(SHA1      ); \
+  GLIBC_UNSUPPORTED(SHA2      ); \
+  GLIBC_UNSUPPORTED(CRC32     ); \
+  GLIBC_UNSUPPORTED(LSE       ); \
+  GLIBC_UNSUPPORTED(FPHP      ); \
+  GLIBC_UNSUPPORTED(ASIMDHP   ); \
+  GLIBC_UNSUPPORTED(DCPOP     ); \
+  GLIBC_UNSUPPORTED(SHA3      ); \
+  GLIBC_UNSUPPORTED(SHA512    ); \
+  GLIBC_UNSUPPORTED(SVE       ); \
+  GLIBC_UNSUPPORTED(SB        ); \
+  GLIBC_UNSUPPORTED(PACA      ); \
+  GLIBC_UNSUPPORTED(SVEBITPERM); \
+  GLIBC_UNSUPPORTED(SVE2      ); \
+  GLIBC_UNSUPPORTED(A53MAC    ); \
+  GLIBC_UNSUPPORTED(ECV       ); \
+  GLIBC_UNSUPPORTED(WFXT      ); \
+  /**/
+#include "runtime/abstract_vm_version.inline.hpp"
+
 int VM_Version::_cpu;
 int VM_Version::_model;
 int VM_Version::_model2;
@@ -56,6 +84,9 @@ SpinWait VM_Version::_spin_wait;
 bool VM_Version::_cache_dic_enabled;
 bool VM_Version::_cache_idc_enabled;
 bool VM_Version::_ic_ivau_trapped;
+
+VM_Version::VM_Features VM_Version::_features;
+VM_Version::VM_Features VM_Version::_cpu_features;
 
 #define DECLARE_CPU_FEATURE_NAME(id, name) XSTR(name),
 const char* VM_Version::_features_names[] = { CPU_FEATURE_FLAGS(DECLARE_CPU_FEATURE_NAME)};
@@ -115,8 +146,11 @@ void VM_Version::initialize() {
   _cache_idc_enabled = false;
   _ic_ivau_trapped = false;
 
+  assert(_features.empty(), "_features should be zero at startup");
   get_os_cpu_info();
   _cpu_features = _features;
+
+  cpu_features_init();
 
   int dcache_line = dcache_line_size();
 
@@ -728,8 +762,6 @@ void VM_Version::initialize() {
     vm_exit_during_initialization("UseSingleICacheInvalidation is set but neither IDC nor DIC nor NeoverseN1ICacheErratumMitigation is enabled");
   }
 
-  check_cpufeatures_vmoptions();
-
   // Construct the "features" string
   stringStream ss(512);
   ss.print("0x%02x:0x%x:0x%03x:%d", _cpu, _variant, _model, _revision);
@@ -744,34 +776,20 @@ void VM_Version::initialize() {
   _features_string = _cpu_info_string + features_offset;
 }
 
-void VM_Version::insert_features_names(uint64_t features, stringStream& ss) {
-  int i = 0;
-  ss.join([&]() {
-    const char* str = nullptr;
-    while ((i < MAX_CPU_FEATURES) && (str == nullptr)) {
-      if (supports_feature(features, (VM_Version::Feature_Flag)i)) {
-        str = _features_names[i];
-      }
-      i += 1;
-    }
-    return str;
-  }, ", ");
-}
-
 void VM_Version::get_cpu_features_name(void* features_buffer, stringStream& ss) {
-  uint64_t features = *(uint64_t*)features_buffer;
-  insert_features_names(features, ss);
+  VM_Features* features = (VM_Features*)features_buffer;
+  insert_features_names(*features, ss);
 }
 
 void VM_Version::get_missing_features_name(void* features_set1, void* features_set2, stringStream& ss) {
-  uint64_t vm_features_set1 = *(uint64_t*)features_set1;
-  uint64_t vm_features_set2 = *(uint64_t*)features_set2;
+  VM_Features* vm_features_set1 = (VM_Features*)features_set1;
+  VM_Features* vm_features_set2 = (VM_Features*)features_set2;
   int i = 0;
   ss.join([&]() {
     const char* str = nullptr;
     while ((i < MAX_CPU_FEATURES) && (str == nullptr)) {
       Feature_Flag flag = (Feature_Flag)i;
-      if (supports_feature(vm_features_set1, flag) && !supports_feature(vm_features_set2, flag)) {
+      if (supports_feature(*vm_features_set1, flag) && !supports_feature(*vm_features_set2, flag)) {
         str = _features_names[i];
       }
       i += 1;
@@ -785,11 +803,11 @@ int VM_Version::cpu_features_size() {
 }
 
 void VM_Version::store_cpu_features(void* buf) {
-  *(uint64_t*)buf = _features;
+  *(VM_Features*)buf = _features;
 }
 
 bool VM_Version::verify_aot_code_cache_features(void* features_buffer) {
-  uint64_t features_to_test = *(uint64_t*)features_buffer;
+  VM_Features features_to_test = *(VM_Features*)features_buffer;
   return (_features == features_to_test);
 }
 
@@ -860,4 +878,26 @@ void VM_Version::initialize_cpu_information(void) {
   os::snprintf_checked(_cpu_desc + desc_len, CPU_DETAILED_DESC_BUF_SIZE - desc_len, " %s", _cpu_info_string);
 
   _initialized = true;
+}
+
+bool VM_Version::cpu_features_binary(VM_Version::VM_Features *data) {
+  *data = _features;
+  return true;
+}
+
+VM_Features VM_Version::CPUFeatures_generic() {
+  VM_Features retval;
+  retval.set_feature(CPU_FP);
+  retval.set_feature(CPU_ASIMD);
+  return retval;
+}
+
+void VM_Version::print_using_features_cr() {
+  if (_ignore_glibc_not_using) {
+    tty->print_raw_cr("CPU features are being kept intact as requested by -XX:CPUFeatures=ignore");
+  } else {
+    tty->print_raw("CPU features being used are: -XX:CPUFeatures=");
+    _features.print_numbers(*tty);
+    tty->cr();
+  }
 }

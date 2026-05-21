@@ -2225,6 +2225,16 @@ bool VM_Version::cpu_features_binary(VM_Version::VM_Features *data) {
   return true;
 }
 
+void VM_Version::print_using_features_cr() {
+  if (_ignore_glibc_not_using) {
+    tty->print_raw_cr("CPU features are being kept intact as requested by -XX:CPUFeatures=ignore");
+  } else {
+    tty->print_raw("CPU features being used are: -XX:CPUFeatures=");
+    _features.aot_code_cache_features().print_numbers(*tty);
+    tty->cr();
+  }
+}
+
 #ifdef COMPILER2
 // Determine if it's running on Cascade Lake using default options.
 bool VM_Version::is_default_intel_cascade_lake() {

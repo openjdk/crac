@@ -891,3 +891,13 @@ VM_Features VM_Version::CPUFeatures_generic() {
   retval.set_feature(CPU_ASIMD);
   return retval;
 }
+
+void VM_Version::print_using_features_cr() {
+  if (_ignore_glibc_not_using) {
+    tty->print_raw_cr("CPU features are being kept intact as requested by -XX:CPUFeatures=ignore");
+  } else {
+    tty->print_raw("CPU features being used are: -XX:CPUFeatures=");
+    _features.print_numbers(*tty);
+    tty->cr();
+  }
+}

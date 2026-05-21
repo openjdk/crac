@@ -1972,6 +1972,12 @@ const int ObjectAlignmentInBytes = 8;
           "restore this option applies only to the restoring VM, i.e. the " \
           "restored VM keeps the value it had before the checkpoint.")      \
                                                                             \
+  product(ccstrlist, CRaCCheckpointEngineOptions, nullptr,                  \
+          "Options appended to CRaCEngineOptions on checkpoint.")           \
+                                                                            \
+  product(ccstrlist, CRaCRestoreEngineOptions, nullptr, RESTORE_SETTABLE,   \
+          "Options appended to CRaCEngineOptions on restore.")              \
+                                                                            \
   product(bool, CRaCIgnoreRestoreIfUnavailable, false, RESTORE_SETTABLE,    \
           "If the image selected via CRaCRestoreFrom is identified as "     \
           "being unusable, continue initializing the JVM instead of "       \

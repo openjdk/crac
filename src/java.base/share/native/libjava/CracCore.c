@@ -39,6 +39,11 @@ Java_jdk_internal_crac_mirror_Core_checkpointRestore0(JNIEnv *env, jclass ignore
     return JVM_Checkpoint(env, fdArr, objArr, dry_run, jcmd_stream);
 }
 
+JNIEXPORT jint JNICALL
+Java_jdk_internal_crac_mirror_Core_getCheckpointableStatus0(JNIEnv *env, jclass ignore) {
+    return JVM_GetCheckpointableStatus(env);
+}
+
 JNIEXPORT void JNICALL
 Java_jdk_internal_crac_mirror_Core_startRecordingDecompilations0(JNIEnv *env, jclass ignore) {
     JVM_StartRecordingDecompilations(env);

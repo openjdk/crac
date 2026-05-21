@@ -57,6 +57,7 @@ public:
 
   static jlong restore_start_time();
   static jlong uptime_since_restore();
+  static jint checkpointable_status();
 
   static jlong monotonic_time_offset() {
     return _javaTimeNanos_offset;

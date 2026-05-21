@@ -85,6 +85,7 @@ typedef enum {
   JMM_TOTAL_GC_CPU_TIME              = 12,   /* Total accumulated GC CPU time */
   JMM_JVM_RESTORE_START_TIME_MS      = 13,   /* Time when the JVM started restore operation */
   JMM_JVM_UPTIME_SINCE_RESTORE_MS    = 14,   /* The JVM uptime since restore */
+  JMM_JVM_CHECKPOINTABLE_STATUS      = 15,    /* The JVM checkpointable status */
 
   JMM_INTERNAL_ATTRIBUTE_INDEX       = 100,
   JMM_CLASS_LOADED_BYTES             = 101,  /* Number of bytes loaded instance classes */

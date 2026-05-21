@@ -56,6 +56,24 @@ public interface CRaCMXBean extends PlatformManagedObject {
      */
     public long getRestoreTime();
 
+    public enum CheckpointableStatus {
+        NEVER, READY, READY_LATER;
+
+        public static CheckpointableStatus fromCode(int code) {
+            CheckpointableStatus[] values = values();
+            if (code < 0 || code >= values.length) {
+                throw new IllegalArgumentException("Unknown CheckpointableStatus code: " + code);
+            }
+            return values[code];
+        }
+    }
+
+    /**
+     *
+     * @return true if checkpoint could be comminted, otherwise returns false.
+     */
+    public CheckpointableStatus getCheckpointableStatus() throws IllegalStateException;
+
     /**
      * Returns the implementation of the MXBean.
      *

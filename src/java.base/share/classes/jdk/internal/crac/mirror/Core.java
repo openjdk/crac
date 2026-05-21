@@ -57,6 +57,7 @@ public class Core {
 
     private static final long JCMD_STREAM_NULL = 0;
     private static native Object[] checkpointRestore0(int[] fdArr, Object[] objArr, boolean dryRun, long jcmdStream);
+    private static native int getCheckpointableStatus0();
     private static final Object checkpointRestoreLock = new Object();
     private static boolean checkpointInProgress = false;
 
@@ -273,6 +274,25 @@ public class Core {
             CheckpointException,
             RestoreException {
         final List<String> newArguments;
+
+        switch (CheckpointableStatus.fromCode(getCheckpointableStatus0())) {
+            case NEVER -> {
+                System.out.print("NEVER!!!!");
+                CheckpointException ex = new CheckpointException();
+                ex.addSuppressed(new Exception("Current engine doesn't support second checkpoint"));
+                throw ex;
+            }
+            case READY_LATER -> {
+                System.out.print("READY_LATER!!!!");
+                CheckpointException ex = new CheckpointException();
+                ex.addSuppressed(new Exception("CRaC cannot commit checkpoint right now"));
+                throw ex;
+            }
+            case READY -> {
+                // fall through to checkpoint logic below
+                System.out.print("READY!!!!");
+            }
+        }
 
         // checkpointRestoreLock protects against the simultaneous
         // call of checkpointRestore from different threads.

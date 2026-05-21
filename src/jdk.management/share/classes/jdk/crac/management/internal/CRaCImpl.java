@@ -53,6 +53,12 @@ public class CRaCImpl implements CRaCMXBean {
     }
 
     @Override
+    public CRaCMXBean.CheckpointableStatus getCheckpointableStatus() {
+        int status = vm.getCheckpointableStatus();
+        return CRaCMXBean.CheckpointableStatus.fromCode(status);
+    }
+
+    @Override
     public void checkpointRestore() throws RestoreException, CheckpointException {
         try {
             jdk.internal.crac.mirror.Core.checkpointRestore();

@@ -80,6 +80,29 @@ jlong crac::uptime_since_restore() {
   return os::javaTimeNanos() - _restore_start_nanos;
 }
 
+jint crac::checkpointable_status() {
+  bool is_checkpointable = true;
+  if (crac::_generation > 1) {
+    if (crac::_engine->prepare_checkpointable_data_api() == CracEngine::ApiStatus::OK) {
+      checkpointable_status_t status = crac::_engine->get_checkpointable_status();
+      switch (status) {
+        case never:
+          is_checkpointable = false;
+          os::message_box("Checkpoint failed", "Current engine doesn't support more than 2 checkpoints.");
+          break;
+        case ready:
+        break;
+        case ready_later:
+          is_checkpointable = false;
+          os::message_box("Checkpoint failed", "Current engine is bussy, try checkpoint later.");
+        break;
+      }
+    }
+  }
+
+  return is_checkpointable;
+}
+
 void VM_Crac::print_resources(const char* msg, ...) {
   if (CRaCPrintResourcesOnCheckpoint) {
     va_list ap;
@@ -449,24 +472,7 @@ void VM_Crac::doit() {
   DefaultStreamHandler defStreamHandler;
 
   Decoder::before_checkpoint();
-  if (crac::_generation > 1) {
-    if (crac::_engine->prepare_checkpointable_data_api() == CracEngine::ApiStatus::OK) {
-      checkpointable_status_t status = crac::_engine->get_checkpointable_status();
-      switch (status) {
-        case never:
-          ok = false;
-          os::message_box("Checkpoint failed", "Current engine doesn't support more than 2 checkpoints.");
-          break;
-        case ready:
-          os::message_box("Checkpoint continue", "Current engine supports more than 2 checkpoints.");
-        break;
-        case ready_later:
-          ok = false;
-          os::message_box("Checkpoint failed", "Current engine is bussy, try checkpoint later.");
-        break;
-      }
-    }
-  }
+
   if (!check_fds()) {
     ok = false;
   }

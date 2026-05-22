@@ -113,5 +113,4 @@ public interface VMManagement {
     // CRaC support
     public long getRestoreTime();
     public long getUptimeSinceRestore();
-    public int getCheckpointableStatus();
 }

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022, 2026, Azul Systems, Inc. All rights reserved.
+ * Copyright (c) 2022, Azul Systems, Inc. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -50,12 +50,6 @@ public class CRaCImpl implements CRaCMXBean {
     @Override
     public long getRestoreTime() {
         return vm.getRestoreTime();
-    }
-
-    @Override
-    public CRaCMXBean.CheckpointableStatus getCheckpointableStatus() {
-        int status = vm.getCheckpointableStatus();
-        return CRaCMXBean.CheckpointableStatus.fromCode(status);
     }
 
     @Override

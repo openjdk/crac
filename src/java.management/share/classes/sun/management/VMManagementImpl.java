@@ -280,7 +280,6 @@ class VMManagementImpl implements VMManagement {
     // CRaC support
     private native long getRestoreTime0();
     private native long getUptimeSinceRestore0();
-    private native int getCheckpointableStatus0();
 
     public long getRestoreTime() {
         return getRestoreTime0();
@@ -288,9 +287,5 @@ class VMManagementImpl implements VMManagement {
 
     public long getUptimeSinceRestore() {
         return getUptimeSinceRestore0();
-    }
-
-    public int getCheckpointableStatus() {
-        return getCheckpointableStatus0();
     }
 }

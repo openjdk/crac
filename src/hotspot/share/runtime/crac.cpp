@@ -459,7 +459,6 @@ void VM_Crac::doit() {
   DefaultStreamHandler defStreamHandler;
 
   Decoder::before_checkpoint();
-
   if (!check_fds()) {
     ok = false;
   }

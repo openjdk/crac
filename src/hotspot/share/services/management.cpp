@@ -1008,8 +1008,7 @@ static jlong get_long_attribute(jmmLongAttribute att) {
       }
       return Management::ticks_to_ms(ticks);
     }
-  case JMM_JVM_CHECKPOINTABLE_STATUS:
-    return crac::checkpointable_status();
+
   default:
     return -1;
   }

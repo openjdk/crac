@@ -348,11 +348,3 @@ Java_sun_management_VMManagementImpl_getUptimeSinceRestore0
     return jmm_interface->GetLongAttribute(env, NULL,
                                            JMM_JVM_UPTIME_SINCE_RESTORE_MS);
 }
-
-JNIEXPORT jint JNICALL
-Java_sun_management_VMManagementImpl_getCheckpointableStatus0
-  (JNIEnv *env, jobject dummy)
-{
-    return (jint) jmm_interface->GetLongAttribute(env, NULL,
-                                           JMM_JVM_CHECKPOINTABLE_STATUS);
-}

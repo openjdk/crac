@@ -500,7 +500,7 @@ static checkpointable_status_t get_checkpointable_status(crlib_conf_t * conf) {
   if (!conf->direct_map()) {
     return ready;
   }
-  return never;
+  return never_after_restore;
 }
 
 const char* criuengine::get_criu() {

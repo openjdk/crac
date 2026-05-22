@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2023, Azul Systems, Inc. All rights reserved.
+ * Copyright (c) 2023, 2026, Azul Systems, Inc. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -82,25 +82,12 @@ jlong crac::uptime_since_restore() {
 
 jint crac::checkpointable_status() {
   bool is_checkpointable = true;
-  if (crac::_generation > 1) {
-    if (crac::_engine->prepare_checkpointable_data_api() == CracEngine::ApiStatus::OK) {
-      checkpointable_status_t status = crac::_engine->get_checkpointable_status();
-      switch (status) {
-        case never:
-          is_checkpointable = false;
-          os::message_box("Checkpoint failed", "Current engine doesn't support more than 2 checkpoints.");
-          break;
-        case ready:
-        break;
-        case ready_later:
-          is_checkpointable = false;
-          os::message_box("Checkpoint failed", "Current engine is bussy, try checkpoint later.");
-        break;
-      }
-    }
+  if ((crac::_generation > 1) &&
+      (crac::_engine->prepare_checkpointable_data_api() == CracEngine::ApiStatus::OK)) {
+      return crac::_engine->get_checkpointable_status();
   }
 
-  return is_checkpointable;
+  return ready;
 }
 
 void VM_Crac::print_resources(const char* msg, ...) {

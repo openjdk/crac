@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2017, 2025, Azul Systems, Inc. All rights reserved.
+ * Copyright (c) 2017, 2026, Azul Systems, Inc. All rights reserved.
  * Copyright (c) 2021, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
@@ -274,23 +274,23 @@ public class Core {
             CheckpointException,
             RestoreException {
         final List<String> newArguments;
-
-        switch (CheckpointableStatus.fromCode(getCheckpointableStatus0())) {
-            case NEVER -> {
-                System.out.print("NEVER!!!!");
+        int status_code = getCheckpointableStatus0();
+        switch (CheckpointableStatus.fromCode(status_code)) {
+            case NEVER_AFTER_RESTORE -> {
                 CheckpointException ex = new CheckpointException();
-                ex.addSuppressed(new Exception("Current engine doesn't support second checkpoint"));
+                ex.addSuppressed(new Exception("Current engine doesn't support second checkpoint after restore."));
                 throw ex;
             }
             case READY_LATER -> {
-                System.out.print("READY_LATER!!!!");
                 CheckpointException ex = new CheckpointException();
-                ex.addSuppressed(new Exception("CRaC cannot commit checkpoint right now"));
+                ex.addSuppressed(new Exception("CRaC cannot commit checkpoint right now, try later."));
                 throw ex;
             }
             case READY -> {
                 // fall through to checkpoint logic below
-                System.out.print("READY!!!!");
+            }
+            default -> {
+                System.err.printf("Engine returned unknown checkpointable status code: %d. Proceeding with checkpoint.%n", status_code);
             }
         }
 

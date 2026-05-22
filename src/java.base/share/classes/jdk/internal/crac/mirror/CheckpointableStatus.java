@@ -27,7 +27,7 @@
 package jdk.internal.crac.mirror;
 
 public enum CheckpointableStatus {
-    NEVER, READY, READY_LATER;
+    NEVER_AFTER_RESTORE, READY_LATER, READY;
 
     public static CheckpointableStatus fromCode(int code) {
         CheckpointableStatus[] values = values();

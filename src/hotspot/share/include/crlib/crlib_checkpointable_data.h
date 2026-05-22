@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2025, Azul Systems, Inc. All rights reserved.
+ * Copyright (c) 2026, Azul Systems, Inc. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -34,9 +34,9 @@ extern "C" {
   CRLIB_EXTENSION(api, crlib_checkpointable_data_t, CRLIB_EXTENSION_CHECKPOINTABLE_DATA_NAME)
 
 typedef enum checkpointable_status {
-    never,      // it's not able to commit checkpoint
-    ready,      // checkpointable
-    ready_later // at some point it could become checkpointable
+    never_after_restore,     // it's not able to commit a new checkpoint after restore
+    ready_late,              // at some point it could become checkpointable
+    ready                    // checkpointable
 } checkpointable_status_t;
 
 // API for obtaining information about chackpointable status.

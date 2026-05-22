@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022, Azul Systems, Inc. All rights reserved.
+ * Copyright (c) 2022, 2026, Azul Systems, Inc. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -57,7 +57,7 @@ public interface CRaCMXBean extends PlatformManagedObject {
     public long getRestoreTime();
 
     public enum CheckpointableStatus {
-        NEVER, READY, READY_LATER;
+        NEVER_AFTER_RESTORE, READY_LATER, READY;
 
         public static CheckpointableStatus fromCode(int code) {
             CheckpointableStatus[] values = values();

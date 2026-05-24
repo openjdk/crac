@@ -23,6 +23,8 @@
  *
  */
 
+#include "memory/resourceArea.hpp"
+#include "runtime/java.hpp"
 #include "runtime/os.hpp"
 #include "runtime/os.inline.hpp"
 #include "runtime/vm_version.hpp"

@@ -204,7 +204,7 @@ bool VM_Version::glibc_not_using() {
 
   glibc_patch(shouldnotuse);
 
-  static const size_t tunables_size_max = strlen("AVX_Fast_Unaligned_Load");
+  static constexpr size_t tunables_size_max = sizeof("AVX_Fast_Unaligned_Load") - 1;
   char disable_str[MAX_CPU_FEATURES * (1/*','*/ + 1/*'-'*/ + tunables_size_max) + 1/*'\0'*/];
   strcpy(disable_str, glibc_prefix);
   char *disable_end = disable_str + glibc_prefix_len;
@@ -239,7 +239,7 @@ bool VM_Version::glibc_not_using() {
     }
   };
 #define EXCESSIVE2(tunables, feature_active) do {                                                                        \
-    static_assert(strlen(STR(tunables)) <= tunables_size_max, "\"" STR(tunables) "\" is longer than tunables_size_max"); \
+    static_assert(sizeof(STR(tunables)) - 1 <= tunables_size_max, "\"" STR(tunables) "\" is longer than tunables_size_max"); \
     shouldnotuse_set(PASTE_TOKENS(CPU_, tunables), STR(tunables), feature_active);                                       \
   } while (0)
 #define EXCESSIVE(tunables) EXCESSIVE2(tunables, FEATURE_ACTIVE(tunables))

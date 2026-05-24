@@ -133,7 +133,7 @@ public:
   static bool glibc_env_set(char *disable_str);
   [[noreturn]] static void glibc_reexec();
   static constexpr char glibc_prefix[] = ":glibc.cpu.hwcaps=";
-  static constexpr size_t glibc_prefix_len = strlen(glibc_prefix);
+  static constexpr size_t glibc_prefix_len = sizeof(glibc_prefix) - 1;
 #endif //LINUX
   static bool _ignore_glibc_not_using;
   static void print_using_features_cr();

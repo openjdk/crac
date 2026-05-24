@@ -577,28 +577,64 @@ void CracEngine::check_cpuinfo(const VM_Version::VM_Features *current_features, 
     log_error(crac)("Restore failed due to wrong or missing CPU architecture (current architecture is " ARCHPROPNAME ")");
   }
   if (_image_constraints_api->is_failed(_conf, cpufeatures_name)) {
+    const char *error_message;
     VM_Version::VM_Features image_features;
     size_t image_features_size = _image_constraints_api->get_failed_bitmap(_conf, cpufeatures_name, reinterpret_cast<unsigned char *>(&image_features), sizeof(image_features));
-    if (image_features_size == sizeof(image_features)) {
-      ResourceMark rm;
+    if (CheckCPUFeaturesMessage != nullptr) {
+      error_message = CheckCPUFeaturesMessage;
+    } else if (image_features_size == sizeof(image_features)) {
 #ifdef AARCH64
       if (image_features.supports_feature(VM_Feature_Flag::CPU_PACA)
           != current_features->supports_feature(VM_Feature_Flag::CPU_PACA)) {
+        stringStream ss;
         VM_Features paca;
         paca.set_feature(VM_Feature_Flag::CPU_PACA);
-        log_error(crac)("Restore failed due to incompatible aarch64 CPU feature PACA (%s); these CPUs each require a separate image.", paca.print_numbers());
-        return;
-      }
+        ss.print("Restore failed due to incompatible aarch64 CPU feature PACA (%s); these CPUs each require a separate image.", paca.print_numbers());
+        error_message = ss.as_string();
+      } else
 #endif
-      if (!exact) {
-        image_features &= *current_features;
+      if (exact) {
+        error_message = "Restore failed due to incompatible or missing CPU features, try using -XX:CPUFeatures=%c on checkpoint.";
       } else {
-        image_features = *current_features;
+        error_message = "Restore failed due to incompatible or missing CPU features, try using -XX:CPUFeatures=%m on checkpoint.";
       }
-      log_error(crac)("Restore failed due to incompatible or missing CPU features, try using -XX:CPUFeatures=%s on checkpoint.", image_features.print_numbers());
     } else {
-      log_error(crac)("Restore failed due to incompatible or missing CPU features.");
+      error_message = "Restore failed due to incompatible or missing CPU features.";
     }
+    VM_Version::VM_Features common_features = image_features;
+    common_features &= *current_features;
+    // Reparse the message
+    ResourceMark rm;
+    stringStream ss;
+    const char *percent = strchr(error_message, '%');
+    while (percent != nullptr) {
+      ss.print_raw(error_message, percent - error_message);
+      switch (percent[1]) {
+        case '\0':
+          ss.print_raw("<invalid trailing % char>");
+          percent = percent - 1; // next cycle will point at the '\0'
+          break;
+        case '%':
+          ss.put('%');
+          break;
+        case 'c':
+          current_features->print_numbers(ss);
+          break;
+        case 's':
+          image_features.print_numbers(ss);
+          break;
+        case 'm':
+          common_features.print_numbers(ss);
+          break;
+        default:
+          ss.print("<invalid formatting char '%c'>", percent[1]);
+          break;
+      }
+      error_message = &percent[2];
+      percent = strchr(error_message, '%');
+    }
+    ss.print_raw(error_message);
+    log_error(crac)("%s", ss.as_string());
   }
 }
 

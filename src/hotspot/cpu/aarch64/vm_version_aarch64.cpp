@@ -152,24 +152,7 @@ void VM_Version::initialize() {
   _cpu_features = _features;
 
   cpu_features_init();
-  if (supports_paca() == supports_notpaca()) {
-    ResourceMark rm;
-    VM_Features paca;
-    paca.set_feature(CPU_PACA);
-    VM_Features notpaca;
-    notpaca.set_feature(CPU_NOTPACA);
-    stringStream ss;
-    ss.print_cr("For -XX:CPUFeatures, exactly one of the bits PACA (%s) and NOTPACA (%s) must be set.", paca.print_numbers(), notpaca.print_numbers());
-    vm_exit_during_initialization(ss.base());
-  }
-  if (_cpu_features.supports_feature(CPU_LSE) && !supports_lse()) {
-    ResourceMark rm;
-    VM_Features lse;
-    lse.set_feature(VM_Feature_Flag::CPU_LSE);
-    stringStream ss;
-    ss.print_cr("One cannot disable LSE (%s) by -XX:CPUFeatures as GLIBC_TUNABLES=glibc.cpu.hwcaps is unsupported on aarch64.", lse.print_numbers());
-    vm_exit_during_initialization(ss.base());
-  }
+  check_os_cpu_info();
 
   int dcache_line = dcache_line_size();
 
@@ -916,4 +899,14 @@ VM_Features VM_Version::CPUFeatures_generic() {
     retval.set_feature(CPU_NOTPACA);
   }
   return retval;
+}
+
+void VM_Version::print_using_features_cr() {
+  if (_ignore_glibc_not_using) {
+    tty->print_raw_cr("CPU features are being kept intact as requested by -XX:CPUFeatures=ignore");
+  } else {
+    tty->print_raw("CPU features being used are: -XX:CPUFeatures=");
+    _features.print_numbers(*tty);
+    tty->cr();
+  }
 }

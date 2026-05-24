@@ -274,16 +274,6 @@ bool VM_Version::glibc_not_using() {
 #undef REEXEC_NAME
 #endif // LINUX
 
-void VM_Version::print_using_features_cr() {
-  if (_ignore_glibc_not_using) {
-    tty->print_raw_cr("CPU features are being kept intact as requested by -XX:CPUFeatures=ignore");
-  } else {
-    tty->print_raw("CPU features being used are: -XX:CPUFeatures=");
-    _features.print_numbers(*tty);
-    tty->cr();
-  }
-}
-
 void VM_Version::cpu_features_init() {
   assert(!CPUFeatures == FLAG_IS_DEFAULT(CPUFeatures), "CPUFeatures parsing");
 

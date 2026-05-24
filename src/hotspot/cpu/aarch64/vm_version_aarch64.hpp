@@ -107,6 +107,7 @@ protected:
 
   // Read additional info using OS-specific interfaces
   static void get_os_cpu_info();
+  static void check_os_cpu_info();
 
   // Sets the SVE length and returns a new actual value or negative on error.
   // If the len is larger than the system largest supported SVE vector length,

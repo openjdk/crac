@@ -277,12 +277,12 @@ public class Core {
         switch (CheckpointableStatus.fromCode(status_code)) {
             case NEVER_AFTER_RESTORE -> {
                 CheckpointException ex = new CheckpointException();
-                ex.addSuppressed(new Exception("Current engine doesn't support second checkpoint after restore."));
+                ex.addSuppressed(new IllegalStateException("Current engine doesn't support second checkpoint after restore."));
                 throw ex;
             }
             case READY_LATER -> {
                 CheckpointException ex = new CheckpointException();
-                ex.addSuppressed(new Exception("CRaC cannot commit checkpoint right now, try later."));
+                ex.addSuppressed(new IllegalStateException("CRaC cannot commit checkpoint right now, try later."));
                 throw ex;
             }
             case READY -> {

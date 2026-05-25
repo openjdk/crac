@@ -302,11 +302,11 @@ static crlib_checkpointable_data_t checkpointable_data_extension = {
 };
 
 static const crlib_extension_t *extensions[] = {
+  &checkpointable_data_extension.header,
   &restore_data_extension.header,
   &image_constraints_extension.header,
   &image_score_extension.header,
   &description_extension.header,
-  &checkpointable_data_extension.header,
   nullptr
 };
 

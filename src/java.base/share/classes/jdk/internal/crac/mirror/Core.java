@@ -273,7 +273,6 @@ public class Core {
     private static void checkpointRestore(long jcmdStream) throws
             CheckpointException,
             RestoreException {
-        final List<String> newArguments;
         int status_code = getCheckpointableStatus0();
         switch (CheckpointableStatus.fromCode(status_code)) {
             case NEVER_AFTER_RESTORE -> {
@@ -293,6 +292,8 @@ public class Core {
                 System.err.printf("Engine returned unknown checkpointable status code: %d. Proceeding with checkpoint.%n", status_code);
             }
         }
+
+        final List<String> newArguments;
 
         // checkpointRestoreLock protects against the simultaneous
         // call of checkpointRestore from different threads.

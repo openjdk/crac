@@ -81,13 +81,21 @@ jlong crac::uptime_since_restore() {
 }
 
 jint crac::checkpointable_status() {
-  bool is_checkpointable = true;
-  if ((crac::_generation > 1) &&
-      (crac::_engine->prepare_checkpointable_data_api() == CracEngine::ApiStatus::OK)) {
-      return crac::_engine->get_checkpointable_status();
+  if (crac::_engine->prepare_checkpoint_availability_api() == CracEngine::ApiStatus::OK) {
+    crlib_checkpointable_status_t status = crac::_engine->get_checkpointable_status();
+    if (status == CRLIB_CHECKPOINTABLE_NEVER) {
+      if (crac::_generation > 1) {
+        return status;
+      } else {
+        // Engine doesn't support checkpoint after restore,
+        // but it's a first checkpoint. So return READY.
+        return CRLIB_CHECKPOINTABLE_READY;
+      }
+    }
+    return status;
   }
 
-  return ready;
+  return CRLIB_CHECKPOINTABLE_READY;
 }
 
 void VM_Crac::print_resources(const char* msg, ...) {

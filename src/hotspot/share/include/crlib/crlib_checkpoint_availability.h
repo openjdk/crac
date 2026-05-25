@@ -20,8 +20,8 @@
  * or visit www.oracle.com if you need additional information or have any
  * questions.
  */
-#ifndef CRLIB_CHECKPOINTABLE_DATA_H
-#define CRLIB_CHECKPOINTABLE_DATA_H
+#ifndef CRLIB_CHECKPOINT_AVAILABILITY_H
+#define CRLIB_CHECKPOINT_AVAILABILITY_H
 
 #include "crlib.h"
 
@@ -29,26 +29,26 @@
 extern "C" {
 #endif
 
-#define CRLIB_EXTENSION_CHECKPOINTABLE_DATA_NAME "checkpointable data"
+#define CRLIB_EXTENSION_CHECKPOINT_AVAILABILITY_NAME "checkpointable data"
 #define CRLIB_EXTENSION_CHECKPOINTABLE(api) \
-  CRLIB_EXTENSION(api, crlib_checkpointable_data_t, CRLIB_EXTENSION_CHECKPOINTABLE_DATA_NAME)
+  CRLIB_EXTENSION(api, crlib_checkpoint_availability_t, CRLIB_EXTENSION_CHECKPOINT_CRLIB_CHECKPOINT_AVAILABILITY_NAME)
 
-typedef enum checkpointable_status {
-    never_after_restore,     // it's not able to commit a new checkpoint after restore
-    ready_late,              // at some point it could become checkpointable
-    ready                    // checkpointable
-} checkpointable_status_t;
+typedef int crlib_checkpointable_status_t;
+#define CRLIB_CHECKPOINTABLE_NEVER   0   // engine will never accept another checkpoint
+#define CRLIB_CHECKPOINTABLE_NOT_YET 1   // not now; may become ready later
+#define CRLIB_CHECKPOINTABLE_READY   2   // checkpoint can proceed
+
 
 // API for obtaining information about chackpointable status.
-struct crlib_checkpointable_data {
+struct crlib_checkpoint_availability {
   crlib_extension_t header;
 
-  checkpointable_status_t (*get_checkpointable_status)(crlib_conf_t *);
+  crlib_checkpointable_status_t (*get_checkpointable_status)(crlib_conf_t *);
 };
-typedef const struct crlib_checkpointable_data crlib_checkpointable_data_t;
+typedef const struct crlib_checkpoint_availability crlib_checkpoint_availability_t;
 
 #ifdef __cplusplus
 } // extern "C
 #endif
 
-#endif // CRLIB_CHECKPOINTABLE_DATA_H
+#endif // CRLIB_CHECKPOINT_AVAILABILITY_H

@@ -38,7 +38,7 @@
 #include <sys/wait.h>
 #include <unistd.h>
 
-#include "crlib/crlib_checkpointable_data.h"
+#include "crlib/crlib_checkpoint_availability.h"
 #include "crlib/crlib_description.h"
 #include "crlib/crlib_restore_data.h"
 #include "crlib/crlib_user_data.h"
@@ -496,11 +496,16 @@ static char* get_relative_file(const char* rel) {
   return buf;
 }
 
-static checkpointable_status_t get_checkpointable_status(crlib_conf_t * conf) {
+static crlib_checkpointable_status_t get_checkpointable_status(crlib_conf_t * conf) {
   if (!conf->direct_map()) {
-    return ready;
+    return CRLIB_CHECKPOINTABLE_READY;
   }
-  return never_after_restore;
+
+  // With direct_map, restored memory pages are mmap'd directly from the
+  // checkpoint image file rather than copied into anonymous memory. A second
+  // checkpoint would overwrite that same image, corrupting the live mappings
+  // of the running process. CRIU has no safe way to re-checkpoint in this mode.
+  return CRLIB_CHECKPOINTABLE_NEVER;
 }
 
 const char* criuengine::get_criu() {
@@ -982,17 +987,17 @@ static crlib_user_data_t user_data_extension = {
   destroy_user_data,
 };
 
-static crlib_checkpointable_data_t checkpointable_data_extension = {
+static crlib_checkpoint_availability_t checkpoint_availability_extension = {
   {
-    CRLIB_EXTENSION_CHECKPOINTABLE_DATA_NAME,
-    sizeof(checkpointable_data_extension)
+    CRLIB_EXTENSION_CHECKPOINT_AVAILABILITY_NAME,
+    sizeof(checkpoint_availability_extension)
   },
   get_checkpointable_status,
 };
 
 static const crlib_extension_t* extensions[] = {
-  &checkpointable_data_extension.header,
   &restore_data_extension.header,
+  &checkpoint_availability_extension.header,
   &image_constraints_extension.header,
   &image_score_extension.header,
   &user_data_extension.header,

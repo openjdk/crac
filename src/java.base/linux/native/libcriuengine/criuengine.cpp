@@ -57,7 +57,7 @@
 #define UNCHECKED_OPTIONS(OPT) \
   OPT(image_location, const char*, nullptr, CRLIB_OPTION_FLAG_CHECKPOINT | CRLIB_OPTION_FLAG_RESTORE, "path", "no default", \
     "path to a directory with checkpoint/restore files.") \
-  OPT(criu_location, const char*, nullptr, CRLIB_OPTION_FLAG_CHECKPOINT | CRLIB_OPTION_FLAG_RESTORE, "path", "<engine dir>/../lib/criu", \
+  OPT(criu_location, const char*, nullptr, CRLIB_OPTION_FLAG_CHECKPOINT | CRLIB_OPTION_FLAG_RESTORE, "path", "PATH lookup", \
     "path to the CRIU executable.") \
   OPT(args, const char*, nullptr, CRLIB_OPTION_FLAG_CHECKPOINT | CRLIB_OPTION_FLAG_RESTORE, "string", "\"\"", \
     "free space-separated arguments passed directly to the engine executable, e.g. \"--arg1 --arg2 --arg3\".") \
@@ -770,6 +770,15 @@ int criuengine::checkpoint() {
   // we will use those if replaced after restore or just close when not (or when kept running).
   int fake_fds[3] = { -1, -1, -1 };
   if (!legacy_criu()) {
+#ifndef SYS_memfd_create
+#if defined(__x86_64__)
+#define SYS_memfd_create 319
+#elif defined(__aarch64__)
+#define SYS_memfd_create 279
+#else
+#error "Unsupported platform"
+#endif
+#endif // SYS_memfd_create
 #ifndef MFD_CLOEXEC
 #define MFD_CLOEXEC 0x0001U
 #endif
@@ -813,6 +822,9 @@ int criuengine::checkpoint() {
     sig = sigwaitinfo(&waitmask, &info);
   } while (sig == -1 && errno == EINTR);
 
+#ifndef F_GET_SEALS
+#define F_GET_SEALS	1034
+#endif
   for (unsigned i = 0; i < ARRAY_SIZE(fake_fds); ++i) {
     if (fake_fds[i] < 0) {
       continue;

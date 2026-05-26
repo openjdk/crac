@@ -728,6 +728,9 @@ private:
   static bool _ignore_glibc_not_using;
   static void print_using_features_cr();
   static void insert_features_names(VM_Version::VM_Features features, stringStream& ss);
+  static const char *restore_failed_check(const VM_Features *image_features, const VM_Features *current_features) {
+    return nullptr;
+  }
 
   static bool os_supports_avx_vectors();
   static bool os_supports_apx_egprs();

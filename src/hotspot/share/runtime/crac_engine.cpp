@@ -583,17 +583,9 @@ void CracEngine::check_cpuinfo(const VM_Version::VM_Features *current_features, 
     if (CheckCPUFeaturesMessage != nullptr) {
       error_message = CheckCPUFeaturesMessage;
     } else if (image_features_size == sizeof(image_features)) {
-#ifdef AARCH64
-      if (image_features.supports_feature(VM_Feature_Flag::CPU_PACA)
-          != current_features->supports_feature(VM_Feature_Flag::CPU_PACA)) {
-        stringStream ss;
-        VM_Features paca;
-        paca.set_feature(VM_Feature_Flag::CPU_PACA);
-        ss.print("Restore failed due to incompatible aarch64 CPU feature PACA (%s); these CPUs each require a separate image.", paca.print_numbers());
-        error_message = ss.as_string();
-      } else
-#endif
-      if (exact) {
+      error_message = VM_Version::restore_failed_check(&image_features, current_features);
+      if (error_message != nullptr) {
+      } else if (exact) {
         error_message = "Restore failed due to incompatible or missing CPU features, try using -XX:CPUFeatures=%c on checkpoint.";
       } else {
         error_message = "Restore failed due to incompatible or missing CPU features, try using -XX:CPUFeatures=%m on checkpoint.";

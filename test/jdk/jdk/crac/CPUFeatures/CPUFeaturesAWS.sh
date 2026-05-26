@@ -78,7 +78,7 @@ fi
 
 helpAWS_KEY_FILE="AWS_KEY_FILE=~/.ssh/aws.pem"
 helpAWS_KEY_NAME="AWS_KEY_NAME=$USER for the aws --key-name parameter"
-helpAWS_TAG_USER="AWS_TAG_USER=fsurname of a valid Azul username"
+helpAWS_TAG_USER="AWS_TAG_USER=fsurname of a valid username"
 if [ "$1" = -h -o "$1" = --help ];then
   echo >&2 "$helpAWS_KEY_FILE $helpAWS_KEY_NAME $helpAWS_TAG_USER TESTJAVA=/java/jdk/root TESTCLASSES=/path/to/CPUFeaturesAWS.class $0 [-h|--help] [only {lineno}...]"
   exit 1
@@ -99,7 +99,6 @@ classfiles="CPUFeaturesAWS.class"
 do_shutdown=true
 
 awstaguser=${AWS_TAG_USER:-$USER}
-curl --fail --head http://release.azulsystems.com/home/$awstaguser/ || (echo >&2 "required: $helpAWS_TAG_USER";exit 1)
 
 awstimeout=30 # minutes, total script run was 9 minutes during a test
 awstagname=$awstaguser-cpufeatures

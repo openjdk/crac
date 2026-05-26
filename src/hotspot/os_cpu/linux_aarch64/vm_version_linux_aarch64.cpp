@@ -225,7 +225,8 @@ void VM_Version::check_os_cpu_info() {
     VM_Features lse;
     lse.set_feature(VM_Feature_Flag::CPU_LSE);
     stringStream ss;
-    ss.print_cr("One cannot disable LSE (%s) by -XX:CPUFeatures as GLIBC_TUNABLES=glibc.cpu.hwcaps is unsupported on aarch64.", lse.print_numbers());
+    // GLIBC_TUNABLES=glibc.cpu.hwcaps is unsupported on aarch64
+    ss.print_cr("LSE (%s) cannot be disabled via -XX:CPUFeatures on aarch64.", lse.print_numbers());
     vm_exit_during_initialization(ss.base());
   }
 }

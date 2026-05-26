@@ -138,6 +138,7 @@ public:
   static bool _ignore_glibc_not_using;
   static void print_using_features_cr();
   static void insert_features_names(VM_Version::VM_Features features, stringStream& ss);
+  // The returned string needs a ResourceMark.
   static const char *restore_failed_check(const VM_Features *image_features, const VM_Features *current_features);
 
   static void print_platform_virtualization_info(outputStream*);

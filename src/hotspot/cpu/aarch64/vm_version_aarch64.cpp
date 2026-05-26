@@ -912,8 +912,8 @@ void VM_Version::print_using_features_cr() {
 }
 
 const char *VM_Version::restore_failed_check(const VM_Features *image_features, const VM_Features *current_features) {
-  if (image_features.supports_feature(VM_Feature_Flag::CPU_PACA) {
-      == current_features->supports_feature(VM_Feature_Flag::CPU_PACA))
+  if (image_features->supports_feature(VM_Feature_Flag::CPU_PACA)
+      == current_features->supports_feature(VM_Feature_Flag::CPU_PACA)) {
     return nullptr;
   }
   stringStream ss;

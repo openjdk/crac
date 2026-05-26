@@ -343,7 +343,7 @@ checkpoint_restore "$LINENO" a1.medium a1.medium
 checkpoint_restore "$LINENO" t4g.micro t4g.micro
 checkpoint_restore "$LINENO" a1.medium t4g.micro
 checkpoint_restore "$LINENO" t4g.micro a1.medium "1:Restore failed due to incompatible or missing CPU features, try using -XX:CPUFeatures=0x4000ff on checkpoint."
-checkpoint_restore "$LINENO" t4g.micro a1.medium "-1:One cannot disable LSE (0x100) by -XX:CPUFeatures as GLIBC_TUNABLES=glibc.cpu.hwcaps is unsupported on aarch64." "-XX:CPUFeatures=0x4000ff" ""
+checkpoint_restore "$LINENO" t4g.micro a1.medium "-1:LSE (0x100) cannot be disabled via -XX:CPUFeatures on aarch64." "-XX:CPUFeatures=0x4000ff" ""
 
 checkpoint_restore "$LINENO" c7g.medium c7g.medium
 checkpoint_restore "$LINENO" c8g.medium c8g.medium

@@ -94,12 +94,14 @@ public class VMOptionsTest implements CracTest {
     private static final List<VMOptionSpec> OPTIONS_CHECKPOINT = List.of(
         VMOptionSpec.ofStr("CRaCEngine", "criu", false),
         VMOptionSpec.ofStr("CRaCEngineOptions", "args=-v1", false),
+        VMOptionSpec.ofStr("CRaCCheckpointEngineOptions", "print_command=false", false),
         VMOptionSpec.ofStr("CRaCCheckpointTo", new CracBuilder().imageDir().toString(), true),
         VMOptionSpec.ofStr("NativeMemoryTracking", "off", false)
     );
     private static final List<VMOptionSpec> OPTIONS_RESTORE = List.of(
         VMOptionSpec.ofStr("CRaCEngine", "criuengine", false),
         VMOptionSpec.ofStr("CRaCEngineOptions", "args=-v2", false),
+        VMOptionSpec.ofStr("CRaCRestoreEngineOptions", "print_command=true", false),
         VMOptionSpec.ofStr("CRaCCheckpointTo", "another", true),
         VMOptionSpec.ofStr("CRaCIgnoredFileDescriptors", "42,43", true),
         VMOptionSpec.ofBool("UnlockExperimentalVMOptions", true, true)

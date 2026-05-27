@@ -1629,10 +1629,18 @@ bool Arguments::check_vm_args_consistency() {
   }
 #endif
 
-  if (CheckCPUFeatures != nullptr && !strcmp(CheckCPUFeatures, "skip") && !UnlockExperimentalVMOptions) {
-    jio_fprintf(defaultStream::error_stream(),
-                "-XX:CheckCPUFeatures=skip is allowed only with -XX:+UnlockExperimentalVMOptions\n");
-    return false;
+  if (CheckCPUFeatures != nullptr && strcmp(CheckCPUFeatures, "skip") == 0 && !UnlockExperimentalVMOptions) {
+    jio_fprintf(defaultStream::error_stream(), "-XX:CheckCPUFeatures=skip requires -XX:+UnlockExperimentalVMOptions\n");
+    status = false;
+  }
+
+  if (CRaCCheckpointEngineOptions != nullptr && CRaCCheckpointTo == nullptr) {
+    jio_fprintf(defaultStream::error_stream(), "-XX:CRaCCheckpointEngineOptions requires -XX:CRaCCheckpointTo\n");
+    status = false;
+  }
+  if (CRaCRestoreEngineOptions != nullptr && CRaCRestoreFrom == nullptr) {
+    jio_fprintf(defaultStream::error_stream(), "-XX:CRaCRestoreEngineOptions requires -XX:CRaCRestoreFrom\n");
+    status = false;
   }
 
   return status;
@@ -2703,9 +2711,12 @@ static bool should_record_for_restore(const JVMFlag& flag) {
            "unexpected CRaCEngine* flag: %s", flag.name());
     return false;
   }
-  if (strcmp(flag.name(), "IgnoreUnrecognizedVMOptions") == 0) {
+  if (strcmp(flag.name(), "IgnoreUnrecognizedVMOptions") == 0 ||
+      strcmp(flag.name(), "CRaCRestoreEngineOptions") == 0) {
     return false;
   }
+  assert(strcmp(flag.name(), "CRaCCheckpointEngineOptions") != 0,
+         "%s is not restore-settable and thus should not reach here", flag.name());
   return true;
 }
 

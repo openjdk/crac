@@ -823,7 +823,7 @@ int criuengine::checkpoint() {
   } while (sig == -1 && errno == EINTR);
 
 #ifndef F_GET_SEALS
-#define F_GET_SEALS	1034
+#define F_GET_SEALS 1034
 #endif
   for (unsigned i = 0; i < ARRAY_SIZE(fake_fds); ++i) {
     if (fake_fds[i] < 0) {

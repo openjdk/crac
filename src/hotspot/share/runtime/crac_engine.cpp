@@ -587,6 +587,7 @@ void CracEngine::check_cpuinfo(const VM_Version::VM_Features *current_features, 
     } else if (image_features_size == sizeof(image_features)) {
       error_message = VM_Version::restore_failed_check(&image_features, current_features);
       if (error_message != nullptr) {
+        // error_message is already set now.
       } else if (exact) {
         error_message = "Restore failed due to incompatible or missing CPU features, try using -XX:CPUFeatures=%c on checkpoint.";
       } else {

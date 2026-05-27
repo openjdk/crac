@@ -44,9 +44,6 @@ public class VersionCheck extends TestHelper {
 
     // tools that do not accept -J-option
     static final String[] BLACKLIST_JOPTION = {
-        "pauseengine", // crac, don't test
-        "simengine", // crac, don't test
-
         "controlpanel",
         "jabswitch",
         "java-rmi",
@@ -70,9 +67,6 @@ public class VersionCheck extends TestHelper {
 
     // tools that do not accept -version
     static final String[] BLACKLIST_VERSION = {
-        "pauseengine", // crac, don't test
-        "simengine", // crac, don't test
-
         "controlpanel",
         "jaccessinspector",
         "jaccessinspector-32",

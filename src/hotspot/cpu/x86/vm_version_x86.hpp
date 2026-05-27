@@ -723,11 +723,14 @@ private:
   static bool glibc_env_set(char *disable_str);
   [[noreturn]] static void glibc_reexec();
   static constexpr char glibc_prefix[] = ":glibc.cpu.hwcaps=";
-  static constexpr size_t glibc_prefix_len = strlen(glibc_prefix);
+  static constexpr size_t glibc_prefix_len = sizeof(glibc_prefix) - 1;
 #endif //LINUX
   static bool _ignore_glibc_not_using;
   static void print_using_features_cr();
   static void insert_features_names(VM_Version::VM_Features features, stringStream& ss);
+  static const char *restore_failed_check(const VM_Features *image_features, const VM_Features *current_features) {
+    return nullptr;
+  }
 
   static bool os_supports_avx_vectors();
   static bool os_supports_apx_egprs();

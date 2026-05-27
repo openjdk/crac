@@ -61,6 +61,7 @@
   GLIBC_UNSUPPORTED(A53MAC    ); \
   GLIBC_UNSUPPORTED(ECV       ); \
   GLIBC_UNSUPPORTED(WFXT      ); \
+  GLIBC_UNSUPPORTED(NOTPACA   ); \
   /**/
 #include "runtime/abstract_vm_version.inline.hpp"
 
@@ -151,6 +152,7 @@ void VM_Version::initialize() {
   _cpu_features = _features;
 
   cpu_features_init();
+  check_os_cpu_info();
 
   int dcache_line = dcache_line_size();
 
@@ -889,6 +891,13 @@ VM_Features VM_Version::CPUFeatures_generic() {
   VM_Features retval;
   retval.set_feature(CPU_FP);
   retval.set_feature(CPU_ASIMD);
+  // PACA cannot be made compatible between CPUs that do and do not support it.
+  if (_cpu_features.supports_feature(CPU_PACA)) {
+    retval.set_feature(CPU_PACA);
+  }
+  if (_cpu_features.supports_feature(CPU_NOTPACA)) {
+    retval.set_feature(CPU_NOTPACA);
+  }
   return retval;
 }
 
@@ -900,4 +909,16 @@ void VM_Version::print_using_features_cr() {
     _features.print_numbers(*tty);
     tty->cr();
   }
+}
+
+const char *VM_Version::restore_failed_check(const VM_Features *image_features, const VM_Features *current_features) {
+  if (image_features->supports_feature(VM_Feature_Flag::CPU_PACA)
+      == current_features->supports_feature(VM_Feature_Flag::CPU_PACA)) {
+    return nullptr;
+  }
+  stringStream ss;
+  VM_Features paca;
+  paca.set_feature(VM_Feature_Flag::CPU_PACA);
+  ss.print("Restore failed due to incompatible aarch64 CPU feature PACA (%s); these CPUs each require a separate image.", paca.print_numbers());
+  return ss.as_string();
 }

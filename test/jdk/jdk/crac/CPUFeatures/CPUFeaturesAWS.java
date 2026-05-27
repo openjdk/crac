@@ -1,6 +1,5 @@
 /*
- * Copyright (c) 2003, 2021, Oracle and/or its affiliates. All rights reserved.
- * Copyright 2007 Red Hat, Inc.
+ * Copyright (c) 2026, Azul Systems, Inc. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -20,29 +19,17 @@
  * Please contact Oracle, 500 Oracle Parkway, Redwood Shores, CA 94065 USA
  * or visit www.oracle.com if you need additional information or have any
  * questions.
- *
  */
 
-#ifndef CPU_ZERO_VM_VERSION_ZERO_HPP
-#define CPU_ZERO_VM_VERSION_ZERO_HPP
-
-#include "runtime/abstract_vm_version.hpp"
-#include "runtime/globals_extension.hpp"
-
-class VM_Version : public Abstract_VM_Version {
- public:
-  static void initialize();
-  struct VM_Features: public Zero_Features {};
-  static bool cpu_features_binary(VM_Features *data) { return false; }
-  static bool check_cpu_features_skip() { return true; }
-  static const char *restore_failed_check(const VM_Features *image_features, const VM_Features *current_features) {
-    return nullptr;
+public class CPUFeaturesAWS {
+  public static void main(String[] args) {
+    for (int i = 0;; ++i) {
+      System.out.println("CPUFeaturesCheck " + i);
+      try {
+        Thread.sleep(1000);
+      } catch (InterruptedException e) {
+        Thread.currentThread().interrupt();
+      }
+    }
   }
-
-  constexpr static bool supports_stack_watermark_barrier() { return true; }
-
-  static void initialize_cpu_information(void);
-  static bool profile_all_receivers_at_type_check() { return false; }
-};
-
-#endif // CPU_ZERO_VM_VERSION_ZERO_HPP
+}

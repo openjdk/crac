@@ -57,6 +57,7 @@ public:
     decl(A53MAC,        a53mac    ) \
     decl(ECV,           ecv       ) \
     decl(WFXT,          wfxt      ) \
+    decl(NOTPACA,       notpaca   ) \
     /**/
 
   enum Feature_Flag {
@@ -106,6 +107,7 @@ protected:
 
   // Read additional info using OS-specific interfaces
   static void get_os_cpu_info();
+  static void check_os_cpu_info();
 
   // Sets the SVE length and returns a new actual value or negative on error.
   // If the len is larger than the system largest supported SVE vector length,
@@ -131,11 +133,13 @@ public:
   static bool glibc_env_set(char *disable_str);
   [[noreturn]] static void glibc_reexec();
   static constexpr char glibc_prefix[] = ":glibc.cpu.hwcaps=";
-  static constexpr size_t glibc_prefix_len = strlen(glibc_prefix);
+  static constexpr size_t glibc_prefix_len = sizeof(glibc_prefix) - 1;
 #endif //LINUX
   static bool _ignore_glibc_not_using;
   static void print_using_features_cr();
   static void insert_features_names(VM_Version::VM_Features features, stringStream& ss);
+  // The returned string needs a ResourceMark.
+  static const char *restore_failed_check(const VM_Features *image_features, const VM_Features *current_features);
 
   static void print_platform_virtualization_info(outputStream*);
 

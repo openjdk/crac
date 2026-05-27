@@ -589,13 +589,18 @@ void CracEngine::check_cpuinfo(const VM_Version::VM_Features *current_features, 
     log_error(crac)("Restore failed due to wrong or missing CPU architecture (current architecture is " ARCHPROPNAME ")");
   }
   if (_image_constraints_api->is_failed(_conf, cpufeatures_name)) {
+    // ResourceMark is for VM_Version::restore_failed_check.
+    ResourceMark rm;
     const char *error_message;
     VM_Version::VM_Features image_features;
     size_t image_features_size = _image_constraints_api->get_failed_bitmap(_conf, cpufeatures_name, reinterpret_cast<unsigned char *>(&image_features), sizeof(image_features));
     if (CheckCPUFeaturesMessage != nullptr) {
       error_message = CheckCPUFeaturesMessage;
     } else if (image_features_size == sizeof(image_features)) {
-      if (exact) {
+      error_message = VM_Version::restore_failed_check(&image_features, current_features);
+      if (error_message != nullptr) {
+        // error_message is already set now.
+      } else if (exact) {
         error_message = "Restore failed due to incompatible or missing CPU features, try using -XX:CPUFeatures=%c on checkpoint.";
       } else {
         error_message = "Restore failed due to incompatible or missing CPU features, try using -XX:CPUFeatures=%m on checkpoint.";
@@ -606,7 +611,6 @@ void CracEngine::check_cpuinfo(const VM_Version::VM_Features *current_features, 
     VM_Version::VM_Features common_features = image_features;
     common_features &= *current_features;
     // Reparse the message
-    ResourceMark rm;
     stringStream ss;
     const char *percent = strchr(error_message, '%');
     while (percent != nullptr) {

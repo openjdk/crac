@@ -2712,10 +2712,11 @@ static bool should_record_for_restore(const JVMFlag& flag) {
     return false;
   }
   if (strcmp(flag.name(), "IgnoreUnrecognizedVMOptions") == 0 ||
-      strcmp(flag.name(), "CRaCCheckpointEngineOptions") == 0 ||
       strcmp(flag.name(), "CRaCRestoreEngineOptions") == 0) {
     return false;
   }
+  assert(strcmp(flag.name(), "CRaCCheckpointEngineOptions") != 0,
+         "%s is not restore-settable and thus should not reach here", flag.name());
   return true;
 }
 

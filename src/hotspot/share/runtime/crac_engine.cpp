@@ -25,6 +25,7 @@
 #include "crlib/crlib_restore_data.h"
 #include "logging/log.hpp"
 #include "memory/allStatic.hpp"
+#include "memory/allocation.hpp"
 #include "memory/resourceArea.hpp"
 #include "nmt/memTag.hpp"
 #include "runtime/crac_engine.hpp"
@@ -181,43 +182,6 @@ public:
 using CStringSet = HashTable<const char *, bool, 256, AnyObj::C_HEAP, MemTag::mtInternal,
                              CStringUtils::hash, CStringUtils::equals>;
 
-static bool apply_engine_options(const crlib_api_t &api, crlib_conf_t *conf, const char *options,
-                                 const CStringSet &vm_keys, CStringSet *applied_keys) {
-  if (options == nullptr || options[0] == '\0' /* possible for ccstrlist */) {
-    return true;
-  }
-
-  char * const options_copy = os::strdup_check_oom(options, mtInternal);
-
-  char *options_copy_iter = options_copy;
-  do {
-    char *key_value = strsep(&options_copy_iter, ",\n"); // '\n' appears when ccstrlist is appended to
-    const char *key = strsep(&key_value, "=");
-    const char *value = key_value != nullptr ? key_value : "";
-    assert(key != nullptr, "Should have terminated before");
-    if (vm_keys.contains(key)) {
-      log_warning(crac)("VM-controlled CRaC engine option provided, skipping: %s", key);
-      continue;
-    }
-    {
-      bool is_new_key;
-      applied_keys->put_if_absent(key, &is_new_key);
-      if (!is_new_key) {
-        log_warning(crac)("CRaC engine option '%s' specified multiple times", key);
-      }
-    }
-    if (!api.configure(conf, key, value)) {
-      log_error(crac)("CRaC engine failed to configure: '%s' = '%s'", key, value);
-      os::free(options_copy);
-      return false;
-    }
-    log_debug(crac)("CRaC engine option: '%s' = '%s'", key, value);
-  } while (options_copy_iter != nullptr);
-
-  os::free(options_copy);
-  return true;
-}
-
 static crlib_conf_t *create_conf(const crlib_api_t &api, bool for_restore) {
   crlib_conf_t * const conf = api.create_conf();
   if (conf == nullptr) {
@@ -240,18 +204,64 @@ static crlib_conf_t *create_conf(const crlib_api_t &api, bool for_restore) {
   }
 #endif // LINUX
 
+  const char *extra_options = for_restore ? CRaCRestoreEngineOptions : CRaCCheckpointEngineOptions;
+  const size_t main_options_len = CRaCEngineOptions != nullptr ? strlen(CRaCEngineOptions) : 0;
+  const size_t extra_options_len = extra_options != nullptr ? strlen(extra_options) : 0;
+  if (main_options_len == 0 && extra_options_len == 0) {
+    return conf;
+  }
+
+  const bool options_need_sep = main_options_len > 0 && extra_options_len > 0;
+  char * const options = NEW_C_HEAP_ARRAY(char, main_options_len + extra_options_len + (options_need_sep ? 1 : 0) + 1, MemTag::mtInternal);
+  {
+    char *options_dst = options;
+    if (main_options_len > 0) {
+      memcpy(options_dst, CRaCEngineOptions, main_options_len);
+      options_dst += main_options_len;
+    }
+    if (options_need_sep) {
+      *(options_dst++) = '\n'; // VM options parsing uses \n for appending to ccstrlist
+    }
+    if (extra_options_len > 0) {
+      memcpy(options_dst, extra_options, extra_options_len);
+      options_dst += extra_options_len;
+    }
+    *options_dst = '\0';
+  }
+
   CStringSet vm_controlled_keys;
 #define PUT_CONTROLLED_KEY(opt) vm_controlled_keys.put_when_absent(engine_opt_##opt, false);
   VM_CONTROLLED_ENGINE_OPTS(PUT_CONTROLLED_KEY)
 #undef PUT_CONTROLLED_KEY
 
-  CStringSet keys;
-  if (!apply_engine_options(api, conf, CRaCEngineOptions, vm_controlled_keys, &keys) ||
-      (!for_restore && !apply_engine_options(api, conf, CRaCCheckpointEngineOptions, vm_controlled_keys, &keys)) ||
-      (for_restore && !apply_engine_options(api, conf, CRaCRestoreEngineOptions, vm_controlled_keys, &keys))) {
-    api.destroy_conf(conf);
-    return nullptr;
-  }
+  CStringSet user_keys;
+  char *options_iter = options;
+  do {
+    char *key_value = strsep(&options_iter, ",\n"); // '\n' appears when ccstrlist is appended to
+    const char *key = strsep(&key_value, "=");
+    const char *value = key_value != nullptr ? key_value : "";
+    assert(key != nullptr, "Should have terminated before");
+    if (vm_controlled_keys.contains(key)) {
+      log_warning(crac)("VM-controlled CRaC engine option provided, skipping: %s", key);
+      continue;
+    }
+    {
+      bool is_new_key;
+      user_keys.put_if_absent(key, &is_new_key);
+      if (!is_new_key) {
+        log_warning(crac)("CRaC engine option '%s' specified multiple times", key);
+      }
+    }
+    if (!api.configure(conf, key, value)) {
+      log_error(crac)("CRaC engine failed to configure: '%s' = '%s'", key, value);
+      FREE_C_HEAP_ARRAY(options);
+      api.destroy_conf(conf);
+      return nullptr;
+    }
+    log_debug(crac)("CRaC engine option: '%s' = '%s'", key, value);
+  } while (options_iter != nullptr);
+
+  FREE_C_HEAP_ARRAY(options);
 
   return conf;
 }

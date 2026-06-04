@@ -3664,6 +3664,10 @@ JVM_ENTRY(jobjectArray, JVM_Checkpoint(JNIEnv *env, jarray fd_arr, jobjectArray 
   return (jobjectArray) JNIHandles::make_local(THREAD, ret());
 JVM_END
 
+JVM_ENTRY(jint, JVM_GetCheckpointableStatus(JNIEnv *env))
+  return crac::checkpointable_status();
+JVM_END
+
 JVM_ENTRY(void, JVM_StartRecordingDecompilations(JNIEnv *env))
   CRaCRecompiler::start_recording_decompilations();
 JVM_END

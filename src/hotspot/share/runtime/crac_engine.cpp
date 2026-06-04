@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2025, Azul Systems, Inc. All rights reserved.
+ * Copyright (c) 2025, 2026, Azul Systems, Inc. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -666,4 +666,14 @@ CracEngine::ApiStatus CracEngine::prepare_image_score_api() {
 
 bool CracEngine::set_score(const char* metric, double value) {
   return _image_score_api->set_score(_conf, metric, value);
+}
+
+CracEngine::ApiStatus CracEngine::prepare_checkpoint_availability_api() {
+  prepare_extension_api(_checkpoint_availability_api, CRLIB_EXTENSION_CHECKPOINT_AVAILABILITY_NAME)
+  require_method(get_checkpointable_status)
+  complete_extension_api(_checkpoint_availability_api)
+}
+
+crlib_checkpointable_status_t CracEngine::get_checkpointable_status() {
+  return _checkpoint_availability_api->get_checkpointable_status(_conf);
 }

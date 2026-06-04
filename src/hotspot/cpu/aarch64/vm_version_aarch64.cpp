@@ -898,9 +898,6 @@ VM_Features VM_Version::CPUFeatures_generic() {
   if (_cpu_features.supports_feature(CPU_NOTPACA)) {
     retval.set_feature(CPU_NOTPACA);
   }
-  if (_cpu_features.supports_feature(CPU_LSE)) {
-    retval.set_feature(CPU_LSE);
-  }
   return retval;
 }
 

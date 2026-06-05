@@ -340,7 +340,7 @@ main(int argc, char **argv)
         }
         margv[i] = NULL;
     }
-#else /* *NIXES */
+#else /* if !_WIN32 */
     {
         // accommodate the NULL at the end
         JLI_List args = JLI_List_new(argc + 1);
@@ -453,7 +453,6 @@ main(int argc, char **argv)
             return 1;
         }
     }
-    #endif /* not WIN32 */
 #ifdef __aarch64__
     bool disable_pac = should_disable_pointer_authentication();
     if (disable_pac) {
@@ -466,7 +465,8 @@ main(int argc, char **argv)
         }
     }
 #endif // __aarch64__
-#endif /* LINUX */
+#endif // LINUX
+#endif // !_WIN32
     int exit_code = JLI_Launch(margc, margv,
                    jargc, jargs,
                    0, NULL,

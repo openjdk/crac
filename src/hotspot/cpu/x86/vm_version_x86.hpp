@@ -718,6 +718,8 @@ private:
   static VM_Features CPUFeatures_generic();
   static void glibc_patch(VM_Features &shouldnotuse);
   static VM_Features CPUFeatures_parse(const char *str);
+  static VM_Features CPUFeatures_parse_numeric(const char *str);
+  static void CPUFeatures_apply_arch(VM_Features &parsed, VM_Features &missing);
 #ifdef LINUX
   static bool glibc_not_using();
   static bool glibc_env_set(char *disable_str);

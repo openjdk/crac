@@ -111,7 +111,9 @@ static bool is_restore = false;
 static const int crac_min_pid_default = 128;
 static int crac_min_pid = 0;
 static bool is_min_pid_set = false;
+#ifdef __aarch64__
 static bool disable_pac = false;
+#endif // __aarch64__
 
 static inline const char *find_option(const char *arg, const char *vmoption) {
     const int len = strlen(vmoption);
@@ -143,10 +145,10 @@ static void parse_crac(const char *arg) {
 #define PR_PAC_SET_ENABLED_KEYS 60
 #endif // PR_PAC_SET_ENABLED_KEYS
 #ifndef PR_PAC_APIAKEY
-#define PR_PAC_APIAKEY			(1UL << 0)
-#define PR_PAC_APIBKEY			(1UL << 1)
-#define PR_PAC_APDAKEY			(1UL << 2)
-#define PR_PAC_APDBKEY			(1UL << 3)
+#define PR_PAC_APIAKEY (1UL << 0)
+#define PR_PAC_APIBKEY (1UL << 1)
+#define PR_PAC_APDAKEY (1UL << 2)
+#define PR_PAC_APDBKEY (1UL << 3)
 #endif // PR_PAC_APIKEY
 
 bool should_disable_pointer_authentication() {

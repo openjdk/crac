@@ -111,9 +111,9 @@ static bool is_restore = false;
 static const int crac_min_pid_default = 128;
 static int crac_min_pid = 0;
 static bool is_min_pid_set = false;
-#ifdef __aarch64__
+#if defined(LINUX) && defined(__aarch64__)
 static bool disable_pac = false;
-#endif // __aarch64__
+#endif // LINUX && __aarch64__
 
 static inline const char *find_option(const char *arg, const char *vmoption) {
     const int len = strlen(vmoption);
@@ -132,10 +132,10 @@ static void parse_crac(const char *arg) {
     } else if (!is_min_pid_set && (value = find_option(arg, "-XX:CRaCMinPid=")) != NULL) {
         crac_min_pid = atoi(value);
         is_min_pid_set = true;
-#ifdef __aarch64__
+#if defined(LINUX) && defined(__aarch64__)
     } else if (find_option(arg, "-XX:-UsePAC")) {
         disable_pac = true;
-#endif // aarch64
+#endif // LINUX && __aarch64__
     }
 }
 

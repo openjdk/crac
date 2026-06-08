@@ -290,7 +290,7 @@ if echo "$arch"|grep -q ', x86-64, ';then
 # Test 2 issues:
 # 1: ZULU-84672: CPUFeatures: Intel/AMD image portability problem; non-contained intersection; a!=(a&b)!=b
 # 2: IgnoreCPUFeatures is not inherited from snapshot to restore.
-checkpoint_restore "$LINENO" t3a.micro t3.micro "1:Restore failed due to incompatible or missing CPU features, try using -XX:CPUFeatures=0x21461805ddfbf7,0x1f98 on checkpoint." \
+checkpoint_restore "$LINENO" t3a.micro t3.micro "1:Restore failed due to incompatible or missing CPU features, try using -XX:CPUFeatures=0x21461805ddfbf7,0xfcc0000000000000 on checkpoint." \
   "-XX:+UnlockExperimentalVMOptions -XX:+IgnoreCPUFeatures" ""
 
 # Test IgnoreCPUFeatures - in this case it only works by luck.
@@ -303,13 +303,13 @@ checkpoint_restore "$LINENO" t3a.micro t3.micro "1:VM option .*CPUFeatures.* is 
 # Test printing during snapshot: "CPU features are being kept intact as requested by -XX:CPUFeatures=ignore"
 checkpoint_restore "$LINENO" t3a.micro t3.micro "" "-XX:CPUFeatures=ignore" "-XX:+UnlockExperimentalVMOptions -XX:+IgnoreCPUFeatures"
 
-checkpoint_restore "$LINENO" t3a.micro t3.micro "" "-XX:CPUFeatures=0x21461805ddfbf7,0x1f98"
-checkpoint_restore "$LINENO" t3.micro t3a.micro "" "-XX:CPUFeatures=0x21461805ddfbf7,0x1f98"
+checkpoint_restore "$LINENO" t3a.micro t3.micro "" "-XX:CPUFeatures=0x21461805ddfbf7,0xfcc0000000000000"
+checkpoint_restore "$LINENO" t3.micro t3a.micro "" "-XX:CPUFeatures=0x21461805ddfbf7,0xfcc0000000000000"
 
 checkpoint_restore "$LINENO" m1.small t3.micro
 
 # criu FAIL: JDK-8373027: [CRaC] [CRIU] x86: FPU xsave area present, but host cpu doesn't support it
-checkpoint_restore "$LINENO" t3.micro m1.small "" "-XX:CPUFeatures=0x142000070bbd7,0x300" ""
+checkpoint_restore "$LINENO" t3.micro m1.small "" "-XX:CPUFeatures=0x142000070bbd7,0x3800000000000000" ""
 
 checkpoint_restore "$LINENO" t3.micro t3.micro "" "-XX:CPUFeatures=native" ""
 
@@ -320,7 +320,7 @@ checkpoint_restore "$LINENO" t3.micro t3.micro "" "-XX:CPUFeatures=generic" ""
 
 # Currently the most modern x86_64 CPU in AWS.
 # criu FAIL: ZULU-84505: [CRaC] [CRIU] Fix a failure for checkpoint on AWS m8i-flex.large
-checkpoint_restore "$LINENO" m8i-flex.large m1.small "" "-XX:CPUFeatures=0x142000070bbd7,0x300" ""
+checkpoint_restore "$LINENO" m8i-flex.large m1.small "" "-XX:CPUFeatures=0x142000070bbd7,0x3800000000000000" ""
 
 # 8374491: CPUFeatures: check performance regression of AVX_Fast_Unaligned_Load
 lastline="$LINENO"

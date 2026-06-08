@@ -144,7 +144,7 @@ int VM_Version::_stepping;
 bool VM_Version::_has_intel_jcc_erratum;
 VM_Version::CpuidInfo VM_Version::_cpuid_info = { 0, };
 
-#define DECLARE_CPU_FEATURE_NAME(id, name) XSTR(name),
+#define DECLARE_CPU_FEATURE_NAME(id, name, bit) name,
 const char* VM_Version::_features_names[] = { CPU_FEATURE_FLAGS(DECLARE_CPU_FEATURE_NAME)};
 #undef DECLARE_CPU_FEATURE_NAME
 

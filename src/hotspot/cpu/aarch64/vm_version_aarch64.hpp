@@ -55,6 +55,8 @@ public:
     decl(SVEBITPERM,    svebitperm, 17) \
     decl(SVE2,          sve2,       18) \
     decl(A53MAC,        a53mac,     19) \
+    decl(ECV,           ecv,        20) \
+    decl(WFXT,          wfxt,       21) \
     /* These features are added for CRaC. */ \
     decl(NOTPACA,       notpaca,    63) \
     /**/
@@ -215,7 +217,7 @@ public:
   static const char* _features_names[];
 
   // Feature identification
-#define CPU_FEATURE_DETECTION(id, name) \
+#define CPU_FEATURE_DETECTION(id, name, bit) \
   static bool supports_##name() { return supports_feature(CPU_##id); }
   CPU_FEATURE_FLAGS(CPU_FEATURE_DETECTION)
 #undef CPU_FEATURE_DETECTION

@@ -87,7 +87,7 @@ bool VM_Version::_ic_ivau_trapped;
 VM_Version::VM_Features VM_Version::_features;
 VM_Version::VM_Features VM_Version::_cpu_features;
 
-#define DECLARE_CPU_FEATURE_NAME(id, name) XSTR(name),
+#define DECLARE_CPU_FEATURE_NAME(id, name, bit) XSTR(name),
 const char* VM_Version::_features_names[] = { CPU_FEATURE_FLAGS(DECLARE_CPU_FEATURE_NAME)};
 #undef DECLARE_CPU_FEATURE_NAME
 

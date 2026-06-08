@@ -59,8 +59,6 @@
   GLIBC_UNSUPPORTED(SVEBITPERM); \
   GLIBC_UNSUPPORTED(SVE2      ); \
   GLIBC_UNSUPPORTED(A53MAC    ); \
-  GLIBC_UNSUPPORTED(ECV       ); \
-  GLIBC_UNSUPPORTED(WFXT      ); \
   GLIBC_UNSUPPORTED(NOTPACA   ); \
   /**/
 #include "runtime/abstract_vm_version.inline.hpp"
@@ -888,20 +886,9 @@ bool VM_Version::cpu_features_binary(VM_Version::VM_Features *data) {
 }
 
 VM_Features VM_Version::CPUFeatures_generic() {
-  VM_Features retval;
-  retval.set_feature(CPU_FP);
-  retval.set_feature(CPU_ASIMD);
-  // PACA cannot be made compatible between CPUs that do and do not support it.
-  if (_cpu_features.supports_feature(CPU_PACA)) {
-    retval.set_feature(CPU_PACA);
-  }
-  if (_cpu_features.supports_feature(CPU_NOTPACA)) {
-    retval.set_feature(CPU_NOTPACA);
-  }
-  if (_cpu_features.supports_feature(CPU_LSE)) {
-    retval.set_feature(CPU_LSE);
-  }
-  return retval;
+  // CPU_PACA and non-PACA processors cannot share the same image. Also we cannot disable glibc using features like CPU_LSE.
+  vm_exit_during_initialization("-XX:CPUFeatures=generic is not available on aarch64");
+  ShouldNotReachHere();
 }
 
 void VM_Version::print_using_features_cr() {

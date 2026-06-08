@@ -42,11 +42,11 @@ import static jdk.test.lib.Asserts.*;
  * @run driver jdk.test.lib.crac.CracTest native  skip              fail
  * @run driver jdk.test.lib.crac.CracTest native  skip-experimental pass
  * @run driver jdk.test.lib.crac.CracTest generic compatible        pass
- * @run driver jdk.test.lib.crac.CracTest generic exact             fail-x86
+ * @run driver jdk.test.lib.crac.CracTest generic exact             fail-x86aarch64
  * @run driver jdk.test.lib.crac.CracTest generic skip              fail
  * @run driver jdk.test.lib.crac.CracTest generic skip-experimental pass
- * @run driver jdk.test.lib.crac.CracTest ignore  compatible        fail-x86
- * @run driver jdk.test.lib.crac.CracTest ignore  exact             fail-x86
+ * @run driver jdk.test.lib.crac.CracTest ignore  compatible        fail-x86aarch64
+ * @run driver jdk.test.lib.crac.CracTest ignore  exact             fail-x86aarch64
  * @run driver jdk.test.lib.crac.CracTest ignore  skip              fail
  * @run driver jdk.test.lib.crac.CracTest ignore  skip-experimental pass
  */
@@ -63,8 +63,8 @@ public class CheckCPUFeaturesTest implements CracTest {
     @Override
     public void test() throws Exception {
         boolean success = "pass".equals(result);
-        if (!Platform.isX86() && !Platform.isX64()) {
-            success = success || "fail-x86".equals(result);
+        if (!Platform.isX86() && !Platform.isX64() && !Platform.isAArch64()) {
+            success = success || "fail-x86aarch64".equals(result);
         }
 
         CracBuilder builder = new CracBuilder().engine(CracEngine.PAUSE);

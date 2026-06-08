@@ -258,7 +258,7 @@ bool VM_Version::glibc_not_using() {
     assert(handled.supports_feature(FIRST_GLIBC_FEATURE), "FIRST_GLIBC_FEATURE not handled");
     VM_Feature_Flag::Feature_Flag last_cpu = static_cast<VM_Feature_Flag::Feature_Flag>(static_cast<int>(FIRST_GLIBC_FEATURE) - 1);
     while (!handled.supports_feature(last_cpu)) {
-      all_features.clear_feature(last_cpu); 
+      all_features.clear_feature(last_cpu);
       last_cpu = static_cast<VM_Feature_Flag::Feature_Flag>(static_cast<int>(last_cpu) - 1);
     }
   }

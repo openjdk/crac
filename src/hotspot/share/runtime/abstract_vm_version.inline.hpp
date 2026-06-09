@@ -24,6 +24,10 @@
 #ifndef SHARE_RUNTIME_ABSTRACT_VM_VERSION_INLINE_HPP
 #define SHARE_RUNTIME_ABSTRACT_VM_VERSION_INLINE_HPP
 
+#include "runtime/abstract_vm_version.hpp"
+
+#include "logging/log.hpp"
+#include "logging/logStream.hpp"
 #include "memory/resourceArea.hpp"
 
 VM_Features VM_Version::CPUFeatures_parse(const char *str) {
@@ -278,10 +282,8 @@ void VM_Version::cpu_features_init() {
   assert(!CPUFeatures == FLAG_IS_DEFAULT(CPUFeatures), "CPUFeatures parsing");
 
   VM_Features CPUFeatures_parsed = CPUFeatures_parse(CPUFeatures);
-  VM_Features features_missing = CPUFeatures_parsed & ~_features;
 
-  features_missing = features_missing.aot_code_cache_features();
-
+  const auto features_missing = (CPUFeatures_parsed & ~_features).aot_code_cache_features();
   if (!features_missing.empty()) {
     stringStream ss;
     ss.print_raw("Specified -XX:CPUFeatures=");
@@ -295,6 +297,20 @@ void VM_Version::cpu_features_init() {
     ss.cr();
     ss.print_raw_cr("If you are sure it will not crash you can override this check by -XX:+UnlockExperimentalVMOptions -XX:CheckCPUFeatures=skip .");
     vm_exit_during_initialization(ss.base());
+  }
+
+  const auto features_mandatory = CPUFeatures_mandatory();
+  assert((features_mandatory & ~_features).empty(), "mandatory features missing");
+  if (!(features_mandatory & ~CPUFeatures_parsed).empty()) {
+    CPUFeatures_parsed |= features_mandatory;
+    if (log_is_enabled(Warning, os, cpu)) {
+      LogStream ls(Log(os, cpu)::warning());
+      ls.print_raw("Extended -XX:CPUFeatures with mandatory ");
+      features_mandatory.print_numbers(ls);
+      ls.print_raw(" to get ");
+      CPUFeatures_parsed.print_numbers(ls);
+      ls.cr();
+    }
   }
 
   _features = CPUFeatures_parsed;

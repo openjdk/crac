@@ -282,9 +282,6 @@ void VM_Version::cpu_features_init() {
   features_missing = features_missing.aot_code_cache_features();
 
   CPUFeatures_apply_arch(CPUFeatures_parsed, features_missing);
-#ifdef __aarch64__
-
-#endif // __aarch64__
 
   if (!features_missing.empty()) {
     stringStream ss;

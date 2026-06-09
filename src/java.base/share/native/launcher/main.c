@@ -454,8 +454,7 @@ main(int argc, char **argv)
         }
     }
 #ifdef __aarch64__
-    bool disable_pac = should_disable_pointer_authentication();
-    if (disable_pac) {
+    if (should_disable_pointer_authentication()) {
         // PR_PAC_APGAKEY cannot be disabled through this syscall
         if (prctl(PR_PAC_SET_ENABLED_KEYS, PR_PAC_APIAKEY | PR_PAC_APIBKEY | PR_PAC_APDAKEY | PR_PAC_APDBKEY, 0, 0, 0)) {
             if (errno != EINVAL) { // Systems without PAC support return EINVAL

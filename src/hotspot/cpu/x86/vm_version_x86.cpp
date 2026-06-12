@@ -33,6 +33,7 @@
 #include "memory/resourceArea.hpp"
 #include "memory/universe.hpp"
 #include "runtime/globals_extension.hpp"
+#include "runtime/icache.hpp"
 #include "runtime/java.hpp"
 #include "runtime/os.inline.hpp"
 #include "runtime/stubCodeGenerator.hpp"
@@ -80,7 +81,9 @@
   EXCESSIVE2(AVX_Fast_Unaligned_Load, FEATURE_ACTIVE(OSXSAVE) && FEATURE_ACTIVE(AVX) && FEATURE_ACTIVE(AVX2)); \
   /**/
 #define GLIBC_UNSUPPORTED_LIST \
+  GLIBC_UNSUPPORTED(FXSR             ); \
   GLIBC_UNSUPPORTED(3DNOW_PREFETCH   ); \
+  GLIBC_UNSUPPORTED(SSE              ); \
   GLIBC_UNSUPPORTED(SSE4A            ); \
   GLIBC_UNSUPPORTED(TSC              ); \
   GLIBC_UNSUPPORTED(TSCINV_BIT       ); \
@@ -94,7 +97,6 @@
   GLIBC_UNSUPPORTED(AVX512_VPCLMULQDQ); \
   GLIBC_UNSUPPORTED(AVX512_VAES      ); \
   GLIBC_UNSUPPORTED(AVX512_VNNI      ); \
-  GLIBC_UNSUPPORTED(FLUSH            ); \
   GLIBC_UNSUPPORTED(FLUSHOPT         ); \
   GLIBC_UNSUPPORTED(CLWB             ); \
   GLIBC_UNSUPPORTED(AVX512_VBMI2     ); \
@@ -122,9 +124,6 @@
   GLIBC_UNSUPPORTED(HT               ); \
   GLIBC_UNSUPPORTED(HYBRID           ); \
   /* These are handled as an exception in VM_Version::glibc_patch(). */ \
-  GLIBC_UNSUPPORTED(FXSR             ); \
-  GLIBC_UNSUPPORTED(MMX              ); \
-  GLIBC_UNSUPPORTED(SSE              ); \
   GLIBC_UNSUPPORTED(CMPXCHG16        ); \
   GLIBC_UNSUPPORTED(LAHFSAHF         ); \
   /**/
@@ -160,8 +159,6 @@ address VM_Version::_cpuinfo_cont_addr_apx = nullptr;
 static BufferBlob* stub_blob;
 static const int stub_size = 2550;
 
-int VM_Version::VM_Features::_features_bitmap_size = sizeof(VM_Version::VM_Features::_features_bitmap) / BytesPerLong;
-
 VM_Version::VM_Features VM_Version::_features;
 VM_Version::VM_Features VM_Version::_cpu_features;
 
@@ -175,36 +172,6 @@ static get_cpu_info_stub_t get_cpu_info_stub = nullptr;
 static detect_virt_stub_t detect_virt_stub = nullptr;
 static clear_apx_test_state_t clear_apx_test_state_stub = nullptr;
 static getCPUIDBrandString_stub_t getCPUIDBrandString_stub = nullptr;
-
-bool VM_Version::supports_clflush() {
-  // clflush should always be available on x86_64
-  // if not we are in real trouble because we rely on it
-  // to flush the code cache.
-  // Unfortunately, Assembler::clflush is currently called as part
-  // of generation of the code cache flush routine. This happens
-  // under Universe::init before the processor features are set
-  // up. Assembler::flush calls this routine to check that clflush
-  // is allowed. So, we give the caller a free pass if Universe init
-  // is still in progress.
-  if (!Universe::is_fully_initialized()) {
-    return true;
-  }
-  if (_features.supports_feature(CPU_FLUSH)) {
-    return true;
-  }
-  if (FLAG_IS_DEFAULT(CPUFeatures)) {
-    vm_exit_during_initialization("clflush should be available");
-  }
-  stringStream ss;
-  ss.print_raw("-XX:CPUFeatures option requires FLUSH flag to be set: ");
-  {
-    VM_Features flush;
-    flush.set_feature(CPU_FLUSH);
-    flush.print_numbers(ss);
-  }
-  vm_exit_during_initialization(ss.base());
-  return false;
-}
 
 #define CPUID_STANDARD_FN   0x0
 #define CPUID_STANDARD_FN_1 0x1
@@ -636,7 +603,6 @@ class VM_Version_StubGenerator: public StubCodeGenerator {
     // and check upper YMM/ZMM bits after it.
     //
     int saved_useavx = UseAVX;
-    int saved_usesse = UseSSE;
 
     // If UseAVX is uninitialized or is set by the user to include EVEX
     if (use_evex) {
@@ -667,7 +633,6 @@ class VM_Version_StubGenerator: public StubCodeGenerator {
       // EVEX setup: run in lowest evex mode
       VM_Version::set_evex_cpuFeatures(); // Enable temporary to pass asserts
       UseAVX = 3;
-      UseSSE = 2;
 #ifdef _WINDOWS
       // xmm5-xmm15 are not preserved by caller on windows
       // https://msdn.microsoft.com/en-us/library/9z1stfyw.aspx
@@ -694,7 +659,6 @@ class VM_Version_StubGenerator: public StubCodeGenerator {
     // AVX setup
     VM_Version::set_avx_cpuFeatures(); // Enable temporary to pass asserts
     UseAVX = 1;
-    UseSSE = 2;
 #ifdef _WINDOWS
     __ subptr(rsp, 32);
     __ vmovdqu(Address(rsp, 0), xmm7);
@@ -748,7 +712,6 @@ class VM_Version_StubGenerator: public StubCodeGenerator {
       // EVEX check: run in lowest evex mode
       VM_Version::set_evex_cpuFeatures(); // Enable temporary to pass asserts
       UseAVX = 3;
-      UseSSE = 2;
       __ lea(rsi, Address(rbp, in_bytes(VM_Version::zmm_save_offset())));
       __ evmovdqul(Address(rsi, 0), xmm0, Assembler::AVX_512bit);
       __ evmovdqul(Address(rsi, 64), xmm7, Assembler::AVX_512bit);
@@ -766,7 +729,6 @@ class VM_Version_StubGenerator: public StubCodeGenerator {
       generate_vzeroupper(wrapup);
       VM_Version::clean_cpuFeatures();
       UseAVX = saved_useavx;
-      UseSSE = saved_usesse;
       __ jmp(wrapup);
    }
 
@@ -774,7 +736,6 @@ class VM_Version_StubGenerator: public StubCodeGenerator {
     // AVX check
     VM_Version::set_avx_cpuFeatures(); // Enable temporary to pass asserts
     UseAVX = 1;
-    UseSSE = 2;
     __ lea(rsi, Address(rbp, in_bytes(VM_Version::ymm_save_offset())));
     __ vmovdqu(Address(rsi, 0), xmm0);
     __ vmovdqu(Address(rsi, 32), xmm7);
@@ -793,7 +754,6 @@ class VM_Version_StubGenerator: public StubCodeGenerator {
     generate_vzeroupper(wrapup);
     VM_Version::clean_cpuFeatures();
     UseAVX = saved_useavx;
-    UseSSE = saved_usesse;
 
     __ bind(wrapup);
     __ popf();
@@ -1038,35 +998,6 @@ void VM_Version::get_processor_features_hardware() {
 }
 
 void VM_Version::get_processor_features_hotspot() {
-  // OS should support SSE for x64 and hardware should support at least SSE2.
-  if (!VM_Version::supports_sse2()) {
-    if (!FLAG_IS_DEFAULT(CPUFeatures)) {
-      stringStream ss;
-      ss.print_raw("-XX:CPUFeatures option requires SSE2 flag to be set: ");
-      {
-        VM_Features sse2;
-        sse2.set_feature(CPU_SSE2);
-        sse2.print_numbers(ss);
-      }
-      vm_exit_during_initialization(ss.base());
-    }
-    vm_exit_during_initialization("Unknown x64 processor: SSE2 not supported");
-  }
-  // in 64 bit the use of SSE2 is the minimum
-  if (UseSSE < 2) UseSSE = 2;
-
-  // flush_icache_stub have to be generated first.
-  // That is why Icache line size is hard coded in ICache class,
-  // see icache_x86.hpp. It is also the reason why we can't use
-  // clflush instruction in 32-bit VM since it could be running
-  // on CPU which does not support it.
-  //
-  // The only thing we can do is to verify that flushed
-  // ICache::line_size has correct value.
-  guarantee(_cpuid_info.std_cpuid1_edx.bits.clflush != 0, "clflush is not supported");
-  // clflush_size is size in quadwords (8 bytes).
-  guarantee(_cpuid_info.std_cpuid1_ebx.bits.clflush_size == 8, "such clflush size is not supported");
-
   // assigning this field effectively enables Unsafe.writebackMemory()
   // by initing UnsafeConstant.DATA_CACHE_LINE_FLUSH_SIZE to non-zero
   // that is only implemented on x86_64 and only if the OS plays ball
@@ -1095,12 +1026,6 @@ void VM_Version::get_processor_features_hotspot() {
     clear_feature(CPU_SSE4A);
   }
 
-  if (UseSSE < 2)
-    clear_feature(CPU_SSE2);
-
-  if (UseSSE < 1)
-    clear_feature(CPU_SSE);
-
   // ZX cpus specific settings
   if (is_zx() && FLAG_IS_DEFAULT(UseAVX)) {
     if (cpu_family() == 7) {
@@ -1115,21 +1040,13 @@ void VM_Version::get_processor_features_hotspot() {
   }
 
   // UseSSE is set to the smaller of what hardware supports and what
-  // the command line requires.  I.e., you cannot set UseSSE to 2 on
-  // older Pentiums which do not support it.
-  int use_sse_limit = 0;
-  if (UseSSE > 0) {
-    if (UseSSE > 3 && supports_sse4_1()) {
-      use_sse_limit = 4;
-    } else if (UseSSE > 2 && supports_sse3()) {
-      use_sse_limit = 3;
-    } else if (UseSSE > 1 && supports_sse2()) {
-      use_sse_limit = 2;
-    } else if (UseSSE > 0 && supports_sse()) {
-      use_sse_limit = 1;
-    } else {
-      use_sse_limit = 0;
-    }
+  // the command line requires. i.e., you cannot set UseSSE to 4 on
+  // older systems which do not support it.
+  int use_sse_limit = 2;
+  if (UseSSE > 3 && supports_sse4_1()) {
+    use_sse_limit = 4;
+  } else if (UseSSE > 2 && supports_sse3()) {
+    use_sse_limit = 3;
   }
   if (FLAG_IS_DEFAULT(UseSSE)) {
     FLAG_SET_DEFAULT(UseSSE, use_sse_limit);
@@ -1252,19 +1169,19 @@ void VM_Version::get_processor_features_hotspot() {
     }
     if (UseAPX) {
       if (!FLAG_IS_DEFAULT(UseAPX)) {
-        warning("APX is not supported on this CPU, setting it to false)");
+        warning("APX instructions are not available on this CPU");
       }
       FLAG_SET_DEFAULT(UseAPX, false);
     }
   }
 
-  CHECK_CPU_FEATURE(UseCLMUL, CLMUL, supports_clmul(), MULTI_INST_WARNING_MSG);
-  CHECK_CPU_FEATURE(UseAES, AES, supports_aes(), MULTI_INST_WARNING_MSG);
-  CHECK_CPU_FEATURE(UseFMA, FMA, supports_fma(), MULTI_INST_WARNING_MSG);
-  CHECK_CPU_FEATURE(UseCountLeadingZerosInstruction, LZCNT, supports_lzcnt(), SINGLE_INST_WARNING_MSG);
+  CHECK_CPU_FEATURE(UseCLMUL, CLMUL, supports_clmul(), "CLMUL" MULTI_INST_WARNING_MSG);
+  CHECK_CPU_FEATURE(UseAES, AES, supports_aes(), "AES" MULTI_INST_WARNING_MSG);
+  CHECK_CPU_FEATURE(UseFMA, FMA, supports_fma(), "FMA" MULTI_INST_WARNING_MSG);
+  CHECK_CPU_FEATURE(UseCountLeadingZerosInstruction, LZCNT, supports_lzcnt(), "lzcnt" SINGLE_INST_WARNING_MSG);
   // BMI instructions (except tzcnt) use an encoding with VEX prefix.
   // VEX prefix is generated only when AVX > 0.
-  CHECK_CPU_FEATURE(UseBMI1Instructions, BMI1, supports_bmi1(), MULTI_INST_WARNING_MSG);
+  CHECK_CPU_FEATURE(UseBMI1Instructions, BMI1, supports_bmi1(), "BMI1" MULTI_INST_WARNING_MSG);
 
   if (supports_bmi2() && supports_avx()) {
     if (FLAG_IS_DEFAULT(UseBMI2Instructions)) {
@@ -1284,8 +1201,8 @@ void VM_Version::get_processor_features_hotspot() {
     }
   }
 
-  CHECK_CPU_FEATURE(UsePopCountInstruction, POPCNT, supports_popcnt(), SINGLE_INST_WARNING_MSG);
-  CHECK_CPU_FEATURE(UseSHA, SHA, supports_sha() || (supports_avx2() && supports_bmi2()), MULTI_INST_WARNING_MSG);
+  CHECK_CPU_FEATURE(UsePopCountInstruction, POPCNT, supports_popcnt(), "popcnt" SINGLE_INST_WARNING_MSG);
+  CHECK_CPU_FEATURE(UseSHA, SHA, supports_sha() || (supports_avx2() && supports_bmi2()), "SHA" MULTI_INST_WARNING_MSG);
 
   if (FLAG_IS_DEFAULT(IntelJccErratumMitigation)) {
     _has_intel_jcc_erratum = compute_has_intel_jcc_erratum();
@@ -1294,7 +1211,6 @@ void VM_Version::get_processor_features_hotspot() {
     _has_intel_jcc_erratum = IntelJccErratumMitigation;
   }
 
-  assert(supports_clflush(), "Always present");
   if (X86ICacheSync == -1) {
     // Auto-detect, choosing the best performant one that still flushes
     // the cache. We could switch to CPUID/SERIALIZE ("4"/"5") going forward.
@@ -1523,7 +1439,8 @@ void VM_Version::get_processor_features_hotspot() {
     FLAG_SET_DEFAULT(UseSHA512Intrinsics, false);
   }
 
-  if (UseSHA && supports_evex() && supports_avx512bw()) {
+  if (UseSHA && ((supports_evex() && supports_avx512vlbw()) ||
+      (EnableX86ECoreOpts && !supports_hybrid()))) {
     if (FLAG_IS_DEFAULT(UseSHA3Intrinsics)) {
       FLAG_SET_DEFAULT(UseSHA3Intrinsics, true);
     }
@@ -1534,7 +1451,7 @@ void VM_Version::get_processor_features_hotspot() {
     FLAG_SET_DEFAULT(UseSHA3Intrinsics, false);
   }
 
-#if COMPILER2_OR_JVMCI
+#ifdef COMPILER2
   int max_vector_size = 0;
   if (UseAVX == 0 || !os_supports_avx_vectors()) {
     // 16 byte vectors (in XMM) are supported with SSE2+
@@ -1567,7 +1484,7 @@ void VM_Version::get_processor_features_hotspot() {
     FLAG_SET_DEFAULT(MaxVectorSize, max_vector_size);
   }
 
-#if defined(COMPILER2) && defined(ASSERT)
+#ifdef ASSERT
   if (MaxVectorSize > 0) {
     if (supports_avx() && PrintMiscellaneous && Verbose && TraceNewVectors) {
       tty->print_cr("State of YMM registers after signal handle:");
@@ -1582,7 +1499,7 @@ void VM_Version::get_processor_features_hotspot() {
       }
     }
   }
-#endif // COMPILER2 && ASSERT
+#endif // ASSERT
 
   if ((supports_avx512ifma() && supports_avx512vlbw()) || supports_avxifma())  {
     if (FLAG_IS_DEFAULT(UsePoly1305Intrinsics)) {
@@ -1621,7 +1538,7 @@ void VM_Version::get_processor_features_hotspot() {
   if (FLAG_IS_DEFAULT(UseMontgomerySquareIntrinsic)) {
     UseMontgomerySquareIntrinsic = true;
   }
-#endif // COMPILER2_OR_JVMCI
+#endif // COMPILER2
 
   // On new cpus instructions which update whole XMM register should be used
   // to prevent partial register stall due to dependencies on high half.
@@ -1679,7 +1596,7 @@ void VM_Version::get_processor_features_hotspot() {
   }
 
   if (is_amd_family()) { // AMD cpus specific settings
-    if (supports_sse2() && FLAG_IS_DEFAULT(UseAddressNop)) {
+    if (FLAG_IS_DEFAULT(UseAddressNop)) {
       // Use it on new AMD cpus starting from Opteron.
       UseAddressNop = true;
     }
@@ -1722,7 +1639,7 @@ void VM_Version::get_processor_features_hotspot() {
       if (FLAG_IS_DEFAULT(AllocatePrefetchInstr)) {
         FLAG_SET_DEFAULT(AllocatePrefetchInstr, 3);
       }
-      if (supports_sse2() && FLAG_IS_DEFAULT(UseUnalignedLoadStores)) {
+      if (FLAG_IS_DEFAULT(UseUnalignedLoadStores)) {
         FLAG_SET_DEFAULT(UseUnalignedLoadStores, true);
       }
     }
@@ -1738,7 +1655,7 @@ void VM_Version::get_processor_features_hotspot() {
     if (cpu_family() >= 0x17) {
       // On family >=17h processors use XMM and UnalignedLoadStores
       // for Array Copy
-      if (supports_sse2() && FLAG_IS_DEFAULT(UseUnalignedLoadStores)) {
+      if (FLAG_IS_DEFAULT(UseUnalignedLoadStores)) {
         FLAG_SET_DEFAULT(UseUnalignedLoadStores, true);
       }
 #ifdef COMPILER2
@@ -1940,8 +1857,6 @@ void VM_Version::get_processor_features_hotspot() {
   if (FLAG_IS_DEFAULT(AllocatePrefetchInstr)) {
     if (AllocatePrefetchInstr == 3 && !supports_3dnow_prefetch()) {
       FLAG_SET_DEFAULT(AllocatePrefetchInstr, 0);
-    } else if (!supports_sse() && supports_3dnow_prefetch()) {
-      FLAG_SET_DEFAULT(AllocatePrefetchInstr, 3);
     }
   }
 
@@ -2071,13 +1986,16 @@ void VM_Version::get_processor_features_hotspot() {
   if (FLAG_IS_DEFAULT(UseCopySignIntrinsic)) {
       FLAG_SET_DEFAULT(UseCopySignIntrinsic, true);
   }
-  // CopyAVX3Threshold is the threshold at which 64-byte instructions are used
-  // for implementing the array copy and clear operations.
-  // The Intel platforms that supports the serialize instruction
-  // have improved implementation of 64-byte load/stores and so the default
-  // threshold is set to 0 for these platforms.
+  // CopyAVX3Threshold is the threshold at which 64-byte vector instructions
+  // are used for implementing the array copy, fill and clear operations.
+  // The Intel platforms that support the serialize instruction and the AMD
+  // platforms with native 512-bit datapath have improved implementation of
+  // 64-byte load/stores and so the default threshold is set to 0 for these
+  // platforms.
   if (FLAG_IS_DEFAULT(CopyAVX3Threshold)) {
     if (is_intel() && is_intel_server_family() && supports_serialize()) {
+      FLAG_SET_DEFAULT(CopyAVX3Threshold, 0);
+    } else if (is_amd() && is_amd_avx512_datapath_server_family()) {
       FLAG_SET_DEFAULT(CopyAVX3Threshold, 0);
     } else {
       FLAG_SET_DEFAULT(CopyAVX3Threshold, AVX3Threshold);
@@ -3054,29 +2972,27 @@ int64_t VM_Version::maximum_qualified_cpu_frequency(void) {
 
 VM_Version::VM_Features VM_Version::CpuidInfo::feature_flags() const {
   VM_Features vm_features;
+
+  // check the features that must be present
+  guarantee(std_cpuid1_edx.bits.sse2 != 0, "sse2 is not supported");
+  guarantee(_cpuid_info.std_cpuid1_edx.bits.clflush != 0, "clflush is not supported");
+  // clflush_size is size in quadwords (8 bytes).
+  guarantee(_cpuid_info.std_cpuid1_ebx.bits.clflush_size == ICache::line_size/8, "clflush size is not supported");
+
+  // sse and sse2 are guaranteed to be present
+  vm_features.set_feature(CPU_SSE);
+  vm_features.set_feature(CPU_SSE2);
+
   if (std_cpuid1_edx.bits.cmpxchg8 != 0)
     vm_features.set_feature(CPU_CX8);
   if (std_cpuid1_edx.bits.cmov != 0)
     vm_features.set_feature(CPU_CMOV);
-  if (std_cpuid1_edx.bits.clflush != 0)
-    vm_features.set_feature(CPU_FLUSH);
-  // clflush should always be available on x86_64
-  // if not we are in real trouble because we rely on it
-  // to flush the code cache.
-  assert (vm_features.supports_feature(CPU_FLUSH), "clflush should be available");
   if (std_cpuid1_edx.bits.fxsr != 0 || (is_amd_family() &&
       ext_cpuid1_edx.bits.fxsr != 0))
     vm_features.set_feature(CPU_FXSR);
   // HT flag is set for multi-core processors also.
   if (threads_per_core() > 1)
     vm_features.set_feature(CPU_HT);
-  if (std_cpuid1_edx.bits.mmx != 0 || (is_amd_family() &&
-      ext_cpuid1_edx.bits.mmx != 0))
-    vm_features.set_feature(CPU_MMX);
-  if (std_cpuid1_edx.bits.sse != 0)
-    vm_features.set_feature(CPU_SSE);
-  if (std_cpuid1_edx.bits.sse2 != 0)
-    vm_features.set_feature(CPU_SSE2);
   if (std_cpuid1_ecx.bits.sse3 != 0)
     vm_features.set_feature(CPU_SSE3);
   if (std_cpuid1_ecx.bits.ssse3 != 0)
@@ -3446,17 +3362,9 @@ int VM_Version::allocate_prefetch_distance(bool use_watermark_prefetch) {
   // It will be used only when AllocatePrefetchStyle > 0
 
   if (is_amd_family()) { // AMD | Hygon
-    if (supports_sse2()) {
-      return 256; // Opteron
-    } else {
-      return 128; // Athlon
-    }
+    return 256; // Opteron
   } else if (is_zx()) {
-    if (supports_sse2()) {
-      return 256;
-    } else {
-      return 128;
-    }
+    return 256;
   } else { // Intel
     if (supports_sse3() && is_intel_server_family()) {
       if (is_intel_modern_cpu()) { // Nehalem based cpus
@@ -3465,14 +3373,10 @@ int VM_Version::allocate_prefetch_distance(bool use_watermark_prefetch) {
         return 384;
       }
     }
-    if (supports_sse2()) {
-      if (is_intel_server_family()) {
-        return 256; // Pentium M, Core, Core2
-      } else {
-        return 512; // Pentium 4
-      }
+    if (is_intel_server_family()) {
+      return 256; // Pentium M, Core, Core2
     } else {
-      return 128; // Pentium 3 (and all other old CPUs)
+      return 512; // Pentium 4
     }
   }
 }
@@ -3492,22 +3396,24 @@ bool VM_Version::is_intrinsic_supported(vmIntrinsicID id) {
   return true;
 }
 
+VM_Features VM_Version::CPUFeatures_mandatory() {
+  VM_Features vm_features;
+  vm_features.set_feature(CPU_SSE);
+  vm_features.set_feature(CPU_SSE2);
+  return vm_features;
+}
+
 VM_Features VM_Version::CPUFeatures_generic() {
 #ifndef LINUX
   return _features;
 #else
-  // 32-bit x86 cannot rely on anything.
-  VM_Features retval;
+  VM_Features retval = CPUFeatures_mandatory();
 #ifdef AMD64
     // The following options are all in /proc/cpuinfo of one of the first 64-bit CPUs - Atom D2700 (and Opteron 1352): https://superuser.com/q/1572306/1015048
-  retval.set_feature(CPU_SSE); // enabled in 'gcc -Q --help=target', used by OpenJDK
-  retval.set_feature(CPU_SSE2); // enabled in 'gcc -Q --help=target', required by OpenJDK
   retval.set_feature(CPU_FXSR); // enabled in 'gcc -Q --help=target', not used by OpenJDK
-  retval.set_feature(CPU_MMX); // enabled in 'gcc -Q --help=target', used only by 32-bit x86 OpenJDK
   retval.set_feature(CPU_TSC); // not used by gcc, used by OpenJDK
   retval.set_feature(CPU_CX8); // gcc detects it to set cpu "pentium" (=32-bit only), used by OpenJDK
   retval.set_feature(CPU_CMOV); // gcc detects it to set cpu "pentiumpro" (=32-bit only), used by OpenJDK
-  retval.set_feature(CPU_FLUSH); // ="clflush" in cpuinfo, not used by gcc, required by OpenJDK
   // CPU_MOVBE is disabled in 'gcc -Q --help=target' and for example i7-720QM does not support it
   // CPU_LAHFSAHF is disabled in 'gcc -Q --help=target' and "Early Intel Pentium 4 CPUs with Intel 64 support ... lacked the LAHF and SAHF instructions"
 #endif // AMD64
@@ -3527,70 +3433,62 @@ void VM_Version::glibc_patch(VM_Features &shouldnotuse) {
   // glibc:     isa_level = GNU_PROPERTY_X86_ISA_1_BASELINE;
   if (_features.supports_feature(CPU_CMOV) &&
       _features.supports_feature(CPU_CX8) &&
-      // FPU is always present on i686+: _features.supports_feature(CPU_FPU) &&
-      _features.supports_feature(CPU_SSE2)) {
-    // These cannot be disabled by CPU_TUNABLES.
-    if (shouldnotuse.supports_feature(CPU_FXSR) || shouldnotuse.supports_feature(CPU_MMX) ||
-        shouldnotuse.supports_feature(CPU_SSE)) {
-      assert(!shouldnotuse.supports_feature(CPU_SSE2), "CPU_SSE2 in both _features and shouldnotuse cannot happen");
-      // FIXME: The choice should be based on glibc impact, not the feature age.
-      // CX8 is i586+, CMOV is i686+ 1995+, SSE2 is 2000+
-      shouldnotuse.set_feature(CPU_SSE2);
-    }
-    if (_features.supports_feature(CPU_FXSR) &&
-        _features.supports_feature(CPU_MMX) &&
-        _features.supports_feature(CPU_SSE)) {
-      // glibc: if (CPU_FEATURE_USABLE_P (cpu_features, CMPXCHG16B)
-      // glibc:     && CPU_FEATURE_USABLE_P (cpu_features, LAHF64_SAHF64)
-      // glibc:     && CPU_FEATURE_USABLE_P (cpu_features, POPCNT)
-      // glibc:     && CPU_FEATURE_USABLE_P (cpu_features, SSE3)
-      // glibc:     && CPU_FEATURE_USABLE_P (cpu_features, SSSE3)
-      // glibc:     && CPU_FEATURE_USABLE_P (cpu_features, SSE4_1)
-      // glibc:     && CPU_FEATURE_USABLE_P (cpu_features, SSE4_2))
-      // glibc:     isa_level |= GNU_PROPERTY_X86_ISA_1_V2;
-      if (_features.supports_feature(CPU_POPCNT) &&
-          _features.supports_feature(CPU_SSSE3) &&
-          _features.supports_feature(CPU_SSE4_1) &&
-          _features.supports_feature(CPU_SSE4_2)) {
-        if (shouldnotuse.supports_feature(CPU_SSE3) ||
-            (shouldnotuse.supports_feature(CPU_CMPXCHG16) || shouldnotuse.supports_feature(CPU_LAHFSAHF))) {
-          assert(!shouldnotuse.supports_feature(CPU_SSE4_2), "CPU_SSE4_2 in both _features and shouldnotuse cannot happen");
-          // POPCNT is 2007+, SSSE3 is 2006+, SSE4_1 is 2007+, SSE4_2 is 2008+.
-          shouldnotuse.set_feature(CPU_SSE4_2);
-        }
-        if (_features.supports_feature(CPU_SSE3) &&
-            _features.supports_feature(CPU_CMPXCHG16) &&
-            _features.supports_feature(CPU_LAHFSAHF)) {
-          // glibc: if (CPU_FEATURE_USABLE_P (cpu_features, AVX)
-          // glibc:     && CPU_FEATURE_USABLE_P (cpu_features, AVX2)
-          // glibc:     && CPU_FEATURE_USABLE_P (cpu_features, BMI1)
-          // glibc:     && CPU_FEATURE_USABLE_P (cpu_features, BMI2)
-          // glibc:     && CPU_FEATURE_USABLE_P (cpu_features, F16C)
-          // glibc:     && CPU_FEATURE_USABLE_P (cpu_features, FMA)
-          // glibc:     && CPU_FEATURE_USABLE_P (cpu_features, LZCNT)
-          // glibc:     && CPU_FEATURE_USABLE_P (cpu_features, MOVBE))
-          // glibc:     isa_level |= GNU_PROPERTY_X86_ISA_1_V3;
-          if (_features.supports_feature(CPU_AVX) &&
-              _features.supports_feature(CPU_AVX2) &&
-              _features.supports_feature(CPU_BMI1) &&
-              _features.supports_feature(CPU_BMI2) &&
-              _features.supports_feature(CPU_FMA) &&
-              _features.supports_feature(CPU_LZCNT) &&
-              _features.supports_feature(CPU_MOVBE)) {
-            if (shouldnotuse.supports_feature(CPU_F16C)) {
-              assert(!shouldnotuse.supports_feature(CPU_MOVBE), "CPU_MOVBE in both _features and shouldnotuse cannot happen");
-              // FMA is 2012+, AVX2+BMI1+BMI2+LZCNT are 2013+, MOVBE is 2015+
-              shouldnotuse.set_feature(CPU_MOVBE);
-            }
-            if (_features.supports_feature(CPU_F16C)) {
-              // glibc: if (CPU_FEATURE_USABLE_P (cpu_features, AVX512F)
-              // glibc:     && CPU_FEATURE_USABLE_P (cpu_features, AVX512BW)
-              // glibc:     && CPU_FEATURE_USABLE_P (cpu_features, AVX512CD)
-              // glibc:     && CPU_FEATURE_USABLE_P (cpu_features, AVX512DQ)
-              // glibc:     && CPU_FEATURE_USABLE_P (cpu_features, AVX512VL))
-              // glibc:   isa_level |= GNU_PROPERTY_X86_ISA_1_V4;
-              // All these flags are supported by disable() below.
-            }
+      // FPU is always present on i686+: _features.supports_feature(CPU_FPU)
+      _features.supports_feature(CPU_FXSR) &&
+      (_cpuid_info.std_cpuid1_edx.bits.mmx != 0 ||
+        (is_amd_family() && _cpuid_info.ext_cpuid1_edx.bits.mmx != 0))
+      // SSE is required by OpenJDK: _features.supports_feature(CPU_SSE)
+      /* SSE2 is required by OpenJDK: _features.supports_feature(CPU_SSE2) */) {
+    // glibc: if (CPU_FEATURE_USABLE_P (cpu_features, CMPXCHG16B)
+    // glibc:     && CPU_FEATURE_USABLE_P (cpu_features, LAHF64_SAHF64)
+    // glibc:     && CPU_FEATURE_USABLE_P (cpu_features, POPCNT)
+    // glibc:     && CPU_FEATURE_USABLE_P (cpu_features, SSE3)
+    // glibc:     && CPU_FEATURE_USABLE_P (cpu_features, SSSE3)
+    // glibc:     && CPU_FEATURE_USABLE_P (cpu_features, SSE4_1)
+    // glibc:     && CPU_FEATURE_USABLE_P (cpu_features, SSE4_2))
+    // glibc:     isa_level |= GNU_PROPERTY_X86_ISA_1_V2;
+    if (_features.supports_feature(CPU_POPCNT) &&
+        _features.supports_feature(CPU_SSSE3) &&
+        _features.supports_feature(CPU_SSE4_1) &&
+        _features.supports_feature(CPU_SSE4_2)) {
+      if (shouldnotuse.supports_feature(CPU_SSE3) ||
+          (shouldnotuse.supports_feature(CPU_CMPXCHG16) || shouldnotuse.supports_feature(CPU_LAHFSAHF))) {
+        assert(!shouldnotuse.supports_feature(CPU_SSE4_2), "CPU_SSE4_2 in both _features and shouldnotuse cannot happen");
+        // POPCNT is 2007+, SSSE3 is 2006+, SSE4_1 is 2007+, SSE4_2 is 2008+.
+        shouldnotuse.set_feature(CPU_SSE4_2);
+      }
+      if (_features.supports_feature(CPU_SSE3) &&
+          _features.supports_feature(CPU_CMPXCHG16) &&
+          _features.supports_feature(CPU_LAHFSAHF)) {
+        // glibc: if (CPU_FEATURE_USABLE_P (cpu_features, AVX)
+        // glibc:     && CPU_FEATURE_USABLE_P (cpu_features, AVX2)
+        // glibc:     && CPU_FEATURE_USABLE_P (cpu_features, BMI1)
+        // glibc:     && CPU_FEATURE_USABLE_P (cpu_features, BMI2)
+        // glibc:     && CPU_FEATURE_USABLE_P (cpu_features, F16C)
+        // glibc:     && CPU_FEATURE_USABLE_P (cpu_features, FMA)
+        // glibc:     && CPU_FEATURE_USABLE_P (cpu_features, LZCNT)
+        // glibc:     && CPU_FEATURE_USABLE_P (cpu_features, MOVBE))
+        // glibc:     isa_level |= GNU_PROPERTY_X86_ISA_1_V3;
+        if (_features.supports_feature(CPU_AVX) &&
+            _features.supports_feature(CPU_AVX2) &&
+            _features.supports_feature(CPU_BMI1) &&
+            _features.supports_feature(CPU_BMI2) &&
+            _features.supports_feature(CPU_FMA) &&
+            _features.supports_feature(CPU_LZCNT) &&
+            _features.supports_feature(CPU_MOVBE)) {
+          if (shouldnotuse.supports_feature(CPU_F16C)) {
+            assert(!shouldnotuse.supports_feature(CPU_MOVBE), "CPU_MOVBE in both _features and shouldnotuse cannot happen");
+            // FMA is 2012+, AVX2+BMI1+BMI2+LZCNT are 2013+, MOVBE is 2015+
+            shouldnotuse.set_feature(CPU_MOVBE);
+          }
+          if (_features.supports_feature(CPU_F16C)) {
+            // glibc: if (CPU_FEATURE_USABLE_P (cpu_features, AVX512F)
+            // glibc:     && CPU_FEATURE_USABLE_P (cpu_features, AVX512BW)
+            // glibc:     && CPU_FEATURE_USABLE_P (cpu_features, AVX512CD)
+            // glibc:     && CPU_FEATURE_USABLE_P (cpu_features, AVX512DQ)
+            // glibc:     && CPU_FEATURE_USABLE_P (cpu_features, AVX512VL))
+            // glibc:   isa_level |= GNU_PROPERTY_X86_ISA_1_V4;
+            // All these flags are supported by disable() below.
           }
         }
       }

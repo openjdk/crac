@@ -28,7 +28,6 @@
 
 class VM_Features : protected VM_Feature_Flag {
   friend class VMStructs;
-  friend class JVMCIVMStructs;
 
  private:
   uint64_t _features_bitmap[(VM_Feature_Flag::MAX_CPU_FEATURES + BitsPerLong - 1) / BitsPerLong];
@@ -52,8 +51,6 @@ class VM_Features : protected VM_Feature_Flag {
   static uint64_t bit_mask(Feature_Flag feature) {
     return (1ULL << (feature & features_bitmap_element_mask()));
   }
-
-  static int _features_bitmap_size; // for JVMCI purposes
 
   static uint64_t index_mask(int idx) {
     assert(idx < features_bitmap_element_count(), "Features array index out of bounds");
@@ -155,8 +152,21 @@ class VM_Features : protected VM_Feature_Flag {
     return retval;
   }
 
+  VM_Features operator |(const VM_Features &other) const {
+    VM_Features retval = *this;
+    apply_to_all_features(retval, [&other](uint64_t &u, int idx) {
+      u |= other._features_bitmap[idx];
+    });
+    return retval;
+  }
+
   VM_Features &operator &=(const VM_Features &other) {
     *this = *this & other;
+    return *this;
+  }
+
+  VM_Features &operator |=(const VM_Features &other) {
+    *this = *this | other;
     return *this;
   }
 

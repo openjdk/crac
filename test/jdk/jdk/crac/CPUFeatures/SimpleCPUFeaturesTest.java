@@ -52,10 +52,10 @@ import jdk.test.lib.crac.*;
  * @library /test/lib
  * @build SimpleCPUFeaturesTest
  * @comment FLUSH and SSE2 must be present
- * @run driver jdk.test.lib.crac.CracTest 0x20000000080,0x0
- * @run driver jdk.test.lib.crac.CracTest foobar              -- INVALID_FORMAT2
- * @run driver jdk.test.lib.crac.CracTest 0xfffff,0x0         -- MISSING_FEATURES
- * @run driver jdk.test.lib.crac.CracTest 0x20000000080,0xfff -- MISSING_FEATURES
+ * @run driver jdk.test.lib.crac.CracTest 0x60,0x0
+ * @run driver jdk.test.lib.crac.CracTest foobar      -- INVALID_FORMAT2
+ * @run driver jdk.test.lib.crac.CracTest 0xfffff,0x0 -- MISSING_FEATURES
+ * @run driver jdk.test.lib.crac.CracTest 0x60,0xfff  -- MISSING_FEATURES
  */
 /*
  * @test id=x86-NON-LINUX
@@ -63,8 +63,8 @@ import jdk.test.lib.crac.*;
  * @requires os.family != "linux"
  * @library /test/lib
  * @build SimpleCPUFeaturesTest
- * @run driver jdk.test.lib.crac.CracTest foobar            -- OS_DOES_NOT_SUPPORT
- * @run driver jdk.test.lib.crac.CracTest 0x20000000080,0x0 -- OS_DOES_NOT_SUPPORT
+ * @run driver jdk.test.lib.crac.CracTest foobar   -- OS_DOES_NOT_SUPPORT
+ * @run driver jdk.test.lib.crac.CracTest 0x60,0x0 -- OS_DOES_NOT_SUPPORT
  */
 /*
  * @test id=AARCH64-LINUX

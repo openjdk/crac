@@ -27,19 +27,19 @@
 #include "memory/resourceArea.hpp"
 
 VM_Features VM_Version::CPUFeatures_parse(const char *str) {
-#ifndef LINUX
-  _ignore_glibc_not_using = true;
-#endif // !LINUX
   if (str == nullptr || strcmp(str, "native") == 0) {
     return _features;
-  }
-  if (strcmp(str, "ignore") == 0) {
+  } else if (strcmp(str, "ignore") == 0) {
     _ignore_glibc_not_using = true;
     return _features;
-  }
-  if (strcmp(str, "generic") == 0) {
+  } else if (strcmp(str, "generic") == 0) {
     return CPUFeatures_generic();
+  } else {
+    return CPUFeatures_parse_numeric(str);
   }
+}
+
+VM_Features VM_Version::CPUFeatures_parse_numeric(const char *str) {
 #ifndef LINUX
   vm_exit_during_initialization("This OS does not support any arch-specific -XX:CPUFeatures options");
   return {};
@@ -75,7 +75,7 @@ VM_Features VM_Version::CPUFeatures_parse(const char *str) {
 #endif // LINUX
 }
 
-bool VM_Version::_ignore_glibc_not_using = false;
+bool VM_Version::_ignore_glibc_not_using = LINUX_ONLY(false) NOT_LINUX(true);
 #ifdef LINUX
 bool VM_Version::glibc_env_set(char *disable_str) {
 #define TUNABLES_NAME "GLIBC_TUNABLES"
@@ -279,8 +279,9 @@ void VM_Version::cpu_features_init() {
 
   VM_Features CPUFeatures_parsed = CPUFeatures_parse(CPUFeatures);
   VM_Features features_missing = CPUFeatures_parsed & ~_features;
-
   features_missing = features_missing.aot_code_cache_features();
+
+  CPUFeatures_apply_arch(CPUFeatures_parsed, features_missing);
 
   if (!features_missing.empty()) {
     stringStream ss;

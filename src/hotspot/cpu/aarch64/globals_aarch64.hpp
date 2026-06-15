@@ -104,6 +104,8 @@ define_pd_global(intx, InlineSmallCode,          1000);
   product(uint, UseSVE, 0,                                              \
           "Highest supported SVE instruction set version")              \
           range(0, 2)                                                   \
+  product(bool, UsePAC, true, RESTORE_SETTABLE,                         \
+          "Enable Pointer Authentication")                              \
   product(bool, UseBlockZeroing, true,                                  \
           "Use DC ZVA for block zeroing")                               \
   product(intx, BlockZeroingLowLimit, 256,                              \

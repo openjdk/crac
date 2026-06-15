@@ -261,11 +261,13 @@ public class CracContainerBuilder extends CracBuilderBase<CracContainerBuilder> 
         DockerTestUtils.execute(Container.ENGINE_COMMAND, "kill", CONTAINER_NAME).getExitValue();
 
         // Docker needs some time to remove a container after kill
-        OutputAnalyzer oa;
-        do {
-            oa = DockerTestUtils.execute(Container.ENGINE_COMMAND, "ps");
-            oa.getExitValue();
-        } while (oa.getStdout().contains(CONTAINER_NAME));
+        while (
+            DockerTestUtils.execute(
+                Container.ENGINE_COMMAND, "inspect", "--type=container", CONTAINER_NAME
+            ).getExitValue() == 0
+        ) {
+            Thread.onSpinWait();
+        }
 
         List<String> cmd = prepareContainerCommand(imageName, List.of(options));
         System.err.println("Recreating docker container:\n" + String.join(" ", cmd));

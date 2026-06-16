@@ -772,21 +772,39 @@ void crac::set_image_score(const char *metric, double value, TRAPS) {
 }
 
 GrowableArray<crac::score> crac::get_image_scores_from_jvm() {
-  GrowableArray<crac::score> scores(21);
-
-  scores.append({"java.lang.Runtime.availableProcessors", static_cast<double>(os::active_processor_count())});
-  scores.append({"java.lang.Runtime.totalMemory", static_cast<double>(Universe::heap()->capacity())});
-  scores.append({"java.lang.Runtime.maxMemory", static_cast<double>(Universe::heap()->max_capacity())});
+  GrowableArray<crac::score> scores(24);
 
   const double uptime = TimeHelper::counter_to_millis(os::elapsed_counter());
-  scores.append({"vm.boot_time", os::javaTimeMillis() - uptime});
-  scores.append({"vm.uptime", uptime});
-  scores.append({"vm.uptime_since_restore", TimeHelper::counter_to_millis(os::elapsed_counter_since_restore())});
+  // Estimated boot time - earlier than RuntimeMXBean.getStartTime(), unless javaTimeMillis jumps
+  scores.append({"vm.bootTime", os::javaTimeMillis() - uptime});
+  // Uptime since latest restore or initial boot if not restored - same as RuntimeMXBean.getUptime()
+  scores.append({"vm.uptime", TimeHelper::counter_to_millis(os::elapsed_counter_since_restore())});
+  // Uptime since initial boot
+  scores.append({"vm.uptimeSinceBoot", uptime});
+  // Uptime since start of latest restore or -1 if not restored - same as CRaCMXBean.getUptimeSinceRestore()
+  scores.append({"vm.uptimeSinceRestore", _generation > 1 ? TimeHelper::counter_to_millis(crac::uptime_since_restore()) : -1});
+
+  // Same as OperatingSystemMXBean.getProcessCpuTime() but in milliseconds
+  scores.append({"vm.processCpuTime", os::elapsed_process_cpu_time() * 1000});
+  scores.append({"vm.availableProcessors", static_cast<double>(os::active_processor_count())});
+
+  // Same as corresponding methods of java.lang.Runtime
+  scores.append({"vm.freeMemory", static_cast<double>(Universe::heap()->unused())});
+  scores.append({"vm.totalMemory", static_cast<double>(Universe::heap()->capacity())});
+  scores.append({"vm.maxMemory", static_cast<double>(Universe::heap()->max_capacity())});
+
+  const auto *c1_queue = CompileBroker::c1_compile_queue();
+  const auto *c2_queue = CompileBroker::c2_compile_queue();
+  const auto compiles_total_queued = (c1_queue != nullptr ? c1_queue->get_total_added() : 0) +
+                                     (c2_queue != nullptr ? c2_queue->get_total_added() : 0);
+  // Same as JFR's CompilerQueueUtilization.totalAddedCount
+  scores.append({"vm.ci.totalQueued", static_cast<double>(compiles_total_queued)});
+
+  // Metrics below are also exposed via 'jcmd <pid> PerfCounter.print' so we use the same names
 
 #if INCLUDE_MANAGEMENT
   const jlong shared_loaded_classes = ClassLoadingService::loaded_shared_class_count();
   const jlong shared_unloaded_classes = ClassLoadingService::unloaded_shared_class_count();
-  // The keys match what jcmd <pid> PerfCounter.print would use
   scores.append({"java.cls.loadedClasses", static_cast<double>(ClassLoadingService::loaded_class_count() - shared_loaded_classes)});
   scores.append({"java.cls.sharedLoadedClasses", static_cast<double>(shared_loaded_classes)});
   scores.append({"java.cls.unloadedClasses", static_cast<double>(ClassLoadingService::unloaded_class_count() - shared_unloaded_classes)});

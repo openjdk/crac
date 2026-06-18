@@ -160,12 +160,12 @@ public class CracProcess implements Closeable {
             assertEquals(137, exitValue, "Checkpointed process was not killed as expected.");
             System.err.printf("Process %d completed with exit value %d%n", process.pid(), exitValue);
         } else {
-            fail("With engine " + engine.engine + " use the async version.");
+            fail("With engine " + engine + " use the async version.");
         }
     }
 
     public void waitForPausePid() throws IOException, InterruptedException {
-        assertEquals(CracEngine.PAUSE, engine, "Pause PID file is created only with pauseengine");
+        assertEquals(CracEngine.PAUSE, engine, "Pause PID file not created in this configuration");
 
         // (at least on Windows) we need to wait to avoid os::prepare_checkpoint() interference with mkdir/rmdir calls
         Thread.sleep(500);
@@ -347,7 +347,7 @@ public class CracProcess implements Closeable {
     }
 
     public void clearPausePid() throws IOException {
-        assertEquals(CracEngine.PAUSE, engine, "Pause PID file is created only with pauseengine");
+        assertEquals(CracEngine.PAUSE, engine, "Pause PID file not created in this configuration");
         Files.delete(imageDir.resolve(PAUSE_PID_FILE));
     }
 }

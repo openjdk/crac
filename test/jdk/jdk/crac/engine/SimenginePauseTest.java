@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2025, Azul Systems, Inc. All rights reserved.
+ * Copyright (c) 2026, Azul Systems, Inc. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -28,13 +28,13 @@ import static jdk.test.lib.Asserts.*;
 
 /*
  * @test
- * @summary pauseengine should pause the execution of the checkpointed process.
+ * @summary simengine with pause option should pause the execution of the checkpointed process.
  * @requires (os.family == "linux")
  * @library /test/lib
- * @build PauseEngineTest
+ * @build SimenginePauseTest
  * @run driver jdk.test.lib.crac.CracTest
  */
-public class PauseEngineTest implements CracTest {
+public class SimenginePauseTest implements CracTest {
     private static final long PAUSE_TIME_MS = 5000;
 
     @Override

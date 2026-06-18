@@ -282,36 +282,35 @@ void VM_Version::cpu_features_init() {
   assert(!CPUFeatures == FLAG_IS_DEFAULT(CPUFeatures), "CPUFeatures parsing");
 
   VM_Features CPUFeatures_parsed = CPUFeatures_parse(CPUFeatures);
-  auto features_missing = (CPUFeatures_parsed & ~_features).aot_code_cache_features();
-  CPUFeatures_apply_arch(CPUFeatures_parsed, features_missing);
+  auto features_missing_on_machine = (CPUFeatures_parsed & ~_features).aot_code_cache_features();
+  CPUFeatures_apply_arch(CPUFeatures_parsed, features_missing_on_machine);
+  const auto features_missing_in_parsed = CPUFeatures_mandatory() & ~CPUFeatures_parsed;
 
-  if (!features_missing.empty()) {
-    stringStream ss;
-    ss.print_raw("Specified -XX:CPUFeatures=");
-    CPUFeatures_parsed.print_numbers(ss);
-    ss.print_raw("; this machine's CPU features are ");
-    _features.print_numbers(ss);
-    ss.print_raw("; missing features of this CPU are ");
-    features_missing.print_numbers(ss);
-    ss.print_raw(" = ");
-    insert_features_names(features_missing, ss);
-    ss.cr();
-    ss.print_raw_cr("If you are sure it will not crash you can override this check by -XX:+UnlockExperimentalVMOptions -XX:CheckCPUFeatures=skip .");
-    vm_exit_during_initialization(ss.base());
+  assert((CPUFeatures_mandatory() & ~_features).empty(), "mandatory features missing on machine");
+  LogStream error_stream(Log(os, cpu)::error());
+  if (!features_missing_on_machine.empty()) {
+    error_stream.print_raw("This machine's CPU features are ");
+    _features.print_numbers(error_stream);
+    error_stream.print_raw(", they are missing the following features required by -XX:CPUFeatures: ");
+    features_missing_on_machine.print_numbers(error_stream);
+    error_stream.print_raw(" = ");
+    insert_features_names(features_missing_on_machine, error_stream);
+    error_stream.cr();
+    error_stream.print_raw_cr("If you are sure it will not crash you can override this check by -XX:+UnlockExperimentalVMOptions -XX:CheckCPUFeatures=skip .");
   }
-
-  const auto features_mandatory = CPUFeatures_mandatory();
-  assert((features_mandatory & ~_features).empty(), "mandatory features missing");
-  if (!(features_mandatory & ~CPUFeatures_parsed).empty()) {
-    CPUFeatures_parsed |= features_mandatory;
-    if (log_is_enabled(Warning, os, cpu)) {
-      LogStream ls(Log(os, cpu)::warning());
-      ls.print_raw("Extended -XX:CPUFeatures with mandatory ");
-      features_mandatory.print_numbers(ls);
-      ls.print_raw(" to get ");
-      CPUFeatures_parsed.print_numbers(ls);
-      ls.cr();
-    }
+  if (!features_missing_in_parsed.empty()) {
+    error_stream.print_raw("-XX:CPUFeatures is missing mandatory features ");
+    insert_features_names(features_missing_in_parsed, error_stream);
+    error_stream.print_raw(", you can fix this by using -XX:CPUFeatures=");
+    (CPUFeatures_parsed | CPUFeatures_mandatory()).print_numbers(error_stream);
+    error_stream.cr();
+  }
+  if (!features_missing_on_machine.empty() || !features_missing_in_parsed.empty()) {
+    stringStream ss;
+    ss.print_raw("Invalid -XX:CPUFeatures=");
+    CPUFeatures_parsed.print_numbers(ss);
+    ss.print_raw(", see error log for details");
+    vm_exit_during_initialization(ss.freeze());
   }
 
   _features = CPUFeatures_parsed;
@@ -326,9 +325,9 @@ void VM_Version::cpu_features_init() {
 #endif
 }
 
-void VM_Version::insert_features_names(VM_Version::VM_Features features, stringStream& ss) {
+void VM_Version::insert_features_names(VM_Version::VM_Features features, outputStream& os) {
   int i = 0;
-  ss.join([&]() {
+  os.join([&]() {
     while (i < MAX_CPU_FEATURES) {
       if (features.supports_feature((VM_Version::Feature_Flag)i)) {
         return _features_names[i++];

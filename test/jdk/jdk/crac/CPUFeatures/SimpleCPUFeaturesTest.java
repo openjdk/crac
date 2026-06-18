@@ -54,8 +54,9 @@ import jdk.test.lib.crac.*;
  * @comment FLUSH and SSE2 must be present
  * @run driver jdk.test.lib.crac.CracTest 0x60,0x0
  * @run driver jdk.test.lib.crac.CracTest foobar      -- INVALID_FORMAT2
- * @run driver jdk.test.lib.crac.CracTest 0xfffff,0x0 -- MISSING_FEATURES
- * @run driver jdk.test.lib.crac.CracTest 0x60,0xfff  -- MISSING_FEATURES
+ * @run driver jdk.test.lib.crac.CracTest 0xfffff,0x0 -- MISSING_FEATURES_ON_MACHINE
+ * @run driver jdk.test.lib.crac.CracTest 0x60,0xfff  -- MISSING_FEATURES_ON_MACHINE
+ * @run driver jdk.test.lib.crac.CracTest 0x0,0x0     -- MISSING_FEATURES_IN_INPUT
  */
 /*
  * @test id=x86-NON-LINUX
@@ -92,7 +93,8 @@ public class SimpleCPUFeaturesTest implements CracTest {
     private enum ErrorMsg {
         INVALID_FORMAT1("must be of the form: 0xNUM"),
         INVALID_FORMAT2("must be of the form: 0xNUM,0xNUM"),
-        MISSING_FEATURES("missing features of this CPU are"),
+        MISSING_FEATURES_ON_MACHINE("missing the following features required by -XX:CPUFeatures"),
+        MISSING_FEATURES_IN_INPUT("-XX:CPUFeatures is missing mandatory features"),
         ARCH_DOES_NOT_SUPPORT("This architecture does not support any arch-specific"),
         OS_DOES_NOT_SUPPORT("This OS does not support"),
         ;

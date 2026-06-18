@@ -3532,3 +3532,7 @@ bool VM_Version::verify_aot_code_cache_features(void* features_buffer) {
   VM_Features rt_features = _features.aot_code_cache_features();
   return rt_features.verify_aot_code_cache_features(features_to_test);
 }
+
+void VM_Version::CPUFeatures_apply_arch(VM_Features &parsed, VM_Features &missing) {
+  // noop
+}

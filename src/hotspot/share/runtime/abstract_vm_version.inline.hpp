@@ -280,30 +280,34 @@ bool VM_Version::glibc_not_using() {
 
 void VM_Version::cpu_features_init() {
   assert(!CPUFeatures == FLAG_IS_DEFAULT(CPUFeatures), "CPUFeatures parsing");
+  assert((CPUFeatures_mandatory() & ~_features).empty(), "machine is missing mandatory features");
 
   VM_Features CPUFeatures_parsed = CPUFeatures_parse(CPUFeatures);
   auto features_missing_on_machine = (CPUFeatures_parsed & ~_features).aot_code_cache_features();
   CPUFeatures_apply_arch(CPUFeatures_parsed, features_missing_on_machine);
   const auto features_missing_in_parsed = CPUFeatures_mandatory() & ~CPUFeatures_parsed;
 
-  assert((CPUFeatures_mandatory() & ~_features).empty(), "mandatory features missing on machine");
-  LogStream error_stream(Log(os, cpu)::error());
-  if (!features_missing_on_machine.empty()) {
-    error_stream.print_raw("This machine's CPU features are ");
-    _features.print_numbers(error_stream);
-    error_stream.print_raw(", they are missing the following features required by -XX:CPUFeatures: ");
-    features_missing_on_machine.print_numbers(error_stream);
-    error_stream.print_raw(" = ");
-    insert_features_names(features_missing_on_machine, error_stream);
-    error_stream.cr();
-    error_stream.print_raw_cr("If you are sure it will not crash you can override this check by -XX:+UnlockExperimentalVMOptions -XX:CheckCPUFeatures=skip .");
-  }
-  if (!features_missing_in_parsed.empty()) {
-    error_stream.print_raw("-XX:CPUFeatures is missing mandatory features ");
-    insert_features_names(features_missing_in_parsed, error_stream);
-    error_stream.print_raw(", you can fix this by using -XX:CPUFeatures=");
-    (CPUFeatures_parsed | CPUFeatures_mandatory()).print_numbers(error_stream);
-    error_stream.cr();
+  const LogTarget(Error, os, cpu) lt;
+  if (lt.is_enabled()) {
+    if (!features_missing_on_machine.empty()) {
+      LogStream ls(lt);
+      ls.print_raw("This machine's CPU features are ");
+      _features.print_numbers(ls);
+      ls.print_raw(", they are missing the following features required by -XX:CPUFeatures: ");
+      features_missing_on_machine.print_numbers(ls);
+      ls.print_raw(" = ");
+      insert_features_names(features_missing_on_machine, ls);
+      ls.cr();
+      ls.print_raw_cr("If you are sure it will not crash you can override this check by -XX:+UnlockExperimentalVMOptions -XX:CheckCPUFeatures=skip .");
+    }
+    if (!features_missing_in_parsed.empty()) {
+      LogStream ls(lt);
+      ls.print_raw("-XX:CPUFeatures is missing mandatory features ");
+      insert_features_names(features_missing_in_parsed, ls);
+      ls.print_raw(", you can fix this by using -XX:CPUFeatures=");
+      (CPUFeatures_parsed | CPUFeatures_mandatory()).print_numbers(ls);
+      ls.cr();
+    }
   }
   if (!features_missing_on_machine.empty() || !features_missing_in_parsed.empty()) {
     stringStream ss;

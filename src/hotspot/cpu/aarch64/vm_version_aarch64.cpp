@@ -339,9 +339,9 @@ void VM_Version::initialize() {
     FLAG_SET_DEFAULT(UseSHA, false);
   }
 
-  CHECK_CPU_FEATURE(UseCRC32, CRC32, supports_crc32(), MULTI_INST_WARNING_MSG);
-  CHECK_CPU_FEATURE(UseLSE, LSE, supports_lse(), MULTI_INST_WARNING_MSG);
-  CHECK_CPU_FEATURE(UseAES, AES, supports_aes(), MULTI_INST_WARNING_MSG);
+  CHECK_CPU_FEATURE(UseCRC32, CRC32, supports_crc32(), "CRC32" MULTI_INST_WARNING_MSG);
+  CHECK_CPU_FEATURE(UseLSE, LSE, supports_lse(), "LSE" MULTI_INST_WARNING_MSG);
+  CHECK_CPU_FEATURE(UseAES, AES, supports_aes(), "AES" MULTI_INST_WARNING_MSG);
 
   if (_cpu == CPU_ARM &&
       model_is_in({ CPU_MODEL_ARM_NEOVERSE_V1, CPU_MODEL_ARM_NEOVERSE_V2,
@@ -888,8 +888,13 @@ bool VM_Version::cpu_features_binary(VM_Version::VM_Features *data) {
   return true;
 }
 
+VM_Features VM_Version::CPUFeatures_mandatory() {
+  // TODO: check if there are any mandatory features and set them here
+  return VM_Features();
+}
+
 VM_Features VM_Version::CPUFeatures_generic() {
-  VM_Features retval;
+  VM_Features retval = CPUFeatures_mandatory();
   retval.set_feature(CPU_FP);
   retval.set_feature(CPU_ASIMD);
   // PACA cannot be made compatible between CPUs that do and do not support it.

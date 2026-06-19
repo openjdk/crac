@@ -76,7 +76,6 @@ class stringStream;
 
 class VM_Version : public Abstract_VM_Version, public VM_Feature_Flag {
   friend class VMStructs;
-  friend class JVMCIVMStructs;
 
 protected:
   static int _cpu;
@@ -109,9 +108,9 @@ protected:
   static void get_os_cpu_info();
   static void check_os_cpu_info();
 
-  // Sets the SVE length and returns a new actual value or negative on error.
-  // If the len is larger than the system largest supported SVE vector length,
-  // the function sets the largest supported value.
+  // Set the SVE vector length to len. If the vector length cannot be
+  // changed to len, set the length to the largest possible value.
+  // Return the length that will be used, or -ve if an error occurred.
   static int set_and_get_current_sve_vector_length(int len);
   static int get_current_sve_vector_length();
 
@@ -125,6 +124,7 @@ public:
   }
   static void check_virtualizations();
 
+  static VM_Features CPUFeatures_mandatory();
   static VM_Features CPUFeatures_generic();
   static void glibc_patch(VM_Features &shouldnotuse) {}
   static VM_Features CPUFeatures_parse(const char *str);
@@ -139,7 +139,7 @@ public:
 #endif //LINUX
   static bool _ignore_glibc_not_using;
   static void print_using_features_cr();
-  static void insert_features_names(VM_Version::VM_Features features, stringStream& ss);
+  static void insert_features_names(VM_Version::VM_Features features, outputStream& os);
   // The returned string needs a ResourceMark.
   static const char *restore_failed_check(const VM_Features *image_features, const VM_Features *current_features);
 

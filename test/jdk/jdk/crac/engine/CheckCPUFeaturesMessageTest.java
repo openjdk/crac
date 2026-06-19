@@ -42,6 +42,7 @@ import java.lang.reflect.Method;
  * @run driver jdk.test.lib.crac.CracTest
  */
 public class CheckCPUFeaturesMessageTest implements CracTest {
+    private static final String GENERIC_FEATURES_X86 = "0x4067,0x0";
 
     private void testDefault(CracBuilder builder) throws Exception {
         builder.doRestoreToAnalyze()
@@ -57,11 +58,10 @@ public class CheckCPUFeaturesMessageTest implements CracTest {
                 .filter(line -> line.startsWith("CPU features being used are") && line.contains("="))
                 .map(line -> line.substring(line.lastIndexOf("=") + 1))
                 .findFirst().orElseThrow();
-        String genericFeatures = "0x200000080d7,0x0";
         builder.vmOption("-XX:CheckCPUFeaturesMessage=%cMyError%sMessageWith%%Common%m")
                 .doRestoreToAnalyze()
                 .shouldHaveExitValue(1)
-                .shouldContain(currentCpuFeatures + "MyError" + genericFeatures + "MessageWith%Common0x");
+                .shouldContain(currentCpuFeatures + "MyError" + GENERIC_FEATURES_X86 + "MessageWith%Common0x");
     }
 
     private void testQuiet(CracBuilder builder) throws Exception {

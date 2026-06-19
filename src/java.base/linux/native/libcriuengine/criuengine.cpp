@@ -115,7 +115,6 @@ class ArgsBuilder {
   const char* _args[32];
   const char** _next = _args;
   const char** const _end = _args + ARRAY_SIZE(_args) - 1;
-  char* _from_env = nullptr;
   char* _from_opts = nullptr;
   bool _failed = false;
 
@@ -138,7 +137,6 @@ public:
   }
 
   ~ArgsBuilder() {
-    free(_from_env);
     free(_from_opts);
   }
 
@@ -159,20 +157,10 @@ public:
 
   ArgsBuilder& append_all(const char* args) {
     // this method can be called only once
-    assert(_from_env == nullptr);
     assert(_from_opts == nullptr);
-
-    const char* criu_opts = getenv("CRAC_CRIU_OPTS");
-    if (criu_opts && criu_opts[0]) {
-      LOG("CRAC_CRIU_OPTS is deprecated, will be obsoleted in JDK 28 and removed in JDK 29. Use -XX:CRaCEngineOptions=args=...");
-      _from_env = strdup_checked(criu_opts);
-      if (_from_env == nullptr) {
-        _failed = true;
-        return *this;
-      }
-      fill_args("CRAC_CRIU_OPTS", _from_env);
+    if (getenv("CRAC_CRIU_OPTS") != nullptr) {
+      LOG("CRAC_CRIU_OPTS is obsolete and has no impact. Use -XX:CRaCEngineOptions=args=... instead. This warning will be removed in JDK 29.");
     }
-    // applying args later (these have higher priority)
     if (args != nullptr) {
       _from_opts = strdup_checked(args);
       if (_from_opts == nullptr) {
@@ -496,35 +484,32 @@ static char* get_relative_file(const char* rel) {
 }
 
 const char* criuengine::get_criu() {
-  char* criu = _criu_location;
-  if (criu == nullptr) {
-    criu = getenv("CRAC_CRIU_PATH");
-    if (criu != nullptr) {
-      LOG("CRAC_CRIU_PATH is deprecated, will be obsoleted in JDK 28 and removed in JDK 29. Use -XX:CRaCEngineOptions=criu_location=...");
-    }
+  if (_criu_location != nullptr) {
+    return check_criu_executable(_criu_location, false);
   }
-  if (criu != nullptr) {
-    return check_criu_executable(criu, false);
+  if (getenv("CRAC_CRIU_PATH") != nullptr) {
+    LOG("CRAC_CRIU_PATH is obsolete and has no impact. Use -XX:CRaCEngineOptions=criu_location=... instead. This warning will be removed in JDK 29.");
   }
   const char* const_path = getenv("PATH");
-  if (const_path == NULL) {
-    LOG("Error: cannot find CRIU: neither criu_location option nor PATH environment variable is set");
+  if (const_path == nullptr) {
+    LOG("Cannot find CRIU executable: neither criu_location option nor PATH environment variable is set");
     return nullptr;
   }
   char* path = strdup(const_path);
-  if (path == NULL) {
+  if (path == nullptr) {
     LOG("Cannot copy PATH; out of memory");
     return nullptr;
   }
   char* save_ptr = nullptr;
   char* prefix = strtok_r(path, ":", &save_ptr);
   while (prefix != nullptr) {
+    char* criu;
     if (asprintf(&criu, "%s/criu", prefix) < 0) {
       LOG("Cannot allocate string with CRIU location starting with %s", prefix);
     } else {
       if (check_criu_executable(criu, true) != nullptr) {
-        free(_criu_location);
         _criu_location = criu;
+        free(path);
         return _criu_location;
       }
       free(criu);
@@ -532,6 +517,7 @@ const char* criuengine::get_criu() {
     prefix = strtok_r(nullptr, ":", &save_ptr);
   }
   LOG("Cannot find CRIU executable: criu_location option not set, not found on PATH");
+  free(path);
   return nullptr;
 }
 

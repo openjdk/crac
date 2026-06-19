@@ -25,45 +25,31 @@ import jdk.crac.management.CRaCMXBean;
 import jdk.test.lib.crac.CracBuilder;
 import jdk.test.lib.crac.CracEngine;
 import jdk.test.lib.crac.CracTest;
-import jdk.test.lib.crac.CracTestArg;
 
 /**
- * @test Testing CracEngineOptions influenced by CRAC_CRIU_OPTS env variable.
+ * @test Testing CracEngineOptions is not influenced by obsoleted CRAC_CRIU_OPTS env variable.
+ * @comment The remaining warning should be dropped together with this test in JDK 29.
  * @requires (os.family == "linux")
  * @library /test/lib
  * @build CracCriuOptsTest
- * @run driver jdk.test.lib.crac.CracTest NOT_SET
- * @run driver jdk.test.lib.crac.CracTest ENVVAR_USED
- * @run driver jdk.test.lib.crac.CracTest ALREADY_SET
+ * @run driver jdk.test.lib.crac.CracTest
  */
 
 public class CracCriuOptsTest implements CracTest {
-    private static final String CRAC_CRIU_OPTS = "CRAC_CRIU_OPTS";
     private static final String RESTORED = "RESTORED";
-
-    public enum Variant {
-        NOT_SET,
-        ENVVAR_USED,
-        ALREADY_SET
-    }
-
-    @CracTestArg
-    Variant variant;
 
     @Override
     public void test() throws Exception {
-        final CracBuilder builder = new CracBuilder().engine(CracEngine.CRIU)
-                .engineOptions("keep_running=true,print_command=true");
-        if (variant == Variant.ENVVAR_USED) {
-            builder.env(CRAC_CRIU_OPTS, "-v");
-        } else if (variant == Variant.ALREADY_SET) {
-            builder.env(CRAC_CRIU_OPTS, "-v -R");
+        if (Runtime.version().feature() >= 29) {
+            throw new IllegalStateException("This test should be removed together with all CRAC_CRIU_* mentions in JDK 29");
         }
+        final CracBuilder builder = new CracBuilder().engine(CracEngine.CRIU)
+                .engineOptions("print_command=true")
+                .env("CRAC_CRIU_OPTS", "-R");
         builder.doCheckpointToAnalyze()
-                .shouldHaveExitValue(0)
-                .stderrShouldContain(RESTORED);
-
-        builder.engineOptions().doRestore();
+                .shouldHaveExitValue(137)
+                .stderrShouldContain("CRAC_CRIU_OPTS is obsolete and has no impact")
+                .stderrShouldNotContain(RESTORED);
     }
 
     @Override

@@ -871,8 +871,6 @@ void crac::restore(crac_restore_data& restore_data) {
     return;
   }
 
-  // Previously IgnoreCPUFeatures didn't disable the check completely; the difference
-  // was printed out but continued even despite features not being satisfied.
   // Since the check itself is delegated to the C/R Engine we will simply
   // skip the check here.
   bool ignore = VM_Version::check_cpu_features_skip();

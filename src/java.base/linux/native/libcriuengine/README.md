@@ -25,7 +25,7 @@ There is one line per tag created through the `crlib_image_constraints_t` interf
 
 ### Image Score
 
-Image Score records metadata that should assist with selecting the best image before restore. For each metric recorded through the `crlib_image_score_t` interface this file contains one line in format `<metric-name>=<floating-point-value>`, e.g.
+Image Score records metadata that should assist with selecting the best image before restore into text file `score` in the checkpoint directory. For each metric recorded through the `crlib_image_score_t` interface this file contains one line in format `<metric-name>=<floating-point-value>`, e.g.
 
 ```
 java.cls.loadedClasses=204.000000

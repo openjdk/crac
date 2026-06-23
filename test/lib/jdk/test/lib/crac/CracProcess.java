@@ -165,7 +165,7 @@ public class CracProcess implements Closeable {
     }
 
     public void waitForPausePid() throws IOException, InterruptedException {
-        assertEquals(CracEngine.PAUSE, engine, "Pause PID file not created in this configuration");
+        assertEquals(CracEngine.SIMULATE, engine, "Pause PID file not created in this configuration");
 
         // (at least on Windows) we need to wait to avoid os::prepare_checkpoint() interference with mkdir/rmdir calls
         Thread.sleep(500);
@@ -347,7 +347,7 @@ public class CracProcess implements Closeable {
     }
 
     public void clearPausePid() throws IOException {
-        assertEquals(CracEngine.PAUSE, engine, "Pause PID file not created in this configuration");
+        assertEquals(CracEngine.SIMULATE, engine, "Pause PID file not created in this configuration");
         Files.delete(imageDir.resolve(PAUSE_PID_FILE));
     }
 }

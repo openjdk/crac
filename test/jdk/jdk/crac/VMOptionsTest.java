@@ -26,7 +26,6 @@ import com.sun.management.VMOption;
 
 import jdk.crac.*;
 import jdk.crac.management.CRaCMXBean;
-import jdk.test.lib.Platform;
 import jdk.test.lib.Utils;
 import jdk.test.lib.crac.CracBuilder;
 import jdk.test.lib.crac.CracTest;
@@ -34,7 +33,6 @@ import jdk.test.lib.process.OutputAnalyzer;
 
 import java.lang.management.ManagementFactory;
 import java.nio.file.Files;
-import java.nio.file.Path;
 import java.util.*;
 import java.util.stream.Collectors;
 
@@ -94,7 +92,6 @@ public class VMOptionsTest implements CracTest {
     };
 
     private static final List<VMOptionSpec> OPTIONS_CHECKPOINT = List.of(
-        VMOptionSpec.ofStr("CRaCEngine", bundledEnginePath("criuengine"), false),
         VMOptionSpec.ofStr("CRaCEngineOptions", "args=-v1", false),
         VMOptionSpec.ofStr("CRaCCheckpointEngineOptions", "print_command=false", false),
         VMOptionSpec.ofStr("CRaCCheckpointTo", new CracBuilder().imageDir().toString(), true),
@@ -109,18 +106,9 @@ public class VMOptionsTest implements CracTest {
         VMOptionSpec.ofBool("UnlockExperimentalVMOptions", true, true)
     );
 
-    private static String bundledEnginePath(String engineName) {
-        if (Platform.isStatic()) {
-            return engineName; // In static builds Bundled engines are built into the JVM and cannot be loaded via a path
-        }
-        final var path = Path.of(Utils.TEST_JDK, Platform.isWindows() ? "bin" : "lib", System.mapLibraryName(engineName)).toAbsolutePath();
-        assertTrue(Files.exists(path), "Cannot find bundled engine " + engineName + ": " + path + " does not exist");
-        return path.toString();
-    }
-
     @Override
     public void test() throws Exception {
-        final var builder = new CracBuilder().javaOption("test.jdk", Utils.TEST_JDK); // Makes TEST_JDK available in exec
+        final var builder = new CracBuilder();
         setVmOptions(builder, OPTIONS_CHECKPOINT);
         builder.doCheckpoint();
 

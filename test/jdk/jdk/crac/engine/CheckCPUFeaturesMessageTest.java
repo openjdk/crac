@@ -26,11 +26,8 @@ import jdk.test.lib.Utils;
 import jdk.test.lib.crac.CracBuilder;
 import jdk.test.lib.crac.CracEngine;
 import jdk.test.lib.crac.CracTest;
-import jdk.test.lib.crac.CracTestArg;
 import jdk.test.lib.process.OutputAnalyzer;
 import jdk.test.lib.util.FileUtils;
-
-import java.lang.reflect.Method;
 
 /*
  * @test
@@ -78,7 +75,7 @@ public class CheckCPUFeaturesMessageTest implements CracTest {
     @Override
     public void test() throws Exception {
         CracBuilder builder = new CracBuilder()
-                .engine(CracEngine.PAUSE)
+                .engine(CracEngine.SIMULATE).engineOptions("pause=true")
                 .vmOption("-XX:CPUFeatures=generic");
         if (builder.imageDir().toFile().exists()) {
             FileUtils.deleteFileTreeWithRetry(builder.imageDir());

@@ -39,7 +39,7 @@ public class SimenginePauseTest implements CracTest {
 
     @Override
     public void test() throws Exception {
-        final CracBuilder builder = new CracBuilder().engine(CracEngine.PAUSE);
+        final CracBuilder builder = new CracBuilder().engine(CracEngine.SIMULATE).engineOptions("pause=true");
         try (var process = builder.startCheckpoint()) {
             process.waitForPausePid();
             Thread.sleep(PAUSE_TIME_MS);

@@ -280,10 +280,7 @@ public abstract class CracBuilderBase<T extends CracBuilderBase<T>> {
         List<String> cmd = new ArrayList<>(javaPrefix.length > 0 ? Arrays.asList(javaPrefix) : getDefaultJavaPrefix());
         cmd.add("-ea");
         if (engine != null) {
-            cmd.add("-XX:CRaCEngine=" + engine.name);
-            if (!engine.options.isEmpty()) {
-                cmd.add("-XX:CRaCEngineOptions=" + engine.options);
-            }
+            cmd.add("-XX:CRaCEngine=" + engine.engine);
         }
         if (engineOptions != null) {
             cmd.add("-XX:CRaCEngineOptions=" + String.join(",", engineOptions));

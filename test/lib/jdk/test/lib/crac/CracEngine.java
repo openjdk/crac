@@ -1,15 +1,12 @@
 package jdk.test.lib.crac;
 
 public enum CracEngine {
-    CRIU("criuengine", ""),
-    PAUSE("simengine", "pause=true"),
-    SIMULATE("simengine", "");
+    CRIU("criuengine"),
+    SIMULATE("simengine");
 
-    public final String name;
-    public final String options;
+    public final String engine;
 
-    CracEngine(String name, String options) {
-        this.name = name;
-        this.options = options;
+    CracEngine(String engine) {
+        this.engine = engine;
     }
 }

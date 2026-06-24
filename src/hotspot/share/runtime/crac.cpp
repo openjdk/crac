@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2023, Azul Systems, Inc. All rights reserved.
+ * Copyright (c) 2023, 2026, Azul Systems, Inc. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -84,6 +84,24 @@ jlong crac::uptime_since_restore() {
     return -1;
   }
   return os::javaTimeNanos() - _restore_start_nanos;
+}
+
+jint crac::checkpointable_status() {
+  if (crac::_engine->prepare_checkpoint_availability_api() == CracEngine::ApiStatus::OK) {
+    crlib_checkpointable_status_t status = crac::_engine->get_checkpointable_status();
+    if (status == CRLIB_CHECKPOINTABLE_NEVER) {
+      if (crac::_generation > 1) {
+        return status;
+      } else {
+        // Engine doesn't support checkpoint after restore,
+        // but it's a first checkpoint. So return READY.
+        return CRLIB_CHECKPOINTABLE_READY;
+      }
+    }
+    return status;
+  }
+
+  return CRLIB_CHECKPOINTABLE_READY;
 }
 
 void VM_Crac::print_resources(const char* msg, ...) {

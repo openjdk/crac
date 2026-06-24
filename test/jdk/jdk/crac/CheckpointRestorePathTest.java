@@ -23,9 +23,7 @@
  * questions.
  */
 
-import jdk.crac.Core;
 import jdk.crac.management.CRaCMXBean;
-import jdk.test.lib.Platform;
 import jdk.test.lib.crac.CracBuilder;
 import jdk.test.lib.crac.CracEngine;
 import jdk.test.lib.crac.CracTest;
@@ -94,14 +92,14 @@ public class CheckpointRestorePathTest implements CracTest {
     void testRestoreEmpty() throws Exception {
         // Empty CRaCRestoreFrom should result in default java usage output
         // as if the VM option was missing (we won't test that case)
-        new CracBuilder().engine(CracEngine.PAUSE).imageDir("")
+        new CracBuilder().engine(CracEngine.SIMULATE).engineOptions("pause=true").imageDir("")
                 .doRestoreToAnalyze()
                 .shouldHaveExitValue(1)
                 .stderrShouldContain("Usage: java");
     }
 
     void testRestoreNoDir() throws Exception {
-        new CracBuilder().engine(CracEngine.PAUSE).imageDir(NON_EXISTENT_CR)
+        new CracBuilder().engine(CracEngine.SIMULATE).engineOptions("pause=true").imageDir(NON_EXISTENT_CR)
                 .doRestoreToAnalyze()
                 .shouldHaveExitValue(1)
                 .stdoutShouldContain("Cannot open CRaCRestoreFrom=" + NON_EXISTENT_CR)
@@ -117,7 +115,7 @@ public class CheckpointRestorePathTest implements CracTest {
     }
 
     void testRestoreNoImage(boolean skipMetadataChecks, String errMessage) throws Exception {
-        CracBuilder builder = new CracBuilder().engine(CracEngine.PAUSE);
+        CracBuilder builder = new CracBuilder().engine(CracEngine.SIMULATE).engineOptions("pause=true");
         if (builder.imageDir().toFile().exists()) {
             FileUtils.deleteFileTreeWithRetry(builder.imageDir());
         }

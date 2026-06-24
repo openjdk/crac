@@ -61,12 +61,8 @@ public class ParsingTest {
 
     @Test
     public void test_engines() throws Exception {
-        test("sim", Collections.emptyList(), 0, List.of("Engine name 'sim' (without the engine suffix) is deprecated"), List.of("[error]"));
         test("simengine");
         if (Platform.isLinux()) {
-            test("pause", Collections.emptyList(), 0, List.of("pauseengine is deprecated"), List.of("[error]"));
-            test("pauseengine", Collections.emptyList(), 0, List.of("pauseengine is deprecated"), List.of("[error"));
-            test("criu", Collections.emptyList(), 0, List.of("Engine name 'criu' (without the engine suffix) is deprecated"), List.of("[error]"));
             test("criuengine");
         }
 
@@ -79,8 +75,10 @@ public class ParsingTest {
 
         if (Platform.isStatic()) {
             test("unknown", null, 1, "Cannot load CRaC engine API entrypoint");
+            test("sim", null, 1, "Cannot load CRaC engine API entrypoint");
         } else {
             test("unknown", null, 1, "Cannot find CRaC engine unknown");
+            test("sim", null, 1, "Cannot find CRaC engine sim");
             test("simengine,--arg", null, 1, "Cannot find CRaC engine simengine,--arg");
             test("one two", null, 1, "Cannot find CRaC engine one two");
         }

@@ -34,37 +34,41 @@
 
 class VM_Feature_Flag {
 public:
-#define CPU_FEATURE_FLAGS(decl)         \
-    decl(FP,            fp,          0) \
-    decl(ASIMD,         asimd,       1) \
-    decl(EVTSTRM,       evtstrm,     2) \
-    decl(AES,           aes,         3) \
-    decl(PMULL,         pmull,       4) \
-    decl(SHA1,          sha1,        5) \
-    decl(SHA2,          sha256,      6) \
-    decl(CRC32,         crc32,       7) \
-    decl(LSE,           lse,         8) \
-    decl(FPHP,          fphp,        9) \
-    decl(ASIMDHP,       asimdhp,    10) \
-    decl(DCPOP,         dcpop,      11) \
-    decl(SHA3,          sha3,       12) \
-    decl(SHA512,        sha512,     13) \
-    decl(SVE,           sve,        14) \
-    decl(SB,            sb,         15) \
-    decl(PACA,          paca,       16) \
-    decl(SVEBITPERM,    svebitperm, 17) \
-    decl(SVE2,          sve2,       18) \
-    decl(A53MAC,        a53mac,     19) \
-    decl(ECV,           ecv,        20) \
-    decl(WFXT,          wfxt,       21) \
+#define CFF_INNER(decl2, decl3, id, name, bit) decl2(id, name) decl3(id, name, bit)
+#define CFF_OUTER(...) \
+    CFF_INNER(__VA_ARGS__, FP,            fp,          0) \
+    CFF_INNER(__VA_ARGS__, ASIMD,         asimd,       1) \
+    CFF_INNER(__VA_ARGS__, EVTSTRM,       evtstrm,     2) \
+    CFF_INNER(__VA_ARGS__, AES,           aes,         3) \
+    CFF_INNER(__VA_ARGS__, PMULL,         pmull,       4) \
+    CFF_INNER(__VA_ARGS__, SHA1,          sha1,        5) \
+    CFF_INNER(__VA_ARGS__, SHA2,          sha256,      6) \
+    CFF_INNER(__VA_ARGS__, CRC32,         crc32,       7) \
+    CFF_INNER(__VA_ARGS__, LSE,           lse,         8) \
+    CFF_INNER(__VA_ARGS__, FPHP,          fphp,        9) \
+    CFF_INNER(__VA_ARGS__, ASIMDHP,       asimdhp,    10) \
+    CFF_INNER(__VA_ARGS__, DCPOP,         dcpop,      11) \
+    CFF_INNER(__VA_ARGS__, SHA3,          sha3,       12) \
+    CFF_INNER(__VA_ARGS__, SHA512,        sha512,     13) \
+    CFF_INNER(__VA_ARGS__, SVE,           sve,        14) \
+    CFF_INNER(__VA_ARGS__, SB,            sb,         15) \
+    CFF_INNER(__VA_ARGS__, PACA,          paca,       16) \
+    CFF_INNER(__VA_ARGS__, SVEBITPERM,    svebitperm, 17) \
+    CFF_INNER(__VA_ARGS__, SVE2,          sve2,       18) \
+    CFF_INNER(__VA_ARGS__, A53MAC,        a53mac,     19) \
+    CFF_INNER(__VA_ARGS__, ECV,           ecv,        20) \
+    CFF_INNER(__VA_ARGS__, WFXT,          wfxt,       21) \
     /* These features are added for CRaC. */ \
-    decl(NOTPACA,       notpaca,    63) \
+    CFF_INNER(__VA_ARGS__, NOTPACA,       notpaca,    63) \
     /**/
+#define CFF_INNER2_NOP(id, name)
+#define CFF_INNER3_NOP(id, name, bit)
+#define CPU_FEATURE_FLAGS(decl2) CFF_OUTER(decl2, CFF_INNER3_NOP)
 
   enum Feature_Flag {
-  #define DECLARE_CPU_FEATURE_FLAG(id, name, bit) CPU_##id = (bit),
-    CPU_FEATURE_FLAGS(DECLARE_CPU_FEATURE_FLAG)
-  #undef DECLARE_CPU_FEATURE_FLAG
+#define DECLARE_CPU_FEATURE_FLAG(id, name, bit) CPU_##id = (bit),
+    CFF_OUTER(CFF_INNER2_NOP, DECLARE_CPU_FEATURE_FLAG)
+#undef DECLARE_CPU_FEATURE_FLAG
     MAX_CPU_FEATURES,
     FIRST_GLIBC_FEATURE = CPU_NOTPACA
   };
@@ -219,7 +223,7 @@ public:
   static const char* _features_names[];
 
   // Feature identification
-#define CPU_FEATURE_DETECTION(id, name, bit) \
+#define CPU_FEATURE_DETECTION(id, name) \
   static bool supports_##name() { return supports_feature(CPU_##id); }
   CPU_FEATURE_FLAGS(CPU_FEATURE_DETECTION)
 #undef CPU_FEATURE_DETECTION

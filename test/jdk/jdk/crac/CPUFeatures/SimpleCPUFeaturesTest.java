@@ -52,10 +52,11 @@ import jdk.test.lib.crac.*;
  * @library /test/lib
  * @build SimpleCPUFeaturesTest
  * @comment FLUSH and SSE2 must be present
- * @run driver jdk.test.lib.crac.CracTest 0x20000000080,0x0
- * @run driver jdk.test.lib.crac.CracTest foobar              -- INVALID_FORMAT2
- * @run driver jdk.test.lib.crac.CracTest 0xfffff,0x0         -- MISSING_FEATURES
- * @run driver jdk.test.lib.crac.CracTest 0x20000000080,0xfff -- MISSING_FEATURES
+ * @run driver jdk.test.lib.crac.CracTest 0x60,0x0
+ * @run driver jdk.test.lib.crac.CracTest foobar      -- INVALID_FORMAT2
+ * @run driver jdk.test.lib.crac.CracTest 0xfffff,0x0 -- MISSING_FEATURES_ON_MACHINE
+ * @run driver jdk.test.lib.crac.CracTest 0x60,0xfff  -- MISSING_FEATURES_ON_MACHINE
+ * @run driver jdk.test.lib.crac.CracTest 0x0,0x0     -- MISSING_FEATURES_IN_INPUT
  */
 /*
  * @test id=x86-NON-LINUX
@@ -63,8 +64,8 @@ import jdk.test.lib.crac.*;
  * @requires os.family != "linux"
  * @library /test/lib
  * @build SimpleCPUFeaturesTest
- * @run driver jdk.test.lib.crac.CracTest foobar            -- OS_DOES_NOT_SUPPORT
- * @run driver jdk.test.lib.crac.CracTest 0x20000000080,0x0 -- OS_DOES_NOT_SUPPORT
+ * @run driver jdk.test.lib.crac.CracTest foobar   -- OS_DOES_NOT_SUPPORT
+ * @run driver jdk.test.lib.crac.CracTest 0x60,0x0 -- OS_DOES_NOT_SUPPORT
  */
 /*
  * @test id=AARCH64-LINUX
@@ -93,7 +94,8 @@ public class SimpleCPUFeaturesTest implements CracTest {
         INVALID_FORMAT1("must be of the form: 0xNUM"),
         INVALID_FORMAT2("must be of the form: 0xNUM,0xNUM"),
         INVALID_PACA("For -XX:CPUFeatures, exactly one of the bits PACA (0x10000) and NOTPACA (0x100000) must be set."),
-        MISSING_FEATURES("missing features of this CPU are"),
+        MISSING_FEATURES_ON_MACHINE("missing the following features required by -XX:CPUFeatures"),
+        MISSING_FEATURES_IN_INPUT("-XX:CPUFeatures is missing mandatory features"),
         ARCH_DOES_NOT_SUPPORT("This architecture does not support any arch-specific"),
         OS_DOES_NOT_SUPPORT("This OS does not support"),
         ;

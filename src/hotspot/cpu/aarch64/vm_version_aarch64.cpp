@@ -28,6 +28,7 @@
 #include "pauth_aarch64.hpp"
 #include "register_aarch64.hpp"
 #include "runtime/arguments.hpp"
+#include "runtime/globals.hpp"
 #include "runtime/globals_extension.hpp"
 #include "runtime/java.hpp"
 #include "runtime/os.inline.hpp"
@@ -336,9 +337,9 @@ void VM_Version::initialize() {
     FLAG_SET_DEFAULT(UseSHA, false);
   }
 
-  CHECK_CPU_FEATURE(UseCRC32, CRC32, supports_crc32(), MULTI_INST_WARNING_MSG);
-  CHECK_CPU_FEATURE(UseLSE, LSE, supports_lse(), MULTI_INST_WARNING_MSG);
-  CHECK_CPU_FEATURE(UseAES, AES, supports_aes(), MULTI_INST_WARNING_MSG);
+  CHECK_CPU_FEATURE(UseCRC32, CRC32, supports_crc32(), "CRC32" MULTI_INST_WARNING_MSG);
+  CHECK_CPU_FEATURE(UseLSE, LSE, supports_lse(), "LSE" MULTI_INST_WARNING_MSG);
+  CHECK_CPU_FEATURE(UseAES, AES, supports_aes(), "AES" MULTI_INST_WARNING_MSG);
 
   if (_cpu == CPU_ARM &&
       model_is_in({ CPU_MODEL_ARM_NEOVERSE_V1, CPU_MODEL_ARM_NEOVERSE_V2,
@@ -885,6 +886,11 @@ bool VM_Version::cpu_features_binary(VM_Version::VM_Features *data) {
   return true;
 }
 
+VM_Features VM_Version::CPUFeatures_mandatory() {
+  // TODO: check if there are any mandatory features and set them here
+  return VM_Features();
+}
+
 VM_Features VM_Version::CPUFeatures_generic() {
   // CPU_PACA and non-PACA processors cannot share the same image. Also we cannot disable glibc using features like CPU_LSE.
   vm_exit_during_initialization("-XX:CPUFeatures=generic is not available on aarch64");
@@ -911,4 +917,18 @@ const char *VM_Version::restore_failed_check(const VM_Features *image_features, 
   paca.set_feature(VM_Feature_Flag::CPU_PACA);
   ss.print("Restore failed due to incompatible aarch64 CPU feature PACA (%s); these CPUs each require a separate image.", paca.print_numbers());
   return ss.as_string();
+}
+
+void VM_Version::CPUFeatures_apply_arch(VM_Features &parsed, VM_Features &missing) {
+  if (!FLAG_IS_DEFAULT(UsePAC)) {
+    if (UsePAC) {
+      parsed.set_feature(CPU_PACA);
+      parsed.clear_feature(CPU_NOTPACA);
+    } else {
+      parsed.set_feature(CPU_NOTPACA);
+      parsed.clear_feature(CPU_PACA);
+    }
+  }
+  missing.clear_feature(CPU_PACA);
+  missing.clear_feature(CPU_NOTPACA);
 }

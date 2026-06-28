@@ -301,7 +301,7 @@ checkpoint_restore "$LINENO" t3a.micro t3.micro "1:VM option .*CPUFeatures.* is 
   "" "-XX:CPUFeatures=ignore"
 
 # Test printing during snapshot: "CPU features are being kept intact as requested by -XX:CPUFeatures=ignore"
-checkpoint_restore "$LINENO" t3a.micro t3.micro "" "-XX:CPUFeatures=ignore" "-XX:+UnlockExperimentalVMOptions -XX:+IgnoreCPUFeatures"
+checkpoint_restore "$LINENO" t3a.micro t3.micro "" "-XX:CPUFeatures=ignore" ""
 
 checkpoint_restore "$LINENO" t3a.micro t3.micro "" "-XX:CPUFeatures=0x21461805ddfbf7,0xfcc0000000000000"
 checkpoint_restore "$LINENO" t3.micro t3a.micro "" "-XX:CPUFeatures=0x21461805ddfbf7,0xfcc0000000000000"

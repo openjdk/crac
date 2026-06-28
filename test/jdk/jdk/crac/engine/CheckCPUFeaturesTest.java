@@ -67,7 +67,7 @@ public class CheckCPUFeaturesTest implements CracTest {
             success = success || "fail-x86aarch64".equals(result);
         }
 
-        CracBuilder builder = new CracBuilder().engine(CracEngine.PAUSE);
+        CracBuilder builder = new CracBuilder().engine(CracEngine.SIMULATE).engineOptions("pause=true");
         if (builder.imageDir().toFile().exists()) {
             FileUtils.deleteFileTreeWithRetry(builder.imageDir());
         }

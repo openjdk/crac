@@ -4,4 +4,4 @@ This library implements the C/R API (see `src/hotspot/share/include/crlib/`) use
 
 ## Extensions
 
-For development purposes, SimEngine implements the "Image Constraints" and "Image Score" extensions to the same extent as CRIU Engine (see `src/hotspot/share/native/libcriuengine`) - in fact the implementation is shared. See the README.md in there for details about the format.
+For development purposes, SimEngine implements the "Image Constraints" and "Image Score" extensions to the same extent as CRIU Engine (see `src/java.base/linux/native/libcriuengine/`) - in fact the implementation is shared. See the README.md in there for details about the format.

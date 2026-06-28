@@ -34,68 +34,58 @@
 /*
  * Update following files when declaring new flags:
  * test/lib-test/jdk/test/whitebox/CPUInfoTest.java
- * src/jdk.internal.vm.ci/share/classes/jdk/vm/ci/amd64/AMD64.java
  */
 class VM_Feature_Flag {
 public:
   enum Feature_Flag {
+  /* Fields *_UNUSED are kept for backwards compatibility of the -XX:CPUFeatures mask.
+   * They must be defined so that detection of enum contiguity does not trigger.
+   */
 #define CPU_FEATURE_FLAGS(decl) \
     decl(CX8,               "cx8",               0)  /*  next bits are from cpuid 1 (EDX) */ \
     decl(CMOV,              "cmov",              1)  \
     decl(FXSR,              "fxsr",              2)  \
     decl(HT,                "ht",                3)  \
-                                                     \
-    decl(MMX,               "mmx",               4)  \
+    decl(MMX_UNUSED,        "mmx",               4)  \
     decl(3DNOW_PREFETCH,    "3dnowpref",         5)  /* Processor supports 3dnow prefetch and prefetchw instructions */ \
-                                                     /* may not necessarily support other 3dnow instructions */ \
     decl(SSE,               "sse",               6)  \
     decl(SSE2,              "sse2",              7)  \
-                                                     \
     decl(SSE3,              "sse3",              8 ) /* SSE3 comes from cpuid 1 (ECX) */ \
     decl(SSSE3,             "ssse3",             9 ) \
     decl(SSE4A,             "sse4a",             10) \
     decl(SSE4_1,            "sse4.1",            11) \
-                                                     \
     decl(SSE4_2,            "sse4.2",            12) \
     decl(POPCNT,            "popcnt",            13) \
     decl(LZCNT,             "lzcnt",             14) \
     decl(TSC,               "tsc",               15) \
-                                                     \
     decl(TSCINV_BIT,        "tscinvbit",         16) \
     decl(TSCINV,            "tscinv",            17) \
     decl(AVX,               "avx",               18) \
     decl(AVX2,              "avx2",              19) \
-                                                     \
     decl(AES,               "aes",               20) \
     decl(ERMS,              "erms",              21) /* enhanced 'rep movsb/stosb' instructions */ \
     decl(CLMUL,             "clmul",             22) /* carryless multiply for CRC */ \
     decl(BMI1,              "bmi1",              23) \
-                                                     \
     decl(BMI2,              "bmi2",              24) \
     decl(RTM,               "rtm",               25) /* Restricted Transactional Memory instructions */ \
     decl(ADX,               "adx",               26) \
     decl(AVX512F,           "avx512f",           27) /* AVX 512bit foundation instructions */ \
-                                                     \
     decl(AVX512DQ,          "avx512dq",          28) \
     decl(AVX512PF,          "avx512pf",          29) \
     decl(AVX512ER,          "avx512er",          30) \
     decl(AVX512CD,          "avx512cd",          31) \
-                                                     \
     decl(AVX512BW,          "avx512bw",          32) /* Byte and word vector instructions */ \
     decl(AVX512VL,          "avx512vl",          33) /* EVEX instructions with smaller vector length */ \
     decl(SHA,               "sha",               34) /* SHA instructions */ \
     decl(FMA,               "fma",               35) /* FMA instructions */ \
-                                                     \
     decl(VZEROUPPER,        "vzeroupper",        36) /* Vzeroupper instruction */ \
     decl(AVX512_VPOPCNTDQ,  "avx512_vpopcntdq",  37) /* Vector popcount */ \
     decl(AVX512_VPCLMULQDQ, "avx512_vpclmulqdq", 38) /* Vector carryless multiplication */ \
     decl(AVX512_VAES,       "avx512_vaes",       39) /* Vector AES instruction */ \
-                                                     \
     decl(AVX512_VNNI,       "avx512_vnni",       40) /* Vector Neural Network Instructions */ \
-    decl(FLUSH,             "clflush",           41) /* flush instruction */ \
+    decl(FLUSH_UNUSED,      "clflush",           41) /* flush instruction */ \
     decl(FLUSHOPT,          "clflushopt",        42) /* flusopth instruction */ \
     decl(CLWB,              "clwb",              43) /* clwb instruction */ \
-                                                     \
     decl(AVX512_VBMI2,      "avx512_vbmi2",      44) /* VBMI2 shift left double instructions */ \
     decl(AVX512_VBMI,       "avx512_vbmi",       45) /* Vector BMI instructions */ \
     decl(HV,                "hv",                46) /* Hypervisor instructions */ \
@@ -150,7 +140,6 @@ class stringStream;
 
 class VM_Version : public Abstract_VM_Version, protected VM_Feature_Flag {
   friend class VMStructs;
-  friend class JVMCIVMStructs;
   friend class CracEngine;
   friend class crac;
 
@@ -718,9 +707,12 @@ private:
   static void get_processor_features_hardware();
   static void get_processor_features_hotspot();
 
+  static VM_Features CPUFeatures_mandatory();
   static VM_Features CPUFeatures_generic();
   static void glibc_patch(VM_Features &shouldnotuse);
   static VM_Features CPUFeatures_parse(const char *str);
+  static VM_Features CPUFeatures_parse_numeric(const char *str);
+  static void CPUFeatures_apply_arch(VM_Features &parsed, VM_Features &missing);
 #ifdef LINUX
   static bool glibc_not_using();
   static bool glibc_env_set(char *disable_str);
@@ -730,7 +722,7 @@ private:
 #endif //LINUX
   static bool _ignore_glibc_not_using;
   static void print_using_features_cr();
-  static void insert_features_names(VM_Version::VM_Features features, stringStream& ss);
+  static void insert_features_names(VM_Version::VM_Features features, outputStream& os);
   static const char *restore_failed_check(const VM_Features *image_features, const VM_Features *current_features) {
     return nullptr;
   }
@@ -788,16 +780,12 @@ public:
     VM_Version::clear_cpu_features();
   }
   static void set_avx_cpuFeatures() {
-    _features.set_feature(CPU_SSE);
-    _features.set_feature(CPU_SSE2);
     _features.set_feature(CPU_AVX);
     _features.set_feature(CPU_VZEROUPPER);
   }
   static void set_evex_cpuFeatures() {
     _features.set_feature(CPU_AVX10_1);
     _features.set_feature(CPU_AVX512F);
-    _features.set_feature(CPU_SSE);
-    _features.set_feature(CPU_SSE2);
     _features.set_feature(CPU_VZEROUPPER);
   }
   static void set_apx_cpuFeatures() {
@@ -843,6 +831,7 @@ public:
   static bool is_P6()             { return cpu_family() >= 6; }
   static bool is_intel_server_family()    { return cpu_family() == 6 || cpu_family() == 18 || cpu_family() == 19; }
   static bool is_amd()            { assert_is_initialized(); return _cpuid_info.std_vendor_name_0 == 0x68747541; } // 'htuA'
+  static bool is_amd_avx512_datapath_server_family()  { return cpu_family() >= 0x1a; }
   static bool is_hygon()          { assert_is_initialized(); return _cpuid_info.std_vendor_name_0 == 0x6F677948; } // 'ogyH'
   static bool is_amd_family()     { return is_amd() || is_hygon(); }
   static bool is_intel()          { assert_is_initialized(); return _cpuid_info.std_vendor_name_0 == 0x756e6547; } // 'uneG'
@@ -871,9 +860,6 @@ public:
   static bool supports_cmov()         { return _features.supports_feature(CPU_CMOV); }
   static bool supports_fxsr()         { return _features.supports_feature(CPU_FXSR); }
   static bool supports_ht()           { return _features.supports_feature(CPU_HT); }
-  static bool supports_mmx()          { return _features.supports_feature(CPU_MMX); }
-  static bool supports_sse()          { return _features.supports_feature(CPU_SSE); }
-  static bool supports_sse2()         { return _features.supports_feature(CPU_SSE2); }
   static bool supports_sse3()         { return _features.supports_feature(CPU_SSE3); }
   static bool supports_ssse3()        { return _features.supports_feature(CPU_SSSE3); }
   static bool supports_sse4_1()       { return _features.supports_feature(CPU_SSE4_1); }
@@ -1010,10 +996,10 @@ public:
 
   static int allocate_prefetch_distance(bool use_watermark_prefetch);
 
-  // SSE2 and later processors implement a 'pause' instruction
-  // that can be used for efficient implementation of
-  // the intrinsic for java.lang.Thread.onSpinWait()
-  static bool supports_on_spin_wait() { return supports_sse2(); }
+  // All currently supported processors support PAUSE instruction
+  // that can be used for efficient implementation of intrinsic for
+  // java.lang.Thread.onSpinWait().
+  static bool supports_on_spin_wait() { return true; }
 
   // x86_64 supports fast class initialization checks
   static bool supports_fast_class_init_checks() {
@@ -1046,7 +1032,6 @@ public:
   // pending in-cache changes.
   //
   // 64 bit cpus always support clflush which writes back and evicts
-  // on 32 bit cpus support is recorded via a feature flag
   //
   // clflushopt is optional and acts like clflush except it does
   // not synchronize with other memory ops. it needs a preceding
@@ -1056,8 +1041,6 @@ public:
   // writes back without evicting the line. it also does not
   // synchronize with other memory ops. so, it needs preceding
   // and trailing StoreStore fences.
-
-  static bool supports_clflush(); // Can't inline due to header file conflict
 
   // Note: CPU_FLUSHOPT and CPU_CLWB bits should always be zero for 32-bit
   static bool supports_clflushopt() { return (_features.supports_feature(CPU_FLUSHOPT)); }

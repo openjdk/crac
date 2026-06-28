@@ -24,6 +24,7 @@
 #include "crlib/crlib.h"
 #include "crlib/crlib_restore_data.h"
 #include "logging/log.hpp"
+#include "memory/allocation.hpp"
 #include "memory/allStatic.hpp"
 #include "memory/resourceArea.hpp"
 #include "nmt/memTag.hpp"
@@ -32,10 +33,12 @@
 #include "runtime/java.hpp"
 #include "runtime/os.hpp"
 #include "utilities/debug.hpp"
+#include "utilities/globalDefinitions.hpp"
 #include "utilities/growableArray.hpp"
 #include "utilities/hashTable.hpp"
-#include "utilities/macros.hpp"
+#ifdef _WINDOWS
 #include "utilities/stringUtils.hpp"
+#endif // _WINDOWS
 
 #include <cstddef>
 #include <cstring>
@@ -52,108 +55,69 @@ static constexpr const char * const vm_controlled_engine_opts[] = {
 
 #define DEFINE_OPT_VAR(opt) static constexpr const char engine_opt_##opt[] = #opt;
 VM_CONTROLLED_ENGINE_OPTS(DEFINE_OPT_VAR)
-
-DEFINE_OPT_VAR(pause)
 #undef DEFINE_OPT_VAR
 
-#define SIMENGINE "simengine"
-
-#ifdef LINUX
-static bool is_pauseengine() {
-  assert(JDK_Version::current().major_version() < 28, "pauseengine shall be expired in JDK 28");
-  return !strcmp(CRaCEngine, "pause") || !strcmp(CRaCEngine, "pauseengine");
-}
-#endif // LINUX
-
-static bool find_engine(const char *dll_dir, char *path, size_t path_size, char *resolved_engine, size_t resolved_engine_size) {
+static bool find_engine(const char *dll_dir, char *path, size_t path_size, char *name, size_t name_size) {
   const size_t engine_length = strlen(CRaCEngine);
+  if (engine_length == 0) {
+    log_error(crac)("CRaCEngine is empty");
+    return false;
+  }
+
   // Try to interpret as a file path
   if (os::is_path_absolute(CRaCEngine)) {
-    if (engine_length + 1 > path_size) {
+    const char *last_slash = strrchr(CRaCEngine, *os::file_separator());
+    const char *basename = last_slash == nullptr ? CRaCEngine : last_slash + strlen(os::file_separator());
+    const size_t basename_length = strlen(basename);
+    if (basename_length <= strlen(JNI_LIB_PREFIX) + strlen(JNI_LIB_SUFFIX) ||
+        strncmp(basename, JNI_LIB_PREFIX, strlen(JNI_LIB_PREFIX)) != 0 ||
+        strcmp(CRaCEngine + engine_length - strlen(JNI_LIB_SUFFIX), JNI_LIB_SUFFIX) != 0) {
+      log_error(crac)("CRaCEngine=%s is not a library: expected " JNI_LIB_PREFIX "<name>" JNI_LIB_SUFFIX, CRaCEngine);
+      return false;
+    }
+
+    if (engine_length >= path_size) {
       log_error(crac)("CRaCEngine file path is too long: %s", CRaCEngine);
       return false;
     }
+    memcpy(path, CRaCEngine, engine_length + 1);
+
+    const size_t name_length = basename_length - strlen(JNI_LIB_PREFIX) - strlen(JNI_LIB_SUFFIX);
+    if (name_length >= name_size) {
+      log_error(crac)("CRaCEngine file name is too long: %s", basename);
+      return false;
+    }
+    memcpy(name, basename + strlen(JNI_LIB_PREFIX), name_length);
+    name[name_length] = '\0';
 
     if (!os::file_exists(CRaCEngine)) {
       log_error(crac)("CRaCEngine file does not exist: %s", CRaCEngine);
       return false;
     }
 
-    strcpy(path, CRaCEngine);
-
-    const char *last_slash = strrchr(CRaCEngine, *os::file_separator());
-    const char *basename;
-    if (last_slash == nullptr) {
-      basename = CRaCEngine;
-    } else {
-      basename = last_slash + strlen(os::file_separator());
-    }
-    if (strlen(basename) <= strlen(JNI_LIB_PREFIX) + strlen(JNI_LIB_SUFFIX) ||
-        strncmp(basename, JNI_LIB_PREFIX, strlen(JNI_LIB_PREFIX)) ||
-        strcmp(CRaCEngine + engine_length - strlen(JNI_LIB_SUFFIX), JNI_LIB_SUFFIX)) {
-      log_error(crac)("CRaCEngine=%s is not a library: expected " JNI_LIB_PREFIX "<name>" JNI_LIB_SUFFIX, CRaCEngine);
-      return false;
-    }
-
-    size_t engine_name_length = strlen(basename) - strlen(JNI_LIB_PREFIX) - strlen(JNI_LIB_SUFFIX);
-    if (engine_name_length < resolved_engine_size) {
-      memcpy(resolved_engine, basename + strlen(JNI_LIB_PREFIX), engine_name_length);
-      resolved_engine[engine_name_length] = '\0';
-      log_debug(crac)("Found CRaCEngine %s in %s", resolved_engine, CRaCEngine);
-      return true;
-    } else {
-      log_error(crac)("CRaCEngine name is too long: %s", basename);
-      return false;
-    }
+    log_debug(crac)("Found CRaCEngine %s in %s", name, CRaCEngine);
+    return true;
   }
 
-#ifdef LINUX
-  if (is_pauseengine()) {
-    assert(sizeof(SIMENGINE) <= resolved_engine_size, "must be");
-    memcpy(resolved_engine, SIMENGINE, sizeof(SIMENGINE));
-    log_warning(crac)("-XX:CRaCEngine=pause/pauseengine is deprecated and will be removed in version 28; use -XX:CRaCEngine=simengine -XX:CRaCEngineOptions=pause=true");
-  } else /* intentional line break */
-#endif // LINUX
-  if (engine_length == 0) {
-    log_error(crac)("CRaCEngine is empty");
-    return false;
-  } else if (engine_length < resolved_engine_size) {
-    memcpy(resolved_engine, CRaCEngine, engine_length);
-    resolved_engine[engine_length] = '\0';
-  } else {
+  // Try to interpret as a name of a bundled engine
+
+  if (engine_length >= name_size) {
     log_error(crac)("CRaCEngine name is too long: %s", CRaCEngine);
     return false;
   }
+  memcpy(name, CRaCEngine, engine_length);
+  name[engine_length] = '\0';
+  log_debug(crac)("Resolved engine name '%s'", name);
 
   if (is_vm_statically_linked()) {
-    if (!strcmp("sim", resolved_engine)) {
-      assert(sizeof(SIMENGINE) <= resolved_engine_size, "must be");
-      assert(JDK_Version::current().major_version() < 28, "shall be expired in JDK 28");
-      memcpy(resolved_engine, SIMENGINE, sizeof(SIMENGINE));
-      log_warning(crac)("Engine name '%s' (without the engine suffix) is deprecated and will be removed in version 28, please use -XX:CRaCEngine=%s", CRaCEngine, resolved_engine);
-    }
-    log_debug(crac)("VM is statically linked, not doing any library lookup");
-    os::jvm_path(path, static_cast<jint>(path_size)); // points to bin/java for static JDK
+    log_debug(crac)("VM is statically linked, not doing library lookup for bundled engines");
+    path[0] = '\0'; // Means look inside the JVM
     return true;
   }
 
-  log_debug(crac)("Resolved engine name '%s'", resolved_engine);
-  // Try to interpret as a library name
-  if (os::dll_locate_lib(path, path_size, dll_dir, resolved_engine)) {
-    log_debug(crac)("Found CRaCEngine %s in %s", resolved_engine, path);
+  if (os::dll_locate_lib(path, path_size, dll_dir, name)) {
+    log_debug(crac)("Found CRaCEngine %s in %s", name, path);
     return true;
-  }
-  // Alternative for engines without the `engine` suffix.
-  // Let's just skip it with weird long engine parameter.
-  // Note: resource mark allocation is not possible here (too early in JVM boot)
-  if (strlen(CRaCEngine) + strlen("engine") + 1 <= resolved_engine_size) {
-    os::snprintf_checked(resolved_engine, resolved_engine_size, "%sengine", CRaCEngine);
-    if (os::dll_locate_lib(path, path_size, dll_dir, resolved_engine)) {
-      assert(JDK_Version::current().major_version() < 28, "shall be expired in JDK 28");
-      log_debug(crac)("Found CRaCEngine %s in %s", resolved_engine, path);
-      log_warning(crac)("Engine name '%s' (without the engine suffix) is deprecated and will be removed in version 28, please use -XX:CRaCEngine=%s", CRaCEngine, resolved_engine);
-      return true;
-    }
   }
 
   log_error(crac)("Did not find CRaCEngine %s in %s", CRaCEngine, dll_dir);
@@ -181,43 +145,6 @@ public:
 using CStringSet = HashTable<const char *, bool, 256, AnyObj::C_HEAP, MemTag::mtInternal,
                              CStringUtils::hash, CStringUtils::equals>;
 
-static bool apply_engine_options(const crlib_api_t &api, crlib_conf_t *conf, const char *options,
-                                 const CStringSet &vm_keys, CStringSet *applied_keys) {
-  if (options == nullptr || options[0] == '\0' /* possible for ccstrlist */) {
-    return true;
-  }
-
-  char * const options_copy = os::strdup_check_oom(options, mtInternal);
-
-  char *options_copy_iter = options_copy;
-  do {
-    char *key_value = strsep(&options_copy_iter, ",\n"); // '\n' appears when ccstrlist is appended to
-    const char *key = strsep(&key_value, "=");
-    const char *value = key_value != nullptr ? key_value : "";
-    assert(key != nullptr, "Should have terminated before");
-    if (vm_keys.contains(key)) {
-      log_warning(crac)("VM-controlled CRaC engine option provided, skipping: %s", key);
-      continue;
-    }
-    {
-      bool is_new_key;
-      applied_keys->put_if_absent(key, &is_new_key);
-      if (!is_new_key) {
-        log_warning(crac)("CRaC engine option '%s' specified multiple times", key);
-      }
-    }
-    if (!api.configure(conf, key, value)) {
-      log_error(crac)("CRaC engine failed to configure: '%s' = '%s'", key, value);
-      os::free(options_copy);
-      return false;
-    }
-    log_debug(crac)("CRaC engine option: '%s' = '%s'", key, value);
-  } while (options_copy_iter != nullptr);
-
-  os::free(options_copy);
-  return true;
-}
-
 static crlib_conf_t *create_conf(const crlib_api_t &api, bool for_restore) {
   crlib_conf_t * const conf = api.create_conf();
   if (conf == nullptr) {
@@ -229,32 +156,81 @@ static crlib_conf_t *create_conf(const crlib_api_t &api, bool for_restore) {
     return conf;
   }
 
-#ifdef LINUX
-  if (is_pauseengine()) {
-    guarantee(api.can_configure(conf, engine_opt_pause), "simengine must support option 'pause'");
-    if (!api.configure(conf, engine_opt_pause, "true")) {
-      log_error(crac)("simengine failed to configure: '%s' = 'true'", engine_opt_pause);
-      api.destroy_conf(conf);
-      return nullptr;
-    }
+  const char *extra_options = for_restore ? CRaCRestoreEngineOptions : CRaCCheckpointEngineOptions;
+  const size_t main_options_len = CRaCEngineOptions != nullptr ? strlen(CRaCEngineOptions) : 0;
+  const size_t extra_options_len = extra_options != nullptr ? strlen(extra_options) : 0;
+  if (main_options_len == 0 && extra_options_len == 0) {
+    return conf;
   }
-#endif // LINUX
+
+  const bool options_need_sep = main_options_len > 0 && extra_options_len > 0;
+  char * const options = NEW_C_HEAP_ARRAY(char, main_options_len + extra_options_len + (options_need_sep ? 1 : 0) + 1, MemTag::mtInternal);
+  {
+    char *options_dst = options;
+    if (main_options_len > 0) {
+      memcpy(options_dst, CRaCEngineOptions, main_options_len);
+      options_dst += main_options_len;
+    }
+    if (options_need_sep) {
+      *(options_dst++) = '\n'; // VM options parsing uses \n for appending to ccstrlist
+    }
+    if (extra_options_len > 0) {
+      memcpy(options_dst, extra_options, extra_options_len);
+      options_dst += extra_options_len;
+    }
+    *options_dst = '\0';
+  }
 
   CStringSet vm_controlled_keys;
 #define PUT_CONTROLLED_KEY(opt) vm_controlled_keys.put_when_absent(engine_opt_##opt, false);
   VM_CONTROLLED_ENGINE_OPTS(PUT_CONTROLLED_KEY)
 #undef PUT_CONTROLLED_KEY
 
-  CStringSet keys;
-  if (!apply_engine_options(api, conf, CRaCEngineOptions, vm_controlled_keys, &keys) ||
-      (!for_restore && !apply_engine_options(api, conf, CRaCCheckpointEngineOptions, vm_controlled_keys, &keys)) ||
-      (for_restore && !apply_engine_options(api, conf, CRaCRestoreEngineOptions, vm_controlled_keys, &keys))) {
-    api.destroy_conf(conf);
-    return nullptr;
-  }
+  CStringSet user_keys;
+  char *options_iter = options;
+  do {
+    char *key_value = strsep(&options_iter, ",\n"); // '\n' appears when ccstrlist is appended to
+    const char *key = strsep(&key_value, "=");
+    const char *value = key_value != nullptr ? key_value : "";
+    assert(key != nullptr, "Should have terminated before");
+    if (vm_controlled_keys.contains(key)) {
+      log_warning(crac)("VM-controlled CRaC engine option provided, skipping: %s", key);
+      continue;
+    }
+    {
+      bool is_new_key;
+      user_keys.put_if_absent(key, &is_new_key);
+      if (!is_new_key) {
+        log_warning(crac)("CRaC engine option '%s' specified multiple times", key);
+      }
+    }
+    if (!api.configure(conf, key, value)) {
+      log_error(crac)("CRaC engine failed to configure: '%s' = '%s'", key, value);
+      FREE_C_HEAP_ARRAY(options);
+      api.destroy_conf(conf);
+      return nullptr;
+    }
+    log_debug(crac)("CRaC engine option: '%s' = '%s'", key, value);
+  } while (options_iter != nullptr);
+
+  FREE_C_HEAP_ARRAY(options);
 
   return conf;
 }
+
+class DllGuard {
+private:
+  void* _dll;
+public:
+  DllGuard(void* dll) : _dll(dll) {}
+  ~DllGuard() {
+    if (_dll != nullptr) {
+      os::dll_unload(_dll);
+    }
+  }
+  NONCOPYABLE(DllGuard);
+  void deactivate() { _dll = nullptr; }
+};
 
 CracEngine::CracEngine(bool for_restore) {
   if (CRaCEngine == nullptr) {
@@ -282,60 +258,46 @@ CracEngine::CracEngine(bool for_restore) {
   }
 
   char path[JVM_MAXPATHLEN];
-  // In static builds the name of API entry function may differ
-  char resolved_engine_func[sizeof(CRLIB_API_FUNC) + MAX_ENGINE_LENGTH];
-  memcpy(resolved_engine_func, CRLIB_API_FUNC, sizeof(CRLIB_API_FUNC));
-  if (is_vm_statically_linked()) {
-    resolved_engine_func[sizeof(CRLIB_API_FUNC) - 1] = '_';
-  }
-
   if (!find_engine(dll_dir, path, sizeof(path), _name, sizeof(_name))) {
     log_error(crac)("Cannot find CRaC engine %s", CRaCEngine);
     return;
   }
   postcond(_name[0] != '\0');
-  postcond(path[0] != '\0');
-  memcpy(resolved_engine_func + sizeof(CRLIB_API_FUNC), _name, strlen(_name) + 1);
 
-  char error_buf[1024];
-  void * const lib = is_vm_statically_linked() ? os::get_default_process_handle() : os::dll_load(path, error_buf, sizeof(error_buf));
-  if (lib == nullptr) {
-    log_error(crac)("Cannot load CRaC engine library from %s: %s", path, error_buf);
-    return;
-  }
-
-  using api_func_t = decltype(&CRLIB_API);
-  auto api_func = reinterpret_cast<api_func_t>(os::dll_lookup(lib, resolved_engine_func));
-  if (api_func == nullptr) {
-    if (is_vm_statically_linked()) {
-      log_warning(crac)("Cannot load CRaC engine API entrypoint '%s' from %s", resolved_engine_func, path);
-      // Maybe the deprecated short name was used, in that case find_engine did not amend the 'engine'
-      assert(JDK_Version::current().major_version() < 28, "shall be expired in JDK 28");
-      static constexpr const char engine_suffix[] = "engine";
-      if (strlen(resolved_engine_func) + sizeof(engine_suffix) <= sizeof(resolved_engine_func)) {
-        strcat(resolved_engine_func, engine_suffix);
-        // resolved_engine_func should be concat(CRLIB_API_FUNC, _name) so the check above should already do
-        assert(strlen(_name) + sizeof(engine_suffix) <= sizeof(_name), "name too long");
-        strcat(_name, engine_suffix);
-        api_func = reinterpret_cast<api_func_t>(os::dll_lookup(lib, resolved_engine_func));
-        if (api_func != nullptr) {
-          log_warning(crac)("Engine name '%s' (without the engine suffix) is deprecated and will be removed in version 28, please use -XX:CRaCEngine=%s",
-            CRaCEngine, resolved_engine_func + sizeof(CRLIB_API_FUNC));
-        }
-      }
-    }
-    if (api_func == nullptr) {
-      log_error(crac)("Cannot load CRaC engine API entrypoint '%s' from %s", resolved_engine_func, path);
-      os::dll_unload(lib);
+  // Empty path means the engine is bundled inside the JVM (normally the case of static JVM build).
+  // In such case its API function has a suffix to avoid name conflicts among bundled engines.
+  void* lib;
+  char api_func_name[sizeof(CRLIB_API_FUNC) + MAX_ENGINE_LENGTH];
+  memcpy(api_func_name, CRLIB_API_FUNC, sizeof(CRLIB_API_FUNC));
+  if (path[0] != '\0') {
+    char error_buf[1024];
+    lib = os::dll_load(path, error_buf, sizeof(error_buf));
+    if (lib == nullptr) {
+      log_error(crac)("Cannot load CRaC engine library %s: %s", path, error_buf);
       return;
     }
+  } else {
+    lib = os::get_default_process_handle();
+    if (lib == nullptr) {
+      log_error(crac)("Cannot get process handle of self");
+      return;
+    }
+    api_func_name[sizeof(CRLIB_API_FUNC) - 1] = '_';
+    memcpy(api_func_name + sizeof(CRLIB_API_FUNC), _name, strlen(_name) + 1);
+  }
+  DllGuard lib_guard(lib);
+
+  using api_func_t = decltype(&CRLIB_API);
+  const auto api_func = reinterpret_cast<api_func_t>(os::dll_lookup(lib, api_func_name));
+  if (api_func == nullptr) {
+    log_error(crac)("Cannot load CRaC engine API entrypoint '%s' from %s", api_func_name, path[0] != '\0' ? path : "the JVM");
+    return;
   }
 
   crlib_api_t * const api = api_func(CRLIB_API_VERSION, sizeof(crlib_api_t));
   if (api == nullptr) {
     log_error(crac)("CRaC engine failed to initialize its API (version %i). "
                     "Maybe this version is not supported?", CRLIB_API_VERSION);
-    os::dll_unload(lib);
     return;
   }
   if (api->create_conf == nullptr || api->destroy_conf == nullptr ||
@@ -343,16 +305,15 @@ CracEngine::CracEngine(bool for_restore) {
       api->can_configure == nullptr || api->configure == nullptr ||
       api->get_extension == nullptr) {
     log_error(crac)("CRaC engine provided invalid API");
-    os::dll_unload(lib);
     return;
   }
 
   crlib_conf_t * const conf = create_conf(*api, for_restore);
   if (conf == nullptr) {
-    os::dll_unload(lib);
     return;
   }
 
+  lib_guard.deactivate();
   _lib = lib;
   _api = api;
   _conf = conf;

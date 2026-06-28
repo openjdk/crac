@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1997, 2025, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 1997, 2026, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -70,7 +70,6 @@ public:
     KIND_C2                 = 1 << 11,
     KIND_ARCH               = 1 << 12,
     KIND_LP64_PRODUCT       = 1 << 13,
-    KIND_JVMCI              = 1 << 14,
     KIND_RESTORE_SETTABLE   = 1 << 15,
 
     // Note the difference:
@@ -262,8 +261,6 @@ public:
   bool is_external() const        { return is_manageable();                      }
 
   void clear_diagnostic();
-  void clear_experimental();
-  void set_product();
 
   JVMFlag::MsgType get_locked_message(char*, int) const;
 

@@ -92,7 +92,6 @@ public class VMOptionsTest implements CracTest {
     };
 
     private static final List<VMOptionSpec> OPTIONS_CHECKPOINT = List.of(
-        VMOptionSpec.ofStr("CRaCEngine", "criu", false),
         VMOptionSpec.ofStr("CRaCEngineOptions", "args=-v1", false),
         VMOptionSpec.ofStr("CRaCCheckpointEngineOptions", "print_command=false", false),
         VMOptionSpec.ofStr("CRaCCheckpointTo", new CracBuilder().imageDir().toString(), true),

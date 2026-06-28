@@ -126,6 +126,9 @@
   /* These are handled as an exception in VM_Version::glibc_patch(). */ \
   GLIBC_UNSUPPORTED(CMPXCHG16        ); \
   GLIBC_UNSUPPORTED(LAHFSAHF         ); \
+  /* Unused fields, see the enum definition. */ \
+  GLIBC_UNSUPPORTED(MMX_UNUSED       ); \
+  GLIBC_UNSUPPORTED(FLUSH_UNUSED     ); \
   /**/
 
 #if INCLUDE_CPU_FEATURE_ACTIVE

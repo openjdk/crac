@@ -39,7 +39,7 @@ import jdk.test.lib.util.FileUtils;
  * @run driver jdk.test.lib.crac.CracTest
  */
 public class CheckCPUFeaturesMessageTest implements CracTest {
-    private static final String GENERIC_FEATURES_X86 = "0x4067,0x0";
+    private static final String GENERIC_FEATURES_X86 = "0x80c7,0x0";
 
     private void testDefault(CracBuilder builder) throws Exception {
         builder.doRestoreToAnalyze()

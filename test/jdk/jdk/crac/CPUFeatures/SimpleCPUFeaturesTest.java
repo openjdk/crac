@@ -52,7 +52,7 @@ import jdk.test.lib.crac.*;
  * @library /test/lib
  * @build SimpleCPUFeaturesTest
  * @comment FLUSH and SSE2 must be present
- * @run driver jdk.test.lib.crac.CracTest 0x60,0x0
+ * @run driver jdk.test.lib.crac.CracTest 0x80c7,0x0
  * @run driver jdk.test.lib.crac.CracTest foobar      -- INVALID_FORMAT2
  * @run driver jdk.test.lib.crac.CracTest 0xfffff,0x0 -- MISSING_FEATURES_ON_MACHINE
  * @run driver jdk.test.lib.crac.CracTest 0x60,0xfff  -- MISSING_FEATURES_ON_MACHINE

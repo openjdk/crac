@@ -887,7 +887,6 @@ bool VM_Version::cpu_features_binary(VM_Version::VM_Features *data) {
 }
 
 VM_Features VM_Version::CPUFeatures_mandatory() {
-  // TODO: check if there are any mandatory features and set them here
   return VM_Features();
 }
 

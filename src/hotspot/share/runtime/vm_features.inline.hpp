@@ -208,7 +208,7 @@ class VM_Features : protected VM_Feature_Flag {
 
   static constexpr const char *make_features_names_name(size_t i) {
     switch (i) {
-#define DECLARE_CPU_FEATURE_NAME(id, name, bit) case bit: return name ;
+#define DECLARE_CPU_FEATURE_NAME(id, name, bit) case bit: return STR(name);
     CPU_FEATURE_FLAGS(DECLARE_CPU_FEATURE_NAME)
 #undef DECLARE_CPU_FEATURE_NAME
     default:

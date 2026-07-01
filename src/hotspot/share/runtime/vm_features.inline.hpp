@@ -24,6 +24,7 @@
 #ifndef SHARE_RUNTIME_VM_FEATURES_INLINE_HPP
 #define SHARE_RUNTIME_VM_FEATURES_INLINE_HPP
 
+#include <utility>
 #include "utilities/ostream.hpp"
 
 class VM_Features : protected VM_Feature_Flag {
@@ -203,6 +204,23 @@ class VM_Features : protected VM_Feature_Flag {
     stringStream ss(buf, MAX_CPU_FEATURES);
     print_numbers(ss);
     return buf;
+  }
+
+  static constexpr const char *make_features_names_name(size_t i) {
+    switch (i) {
+#define DECLARE_CPU_FEATURE_NAME(id, name, bit) case bit: return STR(name);
+    CPU_FEATURE_FLAGS(DECLARE_CPU_FEATURE_NAME)
+#undef DECLARE_CPU_FEATURE_NAME
+    default:
+      return nullptr;
+    }
+  }
+  template <size_t... I>
+  static constexpr std::array<const char *, sizeof...(I)> make_features_names(std::index_sequence<I...>) {
+    return {{ make_features_names_name(I)... }};
+  }
+  static constexpr std::array<const char *, MAX_CPU_FEATURES> make_features_names() {
+    return make_features_names(std::make_index_sequence<MAX_CPU_FEATURES>{});
   }
 };
 

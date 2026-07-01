@@ -52,7 +52,7 @@ import jdk.test.lib.crac.*;
  * @library /test/lib
  * @build SimpleCPUFeaturesTest
  * @comment FLUSH and SSE2 must be present
- * @run driver jdk.test.lib.crac.CracTest 0x60,0x0
+ * @run driver jdk.test.lib.crac.CracTest 0x80c7,0x0
  * @run driver jdk.test.lib.crac.CracTest foobar      -- INVALID_FORMAT2
  * @run driver jdk.test.lib.crac.CracTest 0xfffff,0x0 -- MISSING_FEATURES_ON_MACHINE
  * @run driver jdk.test.lib.crac.CracTest 0x60,0xfff  -- MISSING_FEATURES_ON_MACHINE
@@ -73,7 +73,7 @@ import jdk.test.lib.crac.*;
  * @requires os.arch=="aarch64"
  * @library /test/lib
  * @build SimpleCPUFeaturesTest
- * @run driver jdk.test.lib.crac.CracTest 0x0
+ * @run driver jdk.test.lib.crac.CracTest 0x0     -- INVALID_PACA
  * @run driver jdk.test.lib.crac.CracTest 0x0,0x0 -- INVALID_FORMAT1
  * @run driver jdk.test.lib.crac.CracTest foobar  -- INVALID_FORMAT1
  */
@@ -93,6 +93,7 @@ public class SimpleCPUFeaturesTest implements CracTest {
     private enum ErrorMsg {
         INVALID_FORMAT1("must be of the form: 0xNUM"),
         INVALID_FORMAT2("must be of the form: 0xNUM,0xNUM"),
+        INVALID_PACA("For -XX:CPUFeatures, exactly one of the bits PACA (0x10000) and NOTPACA (0x100000) must be set."),
         MISSING_FEATURES_ON_MACHINE("missing the following features required by -XX:CPUFeatures"),
         MISSING_FEATURES_IN_INPUT("-XX:CPUFeatures is missing mandatory features"),
         ARCH_DOES_NOT_SUPPORT("This architecture does not support any arch-specific"),

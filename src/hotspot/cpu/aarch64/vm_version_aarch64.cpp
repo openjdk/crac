@@ -88,9 +88,7 @@ bool VM_Version::_ic_ivau_trapped;
 VM_Version::VM_Features VM_Version::_features;
 VM_Version::VM_Features VM_Version::_cpu_features;
 
-#define DECLARE_CPU_FEATURE_NAME(id, name, bit) XSTR(name),
-const char* VM_Version::_features_names[] = { CPU_FEATURE_FLAGS(DECLARE_CPU_FEATURE_NAME)};
-#undef DECLARE_CPU_FEATURE_NAME
+const std::array<const char *, VM_Feature_Flag::MAX_CPU_FEATURES> VM_Version::_features_names = VM_Features::make_features_names();
 
 static SpinWait get_spin_wait_desc() {
   SpinWait spin_wait(OnSpinWaitInst, OnSpinWaitInstCount, OnSpinWaitDelay);

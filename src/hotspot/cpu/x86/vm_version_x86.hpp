@@ -25,7 +25,6 @@
 #ifndef CPU_X86_VM_VERSION_X86_HPP
 #define CPU_X86_VM_VERSION_X86_HPP
 
-#include <array>
 #include "runtime/abstract_vm_version.hpp"
 #include "utilities/debug.hpp"
 #include "utilities/formatBuffer.hpp"
@@ -501,7 +500,7 @@ protected:
   // Original CPU feature flags vector, not affected by VM settings.
   static VM_Features _cpu_features;
 
-  static const std::array<const char *, MAX_CPU_FEATURES> _features_names;
+  static const VM_Features::FeaturesNames _features_names;
 
   static void clear_feature(Feature_Flag feature) {
     _features.clear_feature(feature);

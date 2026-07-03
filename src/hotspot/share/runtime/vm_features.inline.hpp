@@ -206,6 +206,17 @@ class VM_Features : protected VM_Feature_Flag {
     return buf;
   }
 
+  struct FeaturesNames {
+    const char *a[MAX_CPU_FEATURES];
+
+    constexpr const char *operator[](size_t i) const {
+      const char *retval = a[i];
+      assert(i < MAX_CPU_FEATURES, "Too big CPUFeature index");
+      assert(retval != nullptr, "Undefined CPUFeatures index");
+      return retval;
+    }
+  };
+
   static constexpr const char *make_features_names_name(size_t i) {
     switch (i) {
 #define DECLARE_CPU_FEATURE_NAME(id, name, bit) case bit: return STR(name);
@@ -216,10 +227,10 @@ class VM_Features : protected VM_Feature_Flag {
     }
   }
   template <size_t... I>
-  static constexpr std::array<const char *, sizeof...(I)> make_features_names(std::index_sequence<I...>) {
+  static constexpr FeaturesNames make_features_names(std::index_sequence<I...>) {
     return {{ make_features_names_name(I)... }};
   }
-  static constexpr std::array<const char *, MAX_CPU_FEATURES> make_features_names() {
+  static constexpr FeaturesNames make_features_names() {
     return make_features_names(std::make_index_sequence<MAX_CPU_FEATURES>{});
   }
 };

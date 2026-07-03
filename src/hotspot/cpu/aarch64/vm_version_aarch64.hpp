@@ -26,7 +26,6 @@
 #ifndef CPU_AARCH64_VM_VERSION_AARCH64_HPP
 #define CPU_AARCH64_VM_VERSION_AARCH64_HPP
 
-#include <array>
 #include "spin_wait_aarch64.hpp"
 #include "runtime/abstract_vm_version.hpp"
 #include "utilities/sizes.hpp"
@@ -217,7 +216,7 @@ public:
 
   static void cpu_features_init();
 
-  static const std::array<const char *, MAX_CPU_FEATURES> _features_names;
+  static const VM_Features::FeaturesNames _features_names;
 
   // Feature identification
 #define CPU_FEATURE_DETECTION(id, name, bit) \

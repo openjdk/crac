@@ -146,7 +146,7 @@ int VM_Version::_stepping;
 bool VM_Version::_has_intel_jcc_erratum;
 VM_Version::CpuidInfo VM_Version::_cpuid_info = { 0, };
 
-const std::array<const char *, VM_Feature_Flag::MAX_CPU_FEATURES> VM_Version::_features_names = VM_Features::make_features_names();
+const VM_Features::FeaturesNames VM_Version::_features_names = VM_Features::make_features_names();
 
 // Address of instruction which causes SEGV
 address VM_Version::_cpuinfo_segv_addr = nullptr;

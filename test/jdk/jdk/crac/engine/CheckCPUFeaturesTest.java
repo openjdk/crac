@@ -73,7 +73,12 @@ public class CheckCPUFeaturesTest implements CracTest {
         }
 
         try (var checkpoint = builder.vmOption("-XX:CPUFeatures=" + features).startCheckpoint()) {
-            checkpoint.waitForPausePid();
+            if (Platform.isAArch64() && "generic".equals(features)) {
+                assertEquals(1, checkpoint.waitFor());
+                return;
+            } else {
+                checkpoint.waitForPausePid();
+            }
 
             builder.clearVmOptions();
             if ("skip-experimental".equals(check)) {

@@ -28,8 +28,14 @@ import jdk.test.lib.crac.*;
  * @library /test/lib
  * @build SimpleCPUFeaturesTest
  * @run driver jdk.test.lib.crac.CracTest native
- * @run driver jdk.test.lib.crac.CracTest generic
  * @run driver jdk.test.lib.crac.CracTest ignore
+ */
+/*
+ * @test id=NAMED-GENERIC
+ * @requires os.arch!="aarch64"
+ * @library /test/lib
+ * @build SimpleCPUFeaturesTest
+ * @run driver jdk.test.lib.crac.CracTest generic
  */
 /*
  * @test id=TUNABLES
@@ -93,7 +99,7 @@ public class SimpleCPUFeaturesTest implements CracTest {
     private enum ErrorMsg {
         INVALID_FORMAT1("must be of the form: 0xNUM"),
         INVALID_FORMAT2("must be of the form: 0xNUM,0xNUM"),
-        INVALID_PACA("For -XX:CPUFeatures, exactly one of the bits PACA (0x10000) and NOTPACA (0x100000) must be set."),
+        INVALID_PACA("For -XX:CPUFeatures, exactly one of the bits PACA (0x10000) and NOTPACA (0x8000000000000000) must be set."),
         MISSING_FEATURES_ON_MACHINE("missing the following features required by -XX:CPUFeatures"),
         MISSING_FEATURES_IN_INPUT("-XX:CPUFeatures is missing mandatory features"),
         ARCH_DOES_NOT_SUPPORT("This architecture does not support any arch-specific"),

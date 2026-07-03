@@ -24,8 +24,9 @@
 #ifndef SHARE_RUNTIME_VM_FEATURES_INLINE_HPP
 #define SHARE_RUNTIME_VM_FEATURES_INLINE_HPP
 
-#include <utility>
 #include "utilities/ostream.hpp"
+
+#include <utility>
 
 class VM_Features : protected VM_Feature_Flag {
   friend class VMStructs;

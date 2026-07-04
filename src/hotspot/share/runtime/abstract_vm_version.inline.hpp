@@ -29,6 +29,7 @@
 #include "logging/log.hpp"
 #include "logging/logStream.hpp"
 #include "memory/resourceArea.hpp"
+#include "runtime/perfMemory.hpp"
 
 VM_Features VM_Version::CPUFeatures_parse(const char *str) {
   if (str == nullptr || strcmp(str, "native") == 0) {
@@ -181,6 +182,10 @@ void VM_Version::glibc_reexec() {
   }
   argv[argv_used] = nullptr;
 #undef CMDLINE
+
+  // Delete the hsperfdata file as the new JVM will have the same PID.
+  // CPUFeaturesAWS.sh would fail with: Could not find any processes matching : 'CPUFeaturesAWS'
+  perfMemory_exit();
 
 #define EXEC "/proc/self/exe"
   execv(EXEC, argv);

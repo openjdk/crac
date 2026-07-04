@@ -253,7 +253,7 @@ checkpoint_restore_one() {
     if [ $kind_restore != $kind_checkpoint ];then
       kind=$kind_restore
       setup
-      runssh "rm -rf cr;ssh -o 'UserKnownHostsFile /dev/null' -o 'StrictHostKeyChecking no' -i key $(ipaddr $kind_checkpoint) tar cf - cr|tar xf -"
+      runssh "rm -rf cr;ssh -o 'UserKnownHostsFile /dev/null' -o 'StrictHostKeyChecking no' -i key $(ipaddr $kind_checkpoint) tar cf - cr|sudo tar xf -"
     fi
     restore="$(runssh "./CPUFeaturesAWS.sh internal_restore $enginecmdline $restore_args" 2>&1|tee /proc/self/fd/2)"
     if echo "$restore"|grep -w RC=$expectrc && echo "$restore"|grep "$expect_error";then
@@ -289,19 +289,19 @@ if echo "$arch"|grep -q ', x86-64, ';then
 
 # Test 2 issues:
 # 1: ZULU-84672: CPUFeatures: Intel/AMD image portability problem; non-contained intersection; a!=(a&b)!=b
-# 2: IgnoreCPUFeatures is not inherited from snapshot to restore.
+# 2: CheckCPUFeatures=skip is not inherited from snapshot to restore.
 checkpoint_restore "$LINENO" t3a.micro t3.micro "1:Restore failed due to incompatible or missing CPU features, try using -XX:CPUFeatures=0x21461805ddfbf7,0xfcc0000000000000 on checkpoint." \
-  "-XX:+UnlockExperimentalVMOptions -XX:+IgnoreCPUFeatures" ""
+  "-XX:+UnlockExperimentalVMOptions -XX:CheckCPUFeatures=skip" ""
 
-# Test IgnoreCPUFeatures - in this case it only works by luck.
-checkpoint_restore "$LINENO" t3a.micro t3.micro "" "" "-XX:+UnlockExperimentalVMOptions -XX:+IgnoreCPUFeatures"
+# CheckCPUFeatures=skip at restore skips verification of the machine features; restore succeeds just due to a luck here.
+checkpoint_restore "$LINENO" t3a.micro t3.micro "" "" "-XX:+UnlockExperimentalVMOptions -XX:CheckCPUFeatures=skip"
 
 # Test the current state of things, it may be fixed in the future.
 checkpoint_restore "$LINENO" t3a.micro t3.micro "1:VM option .*CPUFeatures.* is not restore-settable and is not available on restore." \
   "" "-XX:CPUFeatures=ignore"
 
-# Test printing during snapshot: "CPU features are being kept intact as requested by -XX:CPUFeatures=ignore"
-checkpoint_restore "$LINENO" t3a.micro t3.micro "" "-XX:CPUFeatures=ignore" ""
+# It should also print during snapshot: "CPU features are being kept intact as requested by -XX:CPUFeatures=ignore"
+checkpoint_restore "$LINENO" t3a.micro t3.micro "1:Restore failed due to wrong or missing CPU architecture (current architecture is amd64)" "-XX:CPUFeatures=ignore" ""
 
 checkpoint_restore "$LINENO" t3a.micro t3.micro "" "-XX:CPUFeatures=0x21461805ddfbf7,0xfcc0000000000000"
 checkpoint_restore "$LINENO" t3.micro t3a.micro "" "-XX:CPUFeatures=0x21461805ddfbf7,0xfcc0000000000000"

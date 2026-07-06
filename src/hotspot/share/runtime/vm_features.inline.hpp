@@ -24,8 +24,15 @@
 #ifndef SHARE_RUNTIME_VM_FEATURES_INLINE_HPP
 #define SHARE_RUNTIME_VM_FEATURES_INLINE_HPP
 
+// No vm_features.hpp - this depends on arch-specific VM_Feature_Flag.
+
+#include "memory/allocation.hpp"
+#include "utilities/debug.hpp"
+#include "utilities/globalDefinitions.hpp"
+#include "utilities/macros.hpp"
 #include "utilities/ostream.hpp"
 
+#include <cstdint>
 #include <utility>
 
 class VM_Features : protected VM_Feature_Flag {

@@ -208,10 +208,10 @@ class VM_Features : protected VM_Feature_Flag {
   }
 
   struct FeaturesNames {
-    const char *a[MAX_CPU_FEATURES];
+    const char *names[MAX_CPU_FEATURES];
 
     constexpr const char *operator[](size_t i) const {
-      const char *retval = a[i];
+      const char *retval = names[i];
       assert(i < MAX_CPU_FEATURES, "Too big CPUFeature index");
       assert(retval != nullptr, "Undefined CPUFeatures index");
       return retval;

@@ -3404,6 +3404,8 @@ VM_Features VM_Version::CPUFeatures_mandatory() {
   VM_Features vm_features;
   vm_features.set_feature(CPU_SSE);
   vm_features.set_feature(CPU_SSE2);
+  // It is for compatibility of the set with older JDKs.
+  vm_features.set_feature(CPU_FLUSH_UNUSED);
   return vm_features;
 }
 

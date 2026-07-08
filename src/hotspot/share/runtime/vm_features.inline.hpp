@@ -220,8 +220,7 @@ class VM_Features : protected VM_Feature_Flag {
     constexpr const char *operator[](size_t i) const {
       const char *retval = names[i];
       assert(i < MAX_CPU_FEATURES, "Too big CPUFeature index");
-      assert(retval != nullptr, "Undefined CPUFeatures index");
-      return retval;
+      return retval ? retval : "?";
     }
   };
 

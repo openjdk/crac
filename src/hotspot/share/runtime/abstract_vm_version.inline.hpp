@@ -263,13 +263,11 @@ bool VM_Version::glibc_not_using() {
 
   VM_Features all_features;
   all_features.set_all_features();
-  if (FIRST_GLIBC_FEATURE != MAX_CPU_FEATURES) {
-    assert(handled.supports_feature(FIRST_GLIBC_FEATURE), "FIRST_GLIBC_FEATURE not handled");
-    VM_Feature_Flag::Feature_Flag last_cpu = static_cast<VM_Feature_Flag::Feature_Flag>(static_cast<int>(FIRST_GLIBC_FEATURE) - 1);
-    while (!handled.supports_feature(last_cpu)) {
-      all_features.clear_feature(last_cpu);
-      last_cpu = static_cast<VM_Feature_Flag::Feature_Flag>(static_cast<int>(last_cpu) - 1);
-    }
+  for (VM_Feature_Flag::Feature_Flag gapix = static_cast<VM_Feature_Flag::Feature_Flag>(static_cast<int>(LAST_CPU_FEATURE) + 1);
+       gapix < FIRST_GLIBC_FEATURE;
+       gapix = static_cast<VM_Feature_Flag::Feature_Flag>(static_cast<int>(gapix) + 1)) {
+    assert(!handled.supports_feature(gapix), "wrongly set CPUFeatures gap");
+    all_features.clear_feature(gapix);
   }
   if (handled != all_features) {
     stringStream ss;

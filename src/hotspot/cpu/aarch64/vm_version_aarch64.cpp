@@ -60,6 +60,8 @@
   GLIBC_UNSUPPORTED(SVEBITPERM); \
   GLIBC_UNSUPPORTED(SVE2      ); \
   GLIBC_UNSUPPORTED(A53MAC    ); \
+  GLIBC_UNSUPPORTED(ECV       ); \
+  GLIBC_UNSUPPORTED(WFXT      ); \
   GLIBC_UNSUPPORTED(NOTPACA   ); \
   /**/
 #include "runtime/abstract_vm_version.inline.hpp"

@@ -127,6 +127,7 @@ public:
 #undef DECLARE_CPU_FEATURE_FLAG
     MAX_CPU_FEATURES,
     // Define a window of unused features so that adding new CPU_* upstream does not shift the GLIBC features.
+    LAST_CPU_FEATURE = CPU_HYBRID,
     FIRST_GLIBC_FEATURE = CPU_FMA4
   };
 };

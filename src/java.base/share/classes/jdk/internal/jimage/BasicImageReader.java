@@ -77,9 +77,10 @@ public class BasicImageReader implements AutoCloseable {
     private final ByteOrder byteOrder;
     private final String name;
     private ByteBuffer memoryMap;
+    private final boolean isMemoryMapped;
     private FileChannel channel;
     private final ImageHeader header;
-    private final long indexSize;
+    private final int indexSize;
     private IntBuffer redirect;
     private IntBuffer offsets;
     private ByteBuffer locations;
@@ -95,14 +96,15 @@ public class BasicImageReader implements AutoCloseable {
         this.byteOrder = Objects.requireNonNull(byteOrder);
         this.name = this.imagePath.toString();
 
-        ByteBuffer map;
+        // The image reader will be for the current run-time image when the this class
+        // is defined by the boot class loader.
+        final boolean isCurrentRuntimeImage = BasicImageReader.class.getClassLoader() == null;
+        ByteBuffer map = null;
 
-        if (USE_JVM_MAP && BasicImageReader.class.getClassLoader() == null) {
+        if (USE_JVM_MAP && isCurrentRuntimeImage) {
             // Check to see if the jvm has opened the file using libjimage
             // native entry when loading the image for this runtime
             map = NativeImageBuffer.getNativeMap(name);
-         } else {
-            map = null;
         }
 
         // Open the file only if no memory map yet or is 32 bit jvm
@@ -113,10 +115,13 @@ public class BasicImageReader implements AutoCloseable {
             registerIfCracPresent();
         }
 
-        // If no memory map yet and 64 bit jvm then memory map entire file
-        if (MAP_ALL && map == null) {
+        isMemoryMapped = isCurrentRuntimeImage && MAP_ALL;
+
+        // If no memory map yet, runtime image, and 64 bit jvm then memory map entire file
+        if (map == null && isMemoryMapped) {
             map = createMemoryMap(channel.size());
         }
+
 
         // Assume we have a memory map to read image file header
         ByteBuffer headerBuffer = map;
@@ -124,12 +129,7 @@ public class BasicImageReader implements AutoCloseable {
 
         // If no memory map then read header from image file
         if (headerBuffer == null) {
-            headerBuffer = ByteBuffer.allocateDirect(headerSize);
-            if (channel.read(headerBuffer, 0L) == headerSize) {
-                headerBuffer.rewind();
-            } else {
-                throw new IOException("\"" + name + "\" is not an image file");
-            }
+            headerBuffer = readDirectBuffer(headerSize);
         } else if (headerBuffer.capacity() < headerSize) {
             throw new IOException("\"" + name + "\" is not an image file");
         }
@@ -138,10 +138,9 @@ public class BasicImageReader implements AutoCloseable {
         header = readHeader(intBuffer(headerBuffer, 0, headerSize));
         indexSize = header.getIndexSize();
 
-        // If no memory map yet then must be 32 bit jvm not previously mapped
+        // If no memory map yet then must be 32 bit jvm or not runtime image not previously mapped
         if (map == null) {
-            // Just map the image index
-            map = createMemoryMap(indexSize);
+            map = readDirectBuffer(indexSize);
         }
 
         memoryMap = map.asReadOnlyBuffer();
@@ -246,7 +245,7 @@ public class BasicImageReader implements AutoCloseable {
                     } else if ("afterRestore".equals(method.getName())) {
                         if (channel != null) {
                             channel = openFileChannel();
-                            memoryMap = createMemoryMap(MAP_ALL ? channel.size() : indexSize).asReadOnlyBuffer();
+                            memoryMap = (isMemoryMapped ? createMemoryMap(channel.size()) : readDirectBuffer(indexSize)).asReadOnlyBuffer();
                             initMappedBuffers();
                         }
                     } else if ("toString".equals(method.getName())) {
@@ -267,12 +266,13 @@ public class BasicImageReader implements AutoCloseable {
 
     @SuppressWarnings("removal")
     private FileChannel openFileChannel() throws IOException {
+        final boolean isCurrentRuntimeImage = BasicImageReader.class.getClassLoader() == null;
         FileChannel channel = FileChannel.open(imagePath, StandardOpenOption.READ);
         // No lambdas during bootstrap
         AccessController.doPrivileged(new PrivilegedAction<Void>() {
             @Override
             public Void run() {
-                if (BasicImageReader.class.getClassLoader() == null) {
+                if (isCurrentRuntimeImage) {
                     try {
                         Class<?> fileChannelImpl =
                             Class.forName("sun.nio.ch.FileChannelImpl");
@@ -292,6 +292,16 @@ public class BasicImageReader implements AutoCloseable {
             }
         });
         return channel;
+    }
+
+    private ByteBuffer readDirectBuffer(int size) throws IOException {
+        ByteBuffer buffer = ByteBuffer.allocateDirect(size);
+        if (channel.read(buffer, 0L) == size) {
+            buffer.flip();
+        } else {
+            throw new IOException("\"" + name + "\" is not an image file");
+        }
+        return buffer;
     }
 
     protected BasicImageReader(Path imagePath) throws IOException {
@@ -529,7 +539,7 @@ public class BasicImageReader implements AutoCloseable {
         }
         int checkedSize = (int) size;
 
-        if (MAP_ALL) {
+        if (isMemoryMapped) {
             ByteBuffer buffer = slice(memoryMap, checkedOffset, checkedSize);
             buffer.order(ByteOrder.BIG_ENDIAN);
 

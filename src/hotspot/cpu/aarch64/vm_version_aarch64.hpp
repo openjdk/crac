@@ -54,9 +54,10 @@ public:
     decl(PACA,          paca,       16) \
     decl(SVEBITPERM,    svebitperm, 17) \
     decl(SVE2,          sve2,       18) \
-    decl(A53MAC,        a53mac,     19) \
-    decl(ECV,           ecv,        20) \
-    decl(WFXT,          wfxt,       21) \
+    decl(STXR_PREFETCH_UNUSED, stxr_prefetch, 19)  \
+    decl(A53MAC,        a53mac,     20) \
+    decl(ECV,           ecv,        21) \
+    decl(WFXT,          wfxt,       22) \
     /* These features are added for CRaC. */ \
     decl(NOTPACA,       notpaca,    63) \
     /**/

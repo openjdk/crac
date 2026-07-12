@@ -180,7 +180,7 @@ setup() {
   fi
   getipaddr
   if [ -z "$(ipaddr $kind)" ];then
-    aws ec2 run-instances --no-cli-pager --profile $profile --region us-west-2 --image-id $debianami --instance-type $kind --key-name $AWS_KEY_NAME --subnet-id subnet-0a6fd4c98705a4c63 --security-group-ids sg-0081bc08de42b1086 --tag-specifications "ResourceType=instance,Tags=[{Key=Name,Value=$awstagname-$kind}]" --instance-initiated-shutdown-behavior terminate --user-data $'#!/bin/bash\nshutdown -P +'$awstimeout
+    aws ec2 run-instances --no-cli-pager --profile $profile --region us-west-2 --image-id $debianami --instance-type $kind --key-name $AWS_KEY_NAME --subnet-id subnet-0a6fd4c98705a4c63 --security-group-ids sg-0081bc08de42b1086 --tag-specifications "ResourceType=instance,Tags=[{Key=Name,Value=$awstagname-$kind}]" --instance-initiated-shutdown-behavior terminate --user-data $'#!/bin/bash\n(sleep '$awstimeout'm;shutdown -P now)&'
     for i in `seq 1 60`;do
       getipaddr
       if [ -n "$(ipaddr $kind)" ];then

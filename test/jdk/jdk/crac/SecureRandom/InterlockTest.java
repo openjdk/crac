@@ -1,4 +1,4 @@
-// Copyright 2019-2021 Azul Systems, Inc.  All Rights Reserved.
+// Copyright 2019, 2026 Azul Systems, Inc.  All Rights Reserved.
 // DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
 //
 // This code is free software; you can redistribute it and/or modify it under
@@ -24,23 +24,37 @@ import jdk.crac.Resource;
 import jdk.crac.RestoreException;
 import jdk.crac.management.CRaCMXBean;
 import jdk.test.lib.crac.CracBuilder;
+import jdk.test.lib.crac.CracEngine;
 import jdk.test.lib.crac.CracTest;
 import jdk.test.lib.crac.CracTestArg;
 
 import java.security.SecureRandom;
 
 /*
- * @test
- * @summary Verify that secure random is not interlocked during checkpoint/restore.
- * @requires (os.family == "linux")
+ * @test id=SHA1PRNG
+ * @summary Verify that SHA1PRNG secure random is not interlocked during checkpoint/restore.
  * @library /test/lib
  * @build InterlockTest
  * @run driver/timeout=60 jdk.test.lib.crac.CracTest SHA1PRNG 100
+ */
+/*
+ * @test id=NativePRNGNonBlocking
+ * @summary Verify that NativePRNGNonBlocking secure random is not interlocked during checkpoint/restore.
+ * @requires (os.family != "windows")
+ * @library /test/lib
+ * @build InterlockTest
  * @run driver/timeout=60 jdk.test.lib.crac.CracTest NativePRNGNonBlocking 100
+ */
+/*
+ * @test id=NativePRNG
+ * @summary Verify that NativePRNG secure random is not interlocked during checkpoint/restore.
+ * @requires (os.family != "windows")
+ * @library /test/lib
+ * @build InterlockTest
  * @run driver/timeout=60 jdk.test.lib.crac.CracTest NativePRNG 100
  */
 
-/* NativePRNGBlocking is exluded as on some machines /dev/random is exhausted
+/* NativePRNGBlocking is excluded as on some machines /dev/random is exhausted
  * too soon, making the test running too long. */
 
 public class InterlockTest implements Resource, CracTest {
@@ -123,7 +137,7 @@ public class InterlockTest implements Resource, CracTest {
 
     @Override
     public void test() throws Exception {
-        new CracBuilder().doCheckpointAndRestore();
+        new CracBuilder().engine(CracEngine.SIMULATE).doCheckpoint();
     }
 
     @Override

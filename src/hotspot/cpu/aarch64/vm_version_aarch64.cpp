@@ -905,16 +905,6 @@ VM_Features VM_Version::CPUFeatures_generic() {
   ShouldNotReachHere();
 }
 
-void VM_Version::print_using_features_cr() {
-  if (_ignore_glibc_not_using) {
-    tty->print_raw_cr("CPU features are being kept intact as requested by -XX:CPUFeatures=ignore");
-  } else {
-    tty->print_raw("CPU features being used are: -XX:CPUFeatures=");
-    _features.print_numbers(*tty);
-    tty->cr();
-  }
-}
-
 const char *VM_Version::restore_failed_check(const VM_Features *image_features, const VM_Features *current_features) {
   if (image_features->supports_feature(VM_Feature_Flag::CPU_PACA)
       == current_features->supports_feature(VM_Feature_Flag::CPU_PACA)) {

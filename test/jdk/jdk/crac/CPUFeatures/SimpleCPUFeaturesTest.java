@@ -70,8 +70,8 @@ import jdk.test.lib.crac.*;
  * @requires os.family != "linux"
  * @library /test/lib
  * @build SimpleCPUFeaturesTest
- * @run driver jdk.test.lib.crac.CracTest foobar   -- OS_DOES_NOT_SUPPORT
- * @run driver jdk.test.lib.crac.CracTest 0x60,0x0 -- OS_DOES_NOT_SUPPORT
+ * @run driver jdk.test.lib.crac.CracTest foobar            -- OS_DOES_NOT_SUPPORT
+ * @run driver jdk.test.lib.crac.CracTest 0x20000000080,0x0 -- OS_DOES_NOT_SUPPORT
  */
 /*
  * @test id=AARCH64-LINUX

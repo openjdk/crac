@@ -294,7 +294,7 @@ void VM_Version::print_using_features_cr() {
     tty->print_raw_cr("CPU features are being kept intact as requested by -XX:CPUFeatures=ignore");
   } else {
     tty->print_raw("CPU features being used are: -XX:CPUFeatures=");
-    _features.print_numbers(*tty);
+    _features.aot_code_cache_features().print_numbers(*tty);
     tty->cr();
   }
 }

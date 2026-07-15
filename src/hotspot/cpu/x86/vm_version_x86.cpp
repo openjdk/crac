@@ -3201,6 +3201,14 @@ VM_Version::VM_Features VM_Version::CpuidInfo::feature_flags() const {
   if (std_cpuid1_ecx.bits.osxsave != 0) {
     vm_features.set_feature(CPU_OSXSAVE);
   }
+  if (sef_cpuid7_edx.bits.cet_ibt != 0) {
+    // GLIBC name for CPU_CET_IBT, we could share its bit in VM_Features.
+    vm_features.set_feature(CPU_IBT);
+  }
+  if (sef_cpuid7_ecx.bits.cet_ss != 0) {
+    // GLIBC name for CPU_CET_SS, we could share its bit in VM_Features.
+    vm_features.set_feature(CPU_SHSTK);
+  }
   if (std_cpuid1_ecx.bits.xsave != 0) {
     vm_features.set_feature(CPU_XSAVE);
   }
@@ -3425,9 +3433,9 @@ bool VM_Version::is_intrinsic_supported(vmIntrinsicID id) {
 
 VM_Features VM_Version::CPUFeatures_mandatory() {
   VM_Features vm_features;
-  vm_features.set_feature(CPU_SSE);
   vm_features.set_feature(CPU_SSE2);
   // It is for compatibility of the set with older JDKs.
+  vm_features.set_feature(CPU_MMX_UNUSED);
   vm_features.set_feature(CPU_FLUSH_UNUSED);
   return vm_features;
 }
@@ -3439,6 +3447,7 @@ VM_Features VM_Version::CPUFeatures_generic() {
   VM_Features retval = CPUFeatures_mandatory();
 #ifdef AMD64
     // The following options are all in /proc/cpuinfo of one of the first 64-bit CPUs - Atom D2700 (and Opteron 1352): https://superuser.com/q/1572306/1015048
+  retval.set_feature(CPU_SSE); // enabled in 'gcc -Q --help=target', used by OpenJDK
   retval.set_feature(CPU_FXSR); // enabled in 'gcc -Q --help=target', not used by OpenJDK
   retval.set_feature(CPU_TSC); // not used by gcc, used by OpenJDK
   retval.set_feature(CPU_CX8); // gcc detects it to set cpu "pentium" (=32-bit only), used by OpenJDK

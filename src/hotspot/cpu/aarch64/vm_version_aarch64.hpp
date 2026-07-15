@@ -74,10 +74,6 @@ public:
 
 #include "runtime/vm_features.inline.hpp"
 
-class stringStream;
-
-#define BIT_MASK(flag) (1ULL<<(flag))
-
 class VM_Version : public Abstract_VM_Version, public VM_Feature_Flag {
   friend class VMStructs;
 

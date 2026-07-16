@@ -3229,9 +3229,6 @@ VM_Version::VM_Features VM_Version::CpuidInfo::feature_flags() const {
       }
     }
   }
-  // Unused fields, see the enum definition.
-  vm_features.set_feature(CPU_MMX_UNUSED);
-  vm_features.set_feature(CPU_FLUSH_UNUSED);
 
   // Composite features.
   if (supports_tscinv_bit() &&

@@ -3423,10 +3423,10 @@ bool VM_Version::is_intrinsic_supported(vmIntrinsicID id) {
 
 VM_Features VM_Version::CPUFeatures_mandatory() {
   VM_Features vm_features;
-  // SSE and SSE2 are set unconditionally in feature_flags().
+  // JDK-8383881 in jdk28+ removed supports_sse(), supports_sse2(), supports_mmx() and supports_clflush().
+  // JDK-8383881 has kept the CPU_SSE and CPU_SSE2 bits for an unknown reason.
   vm_features.set_feature(CPU_SSE);
   vm_features.set_feature(CPU_SSE2);
-  // It is for compatibility of the set with older JDKs.
   vm_features.set_feature(CPU_MMX_UNUSED);
   vm_features.set_feature(CPU_FLUSH_UNUSED);
   return vm_features;
@@ -3438,7 +3438,7 @@ VM_Features VM_Version::CPUFeatures_generic() {
 #else
   VM_Features retval = CPUFeatures_mandatory();
 #ifdef AMD64
-    // The following options are all in /proc/cpuinfo of one of the first 64-bit CPUs - Atom D2700 (and Opteron 1352): https://superuser.com/q/1572306/1015048
+  // The following options are all in /proc/cpuinfo of one of the first 64-bit CPUs - Atom D2700 (and Opteron 1352): https://superuser.com/q/1572306/1015048
   retval.set_feature(CPU_FXSR); // enabled in 'gcc -Q --help=target', not used by OpenJDK
   retval.set_feature(CPU_TSC); // not used by gcc, used by OpenJDK
   retval.set_feature(CPU_CX8); // gcc detects it to set cpu "pentium" (=32-bit only), used by OpenJDK

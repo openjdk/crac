@@ -24,7 +24,16 @@
 #ifndef SHARE_RUNTIME_VM_FEATURES_INLINE_HPP
 #define SHARE_RUNTIME_VM_FEATURES_INLINE_HPP
 
+// No vm_features.hpp - this depends on arch-specific VM_Feature_Flag.
+
+#include "memory/allocation.hpp"
+#include "utilities/debug.hpp"
+#include "utilities/globalDefinitions.hpp"
+#include "utilities/macros.hpp"
 #include "utilities/ostream.hpp"
+
+#include <cstdint>
+#include <utility>
 
 class VM_Features : protected VM_Feature_Flag {
   friend class VMStructs;
@@ -203,6 +212,33 @@ class VM_Features : protected VM_Feature_Flag {
     stringStream ss(buf, MAX_CPU_FEATURES);
     print_numbers(ss);
     return buf;
+  }
+
+  struct FeaturesNames {
+    const char *names[MAX_CPU_FEATURES];
+
+    constexpr const char *operator[](size_t i) const {
+      const char *retval = names[i];
+      assert(i < MAX_CPU_FEATURES, "Too big CPUFeature index");
+      return retval ? retval : "?";
+    }
+  };
+
+  static constexpr const char *make_features_names_name(size_t i) {
+    switch (i) {
+#define DECLARE_CPU_FEATURE_NAME(id, name, bit) case bit: return STR(name);
+    CPU_FEATURE_FLAGS(DECLARE_CPU_FEATURE_NAME)
+#undef DECLARE_CPU_FEATURE_NAME
+    default:
+      return nullptr;
+    }
+  }
+  template <size_t... I>
+  static constexpr FeaturesNames make_features_names(std::index_sequence<I...>) {
+    return {{ make_features_names_name(I)... }};
+  }
+  static constexpr FeaturesNames make_features_names() {
+    return make_features_names(std::make_index_sequence<MAX_CPU_FEATURES>{});
   }
 };
 

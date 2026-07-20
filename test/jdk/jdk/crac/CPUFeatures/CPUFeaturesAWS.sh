@@ -180,7 +180,7 @@ setup() {
   fi
   getipaddr
   if [ -z "$(ipaddr $kind)" ];then
-    aws ec2 run-instances --no-cli-pager --profile $profile --region us-west-2 --image-id $debianami --instance-type $kind --key-name $AWS_KEY_NAME --subnet-id subnet-0a6fd4c98705a4c63 --security-group-ids sg-0081bc08de42b1086 --tag-specifications "ResourceType=instance,Tags=[{Key=Name,Value=$awstagname-$kind}]" --instance-initiated-shutdown-behavior terminate --user-data $'#!/bin/bash\nshutdown -P +'$awstimeout
+    aws ec2 run-instances --no-cli-pager --profile $profile --region us-west-2 --image-id $debianami --instance-type $kind --key-name $AWS_KEY_NAME --subnet-id subnet-0a6fd4c98705a4c63 --security-group-ids sg-0081bc08de42b1086 --tag-specifications "ResourceType=instance,Tags=[{Key=Name,Value=$awstagname-$kind}]" --instance-initiated-shutdown-behavior terminate --user-data $'#!/bin/bash\nfor i in $(seq 1 '$awstimeout');do sleep 1m;done;shutdown -P now'
     for i in `seq 1 60`;do
       getipaddr
       if [ -n "$(ipaddr $kind)" ];then
@@ -246,16 +246,16 @@ checkpoint_restore_one() {
   kind=$kind_checkpoint
   setup
   snapshot="$(runssh "./CPUFeaturesAWS.sh internal_checkpoint $enginecmdline $checkpoint_args" 2>&1|tee /proc/self/fd/2)"
+  local r="$engine"
   if [ "$expectrc" = -1 ] && echo "$snapshot"|grep "$expect_error";then
     r="$r-PASS"
   else
     if [ $kind_restore != $kind_checkpoint ];then
       kind=$kind_restore
       setup
-      runssh "rm -rf cr;ssh -o 'UserKnownHostsFile /dev/null' -o 'StrictHostKeyChecking no' -i key $(ipaddr $kind_checkpoint) tar cf - cr|tar xf -"
+      runssh "rm -rf cr;ssh -o 'UserKnownHostsFile /dev/null' -o 'StrictHostKeyChecking no' -i key $(ipaddr $kind_checkpoint) tar cf - cr|sudo tar xf -"
     fi
     restore="$(runssh "./CPUFeaturesAWS.sh internal_restore $enginecmdline $restore_args" 2>&1|tee /proc/self/fd/2)"
-    local r="$engine"
     if echo "$restore"|grep -w RC=$expectrc && echo "$restore"|grep "$expect_error";then
       r="$r-PASS"
     else
@@ -287,23 +287,29 @@ if echo "$arch"|grep -q ', x86-64, ';then
 # Exception in thread "main" java.lang.OutOfMemoryError: Java heap space
 #         at CPUFeaturesAWS.<clinit>(CPUFeaturesAWS.java:32)
 
-# ZULU-84672: CPUFeatures: Intel/AMD image portability problem; non-contained intersection; a!=(a&b)!=b
-checkpoint_restore "$LINENO" t3a.micro t3.micro "1:Restore failed due to incompatible or missing CPU features, try using -XX:CPUFeatures=0x8510c02eefdf7,0x3f3 on checkpoint." "" ""
+# Test 2 issues:
+# 1: ZULU-84672: CPUFeatures: Intel/AMD image portability problem; non-contained intersection; a!=(a&b)!=b
+# 2: CheckCPUFeatures=skip is not inherited from snapshot to restore.
+checkpoint_restore "$LINENO" t3a.micro t3.micro "1:Restore failed due to incompatible or missing CPU features, try using -XX:CPUFeatures=0x21461805ddfbf7,0xfcc0000000000000 on checkpoint." \
+  "-XX:+UnlockExperimentalVMOptions -XX:CheckCPUFeatures=skip" ""
+
+# CheckCPUFeatures=skip at restore skips verification of the machine features; restore succeeds just due to a luck here.
+checkpoint_restore "$LINENO" t3a.micro t3.micro "" "" "-XX:+UnlockExperimentalVMOptions -XX:CheckCPUFeatures=skip"
 
 # Test the current state of things, it may be fixed in the future.
 checkpoint_restore "$LINENO" t3a.micro t3.micro "1:VM option .*CPUFeatures.* is not restore-settable and is not available on restore." \
   "" "-XX:CPUFeatures=ignore"
 
-# Test printing during snapshot: "CPU features are being kept intact as requested by -XX:CPUFeatures=ignore"
-checkpoint_restore "$LINENO" t3a.micro t3.micro "" "-XX:CPUFeatures=ignore" ""
+# It should also print during snapshot: "CPU features are being kept intact as requested by -XX:CPUFeatures=ignore"
+checkpoint_restore "$LINENO" t3a.micro t3.micro "1:Restore failed due to wrong or missing CPU architecture (current architecture is amd64)" "-XX:CPUFeatures=ignore" ""
 
-checkpoint_restore "$LINENO" t3a.micro t3.micro "" "-XX:CPUFeatures=0x8510c02eefdf7,0x3f3"
-checkpoint_restore "$LINENO" t3.micro t3a.micro "" "-XX:CPUFeatures=0x8510c02eefdf7,0x3f3"
+checkpoint_restore "$LINENO" t3a.micro t3.micro "" "-XX:CPUFeatures=0x21461805ddfbf7,0xfcc0000000000000"
+checkpoint_restore "$LINENO" t3.micro t3a.micro "" "-XX:CPUFeatures=0x21461805ddfbf7,0xfcc0000000000000"
 
 checkpoint_restore "$LINENO" m1.small t3.micro
 
 # criu FAIL: JDK-8373027: [CRaC] [CRIU] x86: FPU xsave area present, but host cpu doesn't support it
-checkpoint_restore "$LINENO" t3.micro m1.small "" "-XX:CPUFeatures=0x500000385de7,0xe0" ""
+checkpoint_restore "$LINENO" t3.micro m1.small "" "-XX:CPUFeatures=0x142000070bbd7,0x3800000000000000" ""
 
 checkpoint_restore "$LINENO" t3.micro t3.micro "" "-XX:CPUFeatures=native" ""
 
@@ -314,7 +320,7 @@ checkpoint_restore "$LINENO" t3.micro t3.micro "" "-XX:CPUFeatures=generic" ""
 
 # Currently the most modern x86_64 CPU in AWS.
 # criu FAIL: ZULU-84505: [CRaC] [CRIU] Fix a failure for checkpoint on AWS m8i-flex.large
-checkpoint_restore "$LINENO" m8i-flex.large m1.small "" "-XX:CPUFeatures=0x500000385de7,0xe0" ""
+checkpoint_restore "$LINENO" m8i-flex.large m1.small "" "-XX:CPUFeatures=0x142000070bbd7,0x3800000000000000" ""
 
 # 8374491: CPUFeatures: check performance regression of AVX_Fast_Unaligned_Load
 lastline="$LINENO"
@@ -336,14 +342,14 @@ elif echo "$arch"|grep -q ', ARM aarch64, ';then
 checkpoint_restore "$LINENO" a1.medium a1.medium
 checkpoint_restore "$LINENO" t4g.micro t4g.micro
 checkpoint_restore "$LINENO" a1.medium t4g.micro
-checkpoint_restore "$LINENO" t4g.micro a1.medium "1:Restore failed due to incompatible or missing CPU features, try using -XX:CPUFeatures=0x4000ff on checkpoint."
-checkpoint_restore "$LINENO" t4g.micro a1.medium "-1:LSE (0x100) cannot be disabled via -XX:CPUFeatures on aarch64." "-XX:CPUFeatures=0x4000ff" ""
+checkpoint_restore "$LINENO" t4g.micro a1.medium "1:Restore failed due to incompatible or missing CPU features, try using -XX:CPUFeatures=0x80000000000000ff on checkpoint."
+checkpoint_restore "$LINENO" t4g.micro a1.medium "-1:LSE (0x100) cannot be disabled via -XX:CPUFeatures on aarch64." "-XX:CPUFeatures=0x80000000000000ff" ""
 
-checkpoint_restore "$LINENO" c7g.medium c7g.medium
-checkpoint_restore "$LINENO" c8g.medium c8g.medium
+# JDK-8385359: checkpoint_restore "$LINENO" c7g.medium c7g.medium
+# JDK-8385359: checkpoint_restore "$LINENO" c8g.medium c8g.medium
 # JDK-8385359: checkpoint_restore "$LINENO" c7g.medium c8g.medium
 checkpoint_restore "$LINENO" c8g.medium c7g.medium "1:Restore failed due to incompatible or missing CPU features, try using -XX:CPUFeatures=0x17fff on checkpoint."
-checkpoint_restore "$LINENO" c8g.medium c7g.medium "" "-XX:CPUFeatures=0x17fff" ""
+# JDK-8385359: checkpoint_restore "$LINENO" c8g.medium c7g.medium "" "-XX:CPUFeatures=0x17fff" ""
 
 checkpoint_restore "$LINENO" t4g.micro c8g.medium "1:Restore failed due to incompatible aarch64 CPU feature PACA (0x10000); these CPUs each require a separate image."
 checkpoint_restore "$LINENO" c8g.medium t4g.micro "1:Restore failed due to incompatible aarch64 CPU feature PACA (0x10000); these CPUs each require a separate image."

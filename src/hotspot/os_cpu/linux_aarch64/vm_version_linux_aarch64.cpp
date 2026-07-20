@@ -28,6 +28,7 @@
 #include "runtime/os.hpp"
 #include "runtime/os.inline.hpp"
 #include "runtime/vm_version.hpp"
+#include "utilities/formatBuffer.hpp"
 
 #include <asm/hwcap.h>
 #include <sys/auxv.h>
@@ -216,18 +217,14 @@ void VM_Version::check_os_cpu_info() {
     paca.set_feature(CPU_PACA);
     VM_Features notpaca;
     notpaca.set_feature(CPU_NOTPACA);
-    stringStream ss;
-    ss.print_cr("For -XX:CPUFeatures, exactly one of the bits PACA (%s) and NOTPACA (%s) must be set.", paca.print_numbers(), notpaca.print_numbers());
-    vm_exit_during_initialization(ss.base());
+    vm_exit_during_initialization(err_msg("For -XX:CPUFeatures, exactly one of the bits PACA (%s) and NOTPACA (%s) must be set.", paca.print_numbers(), notpaca.print_numbers()));
   }
   if (_cpu_features.supports_feature(CPU_LSE) && !supports_lse()) {
     ResourceMark rm;
     VM_Features lse;
     lse.set_feature(VM_Feature_Flag::CPU_LSE);
-    stringStream ss;
     // GLIBC_TUNABLES=glibc.cpu.hwcaps is unsupported on aarch64
-    ss.print_cr("LSE (%s) cannot be disabled via -XX:CPUFeatures on aarch64.", lse.print_numbers());
-    vm_exit_during_initialization(ss.base());
+    vm_exit_during_initialization(err_msg("LSE (%s) cannot be disabled via -XX:CPUFeatures on aarch64.", lse.print_numbers()));
   }
 }
 

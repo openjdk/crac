@@ -126,6 +126,9 @@
   /* These are handled as an exception in VM_Version::glibc_patch(). */ \
   GLIBC_UNSUPPORTED(CMPXCHG16        ); \
   GLIBC_UNSUPPORTED(LAHFSAHF         ); \
+  /* Unused fields, see the enum definition. */ \
+  GLIBC_UNSUPPORTED(MMX_UNUSED       ); \
+  GLIBC_UNSUPPORTED(FLUSH_UNUSED     ); \
   /**/
 
 #if INCLUDE_CPU_FEATURE_ACTIVE
@@ -143,9 +146,7 @@ int VM_Version::_stepping;
 bool VM_Version::_has_intel_jcc_erratum;
 VM_Version::CpuidInfo VM_Version::_cpuid_info = { 0, };
 
-#define DECLARE_CPU_FEATURE_NAME(id, name) XSTR(name),
-const char* VM_Version::_features_names[] = { CPU_FEATURE_FLAGS(DECLARE_CPU_FEATURE_NAME)};
-#undef DECLARE_CPU_FEATURE_NAME
+const VM_Features::FeaturesNames VM_Version::_features_names = VM_Features::make_features_names();
 
 // Address of instruction which causes SEGV
 address VM_Version::_cpuinfo_segv_addr = nullptr;
@@ -2166,16 +2167,6 @@ bool VM_Version::cpu_features_binary(VM_Version::VM_Features *data) {
   return true;
 }
 
-void VM_Version::print_using_features_cr() {
-  if (_ignore_glibc_not_using) {
-    tty->print_raw_cr("CPU features are being kept intact as requested by -XX:CPUFeatures=ignore");
-  } else {
-    tty->print_raw("CPU features being used are: -XX:CPUFeatures=");
-    _features.aot_code_cache_features().print_numbers(*tty);
-    tty->cr();
-  }
-}
-
 #ifdef COMPILER2
 // Determine if it's running on Cascade Lake using default options.
 bool VM_Version::is_default_intel_cascade_lake() {
@@ -3200,6 +3191,14 @@ VM_Version::VM_Features VM_Version::CpuidInfo::feature_flags() const {
   if (std_cpuid1_ecx.bits.osxsave != 0) {
     vm_features.set_feature(CPU_OSXSAVE);
   }
+  if (sef_cpuid7_edx.bits.cet_ibt != 0) {
+    // GLIBC name for CPU_CET_IBT, we could share its bit in VM_Features.
+    vm_features.set_feature(CPU_IBT);
+  }
+  if (sef_cpuid7_ecx.bits.cet_ss != 0) {
+    // GLIBC name for CPU_CET_SS, we could share its bit in VM_Features.
+    vm_features.set_feature(CPU_SHSTK);
+  }
   if (std_cpuid1_ecx.bits.xsave != 0) {
     vm_features.set_feature(CPU_XSAVE);
   }
@@ -3230,6 +3229,9 @@ VM_Version::VM_Features VM_Version::CpuidInfo::feature_flags() const {
       }
     }
   }
+  // Unused fields, see the enum definition.
+  vm_features.set_feature(CPU_MMX_UNUSED);
+  vm_features.set_feature(CPU_FLUSH_UNUSED);
 
   // Composite features.
   if (supports_tscinv_bit() &&
@@ -3421,8 +3423,12 @@ bool VM_Version::is_intrinsic_supported(vmIntrinsicID id) {
 
 VM_Features VM_Version::CPUFeatures_mandatory() {
   VM_Features vm_features;
+  // JDK-8383881 in jdk28+ removed supports_sse(), supports_sse2(), supports_mmx() and supports_clflush().
+  // JDK-8384869 has kept CPU_SSE and CPU_SSE2 bits but they are no longer being checked in JDK code.
   vm_features.set_feature(CPU_SSE);
   vm_features.set_feature(CPU_SSE2);
+  vm_features.set_feature(CPU_MMX_UNUSED);
+  vm_features.set_feature(CPU_FLUSH_UNUSED);
   return vm_features;
 }
 
@@ -3432,7 +3438,7 @@ VM_Features VM_Version::CPUFeatures_generic() {
 #else
   VM_Features retval = CPUFeatures_mandatory();
 #ifdef AMD64
-    // The following options are all in /proc/cpuinfo of one of the first 64-bit CPUs - Atom D2700 (and Opteron 1352): https://superuser.com/q/1572306/1015048
+  // The following options are all in /proc/cpuinfo of one of the first 64-bit CPUs - Atom D2700 (and Opteron 1352): https://superuser.com/q/1572306/1015048
   retval.set_feature(CPU_FXSR); // enabled in 'gcc -Q --help=target', not used by OpenJDK
   retval.set_feature(CPU_TSC); // not used by gcc, used by OpenJDK
   retval.set_feature(CPU_CX8); // gcc detects it to set cpu "pentium" (=32-bit only), used by OpenJDK

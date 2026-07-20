@@ -29,6 +29,7 @@
 #include "logging/log.hpp"
 #include "logging/logStream.hpp"
 #include "memory/resourceArea.hpp"
+#include "runtime/perfMemory.hpp"
 
 VM_Features VM_Version::CPUFeatures_parse(const char *str) {
   if (str == nullptr || strcmp(str, "native") == 0) {
@@ -182,6 +183,10 @@ void VM_Version::glibc_reexec() {
   argv[argv_used] = nullptr;
 #undef CMDLINE
 
+  // Delete the hsperfdata file as the new JVM will have the same PID.
+  // CPUFeaturesAWS.sh would fail with: Could not find any processes matching : 'CPUFeaturesAWS'
+  perfMemory_exit();
+
 #define EXEC "/proc/self/exe"
   execv(EXEC, argv);
   vm_exit_during_initialization(err_msg("Cannot re-execute " EXEC ": %m"));
@@ -258,6 +263,12 @@ bool VM_Version::glibc_not_using() {
 
   VM_Features all_features;
   all_features.set_all_features();
+  for (VM_Feature_Flag::Feature_Flag gapix = static_cast<VM_Feature_Flag::Feature_Flag>(static_cast<int>(LAST_CPU_FEATURE) + 1);
+       gapix < FIRST_GLIBC_FEATURE;
+       gapix = static_cast<VM_Feature_Flag::Feature_Flag>(static_cast<int>(gapix) + 1)) {
+    assert(!handled.supports_feature(gapix), "wrongly set CPUFeatures gap");
+    all_features.clear_feature(gapix);
+  }
   if (handled != all_features) {
     stringStream ss;
     ss.print_raw("internal error: Unsupported disabling of some CPU_* ");
@@ -277,6 +288,16 @@ bool VM_Version::glibc_not_using() {
 }
 #undef REEXEC_NAME
 #endif // LINUX
+
+void VM_Version::print_using_features_cr() {
+  if (_ignore_glibc_not_using) {
+    tty->print_raw_cr("CPU features are being kept intact as requested by -XX:CPUFeatures=ignore");
+  } else {
+    tty->print_raw("CPU features being used are: -XX:CPUFeatures=");
+    _features.aot_code_cache_features().print_numbers(*tty);
+    tty->cr();
+  }
+}
 
 void VM_Version::cpu_features_init() {
   assert(!CPUFeatures == FLAG_IS_DEFAULT(CPUFeatures), "CPUFeatures parsing");

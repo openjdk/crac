@@ -43,7 +43,7 @@ public class MissingMetadataTest {
     public static void main(String[] args) throws Exception {
         test("criuengine", null, "Cannot open file cr/engine");
         test("criuengine", "badengine", "Image format does not match");
-        if (Platform.isX64()) { // Requires a platform supporting CPU features
+        if (Platform.isX64() || Platform.isAArch64()) { // Requires a platform supporting CPU features
             test("criuengine", "criuengine", "cannot open cr/tags in mode r");
         }
     }

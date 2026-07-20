@@ -59,6 +59,7 @@
   GLIBC_UNSUPPORTED(PACA      ); \
   GLIBC_UNSUPPORTED(SVEBITPERM); \
   GLIBC_UNSUPPORTED(SVE2      ); \
+  GLIBC_UNSUPPORTED(STXR_PREFETCH_UNUSED); \
   GLIBC_UNSUPPORTED(A53MAC    ); \
   GLIBC_UNSUPPORTED(ECV       ); \
   GLIBC_UNSUPPORTED(WFXT      ); \
@@ -90,9 +91,7 @@ bool VM_Version::_ic_ivau_trapped;
 VM_Version::VM_Features VM_Version::_features;
 VM_Version::VM_Features VM_Version::_cpu_features;
 
-#define DECLARE_CPU_FEATURE_NAME(id, name) XSTR(name),
-const char* VM_Version::_features_names[] = { CPU_FEATURE_FLAGS(DECLARE_CPU_FEATURE_NAME)};
-#undef DECLARE_CPU_FEATURE_NAME
+const VM_Features::FeaturesNames VM_Version::_features_names = VM_Features::make_features_names();
 
 static SpinWait get_spin_wait_desc() {
   SpinWait spin_wait(OnSpinWaitInst, OnSpinWaitInstCount, OnSpinWaitDelay);
@@ -897,32 +896,13 @@ bool VM_Version::cpu_features_binary(VM_Version::VM_Features *data) {
 }
 
 VM_Features VM_Version::CPUFeatures_mandatory() {
-  // TODO: check if there are any mandatory features and set them here
   return VM_Features();
 }
 
 VM_Features VM_Version::CPUFeatures_generic() {
-  VM_Features retval = CPUFeatures_mandatory();
-  retval.set_feature(CPU_FP);
-  retval.set_feature(CPU_ASIMD);
-  // PACA cannot be made compatible between CPUs that do and do not support it.
-  if (_cpu_features.supports_feature(CPU_PACA)) {
-    retval.set_feature(CPU_PACA);
-  }
-  if (_cpu_features.supports_feature(CPU_NOTPACA)) {
-    retval.set_feature(CPU_NOTPACA);
-  }
-  return retval;
-}
-
-void VM_Version::print_using_features_cr() {
-  if (_ignore_glibc_not_using) {
-    tty->print_raw_cr("CPU features are being kept intact as requested by -XX:CPUFeatures=ignore");
-  } else {
-    tty->print_raw("CPU features being used are: -XX:CPUFeatures=");
-    _features.print_numbers(*tty);
-    tty->cr();
-  }
+  // CPU_PACA and non-PACA processors cannot share the same image. Also we cannot disable glibc using features like CPU_LSE.
+  vm_exit_during_initialization("-XX:CPUFeatures=generic is not available on aarch64");
+  ShouldNotReachHere();
 }
 
 const char *VM_Version::restore_failed_check(const VM_Features *image_features, const VM_Features *current_features) {

@@ -3424,7 +3424,7 @@ bool VM_Version::is_intrinsic_supported(vmIntrinsicID id) {
 VM_Features VM_Version::CPUFeatures_mandatory() {
   VM_Features vm_features;
   // JDK-8383881 in jdk28+ removed supports_sse(), supports_sse2(), supports_mmx() and supports_clflush().
-  // JDK-8383881 has kept the CPU_SSE and CPU_SSE2 bits for an unknown reason.
+  // JDK-8384869 has kept CPU_SSE and CPU_SSE2 bits but they are no longer being checked in JDK code.
   vm_features.set_feature(CPU_SSE);
   vm_features.set_feature(CPU_SSE2);
   vm_features.set_feature(CPU_MMX_UNUSED);

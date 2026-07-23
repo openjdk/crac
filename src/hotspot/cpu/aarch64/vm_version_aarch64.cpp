@@ -939,7 +939,6 @@ bool VM_Version::restore_pre(VM_Features image_features, const char *image_locat
   }
   if (image_supports_sve256 && !_cpu_features.supports_feature(CPU_SVE256)) {
     ResourceMark rm;
-    stringStream ss;
     VM_Features sve256;
     sve256.set_feature(CPU_SVE256);
     VM_Features use = image_features & _cpu_features;
@@ -947,11 +946,11 @@ bool VM_Version::restore_pre(VM_Features image_features, const char *image_locat
                     image_location, image_features.print_numbers(), sve256.print_numbers(), _cpu_features.print_numbers(), use.print_numbers());
     return false;
   }
+  set_maximum_sve_vector_length(16);
   errno = 0;
   int got = set_and_get_current_sve_vector_length(16);
   if (got != 16) {
     ResourceMark rm;
-    stringStream ss;
     VM_Features sve256;
     sve256.set_feature(CPU_SVE256);
     log_error(crac)("Image %s has -XX:CPUFeatures=%s with CPU_SVE256=%s unset, this CPU has CPUFeatures=%s but PR_SVE_SET_VL reports %d: %m",

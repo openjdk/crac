@@ -61,6 +61,11 @@ int VM_Version::get_current_sve_vector_length() {
   return VM_Version::supports_sve() ? get_sve_vector_length() : 0;
 }
 
+void VM_Version::set_maximum_sve_vector_length(int length) {
+  // CPU_SVE256 cannot be set on Windows.
+  ShouldNotCallThis();
+}
+
 int VM_Version::set_and_get_current_sve_vector_length(int length) {
   assert(VM_Version::supports_sve(), "should not call this");
 

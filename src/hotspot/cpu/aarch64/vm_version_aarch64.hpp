@@ -114,6 +114,8 @@ protected:
   // Return the length that will be used, or -ve if an error occurred.
   static int set_and_get_current_sve_vector_length(int len);
   static int get_current_sve_vector_length();
+  // Limit what set_and_get_current_sve_vector_length is willing to set.
+  void set_maximum_sve_vector_length(int length);
 
 public:
   // Initialization

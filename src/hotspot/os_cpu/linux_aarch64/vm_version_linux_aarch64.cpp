@@ -121,8 +121,11 @@ int VM_Version::get_current_sve_vector_length() {
   return prctl(PR_SVE_GET_VL);
 }
 
-// Limit what set_and_get_current_sve_vector_length is willing to set.
 static int maximum_sve_vector_length = INT_MAX;
+
+void VM_Version::set_maximum_sve_vector_length(int length) {
+  maximum_sve_vector_length = length;
+}
 
 int VM_Version::set_and_get_current_sve_vector_length(int length) {
   assert(VM_Version::supports_sve(), "should not call this");

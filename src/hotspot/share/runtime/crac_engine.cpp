@@ -411,8 +411,8 @@ bool CracEngine::restore_pre_core(FILE *f) const {
         return false;
       }
       union {
-	VM_Version::VM_Features features;
-	uint8_t bytes[sizeof(VM_Version::VM_Features)];
+        VM_Version::VM_Features features;
+        uint8_t bytes[sizeof(VM_Version::VM_Features)];
       } u = {}; // explicitly construct the first member
       bool err = false;
       for (size_t i = 0; i < length; ++i) {

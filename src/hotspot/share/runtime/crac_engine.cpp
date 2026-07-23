@@ -447,6 +447,9 @@ bool CracEngine::restore_pre() const {
   if (!VM_Version::restore_pre_needed) {
     return true;
   }
+  if (VM_Version::check_cpu_features_skip() || !strcmp(CheckCPUFeatures, "skip")) {
+    return true;
+  }
   FILE* f = open_tags(_image_location, "r");
   if (f == nullptr) {
     log_error(crac)("Cannot open tags for image %s", _image_location);

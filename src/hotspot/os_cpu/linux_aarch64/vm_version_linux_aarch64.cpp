@@ -24,6 +24,7 @@
  */
 
 #include "memory/resourceArea.hpp"
+#include "runtime/globals_extension.hpp"
 #include "runtime/java.hpp"
 #include "runtime/os.hpp"
 #include "runtime/os.inline.hpp"
@@ -120,9 +121,12 @@ int VM_Version::get_current_sve_vector_length() {
   return prctl(PR_SVE_GET_VL);
 }
 
+// Limit what set_and_get_current_sve_vector_length is willing to set.
+static int maximum_sve_vector_length = INT_MAX;
+
 int VM_Version::set_and_get_current_sve_vector_length(int length) {
   assert(VM_Version::supports_sve(), "should not call this");
-  int new_length = prctl(PR_SVE_SET_VL, length);
+  int new_length = prctl(PR_SVE_SET_VL, MIN2(length, maximum_sve_vector_length));
   return new_length;
 }
 
@@ -162,6 +166,10 @@ void VM_Version::get_os_cpu_info() {
   update_feature(auxv2, CPU_ECV,        HWCAP2_ECV       );
   update_feature(auxv2, CPU_WFXT,       HWCAP2_WFXT      );
   update_feature(~auxv, CPU_NOTPACA,    HWCAP_PACA       );
+
+  if (supports_sve() && get_current_sve_vector_length() == 32) {
+    set_feature(CPU_SVE256);
+  }
 
   uint64_t ctr_el0;
   uint64_t dczid_el0;
@@ -225,6 +233,26 @@ void VM_Version::check_os_cpu_info() {
     lse.set_feature(VM_Feature_Flag::CPU_LSE);
     // GLIBC_TUNABLES=glibc.cpu.hwcaps is unsupported on aarch64
     vm_exit_during_initialization(err_msg("LSE (%s) cannot be disabled via -XX:CPUFeatures on aarch64.", lse.print_numbers()));
+  }
+  if (FLAG_IS_DEFAULT(CPUFeatures)) {
+    assert(_cpu_features.supports_feature(CPU_SVE256) == _features.supports_feature(CPU_SVE256), "CPU_SVE256 is not changed");
+  } else if (!_cpu_features.supports_feature(CPU_SVE256) && _features.supports_feature(CPU_SVE256)) {
+    stringStream ss;
+    VM_Features sve256;
+    sve256.set_feature(VM_Feature_Flag::CPU_SVE256);
+    ss.print("Specified -XX:CPUFeatures=%s have CPU_SVE256=%s set but this CPU does not support it", _features.print_numbers(), sve256.print_numbers());
+    vm_exit_during_initialization(ss.base());
+  } else if (_cpu_features.supports_feature(CPU_SVE256) && !_features.supports_feature(CPU_SVE256)) {
+    maximum_sve_vector_length = 16;
+    int got = set_and_get_current_sve_vector_length(maximum_sve_vector_length);
+    if (got != maximum_sve_vector_length) {
+      stringStream ss;
+      VM_Features sve256;
+      sve256.set_feature(VM_Feature_Flag::CPU_SVE256);
+      ss.print("Specified -XX:CPUFeatures=%s have unset CPU_SVE256=%s, this CPU has CPUFeatures=%s but it cannot be disabled as PR_SVE_SET_VL reports %d: %m",
+               _features.print_numbers(), sve256.print_numbers(), _cpu_features.print_numbers(), got);
+      vm_exit_during_initialization(ss.base());
+    }
   }
 }
 

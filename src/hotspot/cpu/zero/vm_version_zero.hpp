@@ -38,6 +38,10 @@ class VM_Version : public Abstract_VM_Version {
   static const char *restore_failed_check(const VM_Features *image_features, const VM_Features *current_features) {
     return nullptr;
   }
+  static bool restore_pre(VM_Features image_features, const char *image_location) {
+    return false;
+  }
+  static constexpr bool restore_pre_needed = false;
 
   constexpr static bool supports_stack_watermark_barrier() { return true; }
 

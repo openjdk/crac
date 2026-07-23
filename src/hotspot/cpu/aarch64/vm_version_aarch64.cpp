@@ -63,6 +63,7 @@
   GLIBC_UNSUPPORTED(A53MAC    ); \
   GLIBC_UNSUPPORTED(ECV       ); \
   GLIBC_UNSUPPORTED(WFXT      ); \
+  GLIBC_UNSUPPORTED(SVE256    ); \
   GLIBC_UNSUPPORTED(NOTPACA   ); \
   /**/
 #include "runtime/abstract_vm_version.inline.hpp"
@@ -929,4 +930,33 @@ void VM_Version::CPUFeatures_apply_arch(VM_Features &parsed, VM_Features &missin
   }
   missing.clear_feature(CPU_PACA);
   missing.clear_feature(CPU_NOTPACA);
+}
+
+bool VM_Version::restore_pre(VM_Features image_features, const char *image_location) {
+  bool boolvalue = image_features.supports_feature(CPU_SVE256);
+  if (boolvalue == _cpu_features.supports_feature(CPU_SVE256)) {
+    return true;
+  }
+  if (boolvalue && !_cpu_features.supports_feature(CPU_SVE256)) {
+    ResourceMark rm;
+    stringStream ss;
+    VM_Features sve256;
+    sve256.set_feature(CPU_SVE256);
+    VM_Features use = image_features & _cpu_features;
+    log_error(crac)("Image %s has -XX:CPUFeatures=%s with CPU_SVE256=%s, this CPU has CPUFeatures=%s not supporting CPU_SVE256, use -XX:CPUFeatures=%s during snapshot",
+                    image_location, image_features.print_numbers(), sve256.print_numbers(), _cpu_features.print_numbers(), use.print_numbers());
+    return false;
+  }
+  errno = 0;
+  int got = set_and_get_current_sve_vector_length(16);
+  if (got != 16) {
+    ResourceMark rm;
+    stringStream ss;
+    VM_Features sve256;
+    sve256.set_feature(CPU_SVE256);
+    log_error(crac)("Image %s has -XX:CPUFeatures=%s with CPU_SVE256=%s unset, this CPU has CPUFeatures=%s but PR_SVE_SET_VL reports %d: %m",
+                    image_location, image_features.print_numbers(), sve256.print_numbers(), _cpu_features.print_numbers(), got);
+    return false;
+  }
+  return true;
 }

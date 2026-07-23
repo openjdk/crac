@@ -59,6 +59,7 @@ public:
     decl(ECV,           ecv,        21) \
     decl(WFXT,          wfxt,       22) \
     /* These features are added for CRaC. */ \
+    decl(SVE256,        sve256,     62) \
     decl(NOTPACA,       notpaca,    63) \
     /**/
 
@@ -68,7 +69,7 @@ public:
   #undef DECLARE_CPU_FEATURE_FLAG
     MAX_CPU_FEATURES,
     LAST_CPU_FEATURE = CPU_WFXT,
-    FIRST_GLIBC_FEATURE = CPU_NOTPACA
+    FIRST_GLIBC_FEATURE = CPU_SVE256
   };
 };
 
@@ -142,6 +143,8 @@ public:
   static void insert_features_names(VM_Version::VM_Features features, outputStream& os);
   // The returned string needs a ResourceMark.
   static const char *restore_failed_check(const VM_Features *image_features, const VM_Features *current_features);
+  static bool restore_pre(VM_Features image_features, const char *image_location);
+  static constexpr bool restore_pre_needed = true;
 
   static void print_platform_virtualization_info(outputStream*);
 

@@ -92,6 +92,9 @@ private:
   crlib_image_score_t *_image_score_api = nullptr;
 
   crlib_conf_option_t *_options = nullptr;
+
+  bool restore_pre() const;
+  bool restore_pre_core(FILE *f) const;
 };
 
 #endif // SHARE_RUNTIME_CRAC_ENGINE_HPP

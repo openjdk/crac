@@ -378,9 +378,94 @@ int CracEngine::checkpoint() const {
   return _api->checkpoint(_conf);
 }
 
+static inline unsigned char from_hex(char c, bool* err) {
+  if (c >= '0' && c <= '9') {
+    return c - '0';
+  } else if (c >= 'a' && c <= 'f') {
+    return c - 'a' + 10;
+  } else {
+    *err = true;
+    return 0;
+  }
+}
+
+static constexpr char cpufeatures_prefix[] = "bitmap:cpu.features";
+
+// FIXME: Replace "tags" parsing by a new constraint reader method call.
+bool CracEngine::restore_pre_core(FILE *f) const {
+  static constexpr const size_t _MAX_VALUE_SIZE = 256;
+  char line[sizeof(cpufeatures_prefix) + 1 + _MAX_VALUE_SIZE + 2];
+  while (fgets(line, (int) sizeof(line), f)) {
+    char* eq = strchr((char *) line, '=');
+    char* nl = strchr((char *) (eq + 1), '\n');
+    if (eq == nullptr || nl == nullptr) {
+      log_error(crac)("Invalid format of tags file of image %s: %s", _image_location, line);
+      return false;
+    }
+    *eq = 0;
+    *nl = 0;
+    if (eq < nl && !strncmp(line, cpufeatures_prefix, strlen(cpufeatures_prefix)) && eq - line == strlen(cpufeatures_prefix)) {
+      size_t length = (size_t)(nl - eq - 1)/2;
+      if (2 * length != (size_t)(nl - eq - 1)) {
+        log_error(crac)("Invalid format of tags file (bad bitmap) of image %s: %s", _image_location, line);
+        return false;
+      }
+      union {
+	VM_Version::VM_Features features;
+	uint8_t bytes[sizeof(VM_Version::VM_Features)] = { 0 };
+      } u;
+      bool err = false;
+      for (size_t i = 0; i < length; ++i) {
+        u.bytes[i] = (from_hex(eq[1 + 2 * i], &err) << 4) + from_hex(eq[2 + 2 * i], &err);
+      }
+      if (err) {
+        log_error(crac)("Invalid format of tags file (bad character in bitmap): %s", line);
+        return false;
+      }
+      return VM_Version::restore_pre(u.features, _image_location);
+    }
+  }
+  log_error(crac)("%s not found in image %s", cpufeatures_prefix, _image_location);
+  return false;
+}
+
+static FILE* open_tags(const char* image_location, const char* mode) {
+  char fname[PATH_MAX];
+  if (os::snprintf(fname, sizeof(fname), "%s/tags", image_location) >= (int) sizeof(fname) - 1) {
+    log_error(crac)("filename too long: %s/tags", image_location);
+    return nullptr;
+  }
+  FILE* f = fopen(fname, mode);
+  if (f == nullptr) {
+    log_error(crac)("cannot open %s in mode %s: %s", fname, mode, os::strerror(errno));
+    return nullptr;
+  }
+  return f;
+}
+
+bool CracEngine::restore_pre() const {
+  if (!VM_Version::restore_pre_needed) {
+    return true;
+  }
+  FILE* f = open_tags(_image_location, "r");
+  if (f == nullptr) {
+    log_error(crac)("Cannot open tags for image %s", _image_location);
+    return false;
+  }
+  bool retval = restore_pre_core(f);
+  if (fclose(f)) {
+    log_error(crac)("cannot close %s/tags: %s", _image_location, os::strerror(errno));
+    return false;
+  }
+  return retval;
+}
+
 int CracEngine::restore() const {
   precond(is_initialized());
   if (!check_engine(_name, _image_location)) {
+    return -1;
+  }
+  if (!restore_pre()) {
     return -1;
   }
   return _api->restore(_conf);

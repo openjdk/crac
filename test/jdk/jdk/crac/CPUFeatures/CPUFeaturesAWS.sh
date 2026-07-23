@@ -345,11 +345,12 @@ checkpoint_restore "$LINENO" a1.medium t4g.micro
 checkpoint_restore "$LINENO" t4g.micro a1.medium "1:Restore failed due to incompatible or missing CPU features, try using -XX:CPUFeatures=0x80000000000000ff on checkpoint."
 checkpoint_restore "$LINENO" t4g.micro a1.medium "-1:LSE (0x100) cannot be disabled via -XX:CPUFeatures on aarch64." "-XX:CPUFeatures=0x80000000000000ff" ""
 
-# JDK-8385359: checkpoint_restore "$LINENO" c7g.medium c7g.medium
-# JDK-8385359: checkpoint_restore "$LINENO" c8g.medium c8g.medium
-# JDK-8385359: checkpoint_restore "$LINENO" c7g.medium c8g.medium
+checkpoint_restore "$LINENO" c7g.medium c7g.medium
+checkpoint_restore "$LINENO" c8g.medium c8g.medium
+checkpoint_restore "$LINENO" c7g.medium c8g.medium "1:Image cr has -XX:CPUFeatures=0x4000000000017fff with CPU_SVE256=0x4000000000000000, this CPU has CPUFeatures=0x77fff not supporting CPU_SVE256, use -XX:CPUFeatures=0x17fff during snapshot"
+checkpoint_restore "$LINENO" c7g.medium c8g.medium "" "-XX:CPUFeatures=0x17fff" ""
 checkpoint_restore "$LINENO" c8g.medium c7g.medium "1:Restore failed due to incompatible or missing CPU features, try using -XX:CPUFeatures=0x17fff on checkpoint."
-# JDK-8385359: checkpoint_restore "$LINENO" c8g.medium c7g.medium "" "-XX:CPUFeatures=0x17fff" ""
+checkpoint_restore "$LINENO" c8g.medium c7g.medium "" "-XX:CPUFeatures=0x17fff" ""
 
 checkpoint_restore "$LINENO" t4g.micro c8g.medium "1:Restore failed due to incompatible aarch64 CPU feature PACA (0x10000); these CPUs each require a separate image."
 checkpoint_restore "$LINENO" c8g.medium t4g.micro "1:Restore failed due to incompatible aarch64 CPU feature PACA (0x10000); these CPUs each require a separate image."

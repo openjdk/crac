@@ -938,6 +938,9 @@ bool VM_Version::restore_pre(VM_Features image_features, const char *image_locat
     return true;
   }
   if (image_supports_sve256 && !_cpu_features.supports_feature(CPU_SVE256)) {
+    if (VM_Version::check_cpu_features_skip() || (CheckCPUFeatures != nullptr && !strcmp(CheckCPUFeatures, "skip"))) {
+      return true;
+    }
     ResourceMark rm;
     VM_Features sve256;
     sve256.set_feature(CPU_SVE256);

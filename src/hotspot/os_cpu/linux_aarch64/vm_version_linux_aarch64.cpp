@@ -239,12 +239,6 @@ void VM_Version::check_os_cpu_info() {
   }
   if (FLAG_IS_DEFAULT(CPUFeatures)) {
     assert(_cpu_features.supports_feature(CPU_SVE256) == _features.supports_feature(CPU_SVE256), "CPU_SVE256 is not changed");
-  } else if (!_cpu_features.supports_feature(CPU_SVE256) && _features.supports_feature(CPU_SVE256)) {
-    stringStream ss;
-    VM_Features sve256;
-    sve256.set_feature(VM_Feature_Flag::CPU_SVE256);
-    ss.print("Specified -XX:CPUFeatures=%s have CPU_SVE256=%s set but this CPU does not support it", _features.print_numbers(), sve256.print_numbers());
-    vm_exit_during_initialization(ss.base());
   } else if (_cpu_features.supports_feature(CPU_SVE256) && !_features.supports_feature(CPU_SVE256)) {
     maximum_sve_vector_length = 16;
     int got = set_and_get_current_sve_vector_length(maximum_sve_vector_length);

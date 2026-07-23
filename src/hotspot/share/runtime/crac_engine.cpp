@@ -447,7 +447,7 @@ bool CracEngine::restore_pre() const {
   if (!VM_Version::restore_pre_needed) {
     return true;
   }
-  if (VM_Version::check_cpu_features_skip() || !strcmp(CheckCPUFeatures, "skip")) {
+  if (VM_Version::check_cpu_features_skip() || (CheckCPUFeatures != nullptr && !strcmp(CheckCPUFeatures, "skip"))) {
     return true;
   }
   FILE* f = open_tags(_image_location, "r");

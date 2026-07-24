@@ -94,7 +94,6 @@ private:
   crlib_conf_option_t *_options = nullptr;
 
   bool pre_restore() const;
-  bool pre_restore_core(FILE *f) const;
 };
 
 #endif // SHARE_RUNTIME_CRAC_ENGINE_HPP

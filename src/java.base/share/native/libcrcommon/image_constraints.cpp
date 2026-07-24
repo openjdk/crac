@@ -259,12 +259,12 @@ bool ImageConstraints::load_tags(const char* image_location, CallbackT callback)
     LOG("error opening %s: %s", image_location, strerror(errno));
     return false;
   }
-  load_tags(f, callback);
+  bool retval = load_tags(f, callback);
   if (fclose(f) != 0) {
     LOG("error closing %s: %s", image_location, strerror(errno));
     return false;
   }
-  return true;
+  return retval;
 }
 
 bool ImageConstraints::validate(const char* image_location) const {

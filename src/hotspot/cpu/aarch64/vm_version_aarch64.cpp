@@ -932,7 +932,7 @@ void VM_Version::CPUFeatures_apply_arch(VM_Features &parsed, VM_Features &missin
   missing.clear_feature(CPU_NOTPACA);
 }
 
-bool VM_Version::restore_pre(VM_Features image_features, const char *image_location) {
+bool VM_Version::pre_restore(VM_Features image_features, const char *image_location) {
   bool image_supports_sve256 = image_features.supports_feature(CPU_SVE256);
   if (image_supports_sve256 == _cpu_features.supports_feature(CPU_SVE256)) {
     return true;

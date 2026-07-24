@@ -392,7 +392,7 @@ static inline unsigned char from_hex(char c, bool* err) {
 static constexpr char cpufeatures_prefix[] = "bitmap:cpu.features";
 
 // FIXME: Replace "tags" parsing by a new constraint reader method call.
-bool CracEngine::restore_pre_core(FILE *f) const {
+bool CracEngine::pre_restore_core(FILE *f) const {
   static constexpr const size_t _MAX_VALUE_SIZE = 256;
   char line[sizeof(cpufeatures_prefix) + 1 + _MAX_VALUE_SIZE + 2];
   while (fgets(line, (int) sizeof(line), f)) {
@@ -422,7 +422,7 @@ bool CracEngine::restore_pre_core(FILE *f) const {
         log_error(crac)("Invalid format of tags file (bad character in bitmap): %s", line);
         return false;
       }
-      return VM_Version::restore_pre(u.features, _image_location);
+      return VM_Version::pre_restore(u.features, _image_location);
     }
   }
   log_error(crac)("%s not found in image %s", cpufeatures_prefix, _image_location);
@@ -443,8 +443,8 @@ static FILE* open_tags(const char* image_location, const char* mode) {
   return f;
 }
 
-bool CracEngine::restore_pre() const {
-  if (!VM_Version::restore_pre_needed) {
+bool CracEngine::pre_restore() const {
+  if (!VM_Version::pre_restore_needed) {
     return true;
   }
   if (VM_Version::check_cpu_features_skip() || (CheckCPUFeatures != nullptr && !strcmp(CheckCPUFeatures, "skip"))) {
@@ -455,7 +455,7 @@ bool CracEngine::restore_pre() const {
     log_error(crac)("Cannot open tags for image %s", _image_location);
     return false;
   }
-  bool retval = restore_pre_core(f);
+  bool retval = pre_restore_core(f);
   if (fclose(f)) {
     log_error(crac)("cannot close %s/tags: %s", _image_location, os::strerror(errno));
     return false;
@@ -468,7 +468,7 @@ int CracEngine::restore() const {
   if (!check_engine(_name, _image_location)) {
     return -1;
   }
-  if (!restore_pre()) {
+  if (!pre_restore()) {
     return -1;
   }
   return _api->restore(_conf);

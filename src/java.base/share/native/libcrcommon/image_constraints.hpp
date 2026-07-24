@@ -150,7 +150,7 @@ public:
   size_t get_failed_bitmap(const char* name, unsigned char *value_return, size_t value_size) const {
     size_t result = 0;
     _constraints.foreach([&](Constraint &c) {
-      if (!strcmp(c.name, name) && c.failed) {
+      if (c.type == TagType::BITMAP && !strcmp(c.name, name) && c.failed) {
         if (c.image_data == nullptr) {
           result = 0;
         } else {

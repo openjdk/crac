@@ -393,7 +393,7 @@ bool CracEngine::pre_restore() const {
     log_error(crac)("Cannot initialize constraints extension for image %s", _image_location);
     return false;
   }
-  VM_Features features;
+  VM_Version::VM_Features features;
   size_t features_len = ics->get_bitmap(_conf, _image_location, cpufeatures_name, reinterpret_cast<unsigned char *>(&features), sizeof(features));
   if (features_len != sizeof(features)) {
     log_error(crac)("Cannot get CPUFeatures for image %s", _image_location);

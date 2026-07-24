@@ -741,6 +741,11 @@ private:
   static bool os_supports_apx_egprs();
   static void get_processor_features();
 
+  friend bool Abstract_VM_Version::should_skip_cpu_features_check();
+  static bool check_cpu_features_skip() {
+    return _ignore_glibc_not_using;
+  }
+
 public:
   // Offsets for cpuid asm stub
   static ByteSize std_cpuid0_offset() { return byte_offset_of(CpuidInfo, std_max_function); }
@@ -817,9 +822,6 @@ public:
   // Initialization
   static void initialize();
   static bool cpu_features_binary(VM_Features *data);
-  static bool check_cpu_features_skip() {
-    return _ignore_glibc_not_using;
-  }
 
   // Override Abstract_VM_Version implementation
   static void print_platform_virtualization_info(outputStream*);

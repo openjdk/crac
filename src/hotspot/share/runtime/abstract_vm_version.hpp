@@ -268,6 +268,8 @@ class Abstract_VM_Version: AllStatic {
 
   // features_buffer is an opaque object that stores arch specific representation of cpu features
   static bool verify_aot_code_cache_features(void* features_buffer) { return false; };
+
+  static bool should_skip_cpu_features_check();
 };
 
 #endif // SHARE_RUNTIME_ABSTRACT_VM_VERSION_HPP

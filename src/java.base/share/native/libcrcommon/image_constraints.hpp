@@ -116,6 +116,24 @@ private:
 
   bool check_tag(const char* type, const char* name, size_t value_size);
 
+  template<class ValueT>
+  size_t get_any_tmpl(const char* name, ValueT *value_return, size_t value_size, bool only_failed, TagType type) const {
+    size_t result = 0;
+    _constraints.foreach([&](Constraint &c) {
+      if (c.type == type && !strcmp(c.name, name) && (!only_failed || c.failed)) {
+        if (c.image_data == nullptr) {
+          result = 0;
+        } else {
+          result = c.data_size;
+          if (value_return) {
+            memcpy(value_return, c.image_data, value_size <= c.data_size ? value_size : c.data_size);
+          }
+        }
+      }
+    });
+    return result;
+  }
+
 public:
   bool set_label(const char* name, const char* value);
   bool set_bitmap(const char* name, const unsigned char* value, size_t length_bytes);
@@ -141,20 +159,18 @@ public:
   }
 
   size_t get_failed_bitmap(const char* name, unsigned char *value_return, size_t value_size) const {
-    size_t result = 0;
-    _constraints.foreach([&](Constraint &c) {
-      if (!strcmp(c.name, name) && c.failed) {
-        if (c.image_data == nullptr) {
-          result = 0;
-        } else {
-          result = c.data_size;
-          if (value_return) {
-            memcpy(value_return, c.image_data, value_size <= c.data_size ? value_size : c.data_size);
-          }
-        }
-      }
-    });
-    return result;
+    bool only_failed = true;
+    return get_any_tmpl(name, value_return, value_size, only_failed, TagType::BITMAP);
+  }
+
+  size_t get_label(const char* name, char *value_return, size_t value_size) const {
+    bool only_failed = false;
+    return get_any_tmpl(name, value_return, value_size, only_failed, TagType::LABEL);
+  }
+
+  size_t get_bitmap(const char* name, unsigned char *value_return, size_t value_size) const {
+    bool only_failed = false;
+    return get_any_tmpl(name, value_return, value_size, only_failed, TagType::BITMAP);
   }
 
   bool persist(const char* image_location) const;

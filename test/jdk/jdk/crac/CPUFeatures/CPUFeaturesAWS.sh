@@ -57,6 +57,13 @@ internal_checkpoint() {
 }
 internal_restore() {
   javasetup
+  tid=$(echo cr/core-*.img|tr -cd ' 0-9'|sed 's/^.* //') # highest
+  if [ -n "$tid" ];then
+    ls -l /proc/$tid/exe || :
+    bash -c 'echo $$'
+    (set +x;while [ $(bash -c 'echo $$') -le $tid ];do :;done)
+    bash -c 'echo $$'
+  fi
   bin/java -XX:CRaCRestoreFrom=cr $* &
   p=$!
   (sleep 2;kill $p) &

@@ -69,10 +69,6 @@ typedef const struct crlib_image_constraints {
   // Returns the size of the data, in bytes — it can be more, equal to or less than
   // 'value_size'. Returned value of 0 represents an error.
   size_t (*get_failed_bitmap)(crlib_conf_t *, const char *name, unsigned char *value_return, size_t value_size);
-
-  // Like get_failed_bitmap but there is no requirement for a previous failure.
-  size_t (*get_label)(crlib_conf_t *, const char *name, char *value_return, size_t value_size);
-  size_t (*get_bitmap)(crlib_conf_t *, const char *name, unsigned char *value_return, size_t value_size);
 } crlib_image_constraints_t;
 
 #ifdef __cplusplus

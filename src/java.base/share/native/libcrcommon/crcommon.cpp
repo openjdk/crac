@@ -63,14 +63,6 @@ static size_t get_failed_bitmap(crlib_conf_t* conf, const char* name, unsigned c
   return COMMON(conf)->image_constraints.get_failed_bitmap(name, value_return, value_size);
 }
 
-static size_t get_bitmap(crlib_conf_t* conf, const char* name, unsigned char* value_return, size_t value_size) {
-  return COMMON(conf)->image_constraints.get_bitmap(name, value_return, value_size);
-}
-
-static size_t get_label(crlib_conf_t* conf, const char* name, char* value_return, size_t value_size) {
-  return COMMON(conf)->image_constraints.get_label(name, value_return, value_size);
-}
-
 static bool set_score(crlib_conf_t* conf, const char* name, double value) {
   return COMMON(conf)->image_score.set_score(name, value);
 }
@@ -106,8 +98,6 @@ extern JNIEXPORT crlib_image_constraints_t image_constraints_extension = {
   require_bitmap,
   is_failed,
   get_failed_bitmap,
-  get_label,
-  get_bitmap,
 };
 
 JNIEXPORT bool image_constraints_persist(const crcommon_t* conf, const char* image_location) {

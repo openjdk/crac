@@ -957,7 +957,7 @@ bool VM_Version::pre_restore(VM_Features image_features, const char *image_locat
     VM_Features sve256;
     sve256.set_feature(CPU_SVE256);
     log_error(crac)("Image %s has -XX:CPUFeatures=%s with CPU_SVE256=%s unset, this CPU has CPUFeatures=%s but PR_SVE_SET_VL reports %d: %s",
-                    image_location, image_features.print_numbers(), sve256.print_numbers(), _cpu_features.print_numbers(), got, os::strerror(errno))
+                    image_location, image_features.print_numbers(), sve256.print_numbers(), _cpu_features.print_numbers(), got, os::strerror(errno));
     return false;
   }
   return true;

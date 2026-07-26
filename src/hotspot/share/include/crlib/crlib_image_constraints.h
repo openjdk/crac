@@ -70,9 +70,11 @@ typedef const struct crlib_image_constraints {
   // 'value_size'. Returned value of 0 represents an error.
   size_t (*get_failed_bitmap)(crlib_conf_t *, const char *name, unsigned char *value_return, size_t value_size);
 
-  // Like get_failed_bitmap but there is no requirement for a previous failure.
-  size_t (*get_label)(crlib_conf_t *, const char *image_location, const char *name, char *value_return, size_t value_size);
-  size_t (*get_bitmap)(crlib_conf_t *, const char *image_location, const char *name, unsigned char *value_return, size_t value_size);
+  // Register callbacks before restore. Callbacks are called only during restore.
+  // If the callback returns false the restore is aborted.
+  // user_data is an arbitrary pointer value which is passed along.
+  bool (*register_label_hook)(crlib_conf_t *, const char *name, bool (*hook)(const char *value, void *user_data), void *user_data);
+  bool (*register_bitmap_hook)(crlib_conf_t *, const char *name, bool (*hook)(const unsigned char *value, size_t value_size, void *user_data), void *user_data);
 } crlib_image_constraints_t;
 
 #ifdef __cplusplus

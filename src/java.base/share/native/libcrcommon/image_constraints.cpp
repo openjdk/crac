@@ -196,9 +196,17 @@ static void print_bitmap(const char* name, const unsigned char* data, size_t siz
   fputc('\n', stderr);
 }
 
-template<class CallbackT>
-bool ImageConstraints::load_tags(FILE *f, CallbackT callback) const {
+bool ImageConstraints::validate(const char* image_location) const {
+  if (_constraints.size() == 0) {
+    // If there are no constraints don't even try to open the file (it's fine if it is missing)
+    return true;
+  }
+  FILE* f = open_tags(image_location, "r");
+  if (f == nullptr) {
+    return false;
+  }
   char line[sizeof(BITMAP_PREFIX) + _MAX_NAME_SIZE + 1 + _MAX_VALUE_SIZE + 2];
+  LinkedList<Tag> tags;
   while (fgets(line, (int) sizeof(line), f)) {
     char* eq = strchr((char *) line, '=');
     char* nl = strchr((char *) (eq + 1), '\n');
@@ -212,7 +220,7 @@ bool ImageConstraints::load_tags(FILE *f, CallbackT callback) const {
     if (!strncmp(line, LABEL_PREFIX, strlen(LABEL_PREFIX))) {
       char* name = strdup(line + strlen(LABEL_PREFIX));
       char* value = strdup(eq + 1);
-      if (name == nullptr || value == nullptr || !callback({ TagType::LABEL, name, value, (size_t) (nl - eq) })) {
+      if (name == nullptr || value == nullptr || !tags.add({ TagType::LABEL, name, value, (size_t) (nl - eq) })) {
         LOG("Cannot allocate memory for validation");
         free(name);
         free(value);
@@ -238,7 +246,7 @@ bool ImageConstraints::load_tags(FILE *f, CallbackT callback) const {
         return false;
       }
       char* name = strdup(line + strlen(BITMAP_PREFIX));
-      if (name == nullptr || !callback({ TagType::BITMAP, name, data, length })) {
+      if (name == nullptr || !tags.add({ TagType::BITMAP, name, data, length })) {
         LOG("Cannot allocate memory for validation");
         free(name);
         free(data);
@@ -249,33 +257,27 @@ bool ImageConstraints::load_tags(FILE *f, CallbackT callback) const {
       return false;
     }
   }
-  return true;
-}
-
-template<class CallbackT>
-bool ImageConstraints::load_tags(const char* image_location, CallbackT callback) const {
-  FILE* f = open_tags(image_location, "r");
-  if (f == nullptr) {
-    LOG("error opening %s: %s", image_location, strerror(errno));
-    return false;
-  }
-  bool retval = load_tags(f, callback);
-  if (fclose(f) != 0) {
-    LOG("error closing %s: %s", image_location, strerror(errno));
-    return false;
-  }
-  return retval;
-}
-
-bool ImageConstraints::validate(const char* image_location) const {
-  if (_constraints.size() == 0) {
-    // If there are no constraints don't even try to open the file (it's fine if it is missing)
-    return true;
-  }
-  LinkedList<Tag> tags;
-  if (!load_tags(image_location, [&](Tag &&tag) {
-      return tags.add(std::move(tag));
-    })) {
+  bool hooks_result = true;
+  _hooks.foreach([&](const Hook& hook) {
+    tags.foreach([&](const Tag& t) {
+      if (!hooks_result || strcmp(hook.name, t.name) != 0) {
+        return;
+      }
+      if (t.type != hook.type) {
+        LOG("Image hook type mismatch for '%s'", hook.name);
+        return;
+      }
+      switch (hook.type) {
+      case TagType::LABEL:
+        hooks_result = hook.hook.label_hook(static_cast<const char *>(t.data), hook.user_data);
+	break;
+      case TagType::BITMAP:
+        hooks_result = hook.hook.bitmap_hook(static_cast<const unsigned char *>(t.data), t.data_size, hook.user_data);
+	break;
+      }
+    });
+  });
+  if (!hooks_result) {
     return false;
   }
   const char** keys = new(std::nothrow) const char*[tags.size()];
@@ -324,26 +326,18 @@ bool ImageConstraints::validate(const char* image_location) const {
   return result;
 }
 
-size_t ImageConstraints::get_any(const char* image_location, const char* name, void *value_return, size_t value_size, ImageConstraints::TagType tagtype) const {
-  size_t retval = 0;
-  if (!load_tags(image_location, [&](ImageConstraints::Tag &&tag) {
-      if (tag.type == tagtype && strcmp(tag.name, name) == 0) {
-        retval = tag.data_size;
-        if (value_return) {
-          memcpy(value_return, tag.data, value_size <= tag.data_size ? value_size : tag.data_size);
-        }
-      }
-      return true;
-    })) {
-    return 0;
+bool ImageConstraints::register_label_hook(const char *name, LabelHook hook, void *user_data) {
+  if (!_hooks.add(Hook(name, hook, user_data))) {
+    LOG("out of memory");
+    return false;
   }
-  return retval;
+  return true;
 }
 
-size_t ImageConstraints::get_label(const char* image_location, const char* name, char* value_return, size_t value_size) const {
-  return get_any(image_location, name, value_return, value_size, TagType::LABEL);
-}
-
-size_t ImageConstraints::get_bitmap(const char* image_location, const char* name, unsigned char* value_return, size_t value_size) const {
-  return get_any(image_location, name, value_return, value_size, TagType::BITMAP);
+bool ImageConstraints::register_bitmap_hook(const char *name, BitmapHook hook, void *user_data) {
+  if (!_hooks.add(Hook(name, hook, user_data))) {
+    LOG("out of memory");
+    return false;
+  }
+  return true;
 }

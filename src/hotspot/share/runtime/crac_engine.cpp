@@ -381,6 +381,22 @@ int CracEngine::checkpoint() const {
 static constexpr char cpuarch_name[] = "cpu.arch";
 static constexpr char cpufeatures_name[] = "cpu.features";
 
+bool CracEngine::pre_restore_bitmap_hook(const unsigned char *value, size_t value_size) const {
+  VM_Version::VM_Features features;
+  if (value_size != sizeof(features)) {
+    log_error(crac)("Invalid CPUFeatures length for image %s - got %zu, want %zu", _image_location, value_size, sizeof(features));
+    return false;
+  }
+  memcpy(&features, value, value_size);
+  return VM_Version::pre_restore(features, _image_location);
+}
+
+bool CracEngine::pre_restore_bitmap_hook_trampoline(const unsigned char *value, size_t value_size, void *user_data) {
+  const CracEngine *self = static_cast<const CracEngine *>(user_data);
+
+  return self->pre_restore_bitmap_hook(value, value_size);
+}
+
 bool CracEngine::pre_restore() const {
   if (!VM_Version::pre_restore_needed) {
     return true;
@@ -393,13 +409,8 @@ bool CracEngine::pre_restore() const {
     log_error(crac)("Cannot initialize constraints extension for image %s", _image_location);
     return false;
   }
-  VM_Version::VM_Features features;
-  size_t features_len = ics->get_bitmap(_conf, _image_location, cpufeatures_name, reinterpret_cast<unsigned char *>(&features), sizeof(features));
-  if (features_len != sizeof(features)) {
-    log_error(crac)("Cannot get CPUFeatures for image %s", _image_location);
-    return false;
-  }
-  return VM_Version::pre_restore(features, _image_location);
+  void *user_data = const_cast<CracEngine *>(this);
+  return ics->register_bitmap_hook(_conf, cpufeatures_name, pre_restore_bitmap_hook_trampoline, user_data);
 }
 
 int CracEngine::restore() const {

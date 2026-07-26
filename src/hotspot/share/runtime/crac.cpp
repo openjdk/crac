@@ -328,7 +328,9 @@ int crac::checkpoint_restore(int *shmid) {
 
   // Setup CPU arch & features only during the first checkpoint; the feature set
   // cannot change after initial boot (and we don't support switching the engine).
-  if (_generation == 1 && !Abstract_VM_Version::should_skip_cpu_features_check()) {
+  // should_skip_cpu_features_check() is not valid here as -XX:CheckCPUFeatures=skip
+  // does not apply for storing of CPUFeatures.
+  if (_generation == 1 && !VM_Version::check_cpu_features_skip()) {
     VM_Version::VM_Features current_features;
     if (VM_Version::cpu_features_binary(&current_features)) {
       switch (_engine->prepare_image_constraints_api()) {

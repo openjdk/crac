@@ -72,6 +72,7 @@ typedef const struct crlib_image_constraints {
 
   // Register callbacks before restore. Callbacks are called only during restore.
   // If the callback returns false the restore is aborted.
+  // name is not copied, its content must remain valid.
   // user_data is an arbitrary pointer value which is passed along.
   bool (*register_label_hook)(crlib_conf_t *, const char *name, bool (*hook)(const char *value, void *user_data), void *user_data);
   bool (*register_bitmap_hook)(crlib_conf_t *, const char *name, bool (*hook)(const unsigned char *value, size_t value_size, void *user_data), void *user_data);

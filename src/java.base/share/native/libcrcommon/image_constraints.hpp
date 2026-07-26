@@ -138,11 +138,6 @@ private:
 
   bool check_tag(const char* type, const char* name, size_t value_size);
 
-  template<class CallbackT>
-  bool load_tags(FILE *f, CallbackT callback) const;
-  template<class CallbackT>
-  bool load_tags(const char* image_location, CallbackT callback) const;
-
 public:
   bool set_label(const char* name, const char* value);
   bool set_bitmap(const char* name, const unsigned char* value, size_t length_bytes);
@@ -184,6 +179,7 @@ public:
     return result;
   }
 
+  // name is not copied, its content must remain valid.
   bool register_label_hook(const char *name, LabelHook hook, void *user_data);
   bool register_bitmap_hook(const char *name, BitmapHook hook, void *user_data);
 

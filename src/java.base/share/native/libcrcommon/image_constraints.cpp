@@ -197,7 +197,7 @@ static void print_bitmap(const char* name, const unsigned char* data, size_t siz
 }
 
 bool ImageConstraints::validate(const char* image_location) const {
-  if (_constraints.size() == 0) {
+  if (_constraints.is_empty() && _hooks.is_empty()) {
     // If there are no constraints don't even try to open the file (it's fine if it is missing)
     return true;
   }
@@ -259,6 +259,7 @@ bool ImageConstraints::validate(const char* image_location) const {
   }
   bool hooks_result = true;
   _hooks.foreach([&](const Hook& hook) {
+    bool found = false;
     tags.foreach([&](const Tag& t) {
       if (!hooks_result || strcmp(hook.name, t.name) != 0) {
         return;
@@ -267,15 +268,20 @@ bool ImageConstraints::validate(const char* image_location) const {
         LOG("Image hook type mismatch for '%s'", hook.name);
         return;
       }
+      found = true;
       switch (hook.type) {
       case TagType::LABEL:
         hooks_result = hook.hook.label_hook(static_cast<const char *>(t.data), hook.user_data);
-	break;
+        break;
       case TagType::BITMAP:
         hooks_result = hook.hook.bitmap_hook(static_cast<const unsigned char *>(t.data), t.data_size, hook.user_data);
-	break;
+        break;
       }
     });
+    if (!found) {
+      LOG("Hook did not find its tag '%s'", hook.name);
+      hooks_result = false;
+    }
   });
   if (!hooks_result) {
     return false;

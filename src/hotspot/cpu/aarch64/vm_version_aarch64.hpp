@@ -117,16 +117,14 @@ protected:
   // Limit what set_and_get_current_sve_vector_length is willing to set.
   static void set_maximum_sve_vector_length(int length);
 
-  friend bool Abstract_VM_Version::should_skip_cpu_features_check();
-  static bool check_cpu_features_skip() {
-    return _ignore_glibc_not_using;
-  }
-
 public:
   // Initialization
   typedef ::VM_Features VM_Features;
   static void initialize();
   static bool cpu_features_binary(VM_Features *data);
+  static bool check_cpu_features_skip() {
+    return _ignore_glibc_not_using;
+  }
   static void check_virtualizations();
 
   static VM_Features CPUFeatures_mandatory();

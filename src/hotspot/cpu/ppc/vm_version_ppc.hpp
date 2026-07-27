@@ -30,9 +30,6 @@
 #include "runtime/globals_extension.hpp"
 
 class VM_Version: public Abstract_VM_Version {
-  friend bool Abstract_VM_Version::should_skip_cpu_features_check();
-  static bool check_cpu_features_skip() { return true; }
-
 protected:
   enum Feature_Flag {
     mfdscr,
@@ -60,6 +57,7 @@ public:
   static void check_virtualizations();
   struct VM_Features: public Zero_Features {};
   static bool cpu_features_binary(VM_Features *data) { return false; }
+  static bool check_cpu_features_skip() { return true; }
 
   // Override Abstract_VM_Version implementation
   static void print_platform_virtualization_info(outputStream*);

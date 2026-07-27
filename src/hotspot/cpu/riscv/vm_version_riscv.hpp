@@ -496,15 +496,13 @@ private:
   static void c2_initialize();
 #endif // COMPILER2
 
-  friend bool Abstract_VM_Version::should_skip_cpu_features_check();
-  static bool check_cpu_features_skip() { return true; }
-
  public:
   // Initialization
   static void initialize();
   static void initialize_cpu_information();
   struct VM_Features: public Zero_Features {};
   static bool cpu_features_binary(VM_Features *data) { return false; }
+  static bool check_cpu_features_skip() { return true; }
 
   constexpr static bool supports_stack_watermark_barrier() { return true; }
 

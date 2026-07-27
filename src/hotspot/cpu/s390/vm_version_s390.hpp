@@ -31,9 +31,6 @@
 #include "runtime/globals_extension.hpp"
 
 class VM_Version: public Abstract_VM_Version {
-  friend bool Abstract_VM_Version::should_skip_cpu_features_check();
-  static bool check_cpu_features_skip() { return true; }
-
  protected:
 // z/Architecture is the name of the 64-bit extension of the 31-bit s390
 // architecture.
@@ -420,6 +417,7 @@ class VM_Version: public Abstract_VM_Version {
   static bool is_determine_features_test_running() { return _is_determine_features_test_running; }
   struct VM_Features: public Zero_Features {};
   static bool cpu_features_binary(VM_Features *data) { return false; }
+  static bool check_cpu_features_skip() { return true; }
 
   // Override Abstract_VM_Version implementation
   static void print_platform_virtualization_info(outputStream*);

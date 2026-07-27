@@ -32,9 +32,6 @@ class VM_Version: public Abstract_VM_Version {
   static bool _has_simd;
   static bool _has_mp_ext;
 
-  friend bool Abstract_VM_Version::should_skip_cpu_features_check();
-  static bool check_cpu_features_skip() { return true; }
-
  protected:
   // Are we done with vm version initialization
   static bool _is_initialized;
@@ -44,6 +41,7 @@ class VM_Version: public Abstract_VM_Version {
   static bool is_initialized()      { return _is_initialized; }
   struct VM_Features: public Zero_Features {};
   static bool cpu_features_binary(VM_Features *data) { return false; }
+  static bool check_cpu_features_skip() { return true; }
   static const char *restore_failed_check(const VM_Features *image_features, const VM_Features *current_features) {
     return nullptr;
   }

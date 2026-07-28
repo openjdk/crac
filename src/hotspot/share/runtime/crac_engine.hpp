@@ -95,7 +95,7 @@ private:
 
   bool pre_restore_bitmap_hook(const unsigned char *value, size_t value_size) const;
   static bool pre_restore_bitmap_hook_trampoline(const unsigned char *value, size_t value_size, void *user_data);
-  bool pre_restore();
+  bool register_constraints_hooks();
 };
 
 #endif // SHARE_RUNTIME_CRAC_ENGINE_HPP

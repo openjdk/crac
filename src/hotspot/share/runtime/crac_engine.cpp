@@ -388,7 +388,7 @@ bool CracEngine::pre_restore_bitmap_hook(const unsigned char *value, size_t valu
     return false;
   }
   memcpy(&features, value, value_size);
-  return VM_Version::pre_restore(features, _image_location);
+  return VM_Version::process_image_cpu_features(features, _image_location);
 }
 
 bool CracEngine::pre_restore_bitmap_hook_trampoline(const unsigned char *value, size_t value_size, void *user_data) {
@@ -397,8 +397,8 @@ bool CracEngine::pre_restore_bitmap_hook_trampoline(const unsigned char *value, 
   return self->pre_restore_bitmap_hook(value, value_size);
 }
 
-bool CracEngine::pre_restore() {
-  if (!VM_Version::pre_restore_needed) {
+bool CracEngine::register_constraints_hooks() {
+  if (!VM_Version::process_image_cpu_features_needed) {
     return true;
   }
   if (Abstract_VM_Version::should_skip_cpu_features_check()) {
@@ -423,7 +423,7 @@ int CracEngine::restore() {
   if (!check_engine(_name, _image_location)) {
     return -1;
   }
-  if (!pre_restore()) {
+  if (!register_constraints_hooks()) {
     return -1;
   }
   return _api->restore(_conf);

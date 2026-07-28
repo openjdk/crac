@@ -384,7 +384,7 @@ static constexpr char cpufeatures_name[] = "cpu.features";
 bool CracEngine::pre_restore_bitmap_hook(const unsigned char *value, size_t value_size) const {
   VM_Version::VM_Features features;
   if (value_size != sizeof(features)) {
-    log_error(crac)("Invalid CPUFeatures length for image %s - got %zu, want %zu", _image_location, value_size, sizeof(features));
+    log_error(crac)("Incompatible CPUFeatures length in image %s - got %zu, want %zu", _image_location, value_size, sizeof(features));
     return false;
   }
   memcpy(&features, value, value_size);

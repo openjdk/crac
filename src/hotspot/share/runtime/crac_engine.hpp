@@ -53,7 +53,7 @@ public:
 
   // Operations supported by all engines
   int checkpoint() const;
-  int restore() const;
+  int restore();
   bool configure_image_location(const char *image_location);
   GrowableArrayCHeap<const char *, MemTag::mtInternal> *vm_controlled_options() const;
 
@@ -95,7 +95,7 @@ private:
 
   bool pre_restore_bitmap_hook(const unsigned char *value, size_t value_size) const;
   static bool pre_restore_bitmap_hook_trampoline(const unsigned char *value, size_t value_size, void *user_data);
-  bool pre_restore() const;
+  bool pre_restore();
 };
 
 #endif // SHARE_RUNTIME_CRAC_ENGINE_HPP

@@ -397,23 +397,28 @@ bool CracEngine::pre_restore_bitmap_hook_trampoline(const unsigned char *value, 
   return self->pre_restore_bitmap_hook(value, value_size);
 }
 
-bool CracEngine::pre_restore() const {
+bool CracEngine::pre_restore() {
   if (!VM_Version::pre_restore_needed) {
     return true;
   }
   if (Abstract_VM_Version::should_skip_cpu_features_check()) {
     return true;
   }
-  crlib_image_constraints_t *ics = CRLIB_EXTENSION_IMAGE_CONSTRAINTS(_api);
-  if (ics == nullptr) {
-    log_error(crac)("Cannot initialize constraints extension for image %s", _image_location);
-    return false;
+  switch (prepare_image_constraints_api()) {
+    case CracEngine::ApiStatus::OK:
+      break;
+    case CracEngine::ApiStatus::ERR:
+      return true;
+    case CracEngine::ApiStatus::UNSUPPORTED:
+      log_warning(crac)("Cannot verify CPUFeatures for arch-specific part of restore "
+        "with the selected CRaC engine");
+      return true;
   }
-  void *user_data = const_cast<CracEngine *>(this);
-  return ics->register_bitmap_hook(_conf, cpufeatures_name, pre_restore_bitmap_hook_trampoline, user_data);
+  void *user_data = this;
+  return _image_constraints_api->register_bitmap_hook(_conf, cpufeatures_name, pre_restore_bitmap_hook_trampoline, user_data);
 }
 
-int CracEngine::restore() const {
+int CracEngine::restore() {
   precond(is_initialized());
   if (!check_engine(_name, _image_location)) {
     return -1;
@@ -552,6 +557,8 @@ CracEngine::ApiStatus CracEngine::prepare_image_constraints_api() {
   require_method(require_label)
   require_method(require_bitmap)
   require_method(is_failed)
+  require_method(get_failed_bitmap)
+  require_method(register_bitmap_hook)
   complete_extension_api(_image_constraints_api)
 }
 

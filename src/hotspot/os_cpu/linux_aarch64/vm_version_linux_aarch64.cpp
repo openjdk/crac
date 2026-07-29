@@ -130,7 +130,7 @@ int VM_Version::set_maximum_sve_vector_length(int length) {
 }
 
 int VM_Version::set_and_get_current_sve_vector_length(int length) {
-  assert(VM_Version::supports_sve(), "should not call this");
+  assert(_cpu_features.supports_feature(CPU_SVE), "should not call this");
   int new_length = prctl(PR_SVE_SET_VL, MIN2(length, maximum_sve_vector_length));
   return new_length;
 }

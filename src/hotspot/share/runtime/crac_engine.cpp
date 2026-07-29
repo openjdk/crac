@@ -395,7 +395,7 @@ bool CracEngine::register_constraints_hooks() {
   if (!VM_Version::process_image_cpu_features_needed) {
     return true;
   }
-  if (Abstract_VM_Version::should_skip_cpu_features_check()) {
+  if (!Abstract_VM_Version::should_check_cpu_features()) {
     return true;
   }
   switch (prepare_image_constraints_api()) {

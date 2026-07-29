@@ -938,7 +938,7 @@ bool VM_Version::process_image_cpu_features(VM_Features image_features) {
     return true;
   }
   if (image_supports_sve256 && !_cpu_features.supports_feature(CPU_SVE256)) {
-    if (Abstract_VM_Version::should_skip_cpu_features_check()) {
+    if (!Abstract_VM_Version::should_check_cpu_features()) {
       return true;
     }
     ResourceMark rm;

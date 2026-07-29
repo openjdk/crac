@@ -123,8 +123,10 @@ int VM_Version::get_current_sve_vector_length() {
 
 static int maximum_sve_vector_length = INT_MAX;
 
-void VM_Version::set_maximum_sve_vector_length(int length) {
+int VM_Version::set_maximum_sve_vector_length(int length) {
+  int retval = maximum_sve_vector_length;
   maximum_sve_vector_length = length;
+  return retval;
 }
 
 int VM_Version::set_and_get_current_sve_vector_length(int length) {

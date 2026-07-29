@@ -933,11 +933,11 @@ void VM_Version::CPUFeatures_apply_arch(VM_Features &parsed, VM_Features &missin
 }
 
 bool VM_Version::process_image_cpu_features(VM_Features image_features) {
+  int want;
   bool image_supports_sve256 = image_features.supports_feature(CPU_SVE256);
   if (image_supports_sve256 == _cpu_features.supports_feature(CPU_SVE256)) {
-    return true;
-  }
-  if (image_supports_sve256 && !_cpu_features.supports_feature(CPU_SVE256)) {
+    want = 32;
+  } else if (image_supports_sve256 && !_cpu_features.supports_feature(CPU_SVE256)) {
     if (!Abstract_VM_Version::should_check_cpu_features()) {
       return true;
     }
@@ -948,16 +948,22 @@ bool VM_Version::process_image_cpu_features(VM_Features image_features) {
     log_error(crac)("The image has -XX:CPUFeatures=%s with CPU_SVE256=%s, this CPU has CPUFeatures=%s not supporting CPU_SVE256, use -XX:CPUFeatures=%s during snapshot",
                     image_features.print_numbers(), sve256.print_numbers(), _cpu_features.print_numbers(), use.print_numbers());
     return false;
+  } else {
+    want = 16;
   }
-  set_maximum_sve_vector_length(16);
+  if (set_maximum_sve_vector_length(want) == want) {
+    return true;
+  }
   errno = 0;
-  int got = set_and_get_current_sve_vector_length(16);
-  if (got != 16) {
+  int got = set_and_get_current_sve_vector_length(want);
+  if (got != want) {
     ResourceMark rm;
     VM_Features sve256;
     sve256.set_feature(CPU_SVE256);
-    log_error(crac)("The image has -XX:CPUFeatures=%s with CPU_SVE256=%s unset, this CPU has CPUFeatures=%s but PR_SVE_SET_VL reports %d: %s",
-                    image_features.print_numbers(), sve256.print_numbers(), _cpu_features.print_numbers(), got, os::strerror(errno));
+    log_error(crac)("The image has -XX:CPUFeatures=%s with CPU_SVE256=%s %s, this CPU has CPUFeatures=%s but PR_SVE_SET_VL reports %d: %s",
+                    image_features.print_numbers(), sve256.print_numbers(),
+                    want == 32 ? "set" : "unset",
+                    _cpu_features.print_numbers(), got, os::strerror(errno));
     return false;
   }
   return true;

@@ -956,7 +956,7 @@ bool VM_Version::process_image_cpu_features(VM_Features image_features) {
     ResourceMark rm;
     VM_Features sve256;
     sve256.set_feature(CPU_SVE256);
-    log_error(crac)("The image %s has -XX:CPUFeatures=%s with CPU_SVE256=%s unset, this CPU has CPUFeatures=%s but PR_SVE_SET_VL reports %d: %s",
+    log_error(crac)("The image has -XX:CPUFeatures=%s with CPU_SVE256=%s unset, this CPU has CPUFeatures=%s but PR_SVE_SET_VL reports %d: %s",
                     image_features.print_numbers(), sve256.print_numbers(), _cpu_features.print_numbers(), got, os::strerror(errno));
     return false;
   }

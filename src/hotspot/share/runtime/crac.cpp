@@ -330,7 +330,7 @@ int crac::checkpoint_restore(int *shmid) {
   // cannot change after initial boot (and we don't support switching the engine).
   // should_skip_cpu_features_check() is not valid here as -XX:CheckCPUFeatures=skip
   // does not apply for storing of CPUFeatures.
-  if (_generation == 1 && !VM_Version::get_cpu_features_ignore()) {
+  if (_generation == 1 && !VM_Version::cpu_features_ignore()) {
     VM_Version::VM_Features current_features;
     if (VM_Version::cpu_features_binary(&current_features)) {
       switch (_engine->prepare_image_constraints_api()) {

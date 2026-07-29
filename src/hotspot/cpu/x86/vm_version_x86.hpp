@@ -817,7 +817,7 @@ public:
   // Initialization
   static void initialize();
   static bool cpu_features_binary(VM_Features *data);
-  static bool get_cpu_features_ignore() {
+  static bool cpu_features_ignore() {
     return _cpu_features_ignore;
   }
 

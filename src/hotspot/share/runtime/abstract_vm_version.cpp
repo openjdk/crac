@@ -403,5 +403,5 @@ void Abstract_VM_Version::check_cpufeatures_vmoptions() {
 }
 
 bool Abstract_VM_Version::should_skip_cpu_features_check() {
-  return VM_Version::get_cpu_features_ignore() || (CheckCPUFeatures != nullptr && !strcmp(CheckCPUFeatures, "skip"));
+  return VM_Version::cpu_features_ignore() || (CheckCPUFeatures != nullptr && !strcmp(CheckCPUFeatures, "skip"));
 }

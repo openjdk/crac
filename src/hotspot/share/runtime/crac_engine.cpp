@@ -381,20 +381,14 @@ int CracEngine::checkpoint() const {
 static constexpr char cpuarch_name[] = "cpu.arch";
 static constexpr char cpufeatures_name[] = "cpu.features";
 
-bool CracEngine::pre_restore_bitmap_hook(const unsigned char *value, size_t value_size) const {
+bool CracEngine::bitmap_constraint_hook(const unsigned char *value, size_t value_size, void *user_data/*unused*/) {
   VM_Version::VM_Features features;
   if (value_size != sizeof(features)) {
-    log_error(crac)("Incompatible CPUFeatures length in image %s - got %zu, want %zu", _image_location, value_size, sizeof(features));
+    log_error(crac)("Incompatible CPUFeatures length in the image - got %zu, want %zu", value_size, sizeof(features));
     return false;
   }
   memcpy(&features, value, value_size);
-  return VM_Version::process_image_cpu_features(features, _image_location);
-}
-
-bool CracEngine::pre_restore_bitmap_hook_trampoline(const unsigned char *value, size_t value_size, void *user_data) {
-  const CracEngine *self = static_cast<const CracEngine *>(user_data);
-
-  return self->pre_restore_bitmap_hook(value, value_size);
+  return VM_Version::process_image_cpu_features(features);
 }
 
 bool CracEngine::register_constraints_hooks() {
@@ -414,8 +408,7 @@ bool CracEngine::register_constraints_hooks() {
         "with the selected CRaC engine");
       return true;
   }
-  void *user_data = this;
-  return _image_constraints_api->register_bitmap_hook(_conf, cpufeatures_name, pre_restore_bitmap_hook_trampoline, user_data);
+  return _image_constraints_api->register_bitmap_hook(_conf, cpufeatures_name, bitmap_constraint_hook, nullptr /* user_data */);
 }
 
 int CracEngine::restore() {

@@ -93,8 +93,7 @@ private:
 
   crlib_conf_option_t *_options = nullptr;
 
-  bool pre_restore_bitmap_hook(const unsigned char *value, size_t value_size) const;
-  static bool pre_restore_bitmap_hook_trampoline(const unsigned char *value, size_t value_size, void *user_data);
+  static bool bitmap_constraint_hook(const unsigned char *value, size_t value_size, void *user_data);
   bool register_constraints_hooks();
 };
 

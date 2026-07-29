@@ -732,7 +732,7 @@ private:
   static const char *restore_failed_check(const VM_Features *image_features, const VM_Features *current_features) {
     return nullptr;
   }
-  static bool process_image_cpu_features(VM_Features image_features, const char *image_location) {
+  static bool process_image_cpu_features(VM_Features image_features) {
     return false;
   }
   static constexpr bool process_image_cpu_features_needed = false;

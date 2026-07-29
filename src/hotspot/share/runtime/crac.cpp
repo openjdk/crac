@@ -875,12 +875,12 @@ void crac::restore(crac_restore_data& restore_data) {
 
   // Since the check itself is delegated to the C/R Engine we will simply
   // skip the check here.
-  bool ignore = Abstract_VM_Version::should_skip_cpu_features_check();
+  bool ignore = VM_Version::cpu_features_ignore();
   bool exact = false;
   if (CheckCPUFeatures == nullptr || !strcmp(CheckCPUFeatures, "compatible")) {
     // default, compatible
   } else if (!strcmp(CheckCPUFeatures, "skip")) {
-    assert(ignore, "Abstract_VM_Version::should_skip_cpu_features_check() has checked it");
+    ignore = true;
   } else if (!strcmp(CheckCPUFeatures, "exact")) {
     exact = true;
   } else {

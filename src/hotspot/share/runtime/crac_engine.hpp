@@ -53,7 +53,7 @@ public:
 
   // Operations supported by all engines
   int checkpoint() const;
-  int restore();
+  int restore() const;
   bool configure_image_location(const char *image_location);
   GrowableArrayCHeap<const char *, MemTag::mtInternal> *vm_controlled_options() const;
 
@@ -73,7 +73,8 @@ public:
   ApiStatus prepare_image_constraints_api();
   bool set_label(const char* label, const char* value);
   bool store_cpuinfo(const VM_Version::VM_Features *current_features) const;
-  void require_cpuinfo(const VM_Version::VM_Features *current_features, bool exact) const;
+  bool require_cpuinfo(const VM_Version::VM_Features *current_features, bool exact) const;
+  void restore_cpuinfo() const;
   void check_cpuinfo(const VM_Version::VM_Features *current_features, bool exact) const;
 
   ApiStatus prepare_image_score_api();
@@ -94,7 +95,6 @@ private:
   crlib_conf_option_t *_options = nullptr;
 
   static bool bitmap_constraint_hook(const unsigned char *value, size_t value_size, void *user_data);
-  bool register_constraints_hooks();
 };
 
 #endif // SHARE_RUNTIME_CRAC_ENGINE_HPP

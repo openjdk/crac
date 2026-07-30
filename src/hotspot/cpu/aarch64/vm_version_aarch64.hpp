@@ -145,7 +145,7 @@ public:
   static void insert_features_names(VM_Version::VM_Features features, outputStream& os);
   // The returned string needs a ResourceMark.
   static const char *restore_failed_check(const VM_Features *image_features, const VM_Features *current_features);
-  static bool process_image_cpu_features(VM_Features image_features);
+  static bool process_image_cpu_features(const VM_Features *image_featuresp);
   static constexpr bool process_image_cpu_features_needed = true;
 
   static void print_platform_virtualization_info(outputStream*);

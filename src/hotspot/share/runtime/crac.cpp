@@ -854,6 +854,14 @@ void crac::prepare_restore(crac_restore_data& restore_data) {
   restore_data.restore_nanos = os::javaTimeNanos();
 }
 
+template <typename F>
+class RestoreCpuInfo {
+  F _f;
+public:
+  explicit RestoreCpuInfo(F f) : _f(f) {}
+  ~RestoreCpuInfo() { _f(); }
+};
+
 void crac::restore(crac_restore_data& restore_data) {
   precond(CRaCRestoreFrom != nullptr);
 
@@ -892,7 +900,9 @@ void crac::restore(crac_restore_data& restore_data) {
       case CracEngine::ApiStatus::OK: {
         VM_Version::VM_Features current_features;
         if (VM_Version::cpu_features_binary(&current_features)) {
-          engine.require_cpuinfo(&current_features, exact);
+          if (!engine.require_cpuinfo(&current_features, exact)) {
+            return;
+          }
         }
         } break;
       case CracEngine::ApiStatus::ERR:
@@ -903,6 +913,9 @@ void crac::restore(crac_restore_data& restore_data) {
         break;
     }
   }
+  RestoreCpuInfo restore_cpu_info_obj([&]{
+    engine.restore_cpuinfo();
+  });
 
   switch (engine.prepare_restore_data_api()) {
     case CracEngine::ApiStatus::OK: {
@@ -941,7 +954,9 @@ void crac::restore(crac_restore_data& restore_data) {
   }
 
   const int ret = engine.restore();
-  if (ret != 0) {
+  if (ret == 0) {
+    ShouldNotReachHere();
+  } else {
     log_error(crac)("CRaC engine failed to restore from %s: error %d", CRaCRestoreFrom, ret);
     VM_Version::VM_Features current_features;
     VM_Version::cpu_features_binary(&current_features); // ignore return value

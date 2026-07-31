@@ -948,7 +948,7 @@ bool VM_Version::process_image_cpu_features(const VM_Features *image_featuresp) 
       VM_Features sve256;
       sve256.set_feature(CPU_SVE256);
       VM_Features use = image_features & _cpu_features;
-      log_error(crac)("The image has -XX:CPUFeatures=%s with CPU_SVE256=%s, this CPU has CPUFeatures=%s not supporting CPU_SVE256, use -XX:CPUFeatures=%s during snapshot",
+      log_error(crac)("The image has -XX:CPUFeatures=%s with CPU_SVE256=%s, this CPU has CPUFeatures=%s not supporting CPU_SVE256, try using -XX:CPUFeatures=%s on checkpoint.",
                       image_features.print_numbers(), sve256.print_numbers(), _cpu_features.print_numbers(), use.print_numbers());
       return false;
     }

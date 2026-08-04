@@ -248,6 +248,7 @@ class LinuxWatchService
                 assert checkpointState == CheckpointRestoreState.RESTORE_TRANSITION;
                 if (thisState == CheckpointRestoreState.CHECKPOINTED) {
                     initFDs();
+                    Map<Integer,LinuxWatchKey> newDescriptors = new HashMap<>();
                     for (Map.Entry<Integer,LinuxWatchKey> entry : wdToKey.entrySet()) {
                         Integer oldDescriptor = entry.getKey();
                         LinuxWatchKey oldKey = entry.getValue();
@@ -257,15 +258,14 @@ class LinuxWatchService
                         if (!(Files.exists(dir) && Files.isDirectory(dir))){
                             System.getLogger(Poller.class.getName()).log(System.Logger.Level.WARNING, "CRaC Restore WatchService: path " +
                                 dir.toString() + " does not exist, skip re-register of WatchKey ");
-                            wdToKey.remove(oldDescriptor);
                             continue;
                         }
                         try (NativeBuffer buffer =
                             NativeBuffers.asNativeBuffer(dir.getByteArrayForSysCalls())) {
                             wd = inotifyAddWatch(ifd, buffer.address(), oldKey.getMask());
                             LinuxWatchKey key = new LinuxWatchKey(dir, watcher, ifd, wd, oldKey.getMask());
-                            wdToKey.remove(oldDescriptor);
-                            wdToKey.put(wd, key);
+                            newDescriptors.put(wd, key);
+
                             } catch (UnixException x) {
                                 if (x.errno() == ENOSPC) {
                                     throw new IOException("User limit of inotify watches reached");
@@ -273,6 +273,9 @@ class LinuxWatchService
                                 throw new IOException("Can't re-register LinuxWatchKey");
                             }
                     }
+                    wdToKey.clear();
+                    wdToKey.putAll(newDescriptors);
+
                     checkpointState = CheckpointRestoreState.NORMAL_OPERATION;
                     this.notifyAll();
                 }

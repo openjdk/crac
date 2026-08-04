@@ -23,6 +23,7 @@ import jdk.crac.Context;
 import jdk.crac.Resource;
 import jdk.crac.RestoreException;
 import jdk.crac.management.CRaCMXBean;
+import jdk.test.lib.Utils;
 import jdk.test.lib.crac.CracBuilder;
 import jdk.test.lib.crac.CracEngine;
 import jdk.test.lib.crac.CracTest;
@@ -35,7 +36,7 @@ import java.security.SecureRandom;
  * @summary Verify that SHA1PRNG secure random is not interlocked during checkpoint/restore.
  * @library /test/lib
  * @build InterlockTest
- * @run driver/timeout=60 jdk.test.lib.crac.CracTest SHA1PRNG 100
+ * @run driver/timeout=60 jdk.test.lib.crac.CracTest SHA1PRNG
  */
 /*
  * @test id=NativePRNGNonBlocking
@@ -43,7 +44,7 @@ import java.security.SecureRandom;
  * @requires (os.family != "windows")
  * @library /test/lib
  * @build InterlockTest
- * @run driver/timeout=60 jdk.test.lib.crac.CracTest NativePRNGNonBlocking 100
+ * @run driver/timeout=60 jdk.test.lib.crac.CracTest NativePRNGNonBlocking
  */
 /*
  * @test id=NativePRNG
@@ -51,24 +52,20 @@ import java.security.SecureRandom;
  * @requires (os.family != "windows")
  * @library /test/lib
  * @build InterlockTest
- * @run driver/timeout=60 jdk.test.lib.crac.CracTest NativePRNG 100
+ * @run driver/timeout=60 jdk.test.lib.crac.CracTest NativePRNG
  */
 
 /* NativePRNGBlocking is excluded as on some machines /dev/random is exhausted
  * too soon, making the test running too long. */
 
 public class InterlockTest implements Resource, CracTest {
-    private static final long MIN_TIMEOUT = 100;
-    private static final long MAX_TIMEOUT = 1000;
+    private static final long SLEEP_MS = Utils.adjustTimeout(25);
 
-    private boolean stop = false;
+    private volatile boolean stop = false;
     private SecureRandom sr;
 
-    @CracTestArg(0)
+    @CracTestArg
     String algName;
-
-    @CracTestArg(1)
-    int numThreads;
 
     private class TestThread1 extends Thread {
         @Override
@@ -77,7 +74,7 @@ public class InterlockTest implements Resource, CracTest {
                 set();
             }
         }
-    };
+    }
 
     private class TestThread2 extends Thread implements Resource {
         private final SecureRandom sr;
@@ -110,7 +107,7 @@ public class InterlockTest implements Resource, CracTest {
         public void afterRestore(Context<? extends Resource> context) throws Exception {
             set();
         }
-    };
+    }
 
     synchronized void clean() {
         sr.nextInt();
@@ -122,11 +119,7 @@ public class InterlockTest implements Resource, CracTest {
 
     @Override
     public void beforeCheckpoint(Context<? extends Resource> context) throws Exception {
-        try {
-            clean();
-        } catch(Exception e) {
-            e.printStackTrace(System.out);
-        };
+        clean();
     }
 
     @Override
@@ -145,40 +138,35 @@ public class InterlockTest implements Resource, CracTest {
         sr = SecureRandom.getInstance(algName);
         Context.getGlobalContext().register(this);
 
-        Thread[] threads = new Thread[numThreads];
-        for(int i = 0; i < numThreads; i++) {
-            threads[i] = (i % 2 == 0) ?
-                    new TestThread1():
-                    new TestThread2();
-            threads[i].start();
-        };
-        Thread.sleep(MIN_TIMEOUT);
-        set();
-        Thread.sleep(MIN_TIMEOUT);
+        try {
+            final int numThreads = Math.min(4 * Runtime.getRuntime().availableProcessors(), 100);
+            System.err.println("Spawning " + numThreads + " test threads");
+            for (int i = 0; i < numThreads; i++) {
+                final var testThread = (i % 2 == 0) ? new TestThread1(): new TestThread2();
+                testThread.start();
+            }
+            Thread.sleep(SLEEP_MS);
+            set();
+            Thread.sleep(SLEEP_MS);
 
-        Object checkpointLock = new Object();
-        Thread checkpointThread = new Thread("checkpointThread") {
-            public void run() {
-                synchronized (checkpointLock) {
-                    try {
-                        CRaCMXBean.getCRaCMXBean().checkpointRestore();
-                    } catch (CheckpointException e) {
-                        throw new RuntimeException("Checkpoint ERROR " + e);
-                    } catch (RestoreException e) {
-                        throw new RuntimeException("Restore ERROR " + e);
-                    }
-                    checkpointLock.notify();
+            final var checkpointThreadSucceeded = new boolean[1];
+            final var checkpointThread = new Thread(() -> {
+                try {
+                    CRaCMXBean.getCRaCMXBean().checkpointRestore();
+                    checkpointThreadSucceeded[0] = true;
+                } catch (CheckpointException | RestoreException e) {
+                    throw new RuntimeException("Checkpoint/restore failed", e);
                 }
+            }, "Checkpoint thread");
+            checkpointThread.start();
+            checkpointThread.join();
+            if (!checkpointThreadSucceeded[0]) {
+                throw new RuntimeException("Checkpoint thread failed");
             }
-        };
-        synchronized (checkpointLock) {
-            try {
-                checkpointThread.start();
-                checkpointLock.wait(MAX_TIMEOUT * 2);
-            } catch(Exception e){
-                throw new RuntimeException("Checkpoint/Restore ERROR " + e);
-            }
+
+            Thread.sleep(10 * SLEEP_MS);
+        } finally {
+            stop = true; // Ensure non-daemon test threads don't block JVM from exiting
         }
-        Thread.sleep(MAX_TIMEOUT);
     }
 }

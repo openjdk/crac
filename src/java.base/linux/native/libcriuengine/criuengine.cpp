@@ -564,14 +564,14 @@ bool criuengine::execute_criu(const ArgsBuilder& args) const {
 
   // grand-child
   pid_t parent = getppid();
-  int tries = 300;
-  while (parent != 1 && 0 < tries--) {
-      usleep(10);
+  int tries = 0;
+  while (parent != 1 && tries < 100) { // 100 gives about 50ms of sleep in total
+      usleep(10 * (++tries));
       parent = getppid();
   }
 
   if (parent == parent_before) {
-    LOG("can't move out of JVM process hierarchy");
+    LOG("Cannot move out of JVM process hierarchy (%i retries)", tries);
     kickjvm(jvm_pid, -1);
     exit(0);
   }

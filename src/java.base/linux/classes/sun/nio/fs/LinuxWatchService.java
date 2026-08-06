@@ -265,13 +265,12 @@ class LinuxWatchService
                             wd = inotifyAddWatch(ifd, buffer.address(), oldKey.getMask());
                             LinuxWatchKey key = new LinuxWatchKey(dir, watcher, ifd, wd, oldKey.getMask());
                             newDescriptors.put(wd, key);
-
-                            } catch (UnixException x) {
-                                if (x.errno() == ENOSPC) {
-                                    throw new IOException("User limit of inotify watches reached");
-                                }
-                                throw new IOException("Can't re-register LinuxWatchKey");
+                        } catch (UnixException x) {
+                            if (x.errno() == ENOSPC) {
+                                throw new IOException("User limit of inotify watches reached");
                             }
+                            throw new IOException("Can't re-register LinuxWatchKey");
+                        }
                     }
                     wdToKey.clear();
                     wdToKey.putAll(newDescriptors);

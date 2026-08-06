@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2017, 2025, Azul Systems, Inc. All rights reserved.
+ * Copyright (c) 2017, 2026, Azul Systems, Inc. All rights reserved.
  * Copyright (c) 2021, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
@@ -57,6 +57,7 @@ public class Core {
 
     private static final long JCMD_STREAM_NULL = 0;
     private static native Object[] checkpointRestore0(int[] fdArr, Object[] objArr, boolean dryRun, long jcmdStream);
+    private static native int getCheckpointableStatus0();
     private static final Object checkpointRestoreLock = new Object();
     private static boolean checkpointInProgress = false;
 
@@ -272,6 +273,26 @@ public class Core {
     private static void checkpointRestore(long jcmdStream) throws
             CheckpointException,
             RestoreException {
+        int status_code = getCheckpointableStatus0();
+        switch (CheckpointableStatus.fromCode(status_code)) {
+            case NEVER_AFTER_RESTORE -> {
+                CheckpointException ex = new CheckpointException();
+                ex.addSuppressed(new IllegalStateException("Current engine doesn't support second checkpoint after restore."));
+                throw ex;
+            }
+            case READY_LATER -> {
+                CheckpointException ex = new CheckpointException();
+                ex.addSuppressed(new IllegalStateException("CRaC cannot commit checkpoint right now, try later."));
+                throw ex;
+            }
+            case READY -> {
+                // fall through to checkpoint logic below
+            }
+            default -> {
+                System.err.printf("Engine returned unknown checkpointable status code: %d. Proceeding with checkpoint.%n", status_code);
+            }
+        }
+
         final List<String> newArguments;
 
         // checkpointRestoreLock protects against the simultaneous

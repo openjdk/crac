@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2021, Azul Systems, Inc. All rights reserved.
+ * Copyright (c) 2021, 2026, Azul Systems, Inc. All rights reserved.
  * Copyright (c) 2021, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
@@ -36,6 +36,7 @@
 #endif // LINUX
 
 #include "crcommon.hpp"
+#include "crlib/crlib_checkpoint_availability.h"
 #include "crlib/crlib_restore_data.h"
 #include "crlib/crlib_description.h"
 #include "jni.h"
@@ -288,8 +289,21 @@ static crlib_description_t description_extension = {
   configuration_options,
 };
 
+static crlib_checkpointable_status_t get_checkpointable_status(crlib_conf_t *) {
+  return CRLIB_CHECKPOINTABLE_READY;
+}
+
+static crlib_checkpoint_availability checkpoint_availability_extension = {
+  {
+    CRLIB_EXTENSION_CHECKPOINT_AVAILABILITY_NAME,
+    sizeof(checkpoint_availability_extension)
+  },
+  get_checkpointable_status,
+};
+
 static const crlib_extension_t *extensions[] = {
   &restore_data_extension.header,
+  &checkpoint_availability_extension.header,
   &image_constraints_extension.header,
   &image_score_extension.header,
   &description_extension.header,

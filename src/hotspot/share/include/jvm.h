@@ -1181,6 +1181,9 @@ enum cr_fail_type {
 JNIEXPORT jobjectArray JNICALL
 JVM_Checkpoint(JNIEnv *env, jarray fd_arr, jobjectArray obj_arr, jboolean dry_run, jlong jcmd_stream);
 
+JNIEXPORT jint JNICALL
+JVM_GetCheckpointableStatus(JNIEnv *env);
+
 JNIEXPORT void JNICALL
 JVM_StartRecordingDecompilations(JNIEnv *env);
 

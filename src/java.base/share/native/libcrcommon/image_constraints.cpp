@@ -197,7 +197,7 @@ static void print_bitmap(const char* name, const unsigned char* data, size_t siz
 }
 
 bool ImageConstraints::validate(const char* image_location) const {
-  if (_constraints.size() == 0) {
+  if (_constraints.size() == 0 && _hooks.size() == 0) {
     // If there are no constraints don't even try to open the file (it's fine if it is missing)
     return true;
   }
@@ -257,6 +257,35 @@ bool ImageConstraints::validate(const char* image_location) const {
       return false;
     }
   }
+  bool hooks_result = true;
+  _hooks.foreach([&](const Hook& hook) {
+    bool found = false;
+    tags.foreach([&](const Tag& t) {
+      if (!hooks_result || strcmp(hook.name, t.name) != 0) {
+        return;
+      }
+      if (t.type != hook.type) {
+        LOG("Image hook type mismatch for '%s'", hook.name);
+        return;
+      }
+      found = true;
+      switch (hook.type) {
+      case TagType::LABEL:
+        hooks_result = hook.hook.label_hook(static_cast<const char *>(t.data), hook.user_data);
+        break;
+      case TagType::BITMAP:
+        hooks_result = hook.hook.bitmap_hook(static_cast<const unsigned char *>(t.data), t.data_size, hook.user_data);
+        break;
+      }
+    });
+    if (!found) {
+      LOG("Hook did not find its tag '%s'", hook.name);
+      hooks_result = false;
+    }
+  });
+  if (!hooks_result) {
+    return false;
+  }
   const char** keys = new(std::nothrow) const char*[tags.size()];
   if (keys == nullptr) {
     LOG("Insufficient memory");
@@ -301,4 +330,20 @@ bool ImageConstraints::validate(const char* image_location) const {
     result = result && !c.failed;
   });
   return result;
+}
+
+bool ImageConstraints::register_label_hook(const char *name, LabelHook hook, void *user_data) {
+  if (!_hooks.add(Hook(name, hook, user_data))) {
+    LOG("out of memory");
+    return false;
+  }
+  return true;
+}
+
+bool ImageConstraints::register_bitmap_hook(const char *name, BitmapHook hook, void *user_data) {
+  if (!_hooks.add(Hook(name, hook, user_data))) {
+    LOG("out of memory");
+    return false;
+  }
+  return true;
 }

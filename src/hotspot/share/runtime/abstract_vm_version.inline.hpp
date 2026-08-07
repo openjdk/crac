@@ -35,7 +35,7 @@ VM_Features VM_Version::CPUFeatures_parse(const char *str) {
   if (str == nullptr || strcmp(str, "native") == 0) {
     return _features;
   } else if (strcmp(str, "ignore") == 0) {
-    _ignore_glibc_not_using = true;
+    _cpu_features_ignore = true;
     return _features;
   } else if (strcmp(str, "generic") == 0) {
     return CPUFeatures_generic();
@@ -80,7 +80,7 @@ VM_Features VM_Version::CPUFeatures_parse_numeric(const char *str) {
 #endif // LINUX
 }
 
-bool VM_Version::_ignore_glibc_not_using = LINUX_ONLY(false) NOT_LINUX(true);
+bool VM_Version::_cpu_features_ignore = LINUX_ONLY(false) NOT_LINUX(true);
 #ifdef LINUX
 bool VM_Version::glibc_env_set(char *disable_str) {
 #define TUNABLES_NAME "GLIBC_TUNABLES"
@@ -196,7 +196,7 @@ void VM_Version::glibc_reexec() {
 
 // Returns whether we should have got set a GLIBC_TUNABLES environment variables but did not get any.
 bool VM_Version::glibc_not_using() {
-  if (_ignore_glibc_not_using)
+  if (_cpu_features_ignore)
     return true;
 
   VM_Features features_expected;
@@ -290,7 +290,7 @@ bool VM_Version::glibc_not_using() {
 #endif // LINUX
 
 void VM_Version::print_using_features_cr() {
-  if (_ignore_glibc_not_using) {
+  if (_cpu_features_ignore) {
     tty->print_raw_cr("CPU features are being kept intact as requested by -XX:CPUFeatures=ignore");
   } else {
     tty->print_raw("CPU features being used are: -XX:CPUFeatures=");

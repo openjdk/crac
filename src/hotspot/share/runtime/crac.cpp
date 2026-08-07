@@ -328,7 +328,9 @@ int crac::checkpoint_restore(int *shmid) {
 
   // Setup CPU arch & features only during the first checkpoint; the feature set
   // cannot change after initial boot (and we don't support switching the engine).
-  if (_generation == 1 && !VM_Version::check_cpu_features_skip()) {
+  // should_check_cpu_features() is not valid here as -XX:CheckCPUFeatures=skip
+  // does not apply for storing of CPUFeatures.
+  if (_generation == 1 && VM_Version::can_use_cpu_features()) {
     VM_Version::VM_Features current_features;
     if (VM_Version::cpu_features_binary(&current_features)) {
       switch (_engine->prepare_image_constraints_api()) {
@@ -852,6 +854,14 @@ void crac::prepare_restore(crac_restore_data& restore_data) {
   restore_data.restore_nanos = os::javaTimeNanos();
 }
 
+template <typename F>
+class RestoreCpuInfo {
+  F _f;
+public:
+  explicit RestoreCpuInfo(F f) : _f(f) {}
+  ~RestoreCpuInfo() { _f(); }
+};
+
 void crac::restore(crac_restore_data& restore_data) {
   precond(CRaCRestoreFrom != nullptr);
 
@@ -873,7 +883,7 @@ void crac::restore(crac_restore_data& restore_data) {
 
   // Since the check itself is delegated to the C/R Engine we will simply
   // skip the check here.
-  bool ignore = VM_Version::check_cpu_features_skip();
+  bool ignore = !VM_Version::can_use_cpu_features();
   bool exact = false;
   if (CheckCPUFeatures == nullptr || !strcmp(CheckCPUFeatures, "compatible")) {
     // default, compatible
@@ -890,7 +900,9 @@ void crac::restore(crac_restore_data& restore_data) {
       case CracEngine::ApiStatus::OK: {
         VM_Version::VM_Features current_features;
         if (VM_Version::cpu_features_binary(&current_features)) {
-          engine.require_cpuinfo(&current_features, exact);
+          if (!engine.require_cpuinfo(&current_features, exact)) {
+            return;
+          }
         }
         } break;
       case CracEngine::ApiStatus::ERR:
@@ -901,6 +913,9 @@ void crac::restore(crac_restore_data& restore_data) {
         break;
     }
   }
+  RestoreCpuInfo restore_cpu_info_obj([&]{
+    engine.restore_cpuinfo();
+  });
 
   switch (engine.prepare_restore_data_api()) {
     case CracEngine::ApiStatus::OK: {
@@ -939,7 +954,9 @@ void crac::restore(crac_restore_data& restore_data) {
   }
 
   const int ret = engine.restore();
-  if (ret != 0) {
+  if (ret == 0) {
+    ShouldNotReachHere();
+  } else {
     log_error(crac)("CRaC engine failed to restore from %s: error %d", CRaCRestoreFrom, ret);
     VM_Version::VM_Features current_features;
     VM_Version::cpu_features_binary(&current_features); // ignore return value

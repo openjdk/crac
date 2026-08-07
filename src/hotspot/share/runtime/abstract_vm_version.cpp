@@ -401,3 +401,7 @@ void Abstract_VM_Version::check_cpufeatures_vmoptions() {
     tty->print_cr("Do not use -XX:ShowCPUFeatures: this architecture does not support any arch-specific strings.");
   }
 }
+
+bool Abstract_VM_Version::should_check_cpu_features() {
+  return VM_Version::can_use_cpu_features() && (CheckCPUFeatures == nullptr || strcmp(CheckCPUFeatures, "skip") != 0);
+}

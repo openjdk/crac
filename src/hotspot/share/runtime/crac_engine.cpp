@@ -507,6 +507,16 @@ const crlib_conf_option_t *CracEngine::configuration_options() {
   return _options;
 }
 
+bool CracEngine::bitmap_constraint_hook(const unsigned char *value, size_t value_size, void *user_data/*unused*/) {
+  VM_Version::VM_Features features;
+  if (value_size != sizeof(features)) {
+    log_error(crac)("Incompatible CPUFeatures length in the image - got %zu, want %zu", value_size, sizeof(features));
+    return false;
+  }
+  memcpy(&features, value, value_size);
+  return VM_Version::process_image_cpu_features(&features);
+}
+
 static constexpr char cpuarch_name[] = "cpu.arch";
 static constexpr char cpufeatures_name[] = "cpu.features";
 
@@ -517,6 +527,8 @@ CracEngine::ApiStatus CracEngine::prepare_image_constraints_api() {
   require_method(require_label)
   require_method(require_bitmap)
   require_method(is_failed)
+  require_method(get_failed_bitmap)
+  require_method(register_bitmap_hook)
   complete_extension_api(_image_constraints_api)
 }
 
@@ -534,11 +546,24 @@ bool CracEngine::store_cpuinfo(const VM_Version::VM_Features *current_features) 
   return true;
 }
 
-void CracEngine::require_cpuinfo(const VM_Version::VM_Features *current_features, bool exact) const {
+// Return success.
+bool CracEngine::require_cpuinfo(const VM_Version::VM_Features *current_features, bool exact) const {
   log_debug(crac)("cpufeatures_load user data %s from %s...", cpufeatures_name, CRaCRestoreFrom);
   _image_constraints_api->require_label(_conf, cpuarch_name, ARCHPROPNAME);
   _image_constraints_api->require_bitmap(_conf, cpufeatures_name,
     reinterpret_cast<const unsigned char *>(current_features), sizeof(*current_features), exact ? EQUALS : SUBSET);
+  if (VM_Version::process_image_cpu_features_needed
+      && !_image_constraints_api->register_bitmap_hook(_conf, cpufeatures_name, bitmap_constraint_hook, nullptr /* user_data */)) {
+    return false;
+  }
+  return true;
+}
+
+void CracEngine::restore_cpuinfo() const {
+  log_debug(crac)("restore_cpuinfo...");
+  if (VM_Version::process_image_cpu_features_needed) {
+    VM_Version::process_image_cpu_features(nullptr);
+  }
 }
 
 void CracEngine::check_cpuinfo(const VM_Version::VM_Features *current_features, bool exact) const {

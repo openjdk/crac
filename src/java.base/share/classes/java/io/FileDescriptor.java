@@ -72,7 +72,6 @@ public final class FileDescriptor {
 
                 OpenResourcePolicies.Policy policy = findPolicy(nativeDescription);
                 String action = "error";
-                Supplier<Exception> supplier = null;
                 // Normally the claiming should be overridden by FileInputStream/FileOutputStream
                 // but in case these are collected we handle FDs 0..2 here as well.
                 if (policy != null) {
@@ -80,7 +79,7 @@ public final class FileDescriptor {
                 } else if (self == in || self == out || self == err) {
                     action = "ignore";
                 }
-                supplier = switch (action.toLowerCase()) {
+                Supplier<Exception> supplier = switch (action.toLowerCase()) {
                     case "error":
                         yield () -> new CheckpointOpenResourceException(
                             FileDescriptor.class.getSimpleName() + " " + fd + ": " + nativeDescription,

@@ -755,7 +755,6 @@ joinListeningThread()
         (*jvmti)->Deallocate(jvmti, (unsigned char*)threads);
     }
     if (thread) {
-        JNIEnv* env = getEnv();
         jclass cls = (*env)->GetObjectClass(env, thread);
         jmethodID methodId = (*env)->GetMethodID(env, cls, "join", "()V");
         if (methodId) {

@@ -33,24 +33,24 @@ import static jdk.test.lib.Asserts.assertEquals;
  * @test id=DEFAULT
  * @summary a trivial check that Selector.wakeup() after restore behaves as expected
  * @library /test/lib
- * @build SelectAndWarkeupAfterRestoreTest
+ * @build SelectAndWakeupAfterRestoreTest
  * @run driver jdk.test.lib.crac.CracTest
  */
 /*
  * @test id=ALT_UNIX
  * @requires (os.family != "windows")
  * @library /test/lib
- * @build SelectAndWarkeupAfterRestoreTest
+ * @build SelectAndWakeupAfterRestoreTest
  * @run driver jdk.test.lib.crac.CracTest sun.nio.ch.PollSelectorProvider
  */
 /*
  * @test id=ALT_WINDOWS
  * @requires (os.family == "windows")
  * @library /test/lib
- * @build SelectAndWarkeupAfterRestoreTest
+ * @build SelectAndWakeupAfterRestoreTest
  * @run driver jdk.test.lib.crac.CracTest sun.nio.ch.WindowsSelectorProvider
  */
-public class SelectAndWarkeupAfterRestoreTest implements CracTest {
+public class SelectAndWakeupAfterRestoreTest implements CracTest {
     @CracTestArg(optional = true)
     String selectorImpl;
 

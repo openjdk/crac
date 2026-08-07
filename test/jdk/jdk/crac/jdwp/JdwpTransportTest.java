@@ -39,8 +39,10 @@ import java.util.concurrent.TimeoutException;
 import static jdk.test.lib.Asserts.*;
 
 /**
- * @test ContextOrderTest
+ * @test JdwpTransportTest
+ * @comment requires jdk.jdi module (not available in JRE)
  * @library /test/lib
+ * @requires vm.jdi
  * @build JdwpTransportTest
  * @run driver/timeout=30 jdk.test.lib.crac.CracTest false false
  * @run driver/timeout=30 jdk.test.lib.crac.CracTest true false

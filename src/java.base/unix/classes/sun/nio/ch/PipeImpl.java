@@ -69,6 +69,7 @@ class PipeImpl
                     warnOpenResource(policy, PipeImpl.this.toString());
                     Core.getClaimedFDs().claimFd(source.getFD(), this, NO_EXCEPTION, source.getFD());
                     Core.getClaimedFDs().claimFd(sink.getFD(), this, NO_EXCEPTION, sink.getFD());
+                    break;
                 default:
                     throw new IllegalStateException("Unknown policy action " + action + " for " + PipeImpl.this, null);
             }

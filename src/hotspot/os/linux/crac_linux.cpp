@@ -156,7 +156,6 @@ bool FdsInfo::same_fd(int i1, int i2) {
 void FdsInfo::initialize() {
   assert(!_inited, "should be called only once");
 
-  char path[PATH_MAX];
   struct dirent *dp;
 
   DIR *dir = opendir("/proc/self/fd");

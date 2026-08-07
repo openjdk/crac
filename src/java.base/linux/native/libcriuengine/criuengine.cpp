@@ -125,7 +125,7 @@ class ArgsBuilder {
       if (_next < _end) {
         *_next++ = arg;
       } else {
-        LOG("Warning: too many arguments for CRIU (dropped '%s' from %s)\n", arg, from);
+        LOG("Warning: too many arguments for CRIU (dropped '%s' from %s)", arg, from);
       }
       arg = strtok_r(NULL, " ", &saveptr);
     }

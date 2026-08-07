@@ -35,10 +35,10 @@ import static jdk.test.lib.Asserts.*;
  * @test Check the -XX:+LogVMOutput together with -XX:+LogCompilation flag on simulated crac engine
  * @library /test/lib
  * @modules java.base/jdk.internal.crac:+open
- * @build LoggingVMlogOpenSimulTest
+ * @build LoggingCompilationSimulTest
  * @run driver jdk.test.lib.crac.CracTest
  */
-public class LoggingVMlogOpenSimulTest implements CracTest {
+public class LoggingCompilationSimulTest implements CracTest {
     @Override
     public void test() throws Exception {
         Path logPathO = Files.createTempFile(getClass().getName(), "-vmlog1.txt");

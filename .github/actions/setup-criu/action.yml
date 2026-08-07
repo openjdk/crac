@@ -1,5 +1,6 @@
 #
 # Copyright (c) 2022, Oracle and/or its affiliates. All rights reserved.
+# Copyright (c) 2026, Azul Systems, Inc. All rights reserved.
 # DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
 #
 # This code is free software; you can redistribute it and/or modify it
@@ -23,7 +24,7 @@
 # questions.
 #
 
-name: 'Setup CRIU '
+name: 'Setup CRIU'
 description: 'Download and install CRIU to JDK'
 inputs:
   jdk-path:
@@ -35,7 +36,7 @@ runs:
   steps:
     - name: Restore CRIU from cache
       id: criu_cache
-      uses: actions/cache@v3
+      uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
       with:
         path: /usr/sbin/criu
         key: criu-${{ runner.os }}

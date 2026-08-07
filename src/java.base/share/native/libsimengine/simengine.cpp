@@ -182,7 +182,7 @@ static bool can_configure(crlib_conf_t* conf, const char* key) {
 static bool configure(crlib_conf_t* conf, const char* key, const char* value) {
   if (!strcmp(key, opt_image_location)) {
     char* copy = strdup(value);
-    if (value == nullptr) {
+    if (copy == nullptr) {
       LOG("out of memory");
       return false;
     }

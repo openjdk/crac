@@ -50,11 +50,11 @@ public:
     decl(SHA3,          sha3,       12) \
     decl(SHA512,        sha512,     13) \
     decl(SVE,           sve,        14) \
-    decl(SB,            sb,         15) \
+    decl(SB_UNUSED,     sb_unused,  15) \
     decl(PACA,          paca,       16) \
     decl(SVEBITPERM,    svebitperm, 17) \
     decl(SVE2,          sve2,       18) \
-    decl(STXR_PREFETCH_UNUSED, stxr_prefetch, 19)  \
+    decl(STXR_PREFETCH_UNUSED, stxr_prefetch_unused, 19)  \
     decl(A53MAC,        a53mac,     20) \
     decl(ECV,           ecv,        21) \
     decl(WFXT,          wfxt,       22) \

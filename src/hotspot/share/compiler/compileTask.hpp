@@ -73,8 +73,8 @@ class CompileTask : public CHeapObj<mtCompiler> {
       "replay",
       "whitebox",
       "must_be_compiled",
-      "bootstrap",
-      "crac"
+      "crac",
+      "bootstrap"
     };
     return reason_names[compile_reason];
   }

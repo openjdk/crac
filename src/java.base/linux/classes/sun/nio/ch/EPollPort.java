@@ -109,7 +109,7 @@ final class EPollPort
             if (threads == 0) {
                 throw new IllegalStateException();
             }
-            phaser = new Phaser(threadCount() + 1);
+            phaser = new Phaser(threads + 1);
             counter = new AtomicInteger(threads);
             for (int i = 0; i < threads; ++i) {
                 // cannot use executeOnHandlerTask as taskQueue is null in a non-fixed threadpool

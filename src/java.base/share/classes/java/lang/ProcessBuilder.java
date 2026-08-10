@@ -39,10 +39,6 @@ import jdk.internal.access.JavaIOFileDescriptorAccess;
 import jdk.internal.access.SharedSecrets;
 import jdk.internal.crac.Core;
 import jdk.internal.crac.JDKResource;
-import java.util.Arrays;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Map;
 import jdk.internal.event.ProcessStartEvent;
 
 /**

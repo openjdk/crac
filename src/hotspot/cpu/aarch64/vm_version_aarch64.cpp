@@ -63,6 +63,7 @@
   GLIBC_UNSUPPORTED(A53MAC    ); \
   GLIBC_UNSUPPORTED(ECV       ); \
   GLIBC_UNSUPPORTED(WFXT      ); \
+  GLIBC_UNSUPPORTED(SVE256    ); \
   GLIBC_UNSUPPORTED(NOTPACA   ); \
   /**/
 #include "runtime/abstract_vm_version.inline.hpp"
@@ -929,4 +930,57 @@ void VM_Version::CPUFeatures_apply_arch(VM_Features &parsed, VM_Features &missin
   }
   missing.clear_feature(CPU_PACA);
   missing.clear_feature(CPU_NOTPACA);
+}
+
+bool VM_Version::process_image_cpu_features(const VM_Features *image_featuresp) {
+  int want;
+  if (image_featuresp == nullptr) {
+    // Cleanup after a failed restore.
+    want = supports_feature(CPU_SVE256) ? 32 : 16;
+  } else {
+    const VM_Features &image_features = *image_featuresp;
+    bool image_supports_sve256 = image_features.supports_feature(CPU_SVE256);
+    if (image_supports_sve256 && !_cpu_features.supports_feature(CPU_SVE256)) {
+      if (!Abstract_VM_Version::should_check_cpu_features()) {
+        return true;
+      }
+      ResourceMark rm;
+      VM_Features sve256;
+      sve256.set_feature(CPU_SVE256);
+      VM_Features use = image_features & _cpu_features;
+      log_error(crac)("The image has -XX:CPUFeatures=%s with CPU_SVE256=%s, this CPU has CPUFeatures=%s not supporting CPU_SVE256, try using -XX:CPUFeatures=%s on checkpoint.",
+                      image_features.print_numbers(), sve256.print_numbers(), _cpu_features.print_numbers(), use.print_numbers());
+      return false;
+    }
+    want = image_supports_sve256 ? 32 : 16;
+  }
+  if (set_maximum_sve_vector_length(want) == want) {
+    return true;
+  }
+  if (!_cpu_features.supports_feature(CPU_SVE)) {
+    guarantee(want == 16, "CPU_SVE256 cannot be present without CPU_SVE");
+    return true;
+  }
+  // Always call PR_SVE_SET_VL, we do not know who did execute this JVM.
+  errno = 0;
+  int got = set_and_get_current_sve_vector_length(want);
+  if (got != want) {
+    ResourceMark rm;
+    VM_Features sve256;
+    sve256.set_feature(CPU_SVE256);
+    if (image_featuresp != nullptr) {
+      const VM_Features &image_features = *image_featuresp;
+      log_error(crac)("The image has -XX:CPUFeatures=%s with CPU_SVE256=%s %s, this CPU has CPUFeatures=%s but PR_SVE_SET_VL reports %d: %s",
+                      image_features.print_numbers(), sve256.print_numbers(),
+                      want == 32 ? "set" : "unset",
+                      _cpu_features.print_numbers(), got, os::strerror(errno));
+    } else {
+      log_error(crac)("Cannot restore this JVM's CPUFeatures=%s with CPU_SVE256=%s %s, this CPU has CPUFeatures=%s but PR_SVE_SET_VL reports %d: %s",
+                      _features.print_numbers(), sve256.print_numbers(),
+                      want == 32 ? "set" : "unset",
+                      _cpu_features.print_numbers(), got, os::strerror(errno));
+    }
+    return false;
+  }
+  return true;
 }

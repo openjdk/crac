@@ -33,6 +33,10 @@
 #include "linkedlist.hpp"
 
 class ImageConstraints {
+public:
+  using LabelHook = bool (*)(const char *value, void *user_data);
+  using BitmapHook = bool (*)(const unsigned char *value, size_t value_size, void *user_data);
+
 private:
   enum class TagType: std::uint8_t {
     LABEL,
@@ -108,8 +112,26 @@ private:
     bool compare_bitmaps(const unsigned char* bitmap, size_t length) const;
   };
 
+  struct Hook {
+    TagType type;
+    const char* name;
+    union U {
+      LabelHook label_hook;
+      BitmapHook bitmap_hook;
+      U(LabelHook h) : label_hook(h) {}
+      U(BitmapHook h) : bitmap_hook(h) {}
+    } hook;
+    void *user_data;
+
+    Hook(const char* n, LabelHook h, void *ud):
+      type(TagType::LABEL), name(n), hook(h), user_data(ud) {}
+    Hook(const char* n, BitmapHook h, void *ud):
+      type(TagType::BITMAP), name(n), hook(h), user_data(ud) {}
+  };
+
   LinkedList<Tag> _tags;
   LinkedList<Constraint> _constraints;
+  LinkedList<Hook> _hooks;
 
   static constexpr const size_t _MAX_NAME_SIZE = 256;
   static constexpr const size_t _MAX_VALUE_SIZE = 256;
@@ -143,7 +165,7 @@ public:
   size_t get_failed_bitmap(const char* name, unsigned char *value_return, size_t value_size) const {
     size_t result = 0;
     _constraints.foreach([&](Constraint &c) {
-      if (!strcmp(c.name, name) && c.failed) {
+      if (c.type == TagType::BITMAP && !strcmp(c.name, name) && c.failed) {
         if (c.image_data == nullptr) {
           result = 0;
         } else {
@@ -156,6 +178,10 @@ public:
     });
     return result;
   }
+
+  // name is not copied, its content must remain valid.
+  bool register_label_hook(const char *name, LabelHook hook, void *user_data);
+  bool register_bitmap_hook(const char *name, BitmapHook hook, void *user_data);
 
   bool persist(const char* image_location) const;
   bool validate(const char* image_location) const;

@@ -73,7 +73,8 @@ public:
   ApiStatus prepare_image_constraints_api();
   bool set_label(const char* label, const char* value);
   bool store_cpuinfo(const VM_Version::VM_Features *current_features) const;
-  void require_cpuinfo(const VM_Version::VM_Features *current_features, bool exact) const;
+  bool require_cpuinfo(const VM_Version::VM_Features *current_features, bool exact) const;
+  void restore_cpuinfo() const;
   void check_cpuinfo(const VM_Version::VM_Features *current_features, bool exact) const;
 
   ApiStatus prepare_image_score_api();
@@ -92,6 +93,8 @@ private:
   crlib_image_score_t *_image_score_api = nullptr;
 
   crlib_conf_option_t *_options = nullptr;
+
+  static bool bitmap_constraint_hook(const unsigned char *value, size_t value_size, void *user_data);
 };
 
 #endif // SHARE_RUNTIME_CRAC_ENGINE_HPP

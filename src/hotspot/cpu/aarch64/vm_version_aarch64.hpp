@@ -59,6 +59,7 @@ public:
     decl(ECV,           ecv,        21) \
     decl(WFXT,          wfxt,       22) \
     /* These features are added for CRaC. */ \
+    decl(SVE256,        sve256,     62) \
     decl(NOTPACA,       notpaca,    63) \
     /**/
 
@@ -68,7 +69,7 @@ public:
   #undef DECLARE_CPU_FEATURE_FLAG
     MAX_CPU_FEATURES,
     LAST_CPU_FEATURE = CPU_WFXT,
-    FIRST_GLIBC_FEATURE = CPU_NOTPACA
+    FIRST_GLIBC_FEATURE = CPU_SVE256
   };
 };
 
@@ -113,14 +114,17 @@ protected:
   // Return the length that will be used, or -ve if an error occurred.
   static int set_and_get_current_sve_vector_length(int len);
   static int get_current_sve_vector_length();
+  // Limit what set_and_get_current_sve_vector_length is willing to set.
+  static int set_maximum_sve_vector_length(int length);
 
 public:
   // Initialization
   typedef ::VM_Features VM_Features;
   static void initialize();
   static bool cpu_features_binary(VM_Features *data);
-  static bool check_cpu_features_skip() {
-    return _ignore_glibc_not_using;
+  static bool _cpu_features_ignore;
+  static bool can_use_cpu_features() {
+    return !_cpu_features_ignore;
   }
   static void check_virtualizations();
 
@@ -137,11 +141,12 @@ public:
   static constexpr char glibc_prefix[] = ":glibc.cpu.hwcaps=";
   static constexpr size_t glibc_prefix_len = sizeof(glibc_prefix) - 1;
 #endif //LINUX
-  static bool _ignore_glibc_not_using;
   static void print_using_features_cr();
   static void insert_features_names(VM_Version::VM_Features features, outputStream& os);
   // The returned string needs a ResourceMark.
   static const char *restore_failed_check(const VM_Features *image_features, const VM_Features *current_features);
+  static bool process_image_cpu_features(const VM_Features *image_featuresp);
+  static constexpr bool process_image_cpu_features_needed = true;
 
   static void print_platform_virtualization_info(outputStream*);
 

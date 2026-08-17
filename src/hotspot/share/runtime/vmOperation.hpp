@@ -110,6 +110,7 @@
   template(GTestStopSafepoint)                    \
   template(JFROldObject)                          \
   template(VM_Crac)                               \
+  template(ClassPrintLayout)                      \
   template(RendezvousGCThreads)                   \
   template(JFRInitializeCPUTimeSampler)           \
   template(JFRTerminateCPUTimeSampler)            \

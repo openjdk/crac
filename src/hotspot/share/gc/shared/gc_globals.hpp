@@ -287,7 +287,7 @@ const size_t defaultMaxHeapSize = ScaleForWordSize(96*M);
   develop(uintx, MaxVirtMemFraction, 2,                                     \
           "Maximum fraction (1/n) of virtual memory used for ergonomically "\
           "determining maximum heap size")                                  \
-          range(1, max_uintx)                                               \
+          range(1, max_juint)                                               \
                                                                             \
   product(bool, UseAdaptiveSizePolicy, true,                                \
           "Use adaptive generation sizing policies")                        \

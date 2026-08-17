@@ -832,7 +832,7 @@ GrowableArray<crac::score> crac::get_image_scores_from_jvm() {
 bool crac::record_image_scores(jobjectArray metrics, jdoubleArray values) {
   assert(crac::is_image_score_supported(), "CRaC engine does not support score recording");
   ResourceMark rm;
-  objArrayOop metrics_oops = oop_cast<objArrayOop>(JNIHandles::resolve_non_null(metrics));
+  refArrayOop metrics_oops = oop_cast<refArrayOop>(JNIHandles::resolve_non_null(metrics));
   typeArrayOop values_oops = oop_cast<typeArrayOop>(JNIHandles::resolve_non_null(values));
   assert(metrics_oops->length() == values_oops->length(), "should be equal");
   for (int i = 0; i < metrics_oops->length(); ++i) {

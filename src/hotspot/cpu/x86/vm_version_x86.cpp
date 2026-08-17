@@ -1387,7 +1387,7 @@ void VM_Version::get_processor_features_hotspot() {
 
   // Kyber Intrinsics
   // Currently we only have them for AVX512
-  if (supports_evex() && supports_avx512bw()) {
+  if (supports_avx512vlbw()) {
     if (FLAG_IS_DEFAULT(UseKyberIntrinsics)) {
       UseKyberIntrinsics = true;
     }
@@ -1460,7 +1460,7 @@ void VM_Version::get_processor_features_hotspot() {
   }
 
   if (UseSHA && ((supports_evex() && supports_avx512vlbw()) ||
-      (EnableX86ECoreOpts && !supports_hybrid()))) {
+      (supports_avx2() && EnableX86ECoreOpts && !supports_hybrid()))) {
     if (FLAG_IS_DEFAULT(UseSHA3Intrinsics)) {
       FLAG_SET_DEFAULT(UseSHA3Intrinsics, true);
     }
@@ -1860,7 +1860,7 @@ void VM_Version::get_processor_features_hotspot() {
 #endif
 
   // Use XMM/YMM MOVDQU instruction for Object Initialization
-  if (!UseFastStosb && UseUnalignedLoadStores) {
+  if (UseUnalignedLoadStores) {
     if (FLAG_IS_DEFAULT(UseXMMForObjInit)) {
       UseXMMForObjInit = true;
     }
@@ -1911,7 +1911,12 @@ void VM_Version::get_processor_features_hotspot() {
     }
 #ifdef COMPILER2
     if (FLAG_IS_DEFAULT(UseFPUForSpilling) && supports_sse4_2()) {
-      FLAG_SET_DEFAULT(UseFPUForSpilling, true);
+      // Spilling to FPU registers not beneficial on Haswell and beyond
+      if (UseAVX > 1) {
+        FLAG_SET_DEFAULT(UseFPUForSpilling, false);
+      } else {
+        FLAG_SET_DEFAULT(UseFPUForSpilling, true);
+      }
     }
 #endif
   }
@@ -3156,8 +3161,10 @@ VM_Version::VM_Features VM_Version::CpuidInfo::feature_flags() const {
       vm_features.set_feature(CPU_SERIALIZE);
     if (sef_cpuid7_edx.bits.hybrid != 0)
       vm_features.set_feature(CPU_HYBRID);
-    if (_cpuid_info.sef_cpuid7_edx.bits.avx512_fp16 != 0)
-      vm_features.set_feature(CPU_AVX512_FP16);
+  }
+
+  if (_cpuid_info.sef_cpuid7_edx.bits.avx512_fp16 != 0) {
+    vm_features.set_feature(CPU_AVX512_FP16);
   }
 
   // ZX additional features.

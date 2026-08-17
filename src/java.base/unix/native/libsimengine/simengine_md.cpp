@@ -39,7 +39,7 @@
 int kickjvm(pid_t jvm, int code) {
     union sigval sv = { .sival_int = code };
     if (-1 == sigqueue(jvm, RESTORE_SIGNAL, sv)) {
-        LOG("sigqueue: %s", strerror(errno));
+        LOG("sigqueue PID %d: %s", jvm, strerror(errno));
         return 1;
     }
     return 0;

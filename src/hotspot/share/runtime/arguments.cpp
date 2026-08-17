@@ -2821,9 +2821,6 @@ jint Arguments::finalize_vm_init_args() {
   if (CRaCRestoreFrom && !process_flags_for_restore()) {
     return JNI_EINVAL;
   }
-  if (CRaCCheckpointTo && !crac::prepare_checkpoint()) {
-    return JNI_ERR;
-  }
 
   return JNI_OK;
 }

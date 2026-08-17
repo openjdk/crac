@@ -58,6 +58,7 @@ VM_CONTROLLED_ENGINE_OPTS(DEFINE_OPT_VAR)
 #undef DEFINE_OPT_VAR
 
 static bool find_engine(const char *dll_dir, char *path, size_t path_size, char *name, size_t name_size) {
+  assert(CRaCEngine != nullptr, "must have engine set");
   const size_t engine_length = strlen(CRaCEngine);
   if (engine_length == 0) {
     log_error(crac)("CRaCEngine is empty");
@@ -606,7 +607,17 @@ void CracEngine::check_cpuinfo(const VM_Version::VM_Features *current_features, 
 }
 
 bool CracEngine::set_label(const char* label, const char* value) {
+  if (value == nullptr) {
+    return true; // ignore empty labels for convenience
+  }
   return _image_constraints_api->set_label(_conf, label, value);
+}
+
+bool CracEngine::require_label(const char* label, const char* value) {
+  if (value == nullptr) {
+    return true; // for symmetry with set_label
+  }
+  return _image_constraints_api->require_label(_conf, label, value);
 }
 
 CracEngine::ApiStatus CracEngine::prepare_image_score_api() {

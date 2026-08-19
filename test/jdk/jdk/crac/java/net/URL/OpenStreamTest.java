@@ -25,6 +25,7 @@ import jdk.test.lib.crac.CracBuilder;
 import jdk.test.lib.crac.CracEngine;
 import jdk.test.lib.crac.CracTest;
 
+import java.io.Closeable;
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
@@ -61,22 +62,22 @@ public class OpenStreamTest implements CracTest {
         } finally {
             File testTxt = testFilePath.toFile();
             if (testTxt.exists()) {
-                assert testTxt.delete();
+                assertTrue(testTxt.delete());
             }
-            assert temp.toFile().delete();
+            assertTrue(temp.toFile().delete());
         }
     }
 
     @Override
     public void exec() throws Exception {
         Path testjar = createTestJar();
+        assertTrue(testjar.toFile().exists());
 
-        URL url = new URL("jar:file:test.jar!/test.txt");
-        try (InputStream inputStream = url.openStream()) {
+        URL url = new URL("jar:" + testjar.toUri().toURL() + "!/test.txt");
+        try (AutoCloseable _ = () -> assertTrue(testjar.toFile().delete());
+             InputStream inputStream = url.openStream()) {
             CRaCMXBean.getCRaCMXBean().checkpointRestore();
             assertEquals(TEST_STRING.length(), inputStream.readAllBytes().length);
-        } finally {
-            assertTrue(testjar.toFile().delete());
         }
     }
 

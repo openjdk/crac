@@ -943,7 +943,7 @@ void crac::restore(crac_restore_data& restore_data) {
     case CracEngine::ApiStatus::ERR:
       return;
     case CracEngine::ApiStatus::UNSUPPORTED:
-      log_warning(crac)("Cannot verify image constraints (e.g. CPUFeatures) for restore with the selected CRaC engine");
+      log_warning(crac)("Cannot verify image constraints (CPU features, labels) for restore with the selected CRaC engine");
       break;
   }
 

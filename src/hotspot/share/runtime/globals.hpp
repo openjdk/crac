@@ -2068,7 +2068,7 @@ const int ObjectAlignmentInBytes = 8;
           "to be recorded: label1=value,label2=$ENV,ENV (the last form "    \
           "sets label ENV from environment variable ENV)")                  \
                                                                             \
-  product(ccstr, CRaCRequiredImageLabels, nullptr, RESTORE_SETTABLE,         \
+  product(ccstr, CRaCRequiredImageLabels, nullptr, RESTORE_SETTABLE,        \
           "Labels that the image must have recorded in order for the "      \
           "checkpoint to succeed. Same format as CRaCImageLabels.")         \
                                                                             \

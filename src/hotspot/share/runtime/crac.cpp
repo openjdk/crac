@@ -589,33 +589,38 @@ public:
   }
 };
 
-static bool apply_labels(const char* property, CracEngine* engine, bool (CracEngine::*func)(const char*, const char*)) {
-  const char* labels = Arguments::get_property(property);
+static bool apply_labels(const char* labels, CracEngine* engine, bool (CracEngine::*func)(const char*, const char*)) {
   if (labels == nullptr) {
     return true;
   }
   char* dup = os::strdup_check_oom(labels);
   char *ptr = dup;
   char *key_value;
-  bool retval = true;
   while ((key_value = strtok_r(ptr, ",", &ptr)) != nullptr) {
     char *eq = strchr(key_value, '=');
     const char *value = nullptr;
+    const char *envvar = nullptr;
     if (eq == nullptr) {
-      value = getenv(key_value);
+      envvar = key_value;
+      value = getenv(envvar);
     } else {
       eq[0] = '\0';
       if (eq[1] == '$') {
-        value = getenv(eq + 2);
+        envvar = eq + 2;
+        value = getenv(envvar);
       } else {
         value = eq + 1;
       }
     }
-    // if value is nullptr (e.g. env unset) func should ignore the call
-    retval = (engine->*func)(key_value, value) && retval;
+    if (value == nullptr) {
+      log_warning(crac)("Environment variable %s used for label %s is not set.", envvar, key_value);
+    } else if (!(engine->*func)(key_value, value)) {
+      os::free(dup);
+      return false;
+    }
   }
   os::free(dup);
-  return retval;
+  return true;
 }
 
 bool crac::prepare_checkpoint() {
@@ -645,17 +650,14 @@ bool crac::prepare_checkpoint() {
         return false;
       }
       char java_version_buf[64];
-      guarantee((size_t) os::snprintf(java_version_buf, sizeof(java_version_buf), "%d.%d.%d",
-        JDK_Version::current().major_version(), JDK_Version::current().minor_version(),
-        JDK_Version::current().security_version()) < sizeof(java_version_buf), "version must fit");
+      JDK_Version::current().to_string(java_version_buf, sizeof(java_version_buf));
       // TODO: more built-in identifiers?
-      if (!engine->set_label("version", Arguments::get_property("jdk.crac.app.version")) ||
-          !engine->set_label("java.version", java_version_buf)) {
+      if (!engine->set_label("java.version", java_version_buf)) {
         log_error(crac)("Cannot set common image labels");
         return false;
       }
-      if (!apply_labels("jdk.crac.labels", engine.get(), &CracEngine::set_label)) {
-        log_error(crac)("Cannot set some labels from the 'jdk.crac.labels' property");
+      if (!apply_labels(CRaCImageLabels, engine.get(), &CracEngine::set_label)) {
+        log_error(crac)("Cannot set some labels from CRaCImageLabels");
         return false;
       }
     } break;
@@ -911,38 +913,38 @@ void crac::restore(crac_restore_data& restore_data) {
     return;
   }
 
-  // Since the check itself is delegated to the C/R Engine we will simply
-  // skip the check here.
-  bool ignore = VM_Version::check_cpu_features_skip();
   bool exact = false;
-  if (CheckCPUFeatures == nullptr || !strcmp(CheckCPUFeatures, "compatible")) {
-    // default, compatible
-  } else if (!strcmp(CheckCPUFeatures, "skip")) {
-    ignore = true;
-  } else if (!strcmp(CheckCPUFeatures, "exact")) {
-    exact = true;
-  } else {
-    log_error(crac)("Invalid value for -XX:CheckCPUFeatures=%s; available are 'compatible', 'exact' or 'skip'", CheckCPUFeatures);
-    return;
-  }
-  if (!ignore) {
-    switch (engine.prepare_image_constraints_api()) {
-      case CracEngine::ApiStatus::OK: {
+  switch (engine.prepare_image_constraints_api()) {
+    case CracEngine::ApiStatus::OK: {
+      // Since the check itself is delegated to the C/R Engine we will simply
+      // skip the check here.
+      bool ignore = VM_Version::check_cpu_features_skip();
+      if (CheckCPUFeatures == nullptr || !strcmp(CheckCPUFeatures, "compatible")) {
+        // default, compatible
+      } else if (!strcmp(CheckCPUFeatures, "skip")) {
+        ignore = true;
+      } else if (!strcmp(CheckCPUFeatures, "exact")) {
+        exact = true;
+      } else {
+        log_error(crac)("Invalid value for -XX:CheckCPUFeatures=%s; available are 'compatible', 'exact' or 'skip'", CheckCPUFeatures);
+        return;
+      }
+      if (!ignore) {
         VM_Version::VM_Features current_features;
         if (VM_Version::cpu_features_binary(&current_features)) {
           engine.require_cpuinfo(&current_features, exact);
         }
-        if (!apply_labels("jdk.crac.require-labels", &engine, &CracEngine::require_label)) {
-          log_error(crac)("Cannot enforce some labels from the 'jdk.crac.require-labels' property");
-          return;
-        }
-      } break;
-      case CracEngine::ApiStatus::ERR:
+      }
+      if (!apply_labels(CRaCRequiredImageLabels, &engine, &CracEngine::require_label)) {
+        log_error(crac)("Cannot enforce some labels from CRaCRequiredImageLabels");
         return;
-      case CracEngine::ApiStatus::UNSUPPORTED:
-        log_warning(crac)("Cannot verify image constraints (e.g. CPUFeatures) for restore with the selected CRaC engine");
-        break;
-    }
+      }
+    } break;
+    case CracEngine::ApiStatus::ERR:
+      return;
+    case CracEngine::ApiStatus::UNSUPPORTED:
+      log_warning(crac)("Cannot verify image constraints (e.g. CPUFeatures) for restore with the selected CRaC engine");
+      break;
   }
 
   switch (engine.prepare_restore_data_api()) {

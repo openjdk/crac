@@ -1,5 +1,5 @@
-package constraints;/*
- * Copyright (c) 2025, 2026, Azul Systems, Inc. All rights reserved.
+/*
+ * Copyright (c) 2026, Azul Systems, Inc. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -20,7 +20,6 @@ package constraints;/*
  * CA 94089 USA or visit www.azul.com if you need additional information or
  * have any questions.
  */
-
 import jdk.crac.management.CRaCMXBean;
 import jdk.test.lib.crac.*;
 
@@ -32,6 +31,8 @@ import java.nio.file.Path;
  * @summary Check the jdk.crac.labels and jdk.crac.require-labels functionality
  * @library /test/lib
  * @build RequiredLabelsTest
+ * @comment simengine with pause=true is available only on Linux
+ * @requires os.family == "linux"
  * @run driver/timeout=15 jdk.test.lib.crac.CracTest foo=bar  foo=bar  true
  * @run driver/timeout=15 jdk.test.lib.crac.CracTest foo=bar  -        true
  * @run driver/timeout=15 jdk.test.lib.crac.CracTest -        foo=bar  false
@@ -39,9 +40,10 @@ import java.nio.file.Path;
  * @run driver/timeout=15 jdk.test.lib.crac.CracTest foo=bar  foo=$BAR false
  * @run driver/timeout=15 jdk.test.lib.crac.CracTest foo=$BAR foo=GOO  true
  * @run driver/timeout=15 jdk.test.lib.crac.CracTest foo      foo=xxx  true
- * @run driver/timeout=15 jdk.test.lib.crac.CracTest        - foo      false
+ * @run driver/timeout=15 jdk.test.lib.crac.CracTest -        foo      false
  * @run driver/timeout=15 jdk.test.lib.crac.CracTest foo,abc=def,ghi=$BAR abc=def,ghi=$BAR,foo=xxx true
  * @run driver/timeout=15 jdk.test.lib.crac.CracTest foo,abc=def,ghi=$BAR abc=xxx,foo              false
+ * @run driver/timeout=15 jdk.test.lib.crac.CracTest not_defined_env,abc=$NOT_DEFINED_ENV not_defined_env,abc=$NOT_DEFINED_ENV true
  */
 public class RequiredLabelsTest implements CracTest {
     @CracTestArg(0)
@@ -63,7 +65,7 @@ public class RequiredLabelsTest implements CracTest {
     public void test() throws Exception {
         CracBuilder cpBuilder = newPauseBuilder();
         if (!"-".equals(setLabels)) {
-            cpBuilder.javaOption("jdk.crac.labels", setLabels);
+            cpBuilder.vmOption("-XX:CRaCImageLabels=" + setLabels);
         }
         // Ensure that the pid file does not exist as leftover from previous test
         //noinspection ResultOfMethodCallIgnored
@@ -74,7 +76,7 @@ public class RequiredLabelsTest implements CracTest {
 
             CracBuilder restoreBuilder = newPauseBuilder();
             if (!"-".equals(requireLabels)) {
-                restoreBuilder.javaOption("jdk.crac.require-labels", requireLabels);
+                restoreBuilder.vmOption("-XX:CRaCRequiredImageLabels=" + requireLabels);
             }
             var restore = restoreBuilder.doRestoreToAnalyze();
             if (shouldSucceed) {

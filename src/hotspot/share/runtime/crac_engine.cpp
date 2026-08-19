@@ -607,16 +607,10 @@ void CracEngine::check_cpuinfo(const VM_Version::VM_Features *current_features, 
 }
 
 bool CracEngine::set_label(const char* label, const char* value) {
-  if (value == nullptr) {
-    return true; // ignore empty labels for convenience
-  }
   return _image_constraints_api->set_label(_conf, label, value);
 }
 
 bool CracEngine::require_label(const char* label, const char* value) {
-  if (value == nullptr) {
-    return true; // for symmetry with set_label
-  }
   return _image_constraints_api->require_label(_conf, label, value);
 }
 

@@ -21,9 +21,11 @@
  * questions.
  */
 import jdk.crac.management.CRaCMXBean;
+import jdk.test.lib.Utils;
 import jdk.test.lib.crac.CracBuilder;
 import jdk.test.lib.crac.CracEngine;
 import jdk.test.lib.crac.CracTest;
+import jdk.test.lib.util.JarUtils;
 
 import java.io.Closeable;
 import java.io.File;
@@ -48,16 +50,16 @@ public class OpenStreamTest implements CracTest {
     @Override
     public void test() throws Exception {
         // no restore with simengine
-        new CracBuilder().engine(CracEngine.SIMULATE).doCheckpointToAnalyze().shouldHaveExitValue(0);
+        new CracBuilder().engine(CracEngine.SIMULATE).doCheckpoint();
     }
 
     private static Path createTestJar() throws IOException {
-        Path temp = Files.createTempDirectory(OpenStreamTest.class.getName());
+        Path temp = Utils.createTempDirectory(OpenStreamTest.class.getName());
         Path testFilePath = temp.resolve("test.txt");
         try {
             Files.writeString(testFilePath, TEST_STRING);
             Path jarfile = Path.of("test.jar");
-            jdk.test.lib.util.JarUtils.createJarFile(jarfile, temp, "test.txt");
+            JarUtils.createJarFile(jarfile, temp, "test.txt");
             return jarfile;
         } finally {
             File testTxt = testFilePath.toFile();
@@ -80,5 +82,4 @@ public class OpenStreamTest implements CracTest {
             assertEquals(TEST_STRING.length(), inputStream.readAllBytes().length);
         }
     }
-
 }

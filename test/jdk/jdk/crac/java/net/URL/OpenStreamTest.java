@@ -27,7 +27,6 @@ import jdk.test.lib.crac.CracEngine;
 import jdk.test.lib.crac.CracTest;
 import jdk.test.lib.util.JarUtils;
 
-import java.io.Closeable;
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
@@ -76,10 +75,15 @@ public class OpenStreamTest implements CracTest {
         assertTrue(testjar.toFile().exists());
 
         URL url = new URL("jar:" + testjar.toUri().toURL() + "!/test.txt");
-        try (AutoCloseable _ = () -> assertTrue(testjar.toFile().delete());
-             InputStream inputStream = url.openStream()) {
+        try (InputStream inputStream = url.openStream()) {
             CRaCMXBean.getCRaCMXBean().checkpointRestore();
             assertEquals(TEST_STRING.length(), inputStream.readAllBytes().length);
         }
+        // On Windows the cleanup fails (that's why we don't assert that the delete() succeeds):
+        // the file is still open (and on Windowss it cannot be deleted). This is because the underlying
+        // JarFile is left cached despite the stream that got it opened is properly closed above.
+        // This is rather unrelated to what this test is asserting, though.
+        //noinspection ResultOfMethodCallIgnored
+        testjar.toFile().delete();
     }
 }

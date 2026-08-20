@@ -50,7 +50,7 @@ import jdk.jfr.internal.WriteablePath;
  *
  * @since 9
  *
- * @crac The recording is automatically stopped on checkpoint & re-created on restore.
+ * @crac The recording is automatically stopped on checkpoint and re-created on restore.
  */
 public final class Recording implements Closeable {
 

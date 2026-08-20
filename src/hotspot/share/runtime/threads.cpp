@@ -623,6 +623,12 @@ jint Threads::create_vm(JavaVMInitArgs* args, bool* canTryAgain) {
   }
   Arguments::free_restore_only_data(); // Not needed anymore
 
+  // Preparations for checkpoint should be done only if we're not going to restore.
+  // Also this should be done only after VM_Version and JDK_Version are initialized.
+  if (CRaCCheckpointTo && !crac::prepare_checkpoint()) {
+    return JNI_ERR;
+  }
+
   // Have the WatcherThread read the release file in the background.
   ReadReleaseFileTask* read_task = new ReadReleaseFileTask();
   read_task->enroll();

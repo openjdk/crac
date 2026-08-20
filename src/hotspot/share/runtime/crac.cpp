@@ -326,27 +326,6 @@ int crac::checkpoint_restore(int *shmid) {
     return JVM_CHECKPOINT_ERROR;
   }
 
-  // Setup CPU arch & features only during the first checkpoint; the feature set
-  // cannot change after initial boot (and we don't support switching the engine).
-  if (_generation == 1 && !VM_Version::check_cpu_features_skip()) {
-    VM_Version::VM_Features current_features;
-    if (VM_Version::cpu_features_binary(&current_features)) {
-      switch (_engine->prepare_image_constraints_api()) {
-        case CracEngine::ApiStatus::OK:
-          if (!_engine->store_cpuinfo(&current_features)) {
-            return JVM_CHECKPOINT_ERROR;
-          }
-          break;
-        case CracEngine::ApiStatus::ERR:
-          return JVM_CHECKPOINT_ERROR;
-        case CracEngine::ApiStatus::UNSUPPORTED:
-          log_warning(crac)("Cannot store CPUFeatures for checkpoint "
-            "with the selected CRaC engine");
-          break;
-      }
-    }
-  }
-
   const int ret = _engine->checkpoint();
   if (ret != 0) {
     log_error(crac)("CRaC engine failed to checkpoint to %s: error %i", image_location, ret);
@@ -605,7 +584,44 @@ public:
     _t = nullptr;
     return tmp;
   }
+  T *get() {
+    return _t;
+  }
 };
+
+static bool apply_labels(const char* labels, CracEngine* engine, bool (CracEngine::*func)(const char*, const char*)) {
+  if (labels == nullptr) {
+    return true;
+  }
+  char* dup = os::strdup_check_oom(labels);
+  char *ptr = dup;
+  char *key_value;
+  while ((key_value = strtok_r(ptr, ",", &ptr)) != nullptr) {
+    char *eq = strchr(key_value, '=');
+    const char *value = nullptr;
+    const char *envvar = nullptr;
+    if (eq == nullptr) {
+      envvar = key_value;
+      value = getenv(envvar);
+    } else {
+      eq[0] = '\0';
+      if (eq[1] == '$') {
+        envvar = eq + 2;
+        value = getenv(envvar);
+      } else {
+        value = eq + 1;
+      }
+    }
+    if (value == nullptr) {
+      log_warning(crac)("Environment variable %s used for label %s is not set.", envvar, key_value);
+    } else if (!(engine->*func)(key_value, value)) {
+      os::free(dup);
+      return false;
+    }
+  }
+  os::free(dup);
+  return true;
+}
 
 bool crac::prepare_checkpoint() {
   precond(CRaCCheckpointTo != nullptr);
@@ -624,6 +640,32 @@ bool crac::prepare_checkpoint() {
   }
   if (fixed_path && (!ensure_checkpoint_dir(image_location, true) || !engine->configure_image_location(image_location))) {
     return false;
+  }
+
+  switch (engine->prepare_image_constraints_api()) {
+    case CracEngine::ApiStatus::OK: {
+      VM_Version::VM_Features current_features;
+      if (!VM_Version::check_cpu_features_skip() && VM_Version::cpu_features_binary(&current_features) &&
+          !engine->store_cpuinfo(&current_features)) {
+        return false;
+      }
+      char java_version_buf[64];
+      JDK_Version::current().to_string(java_version_buf, sizeof(java_version_buf));
+      // TODO: more built-in identifiers?
+      if (!engine->set_label("java.version", java_version_buf)) {
+        log_error(crac)("Cannot set common image labels");
+        return false;
+      }
+      if (!apply_labels(CRaCImageLabels, engine.get(), &CracEngine::set_label)) {
+        log_error(crac)("Cannot set some labels from CRaCImageLabels");
+        return false;
+      }
+    } break;
+    case CracEngine::ApiStatus::ERR:
+      return false;
+    case CracEngine::ApiStatus::UNSUPPORTED:
+      log_warning(crac)("Cannot store image tags with the selected CRaC engine");
+      break;
   }
 
   _engine = engine.extract();
@@ -871,35 +913,38 @@ void crac::restore(crac_restore_data& restore_data) {
     return;
   }
 
-  // Since the check itself is delegated to the C/R Engine we will simply
-  // skip the check here.
-  bool ignore = VM_Version::check_cpu_features_skip();
   bool exact = false;
-  if (CheckCPUFeatures == nullptr || !strcmp(CheckCPUFeatures, "compatible")) {
-    // default, compatible
-  } else if (!strcmp(CheckCPUFeatures, "skip")) {
-    ignore = true;
-  } else if (!strcmp(CheckCPUFeatures, "exact")) {
-    exact = true;
-  } else {
-    log_error(crac)("Invalid value for -XX:CheckCPUFeatures=%s; available are 'compatible', 'exact' or 'skip'", CheckCPUFeatures);
-    return;
-  }
-  if (!ignore) {
-    switch (engine.prepare_image_constraints_api()) {
-      case CracEngine::ApiStatus::OK: {
+  switch (engine.prepare_image_constraints_api()) {
+    case CracEngine::ApiStatus::OK: {
+      // Since the check itself is delegated to the C/R Engine we will simply
+      // skip the check here.
+      bool ignore = VM_Version::check_cpu_features_skip();
+      if (CheckCPUFeatures == nullptr || !strcmp(CheckCPUFeatures, "compatible")) {
+        // default, compatible
+      } else if (!strcmp(CheckCPUFeatures, "skip")) {
+        ignore = true;
+      } else if (!strcmp(CheckCPUFeatures, "exact")) {
+        exact = true;
+      } else {
+        log_error(crac)("Invalid value for -XX:CheckCPUFeatures=%s; available are 'compatible', 'exact' or 'skip'", CheckCPUFeatures);
+        return;
+      }
+      if (!ignore) {
         VM_Version::VM_Features current_features;
         if (VM_Version::cpu_features_binary(&current_features)) {
           engine.require_cpuinfo(&current_features, exact);
         }
-        } break;
-      case CracEngine::ApiStatus::ERR:
+      }
+      if (!apply_labels(CRaCRequiredImageLabels, &engine, &CracEngine::require_label)) {
+        log_error(crac)("Cannot enforce some labels from CRaCRequiredImageLabels");
         return;
-      case CracEngine::ApiStatus::UNSUPPORTED:
-        log_warning(crac)("Cannot verify CPUFeatures for restore "
-          "with the selected CRaC engine");
-        break;
-    }
+      }
+    } break;
+    case CracEngine::ApiStatus::ERR:
+      return;
+    case CracEngine::ApiStatus::UNSUPPORTED:
+      log_warning(crac)("Cannot verify image constraints (CPU features, labels) for restore with the selected CRaC engine");
+      break;
   }
 
   switch (engine.prepare_restore_data_api()) {

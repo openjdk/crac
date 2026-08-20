@@ -2064,6 +2064,14 @@ const int ObjectAlignmentInBytes = 8;
   product(bool, CRaCPauseOnCheckpointError, false, DIAGNOSTIC,              \
           "Pauses the checkpoint when a problem is found on VM level.")     \
                                                                             \
+  product(ccstr, CRaCImageLabels, nullptr, "Comma-separated list of labels "\
+          "to be recorded: label1=value,label2=$ENV,ENV (the last form "    \
+          "sets label ENV from environment variable ENV)")                  \
+                                                                            \
+  product(ccstr, CRaCRequiredImageLabels, nullptr, RESTORE_SETTABLE,        \
+          "Labels that the image must have recorded in order for the "      \
+          "checkpoint to succeed. Same format as CRaCImageLabels.")         \
+                                                                            \
   product(ccstr, CPUFeatures, nullptr, "CPU feature set, "                  \
           "Limit set of CPU features to make the CRaC image compatible "    \
           "for running on a machine with different CPU:"                    \

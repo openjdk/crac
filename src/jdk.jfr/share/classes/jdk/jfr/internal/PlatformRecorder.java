@@ -94,8 +94,7 @@ public final class PlatformRecorder {
                     PlatformRecording pr = access.getPlatformRecording(rec);
                     // Update the owning Recording (important if this was created programmatically)
                     access.setPlatformRecording(r.getRecording(), pr);
-                    if (r.getName().equ
-                    als(String.valueOf(r.getId()))) {
+                    if (r.getName().equals(String.valueOf(r.getId()))) {
                         // default name == id, use the new id as name as well
                         rec.setName(String.valueOf(rec.getId()));
                     } else {

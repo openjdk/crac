@@ -983,13 +983,12 @@ void crac::restore(crac_restore_data& restore_data) {
       break;
   }
 
-  const int ret = engine.restore();
-  if (ret != 0) {
-    log_error(crac)("CRaC engine failed to restore from %s: error %d", CRaCRestoreFrom, ret);
-    VM_Version::VM_Features current_features;
-    VM_Version::cpu_features_binary(&current_features); // ignore return value
-    engine.check_cpuinfo(&current_features, exact);
-  }
+  const int err = engine.restore(); // Does not return on success
+  log_error(crac)("CRaC engine failed to restore from %s (error code %d)", CRaCRestoreFrom, err);
+
+  VM_Version::VM_Features current_features;
+  VM_Version::cpu_features_binary(&current_features); // ignore return value
+  engine.check_cpuinfo(&current_features, exact);
 }
 
 bool CracRestoreParameters::read_from(int fd) {

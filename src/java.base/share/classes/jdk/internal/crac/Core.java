@@ -72,6 +72,7 @@ public class Core {
         SCORE(Score.getContext()),
         FILE_DESCRIPTORS(new BlockingOrderedContext<>()),
         PRE_FILE_DESCRIPTORS(new BlockingOrderedContext<>()),
+        POST_JFR(new BlockingOrderedContext<>()),
         // We use OrderedContext to not cause failure when PlatformRecorder tries to
         // register itself when the recording is started from JfrResource.
         JFR(new OrderedContext<>()),

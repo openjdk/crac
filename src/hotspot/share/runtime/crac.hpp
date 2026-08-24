@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2023, Azul Systems, Inc. All rights reserved.
+ * Copyright (c) 2023, 2026, Azul Systems, Inc. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -63,6 +63,7 @@ public:
 
   static jlong restore_start_time();
   static jlong uptime_since_restore();
+  static jint checkpointable_status();
 
   static jlong monotonic_time_offset() {
     return _javaTimeNanos_offset;

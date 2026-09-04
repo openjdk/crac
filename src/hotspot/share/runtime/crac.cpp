@@ -625,6 +625,34 @@ static bool apply_labels(const char* labels, CracEngine* engine, bool (CracEngin
   return true;
 }
 
+static bool apply_constraints(CracEngine &engine, bool *exact) {
+  *exact = false;
+  // Since the check itself is delegated to the C/R Engine we will simply
+  // skip the check here.
+  bool ignore = VM_Version::check_cpu_features_skip();
+  if (CheckCPUFeatures == nullptr || !strcmp(CheckCPUFeatures, "compatible")) {
+    // default, compatible
+  } else if (!strcmp(CheckCPUFeatures, "skip")) {
+    ignore = true;
+  } else if (!strcmp(CheckCPUFeatures, "exact")) {
+    *exact = true;
+  } else {
+    log_error(crac)("Invalid value for -XX:CheckCPUFeatures=%s; available are 'compatible', 'exact' or 'skip'", CheckCPUFeatures);
+    return false;
+  }
+  if (!ignore) {
+    VM_Version::VM_Features current_features;
+    if (VM_Version::cpu_features_binary(&current_features)) {
+      engine.require_cpuinfo(&current_features, *exact);
+    }
+  }
+  if (!apply_labels(CRaCRequiredImageLabels, &engine, &CracEngine::require_label)) {
+    log_error(crac)("Cannot enforce some labels from CRaCRequiredImageLabels");
+    return false;
+  }
+  return true;
+}
+
 bool crac::prepare_checkpoint() {
   precond(CRaCCheckpointTo != nullptr);
 
@@ -660,6 +688,12 @@ bool crac::prepare_checkpoint() {
       }
       if (!apply_labels(CRaCImageLabels, engine.get(), &CracEngine::set_label)) {
         log_error(crac)("Cannot set some labels from CRaCImageLabels");
+        return false;
+      }
+      // We don't normally need constaints for the checkpoint itself; engine might use this
+      // to identify 'peer' images or 'peer' instances.
+      bool exact_ignored;
+      if (!apply_constraints(*engine.get(), &exact_ignored)) {
         return false;
       }
     } break;
@@ -920,31 +954,11 @@ void crac::restore(crac_restore_data& restore_data) {
 
   bool exact = false;
   switch (engine.prepare_image_constraints_api()) {
-    case CracEngine::ApiStatus::OK: {
-      // Since the check itself is delegated to the C/R Engine we will simply
-      // skip the check here.
-      bool ignore = VM_Version::check_cpu_features_skip();
-      if (CheckCPUFeatures == nullptr || !strcmp(CheckCPUFeatures, "compatible")) {
-        // default, compatible
-      } else if (!strcmp(CheckCPUFeatures, "skip")) {
-        ignore = true;
-      } else if (!strcmp(CheckCPUFeatures, "exact")) {
-        exact = true;
-      } else {
-        log_error(crac)("Invalid value for -XX:CheckCPUFeatures=%s; available are 'compatible', 'exact' or 'skip'", CheckCPUFeatures);
+    case CracEngine::ApiStatus::OK:
+      if (!apply_constraints(engine, &exact)) {
         return;
       }
-      if (!ignore) {
-        VM_Version::VM_Features current_features;
-        if (VM_Version::cpu_features_binary(&current_features)) {
-          engine.require_cpuinfo(&current_features, exact);
-        }
-      }
-      if (!apply_labels(CRaCRequiredImageLabels, &engine, &CracEngine::require_label)) {
-        log_error(crac)("Cannot enforce some labels from CRaCRequiredImageLabels");
-        return;
-      }
-    } break;
+      break;
     case CracEngine::ApiStatus::ERR:
       return;
     case CracEngine::ApiStatus::UNSUPPORTED:

@@ -25,7 +25,6 @@ import java.util.List;
 
 import jdk.crac.management.CRaCMXBean;
 import jdk.test.lib.crac.CracBuilder;
-import jdk.test.lib.crac.CracEngine;
 import jdk.test.lib.crac.CracTest;
 
 /**
@@ -43,7 +42,7 @@ public class CheckpointInNewMainTest implements CracTest {
 
     @Override
     public void test() throws Exception {
-        final var builder = new CracBuilder().engine(CracEngine.CRIU);
+        final var builder = new CracBuilder();
         // Checkpoint in the old main
         builder.doCheckpoint();
         // Restore from the old main and checkpoint in the new main

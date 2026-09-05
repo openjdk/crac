@@ -52,7 +52,7 @@ public class RepeatedCheckpointTest implements CracTest {
             }
             builder.imageDir(nextImageLocation);
         }
-        builder.doRestore();
+        builder.clearVmOptions().doRestore();
     }
 
     @Override

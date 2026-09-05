@@ -50,7 +50,7 @@ public class RepeatedCheckpointTest implements CracTest {
             try (final var p = builder.startRestore()) {
                 p.waitForCheckpointed();
             }
-            builder.imageDir(nextImageLocation);
+            builder.clearVmOptions().imageDir(nextImageLocation);
         }
         builder.doRestore();
     }

@@ -24,22 +24,35 @@
 import jdk.crac.management.CRaCMXBean;
 import jdk.test.lib.crac.CracBuilder;
 import jdk.test.lib.crac.CracTest;
+import jdk.test.lib.crac.CracTestArg;
 
 /**
  * @test
  * @requires os.family == "linux"
  * @library /test/lib
- * @build RepeatedCheckpointTest
- * @run driver jdk.test.lib.crac.CracTest
+ * @build RepeatedCheckpointRestoreTest
+ * @run driver jdk.test.lib.crac.CracTest false
+ * @run driver jdk.test.lib.crac.CracTest true
  */
-public class RepeatedCheckpointTest implements CracTest {
+public class RepeatedCheckpointRestoreTest implements CracTest {
     private static final int NUM_CHECKPOINTS = 3;
+
+    @CracTestArg(0)
+    boolean changeImageLocation;
 
     @Override
     public void test() throws Exception {
-        final var builder = new CracBuilder();
-        builder.engineOptions("keep_running=true").doCheckpointToAnalyze().shouldHaveExitValue(0);
-        builder.engineOptions().doRestore();
+        final var builder = new CracBuilder().imageDir("cr0");
+        builder.doCheckpoint();
+        for (int i = 1; i < NUM_CHECKPOINTS; i++) {
+            final var nextImageLocation = changeImageLocation ? "cr" + i : builder.imageDir().toString();
+            builder.clearVmOptions().vmOption("-XX:CRaCCheckpointTo=" + nextImageLocation);
+            try (final var p = builder.startRestore()) {
+                p.waitForCheckpointed();
+            }
+            builder.imageDir(nextImageLocation);
+        }
+        builder.clearVmOptions().doRestore();
     }
 
     @Override

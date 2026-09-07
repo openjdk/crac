@@ -25,6 +25,9 @@ import jdk.crac.management.CRaCMXBean;
 import jdk.test.lib.crac.CracBuilder;
 import jdk.test.lib.crac.CracTest;
 
+import java.nio.file.Files;
+import java.nio.file.Path;
+
 /**
  * @test
  * @requires os.family == "linux"
@@ -34,19 +37,28 @@ import jdk.test.lib.crac.CracTest;
  */
 public class RepeatedCheckpointTest implements CracTest {
     private static final int NUM_CHECKPOINTS = 3;
+    private static final Path DO_CHECKPOINTS_MARKER = Path.of("do-checkpoints-marker");
 
     @Override
     public void test() throws Exception {
-        final var builder = new CracBuilder();
-        builder.engineOptions("keep_running=true").doCheckpointToAnalyze().shouldHaveExitValue(0);
-        builder.engineOptions().doRestore();
+        Files.createFile(DO_CHECKPOINTS_MARKER);
+        new CracBuilder().imageDir("cr%g").engineOptions("keep_running=true")
+                .doCheckpointToAnalyze().shouldHaveExitValue(0);
+
+        Files.delete(DO_CHECKPOINTS_MARKER); // Do not create new checkpoints, we want to test the ones already created
+        final var restoreBuilder = new CracBuilder();
+        for (int i = 0; i < NUM_CHECKPOINTS; i++) {
+            restoreBuilder.imageDir("cr" + (i + 1)).doRestore(); // %g starts from 1
+        }
     }
 
     @Override
     public void exec() throws Exception {
         final var mxBean = CRaCMXBean.getCRaCMXBean();
-        for (int i = 0; i < NUM_CHECKPOINTS; i++) {
+        for (int i = 0; i < NUM_CHECKPOINTS && Files.exists(DO_CHECKPOINTS_MARKER); i++) {
+            System.out.println("Checkpoint #" + (i + 1));
             mxBean.checkpointRestore();
         }
+        System.out.println("Completed");
     }
 }

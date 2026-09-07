@@ -42,8 +42,8 @@ public class RepeatedCheckpointRestoreTest implements CracTest {
 
     @Override
     public void test() throws Exception {
-        final var builder = new CracBuilder().imageDir("cr0");
-        builder.doCheckpoint();
+        final var builder = new CracBuilder();
+        builder.imageDir("cr0").doCheckpoint();
         for (int i = 1; i < NUM_CHECKPOINTS; i++) {
             final var nextImageLocation = changeImageLocation ? "cr" + i : builder.imageDir().toString();
             builder.clearVmOptions().vmOption("-XX:CRaCCheckpointTo=" + nextImageLocation);

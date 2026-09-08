@@ -124,7 +124,6 @@ public abstract class CracBuilderBase<T extends CracBuilderBase<T>> {
     }
 
     public T imageDir(String imageDir) {
-        assertEquals(DEFAULT_IMAGE_DIR, this.imageDir); // set once
         this.imageDir = imageDir;
         return self();
     }

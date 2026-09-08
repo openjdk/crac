@@ -645,7 +645,7 @@ bool crac::prepare_checkpoint() {
   switch (engine->prepare_image_constraints_api()) {
     case CracEngine::ApiStatus::OK: {
       VM_Version::VM_Features current_features;
-      if (!VM_Version::check_cpu_features_skip() && VM_Version::cpu_features_binary(&current_features) &&
+      if (VM_Version::can_use_cpu_features() && VM_Version::cpu_features_binary(&current_features) &&
           !engine->store_cpuinfo(&current_features)) {
         return false;
       }

@@ -539,7 +539,7 @@ void CracEngine::require_cpuinfo(const VM_Version::VM_Features *current_features
   log_debug(crac)("cpufeatures_load user data %s from %s...", cpufeatures_name, CRaCRestoreFrom);
   _image_constraints_api->require_label(_conf, cpuarch_name, ARCHPROPNAME);
   _image_constraints_api->require_bitmap(_conf, cpufeatures_name,
-    reinterpret_cast<const unsigned char *>(current_features), sizeof(*current_features), exact ? EQUALS : SUBSET);
+    reinterpret_cast<const unsigned char *>(current_features), sizeof(*current_features), exact ? CRLIB_BITMAP_CMP_EQUALS : CRLIB_BITMAP_CMP_SUBSET);
 }
 
 void CracEngine::check_cpuinfo(const VM_Version::VM_Features *current_features, bool exact) const {

@@ -121,7 +121,7 @@ public:
   bool set_bitmap(const char* name, const unsigned char* value, size_t length_bytes);
 
   bool require_label(const char* name, const char* value) {
-    return _constraints.add(Constraint(TagType::LABEL, strdup(name), strdup(value), strlen(value) + 1, EQUALS));
+    return _constraints.add(Constraint(TagType::LABEL, strdup(name), strdup(value), strlen(value) + 1, CRLIB_BITMAP_CMP_EQUALS));
   }
 
   bool require_bitmap(const char* name, const unsigned char* value, size_t length_bytes, crlib_bitmap_comparison_t comparison) {

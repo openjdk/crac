@@ -108,6 +108,7 @@ requires.properties= \
     vm.debug \
     vm.hasSA \
     vm.hasJFR \
+    vm.jdi \
     vm.jvmti \
     vm.cpu.features \
     container.support \

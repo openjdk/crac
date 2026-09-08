@@ -112,6 +112,7 @@ public class VMProps implements Callable<Map<String, String>> {
         // so tests can be executed.
         map.put("vm.hasJFR", this::vmHasJFR);
         map.put("vm.hasDTrace", this::vmHasDTrace);
+        map.put("vm.jdi", this::vmJdi);
         map.put("vm.jvmti", this::vmHasJVMTI);
         map.put("vm.cpu.features", this::cpuFeatures);
         map.put("vm.pageSize", this::vmPageSize);
@@ -328,6 +329,7 @@ public class VMProps implements Callable<Map<String, String>> {
         vmOptFinalFlag(map, "ClassUnloadingWithConcurrentMark");
         vmOptFinalFlag(map, "CriticalJNINatives");
         vmOptFinalFlag(map, "EliminateAllocations");
+        vmOptFinalFlag(map, "TieredCompilation");
         vmOptFinalFlag(map, "UnlockExperimentalVMOptions");
         vmOptFinalFlag(map, "UseAdaptiveSizePolicy");
         vmOptFinalFlag(map, "UseCompressedOops");
@@ -383,6 +385,13 @@ public class VMProps implements Callable<Map<String, String>> {
      */
     protected String vmHasDTrace() {
         return "" + WB.isDTraceIncluded();
+    }
+
+    /**
+     * @return "true" if the module jdk.jdi is present (can use it for attaching debugger)
+     */
+    protected String vmJdi() {
+        return Boolean.toString(ModuleLayer.boot().findModule("jdk.jdi").isPresent());
     }
 
     /**

@@ -69,7 +69,6 @@ template<typename F> inline Deferred<F> defer(F&& f) {
 }
 
 typedef struct crcommon crcommon_t;
-typedef crcommon_t* (crlib_to_crcommon_t)(crlib_conf_t*);
 
 #ifdef CRCOMMON_IMPL
 # define CRCOMMON_API JNIEXPORT

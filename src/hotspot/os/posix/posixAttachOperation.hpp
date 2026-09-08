@@ -95,7 +95,7 @@ class PosixAttachOperation: public AttachOperation {
   }
 
   int socket() const {
-    return _socket_channel.socket();;
+    return _socket_channel.socket();
   }
 
   ReplyWriter* get_reply_writer() override {

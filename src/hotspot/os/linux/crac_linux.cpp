@@ -148,7 +148,7 @@ bool FdsInfo::same_fd(int i1, int i2) {
   const int new_flags2 = fcntl(fi2->fd, F_GETFL);
   const bool are_same = new_flags1 == new_flags2;
 
-  fcntl(fi2->fd, flags1);
+  fcntl(fi1->fd, F_SETFL, flags1);
 
   return are_same;
 }
@@ -156,7 +156,6 @@ bool FdsInfo::same_fd(int i1, int i2) {
 void FdsInfo::initialize() {
   assert(!_inited, "should be called only once");
 
-  char path[PATH_MAX];
   struct dirent *dp;
 
   DIR *dir = opendir("/proc/self/fd");

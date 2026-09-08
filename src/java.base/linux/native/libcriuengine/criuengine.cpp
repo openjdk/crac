@@ -125,7 +125,7 @@ class ArgsBuilder {
       if (_next < _end) {
         *_next++ = arg;
       } else {
-        LOG("Warning: too many arguments for CRIU (dropped '%s' from %s)\n", arg, from);
+        LOG("Warning: too many arguments for CRIU (dropped '%s' from %s)", arg, from);
       }
       arg = strtok_r(NULL, " ", &saveptr);
     }
@@ -564,14 +564,14 @@ bool criuengine::execute_criu(const ArgsBuilder& args) const {
 
   // grand-child
   pid_t parent = getppid();
-  int tries = 300;
-  while (parent != 1 && 0 < tries--) {
-      usleep(10);
+  int tries = 0;
+  while (parent != 1 && tries < 100) { // 100 gives about 50ms of sleep in total
+      usleep(10 * (++tries));
       parent = getppid();
   }
 
   if (parent == parent_before) {
-    LOG("can't move out of JVM process hierarchy");
+    LOG("Cannot move out of JVM process hierarchy (%i retries)", tries);
     kickjvm(jvm_pid, -1);
     exit(0);
   }
@@ -678,7 +678,7 @@ static void maybe_reopen(int fd, int flags) {
   // fcntl should not return file creation flags, though
   assert((current_flags & (O_TRUNC | O_EXCL)) == 0);
   static const char deleted[] = " (deleted)";
-  if (!strcmp(target + len - sizeof(deleted), deleted)) {
+  if ((size_t) len >= sizeof(deleted) - 1 && !strcmp(target + len - (sizeof(deleted) - 1), deleted)) {
     // deleted file will be replaced by /dev/null to avoid accidentally overwriting
     // other file
     strcpy(target, "/dev/null");
@@ -816,7 +816,7 @@ int criuengine::checkpoint() {
       continue;
     } else if (fcntl(fake_fds[i], F_GET_SEALS) >= 0) {
       // this is memfd => not replaced, just close
-    } else if (dup2(fake_fds[i], i) < -1) {
+    } else if (dup2(fake_fds[i], i) < 0) {
       // you probably wouldn't see this message, though
       LOG("Failed to dup2(%d, %d): %s", fake_fds[i], i, strerror(errno));
     }

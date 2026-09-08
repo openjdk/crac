@@ -57,8 +57,8 @@ public class FileWatcherThreadTest implements CracTest {
         Path directory = Paths.get(System.getProperty("user.dir"), "workdir");
         directory.toFile().mkdir();
 
-        CompletableFuture<Boolean> caughtFirst = new CompletableFuture();
-        CompletableFuture<Boolean> caughtSecond = new CompletableFuture();
+        CompletableFuture<Boolean> caughtFirst = new CompletableFuture<>();
+        CompletableFuture<Boolean> caughtSecond = new CompletableFuture<>();
         CyclicBarrier barrier = new CyclicBarrier(2); // Create a CyclicBarrier to sync between two threads
 
         // Start the WatchService in a separate thread

@@ -28,10 +28,6 @@ package jdk.internal.access;
 import java.lang.ref.Reference;
 import java.lang.ref.ReferenceQueue;
 
-import jdk.internal.crac.Core;
-
-import java.lang.ref.ReferenceQueue;
-
 public interface JavaLangRefAccess {
 
     /**

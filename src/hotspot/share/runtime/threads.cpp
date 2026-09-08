@@ -415,6 +415,7 @@ void Threads::initialize_java_lang_classes(JavaThread* main_thread, TRAPS) {
   initialize_class(vmSymbols::java_lang_ArrayIndexOutOfBoundsException(), CHECK);
   initialize_class(vmSymbols::java_lang_StackOverflowError(), CHECK);
   initialize_class(vmSymbols::java_lang_IllegalMonitorStateException(), CHECK);
+  initialize_class(vmSymbols::java_lang_IdentityException(), CHECK);
   initialize_class(vmSymbols::java_lang_IllegalArgumentException(), CHECK);
   initialize_class(vmSymbols::java_lang_InternalError(), CHECK);
 }
@@ -616,11 +617,16 @@ jint Threads::create_vm(JavaVMInitArgs* args, bool* canTryAgain) {
   if (CRaCRestoreFrom) {
     crac::restore(restore_data);
     if (!CRaCIgnoreRestoreIfUnavailable) {
-      log_error(crac)("Failed to restore from %s", CRaCRestoreFrom);
       return JNI_ERR;
     }
   }
   Arguments::free_restore_only_data(); // Not needed anymore
+
+  // Preparations for checkpoint should be done only if we're not going to restore.
+  // Also this should be done only after VM_Version and JDK_Version are initialized.
+  if (CRaCCheckpointTo && !crac::prepare_checkpoint()) {
+    return JNI_ERR;
+  }
 
   // Have the WatcherThread read the release file in the background.
   ReadReleaseFileTask* read_task = new ReadReleaseFileTask();
@@ -1063,6 +1069,7 @@ jboolean Threads::is_supported_jni_version(jint version) {
   if (version == JNI_VERSION_20) return JNI_TRUE;
   if (version == JNI_VERSION_21) return JNI_TRUE;
   if (version == JNI_VERSION_24) return JNI_TRUE;
+  if (version == JNI_VERSION_28) return JNI_TRUE;
   return JNI_FALSE;
 }
 
@@ -1387,7 +1394,7 @@ void Threads::print_on(outputStream* st, bool print_stacks,
     p->print_on(st, print_extended_info);
     if (print_stacks) {
       if (internal_format) {
-        p->trace_stack();
+        p->trace_stack_on(st);
       } else {
         p->print_stack_on(st);
         if (p->is_vthread_mounted()) {

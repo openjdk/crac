@@ -34,10 +34,14 @@ class VM_Version : public Abstract_VM_Version {
   static void initialize();
   struct VM_Features: public Zero_Features {};
   static bool cpu_features_binary(VM_Features *data) { return false; }
-  static bool check_cpu_features_skip() { return true; }
+  static bool can_use_cpu_features() { return false; }
   static const char *restore_failed_check(const VM_Features *image_features, const VM_Features *current_features) {
     return nullptr;
   }
+  static bool process_image_cpu_features(const VM_Features *image_featuresp) {
+    return false;
+  }
+  static constexpr bool process_image_cpu_features_needed = false;
 
   constexpr static bool supports_stack_watermark_barrier() { return true; }
 

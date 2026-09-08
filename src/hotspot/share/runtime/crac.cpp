@@ -63,6 +63,7 @@
 
 static jlong _restore_start_time;
 static jlong _restore_start_nanos;
+static jlong _restore_native_end_nanos = -1;
 
 CracEngine *crac::_engine = nullptr;
 unsigned int crac::_generation = 1;
@@ -362,6 +363,7 @@ int crac::checkpoint_restore(int *shmid) {
 #endif //LINUX
 
   crac::update_javaTimeNanos_offset();
+  crac::record_time_after_restore();
 
   if (CRaCTraceStartupTime) {
     tty->print_cr("STARTUPTIME " JLONG_FORMAT " restore-native", os::javaTimeNanos());
@@ -814,7 +816,7 @@ void crac::set_image_score(const char *metric, double value, TRAPS) {
 }
 
 GrowableArray<crac::score> crac::get_image_scores_from_jvm() {
-  GrowableArray<crac::score> scores(24);
+  GrowableArray<crac::score> scores(32);
 
   const double uptime = TimeHelper::counter_to_millis(os::elapsed_counter());
   // Estimated boot time - earlier than RuntimeMXBean.getStartTime(), unless javaTimeMillis jumps
@@ -824,7 +826,10 @@ GrowableArray<crac::score> crac::get_image_scores_from_jvm() {
   // Uptime since initial boot
   scores.append({"vm.uptimeSinceBoot", uptime});
   // Uptime since start of latest restore or -1 if not restored - same as CRaCMXBean.getUptimeSinceRestore()
-  scores.append({"vm.uptimeSinceRestore", _generation > 1 ? TimeHelper::counter_to_millis(crac::uptime_since_restore()) : -1});
+  scores.append({"vm.uptimeSinceRestore", static_cast<double>(_generation > 1 ? crac::uptime_since_restore() / NANOSECS_PER_MILLISEC : -1)});
+
+  scores.append({"vm.crac.generation", static_cast<double>(_generation)});
+  scores.append({"vm.restore.nativeTime", static_cast<double>(_generation > 1 ? (_restore_native_end_nanos - _restore_start_nanos) / NANOSECS_PER_MILLISEC : -1)});
 
   // Same as OperatingSystemMXBean.getProcessCpuTime() but in milliseconds
   scores.append({"vm.processCpuTime", os::elapsed_process_cpu_time() * 1000});
@@ -1072,6 +1077,10 @@ void crac::record_time_before_checkpoint() {
   _checkpoint_monotonic_nanos = os::javaTimeNanos();
   memset(_checkpoint_bootid, 0, UUID_LENGTH);
   read_bootid(_checkpoint_bootid);
+}
+
+void crac::record_time_after_restore() {
+  _restore_native_end_nanos = os::javaTimeNanos();
 }
 
 void crac::update_javaTimeNanos_offset() {

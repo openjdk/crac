@@ -1004,11 +1004,11 @@ static jlong get_long_attribute(jmmLongAttribute att) {
 
   case JMM_JVM_UPTIME_SINCE_RESTORE_MS:
     {
-      jlong ticks = crac::uptime_since_restore();
-      if (ticks == -1) {
+      jlong nanos = crac::uptime_since_restore();
+      if (nanos == -1) {
         return -1;
       }
-      return Management::ticks_to_ms(ticks);
+      return nanos / NANOSECS_PER_MILLISEC;
     }
 
   default:

@@ -63,3 +63,8 @@ JNIEXPORT void JNICALL
 Java_jdk_internal_crac_Score_record(JNIEnv *env, jclass ignore, jobjectArray metrics, jdoubleArray values) {
     JVM_RecordCRaCScores(env, metrics, values);
 }
+
+JNIEXPORT jlong JNICALL
+Java_jdk_internal_crac_mirror_Core_getUptimeSinceRestore0(JNIEnv *env, jclass ignore) {
+    return JVM_GetUptimeSinceRestore(env);
+}

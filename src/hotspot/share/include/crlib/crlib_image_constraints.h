@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2025, Azul Systems, Inc. All rights reserved.
+ * Copyright (c) 2025, 2026 Azul Systems, Inc. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -23,6 +23,9 @@
 #ifndef CRLIB_IMAGE_CONSTRAINTS_H
 #define CRLIB_IMAGE_CONSTRAINTS_H
 
+#include <stdbool.h>
+#include <stddef.h>
+
 #include "crlib.h"
 
 #ifdef __cplusplus
@@ -35,13 +38,12 @@ extern "C" {
 
 // When two bitmaps of different size are compared this behaves as if the shorter
 // bitmap was extended with zeros to the length of the longer bitmap.
-typedef enum {
-  EQUALS,
-  // Bitmap in image must be subset or equal to bitmap in constraint
-  SUBSET,
-  // Bitmap in image must be superset or equal to bitmap in constraint
-  SUPERSET,
-} crlib_bitmap_comparison_t;
+typedef unsigned int crlib_bitmap_comparison_t;
+#define CRLIB_BITMAP_CMP_EQUALS   0
+// Bitmap in image must be subset or equal to bitmap in constraint
+#define CRLIB_BITMAP_CMP_SUBSET   1
+// Bitmap in image must be superset or equal to bitmap in constraint
+#define CRLIB_BITMAP_CMP_SUPERSET 2
 
 // API for storing & verifying application-defined image characteristics, generally called tags.
 typedef const struct crlib_image_constraints {

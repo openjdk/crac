@@ -63,7 +63,7 @@
 
 static jlong _restore_start_time;
 static jlong _restore_start_nanos;
-static jlong _restore_native_end_nanos = -1;
+static jlong _restore_native_end_nanos;
 
 CracEngine *crac::_engine = nullptr;
 unsigned int crac::_generation = 1;

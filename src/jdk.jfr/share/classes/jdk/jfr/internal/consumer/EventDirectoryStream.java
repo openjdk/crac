@@ -25,6 +25,7 @@
 
 package jdk.jfr.internal.consumer;
 
+import java.io.Closeable;
 import java.io.IOException;
 import java.nio.file.Path;
 import java.time.Instant;
@@ -32,8 +33,14 @@ import java.util.Arrays;
 import java.util.Comparator;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.locks.Lock;
+import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.Consumer;
 
+import jdk.internal.crac.Core;
+import jdk.internal.crac.JDKResource;
+import jdk.internal.crac.mirror.Context;
+import jdk.internal.crac.mirror.Resource;
 import jdk.jfr.Configuration;
 import jdk.jfr.RecordingState;
 import jdk.jfr.consumer.RecordedEvent;
@@ -50,7 +57,7 @@ import jdk.jfr.internal.management.StreamBarrier;
  * with chunk files.
  *
  */
-public final class EventDirectoryStream extends AbstractEventStream {
+public final class EventDirectoryStream extends AbstractEventStream implements JDKResource {
 
     private static final Comparator<? super RecordedEvent> EVENT_COMPARATOR = JdkJfrConsumer.instance().eventComparator();
 
@@ -63,6 +70,7 @@ public final class EventDirectoryStream extends AbstractEventStream {
     private RecordedEvent[] sortedCache;
     private int threadExclusionLevel = 0;
     private volatile Consumer<Long> onCompleteHandler;
+    private final ReentrantLock lock = new ReentrantLock();
 
     public EventDirectoryStream(
             Path p,
@@ -74,6 +82,7 @@ public final class EventDirectoryStream extends AbstractEventStream {
         this.repositoryFiles = new RepositoryFiles(p, allowSubDirectories);
         this.streamId.incrementAndGet();
         Logger.log(LogTag.JFR_SYSTEM_PARSER, LogLevel.INFO, "Stream " + streamId + " started.");
+        Core.Priority.POST_JFR.getContext().register(this);
     }
 
     @Override
@@ -142,7 +151,13 @@ public final class EventDirectoryStream extends AbstractEventStream {
             return;
         }
         currentChunkStartNanos = repositoryFiles.getTimestamp(path);
-        try (RecordingInput input = new RecordingInput(path.toFile())) {
+        lock.lock();
+        try (Closeable _ = () -> {
+                if (lock.isHeldByCurrentThread()) {
+                    lock.unlock();
+                }
+            };
+            RecordingInput input = new RecordingInput(path.toFile())) {
             input.setStreamed();
             currentParser = new ChunkParser(input, disp.parserConfiguration, parserState());
             long segmentStart = currentParser.getStartNanos() + currentParser.getChunkDuration();
@@ -170,6 +185,11 @@ public final class EventDirectoryStream extends AbstractEventStream {
                         return;
                     }
                 }
+                // avoid try-with-resources explicit close warning
+                RecordingInput ri = input;
+                ri.close();
+                lock.unlock();
+
                 long endNanos = currentParser.getStartNanos() + currentParser.getChunkDuration();
                 long endMillis = Instant.ofEpochSecond(0, endNanos).toEpochMilli();
 
@@ -212,6 +232,7 @@ public final class EventDirectoryStream extends AbstractEventStream {
                     return;
                 }
                 currentChunkStartNanos = repositoryFiles.getTimestamp(path);
+                lock.lock();
                 input.setFile(path);
                 onComplete(endChunkNanos);
                 currentParser = currentParser.newChunkParser();
@@ -282,5 +303,16 @@ public final class EventDirectoryStream extends AbstractEventStream {
     public StreamBarrier activateStreamBarrier() {
         barrier.activate();
         return barrier;
+    }
+
+    @Override
+    public void beforeCheckpoint(Context<? extends Resource> context) throws Exception {
+        // Ensures that the thread in processRecursionSafe() does not have an open file
+        lock.lock();
+    }
+
+    @Override
+    public void afterRestore(Context<? extends Resource> context) throws Exception {
+        lock.unlock();
     }
 }

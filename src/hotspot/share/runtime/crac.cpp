@@ -63,6 +63,7 @@
 
 static jlong _restore_start_time;
 static jlong _restore_start_nanos;
+static jlong _restore_native_end_nanos;
 
 CracEngine *crac::_engine = nullptr;
 unsigned int crac::_generation = 1;
@@ -362,6 +363,7 @@ int crac::checkpoint_restore(int *shmid) {
 #endif //LINUX
 
   crac::update_javaTimeNanos_offset();
+  crac::record_time_after_restore();
 
   if (CRaCTraceStartupTime) {
     tty->print_cr("STARTUPTIME " JLONG_FORMAT " restore-native", os::javaTimeNanos());
@@ -623,6 +625,34 @@ static bool apply_labels(const char* labels, CracEngine* engine, bool (CracEngin
   return true;
 }
 
+static bool apply_constraints(CracEngine &engine, bool *exact) {
+  *exact = false;
+  // Since the check itself is delegated to the C/R Engine we will simply
+  // skip the check here.
+  bool ignore = VM_Version::check_cpu_features_skip();
+  if (CheckCPUFeatures == nullptr || !strcmp(CheckCPUFeatures, "compatible")) {
+    // default, compatible
+  } else if (!strcmp(CheckCPUFeatures, "skip")) {
+    ignore = true;
+  } else if (!strcmp(CheckCPUFeatures, "exact")) {
+    *exact = true;
+  } else {
+    log_error(crac)("Invalid value for -XX:CheckCPUFeatures=%s; available are 'compatible', 'exact' or 'skip'", CheckCPUFeatures);
+    return false;
+  }
+  if (!ignore) {
+    VM_Version::VM_Features current_features;
+    if (VM_Version::cpu_features_binary(&current_features)) {
+      engine.require_cpuinfo(&current_features, *exact);
+    }
+  }
+  if (!apply_labels(CRaCRequiredImageLabels, &engine, &CracEngine::require_label)) {
+    log_error(crac)("Cannot enforce some labels from CRaCRequiredImageLabels");
+    return false;
+  }
+  return true;
+}
+
 bool crac::prepare_checkpoint() {
   precond(CRaCCheckpointTo != nullptr);
 
@@ -658,6 +688,12 @@ bool crac::prepare_checkpoint() {
       }
       if (!apply_labels(CRaCImageLabels, engine.get(), &CracEngine::set_label)) {
         log_error(crac)("Cannot set some labels from CRaCImageLabels");
+        return false;
+      }
+      // We don't normally need constaints for the checkpoint itself; engine might use this
+      // to identify 'peer' images or 'peer' instances.
+      bool exact_ignored;
+      if (!apply_constraints(*engine.get(), &exact_ignored)) {
         return false;
       }
     } break;
@@ -814,7 +850,7 @@ void crac::set_image_score(const char *metric, double value, TRAPS) {
 }
 
 GrowableArray<crac::score> crac::get_image_scores_from_jvm() {
-  GrowableArray<crac::score> scores(24);
+  GrowableArray<crac::score> scores(32);
 
   const double uptime = TimeHelper::counter_to_millis(os::elapsed_counter());
   // Estimated boot time - earlier than RuntimeMXBean.getStartTime(), unless javaTimeMillis jumps
@@ -824,7 +860,10 @@ GrowableArray<crac::score> crac::get_image_scores_from_jvm() {
   // Uptime since initial boot
   scores.append({"vm.uptimeSinceBoot", uptime});
   // Uptime since start of latest restore or -1 if not restored - same as CRaCMXBean.getUptimeSinceRestore()
-  scores.append({"vm.uptimeSinceRestore", _generation > 1 ? TimeHelper::counter_to_millis(crac::uptime_since_restore()) : -1});
+  scores.append({"vm.uptimeSinceRestore", static_cast<double>(_generation > 1 ? crac::uptime_since_restore() / NANOSECS_PER_MILLISEC : -1)});
+
+  scores.append({"vm.crac.generation", static_cast<double>(_generation)});
+  scores.append({"vm.restore.nativeTime", static_cast<double>(_generation > 1 ? (_restore_native_end_nanos - _restore_start_nanos) / NANOSECS_PER_MILLISEC : -1)});
 
   // Same as OperatingSystemMXBean.getProcessCpuTime() but in milliseconds
   scores.append({"vm.processCpuTime", os::elapsed_process_cpu_time() * 1000});
@@ -915,31 +954,11 @@ void crac::restore(crac_restore_data& restore_data) {
 
   bool exact = false;
   switch (engine.prepare_image_constraints_api()) {
-    case CracEngine::ApiStatus::OK: {
-      // Since the check itself is delegated to the C/R Engine we will simply
-      // skip the check here.
-      bool ignore = VM_Version::check_cpu_features_skip();
-      if (CheckCPUFeatures == nullptr || !strcmp(CheckCPUFeatures, "compatible")) {
-        // default, compatible
-      } else if (!strcmp(CheckCPUFeatures, "skip")) {
-        ignore = true;
-      } else if (!strcmp(CheckCPUFeatures, "exact")) {
-        exact = true;
-      } else {
-        log_error(crac)("Invalid value for -XX:CheckCPUFeatures=%s; available are 'compatible', 'exact' or 'skip'", CheckCPUFeatures);
+    case CracEngine::ApiStatus::OK:
+      if (!apply_constraints(engine, &exact)) {
         return;
       }
-      if (!ignore) {
-        VM_Version::VM_Features current_features;
-        if (VM_Version::cpu_features_binary(&current_features)) {
-          engine.require_cpuinfo(&current_features, exact);
-        }
-      }
-      if (!apply_labels(CRaCRequiredImageLabels, &engine, &CracEngine::require_label)) {
-        log_error(crac)("Cannot enforce some labels from CRaCRequiredImageLabels");
-        return;
-      }
-    } break;
+      break;
     case CracEngine::ApiStatus::ERR:
       return;
     case CracEngine::ApiStatus::UNSUPPORTED:
@@ -1072,6 +1091,10 @@ void crac::record_time_before_checkpoint() {
   _checkpoint_monotonic_nanos = os::javaTimeNanos();
   memset(_checkpoint_bootid, 0, UUID_LENGTH);
   read_bootid(_checkpoint_bootid);
+}
+
+void crac::record_time_after_restore() {
+  _restore_native_end_nanos = os::javaTimeNanos();
 }
 
 void crac::update_javaTimeNanos_offset() {

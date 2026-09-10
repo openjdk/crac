@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2017, 2025, Azul Systems, Inc. All rights reserved.
+ * Copyright (c) 2017, 2026, Azul Systems, Inc. All rights reserved.
  * Copyright (c) 2021, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
@@ -37,6 +37,11 @@
 JNIEXPORT jobjectArray JNICALL
 Java_jdk_internal_crac_mirror_Core_checkpointRestore0(JNIEnv *env, jclass ignore, jarray fdArr, jobjectArray objArr, jboolean dry_run, jlong jcmd_stream) {
     return JVM_Checkpoint(env, fdArr, objArr, dry_run, jcmd_stream);
+}
+
+JNIEXPORT jint JNICALL
+Java_jdk_internal_crac_mirror_Core_getCheckpointableStatus0(JNIEnv *env, jclass ignore) {
+    return JVM_GetCheckpointableStatus(env);
 }
 
 JNIEXPORT void JNICALL

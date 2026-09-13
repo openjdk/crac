@@ -57,7 +57,7 @@ internal_checkpoint() {
 }
 internal_restore() {
   javasetup
-  tid=$(echo cr/core-*.img|tr -cd ' 0-9'|sed 's/^.* //') # highest
+  tid=$(echo cr/core-*.img|tr ' ' '\n'|sed 's#^cr/core-\(.*\)[.]img$#\1#'|sort -n|tail -n 1) # highest
   if [ -n "$tid" ];then
     ls -l /proc/$tid/exe || :
     dash -c 'echo $$'

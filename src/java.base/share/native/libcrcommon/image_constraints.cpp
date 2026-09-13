@@ -257,7 +257,7 @@ bool ImageConstraints::validate(const char* image_location) const {
       return false;
     }
   }
-  bool hooks_result = true;
+  bool result = true;
   _hooks.foreach([&](const Hook& hook) {
     bool found = false;
     tags.foreach([&](const Tag& t) {
@@ -266,30 +266,24 @@ bool ImageConstraints::validate(const char* image_location) const {
       }
       if (t.type != hook.type) {
         LOG("Image hook type mismatch for '%s'", hook.name);
+        result = false;
         return;
       }
       found = true;
       switch (hook.type) {
       case TagType::LABEL:
-        if (!hook.hook.label_hook(static_cast<const char *>(t.data), hook.user_data)) {
-          hooks_result = false;
-        }
+        result = hook.hook.label_hook(static_cast<const char *>(t.data), hook.user_data) && result;
         break;
       case TagType::BITMAP:
-        if (!hook.hook.bitmap_hook(static_cast<const unsigned char *>(t.data), t.data_size, hook.user_data)) {
-          hooks_result = false;
-        }
+        result = hook.hook.bitmap_hook(static_cast<const unsigned char *>(t.data), t.data_size, hook.user_data) && result;
         break;
       }
     });
     if (!found) {
       LOG("Hook did not find its tag '%s'", hook.name);
-      hooks_result = false;
+      result = false;
     }
   });
-  if (!hooks_result) {
-    return false;
-  }
   const char** keys = new(std::nothrow) const char*[tags.size()];
   if (keys == nullptr) {
     LOG("Insufficient memory");
@@ -302,7 +296,6 @@ bool ImageConstraints::validate(const char* image_location) const {
   Hashtable<Tag> ht(keys, tags.size());
   delete[] keys;
 
-  bool result = true;
   tags.foreach([&](Tag& t) {
     result = ht.put(t.name, std::move(t)) && result;
   });

@@ -65,11 +65,11 @@ static size_t get_failed_bitmap(crlib_conf_t* conf, const char* name, unsigned c
 
 static bool register_label_hook(crlib_conf_t* conf, const char *name, ImageConstraints::LabelHook hook, void *user_data) {
   return COMMON(conf)->image_constraints.register_label_hook(name, hook, user_data);
-};
+}
 
 static bool register_bitmap_hook(crlib_conf_t* conf, const char *name, ImageConstraints::BitmapHook hook, void *user_data) {
   return COMMON(conf)->image_constraints.register_bitmap_hook(name, hook, user_data);
-};
+}
 
 static bool set_score(crlib_conf_t* conf, const char* name, double value) {
   return COMMON(conf)->image_score.set_score(name, value);

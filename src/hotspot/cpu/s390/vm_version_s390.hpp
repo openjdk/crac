@@ -31,6 +31,7 @@
 #include "runtime/globals_extension.hpp"
 
 class VM_Version: public Abstract_VM_Version {
+
  protected:
 // z/Architecture is the name of the 64-bit extension of the 31-bit s390
 // architecture.

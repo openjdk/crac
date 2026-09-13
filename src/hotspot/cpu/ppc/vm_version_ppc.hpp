@@ -58,6 +58,12 @@ public:
   struct VM_Features: public Zero_Features {};
   static bool cpu_features_binary(VM_Features *data) { return false; }
   static bool can_use_cpu_features() { return false; }
+  static const char *restore_failed_check(const VM_Features *image_features, const VM_Features *current_features) {
+    return nullptr;
+  }
+  static bool checkpoint_check() {
+    return true;
+  }
 
   // Override Abstract_VM_Version implementation
   static void print_platform_virtualization_info(outputStream*);

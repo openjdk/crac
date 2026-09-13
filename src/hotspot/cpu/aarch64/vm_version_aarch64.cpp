@@ -920,6 +920,9 @@ const char *VM_Version::restore_failed_check(const VM_Features *image_features, 
 }
 
 bool VM_Version::checkpoint_check() {
+  if (!supports_sve()) {
+    return true;
+  }
   if (get_current_sve_vector_length() <= 32) {
     return true;
   }

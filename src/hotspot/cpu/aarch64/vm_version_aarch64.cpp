@@ -926,7 +926,7 @@ bool VM_Version::checkpoint_check() {
   if (get_current_sve_vector_length() <= 32) {
     return true;
   }
-  assert(supports_feature(CPU_SVE256), "CPU_SVE256 should have been set for get_current_sve_vector_length() > 32");
+  assert(_cpu_features.supports_feature(CPU_SVE256), "CPU_SVE256 should have been set for get_current_sve_vector_length() > 32");
   log_error(crac)("Cannot make a snapshot as this CPU has vector length %d bits while CRaC currently supports at most 256 bits",
                   get_current_sve_vector_length() * 8);
   return false;

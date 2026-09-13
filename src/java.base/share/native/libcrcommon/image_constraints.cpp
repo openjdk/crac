@@ -157,7 +157,7 @@ static inline bool check_zeroes(const unsigned char* mem, size_t length) {
 
 bool ImageConstraints::Constraint::compare_bitmaps(const unsigned char* bitmap, size_t size) const {
   size_t common_size = data_size < size ? data_size : size;
-  if (comparison == EQUALS) {
+  if (comparison == CRLIB_BITMAP_CMP_EQUALS) {
     if (memcmp(data, bitmap, common_size)) {
       return false;
     }
@@ -170,7 +170,7 @@ bool ImageConstraints::Constraint::compare_bitmaps(const unsigned char* bitmap, 
   }
   const unsigned char* bm1 = bitmap, * bm2 = static_cast<const unsigned char*>(data);
   size_t s1 = size, s2 = data_size;
-  if (comparison == SUPERSET) {
+  if (comparison == CRLIB_BITMAP_CMP_SUPERSET) {
     bm1 = bm2;
     bm2 = bitmap;
     s1 = s2;

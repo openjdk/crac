@@ -261,7 +261,7 @@ bool ImageConstraints::validate(const char* image_location) const {
   _hooks.foreach([&](const Hook& hook) {
     bool found = false;
     tags.foreach([&](const Tag& t) {
-      if (!hooks_result || strcmp(hook.name, t.name) != 0) {
+      if (strcmp(hook.name, t.name) != 0) {
         return;
       }
       if (t.type != hook.type) {
@@ -271,10 +271,14 @@ bool ImageConstraints::validate(const char* image_location) const {
       found = true;
       switch (hook.type) {
       case TagType::LABEL:
-        hooks_result = hook.hook.label_hook(static_cast<const char *>(t.data), hook.user_data);
+        if (!hook.hook.label_hook(static_cast<const char *>(t.data), hook.user_data)) {
+          hooks_result = false;
+        }
         break;
       case TagType::BITMAP:
-        hooks_result = hook.hook.bitmap_hook(static_cast<const unsigned char *>(t.data), t.data_size, hook.user_data);
+        if (!hook.hook.bitmap_hook(static_cast<const unsigned char *>(t.data), t.data_size, hook.user_data)) {
+          hooks_result = false;
+        }
         break;
       }
     });

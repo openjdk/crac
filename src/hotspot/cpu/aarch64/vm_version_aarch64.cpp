@@ -983,7 +983,7 @@ bool VM_Version::process_image_cpu_features(const VM_Features *image_featuresp) 
         use.print_numbers(use_ss);
       }
       log_error(crac)("The image has -XX:CPUFeatures=%s with CPU_SVE256=%s, this CPU has CPUFeatures=%s not supporting CPU_SVE256, "
-                      "try using -XX:CPUFeatures=%s on checkpoint.",
+                      "try using -XX:MaxVectorSize=16 -XX:CPUFeatures=%s on checkpoint.",
                       image_features_buf, sve256_buf, cpu_features_buf, use_buf);
       return false;
     }

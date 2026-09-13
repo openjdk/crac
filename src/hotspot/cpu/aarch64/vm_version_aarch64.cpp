@@ -918,6 +918,16 @@ const char *VM_Version::restore_failed_check(const VM_Features *image_features, 
   return ss.as_string();
 }
 
+bool VM_Version::checkpoint_check() {
+  if (get_current_sve_vector_length() <= 32) {
+    return true;
+  }
+  assert(supports_feature(CPU_SVE256), "CPU_SVE256 should have been set for get_current_sve_vector_length() > 32");
+  log_error(crac)("Cannot make a snapshot as this CPU has vector length %d bits while CRaC currently supports at most 256 bits",
+                  get_current_sve_vector_length() * 8);
+  return false;
+}
+
 void VM_Version::CPUFeatures_apply_arch(VM_Features &parsed, VM_Features &missing) {
   if (!FLAG_IS_DEFAULT(UsePAC)) {
     if (UsePAC) {
@@ -936,7 +946,7 @@ bool VM_Version::process_image_cpu_features(const VM_Features *image_featuresp) 
   int want_sve_vector_length;
   if (image_featuresp == nullptr) {
     // Cleanup after a failed restore.
-    want_sve_vector_length = supports_feature(CPU_SVE256) ? 32 : 16;
+    want_sve_vector_length = _initial_sve_vector_length;
   } else {
     const VM_Features &image_features = *image_featuresp;
     bool image_supports_sve256 = image_features.supports_feature(CPU_SVE256);
@@ -968,7 +978,10 @@ bool VM_Version::process_image_cpu_features(const VM_Features *image_featuresp) 
     ResourceMark rm;
     VM_Features sve256;
     sve256.set_feature(CPU_SVE256);
-    if (image_featuresp != nullptr) {
+    if (want_sve_vector_length > 32) {
+      log_error(crac)("Cannot restore original vector length %d, PR_SVE_SET_VL reports %d: %s",
+                      want_sve_vector_length, got, os::strerror(errno));
+    } else if (image_featuresp != nullptr) {
       const VM_Features &image_features = *image_featuresp;
       log_error(crac)("The image has -XX:CPUFeatures=%s with CPU_SVE256=%s %s, this CPU has CPUFeatures=%s but PR_SVE_SET_VL reports %d: %s",
                       image_features.print_numbers(), sve256.print_numbers(),

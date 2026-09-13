@@ -642,6 +642,10 @@ bool crac::prepare_checkpoint() {
     return false;
   }
 
+  if (VM_Version::can_use_cpu_features() && !VM_Version::checkpoint_check()) {
+    return false;
+  }
+
   switch (engine->prepare_image_constraints_api()) {
     case CracEngine::ApiStatus::OK: {
       VM_Version::VM_Features current_features;

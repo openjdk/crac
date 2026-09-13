@@ -172,7 +172,7 @@ void VM_Version::get_os_cpu_info() {
   update_feature(auxv2, CPU_WFXT,       HWCAP2_WFXT      );
   update_feature(~auxv, CPU_NOTPACA,    HWCAP_PACA       );
 
-  if (supports_sve() && get_current_sve_vector_length() == 32) {
+  if (supports_sve() && get_current_sve_vector_length() >= 32) {
     set_feature(CPU_SVE256);
   }
 

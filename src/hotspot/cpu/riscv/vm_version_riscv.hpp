@@ -513,6 +513,10 @@ private:
   static bool checkpoint_check() {
     return true;
   }
+  static bool process_image_cpu_features(const VM_Features *image_featuresp) {
+    return false;
+  }
+  static constexpr bool process_image_cpu_features_needed = false;
 
   constexpr static bool supports_stack_watermark_barrier() { return true; }
 

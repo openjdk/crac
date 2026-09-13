@@ -554,7 +554,8 @@ bool CracEngine::require_cpuinfo(const VM_Version::VM_Features *current_features
   _image_constraints_api->require_bitmap(_conf, cpufeatures_name,
     reinterpret_cast<const unsigned char *>(current_features), sizeof(*current_features), exact ? CRLIB_BITMAP_CMP_EQUALS : CRLIB_BITMAP_CMP_SUBSET);
   if (VM_Version::process_image_cpu_features_needed
-      && !_image_constraints_api->register_bitmap_hook(_conf, cpufeatures_name, bitmap_constraint_hook, nullptr /* user_data */)) {
+      && (!has_method(_image_constraints_api, register_bitmap_hook)
+          || !_image_constraints_api->register_bitmap_hook(_conf, cpufeatures_name, bitmap_constraint_hook, nullptr /* user_data */))) {
     return false;
   }
   return true;

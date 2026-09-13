@@ -466,7 +466,7 @@ main(int argc, char **argv)
             }
         }
     }
-    if (set_vector_size != 0) {
+    if (is_restore && set_vector_size != 0) {
         int new_length = prctl(PR_SVE_SET_VL, set_vector_size);
         if (new_length == -1) {
             perror("prctl PR_SVE_SET_VL");

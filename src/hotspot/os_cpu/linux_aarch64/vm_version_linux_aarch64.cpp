@@ -245,6 +245,7 @@ void VM_Version::check_os_cpu_info() {
     maximum_sve_vector_length = 16;
     int got = set_and_get_current_sve_vector_length(maximum_sve_vector_length);
     if (got != maximum_sve_vector_length) {
+      ResourceMark rm;
       stringStream ss;
       VM_Features sve256;
       sve256.set_feature(VM_Feature_Flag::CPU_SVE256);

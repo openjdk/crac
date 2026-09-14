@@ -989,11 +989,11 @@ bool VM_Version::process_image_cpu_features(const VM_Features *image_featuresp) 
     }
     want_sve_vector_length = image_supports_sve256 ? 32 : 16;
   }
-  set_maximum_sve_vector_length(want_sve_vector_length);
   if (!_cpu_features.supports_feature(CPU_SVE)) {
     guarantee(want_sve_vector_length == 0 || want_sve_vector_length == 16, "CPU_SVE256 cannot be present without CPU_SVE");
     return true;
   }
+  set_maximum_sve_vector_length(want_sve_vector_length);
   // Always call PR_SVE_SET_VL, we do not know who did execute this JVM.
   errno = 0;
   int got = set_and_get_current_sve_vector_length(want_sve_vector_length);

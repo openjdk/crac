@@ -289,6 +289,14 @@ int os::extra_bang_size_in_bytes() {
   return 0;
 }
 
+bool VM_Version::checkpoint_check() {
+  return true;
+}
+
+bool VM_Version::process_image_cpu_features(const VM_Features *image_featuresp) {
+  return true;
+}
+
 extern "C" {
   int SpinPause() {
     using spin_wait_func_ptr_t = void (*)();

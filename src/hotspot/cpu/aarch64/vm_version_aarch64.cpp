@@ -25,6 +25,7 @@
  */
 
 #include "logging/log.hpp"
+#include "memory/resourceArea.hpp"
 #include "pauth_aarch64.hpp"
 #include "register_aarch64.hpp"
 #include "runtime/arguments.hpp"
@@ -63,6 +64,7 @@
   GLIBC_UNSUPPORTED(A53MAC    ); \
   GLIBC_UNSUPPORTED(ECV       ); \
   GLIBC_UNSUPPORTED(WFXT      ); \
+  GLIBC_UNSUPPORTED(SVE256    ); \
   GLIBC_UNSUPPORTED(NOTPACA   ); \
   /**/
 #include "runtime/abstract_vm_version.inline.hpp"

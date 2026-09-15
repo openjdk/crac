@@ -898,13 +898,22 @@ void crac::prepare_restore(crac_restore_data& restore_data) {
   restore_data.restore_nanos = os::javaTimeNanos();
 }
 
-template <typename F>
-class RestoreCpuInfo {
+// Deferred is from crcommon.hpp .
+template<typename F> class Deferred;
+template<typename F> inline Deferred<F> defer(F&& f);
+
+template<typename F> class Deferred {
+friend Deferred<F> defer<F>(F&& f);
+private:
   F _f;
+  inline explicit Deferred(F f): _f(f) {}
 public:
-  explicit RestoreCpuInfo(F f) : _f(f) {}
-  ~RestoreCpuInfo() { _f(); }
+  inline ~Deferred() { _f(); }
 };
+
+template<typename F> inline Deferred<F> defer(F&& f) {
+  return Deferred<F>(std::forward<F>(f));
+}
 
 void crac::restore(crac_restore_data& restore_data) {
   precond(CRaCRestoreFrom != nullptr);
@@ -960,7 +969,7 @@ void crac::restore(crac_restore_data& restore_data) {
       log_warning(crac)("Cannot verify image constraints (CPU features, labels) for restore with the selected CRaC engine");
       break;
   }
-  RestoreCpuInfo restore_cpu_info_obj([&]{
+  auto restore_cpu_info = defer([&] {
     engine.restore_cpuinfo();
   });
 

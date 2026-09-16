@@ -33,10 +33,6 @@
 #include "linkedlist.hpp"
 
 class ImageConstraints {
-public:
-  using LabelHook = bool (*)(const char *value, void *user_data);
-  using BitmapHook = bool (*)(const unsigned char *value, size_t value_size, void *user_data);
-
 private:
   enum class TagType: std::uint8_t {
     LABEL,

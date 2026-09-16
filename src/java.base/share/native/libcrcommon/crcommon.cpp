@@ -114,8 +114,9 @@ JNIEXPORT bool image_constraints_persist(const crcommon_t* conf, const char* ima
   return conf->image_constraints.persist(image_location);
 }
 
-JNIEXPORT bool image_constraints_validate(const crcommon_t* conf, const char* image_location) {
-  return conf->image_constraints.validate(image_location);
+JNIEXPORT bool image_constraints_validate(crlib_conf_t* crlib_conf, const char* image_location) {
+  crcommon_t* conf = COMMON(crlib_conf);
+  return conf->image_constraints.validate(image_location) && conf->image_constraints.callback(crlib_conf);
 }
 
 extern JNIEXPORT crlib_image_score_t image_score_extension = {

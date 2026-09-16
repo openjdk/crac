@@ -110,7 +110,7 @@ private:
 
   LinkedList<Tag> _tags;
   LinkedList<Constraint> _constraints;
-  bool (*_callback)(crlib_conf_t *conf, void *user_data);
+  bool (*_callback)(crlib_conf_t *conf, void *user_data) = nullptr;
   void *_callback_user_data;
 
   static constexpr const size_t _MAX_NAME_SIZE = 256;
@@ -178,6 +178,13 @@ public:
 
   bool persist(const char* image_location) const;
   bool validate(const char* image_location) const;
+
+  bool callback(crlib_conf_t *conf) const {
+    if (_callback == nullptr) {
+      return true;
+    }
+    return _callback (conf, _callback_user_data);
+  }
 };
 
 #endif // IMAGE_CONSTRAINTS_HPP

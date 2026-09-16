@@ -83,7 +83,7 @@ extern "C" {
 
   extern CRCOMMON_API crlib_image_constraints_t image_constraints_extension;
   extern CRCOMMON_API bool image_constraints_persist(const crcommon_t* conf, const char* image_location);
-  extern CRCOMMON_API bool image_constraints_validate(const crcommon_t* conf, const char* image_location);
+  extern CRCOMMON_API bool image_constraints_validate(crlib_conf_t* crlib_conf, const char* image_location);
 
   extern CRCOMMON_API crlib_image_score_t image_score_extension;
   extern CRCOMMON_API bool image_score_persist(const crcommon_t* conf, const char* image_location);

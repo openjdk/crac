@@ -848,7 +848,7 @@ int criuengine::restore() {
   }
   require_defaults(CRLIB_OPTION_FLAG_RESTORE, "restore");
 
-  if (!image_constraints_validate(common(), _image_location)) {
+  if (!image_constraints_validate(static_cast<crlib_conf_t *>(this), _image_location)) {
     return -1;
   }
 

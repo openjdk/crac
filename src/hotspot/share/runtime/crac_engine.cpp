@@ -508,16 +508,6 @@ const crlib_conf_option_t *CracEngine::configuration_options() {
   return _options;
 }
 
-bool CracEngine::bitmap_constraint_hook(const unsigned char *value, size_t value_size, void *user_data/*unused*/) {
-  VM_Version::VM_Features features;
-  if (value_size != sizeof(features)) {
-    log_error(crac)("Incompatible CPUFeatures length in the image - got %zu, want %zu", value_size, sizeof(features));
-    return false;
-  }
-  memcpy(&features, value, value_size);
-  return VM_Version::process_image_cpu_features(&features);
-}
-
 static constexpr char cpuarch_name[] = "cpu.arch";
 static constexpr char cpufeatures_name[] = "cpu.features";
 
@@ -529,7 +519,8 @@ CracEngine::ApiStatus CracEngine::prepare_image_constraints_api() {
   require_method(require_bitmap)
   require_method(is_failed)
   require_method(get_failed_bitmap)
-  require_method(register_bitmap_hook)
+  require_method(get_bitmap)
+  require_method(register_prepare_restore)
   complete_extension_api(_image_constraints_api)
 }
 
@@ -547,25 +538,30 @@ bool CracEngine::store_cpuinfo(const VM_Version::VM_Features *current_features) 
   return true;
 }
 
+bool CracEngine::prepare_restore_callback(crlib_conf_t *conf) const {
+  VM_Version::VM_Features image_features;
+  size_t image_features_size = _image_constraints_api->get_bitmap(conf, cpufeatures_name, reinterpret_cast<unsigned char *>(&image_features), sizeof(image_features));
+  if (image_features_size != sizeof(image_features)) {
+    log_error(crac)("Restore failed due to incompatible or missing CPU features.");
+    return false;
+  }
+  return VM_Version::prepare_restore(image_features);
+}
+
+static bool prepare_restore_callback(crlib_conf_t *conf, void *user_data) {
+  const CracEngine *engine = const_cast<const CracEngine *>(static_cast<CracEngine *>(user_data));
+  return engine->prepare_restore_callback(conf);
+}
+
 // Return success.
 bool CracEngine::require_cpuinfo(const VM_Version::VM_Features *current_features, bool exact) const {
   log_debug(crac)("cpufeatures_load user data %s from %s...", cpufeatures_name, CRaCRestoreFrom);
   _image_constraints_api->require_label(_conf, cpuarch_name, ARCHPROPNAME);
   _image_constraints_api->require_bitmap(_conf, cpufeatures_name,
     reinterpret_cast<const unsigned char *>(current_features), sizeof(*current_features), exact ? CRLIB_BITMAP_CMP_EQUALS : CRLIB_BITMAP_CMP_SUBSET);
-  if (VM_Version::process_image_cpu_features_needed
-      && (!has_method(_image_constraints_api, register_bitmap_hook)
-          || !_image_constraints_api->register_bitmap_hook(_conf, cpufeatures_name, bitmap_constraint_hook, nullptr /* user_data */))) {
-    return false;
-  }
+  void *user_data = static_cast<void *>(const_cast<CracEngine *>(this));
+  _image_constraints_api->register_prepare_restore(_conf, ::prepare_restore_callback, user_data);
   return true;
-}
-
-void CracEngine::restore_cpuinfo() const {
-  log_debug(crac)("restore_cpuinfo...");
-  if (VM_Version::process_image_cpu_features_needed) {
-    VM_Version::process_image_cpu_features(nullptr);
-  }
 }
 
 void CracEngine::check_cpuinfo(const VM_Version::VM_Features *current_features, bool exact) const {

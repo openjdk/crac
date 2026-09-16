@@ -41,10 +41,9 @@ class VM_Version : public Abstract_VM_Version {
   static bool checkpoint_check() {
     return true;
   }
-  static bool process_image_cpu_features(const VM_Features *image_featuresp) {
-    return false;
+  static bool prepare_restore(VM_Version::VM_Features image_features) {
+    return true;
   }
-  static constexpr bool process_image_cpu_features_needed = false;
 
   constexpr static bool supports_stack_watermark_barrier() { return true; }
 

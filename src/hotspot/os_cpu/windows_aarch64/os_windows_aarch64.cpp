@@ -293,7 +293,7 @@ bool VM_Version::checkpoint_check() {
   return true;
 }
 
-bool VM_Version::process_image_cpu_features(const VM_Features *image_featuresp) {
+bool VM_Version::prepare_restore(VM_Version::VM_Features image_features) {
   return true;
 }
 

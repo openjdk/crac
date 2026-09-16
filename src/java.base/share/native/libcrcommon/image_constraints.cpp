@@ -197,7 +197,7 @@ static void print_bitmap(const char* name, const unsigned char* data, size_t siz
 }
 
 bool ImageConstraints::validate(const char* image_location) const {
-  if (_constraints.size() == 0 && _hooks.size() == 0) {
+  if (_constraints.size() == 0) {
     // If there are no constraints don't even try to open the file (it's fine if it is missing)
     return true;
   }
@@ -257,33 +257,6 @@ bool ImageConstraints::validate(const char* image_location) const {
       return false;
     }
   }
-  bool result = true;
-  _hooks.foreach([&](const Hook& hook) {
-    bool found = false;
-    tags.foreach([&](const Tag& t) {
-      if (strcmp(hook.name, t.name) != 0) {
-        return;
-      }
-      if (t.type != hook.type) {
-        LOG("Image hook type mismatch for '%s'", hook.name);
-        result = false;
-        return;
-      }
-      found = true;
-      switch (hook.type) {
-      case TagType::LABEL:
-        result = hook.hook.label_hook(static_cast<const char *>(t.data), hook.user_data) && result;
-        break;
-      case TagType::BITMAP:
-        result = hook.hook.bitmap_hook(static_cast<const unsigned char *>(t.data), t.data_size, hook.user_data) && result;
-        break;
-      }
-    });
-    if (!found) {
-      LOG("Hook did not find its tag '%s'", hook.name);
-      result = false;
-    }
-  });
   const char** keys = new(std::nothrow) const char*[tags.size()];
   if (keys == nullptr) {
     LOG("Insufficient memory");
@@ -296,6 +269,7 @@ bool ImageConstraints::validate(const char* image_location) const {
   Hashtable<Tag> ht(keys, tags.size());
   delete[] keys;
 
+  bool result = true;
   tags.foreach([&](Tag& t) {
     result = ht.put(t.name, std::move(t)) && result;
   });
@@ -309,8 +283,8 @@ bool ImageConstraints::validate(const char* image_location) const {
     } else if (c.type == TagType::LABEL && strcmp(static_cast<const char*>(c.data), static_cast<const char*>(t->data))) {
       LOG("Label mismatch for tag %s: '%s' vs. '%s'", c.name,
         static_cast<const char*>(c.data), static_cast<const char*>(t->data));
-    } else if (c.type == TagType::BITMAP && !c.compare_bitmaps(static_cast<const unsigned char*>(t->data), t->data_size)) {
-      LOG("Bitmap mismatch for tag %s:", c.name);
+    } else if (c.type == TagType::BITMAP) {
+      LOG("Bitmap store for tag %s:", c.name);
       print_bitmap("Constraint:   ", static_cast<const unsigned char*>(c.data), c.data_size);
       print_bitmap("Image:        ", static_cast<const unsigned char*>(t->data), t->data_size);
       free((void *) c.image_data);
@@ -321,26 +295,13 @@ bool ImageConstraints::validate(const char* image_location) const {
       } else {
         memcpy(c.image_data, t->data, c.data_size);
       }
+      if (c.compare_bitmaps(static_cast<const unsigned char*>(t->data), t->data_size)) {
+        c.failed = false;
+      }
     } else {
       c.failed = false;
     }
     result = result && !c.failed;
   });
   return result;
-}
-
-bool ImageConstraints::register_label_hook(const char *name, LabelHook hook, void *user_data) {
-  if (!_hooks.add(Hook(name, hook, user_data))) {
-    LOG("out of memory");
-    return false;
-  }
-  return true;
-}
-
-bool ImageConstraints::register_bitmap_hook(const char *name, BitmapHook hook, void *user_data) {
-  if (!_hooks.add(Hook(name, hook, user_data))) {
-    LOG("out of memory");
-    return false;
-  }
-  return true;
 }

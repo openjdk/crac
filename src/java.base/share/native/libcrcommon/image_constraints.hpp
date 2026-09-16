@@ -112,31 +112,32 @@ private:
     bool compare_bitmaps(const unsigned char* bitmap, size_t length) const;
   };
 
-  struct Hook {
-    TagType type;
-    const char* name;
-    union U {
-      LabelHook label_hook;
-      BitmapHook bitmap_hook;
-      U(LabelHook h) : label_hook(h) {}
-      U(BitmapHook h) : bitmap_hook(h) {}
-    } hook;
-    void *user_data;
-
-    Hook(const char* n, LabelHook h, void *ud):
-      type(TagType::LABEL), name(n), hook(h), user_data(ud) {}
-    Hook(const char* n, BitmapHook h, void *ud):
-      type(TagType::BITMAP), name(n), hook(h), user_data(ud) {}
-  };
-
   LinkedList<Tag> _tags;
   LinkedList<Constraint> _constraints;
-  LinkedList<Hook> _hooks;
+  bool (*_callback)(crlib_conf_t *conf, void *user_data);
+  void *_callback_user_data;
 
   static constexpr const size_t _MAX_NAME_SIZE = 256;
   static constexpr const size_t _MAX_VALUE_SIZE = 256;
 
   bool check_tag(const char* type, const char* name, size_t value_size);
+
+  size_t get_any_bitmap(const char* name, unsigned char *value_return, size_t value_size, bool need_failed) const {
+    size_t result = 0;
+    _constraints.foreach([&](Constraint &c) {
+      if (c.type == TagType::BITMAP && !strcmp(c.name, name) && (!need_failed || c.failed)) {
+        if (c.image_data == nullptr) {
+          result = 0;
+        } else {
+          result = c.data_size;
+          if (value_return) {
+            memcpy(value_return, c.image_data, value_size <= c.data_size ? value_size : c.data_size);
+          }
+        }
+      }
+    });
+    return result;
+  }
 
 public:
   bool set_label(const char* name, const char* value);
@@ -163,25 +164,21 @@ public:
   }
 
   size_t get_failed_bitmap(const char* name, unsigned char *value_return, size_t value_size) const {
-    size_t result = 0;
-    _constraints.foreach([&](Constraint &c) {
-      if (c.type == TagType::BITMAP && !strcmp(c.name, name) && c.failed) {
-        if (c.image_data == nullptr) {
-          result = 0;
-        } else {
-          result = c.data_size;
-          if (value_return) {
-            memcpy(value_return, c.image_data, value_size <= c.data_size ? value_size : c.data_size);
-          }
-        }
-      }
-    });
-    return result;
+    return get_any_bitmap(name, value_return, value_size, true /* need_failed */);
   }
 
-  // name is not copied, its content must remain valid.
-  bool register_label_hook(const char *name, LabelHook hook, void *user_data);
-  bool register_bitmap_hook(const char *name, BitmapHook hook, void *user_data);
+  size_t get_bitmap(const char* name, unsigned char *value_return, size_t value_size) const {
+    return get_any_bitmap(name, value_return, value_size, false /* need_failed */);
+  }
+
+  bool register_prepare_restore(bool (*callback)(crlib_conf_t *conf, void *user_data), void *user_data) {
+    if (_callback != nullptr) {
+      return false;
+    }
+    _callback = callback;
+    _callback_user_data = user_data;
+    return true;
+  }
 
   bool persist(const char* image_location) const;
   bool validate(const char* image_location) const;

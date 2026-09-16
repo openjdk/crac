@@ -146,8 +146,7 @@ public:
   // The returned string needs a ResourceMark.
   static const char *restore_failed_check(const VM_Features *image_features, const VM_Features *current_features);
   static bool checkpoint_check();
-  static bool process_image_cpu_features(const VM_Features *image_featuresp);
-  static constexpr bool process_image_cpu_features_needed = true;
+  static bool prepare_restore(VM_Version::VM_Features image_features);
 
   static void print_platform_virtualization_info(outputStream*);
 

@@ -734,10 +734,9 @@ private:
   static bool checkpoint_check() {
     return true;
   }
-  static bool process_image_cpu_features(const VM_Features *image_featuresp) {
-    return false;
+  static bool prepare_restore(VM_Version::VM_Features image_features) {
+    return true;
   }
-  static constexpr bool process_image_cpu_features_needed = false;
 
   static bool os_supports_avx_vectors();
   static bool os_supports_apx_egprs();

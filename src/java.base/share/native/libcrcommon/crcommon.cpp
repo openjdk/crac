@@ -63,12 +63,12 @@ static size_t get_failed_bitmap(crlib_conf_t* conf, const char* name, unsigned c
   return COMMON(conf)->image_constraints.get_failed_bitmap(name, value_return, value_size);
 }
 
-static bool register_label_hook(crlib_conf_t* conf, const char *name, ImageConstraints::LabelHook hook, void *user_data) {
-  return COMMON(conf)->image_constraints.register_label_hook(name, hook, user_data);
+static size_t get_bitmap(crlib_conf_t* conf, const char* name, unsigned char* value_return, size_t value_size) {
+  return COMMON(conf)->image_constraints.get_bitmap(name, value_return, value_size);
 }
 
-static bool register_bitmap_hook(crlib_conf_t* conf, const char *name, ImageConstraints::BitmapHook hook, void *user_data) {
-  return COMMON(conf)->image_constraints.register_bitmap_hook(name, hook, user_data);
+static bool register_prepare_restore(crlib_conf_t *conf, bool (*callback)(crlib_conf_t *conf, void *user_data), void *user_data) {
+  return COMMON(conf)->image_constraints.register_prepare_restore(callback, user_data);
 }
 
 static bool set_score(crlib_conf_t* conf, const char* name, double value) {
@@ -106,8 +106,8 @@ extern JNIEXPORT crlib_image_constraints_t image_constraints_extension = {
   require_bitmap,
   is_failed,
   get_failed_bitmap,
-  register_label_hook,
-  register_bitmap_hook,
+  get_bitmap,
+  register_prepare_restore,
 };
 
 JNIEXPORT bool image_constraints_persist(const crcommon_t* conf, const char* image_location) {

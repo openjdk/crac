@@ -283,6 +283,9 @@ bool ImageConstraints::validate(const char* image_location) const {
     } else if (c.type == TagType::LABEL && strcmp(static_cast<const char*>(c.data), static_cast<const char*>(t->data))) {
       LOG("Label mismatch for tag %s: '%s' vs. '%s'", c.name,
         static_cast<const char*>(c.data), static_cast<const char*>(t->data));
+    } else if (c.type == TagType::BITMAP && t->data_size > c.data_size) {
+      LOG("Bitmap for tag %s in the image is too large - %zu > %zu bytes",
+        c.name, t->data_size, c.data_size);
     } else if (c.type == TagType::BITMAP) {
       LOG("Bitmap store for tag %s:", c.name);
       print_bitmap("Constraint:   ", static_cast<const unsigned char*>(c.data), c.data_size);
@@ -293,10 +296,11 @@ bool ImageConstraints::validate(const char* image_location) const {
         LOG("Cannot allocate memory for a bitmap copy");
         result = false;
       } else {
-        memcpy(c.image_data, t->data, c.data_size);
-      }
-      if (c.compare_bitmaps(static_cast<const unsigned char*>(t->data), t->data_size)) {
-        c.failed = false;
+        memcpy(c.image_data, t->data, t->data_size);
+        memset(c.image_data + t->data_size, 0, c.data_size - t->data_size);
+        if (c.compare_bitmaps(static_cast<const unsigned char*>(t->data), t->data_size)) {
+          c.failed = false;
+        }
       }
     } else {
       c.failed = false;

@@ -556,11 +556,15 @@ static bool prepare_restore_callback(crlib_conf_t *conf, void *user_data) {
 // Return success.
 bool CracEngine::require_cpuinfo(const VM_Version::VM_Features *current_features, bool exact) const {
   log_debug(crac)("cpufeatures_load user data %s from %s...", cpufeatures_name, CRaCRestoreFrom);
-  _image_constraints_api->require_label(_conf, cpuarch_name, ARCHPROPNAME);
-  _image_constraints_api->require_bitmap(_conf, cpufeatures_name,
-    reinterpret_cast<const unsigned char *>(current_features), sizeof(*current_features), exact ? CRLIB_BITMAP_CMP_EQUALS : CRLIB_BITMAP_CMP_SUBSET);
+  bool ok = _image_constraints_api->require_label(_conf, cpuarch_name, ARCHPROPNAME);
+  ok = _image_constraints_api->require_bitmap(_conf, cpufeatures_name,
+    reinterpret_cast<const unsigned char *>(current_features), sizeof(*current_features), exact ? CRLIB_BITMAP_CMP_EQUALS : CRLIB_BITMAP_CMP_SUBSET) && ok;
   void *user_data = static_cast<void *>(const_cast<CracEngine *>(this));
-  _image_constraints_api->register_prepare_restore(_conf, ::prepare_restore_callback, user_data);
+  ok = _image_constraints_api->register_prepare_restore(_conf, ::prepare_restore_callback, user_data) && ok;
+  if (!ok) {
+    log_error(crac)("Failed to register image requirements");
+    return false;
+  }
   return true;
 }
 

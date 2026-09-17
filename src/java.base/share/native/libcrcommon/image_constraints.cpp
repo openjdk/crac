@@ -301,7 +301,7 @@ bool ImageConstraints::validate(const char* image_location) const {
           LOG("Bitmap mismatch for tag %s:", c.name);
           print_bitmap("Constraint:   ", static_cast<const unsigned char*>(c.data), c.data_size);
           print_bitmap("Image:        ", static_cast<const unsigned char*>(t->data), t->data_size);
-	}
+        }
       }
     } else {
       c.failed = false;

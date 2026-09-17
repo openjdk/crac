@@ -287,9 +287,6 @@ bool ImageConstraints::validate(const char* image_location) const {
       LOG("Bitmap for tag %s in the image is too large - %zu > %zu bytes",
         c.name, t->data_size, c.data_size);
     } else if (c.type == TagType::BITMAP) {
-      LOG("Bitmap store for tag %s:", c.name);
-      print_bitmap("Constraint:   ", static_cast<const unsigned char*>(c.data), c.data_size);
-      print_bitmap("Image:        ", static_cast<const unsigned char*>(t->data), t->data_size);
       free((void *) c.image_data);
       c.image_data = static_cast<unsigned char *>(malloc(c.data_size));
       if (c.image_data == nullptr) {
@@ -300,7 +297,11 @@ bool ImageConstraints::validate(const char* image_location) const {
         memset(c.image_data + t->data_size, 0, c.data_size - t->data_size);
         if (c.compare_bitmaps(static_cast<const unsigned char*>(t->data), t->data_size)) {
           c.failed = false;
-        }
+        } else {
+          LOG("Bitmap mismatch for tag %s:", c.name);
+          print_bitmap("Constraint:   ", static_cast<const unsigned char*>(c.data), c.data_size);
+          print_bitmap("Image:        ", static_cast<const unsigned char*>(t->data), t->data_size);
+	}
       }
     } else {
       c.failed = false;

@@ -110,8 +110,8 @@ private:
 
   LinkedList<Tag> _tags;
   LinkedList<Constraint> _constraints;
-  bool (*_callback)(crlib_conf_t *conf, void *user_data) = nullptr;
-  void *_callback_user_data;
+  bool (*_prepare_restore_callback)(crlib_conf_t *conf, void *user_data) = nullptr;
+  void *_prepare_restore_callback_user_data;
 
   static constexpr const size_t _MAX_NAME_SIZE = 256;
   static constexpr const size_t _MAX_VALUE_SIZE = 256;
@@ -168,11 +168,11 @@ public:
   }
 
   bool register_prepare_restore(bool (*callback)(crlib_conf_t *conf, void *user_data), void *user_data) {
-    if (_callback != nullptr) {
+    if (_prepare_restore_callback != nullptr) {
       return false;
     }
-    _callback = callback;
-    _callback_user_data = user_data;
+    _prepare_restore_callback = callback;
+    _prepare_restore_callback_user_data = user_data;
     return true;
   }
 
@@ -180,10 +180,10 @@ public:
   bool validate(const char* image_location) const;
 
   bool callback(crlib_conf_t *conf) const {
-    if (_callback == nullptr) {
+    if (_prepare_restore_callback == nullptr) {
       return true;
     }
-    return _callback (conf, _callback_user_data);
+    return _prepare_restore_callback (conf, _prepare_restore_callback_user_data);
   }
 };
 

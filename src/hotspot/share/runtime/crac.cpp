@@ -642,10 +642,14 @@ bool crac::prepare_checkpoint() {
     return false;
   }
 
+  if (VM_Version::can_use_cpu_features() && !VM_Version::checkpoint_check()) {
+    return false;
+  }
+
   switch (engine->prepare_image_constraints_api()) {
     case CracEngine::ApiStatus::OK: {
       VM_Version::VM_Features current_features;
-      if (!VM_Version::check_cpu_features_skip() && VM_Version::cpu_features_binary(&current_features) &&
+      if (VM_Version::can_use_cpu_features() && VM_Version::cpu_features_binary(&current_features) &&
           !engine->store_cpuinfo(&current_features)) {
         return false;
       }
@@ -918,7 +922,7 @@ void crac::restore(crac_restore_data& restore_data) {
     case CracEngine::ApiStatus::OK: {
       // Since the check itself is delegated to the C/R Engine we will simply
       // skip the check here.
-      bool ignore = VM_Version::check_cpu_features_skip();
+      bool ignore = !VM_Version::can_use_cpu_features();
       if (CheckCPUFeatures == nullptr || !strcmp(CheckCPUFeatures, "compatible")) {
         // default, compatible
       } else if (!strcmp(CheckCPUFeatures, "skip")) {
@@ -932,7 +936,9 @@ void crac::restore(crac_restore_data& restore_data) {
       if (!ignore) {
         VM_Version::VM_Features current_features;
         if (VM_Version::cpu_features_binary(&current_features)) {
-          engine.require_cpuinfo(&current_features, exact);
+          if (!engine.require_cpuinfo(&current_features, exact)) {
+            return;
+          }
         }
       }
       if (!apply_labels(CRaCRequiredImageLabels, &engine, &CracEngine::require_label)) {

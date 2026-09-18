@@ -63,6 +63,14 @@ static size_t get_failed_bitmap(crlib_conf_t* conf, const char* name, unsigned c
   return COMMON(conf)->image_constraints.get_failed_bitmap(name, value_return, value_size);
 }
 
+static size_t get_bitmap(crlib_conf_t* conf, const char* name, unsigned char* value_return, size_t value_size) {
+  return COMMON(conf)->image_constraints.get_bitmap(name, value_return, value_size);
+}
+
+static bool register_prepare_restore(crlib_conf_t *conf, bool (*callback)(crlib_conf_t *conf, void *user_data), void *user_data) {
+  return COMMON(conf)->image_constraints.register_prepare_restore(callback, user_data);
+}
+
 static bool set_score(crlib_conf_t* conf, const char* name, double value) {
   return COMMON(conf)->image_score.set_score(name, value);
 }
@@ -98,14 +106,17 @@ extern JNIEXPORT crlib_image_constraints_t image_constraints_extension = {
   require_bitmap,
   is_failed,
   get_failed_bitmap,
+  get_bitmap,
+  register_prepare_restore,
 };
 
 JNIEXPORT bool image_constraints_persist(const crcommon_t* conf, const char* image_location) {
   return conf->image_constraints.persist(image_location);
 }
 
-JNIEXPORT bool image_constraints_validate(const crcommon_t* conf, const char* image_location) {
-  return conf->image_constraints.validate(image_location);
+JNIEXPORT bool image_constraints_validate(crlib_conf_t* crlib_conf, const char* image_location) {
+  crcommon_t* conf = COMMON(crlib_conf);
+  return conf->image_constraints.validate(image_location) && conf->image_constraints.callback(crlib_conf);
 }
 
 extern JNIEXPORT crlib_image_score_t image_score_extension = {

@@ -80,11 +80,12 @@ private:
     const char* name;
     const void* data;
     size_t data_size;
-    unsigned char* image_data; // data_size
+    unsigned char* image_data; // image_data_size
+    size_t image_data_size;
     crlib_bitmap_comparison_t comparison;
 
     Constraint(TagType t, const char* n, const void* d, size_t ds, crlib_bitmap_comparison_t c):
-      type(t), failed(false), name(n), data(d), data_size(ds), image_data(nullptr), comparison(c) {}
+      type(t), failed(false), name(n), data(d), data_size(ds), image_data(nullptr), image_data_size(0), comparison(c) {}
 
     Constraint(Constraint &&o) {
       type = o.type;
@@ -92,6 +93,7 @@ private:
       data = o.data;
       data_size = o.data_size;
       image_data = o.image_data;
+      image_data_size = o.image_data_size;
       comparison = o.comparison;
       o.name = nullptr;
       o.data = nullptr;
@@ -125,9 +127,9 @@ private:
         if (c.image_data == nullptr) {
           result = 0;
         } else {
-          result = c.data_size;
+          result = c.image_data_size;
           if (value_return) {
-            memcpy(value_return, c.image_data, value_size <= c.data_size ? value_size : c.data_size);
+            memcpy(value_return, c.image_data, value_size <= c.image_data_size ? value_size : c.image_data_size);
           }
         }
       }

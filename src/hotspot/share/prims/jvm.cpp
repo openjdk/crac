@@ -3911,6 +3911,10 @@ JVM_ENTRY(void, JVM_RecordCRaCScores(JNIEnv *env, jobjectArray metrics, jdoubleA
   }
 JVM_END
 
+JVM_ENTRY(jlong, JVM_GetUptimeSinceRestore(JNIEnv *env))
+  return crac::uptime_since_restore();
+JVM_END
+
 JVM_ENTRY(void, JVM_VirtualThreadEndFirstTransition(JNIEnv* env, jobject vthread))
   oop vt = JNIHandles::resolve_external_guard(vthread);
   MountUnmountDisabler::end_transition(thread, vt, true /*is_mount*/, true /*is_thread_start*/);

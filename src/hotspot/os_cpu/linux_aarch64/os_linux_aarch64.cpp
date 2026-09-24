@@ -398,6 +398,109 @@ static inline void atomic_copy64(const volatile void *src, volatile void *dst) {
   *(jlong *) dst = *(const jlong *) src;
 }
 
+bool VM_Version::checkpoint_check() {
+  if (!supports_sve()) {
+    return true;
+  }
+  if (get_current_sve_vector_length() <= 32) {
+    return true;
+  }
+  assert(_cpu_features.supports_feature(CPU_SVE256), "CPU_SVE256 should have been set for get_current_sve_vector_length() > 32");
+  log_error(crac)("Cannot make a snapshot as this CPU has vector length %d bits while CRaC currently supports at most 256 bits",
+                  get_current_sve_vector_length() * 8);
+  return false;
+}
+
+const char *VM_Version::restore_failed_check(const VM_Features *image_features, const VM_Features *current_features) {
+  if (image_features->supports_feature(VM_Feature_Flag::CPU_PACA)
+      != current_features->supports_feature(VM_Feature_Flag::CPU_PACA)) {
+    stringStream ss;
+    VM_Features paca;
+    paca.set_feature(VM_Feature_Flag::CPU_PACA);
+    ss.print("Restore failed due to incompatible aarch64 CPU feature PACA (%s); these CPUs each require a separate image.", paca.print_numbers());
+    return ss.as_string();
+  }
+  bool image_supports_sve256 = image_features->supports_feature(CPU_SVE256);
+  if (image_supports_sve256 && !current_features->supports_feature(CPU_SVE256)) {
+    // ResourceMark is not permitted here.
+    char image_features_buf[MAX_CPU_FEATURES];
+    {
+      stringStream image_features_ss(image_features_buf, sizeof(image_features_buf));
+      image_features->print_numbers(image_features_ss);
+    }
+    char sve256_buf[MAX_CPU_FEATURES];
+    {
+      VM_Features sve256;
+      sve256.set_feature(CPU_SVE256);
+      stringStream sve256_ss(sve256_buf, sizeof(sve256_buf));
+      sve256.print_numbers(sve256_ss);
+    }
+    char current_features_buf[MAX_CPU_FEATURES];
+    {
+      stringStream current_features_ss(current_features_buf, sizeof(current_features_buf));
+      current_features->print_numbers(current_features_ss);
+    }
+    char use_buf[MAX_CPU_FEATURES];
+    {
+      VM_Features use = *image_features & *current_features;
+      stringStream use_ss(use_buf, sizeof(use_buf));
+      use.print_numbers(use_ss);
+    }
+    stringStream ss;
+    ss.print("The image has -XX:CPUFeatures=%s with CPU_SVE256=%s, this CPU has CPUFeatures=%s not supporting CPU_SVE256, "
+             "try using -XX:MaxVectorSize=16 -XX:CPUFeatures=%s on checkpoint.",
+             image_features_buf, sve256_buf, current_features_buf, use_buf);
+    return ss.as_string();
+  }
+  return nullptr;
+}
+
+bool VM_Version::prepare_restore(VM_Version::VM_Features image_features) {
+  bool image_supports_sve256 = image_features.supports_feature(CPU_SVE256);
+  assert(!image_supports_sve256 || _cpu_features.supports_feature(CPU_SVE256), "it should have been caught by VM_Version::restore_failed_check");
+  int want_sve_vector_length = image_supports_sve256 ? 32 : 16;
+  if (!_cpu_features.supports_feature(CPU_SVE)) {
+    guarantee(want_sve_vector_length == 0 || want_sve_vector_length == 16, "CPU_SVE256 cannot be present without CPU_SVE");
+    return true;
+  }
+  set_maximum_sve_vector_length(want_sve_vector_length);
+  // Always call PR_SVE_SET_VL, we do not know who did execute this JVM.
+  errno = 0;
+  int got = set_and_get_current_sve_vector_length(want_sve_vector_length);
+  if (got == want_sve_vector_length) {
+    return true;
+  }
+  // ResourceMark is not permitted here.
+  char sve256_buf[MAX_CPU_FEATURES];
+  {
+    VM_Features sve256;
+    sve256.set_feature(CPU_SVE256);
+    stringStream sve256_ss(sve256_buf, sizeof(sve256_buf));
+    sve256.print_numbers(sve256_ss);
+  }
+  char cpu_features_buf[MAX_CPU_FEATURES];
+  {
+    stringStream cpu_features_ss(cpu_features_buf, sizeof(cpu_features_buf));
+    _cpu_features.print_numbers(cpu_features_ss);
+  }
+  char features_buf[MAX_CPU_FEATURES];
+  {
+    stringStream features_ss(features_buf, sizeof(features_buf));
+    _features.print_numbers(features_ss);
+  }
+  // ResourceMark is not permitted here.
+  char image_features_buf[MAX_CPU_FEATURES];
+  {
+    stringStream image_features_ss(image_features_buf, sizeof(image_features_buf));
+    image_features.print_numbers(image_features_ss);
+  }
+  log_error(crac)("The image has -XX:CPUFeatures=%s with CPU_SVE256=%s %s, this CPU has CPUFeatures=%s but PR_SVE_SET_VL reports %d: %s",
+                  image_features_buf, sve256_buf,
+                  want_sve_vector_length == 32 ? "set" : "unset",
+                  cpu_features_buf, got, os::strerror(errno));
+  return false;
+}
+
 extern "C" {
   int SpinPause() {
     using spin_wait_func_ptr_t = void (*)();

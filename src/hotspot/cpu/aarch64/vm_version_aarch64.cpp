@@ -25,6 +25,7 @@
  */
 
 #include "logging/log.hpp"
+#include "memory/resourceArea.hpp"
 #include "pauth_aarch64.hpp"
 #include "register_aarch64.hpp"
 #include "runtime/arguments.hpp"
@@ -63,6 +64,7 @@
   GLIBC_UNSUPPORTED(A53MAC    ); \
   GLIBC_UNSUPPORTED(ECV       ); \
   GLIBC_UNSUPPORTED(WFXT      ); \
+  GLIBC_UNSUPPORTED(SVE256    ); \
   GLIBC_UNSUPPORTED(NOTPACA   ); \
   /**/
 #include "runtime/abstract_vm_version.inline.hpp"
@@ -903,18 +905,6 @@ VM_Features VM_Version::CPUFeatures_generic() {
   // CPU_PACA and non-PACA processors cannot share the same image. Also we cannot disable glibc using features like CPU_LSE.
   vm_exit_during_initialization("-XX:CPUFeatures=generic is not available on aarch64");
   ShouldNotReachHere();
-}
-
-const char *VM_Version::restore_failed_check(const VM_Features *image_features, const VM_Features *current_features) {
-  if (image_features->supports_feature(VM_Feature_Flag::CPU_PACA)
-      == current_features->supports_feature(VM_Feature_Flag::CPU_PACA)) {
-    return nullptr;
-  }
-  stringStream ss;
-  VM_Features paca;
-  paca.set_feature(VM_Feature_Flag::CPU_PACA);
-  ss.print("Restore failed due to incompatible aarch64 CPU feature PACA (%s); these CPUs each require a separate image.", paca.print_numbers());
-  return ss.as_string();
 }
 
 void VM_Version::CPUFeatures_apply_arch(VM_Features &parsed, VM_Features &missing) {

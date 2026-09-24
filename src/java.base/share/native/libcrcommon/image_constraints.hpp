@@ -80,11 +80,12 @@ private:
     const char* name;
     const void* data;
     size_t data_size;
-    unsigned char* image_data; // data_size
+    unsigned char* image_data; // image_data_size
+    size_t image_data_size;
     crlib_bitmap_comparison_t comparison;
 
     Constraint(TagType t, const char* n, const void* d, size_t ds, crlib_bitmap_comparison_t c):
-      type(t), failed(false), name(n), data(d), data_size(ds), image_data(nullptr), comparison(c) {}
+      type(t), failed(false), name(n), data(d), data_size(ds), image_data(nullptr), image_data_size(0), comparison(c) {}
 
     Constraint(Constraint &&o) {
       type = o.type;
@@ -92,6 +93,7 @@ private:
       data = o.data;
       data_size = o.data_size;
       image_data = o.image_data;
+      image_data_size = o.image_data_size;
       comparison = o.comparison;
       o.name = nullptr;
       o.data = nullptr;
@@ -110,18 +112,37 @@ private:
 
   LinkedList<Tag> _tags;
   LinkedList<Constraint> _constraints;
+  bool (*_prepare_restore_callback)(crlib_conf_t *conf, void *user_data) = nullptr;
+  void *_prepare_restore_callback_user_data;
 
   static constexpr const size_t _MAX_NAME_SIZE = 256;
   static constexpr const size_t _MAX_VALUE_SIZE = 256;
 
   bool check_tag(const char* type, const char* name, size_t value_size);
 
+  size_t get_any_bitmap(const char* name, unsigned char *value_return, size_t value_size, bool need_failed) const {
+    size_t result = 0;
+    _constraints.foreach([&](Constraint &c) {
+      if (c.type == TagType::BITMAP && !strcmp(c.name, name) && (!need_failed || c.failed)) {
+        if (c.image_data == nullptr) {
+          result = 0;
+        } else {
+          result = c.image_data_size;
+          if (value_return) {
+            memcpy(value_return, c.image_data, value_size <= c.image_data_size ? value_size : c.image_data_size);
+          }
+        }
+      }
+    });
+    return result;
+  }
+
 public:
   bool set_label(const char* name, const char* value);
   bool set_bitmap(const char* name, const unsigned char* value, size_t length_bytes);
 
   bool require_label(const char* name, const char* value) {
-    return _constraints.add(Constraint(TagType::LABEL, strdup(name), strdup(value), strlen(value) + 1, EQUALS));
+    return _constraints.add(Constraint(TagType::LABEL, strdup(name), strdup(value), strlen(value) + 1, CRLIB_BITMAP_CMP_EQUALS));
   }
 
   bool require_bitmap(const char* name, const unsigned char* value, size_t length_bytes, crlib_bitmap_comparison_t comparison) {
@@ -141,24 +162,31 @@ public:
   }
 
   size_t get_failed_bitmap(const char* name, unsigned char *value_return, size_t value_size) const {
-    size_t result = 0;
-    _constraints.foreach([&](Constraint &c) {
-      if (!strcmp(c.name, name) && c.failed) {
-        if (c.image_data == nullptr) {
-          result = 0;
-        } else {
-          result = c.data_size;
-          if (value_return) {
-            memcpy(value_return, c.image_data, value_size <= c.data_size ? value_size : c.data_size);
-          }
-        }
-      }
-    });
-    return result;
+    return get_any_bitmap(name, value_return, value_size, true /* need_failed */);
+  }
+
+  size_t get_bitmap(const char* name, unsigned char *value_return, size_t value_size) const {
+    return get_any_bitmap(name, value_return, value_size, false /* need_failed */);
+  }
+
+  bool register_prepare_restore(bool (*callback)(crlib_conf_t *conf, void *user_data), void *user_data) {
+    if (_prepare_restore_callback != nullptr) {
+      return false;
+    }
+    _prepare_restore_callback = callback;
+    _prepare_restore_callback_user_data = user_data;
+    return true;
   }
 
   bool persist(const char* image_location) const;
   bool validate(const char* image_location) const;
+
+  bool callback(crlib_conf_t *conf) const {
+    if (_prepare_restore_callback == nullptr) {
+      return true;
+    }
+    return _prepare_restore_callback (conf, _prepare_restore_callback_user_data);
+  }
 };
 
 #endif // IMAGE_CONSTRAINTS_HPP

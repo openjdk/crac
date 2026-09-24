@@ -510,6 +510,18 @@ int os::extra_bang_size_in_bytes() {
   return 0;
 }
 
+bool VM_Version::checkpoint_check() {
+  return true;
+}
+
+const char *VM_Version::restore_failed_check(const VM_Features *image_features, const VM_Features *current_features) {
+  return nullptr;
+}
+
+bool VM_Version::prepare_restore(VM_Version::VM_Features image_features) {
+  return true;
+}
+
 #ifdef MACOS_AARCH64
 THREAD_LOCAL bool os::_jit_exec_enabled;
 

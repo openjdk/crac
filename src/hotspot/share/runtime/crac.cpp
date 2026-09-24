@@ -629,7 +629,7 @@ static bool apply_constraints(CracEngine &engine, bool *exact) {
   *exact = false;
   // Since the check itself is delegated to the C/R Engine we will simply
   // skip the check here.
-  bool ignore = VM_Version::check_cpu_features_skip();
+  bool ignore = !VM_Version::can_use_cpu_features();
   if (CheckCPUFeatures == nullptr || !strcmp(CheckCPUFeatures, "compatible")) {
     // default, compatible
   } else if (!strcmp(CheckCPUFeatures, "skip")) {
@@ -672,10 +672,14 @@ bool crac::prepare_checkpoint() {
     return false;
   }
 
+  if (VM_Version::can_use_cpu_features() && !VM_Version::checkpoint_check()) {
+    return false;
+  }
+
   switch (engine->prepare_image_constraints_api()) {
     case CracEngine::ApiStatus::OK: {
       VM_Version::VM_Features current_features;
-      if (!VM_Version::check_cpu_features_skip() && VM_Version::cpu_features_binary(&current_features) &&
+      if (VM_Version::can_use_cpu_features() && VM_Version::cpu_features_binary(&current_features) &&
           !engine->store_cpuinfo(&current_features)) {
         return false;
       }

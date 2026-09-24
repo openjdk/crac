@@ -57,6 +57,13 @@ internal_checkpoint() {
 }
 internal_restore() {
   javasetup
+  tid=$(echo cr/core-*.img|tr ' ' '\n'|sed 's#^cr/core-\(.*\)[.]img$#\1#'|sort -n|tail -n 1) # highest
+  if [ "$tid" != "*" ];then
+    ls -l /proc/$tid/exe || :
+    dash -c 'echo $$'
+    (set +x;while [ $(dash -c 'echo $$') -le $tid ];do :;done)
+    dash -c 'echo $$'
+  fi
   bin/java -XX:CRaCRestoreFrom=cr $* &
   p=$!
   (sleep 2;kill $p) &
@@ -180,7 +187,7 @@ setup() {
   fi
   getipaddr
   if [ -z "$(ipaddr $kind)" ];then
-    aws ec2 run-instances --no-cli-pager --profile $profile --region us-west-2 --image-id $debianami --instance-type $kind --key-name $AWS_KEY_NAME --subnet-id subnet-0a6fd4c98705a4c63 --security-group-ids sg-0081bc08de42b1086 --tag-specifications "ResourceType=instance,Tags=[{Key=Name,Value=$awstagname-$kind}]" --instance-initiated-shutdown-behavior terminate --user-data $'#!/bin/bash\nfor i in $(seq 1 '$awstimeout');do sleep 1m;done;shutdown -P now'
+    aws ec2 run-instances --no-cli-pager --profile $profile --region us-west-2 --image-id $debianami --instance-type $kind --key-name $AWS_KEY_NAME --subnet-id subnet-0a6fd4c98705a4c63 --security-group-ids sg-0081bc08de42b1086 --tag-specifications "ResourceType=instance,Tags=[{Key=Name,Value=$awstagname-$kind}]" --instance-initiated-shutdown-behavior terminate --user-data $'#!/bin/dash\nfor i in $(seq 1 '$awstimeout');do sleep 1m;done;shutdown -P now'
     for i in `seq 1 60`;do
       getipaddr
       if [ -n "$(ipaddr $kind)" ];then
@@ -345,11 +352,12 @@ checkpoint_restore "$LINENO" a1.medium t4g.micro
 checkpoint_restore "$LINENO" t4g.micro a1.medium "1:Restore failed due to incompatible or missing CPU features, try using -XX:CPUFeatures=0x80000000000000ff on checkpoint."
 checkpoint_restore "$LINENO" t4g.micro a1.medium "-1:LSE (0x100) cannot be disabled via -XX:CPUFeatures on aarch64." "-XX:CPUFeatures=0x80000000000000ff" ""
 
-# JDK-8385359: checkpoint_restore "$LINENO" c7g.medium c7g.medium
-# JDK-8385359: checkpoint_restore "$LINENO" c8g.medium c8g.medium
-# JDK-8385359: checkpoint_restore "$LINENO" c7g.medium c8g.medium
+checkpoint_restore "$LINENO" c7g.medium c7g.medium
+checkpoint_restore "$LINENO" c8g.medium c8g.medium
+checkpoint_restore "$LINENO" c7g.medium c8g.medium "1:The image has -XX:CPUFeatures=0x4000000000017fff with CPU_SVE256=0x4000000000000000, this CPU has CPUFeatures=0x77fff not supporting CPU_SVE256, try using -XX:MaxVectorSize=16 -XX:CPUFeatures=0x17fff on checkpoint."
+checkpoint_restore "$LINENO" c7g.medium c8g.medium "" "-XX:MaxVectorSize=16 -XX:CPUFeatures=0x17fff" ""
 checkpoint_restore "$LINENO" c8g.medium c7g.medium "1:Restore failed due to incompatible or missing CPU features, try using -XX:CPUFeatures=0x17fff on checkpoint."
-# JDK-8385359: checkpoint_restore "$LINENO" c8g.medium c7g.medium "" "-XX:CPUFeatures=0x17fff" ""
+checkpoint_restore "$LINENO" c8g.medium c7g.medium "" "-XX:CPUFeatures=0x17fff" ""
 
 checkpoint_restore "$LINENO" t4g.micro c8g.medium "1:Restore failed due to incompatible aarch64 CPU feature PACA (0x10000); these CPUs each require a separate image."
 checkpoint_restore "$LINENO" c8g.medium t4g.micro "1:Restore failed due to incompatible aarch64 CPU feature PACA (0x10000); these CPUs each require a separate image."

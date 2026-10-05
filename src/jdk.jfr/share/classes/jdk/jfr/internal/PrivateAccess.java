@@ -78,6 +78,8 @@ public abstract class PrivateAccess {
 
     public abstract PlatformRecording getPlatformRecording(Recording r);
 
+    public abstract void setPlatformRecording(Recording r, PlatformRecording pr);
+
     public abstract PlatformEventType getPlatformEventType(EventType eventType);
 
     public abstract boolean isConstantPool(ValueDescriptor v);

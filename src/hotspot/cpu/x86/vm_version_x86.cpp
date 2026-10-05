@@ -1009,12 +1009,6 @@ void VM_Version::get_processor_features_hardware() {
   _supports_atomic_getadd4 = true;
   _supports_atomic_getset8 = true;
   _supports_atomic_getadd8 = true;
-
-  if (ShowCPUFeatures) {
-    tty->print_raw("This machine's CPU features are: -XX:CPUFeatures=");
-    _features.print_numbers(*tty);
-    tty->cr();
-  }
 }
 
 void VM_Version::get_processor_features_hotspot() {

@@ -293,6 +293,9 @@ void VM_Version::print_using_features_cr() {
   if (_cpu_features_ignore) {
     tty->print_raw_cr("CPU features are being kept intact as requested by -XX:CPUFeatures=ignore");
   } else {
+    tty->print_raw("This machine's CPU features are: -XX:CPUFeatures=");
+    _cpu_features.aot_code_cache_features().print_numbers(*tty);
+    tty->cr();
     tty->print_raw("CPU features being used are: -XX:CPUFeatures=");
     _features.aot_code_cache_features().print_numbers(*tty);
     tty->cr();

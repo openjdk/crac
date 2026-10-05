@@ -1067,6 +1067,7 @@ define SetupRunJtregTestBody
           -reportDir:$$($1_TEST_RESULTS_DIR) \
           -workDir:$$($1_TEST_SUPPORT_DIR) \
           -report:$${JTREG_REPORT} \
+          -e:PATH \
           $$$${JTREG_STATUS} \
           $$(JTREG_OPTIONS) \
           $$(JTREG_FAILURE_HANDLER_OPTIONS) \

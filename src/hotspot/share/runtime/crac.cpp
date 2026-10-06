@@ -335,21 +335,22 @@ int crac::checkpoint_restore(int *shmid) {
 
   switch (_engine->prepare_restore_data_api()) {
     case CracEngine::ApiStatus::OK: {
-      constexpr size_t required_size = sizeof(*shmid);
-      const size_t available_size = _engine->get_restore_data(shmid, sizeof(*shmid));
-      if (available_size == 0) { // Possible if we were not killed by the engine and thus there is no restoring JVM
+      constexpr size_t expected_size = sizeof(*shmid);
+      const size_t available_size = _engine->get_restore_data(shmid, expected_size);
+      // No data is possible if we were not killed by the engine and thus there is no restoring JVM
+      if (available_size == 0) {
         *shmid = 0; // Not an error, just no restore data
         break;
       }
-      if (available_size == required_size) {
+      // Clean up in case the next checkpoint/restore will not be updating it (the case above)
+      if (!_engine->set_restore_data(nullptr, 0)) {
+        log_warning(crac)("Could not clear restore data after reading");
+      }
+      if (available_size == expected_size) {
         break;
       }
-      if (available_size > required_size) {
-        log_debug(crac)("CRaC engine has more restore data than expected");
-        break;
-      }
-      log_error(crac)("CRaC engine provided not enough restore data: need %zu bytes, got %zu",
-                      required_size, available_size);
+      log_error(crac)("CRaC engine has unexpected amount of restore data: expected %zu bytes, got %zu",
+                      expected_size, available_size);
       // fallthrough
     }
     case CracEngine::ApiStatus::ERR:         *shmid = -1; break; // Indicates error to the caller

@@ -252,13 +252,27 @@ public:
 
   int restore_data() const { return _restore_data; }
 
-  void require_defaults(crlib_conf_option_flag_t flag, const char* event) const {
+  bool require_defaults(crlib_conf_option_flag_t flag, const char* event) const {
+    bool ok = true;
+
 #define CHECK_OPT(id, ctype, cdef, flags, ...) \
   if (!_##id.is_default && !((flags) & flag)) { \
     LOG(#id " has no effect on %s", event); \
+    ok = false; \
   }
     CHECKED_OPTIONS(CHECK_OPT)
 #undef CHECK_OPT
+
+    // API does not mandate clearing restore data before checkpoint, but not doing so is probably an
+    // error (stale value from previous restore).
+    // The current implementation may overwrite it on restore anyway, even when the restoring
+    // process has not actually set it.
+    if (flag == CRLIB_OPTION_FLAG_CHECKPOINT && restore_data() != 0) {
+      LOG("Restore data should not be set on checkpoint: it may be overwritten on restore");
+      ok = false;
+    }
+
+    return ok;
   }
 
   bool can_configure(const char* key) const {
@@ -710,7 +724,9 @@ int criuengine::checkpoint() {
     LOG("%s must be set before checkpoint", opt_image_location);
     return -1;
   }
-  require_defaults(CRLIB_OPTION_FLAG_CHECKPOINT, "checkpoint");
+  if (!require_defaults(CRLIB_OPTION_FLAG_CHECKPOINT, "checkpoint")) {
+    return -1;
+  }
 
   if (!image_constraints_persist(common(), _image_location) ||
       !image_score_persist(common(), _image_location)) {
@@ -846,7 +862,9 @@ int criuengine::restore() {
     LOG("%s must be set before restore", opt_image_location);
     return -1;
   }
-  require_defaults(CRLIB_OPTION_FLAG_RESTORE, "restore");
+  if (!require_defaults(CRLIB_OPTION_FLAG_RESTORE, "restore")) {
+    return -1;
+  }
 
   if (!image_constraints_validate(static_cast<crlib_conf_t *>(this), _image_location)) {
     return -1;

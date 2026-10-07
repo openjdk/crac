@@ -256,7 +256,6 @@ public:
 #define CHECK_OPT(id, ctype, cdef, flags, ...) \
   if (!_##id.is_default && !((flags) & flag)) { \
     LOG(#id " has no effect on %s", event); \
-    ok = false; \
   }
     CHECKED_OPTIONS(CHECK_OPT)
 #undef CHECK_OPT

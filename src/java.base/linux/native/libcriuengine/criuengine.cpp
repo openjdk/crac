@@ -712,6 +712,14 @@ int criuengine::checkpoint() {
   }
   require_defaults(CRLIB_OPTION_FLAG_CHECKPOINT, "checkpoint");
 
+  // API does not mandate clearing restore data before checkpoint, but not doing so is probably an
+  // error (stale value from previous restore).
+  // The current implementation always overwrites it on successful restore anyway, even when the
+  // restoring process has not actually set it.
+  if (restore_data() != 0) {
+    LOG("Warning: restore data is not expected to be set on checkpoint, it will get overwritten");
+  }
+
   if (!image_constraints_persist(common(), _image_location) ||
       !image_score_persist(common(), _image_location)) {
     return -1;

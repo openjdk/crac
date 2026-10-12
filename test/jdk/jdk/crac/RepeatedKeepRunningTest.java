@@ -32,33 +32,45 @@ import java.nio.file.Path;
  * @test
  * @requires os.family == "linux"
  * @library /test/lib
- * @build RepeatedCheckpointTest
+ * @build RepeatedKeepRunningTest
  * @run driver jdk.test.lib.crac.CracTest
  */
-public class RepeatedCheckpointTest implements CracTest {
-    private static final int NUM_CHECKPOINTS = 3;
-    private static final Path DO_CHECKPOINTS_MARKER = Path.of("do-checkpoints-marker");
+public class RepeatedKeepRunningTest implements CracTest {
+    private static final int NUM_CHAINED_CHECKPOINTS = 3;
+    private static final Path MAKE_CHECKPOINT_CHAIN_MARKER = Path.of("make-checkpoint-chain");
+    private static final Path OUT_OF_CHAIN_IMAGE = Path.of("cr-ooc");
 
     @Override
     public void test() throws Exception {
-        Files.createFile(DO_CHECKPOINTS_MARKER);
+        // N chained checkpoint/restores at (1)
+        Files.createFile(MAKE_CHECKPOINT_CHAIN_MARKER);
         new CracBuilder().imageDir("cr%g").engineOptions("keep_running=true")
                 .doCheckpointToAnalyze().shouldHaveExitValue(0);
+        Files.delete(MAKE_CHECKPOINT_CHAIN_MARKER);
 
-        Files.delete(DO_CHECKPOINTS_MARKER); // Do not create new checkpoints, we want to test the ones already created
-        final var restoreBuilder = new CracBuilder();
-        for (int i = 0; i < NUM_CHECKPOINTS; i++) {
-            restoreBuilder.imageDir("cr" + (i + 1)).doRestore(); // %g starts from 1
+        final var builder = new CracBuilder().vmOption("-XX:CRaCCheckpointTo=" + OUT_OF_CHAIN_IMAGE);
+        for (int i = 0; i < NUM_CHAINED_CHECKPOINTS; i++) {
+            // Restore from a certain generation in the chain at (1), checkpoint/restore at (2)
+            builder.imageDir("cr" + (i + 1) /* %g starts from 1 */).doRestore();
+            // Restore from (2)
+            builder.imageDir(OUT_OF_CHAIN_IMAGE.toString()).doRestore();
         }
     }
 
     @Override
     public void exec() throws Exception {
         final var mxBean = CRaCMXBean.getCRaCMXBean();
-        for (int i = 0; i < NUM_CHECKPOINTS && Files.exists(DO_CHECKPOINTS_MARKER); i++) {
+
+        for (int i = 0; i < NUM_CHAINED_CHECKPOINTS && Files.exists(MAKE_CHECKPOINT_CHAIN_MARKER); i++) {
             System.out.println("Checkpoint #" + (i + 1));
-            mxBean.checkpointRestore();
+            mxBean.checkpointRestore(); // 1) N checkpoints without real restores in-between
         }
+
+        if (!Files.exists(MAKE_CHECKPOINT_CHAIN_MARKER)) {
+            System.out.println("Out-of-chain checkpoint");
+            mxBean.checkpointRestore(); // 2) Checkpoint after a real restore from (1)
+        }
+
         System.out.println("Completed");
     }
 }

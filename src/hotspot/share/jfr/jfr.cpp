@@ -30,6 +30,7 @@
 #include "jfr/leakprofiler/leakProfiler.hpp"
 #include "jfr/periodic/jfrOSInterface.hpp"
 #include "jfr/recorder/checkpoint/jfrCheckpointManager.hpp"
+#include "jfr/recorder/checkpoint/types/traceid/jfrTraceId.inline.hpp"
 #include "jfr/recorder/jfrRecorder.hpp"
 #include "jfr/recorder/repository/jfrEmergencyDump.hpp"
 #include "jfr/recorder/repository/jfrRepository.hpp"
@@ -37,6 +38,7 @@
 #include "jfr/recorder/service/jfrRecorderService.hpp"
 #include "jfr/support/jfrClassDefineEvent.hpp"
 #include "jfr/support/jfrKlassExtension.hpp"
+#include "jfr/support/jfrKlassUnloading.hpp"
 #include "jfr/support/jfrResolution.hpp"
 #include "jfr/support/jfrThreadLocal.hpp"
 #include "jfr/support/methodtracer/jfrMethodTracer.hpp"
@@ -48,7 +50,7 @@
 #include "runtime/java.hpp"
 #include "runtime/javaThread.hpp"
 #include "runtime/os.hpp"
-
+#include "runtime/safepoint.hpp"
 
 bool Jfr::is_enabled() {
   return JfrRecorder::is_enabled();
@@ -203,6 +205,26 @@ void Jfr::after_restore() {
 void Jfr::on_report_java_out_of_memory() {
   if (CrashOnOutOfMemoryError && JfrRecorder::is_recording()) {
     JfrRecorderService::emit_leakprofiler_events_on_oom();
+  }
+}
+
+void Jfr::on_definition(const InstanceKlass* ik, JavaThread* jt) {
+  const bool from_boot_loader_modules_image = JfrTraceId::has_preload_bootloader_bit(ik);
+  if (from_boot_loader_modules_image) {
+    JfrTraceId::clear_preload_bootloader_bit(ik);
+  }
+  if (JfrTraceId::has_preload_sticky_bit(ik)) {
+    assert(JfrMethodTracer::in_use(), "invariant");
+    JfrMethodTracer::on_definition(ik, jt);
+  }
+  JfrClassDefineEvent::send_event(ik, from_boot_loader_modules_image, jt);
+}
+
+void Jfr::on_deallocation(const Klass* k) {
+  assert(k != nullptr, "invariant");
+  assert(SafepointSynchronize::is_at_safepoint(), "only called at safepoint");
+  if (JfrMethodTracer::in_use() && JfrTraceId::has_sticky_bit(k)) {
+    JfrKlassUnloading::add_to_unloaded_set(k);
   }
 }
 

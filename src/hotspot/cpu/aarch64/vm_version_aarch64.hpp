@@ -209,8 +209,6 @@ public:
     CPU_MODEL_ARM_NEOVERSE_N3   = 0xd8e,
   };
 
-  STATIC_ASSERT(sizeof(_features) * BitsPerByte >= MAX_CPU_FEATURES);
-
   // CPU feature flags vector, can be affected by VM settings.
   static VM_Features _features;
 

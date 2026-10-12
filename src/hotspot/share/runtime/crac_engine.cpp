@@ -396,7 +396,7 @@ bool CracEngine::configure_image_location(const char *image_location) {
   }
 
   os::free(_image_location);
-  _image_location = os::strdup_check_oom(image_location);
+  _image_location = os::strdup_check_oom(image_location, mtInternal);
   return true;
 }
 

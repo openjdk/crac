@@ -141,6 +141,7 @@ public:
   static constexpr char glibc_prefix[] = ":glibc.cpu.hwcaps=";
   static constexpr size_t glibc_prefix_len = sizeof(glibc_prefix) - 1;
 #endif //LINUX
+  static bool include_cpu_feature_active;
   static void print_using_features_cr();
   static void insert_features_names(VM_Version::VM_Features features, outputStream& os);
   // The returned string needs a ResourceMark.

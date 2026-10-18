@@ -162,6 +162,7 @@ static const int stub_size = 2550;
 
 VM_Version::VM_Features VM_Version::_features;
 VM_Version::VM_Features VM_Version::_cpu_features;
+bool VM_Version::include_cpu_feature_active;
 
 extern "C" {
   typedef void (*get_cpu_info_stub_t)(void*);

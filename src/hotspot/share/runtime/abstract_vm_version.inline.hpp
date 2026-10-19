@@ -88,8 +88,8 @@ bool VM_Version::glibc_env_set(char *disable_str) {
   char *env_val = disable_str;
   const char *env = getenv(TUNABLES_NAME);
   bool from_reexec = getenv(REEXEC_NAME) != nullptr;
-  if (env && (strcmp(env, env_val) == 0 || (!INCLUDE_CPU_FEATURE_ACTIVE && from_reexec))) {
-    if (!INCLUDE_CPU_FEATURE_ACTIVE) {
+  if (env && (strcmp(env, env_val) == 0 || (!_include_cpu_feature_active && from_reexec))) {
+    if (!_include_cpu_feature_active) {
       if (ShowCPUFeatures) {
         tty->print_cr("Environment variable already set, glibc CPU_FEATURE_ACTIVE is unavailable - re-exec suppressed: " TUNABLES_NAME "=%s", env);
       }
@@ -199,12 +199,7 @@ bool VM_Version::glibc_not_using() {
   if (_cpu_features_ignore)
     return true;
 
-  VM_Features features_expected;
-  features_expected.set_all_features();
-  if (!INCLUDE_CPU_FEATURE_ACTIVE) {
-    features_expected = _features;
-  }
-  VM_Features shouldnotuse = features_expected & ~_features;
+  VM_Features shouldnotuse = _cpu_features & ~_features;
 
 #ifndef ASSERT
   if (shouldnotuse.empty())
@@ -236,7 +231,7 @@ bool VM_Version::glibc_not_using() {
 #define EXCESSIVE_HANDLED(tunables) shouldnotuse_handled(PASTE_TOKENS(CPU_, tunables), STR(tunables))
 
 #if INCLUDE_CPU_FEATURE_ACTIVE
-# define FEATURE_ACTIVE(tunables) CPU_FEATURE_ACTIVE(tunables)
+# define FEATURE_ACTIVE(tunables) (!_include_cpu_feature_active || CPU_FEATURE_ACTIVE(tunables))
 #else
 # define FEATURE_ACTIVE(tunables) true
 #endif
@@ -305,6 +300,14 @@ void VM_Version::print_using_features_cr() {
 void VM_Version::cpu_features_init() {
   assert(!CPUFeatures == FLAG_IS_DEFAULT(CPUFeatures), "CPUFeatures parsing");
   assert((CPUFeatures_mandatory() & ~_features).empty(), "machine is missing mandatory features");
+
+  _include_cpu_feature_active = INCLUDE_CPU_FEATURE_ACTIVE != 0;
+  if (!FLAG_IS_DEFAULT(IncludeCpuFeatureActive)) {
+    if (IncludeCpuFeatureActive && !INCLUDE_CPU_FEATURE_ACTIVE) {
+      vm_exit_during_initialization("-XX:+IncludeCpuFeatureActive is not available on this platform");
+    }
+    _include_cpu_feature_active = IncludeCpuFeatureActive;
+  }
 
   VM_Features CPUFeatures_parsed = CPUFeatures_parse(CPUFeatures);
   auto features_missing_on_machine = (CPUFeatures_parsed & ~_features).aot_code_cache_features();

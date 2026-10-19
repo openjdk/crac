@@ -92,6 +92,7 @@ bool VM_Version::_ic_ivau_trapped;
 
 VM_Version::VM_Features VM_Version::_features;
 VM_Version::VM_Features VM_Version::_cpu_features;
+bool VM_Version::_include_cpu_feature_active;
 
 const VM_Features::FeaturesNames VM_Version::_features_names = VM_Features::make_features_names();
 

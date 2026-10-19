@@ -105,6 +105,8 @@ protected:
 
   static SpinWait _spin_wait;
 
+  static bool _include_cpu_feature_active;
+
   // Read additional info using OS-specific interfaces
   static void get_os_cpu_info();
   static void check_os_cpu_info();

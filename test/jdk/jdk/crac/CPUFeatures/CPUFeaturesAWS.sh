@@ -287,7 +287,7 @@ checkpoint_restore_icfa() {
 
 icfacmdline_set() {
   if [ $include_cpu_feature_active -eq 1 ];then
-    icfacmdline="-XX:+UnlockDiagnosticVMOptions -XX:+IncludeCpuFeatureActive" 
+    icfacmdline="-XX:+UnlockDiagnosticVMOptions -XX:+IncludeCpuFeatureActive"
   else
     icfacmdline="-XX:+UnlockDiagnosticVMOptions -XX:-IncludeCpuFeatureActive"
   fi

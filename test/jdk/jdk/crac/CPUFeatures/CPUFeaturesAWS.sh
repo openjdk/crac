@@ -74,7 +74,7 @@ internal_restore() {
 internal_reexec() {
   javasetup
   set +e
-  ! bin/java $enginecmdline -XX:+ShowCPUFeatures --version "$@"|grep 'Re-exec of java with new environment variable'
+  ! bin/java $enginecmdline -XX:+ShowCPUFeatures "$@" --version|grep 'Re-exec of java with new environment variable'
   exit $?
 }
 if [ "${1#internal_}" != "$1" ];then

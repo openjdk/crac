@@ -74,7 +74,7 @@ internal_restore() {
 internal_reexec() {
   javasetup
   set +e
-  ! bin/java $enginecmdline -XX:+ShowCPUFeatures --version|grep 'Re-exec of java with new environment variable'
+  ! bin/java $enginecmdline -XX:+ShowCPUFeatures --version "$@"|grep 'Re-exec of java with new environment variable'
   exit $?
 }
 if [ "${1#internal_}" != "$1" ];then
@@ -252,7 +252,7 @@ checkpoint_restore_one() {
   echo checkpoint_restore called from line=$lastline engine=$engine kind_checkpoint=$kind_checkpoint kind_restore=$kind_restore include_cpu_feature_active=$include_cpu_feature_active expect_error=$expect_error checkpoint_args=$checkpoint_args restore_args=$restore_args
   kind=$kind_checkpoint
   setup
-  snapshot="$(runssh "INCLUDE_CPU_FEATURE_ACTIVE=$include_cpu_feature_active ./CPUFeaturesAWS.sh internal_checkpoint $enginecmdline $checkpoint_args" 2>&1|tee /proc/self/fd/2)"
+  snapshot="$(runssh "./CPUFeaturesAWS.sh internal_checkpoint $enginecmdline $icfacmdline $checkpoint_args" 2>&1|tee /proc/self/fd/2)"
   local r="$engine-icfa$include_cpu_feature_active"
   if [ "$expectrc" = -1 ] && echo "$snapshot"|grep "$expect_error";then
     r="$r-PASS"
@@ -262,7 +262,7 @@ checkpoint_restore_one() {
       setup
       runssh "rm -rf cr;ssh -o 'UserKnownHostsFile /dev/null' -o 'StrictHostKeyChecking no' -i key $(ipaddr $kind_checkpoint) tar cf - cr|sudo tar xf -"
     fi
-    restore="$(runssh "INCLUDE_CPU_FEATURE_ACTIVE=$include_cpu_feature_active ./CPUFeaturesAWS.sh internal_restore $enginecmdline $restore_args" 2>&1|tee /proc/self/fd/2)"
+    restore="$(runssh "./CPUFeaturesAWS.sh internal_restore $enginecmdline $restore_args" 2>&1|tee /proc/self/fd/2)"
     if echo "$restore"|grep -w RC=$expectrc && echo "$restore"|grep "$expect_error";then
       r="$r-PASS"
     else
@@ -285,8 +285,17 @@ checkpoint_restore_icfa() {
   checkpoint_restore_criu "$@"
 }
 
+icfacmdline_set() {
+  if [ $include_cpu_feature_active -eq 1 ];then
+    icfacmdline="-XX:+UnlockDiagnosticVMOptions -XX:-IncludeCpuFeatureActive" 
+  else
+    icfacmdline="-XX:+UnlockDiagnosticVMOptions -XX:+IncludeCpuFeatureActive"
+  fi
+}
+
 checkpoint_restore() {
   for include_cpu_feature_active in $include_cpu_feature_active_list;do
+    icfacmdline_set
     checkpoint_restore_icfa "$@"
   done
 }
@@ -294,7 +303,7 @@ checkpoint_restore() {
 arch="$(file $TESTJAVA/bin/java)"
 
 include_cpu_feature_active_list="0"
-if ! INCLUDE_CPU_FEATURE_ACTIVE=1 $TESTJAVA/bin/java -version 2>&1|grep 'env(INCLUDE_CPU_FEATURE_ACTIVE)="1" is not available on this platform';then
+if ! $TESTJAVA/bin/java -XX:+UnlockDiagnosticVMOptions -XX:+IncludeCpuFeatureActive -version 2>&1|grep -- '-XX:+IncludeCpuFeatureActive is not available on this platform';then
   include_cpu_feature_active_list="$include_cpu_feature_active_list 1"
 fi
 
@@ -345,21 +354,24 @@ lastline="$LINENO"
 if [ -z "$only" ] || echo "$only"|grep -w $lastline;then
   kind=m1.small
   setup
-  r="icfa$include_cpu_feature_active"
-  if runssh "INCLUDE_CPU_FEATURE_ACTIVE=$include_cpu_feature_active ./CPUFeaturesAWS.sh internal_reexec";then
-    r="$r-PASS"
-  else
-    r="$r-FAIL"
-    exitcode=1
-  fi
-  results="$results\n$lastline:$r"
+  for include_cpu_feature_active in $include_cpu_feature_active_list;do
+    icfacmdline_set
+    r="icfa$include_cpu_feature_active"
+    if runssh "./CPUFeaturesAWS.sh internal_reexec $icfacmdline";then
+      r="$r-PASS"
+    else
+      r="$r-FAIL"
+      exitcode=1
+    fi
+    results="$results\n$lastline:$r"
+  done
 fi
 
 # JDK-8394807
 checkpoint_restore "$LINENO" c6i.xlarge c6a.xlarge "" "-XX:CPUFeatures=0x234e1c05ddfbff,0xfcc0000000000000" ""
 checkpoint_restore "$LINENO" c6a.xlarge c6i.xlarge "" "-XX:CPUFeatures=0x234e1c05ddfbff,0xfcc0000000000000" ""
 
-## ZULU-99795
+# ZULU-99795
 checkpoint_restore "$LINENO" c7a.medium c6i.large "" "-XX:CPUFeatures=0x4fb7fff9dddfbf7,0xdcc0000000000000" ""
 checkpoint_restore "$LINENO" c6i.large c7a.medium "" "-XX:CPUFeatures=0x4fb7fff9dddfbf7,0xdcc0000000000000" ""
 

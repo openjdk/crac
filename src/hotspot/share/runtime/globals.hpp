@@ -2095,7 +2095,11 @@ const int ObjectAlignmentInBytes = 8;
           "Message reported when CPU features checks fails. This string "   \
           "can contain placeholders '%c', '%s' or '%m' for current CPU "    \
           "features, features stored in the image or common (intersection " \
-          "of current & stored) features respectively.")               \
+          "of current & stored) features respectively.")                    \
+                                                                            \
+  product(bool, IncludeCpuFeatureActive, true, DIAGNOSTIC,                  \
+          "Allow disabling glibc's detected CPU_FEATURE_ACTIVE macro. "     \
+          "Useful for testing CRaC as if built with an older glibc.")       \
                                                                             \
   product(bool, UseObjectMonitorTable, true, DIAGNOSTIC,                    \
           "Use a table to record inflated monitors rather than the first "  \

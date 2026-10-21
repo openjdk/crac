@@ -301,7 +301,7 @@ class os: AllStatic {
   // Before restore returns the same value as elapsed_counter()
   static jlong elapsed_counter_since_restore();
 
-  static double elapsed_process_cpu_time();
+  [[nodiscard]] static bool elapsed_process_cpu_time(double& value);
 
   // Return current local time in a string (YYYY-MM-DD HH:MM:SS).
   // It is MT safe, but not async-safe, as reading time zone
@@ -1013,9 +1013,9 @@ class os: AllStatic {
 
   // handles null pointers
   static void  free    (void *memblock);
-  static char* strdup(const char *, MemTag mem_tag = mtInternal);  // Like strdup
+  static char* strdup(const char *, MemTag mem_tag);  // Like strdup
   // Like strdup, but exit VM when strdup() returns null
-  static char* strdup_check_oom(const char*, MemTag mem_tag = mtInternal);
+  static char* strdup_check_oom(const char*, MemTag mem_tag);
 
   // SocketInterface (ex HPI SocketInterface )
   static int socket_close(int fd);

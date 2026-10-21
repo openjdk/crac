@@ -88,6 +88,7 @@ static jboolean _have_classpath = JNI_FALSE;
 static const char *_fVersion;
 static jboolean _wc_enabled = JNI_FALSE;
 static jboolean dumpSharedSpaces = JNI_FALSE; /* -Xshare:dump */
+static const char *launchModeNames[] = { "Unknown", "Main class", "JAR file", "Module", "Source" };
 
 /*
  * Values that will be stored into splash screen environment variables.
@@ -728,7 +729,8 @@ IsModuleOption(const char* name) {
            JLI_StrCmp(name, "--add-exports") == 0 ||
            JLI_StrCmp(name, "--add-opens") == 0 ||
            JLI_StrCmp(name, "--add-reads") == 0 ||
-           JLI_StrCmp(name, "--patch-module") == 0;
+           JLI_StrCmp(name, "--patch-module") == 0 ||
+           JLI_StrCmp(name, "--enable-final-field-mutation") == 0;
 }
 
 static jboolean
@@ -740,7 +742,21 @@ IsLongFormModuleOption(const char* name) {
            JLI_StrCCmp(name, "--limit-modules=") == 0 ||
            JLI_StrCCmp(name, "--add-exports=") == 0 ||
            JLI_StrCCmp(name, "--add-reads=") == 0 ||
-           JLI_StrCCmp(name, "--patch-module=") == 0;
+           JLI_StrCCmp(name, "--patch-module=") == 0 ||
+           JLI_StrCCmp(name, "--enable-final-field-mutation=") == 0;
+}
+
+/*
+ * Test if the given name is a non-module VM white-space option that
+ * will be passed to the VM with its corresponding long-form option
+ * name and "=" delimiter.
+ */
+static jboolean
+IsNonModuleVMWhiteSpaceOption(const char* name) {
+    return JLI_StrCmp(name, "--illegal-native-access") == 0 ||
+           JLI_StrCmp(name, "--illegal-final-field-mutation") == 0 ||
+           JLI_StrCmp(name, "--sun-misc-unsafe-memory-access") == 0 ||
+           JLI_StrCmp(name, "--finalization") == 0;
 }
 
 /*
@@ -749,7 +765,8 @@ IsLongFormModuleOption(const char* name) {
 jboolean
 IsWhiteSpaceOption(const char* name) {
     return IsModuleOption(name) ||
-           IsLauncherOption(name);
+           IsLauncherOption(name) ||
+           IsNonModuleVMWhiteSpaceOption(name);
 }
 
 /*
@@ -1126,7 +1143,7 @@ GetOpt(int *pargc, char ***pargv, char **poption, char **pvalue) {
         }
         kind = IsLauncherMainOption(arg) ? LAUNCHER_MAIN_OPTION
                                          : LAUNCHER_OPTION_WITH_ARGUMENT;
-    } else if (IsModuleOption(arg)) {
+    } else if (IsModuleOption(arg) || IsNonModuleVMWhiteSpaceOption(arg)) {
         kind = VM_LONG_OPTION_WITH_ARGUMENT;
         if (has_arg) {
             value = *argv;
@@ -1240,6 +1257,12 @@ ParseArguments(int *pargc, char ***pargv,
             } else if (kind == VM_LONG_OPTION_WITH_ARGUMENT) {
                 AddLongFormOption(option, value);
             }
+        /*
+         * Normalize a missing argument to the equivalent "--option=" form
+         * and let the subsequent option validation handle the empty value.
+         */
+        } else if (!has_arg && IsNonModuleVMWhiteSpaceOption(arg)) {
+            AddLongFormOption(option, "");
 /*
  * Error missing argument
  */
@@ -1444,9 +1467,11 @@ SetupSplashScreenEnvVars(const char *splash_file_path, char *jar_path) {
     if ((res = JLI_ParseManifest(jar_path, &info)) != 0) {
         JLI_FreeManifest(); // cleanup any manifest structure
         if (res == -1) {
-            JLI_ReportErrorMessage(JAR_ERROR2, jar_path);
+            JLI_ReportErrorMessage(JAR_ERROR_CANNOT_OPEN, jar_path);
+        } else if (res == -2) {
+            JLI_ReportErrorMessage(JAR_ERROR_MANIFEST_MISSING, jar_path);
         } else {
-            JLI_ReportErrorMessage(JAR_ERROR3, jar_path);
+            JLI_ReportErrorMessage(JAR_ERROR_MANIFEST_PARSE, jar_path);
         }
         exit(1);
     }

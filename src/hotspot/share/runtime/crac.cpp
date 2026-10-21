@@ -596,7 +596,7 @@ static bool apply_labels(const char* labels, CracEngine* engine, bool (CracEngin
   if (labels == nullptr) {
     return true;
   }
-  char* dup = os::strdup_check_oom(labels);
+  char* dup = os::strdup_check_oom(labels, mtInternal);
   char *ptr = dup;
   char *key_value;
   while ((key_value = strtok_r(ptr, ",", &ptr)) != nullptr) {
@@ -870,8 +870,12 @@ GrowableArray<crac::score> crac::get_image_scores_from_jvm() {
   scores.append({"vm.crac.generation", static_cast<double>(_generation)});
   scores.append({"vm.restore.nativeTime", static_cast<double>(_generation > 1 ? (_restore_native_end_nanos - _restore_start_nanos) / NANOSECS_PER_MILLISEC : -1)});
 
+  double process_cpu_time;
+  if (!os::elapsed_process_cpu_time(process_cpu_time)) {
+    process_cpu_time = 0;
+  }
   // Same as OperatingSystemMXBean.getProcessCpuTime() but in milliseconds
-  scores.append({"vm.processCpuTime", os::elapsed_process_cpu_time() * 1000});
+  scores.append({"vm.processCpuTime", process_cpu_time * 1000});
   scores.append({"vm.availableProcessors", static_cast<double>(os::active_processor_count())});
 
   // Same as corresponding methods of java.lang.Runtime

@@ -564,9 +564,9 @@ bool criuengine::execute_criu(const ArgsBuilder& args) const {
 
   // grand-child
   pid_t parent = getppid();
-  int tries = 0;
-  while (parent != 1 && tries < 100) { // 100 gives about 50ms of sleep in total
-      usleep(10 * (++tries));
+  int tries = 30000;
+  while (parent != 1 && 0 < tries--) { // 30000 gives about 3 seconds of sleep in total
+      usleep(100);
       parent = getppid();
   }
 

@@ -314,6 +314,7 @@ JavaThread::JavaThread(MemTag mem_tag) :
   Thread(mem_tag),
   // Initialize fields
   _on_thread_list(false),
+  _smr_delete_is_safe(false),
   DEBUG_ONLY(_java_call_counter(0) COMMA)
   _entry_point(nullptr),
   _deopt_mark(nullptr),
@@ -1167,7 +1168,7 @@ void JavaThread::make_zombies() {
       // it is a Java nmethod
       nmethod* nm = CodeCache::find_nmethod(fst.current()->pc());
       assert(nm != nullptr, "did not find nmethod");
-      nm->make_not_entrant(nmethod::InvalidationReason::ZOMBIE, false /* don't interfere with testing/debugging */);
+      nm->make_not_entrant(nmethod::InvalidationReason::ZOMBIE, false, false /* don't interfere with testing/debugging */);
     }
   }
 }

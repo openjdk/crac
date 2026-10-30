@@ -429,9 +429,15 @@ Symbol* Method::klass_name() const {
 }
 
 void Method::metaspace_pointers_do(MetaspaceClosure* it) {
-  log_trace(aot)("Iter(Method): %p", this);
-
-  if (!method_holder()->is_rewritten() || Arguments::is_valhalla_enabled()) {
+  LogStreamHandle(Trace, aot) lsh;
+  if (lsh.is_enabled() && method_holder() != nullptr) {
+    lsh.print("Iter(Method): %p ", this);
+    print_external_name(&lsh);
+    lsh.cr();
+  }
+  // holder is null for MH intrinsic methods
+  if ((method_holder() != nullptr && !method_holder()->is_rewritten()) ||
+      Arguments::is_valhalla_enabled()) {
     it->push(&_constMethod, MetaspaceClosure::_writable);
   } else {
     it->push(&_constMethod);
@@ -1095,7 +1101,7 @@ void Method::set_native_function(address function, bool post_event_flag) {
   // If so, we have to make it not_entrant.
   nmethod* nm = code(); // Put it into local variable to guard against concurrent updates
   if (nm != nullptr) {
-    nm->make_not_entrant(nmethod::InvalidationReason::SET_NATIVE_FUNCTION, false /* replaced by native function */);
+    nm->make_not_entrant(nmethod::InvalidationReason::SET_NATIVE_FUNCTION, false, false /* replaced by native function */);
   }
 }
 

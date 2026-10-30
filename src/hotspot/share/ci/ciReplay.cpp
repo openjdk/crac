@@ -46,7 +46,6 @@
 #include "oops/klass.inline.hpp"
 #include "oops/method.inline.hpp"
 #include "oops/oop.inline.hpp"
-#include "oops/oopCast.inline.hpp"
 #include "oops/resolvedIndyEntry.hpp"
 #include "oops/valueKlass.inline.hpp"
 #include "prims/jvmtiExport.hpp"
@@ -805,11 +804,11 @@ class CompileReplay : public StackObj {
     // Make sure the existence of a prior compile doesn't stop this one
     nmethod* nm = (entry_bci != InvocationEntryBci) ? method->lookup_osr_nmethod_for(entry_bci, comp_level, true) : method->code();
     if (nm != nullptr) {
-      nm->make_not_entrant(nmethod::InvalidationReason::CI_REPLAY, false /* recompiling by ourselves */);
+      nm->make_not_entrant(nmethod::InvalidationReason::CI_REPLAY, false, false /* recompiling by ourselves */);
     }
     replay_state = this;
     CompileBroker::compile_method(methodHandle(THREAD, method), entry_bci, comp_level,
-                                  0, CompileTask::Reason_Replay, THREAD);
+                                  0, nullptr, CompileTask::Reason_Replay, THREAD);
     replay_state = nullptr;
   }
 

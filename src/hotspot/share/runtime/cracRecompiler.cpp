@@ -119,8 +119,9 @@ static void request_recompilation(CompilationInfo *info) {
   // Note: this does not guarantee the method will get compiled; e.g. there may
   // already be compilation tasks for this method (even if on another level or
   // OSR-BCI) or it may have gotten not-compilable since it was recorded.
+  // TODO: investigate whether it makes sense to find AOT cache entry for this
   CompileBroker::compile_method(methodHandle(THREAD, info->method()), info->bci(), info->comp_level(),
-                                0, CompileTask::Reason_CRaC, THREAD);
+                                0, nullptr, CompileTask::Reason_CRaC, THREAD);
   guarantee(!HAS_PENDING_EXCEPTION, "the method should have been successfully compiled before");
 }
 

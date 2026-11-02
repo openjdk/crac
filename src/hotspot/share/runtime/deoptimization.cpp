@@ -26,6 +26,7 @@
 #include "classfile/symbolTable.hpp"
 #include "classfile/systemDictionary.hpp"
 #include "classfile/vmClasses.hpp"
+#include "code/aotCodeCache.hpp"
 #include "code/codeCache.hpp"
 #include "code/debugInfoRec.hpp"
 #include "code/nmethod.hpp"
@@ -1635,7 +1636,7 @@ void Deoptimization::deoptimize(JavaThread* thread, frame fr, DeoptReason reason
 address Deoptimization::deoptimize_for_missing_exception_handler(nmethod* nm, bool make_not_entrant) {
   // there is no exception handler for this pc => deoptimize
   if (make_not_entrant) {
-    nm->make_not_entrant(nmethod::InvalidationReason::MISSING_EXCEPTION_HANDLER, true /* OK to recompile */);
+    nm->make_not_entrant(nmethod::InvalidationReason::MISSING_EXCEPTION_HANDLER, false, true /* OK to recompile */);
   }
 
   // Use Deoptimization::deoptimize for all of its side-effects:
@@ -1829,8 +1830,11 @@ static void log_uncommon_trap(nmethod* nm, Method* tm, intptr_t pc, frame& fr, i
     if (class_name != nullptr) {
       ls.print("%s class_name=%s ", unresolved ? "unresolved" : "", class_name);
     }
-    ls.print("cid=%4d %s level=%d ",
-             nm->compile_id(), (is_osr ? "osr" : ""), nm->comp_level());
+    ls.print("cid=%4d %s%s%s level=%d ",
+             nm->compile_id(), (is_osr ? "osr" : "   "),
+             (nm->is_aot() ? "aot " : ""),
+             (nm->aot_preloaded() ? "preload " : ""),
+             nm->comp_level());
     ls.print_cr("pc=" INTPTR_FORMAT " relative_pc=" INTPTR_FORMAT,
              pc, fr.pc() - nm->code_begin());
 
@@ -1881,7 +1885,7 @@ JRT_ENTRY(void, Deoptimization::uncommon_trap_inner(JavaThread* current, jint tr
     gather_statistics(reason, action, trap_bc);
 
     // Ensure that we can record deopt. history:
-    bool create_if_missing = ProfileTraps;
+    bool create_if_missing = ProfileTraps || AOTCodeCache::is_using_code();
 
     methodHandle profiled_method;
     profiled_method = trap_method;
@@ -2188,7 +2192,7 @@ JRT_ENTRY(void, Deoptimization::uncommon_trap_inner(JavaThread* current, jint tr
 
     // Recompile
     if (make_not_entrant) {
-      if (!nm->make_not_entrant(nmethod::InvalidationReason::UNCOMMON_TRAP, true /* OK to recompile */)) {
+      if (!nm->make_not_entrant(nmethod::InvalidationReason::UNCOMMON_TRAP, false, true /* OK to recompile */)) {
         return; // the call did not change nmethod's state
       }
 

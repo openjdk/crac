@@ -2140,6 +2140,9 @@ public final class System {
             public boolean isReflectivelyOpened(Module m, String pn, Module other) {
                 return m.isReflectivelyOpened(pn, other);
             }
+            public boolean hasModuleReflectionData() {
+                return Module.hasReflectionData();
+            }
             public void addEnableNativeAccess(Module m) {
                 m.implAddEnableNativeAccess();
             }

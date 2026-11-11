@@ -368,12 +368,12 @@ if [ -z "$only" ] || echo "$only"|grep -w $lastline;then
 fi
 
 # JDK-8394807
-checkpoint_restore "$LINENO" c6i.xlarge c6a.xlarge "" "-XX:CPUFeatures=0x234e1c05ddfbff,0xfcc0000000000000" ""
-checkpoint_restore "$LINENO" c6a.xlarge c6i.xlarge "" "-XX:CPUFeatures=0x234e1c05ddfbff,0xfcc0000000000000" ""
+checkpoint_restore "$LINENO" c6i.xlarge c6a.xlarge "" "-XX:CPUFeatures=0x23461c05ddfbf7,0xfcc0000000000000" ""
+checkpoint_restore "$LINENO" c6a.xlarge c6i.xlarge "" "-XX:CPUFeatures=0x23461c05ddfbf7,0xfcc0000000000000" ""
 
 # ZULU-99795
-checkpoint_restore "$LINENO" c7a.medium c6i.large "" "-XX:CPUFeatures=0x4fb7fff9dddfbf7,0xdcc0000000000000" ""
-checkpoint_restore "$LINENO" c6i.large c7a.medium "" "-XX:CPUFeatures=0x4fb7fff9dddfbf7,0xdcc0000000000000" ""
+checkpoint_restore "$LINENO" c7a.medium c6i.large "" "-XX:CPUFeatures=0x4fb77ff9dddfbf7,0xdcc0000000000000" ""
+checkpoint_restore "$LINENO" c6i.large c7a.medium "" "-XX:CPUFeatures=0x4fb77ff9dddfbf7,0xdcc0000000000000" ""
 
 elif echo "$arch"|grep -q ', ARM aarch64, ';then
   debianami=ami-0aed0cf56d6c464bc

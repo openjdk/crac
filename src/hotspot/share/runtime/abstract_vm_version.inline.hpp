@@ -319,7 +319,7 @@ void VM_Version::cpu_features_init() {
     if (!features_missing_on_machine.empty()) {
       LogStream ls(lt);
       ls.print_raw("This machine's CPU features are ");
-      _features.print_numbers(ls);
+      _cpu_features.aot_code_cache_features().print_numbers(ls);
       ls.print_raw(", they are missing the following features required by -XX:CPUFeatures: ");
       features_missing_on_machine.print_numbers(ls);
       ls.print_raw(" = ");

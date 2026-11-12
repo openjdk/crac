@@ -148,6 +148,7 @@ public class TestRedact {
            checkArgument("Java arguments", javaArgs, argument);
            checkArgument("Flags", jvmFlags, argument);
            checkArgument("sun.java.command", systemProperties.get("sun.java.command"), argument);
+           checkArgument("sun.java.crac_command", systemProperties.get("sun.java.crac_command"), argument);
        }
 
        private void checkArgument(String kind, String arguments, String argument) throws Exception {

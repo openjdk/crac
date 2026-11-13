@@ -58,9 +58,9 @@ import jdk.jfr.internal.management.StreamBarrier;
  *
  * {@snippet class="Snippets" region="RecordingStreamOverview"}
  *
- * @since 14
- *
  * @crac The recording is automatically stopped on checkpoint and re-created on restore.
+ *
+ * @since 14
  */
 public final class RecordingStream implements AutoCloseable, EventStream {
 

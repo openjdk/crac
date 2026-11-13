@@ -48,9 +48,9 @@ import jdk.jfr.internal.WriteablePath;
  *
  * {@snippet class="Snippets" region="RecordingOverview"}
  *
- * @since 9
- *
  * @crac The recording is automatically stopped on checkpoint and re-created on restore.
+ *
+ * @since 9
  */
 public final class Recording implements Closeable {
 
@@ -113,6 +113,7 @@ public final class Recording implements Closeable {
         synchronized (r) {
             this.internal = r.newRecording(register, sanitized);
             this.internal.setRecording(this);
+            this.internal.setOriginalRecording(this);
             if (internal.getRecording() != this) {
                 throw new InternalError("Internal recording not properly setup");
             }

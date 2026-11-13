@@ -33,7 +33,6 @@ import java.util.Arrays;
 import java.util.Comparator;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicLong;
-import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.Consumer;
 
@@ -226,13 +225,13 @@ public final class EventDirectoryStream extends AbstractEventStream implements J
                         Logger.log(LogTag.JFR_SYSTEM_PARSER, LogLevel.INFO, "Unexpected chunk with 0 ns duration");
                     }
                 }
+                lock.lock();
                 path = repositoryFiles.nextPath(currentChunkStartNanos + durationNanos, getWaitForChunks());
                 if (path == null) {
                     logStreamEnd("no more chunk files found.");
                     return;
                 }
                 currentChunkStartNanos = repositoryFiles.getTimestamp(path);
-                lock.lock();
                 input.setFile(path);
                 onComplete(endChunkNanos);
                 currentParser = currentParser.newChunkParser();
@@ -308,7 +307,7 @@ public final class EventDirectoryStream extends AbstractEventStream implements J
     @Override
     public void beforeCheckpoint(Context<? extends Resource> context) throws Exception {
         // Ensures that the thread in processRecursionSafe() does not have an open file
-        lock.lock();
+        lock.lockInterruptibly();
     }
 
     @Override

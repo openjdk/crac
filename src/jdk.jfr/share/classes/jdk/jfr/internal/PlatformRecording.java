@@ -87,6 +87,7 @@ public final class PlatformRecording implements AutoCloseable {
     private final LinkedList<RepositoryChunk> chunks = new LinkedList<>();
     private final List<Report> reports = new ArrayList<>();
     private volatile Recording recording;
+    private Recording originalRecording;
     private TimerTask stopTask;
     private TimerTask startTask;
     private boolean shouldWriteActiveRecordingEvent = true;
@@ -543,6 +544,14 @@ public final class PlatformRecording implements AutoCloseable {
 
     public Recording getRecording() {
         return recording;
+    }
+
+    public void setOriginalRecording(Recording r) {
+        originalRecording = r;
+    }
+
+    public Recording getOriginalRecording() {
+        return originalRecording;
     }
 
     @Override

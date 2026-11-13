@@ -432,13 +432,10 @@ public final class RecordingInput implements DataInput, AutoCloseable {
     // Purpose of this method is to reuse block cache from a
     // previous RecordingInput
     public void setFile(Path path) throws IOException {
-        if (file != null) {
-            try {
-                file.close();
-            } catch (IOException e) {
-                // perhaps deleted
-            }
-            file = null;
+        try {
+            file.close();
+        } catch (IOException e) {
+            // perhaps deleted
         }
         initialize(path.toFile());
     }

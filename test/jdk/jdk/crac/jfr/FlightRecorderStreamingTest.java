@@ -23,6 +23,7 @@
 import jdk.crac.management.CRaCMXBean;
 import jdk.jfr.consumer.RecordingStream;
 import jdk.test.lib.crac.CracBuilder;
+import jdk.test.lib.crac.CracEngine;
 import jdk.test.lib.crac.CracTest;
 
 import java.time.Duration;
@@ -32,7 +33,6 @@ import java.util.concurrent.atomic.AtomicReference;
 /**
  * @test FlightRecorderStreamingTest
  * @library /test/lib
- * @requires (os.family == "linux")
  * @build FlightRecorderStreamingTest
  * @run driver jdk.test.lib.crac.CracTest
  */
@@ -41,7 +41,7 @@ public class FlightRecorderStreamingTest implements CracTest {
 
     @Override
     public void test() throws Exception {
-        new CracBuilder().doCheckpointAndRestore();
+        new CracBuilder().engine(CracEngine.SIMULATE).doCheckpoint();
     }
 
     @Override
@@ -53,10 +53,13 @@ public class FlightRecorderStreamingTest implements CracTest {
             rs.startAsync();
             // Wait until we receive at least one event
             latch.get().await();
-            CRaCMXBean.getCRaCMXBean().checkpointRestore();
-            // Wait for some new event to arrive
-            latch.set(new CountDownLatch(1));
-            latch.get().await();
+            // Ensure that third recording still creates our events
+            for (int i = 0; i < 2; ++i) {
+                CRaCMXBean.getCRaCMXBean().checkpointRestore();
+                // Wait for some new event to arrive
+                latch.set(new CountDownLatch(1));
+                latch.get().await();
+            }
         }
     }
 }

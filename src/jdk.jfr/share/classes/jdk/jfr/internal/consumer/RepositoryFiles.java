@@ -41,14 +41,19 @@ import java.util.NavigableMap;
 import java.util.Set;
 import java.util.SortedMap;
 import java.util.TreeMap;
+import java.util.concurrent.locks.ReentrantLock;
 
+import jdk.internal.crac.Core;
+import jdk.internal.crac.JDKResource;
+import jdk.internal.crac.mirror.Context;
+import jdk.internal.crac.mirror.Resource;
 import jdk.jfr.internal.LogLevel;
 import jdk.jfr.internal.LogTag;
 import jdk.jfr.internal.Logger;
 import jdk.jfr.internal.Repository;
 import jdk.jfr.internal.management.HiddenWait;;
 
-public final class RepositoryFiles {
+public final class RepositoryFiles implements JDKResource {
     private static final HiddenWait WAIT_OBJECT = new HiddenWait();
     private static final String DIRECTORY_PATTERN = "DDDD_DD_DD_DD_DD_DD_";
     public static void notifyNewFile() {
@@ -63,11 +68,13 @@ public final class RepositoryFiles {
     private boolean allowSubDirectory;
     private volatile boolean closed;
     private Path repository;
+    private final ReentrantLock lock = new ReentrantLock();
 
     public RepositoryFiles(Path repository, boolean allowSubDirectory) {
         this.repository = repository;
         this.waitObject = repository == null ? WAIT_OBJECT : new HiddenWait();
         this.allowSubDirectory = allowSubDirectory;
+        Core.Priority.JFR.getContext().register(this);
     }
 
     long getTimestamp(Path p) {
@@ -177,6 +184,7 @@ public final class RepositoryFiles {
             repoPath = path;
         }
 
+        lock.lock();
         try (DirectoryStream<Path> dirStream = Files.newDirectoryStream(repoPath)) {
             List<Path> added = new ArrayList<>();
             Set<Path> current = new HashSet<>();
@@ -224,12 +232,15 @@ public final class RepositoryFiles {
             }
 
             return foundNew;
+        } finally {
+            lock.unlock();
         }
     }
 
     private Path findSubDirectory(Path repoPath) {
         FileTime latestTimestamp = null;
         Path latestPath = null;
+        lock.lock();
         try (DirectoryStream<Path> dirStream = Files.newDirectoryStream(repoPath)) {
             for (Path p : dirStream) {
                 String filename = p.getFileName().toString();
@@ -245,6 +256,8 @@ public final class RepositoryFiles {
             }
         } catch (IOException | DirectoryIteratorException e) {
             // Ignore
+        } finally {
+            lock.unlock();
         }
         return latestPath;
     }
@@ -293,5 +306,15 @@ public final class RepositoryFiles {
 
     public boolean hasFixedPath() {
         return repository != null;
+    }
+
+    @Override
+    public void beforeCheckpoint(Context<? extends Resource> context) throws Exception {
+        lock.lockInterruptibly();
+    }
+
+    @Override
+    public void afterRestore(Context<? extends Resource> context) throws Exception {
+        lock.unlock();
     }
 }

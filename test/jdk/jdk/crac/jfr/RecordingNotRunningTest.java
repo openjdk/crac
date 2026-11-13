@@ -23,6 +23,7 @@
 import jdk.crac.management.CRaCMXBean;
 import jdk.jfr.Recording;
 import jdk.test.lib.crac.CracBuilder;
+import jdk.test.lib.crac.CracEngine;
 import jdk.test.lib.crac.CracTest;
 
 import java.io.IOException;
@@ -32,7 +33,6 @@ import java.time.Duration;
 /**
  * @test RecordingNotRunningTest
  * @library /test/lib
- * @requires (os.family == "linux")
  * @build RecordingNotRunningTest
  * @run driver jdk.test.lib.crac.CracTest
  */
@@ -41,7 +41,7 @@ public class RecordingNotRunningTest implements CracTest {
 
     @Override
     public void test() throws Exception {
-        new CracBuilder().doCheckpointAndRestore();
+        new CracBuilder().engine(CracEngine.SIMULATE).doCheckpoint();
     }
 
     @Override

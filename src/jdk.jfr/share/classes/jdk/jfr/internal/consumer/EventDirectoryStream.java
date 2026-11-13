@@ -227,12 +227,12 @@ public final class EventDirectoryStream extends AbstractEventStream implements J
                         Logger.log(LogTag.JFR_SYSTEM_PARSER, LogLevel.INFO, "Unexpected chunk with 0 ns duration");
                     }
                 }
-                lock.lock();
                 path = repositoryFiles.nextPath(currentChunkStartNanos + durationNanos, getWaitForChunks());
                 if (path == null) {
                     logStreamEnd("no more chunk files found.");
                     return;
                 }
+                lock.lock();
                 currentChunkStartNanos = repositoryFiles.getTimestamp(path);
                 input.setFile(path);
                 onComplete(endChunkNanos);

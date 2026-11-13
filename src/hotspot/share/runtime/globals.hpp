@@ -129,7 +129,11 @@ const size_t minimumSymbolTableSize = 1024;
                                                                             \
   product(bool, AOTCompatibleOopCompression, false, DIAGNOSTIC,             \
           "Always use HeapBasedNarrowOop mode, so that AOT code will "      \
-          "always work regardless of runtime heap range")                   \
+          "always work regardless of runtime heap range; this is set "      \
+          "by default when assembling an AOT cache which contains code, "   \
+          "and by default in a production run that uses that AOT cache; "   \
+          "to diagnose possible effects on performance, you can assemble "  \
+          "an AOT cache by disabling either AOTCodeCaching or this flag")   \
                                                                             \
   product(bool, UseCompactObjectHeaders, true,                              \
           "Use compact 64-bit object headers in 64-bit VM")                 \
@@ -460,9 +464,6 @@ const int ObjectAlignmentInBytes = 8;
   product(bool, BytecodeVerificationLocal, false, DIAGNOSTIC,               \
           "Enable the Java bytecode verifier for local classes")            \
                                                                             \
-  develop(bool, VerifyStackAtCalls, false,                                  \
-          "Verify that the stack pointer is unchanged after calls")         \
-                                                                            \
   develop(bool, VerifyCodeCache, false,                                     \
           "Verify code cache on memory allocation/deallocation")            \
                                                                             \
@@ -526,10 +527,10 @@ const int ObjectAlignmentInBytes = 8;
   product(bool, CreateCoredumpOnCrash, true,                                \
           "Create core/mini dump on VM fatal error")                        \
                                                                             \
-  product(uint64_t, ErrorLogTimeout, 2 * 60,                                \
+  product(uint, ErrorLogTimeout, 2 * 60,                                    \
           "Timeout, in seconds, to limit the time spent on writing an "     \
-          "error log in case of a crash.")                                  \
-          range(0, (uint64_t)max_jlong/1000)                                \
+          "error log in case of a crash. A value of 0 disables the "        \
+          "timeout.")                                                       \
                                                                             \
   product(bool, ErrorLogSecondaryErrorDetails, false, DIAGNOSTIC,           \
           "If enabled, show details on secondary crashes in the error log") \
@@ -811,9 +812,9 @@ const int ObjectAlignmentInBytes = 8;
   product(bool, PrintFieldLayout, false, DIAGNOSTIC,                        \
           "Print field layout for each class")                              \
                                                                             \
-  product(bool, PrintInlineLayout, false, DIAGNOSTIC,                       \
+  product(bool, PrintValueLayout, false, DIAGNOSTIC,                        \
           "Print field layout for each value class or class containing "    \
-          "inlined value fields")                                           \
+          "flattenable value fields")                                       \
                                                                             \
   product(bool, PrintFlatArrayLayout, false, DIAGNOSTIC,                    \
           "Print array layout for each flattened value array")              \
@@ -823,7 +824,7 @@ const int ObjectAlignmentInBytes = 8;
           "when it determines it is possible and beneficial to do so")      \
                                                                             \
   product(bool, UseFieldFlattening, true, DIAGNOSTIC,                       \
-          "Allow the JVM to inline the fields of concrete value objects "   \
+          "Allow the JVM to flatten the fields of concrete value objects "  \
           "when it determines it is possible and beneficial to do so")      \
                                                                             \
   product(bool, UseNullableAtomicValueFlattening, true, DIAGNOSTIC,         \
@@ -845,8 +846,9 @@ const int ObjectAlignmentInBytes = 8;
   product(uint, FlatteningBudget, 1024, EXPERIMENTAL,                       \
           "Maximum size (in bytes) dedicated to flat fields in an instance")\
           range(0, 1024 * 1024)                                             \
-  develop(ccstrlist, PrintInlineKlassFields, "",                            \
-          "Print fields collected by InlineKlass::collect_fields")          \
+                                                                            \
+  develop(ccstrlist, PrintValueKlassFields, "",                             \
+          "Print fields collected by ValueKlass::collect_fields")           \
                                                                             \
   /* Need to limit the extent of the padding to reasonable size.          */\
   /* 8K is well beyond the reasonable HW cache line size, even with       */\
@@ -1002,7 +1004,8 @@ const int ObjectAlignmentInBytes = 8;
           "Use population count instruction")                               \
                                                                             \
   develop(bool, TraceMethodReplacement, false,                              \
-          "Print when methods are replaced do to recompilation")            \
+          "Print when AOT or tiered JIT methods are replaced due to "       \
+          "recompilation")                                                  \
                                                                             \
   product(intx, MinPassesBeforeFlush, 10, DIAGNOSTIC,                       \
           "Minimum number of sweeper passes before an nmethod "             \
@@ -1228,10 +1231,6 @@ const int ObjectAlignmentInBytes = 8;
   /* compilation */                                                         \
   product(bool, UseCompiler, true,                                          \
           "Use Just-In-Time compilation")                                   \
-                                                                            \
-  product(bool, AlwaysCompileLoopMethods, false,                            \
-          "(Deprecated) When using recompilation, never interpret methods " \
-          "containing loops")                                               \
                                                                             \
   product(int,  AllocatePrefetchStyle, 1,                                   \
           "0 = no prefetch, "                                               \
@@ -1791,8 +1790,6 @@ const int ObjectAlignmentInBytes = 8;
   product(bool, VerifyMethodHandles, trueInDebug, DIAGNOSTIC,               \
           "perform extra checks when constructing method handles")          \
                                                                             \
-  product(bool, IgnoreAssertUnsetFields, false, DIAGNOSTIC,                           \
-          "Ignore assert_unset_fields")                                     \
                                                                             \
   product(bool, ShowHiddenFrames, false, DIAGNOSTIC,                        \
           "show method handle implementation frames (usually hidden)")      \
@@ -1965,11 +1962,11 @@ const int ObjectAlignmentInBytes = 8;
   product(bool, UseFastUnorderedTimeStamps, false, EXPERIMENTAL,            \
           "Use platform unstable time where supported for timestamps only") \
                                                                             \
-  product_pd(bool, InlineTypePassFieldsAsArgs, DIAGNOSTIC,                  \
-          "Pass each inline type field as an argument at calls")            \
+  product_pd(bool, ValueTypePassFieldsAsArgs, DIAGNOSTIC,                  \
+          "Pass each value type field as an argument at calls")            \
                                                                             \
-  product_pd(bool, InlineTypeReturnedAsFields, DIAGNOSTIC,                  \
-          "Return fields instead of an inline type reference")              \
+  product_pd(bool, ValueTypeReturnedAsFields, DIAGNOSTIC,                  \
+          "Return fields instead of a value type reference")              \
                                                                             \
   develop(bool, StressCallingConvention, false,                             \
           "Stress the scalarized calling convention.")                      \
@@ -1978,7 +1975,7 @@ const int ObjectAlignmentInBytes = 8;
           "Preloading all classes from the LoadableDescriptors attribute")  \
                                                                             \
   product(ccstrlist, ForceNonTearable, "", DIAGNOSTIC,                      \
-          "List of inline classes which are forced to be atomic "           \
+          "List of value classes which are forced to be atomic "            \
           "(whitespace and commas separate names, "                         \
           "and leading and trailing stars '*' are wildcards)")              \
                                                                             \
@@ -2064,6 +2061,14 @@ const int ObjectAlignmentInBytes = 8;
   product(bool, CRaCPauseOnCheckpointError, false, DIAGNOSTIC,              \
           "Pauses the checkpoint when a problem is found on VM level.")     \
                                                                             \
+  product(ccstr, CRaCImageLabels, nullptr, "Comma-separated list of labels "\
+          "to be recorded: label1=value,label2=$ENV,ENV (the last form "    \
+          "sets label ENV from environment variable ENV)")                  \
+                                                                            \
+  product(ccstr, CRaCRequiredImageLabels, nullptr, RESTORE_SETTABLE,        \
+          "Labels that the image must have recorded in order for the "      \
+          "checkpoint to succeed. Same format as CRaCImageLabels.")         \
+                                                                            \
   product(ccstr, CPUFeatures, nullptr, "CPU feature set, "                  \
           "Limit set of CPU features to make the CRaC image compatible "    \
           "for running on a machine with different CPU:"                    \
@@ -2087,11 +2092,11 @@ const int ObjectAlignmentInBytes = 8;
           "Message reported when CPU features checks fails. This string "   \
           "can contain placeholders '%c', '%s' or '%m' for current CPU "    \
           "features, features stored in the image or common (intersection " \
-          "of current & stored) features respectively.")               \
+          "of current & stored) features respectively.")                    \
                                                                             \
-  product(bool, UseObjectMonitorTable, true, DIAGNOSTIC,                    \
-          "Use a table to record inflated monitors rather than the first "  \
-          "word of the object.")                                            \
+  product(bool, IncludeCpuFeatureActive, true, DIAGNOSTIC,                  \
+          "Allow disabling glibc's detected CPU_FEATURE_ACTIVE macro. "     \
+          "Useful for testing CRaC as if built with an older glibc.")       \
                                                                             \
   product(int, FastLockingSpins, 8, DIAGNOSTIC,                             \
           "Specifies the number of times fast locking will attempt to "     \
@@ -2141,6 +2146,9 @@ const int ObjectAlignmentInBytes = 8;
                                                                             \
   product(bool, UseAcmpFastPath, true, DIAGNOSTIC,                          \
           "Use fast path for acmp.")                                        \
+                                                                            \
+  product(bool, UseHashcodeFastPath, true, DIAGNOSTIC,                      \
+          "Use fast path for identityHashCode.")                            \
 
 // end of RUNTIME_FLAGS
 

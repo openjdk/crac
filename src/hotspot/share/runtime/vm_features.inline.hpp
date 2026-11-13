@@ -41,7 +41,7 @@ class VM_Features : protected VM_Feature_Flag {
  private:
   uint64_t _features_bitmap[(VM_Feature_Flag::MAX_CPU_FEATURES + BitsPerLong - 1) / BitsPerLong];
 
-  STATIC_ASSERT(sizeof(_features_bitmap) * BitsPerByte >= VM_Feature_Flag::MAX_CPU_FEATURES);
+  static_assert(sizeof(_features_bitmap) * BitsPerByte >= VM_Feature_Flag::MAX_CPU_FEATURES);
 
   constexpr static int features_bitmap_element_shift_count() {
     return LogBitsPerLong;

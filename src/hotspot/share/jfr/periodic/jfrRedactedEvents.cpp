@@ -312,6 +312,11 @@ void JfrRedactedEvents::emit_initial_system_properties(bool log) {
         const char* value = p->value();
         if (strcmp(p->key(), "sun.java.command") == 0) {
            value = String::c_str(_redacted_java_command_line);
+        } else if (strcmp(p->key(), "sun.java.crac_command") == 0) {
+          // crac_command includes the same information as sun.java.command, just with escaped
+          // whitespaces. The intended use is only internal; there is no point in re-parsing,
+          // unescaping, redacting and then escaping back.
+          value = String::c_str(_redacted_java_command_line);
         }
         if (is_redacted_key(p->key())) {
            value = REDACTED;

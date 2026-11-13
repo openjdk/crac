@@ -132,7 +132,7 @@ static int checkpoint(crlib_conf_t* conf) {
 }
 
 static int restore(crlib_conf_t* conf) {
-  if (!image_constraints_validate(conf->common(), conf->image_location)) {
+  if (!image_constraints_validate(conf, conf->image_location)) {
     return -1;
   }
 

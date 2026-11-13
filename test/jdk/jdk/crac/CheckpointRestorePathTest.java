@@ -102,8 +102,7 @@ public class CheckpointRestorePathTest implements CracTest {
         new CracBuilder().engine(CracEngine.SIMULATE).engineOptions("pause=true").imageDir(NON_EXISTENT_CR)
                 .doRestoreToAnalyze()
                 .shouldHaveExitValue(1)
-                .stdoutShouldContain("Cannot open CRaCRestoreFrom=" + NON_EXISTENT_CR)
-                .stdoutShouldContain("Failed to restore from " + NON_EXISTENT_CR);
+                .stdoutShouldContain("Cannot open CRaCRestoreFrom=" + NON_EXISTENT_CR);
     }
 
     void testRestoreNoImage() throws Exception {

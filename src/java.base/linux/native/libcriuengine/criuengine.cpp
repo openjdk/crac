@@ -565,7 +565,7 @@ bool criuengine::execute_criu(const ArgsBuilder& args) const {
   // grand-child
   pid_t parent = getppid();
   int tries = 0;
-  while (parent != 1 && tries < 100) { // 100 gives about 50ms of sleep in total
+  while (parent != 1 && tries < 775) { // 775 gives about 3 seconds of sleep in total
       usleep(10 * (++tries));
       parent = getppid();
   }
@@ -712,6 +712,14 @@ int criuengine::checkpoint() {
   }
   require_defaults(CRLIB_OPTION_FLAG_CHECKPOINT, "checkpoint");
 
+  // API does not mandate clearing restore data before checkpoint, but not doing so is probably an
+  // error (stale value from previous restore).
+  // The current implementation always overwrites it on successful restore anyway, even when the
+  // restoring process has not actually set it.
+  if (restore_data() != 0) {
+    LOG("Warning: restore data is not expected to be set on checkpoint, it will get overwritten");
+  }
+
   if (!image_constraints_persist(common(), _image_location) ||
       !image_score_persist(common(), _image_location)) {
     return -1;
@@ -848,7 +856,7 @@ int criuengine::restore() {
   }
   require_defaults(CRLIB_OPTION_FLAG_RESTORE, "restore");
 
-  if (!image_constraints_validate(common(), _image_location)) {
+  if (!image_constraints_validate(static_cast<crlib_conf_t *>(this), _image_location)) {
     return -1;
   }
 

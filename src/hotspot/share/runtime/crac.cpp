@@ -34,7 +34,7 @@
 #include "memory/oopFactory.hpp"
 #include "memory/resourceArea.hpp"
 #include "nmt/memTag.hpp"
-#include "oops/oopCast.inline.hpp"
+#include "oops/oop.inline.hpp"
 #include "oops/typeArrayOop.inline.hpp"
 #include "prims/jvmtiExport.hpp"
 #include "runtime/crac.hpp"
@@ -63,6 +63,7 @@
 
 static jlong _restore_start_time;
 static jlong _restore_start_nanos;
+static jlong _restore_native_end_nanos;
 
 CracEngine *crac::_engine = nullptr;
 unsigned int crac::_generation = 1;
@@ -326,27 +327,6 @@ int crac::checkpoint_restore(int *shmid) {
     return JVM_CHECKPOINT_ERROR;
   }
 
-  // Setup CPU arch & features only during the first checkpoint; the feature set
-  // cannot change after initial boot (and we don't support switching the engine).
-  if (_generation == 1 && !VM_Version::check_cpu_features_skip()) {
-    VM_Version::VM_Features current_features;
-    if (VM_Version::cpu_features_binary(&current_features)) {
-      switch (_engine->prepare_image_constraints_api()) {
-        case CracEngine::ApiStatus::OK:
-          if (!_engine->store_cpuinfo(&current_features)) {
-            return JVM_CHECKPOINT_ERROR;
-          }
-          break;
-        case CracEngine::ApiStatus::ERR:
-          return JVM_CHECKPOINT_ERROR;
-        case CracEngine::ApiStatus::UNSUPPORTED:
-          log_warning(crac)("Cannot store CPUFeatures for checkpoint "
-            "with the selected CRaC engine");
-          break;
-      }
-    }
-  }
-
   const int ret = _engine->checkpoint();
   if (ret != 0) {
     log_error(crac)("CRaC engine failed to checkpoint to %s: error %i", image_location, ret);
@@ -355,21 +335,22 @@ int crac::checkpoint_restore(int *shmid) {
 
   switch (_engine->prepare_restore_data_api()) {
     case CracEngine::ApiStatus::OK: {
-      constexpr size_t required_size = sizeof(*shmid);
-      const size_t available_size = _engine->get_restore_data(shmid, sizeof(*shmid));
-      if (available_size == 0) { // Possible if we were not killed by the engine and thus there is no restoring JVM
+      constexpr size_t expected_size = sizeof(*shmid);
+      const size_t available_size = _engine->get_restore_data(shmid, expected_size);
+      // No data is possible if we were not killed by the engine and thus there is no restoring JVM
+      if (available_size == 0) {
         *shmid = 0; // Not an error, just no restore data
         break;
       }
-      if (available_size == required_size) {
+      // Clean up in case the next checkpoint/restore will not be updating it (the case above)
+      if (!_engine->set_restore_data(nullptr, 0)) {
+        log_warning(crac)("Could not clear restore data after reading");
+      }
+      if (available_size == expected_size) {
         break;
       }
-      if (available_size > required_size) {
-        log_debug(crac)("CRaC engine has more restore data than expected");
-        break;
-      }
-      log_error(crac)("CRaC engine provided not enough restore data: need %zu bytes, got %zu",
-                      required_size, available_size);
+      log_error(crac)("CRaC engine has unexpected amount of restore data: expected %zu bytes, got %zu",
+                      expected_size, available_size);
       // fallthrough
     }
     case CracEngine::ApiStatus::ERR:         *shmid = -1; break; // Indicates error to the caller
@@ -383,6 +364,7 @@ int crac::checkpoint_restore(int *shmid) {
 #endif //LINUX
 
   crac::update_javaTimeNanos_offset();
+  crac::record_time_after_restore();
 
   if (CRaCTraceStartupTime) {
     tty->print_cr("STARTUPTIME " JLONG_FORMAT " restore-native", os::javaTimeNanos());
@@ -605,7 +587,72 @@ public:
     _t = nullptr;
     return tmp;
   }
+  T *get() {
+    return _t;
+  }
 };
+
+static bool apply_labels(const char* labels, CracEngine* engine, bool (CracEngine::*func)(const char*, const char*)) {
+  if (labels == nullptr) {
+    return true;
+  }
+  char* dup = os::strdup_check_oom(labels, mtInternal);
+  char *ptr = dup;
+  char *key_value;
+  while ((key_value = strtok_r(ptr, ",", &ptr)) != nullptr) {
+    char *eq = strchr(key_value, '=');
+    const char *value = nullptr;
+    const char *envvar = nullptr;
+    if (eq == nullptr) {
+      envvar = key_value;
+      value = getenv(envvar);
+    } else {
+      eq[0] = '\0';
+      if (eq[1] == '$') {
+        envvar = eq + 2;
+        value = getenv(envvar);
+      } else {
+        value = eq + 1;
+      }
+    }
+    if (value == nullptr) {
+      log_warning(crac)("Environment variable %s used for label %s is not set.", envvar, key_value);
+    } else if (!(engine->*func)(key_value, value)) {
+      os::free(dup);
+      return false;
+    }
+  }
+  os::free(dup);
+  return true;
+}
+
+static bool apply_constraints(CracEngine &engine, bool *exact) {
+  *exact = false;
+  // Since the check itself is delegated to the C/R Engine we will simply
+  // skip the check here.
+  bool ignore = !VM_Version::can_use_cpu_features();
+  if (CheckCPUFeatures == nullptr || !strcmp(CheckCPUFeatures, "compatible")) {
+    // default, compatible
+  } else if (!strcmp(CheckCPUFeatures, "skip")) {
+    ignore = true;
+  } else if (!strcmp(CheckCPUFeatures, "exact")) {
+    *exact = true;
+  } else {
+    log_error(crac)("Invalid value for -XX:CheckCPUFeatures=%s; available are 'compatible', 'exact' or 'skip'", CheckCPUFeatures);
+    return false;
+  }
+  if (!ignore) {
+    VM_Version::VM_Features current_features;
+    if (VM_Version::cpu_features_binary(&current_features)) {
+      engine.require_cpuinfo(&current_features, *exact);
+    }
+  }
+  if (!apply_labels(CRaCRequiredImageLabels, &engine, &CracEngine::require_label)) {
+    log_error(crac)("Cannot enforce some labels from CRaCRequiredImageLabels");
+    return false;
+  }
+  return true;
+}
 
 bool crac::prepare_checkpoint() {
   precond(CRaCCheckpointTo != nullptr);
@@ -624,6 +671,42 @@ bool crac::prepare_checkpoint() {
   }
   if (fixed_path && (!ensure_checkpoint_dir(image_location, true) || !engine->configure_image_location(image_location))) {
     return false;
+  }
+
+  if (VM_Version::can_use_cpu_features() && !VM_Version::checkpoint_check()) {
+    return false;
+  }
+
+  switch (engine->prepare_image_constraints_api()) {
+    case CracEngine::ApiStatus::OK: {
+      VM_Version::VM_Features current_features;
+      if (VM_Version::can_use_cpu_features() && VM_Version::cpu_features_binary(&current_features) &&
+          !engine->store_cpuinfo(&current_features)) {
+        return false;
+      }
+      char java_version_buf[64];
+      JDK_Version::current().to_string(java_version_buf, sizeof(java_version_buf));
+      // TODO: more built-in identifiers?
+      if (!engine->set_label("java.version", java_version_buf)) {
+        log_error(crac)("Cannot set common image labels");
+        return false;
+      }
+      if (!apply_labels(CRaCImageLabels, engine.get(), &CracEngine::set_label)) {
+        log_error(crac)("Cannot set some labels from CRaCImageLabels");
+        return false;
+      }
+      // We don't normally need constaints for the checkpoint itself; engine might use this
+      // to identify 'peer' images or 'peer' instances.
+      bool exact_ignored;
+      if (!apply_constraints(*engine.get(), &exact_ignored)) {
+        return false;
+      }
+    } break;
+    case CracEngine::ApiStatus::ERR:
+      return false;
+    case CracEngine::ApiStatus::UNSUPPORTED:
+      log_warning(crac)("Cannot store image tags with the selected CRaC engine");
+      break;
   }
 
   _engine = engine.extract();
@@ -772,7 +855,7 @@ void crac::set_image_score(const char *metric, double value, TRAPS) {
 }
 
 GrowableArray<crac::score> crac::get_image_scores_from_jvm() {
-  GrowableArray<crac::score> scores(24);
+  GrowableArray<crac::score> scores(32);
 
   const double uptime = TimeHelper::counter_to_millis(os::elapsed_counter());
   // Estimated boot time - earlier than RuntimeMXBean.getStartTime(), unless javaTimeMillis jumps
@@ -782,10 +865,17 @@ GrowableArray<crac::score> crac::get_image_scores_from_jvm() {
   // Uptime since initial boot
   scores.append({"vm.uptimeSinceBoot", uptime});
   // Uptime since start of latest restore or -1 if not restored - same as CRaCMXBean.getUptimeSinceRestore()
-  scores.append({"vm.uptimeSinceRestore", _generation > 1 ? TimeHelper::counter_to_millis(crac::uptime_since_restore()) : -1});
+  scores.append({"vm.uptimeSinceRestore", static_cast<double>(_generation > 1 ? crac::uptime_since_restore() / NANOSECS_PER_MILLISEC : -1)});
 
+  scores.append({"vm.crac.generation", static_cast<double>(_generation)});
+  scores.append({"vm.restore.nativeTime", static_cast<double>(_generation > 1 ? (_restore_native_end_nanos - _restore_start_nanos) / NANOSECS_PER_MILLISEC : -1)});
+
+  double process_cpu_time;
+  if (!os::elapsed_process_cpu_time(process_cpu_time)) {
+    process_cpu_time = 0;
+  }
   // Same as OperatingSystemMXBean.getProcessCpuTime() but in milliseconds
-  scores.append({"vm.processCpuTime", os::elapsed_process_cpu_time() * 1000});
+  scores.append({"vm.processCpuTime", process_cpu_time * 1000});
   scores.append({"vm.availableProcessors", static_cast<double>(os::active_processor_count())});
 
   // Same as corresponding methods of java.lang.Runtime
@@ -871,35 +961,18 @@ void crac::restore(crac_restore_data& restore_data) {
     return;
   }
 
-  // Since the check itself is delegated to the C/R Engine we will simply
-  // skip the check here.
-  bool ignore = VM_Version::check_cpu_features_skip();
   bool exact = false;
-  if (CheckCPUFeatures == nullptr || !strcmp(CheckCPUFeatures, "compatible")) {
-    // default, compatible
-  } else if (!strcmp(CheckCPUFeatures, "skip")) {
-    ignore = true;
-  } else if (!strcmp(CheckCPUFeatures, "exact")) {
-    exact = true;
-  } else {
-    log_error(crac)("Invalid value for -XX:CheckCPUFeatures=%s; available are 'compatible', 'exact' or 'skip'", CheckCPUFeatures);
-    return;
-  }
-  if (!ignore) {
-    switch (engine.prepare_image_constraints_api()) {
-      case CracEngine::ApiStatus::OK: {
-        VM_Version::VM_Features current_features;
-        if (VM_Version::cpu_features_binary(&current_features)) {
-          engine.require_cpuinfo(&current_features, exact);
-        }
-        } break;
-      case CracEngine::ApiStatus::ERR:
+  switch (engine.prepare_image_constraints_api()) {
+    case CracEngine::ApiStatus::OK:
+      if (!apply_constraints(engine, &exact)) {
         return;
-      case CracEngine::ApiStatus::UNSUPPORTED:
-        log_warning(crac)("Cannot verify CPUFeatures for restore "
-          "with the selected CRaC engine");
-        break;
-    }
+      }
+      break;
+    case CracEngine::ApiStatus::ERR:
+      return;
+    case CracEngine::ApiStatus::UNSUPPORTED:
+      log_warning(crac)("Cannot verify image constraints (CPU features, labels) for restore with the selected CRaC engine");
+      break;
   }
 
   switch (engine.prepare_restore_data_api()) {
@@ -938,13 +1011,12 @@ void crac::restore(crac_restore_data& restore_data) {
       break;
   }
 
-  const int ret = engine.restore();
-  if (ret != 0) {
-    log_error(crac)("CRaC engine failed to restore from %s: error %d", CRaCRestoreFrom, ret);
-    VM_Version::VM_Features current_features;
-    VM_Version::cpu_features_binary(&current_features); // ignore return value
-    engine.check_cpuinfo(&current_features, exact);
-  }
+  const int err = engine.restore(); // Does not return on success
+  log_error(crac)("CRaC engine failed to restore from %s (error code %d)", CRaCRestoreFrom, err);
+
+  VM_Version::VM_Features current_features;
+  VM_Version::cpu_features_binary(&current_features); // ignore return value
+  engine.check_cpuinfo(&current_features, exact);
 }
 
 bool CracRestoreParameters::read_from(int fd) {
@@ -1028,6 +1100,10 @@ void crac::record_time_before_checkpoint() {
   _checkpoint_monotonic_nanos = os::javaTimeNanos();
   memset(_checkpoint_bootid, 0, UUID_LENGTH);
   read_bootid(_checkpoint_bootid);
+}
+
+void crac::record_time_after_restore() {
+  _restore_native_end_nanos = os::javaTimeNanos();
 }
 
 void crac::update_javaTimeNanos_offset() {

@@ -1252,7 +1252,7 @@ public class FileChannelImpl
 
     @Override
     public int write(ByteBuffer src, long position) throws IOException {
-        if (jfrTracing && FileReadEvent.enabled()) {
+        if (jfrTracing && FileWriteEvent.enabled()) {
             return traceImplWrite(src, position);
         }
         return implWrite(src, position);

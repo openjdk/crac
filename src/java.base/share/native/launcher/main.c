@@ -113,6 +113,7 @@ static int crac_min_pid = 0;
 static bool is_min_pid_set = false;
 #if defined(LINUX) && defined(__aarch64__)
 static bool disable_pac = false;
+static int set_vector_size = 0;
 #endif // LINUX && __aarch64__
 
 static inline const char *find_option(const char *arg, const char *vmoption) {
@@ -135,6 +136,8 @@ static void parse_crac(const char *arg) {
 #if defined(LINUX) && defined(__aarch64__)
     } else if (find_option(arg, "-XX:-UsePAC")) {
         disable_pac = true;
+    } else if ((value = find_option(arg, "-XX:MaxVectorSize=")) != NULL) {
+        set_vector_size = atoi(value);
 #endif // LINUX && __aarch64__
     }
 }
@@ -461,6 +464,17 @@ main(int argc, char **argv)
                 perror("prctl PR_PAC_SET_ENABLED_KEYS");
                 return 1;
             }
+        }
+    }
+    if (is_checkpoint && set_vector_size != 0) {
+        int new_length = prctl(PR_SVE_SET_VL, set_vector_size);
+        if (new_length == -1) {
+            perror("prctl PR_SVE_SET_VL");
+            return 1;
+        }
+        if (new_length != set_vector_size) {
+            fprintf(stderr, "prctl PR_SVE_SET_VL %d but got %d, CPU does not support this vector size?\n", set_vector_size, new_length);
+            return 1;
         }
     }
 #endif // __aarch64__

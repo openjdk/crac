@@ -53,7 +53,7 @@
 #define SEGV_BNDERR_value 3
 
 #if defined(SEGV_BNDERR)
-STATIC_ASSERT(SEGV_BNDERR == SEGV_BNDERR_value);
+static_assert(SEGV_BNDERR == SEGV_BNDERR_value);
 #else
 #define SEGV_BNDERR SEGV_BNDERR_value
 #endif
@@ -1599,7 +1599,7 @@ static void signal_sets_init() {
   // signals in a different way and having this signal blocked could interfere.
   const char *signal_engines[] = { "criuengine", "simengine", nullptr };
   for (int i = 0; signal_engines[i] != nullptr; ++i) {
-    if (strcmp(CRaCEngine, signal_engines[i]) == 0) {
+    if (CRaCEngine != nullptr && strcmp(CRaCEngine, signal_engines[i]) == 0) {
       sigaddset(&blocked_sigs, RESTORE_SIGNAL);
       break;
     }

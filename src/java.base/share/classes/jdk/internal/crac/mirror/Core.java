@@ -30,6 +30,7 @@ import jdk.internal.access.SharedSecrets;
 import jdk.internal.crac.ClaimedFDs;
 import jdk.internal.crac.JDKResource;
 import jdk.internal.crac.LoggerContainer;
+import jdk.internal.crac.Score;
 import jdk.internal.crac.mirror.impl.*;
 import jdk.internal.misc.InnocuousThread;
 import jdk.internal.module.Modules;
@@ -159,6 +160,9 @@ public class Core {
 
         return parsedNewArguments;
     }
+
+    // We cannot call CRaCMxBean from jdk.management module
+    private static native long getUptimeSinceRestore0();
 
     private static List<String> checkpointRestore1(long jcmdStream) throws CheckpointException, RestoreException {
         final ExceptionHolder<CheckpointException> checkpointException = new ExceptionHolder<>(CheckpointException::new);
@@ -292,6 +296,7 @@ public class Core {
                 checkpointInProgress = true;
                 newArguments = checkpointRestore1(jcmdStream);
             } finally {
+                Score.setScore("vm.restore.overallTime", getUptimeSinceRestore0());
                 if (FlagsHolder.TRACE_STARTUP_TIME) {
                     System.out.println("STARTUPTIME " + System.nanoTime() + " restore-finish");
                 }

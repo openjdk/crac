@@ -157,7 +157,7 @@ static inline bool check_zeroes(const unsigned char* mem, size_t length) {
 
 bool ImageConstraints::Constraint::compare_bitmaps(const unsigned char* bitmap, size_t size) const {
   size_t common_size = data_size < size ? data_size : size;
-  if (comparison == EQUALS) {
+  if (comparison == CRLIB_BITMAP_CMP_EQUALS) {
     if (memcmp(data, bitmap, common_size)) {
       return false;
     }
@@ -170,7 +170,7 @@ bool ImageConstraints::Constraint::compare_bitmaps(const unsigned char* bitmap, 
   }
   const unsigned char* bm1 = bitmap, * bm2 = static_cast<const unsigned char*>(data);
   size_t s1 = size, s2 = data_size;
-  if (comparison == SUPERSET) {
+  if (comparison == CRLIB_BITMAP_CMP_SUPERSET) {
     bm1 = bm2;
     bm2 = bitmap;
     s1 = s2;
@@ -283,17 +283,23 @@ bool ImageConstraints::validate(const char* image_location) const {
     } else if (c.type == TagType::LABEL && strcmp(static_cast<const char*>(c.data), static_cast<const char*>(t->data))) {
       LOG("Label mismatch for tag %s: '%s' vs. '%s'", c.name,
         static_cast<const char*>(c.data), static_cast<const char*>(t->data));
-    } else if (c.type == TagType::BITMAP && !c.compare_bitmaps(static_cast<const unsigned char*>(t->data), t->data_size)) {
-      LOG("Bitmap mismatch for tag %s:", c.name);
-      print_bitmap("Constraint:   ", static_cast<const unsigned char*>(c.data), c.data_size);
-      print_bitmap("Image:        ", static_cast<const unsigned char*>(t->data), t->data_size);
+    } else if (c.type == TagType::BITMAP) {
       free((void *) c.image_data);
-      c.image_data = static_cast<unsigned char *>(malloc(c.data_size));
+      c.image_data = static_cast<unsigned char *>(malloc(t->data_size));
       if (c.image_data == nullptr) {
         LOG("Cannot allocate memory for a bitmap copy");
+        c.image_data_size = 0;
         result = false;
       } else {
-        memcpy(c.image_data, t->data, c.data_size);
+        memcpy(c.image_data, t->data, t->data_size);
+        c.image_data_size = t->data_size;
+        if (c.compare_bitmaps(static_cast<const unsigned char*>(t->data), t->data_size)) {
+          c.failed = false;
+        } else {
+          LOG("Bitmap mismatch for tag %s:", c.name);
+          print_bitmap("Constraint:   ", static_cast<const unsigned char*>(c.data), c.data_size);
+          print_bitmap("Image:        ", static_cast<const unsigned char*>(t->data), t->data_size);
+        }
       }
     } else {
       c.failed = false;

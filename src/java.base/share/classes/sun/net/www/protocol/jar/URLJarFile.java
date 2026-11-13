@@ -36,6 +36,13 @@ import java.util.jar.*;
 import java.util.zip.ZipFile;
 import java.util.zip.ZipEntry;
 import java.security.CodeSigner;
+
+import jdk.internal.access.SharedSecrets;
+import jdk.internal.crac.Core;
+import jdk.internal.crac.JDKResource;
+import jdk.internal.crac.LoggerContainer;
+import jdk.internal.crac.mirror.Context;
+import jdk.internal.crac.mirror.Resource;
 import sun.net.www.ParseUtil;
 
 /* URL jar file is a common JarFile subtype used for JarURLConnection */
@@ -47,6 +54,7 @@ public class URLJarFile extends JarFile {
     private Manifest superMan;
     private Attributes superAttr;
     private Map<String, Attributes> superEntries;
+    private final JDKResource cracResource;
 
     static JarFile getJarFile(URL url, URLJarFileCloseController closeController) throws IOException {
         if (ParseUtil.isLocalFileURL(url)) {
@@ -63,12 +71,30 @@ public class URLJarFile extends JarFile {
             throws IOException {
         super(file, true, ZipFile.OPEN_READ | ZipFile.OPEN_DELETE, version);
         this.closeController = closeController;
+        // We don't assign the resource that would mark the file as persistent because it is deleted
+        // by the time we do a checkpoint. That's also why we use a separate resource rather than extending PersistentJarFile.
+        // In the future we could automatically copy that file to persist it during checkpoint
+        // (creating a hard link to deleted file is intentionally defunct on modern OS) and delete after restore.
+        this.cracResource = null;
     }
 
     private URLJarFile(URL url, URLJarFileCloseController closeController, Runtime.Version version)
             throws IOException {
         super(new File(ParseUtil.decode(url.getFile())), true, ZipFile.OPEN_READ, version);
         this.closeController = closeController;
+        this.cracResource = new JDKResource() {
+            @Override
+            public void beforeCheckpoint(Context<? extends Resource> context) throws Exception {
+                LoggerContainer.info(URLJarFile.this.getName() + " is recorded as always available on restore");
+                SharedSecrets.getJavaUtilZipFileAccess().beforeCheckpoint(URLJarFile.this);
+            }
+
+            @Override
+            public void afterRestore(Context<? extends Resource> context) throws Exception {
+                // noop
+            }
+        };
+        Core.Priority.NORMAL.getContext().register(this.cracResource);
     }
 
     /**

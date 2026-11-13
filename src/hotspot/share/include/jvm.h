@@ -1220,6 +1220,9 @@ JVM_GetCRaCScores(JNIEnv *env);
 JNIEXPORT void JNICALL
 JVM_RecordCRaCScores(JNIEnv *env, jobjectArray metrics, jdoubleArray values);
 
+JNIEXPORT jlong JNICALL
+JVM_GetUptimeSinceRestore(JNIEnv *env);
+
 #ifdef __cplusplus
 } /* extern "C" */
 

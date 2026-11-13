@@ -21,7 +21,6 @@
  * questions.
  */
 
-import java.util.Objects;
 import java.util.function.BooleanSupplier;
 
 import jdk.crac.Context;
@@ -68,15 +67,17 @@ public class NaturalDecompilationTest implements CracTest {
 
     private static void blackhole(@SuppressWarnings("unused") Object o) {}
 
-    private static int testMethod(int i) {
-        try {
-            // A compiler intrinsic which triggers decompilation in both C1 and
-            // C2 when it has to throw IndexOutOfBoundsException
-            Objects.checkIndex(i, 10);
-            return i;
-        } catch (IndexOutOfBoundsException ignored) {
-            return -1;
+    private static class TestClass {
+        static {
+            System.out.println("Initializing " + TestClass.class.getName());
         }
+        public static volatile int x;
+    }
+
+    private static int testMethod(int i) {
+        // Reading x from the not-yet-initialized TestClass class causes it to
+        // be initialized which should trigger decompilation of this method
+        return i >= 0 ? i : TestClass.x;
     }
 
     private static final String BLACKHOLE_NAME = "blackhole";

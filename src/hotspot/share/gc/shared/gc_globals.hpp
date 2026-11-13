@@ -47,6 +47,7 @@
 #endif
 
 const size_t defaultMaxHeapSize = ScaleForWordSize(96*M);
+constexpr uint MaxGCCardSizeInBytes = NOT_LP64(512) LP64_ONLY(1024);
 
 #define GC_FLAGS(develop,                                                   \
                  develop_pd,                                                \
@@ -531,7 +532,7 @@ const size_t defaultMaxHeapSize = ScaleForWordSize(96*M);
                                                                             \
   product(uint, GCCardSizeInBytes, 512,                                     \
           "Card table entry size (in bytes) for card based collectors")     \
-          range(128, NOT_LP64(512) LP64_ONLY(1024))                         \
+          range(128, MaxGCCardSizeInBytes)                                  \
           constraint(GCCardSizeInBytesConstraintFunc,AtParse)
   // end of GC_FLAGS
 

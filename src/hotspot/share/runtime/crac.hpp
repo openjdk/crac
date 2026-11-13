@@ -87,6 +87,7 @@ private:
 
   static void record_time_before_checkpoint();
   static void update_javaTimeNanos_offset();
+  static void record_time_after_restore();
 
   static int checkpoint_restore(int *shmid);
 

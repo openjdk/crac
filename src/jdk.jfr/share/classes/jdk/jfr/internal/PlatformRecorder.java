@@ -77,45 +77,55 @@ public final class PlatformRecorder {
     private RepositoryChunk currentChunk;
     private boolean runPeriodicTask;
     private boolean destroyed;
-    private JDKResource resource = new JDKResource() {
+    private final JDKResource resource = new JDKResource() {
         private List<PlatformRecording> futureRecordings;
-        private static int MAX_BACKUPS = Integer.getInteger("jdk.jfr.max_backups", 20);
+        private static final int MAX_BACKUPS = Integer.getInteger("jdk.jfr.max_backups", 20);
 
         @Override
         public void beforeCheckpoint(Context<? extends Resource> context) throws Exception {
             synchronized (PlatformRecorder.this) {
-                ArrayList<PlatformRecording> copy = new ArrayList<>(recordings);
-                futureRecordings = copy.stream().map(r -> {
+                // Started, delayed and stopped + closed recordings can be left as-is
+                List<PlatformRecording> running = recordings.stream()
+                        .filter(r -> r.getState() == RecordingState.RUNNING).toList();
+                futureRecordings = running.stream().map(oldPr -> {
                     // PlatformRecording has to have a matching Recording - otherwise we could not control those
                     // through jcmd
-                    Recording rec = new Recording(r.getSettings());
-                    PlatformRecording pr = PrivateAccess.getInstance().getPlatformRecording(rec);
-                    if (r.getName().equals(String.valueOf(r.getId()))) {
+                    Recording newRec = new Recording(oldPr.getSettings());
+                    PrivateAccess access = PrivateAccess.getInstance();
+                    PlatformRecording newPr = access.getPlatformRecording(newRec);
+                    newPr.setOriginalRecording(oldPr.getOriginalRecording());
+                    // Update the original Recording (important if this was created programmatically)
+                    access.setPlatformRecording(oldPr.getOriginalRecording(), newPr);
+                    if (oldPr.getName().equals(String.valueOf(oldPr.getId()))) {
                         // default name == id, use the new id as name as well
-                        rec.setName(String.valueOf(rec.getId()));
+                        newRec.setName(String.valueOf(newRec.getId()));
                     } else {
                         // custom name, keep it
-                        rec.setName(r.getName());
+                        newRec.setName(oldPr.getName());
                     }
-                    rec.setToDisk(r.isToDisk());
-                    rec.setSettings(r.getSettings());
-                    pr.setDumpDirectory(r.getDumpDirectory());
+                    newRec.setToDisk(oldPr.isToDisk());
+                    newRec.setSettings(oldPr.getSettings());
+                    newPr.setDumpDirectory(oldPr.getDumpDirectory());
                     try {
-                        pr.setDestination(r.getDestination());
+                        newPr.setDestination(oldPr.getDestination());
                     } catch (IOException e) {
                         // never thrown
                         Logger.log(JFR, ERROR, "Cannot copy destination: " + e.getMessage());
                     }
-                    rec.setMaxAge(r.getMaxAge());
-                    rec.setMaxSize(r.getMaxSize());
-                    pr.setInternalDuration(r.getDuration());
-                    rec.setDumpOnExit(r.getDumpOnExit());
-                    pr.setFlushInterval(r.getFlushInterval());
-                    return pr;
+                    newRec.setMaxAge(oldPr.getMaxAge());
+                    newRec.setMaxSize(oldPr.getMaxSize());
+                    newPr.setInternalDuration(oldPr.getDuration());
+                    newRec.setDumpOnExit(oldPr.getDumpOnExit());
+                    newPr.setFlushInterval(oldPr.getFlushInterval());
+                    oldPr.getReports().forEach(newPr::addReport);
+                    return newPr;
                 }).collect(Collectors.toList());
                 recordings.removeAll(futureRecordings);
-                copy.forEach(r -> r.stop("Checkpoint"));
-                assert recordings.isEmpty();
+                running.forEach(r -> {
+                    r.stop("Checkpoint");
+                    r.close();
+                });
+                assert recordings.stream().allMatch(r -> r.getState() != RecordingState.RUNNING);
             }
         }
 
@@ -125,43 +135,54 @@ public final class PlatformRecorder {
                 futureRecordings.forEach(r -> {
                     recordings.add(r);
                     WriteablePath destination = r.getDestination();
-                    // The backup recording has to be moved before creating WriteablePath
-                    // (and touching the recording output file)
-                    try {
-                        File destFile = destination.getReal().toFile();
-                        if (destFile.exists()) {
-                            Path backup = null;
-                            for (int i = 0; backup == null && i < MAX_BACKUPS; ++i) {
-                                String name = destFile.getName();
-                                // Mission Control has issues opening recording files
-                                // that don't end with .jfr
-                                if (name.endsWith(".jfr")) {
-                                    name = name.substring(0, name.length() - 4) + "." + i + ".jfr";
-                                } else {
-                                    name = name + "." + i;
-                                }
-                                backup = destination.getReal().getParent().resolve(name);
-                                if (backup.toFile().exists()) {
-                                    backup = null;
-                                }
-                            }
-                            if (backup != null) {
-                                Files.move(destFile.toPath(), backup);
-                                Logger.log(JFR, INFO, "Backed up " + destFile + " to " + backup);
-                            }
+                    // This could be a streaming recording (see JEP-349) without actual destination
+                    if (destination != null) {
+                        // The backup recording has to be moved before creating WriteablePath
+                        // (and touching the recording output file)
+                        backupOriginalDestination(destination);
+                        try {
+                            // We need to invoke WriteablePath after restore to create the dump file.
+                            // Since we're creating another WriteablePath we can use the original specification
+                            r.setDestination(new WriteablePath(destination.getPath()));
+                        } catch (IOException e) {
+                            Logger.log(JFR, ERROR, "Cannot reset recording destination: " + e);
                         }
-                    } catch (IOException e) {
-                        Logger.log(JFR, ERROR, "Cannot backup previous recording: " + e);
-                    }
-                    try {
-                        // We need to invoke WriteablePath after restore to create the dump file.
-                        // Since we're creating another WriteablePath we can use the original specification
-                        r.setDestination(new WriteablePath(destination.getPath()));
-                    } catch (IOException e) {
-                        Logger.log(JFR, ERROR, "Cannot reset recording destination: " + e);
                     }
                     r.start();
                 });
+                futureRecordings.clear();
+            }
+        }
+
+        private void backupOriginalDestination(WriteablePath original) {
+            try {
+                File destFile = original.getReal().toFile();
+                if (!destFile.exists()) {
+                    return;
+                }
+                Path backup = null;
+                for (int i = 0; backup == null && i < MAX_BACKUPS; ++i) {
+                    String name = destFile.getName();
+                    // Mission Control has issues opening recording files
+                    // that don't end with .jfr
+                    if (name.endsWith(".jfr")) {
+                        name = name.substring(0, name.length() - 4) + "." + i + ".jfr";
+                    } else {
+                        name = name + "." + i;
+                    }
+                    backup = original.getReal().getParent().resolve(name);
+                    if (backup.toFile().exists()) {
+                        backup = null;
+                    }
+                }
+                if (backup != null) {
+                    Files.move(destFile.toPath(), backup);
+                    Logger.log(JFR, INFO, "Backed up " + destFile + " to " + backup);
+                } else {
+                    Logger.log(JFR, WARN, "Exceeded maximum number of backup files, won't backup previous recording.");
+                }
+            } catch (IOException e) {
+                Logger.log(JFR, ERROR, "Cannot backup previous recording: " + e);
             }
         }
     };

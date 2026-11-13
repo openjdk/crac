@@ -106,6 +106,11 @@ public abstract class EventSettings {
         }
 
         @Override
+        public void setPlatformRecording(Recording r, PlatformRecording pr) {
+            r.setInternal(pr);
+        }
+
+        @Override
         public PlatformEventType getPlatformEventType(EventType eventType) {
             return eventType.getPlatformEventType();
         }

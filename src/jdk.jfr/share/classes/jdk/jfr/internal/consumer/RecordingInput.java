@@ -441,7 +441,6 @@ public final class RecordingInput implements DataInput, AutoCloseable {
         } catch (IOException e) {
             // perhaps deleted
         }
-        file = null;
         initialize(path.toFile());
     }
 

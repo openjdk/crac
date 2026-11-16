@@ -48,6 +48,8 @@ import jdk.jfr.internal.WriteablePath;
  *
  * {@snippet class="Snippets" region="RecordingOverview"}
  *
+ * @crac The recording is automatically stopped on checkpoint and re-created on restore.
+ *
  * @since 9
  */
 public final class Recording implements Closeable {
@@ -82,7 +84,7 @@ public final class Recording implements Closeable {
         }
     }
 
-    private final PlatformRecording internal;
+    private PlatformRecording internal;
 
     /**
      * Creates a recording with settings from a map of name-value pairs.
@@ -111,6 +113,7 @@ public final class Recording implements Closeable {
         synchronized (r) {
             this.internal = r.newRecording(register, sanitized);
             this.internal.setRecording(this);
+            this.internal.setOriginalRecording(this);
             if (internal.getRecording() != this) {
                 throw new InternalError("Internal recording not properly setup");
             }
@@ -676,6 +679,10 @@ public final class Recording implements Closeable {
     // package private
     PlatformRecording getInternal() {
         return internal;
+    }
+
+    void setInternal(PlatformRecording pr) {
+        internal = pr;
     }
 
     private void setSetting(String id, String value) {

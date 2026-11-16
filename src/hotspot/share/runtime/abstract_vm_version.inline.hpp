@@ -325,7 +325,11 @@ void VM_Version::cpu_features_init() {
       ls.print_raw(" = ");
       insert_features_names(features_missing_on_machine, ls);
       ls.cr();
-      ls.print_raw_cr("If you are sure it will not crash you can override this check by -XX:+UnlockExperimentalVMOptions -XX:CheckCPUFeatures=skip .");
+      if (Abstract_VM_Version::should_check_cpu_features()) {
+        ls.print_raw_cr("If you are sure it will not crash you can override this check by -XX:+UnlockExperimentalVMOptions -XX:CheckCPUFeatures=skip .");
+      } else {
+        ls.print_raw_cr("Overriding this check because -XX:CheckCPUFeatures=skip was specified.");
+      }
     }
     if (!features_missing_in_parsed.empty()) {
       LogStream ls(lt);
@@ -336,7 +340,8 @@ void VM_Version::cpu_features_init() {
       ls.cr();
     }
   }
-  if (!features_missing_on_machine.empty() || !features_missing_in_parsed.empty()) {
+  if ((!features_missing_on_machine.empty() && Abstract_VM_Version::should_check_cpu_features())
+      || !features_missing_in_parsed.empty()) {
     stringStream ss;
     ss.print_raw("Invalid -XX:CPUFeatures=");
     CPUFeatures_parsed.print_numbers(ss);

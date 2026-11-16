@@ -63,6 +63,8 @@ import jdk.test.lib.crac.*;
  * @run driver jdk.test.lib.crac.CracTest 0xfffff,0x0 -- MISSING_FEATURES_ON_MACHINE
  * @run driver jdk.test.lib.crac.CracTest 0x60,0xfff  -- MISSING_FEATURES_ON_MACHINE
  * @run driver jdk.test.lib.crac.CracTest 0x0,0x0     -- MISSING_FEATURES_IN_INPUT
+ * @run driver jdk.test.lib.crac.CracTest 0x200000fffff,0x0 -- MISSING_FEATURES_ON_MACHINE true
+ * @run driver jdk.test.lib.crac.CracTest 0x0,0x0     -- MISSING_FEATURES_IN_INPUT   true
  */
 /*
  * @test id=x86-NON-LINUX
@@ -121,6 +123,9 @@ public class SimpleCPUFeaturesTest implements CracTest {
     @CracTestArg(value = 2, optional = true)
     ErrorMsg error;
 
+    @CracTestArg(value = 3, optional = true)
+    boolean checkCPUFeaturesSkip;
+
     @Override
     public void test() throws Exception {
         CracBuilder builder = new CracBuilder()
@@ -129,8 +134,13 @@ public class SimpleCPUFeaturesTest implements CracTest {
         if (glibcTunables != null && !"--".equals(glibcTunables)) {
             builder.env("GLIBC_TUNABLES", glibcTunables);
         }
+        if (checkCPUFeaturesSkip) {
+            builder
+                .vmOption("-XX:+UnlockExperimentalVMOptions")
+                .vmOption("-XX:CheckCPUFeatures=skip");
+        }
         final var oa = builder.doPlainToAnalyze();
-        if (error == null) {
+        if (error == null || (checkCPUFeaturesSkip && error == ErrorMsg.MISSING_FEATURES_ON_MACHINE)) {
             oa.shouldHaveExitValue(0)
                     .stdoutShouldContain(SUCCESS);
         } else {

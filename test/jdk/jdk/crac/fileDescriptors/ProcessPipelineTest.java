@@ -56,20 +56,24 @@ public class ProcessPipelineTest implements CracTest {
         // The pipeline creates several FDs to connect the subprocesses,
         // but all of them should be closed (in this process) when the method returns.
         List<Process> processes = ProcessBuilder.startPipeline(pipeline);
-        try (
-                var writer = new OutputStreamWriter(processes.get(0).getOutputStream());
-                var reader = new BufferedReader(new InputStreamReader(processes.get(2).getInputStream()))
-        ) {
-            writer.write("Hello world\n");
-            writer.flush();
-            assertEquals("Hello world", reader.readLine());
-            try {
-                CRaCMXBean.getCRaCMXBean().checkpointRestore();
-                fail("Should have failed");
-            } catch (CheckpointException e) {
-                // One for pipe to the first process, another for pipe from the last
-                assertEquals(2, e.getSuppressed().length);
+        try (var reader = new BufferedReader(new InputStreamReader(processes.get(2).getInputStream()))) {
+            try (var writer = new OutputStreamWriter(processes.get(0).getOutputStream())) {
+                writer.write("Hello world\n");
+                writer.flush();
+                assertEquals("Hello world", reader.readLine());
+                try {
+                    CRaCMXBean.getCRaCMXBean().checkpointRestore();
+                    fail("Should have failed");
+                } catch (CheckpointException e) {
+                    // One for pipe to the first process, another for pipe from the last
+                    assertEquals(2, e.getSuppressed().length);
+                }
             }
+            // ZULU-93469: Drain the reader before closing it. If we close the reader before
+            // the processes find that the input has been closed these might terminate
+            // with non-zero exit code (reproducibility depends on cat implementation).
+            //noinspection StatementWithEmptyBody
+            while (reader.read() != -1);
         }
         // This time it should succeed
         CRaCMXBean.getCRaCMXBean().checkpointRestore();

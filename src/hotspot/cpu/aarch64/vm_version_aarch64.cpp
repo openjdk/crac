@@ -787,6 +787,8 @@ void VM_Version::initialize() {
 
   _cpu_info_string = ss.as_string(true);
   _features_string = _cpu_info_string + features_offset;
+
+  show_cpu_features();
 }
 
 void VM_Version::get_cpu_features_name(void* features_buffer, stringStream& ss) {
@@ -895,6 +897,11 @@ void VM_Version::initialize_cpu_information(void) {
 
 bool VM_Version::cpu_features_binary(VM_Version::VM_Features *data) {
   *data = _features;
+  return true;
+}
+
+bool VM_Version::orig_cpu_features_binary(VM_Version::VM_Features *data) {
+  *data = _cpu_features;
   return true;
 }
 

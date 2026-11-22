@@ -351,14 +351,16 @@ void VM_Version::cpu_features_init() {
 
   _features = CPUFeatures_parsed;
 
-  if (ShowCPUFeatures && !CRaCRestoreFrom) {
-    print_using_features_cr();
-  }
-
 #ifdef LINUX
   if (!glibc_not_using())
     glibc_reexec();
 #endif
+}
+
+void VM_Version::show_cpu_features() {
+  if (ShowCPUFeatures && !CRaCRestoreFrom) {
+    print_using_features_cr();
+  }
 }
 
 void VM_Version::insert_features_names(VM_Version::VM_Features features, outputStream& os) {

@@ -38,6 +38,7 @@ class VM_Version: public Abstract_VM_Version {
   static bool is_initialized()      { return _is_initialized; }
   struct VM_Features: public Zero_Features {};
   static bool cpu_features_binary(VM_Features *data) { return false; }
+  static bool orig_cpu_features_binary(VM_Features *data) { return false; }
   static bool can_use_cpu_features() { return false; }
   static const char *restore_failed_check(const VM_Features *image_features, const VM_Features *current_features) {
     return nullptr;

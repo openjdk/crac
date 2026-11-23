@@ -71,11 +71,23 @@ internal_restore() {
   wait $p
   echo RC=$?
 }
-internal_version() {
+internal_reexec() {
   javasetup
   set +e
-  cat /proc/cpuinfo |grep '^stepping.: 4$'
-  bin/java $enginecmdline -XX:+ShowCPUFeatures "$@" --version
+  ! bin/java $enginecmdline -XX:+ShowCPUFeatures "$@" --version|grep 'Re-exec of java with new environment variable'
+  exit $?
+}
+internal_stepping4() {
+  javasetup
+  set +e
+  if ! grep '^stepping.: 4$' /proc/cpuinfo;then
+    exit 2
+  fi
+  # This machine's CPU features are: -XX:CPUFeatures=0xe14e1b9dfdfbf7,0xfcc0000000000000
+  if bin/java $enginecmdline -XX:+ShowCPUFeatures "$@" --version|grep 'CPU features being used are: -XX:CPUFeatures=0xe14e1805fdfbf7,0xfcc0000000000000';then
+    exit 0
+  fi
+  exit 1
 }
 if [ "${1#internal_}" != "$1" ];then
   set -x
@@ -357,7 +369,7 @@ if [ -z "$only" ] || echo "$only"|grep -w $lastline;then
   for include_cpu_feature_active in $include_cpu_feature_active_list;do
     icfacmdline_set
     r="icfa$include_cpu_feature_active"
-    if runssh "./CPUFeaturesAWS.sh internal_version $icfacmdline"|grep 'Re-exec of java with new environment variable';then
+    if runssh "./CPUFeaturesAWS.sh internal_reexec $icfacmdline";then
       r="$r-PASS"
     else
       r="$r-FAIL"
@@ -384,13 +396,11 @@ if [ -z "$only" ] || echo "$only"|grep -w $lastline;then
   for include_cpu_feature_active in $include_cpu_feature_active_list;do
     icfacmdline_set
     r="icfa$include_cpu_feature_active"
-    out="$(runssh "./CPUFeaturesAWS.sh internal_version $icfacmdline")"
-    if ! echo "$out"|grep '^stepping.: 4$';then
-      r="$r-SKIP (not 8124M)"
-    # This machine's CPU features are: -XX:CPUFeatures=0xe14e1b9dfdfbf7,0xfcc0000000000000
-    elif echo "$out"|grep 'CPU features being used are: -XX:CPUFeatures=0xe14e1805fdfbf7,0xfcc0000000000000';then
+    if runssh "./CPUFeaturesAWS.sh internal_stepping4 $icfacmdline";then
       r="$r-PASS"
       c5ok=true
+    elif [ $? -eq 2 ];then
+      r="$r-SKIP (not 8124M)"
     else
       r="$r-FAIL"
       exitcode=1

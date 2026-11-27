@@ -124,6 +124,10 @@ public:
   typedef ::VM_Features VM_Features;
   static void initialize();
   static bool cpu_features_binary(VM_Features *data);
+  // orig_cpu_features_binary provides the hardware CPU capabilities.
+  // Unlike cpu_features_binary which has bits cleared for features not
+  // enabled for this JDK run, such as UseAVX.
+  static bool orig_cpu_features_binary(VM_Features *data);
   static bool _cpu_features_ignore;
   static bool can_use_cpu_features() {
     return !_cpu_features_ignore;
@@ -144,6 +148,7 @@ public:
   static constexpr size_t glibc_prefix_len = sizeof(glibc_prefix) - 1;
 #endif //LINUX
   static void print_using_features_cr();
+  static void show_cpu_features();
   static void insert_features_names(VM_Version::VM_Features features, outputStream& os);
   // The returned string needs a ResourceMark.
   static const char *restore_failed_check(const VM_Features *image_features, const VM_Features *current_features);

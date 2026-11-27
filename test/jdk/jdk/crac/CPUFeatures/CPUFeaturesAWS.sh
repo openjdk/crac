@@ -77,6 +77,18 @@ internal_reexec() {
   ! bin/java $enginecmdline -XX:+ShowCPUFeatures "$@" --version|grep 'Re-exec of java with new environment variable'
   exit $?
 }
+internal_stepping4() {
+  javasetup
+  set +e
+  if ! grep '^stepping.: 4$' /proc/cpuinfo;then
+    exit 2
+  fi
+  # This machine's CPU features are: -XX:CPUFeatures=0xe14e1b9dfdfbf7,0xfcc0000000000000
+  if bin/java $enginecmdline -XX:+ShowCPUFeatures "$@" --version|grep 'CPU features being used are: -XX:CPUFeatures=0xe14e1805fdfbf7,0xfcc0000000000000';then
+    exit 0
+  fi
+  exit 1
+}
 if [ "${1#internal_}" != "$1" ];then
   set -x
   "$@"
@@ -374,6 +386,31 @@ checkpoint_restore "$LINENO" c6a.xlarge c6i.xlarge "" "-XX:CPUFeatures=0x23461c0
 # ZULU-99795
 checkpoint_restore "$LINENO" c7a.medium c6i.large "" "-XX:CPUFeatures=0x4fb77ff9dddfbf7,0xdcc0000000000000" ""
 checkpoint_restore "$LINENO" c6i.large c7a.medium "" "-XX:CPUFeatures=0x4fb77ff9dddfbf7,0xdcc0000000000000" ""
+
+# JDK-8398015
+c5ok=false
+lastline="$LINENO"
+if [ -z "$only" ] || echo "$only"|grep -w $lastline;then
+  kind=c5.large
+  setup
+  for include_cpu_feature_active in $include_cpu_feature_active_list;do
+    icfacmdline_set
+    r="icfa$include_cpu_feature_active"
+    if runssh "./CPUFeaturesAWS.sh internal_stepping4 $icfacmdline";then
+      r="$r-PASS"
+      c5ok=true
+    elif [ $? -eq 2 ];then
+      r="$r-SKIP (not 8124M)"
+    else
+      r="$r-FAIL"
+      exitcode=1
+    fi
+    results="$results\n$lastline:$r"
+  done
+fi
+if $c5ok;then
+  checkpoint_restore "$LINENO" c5.large c5.large "" "-XX:UseAVX=3" ""
+fi
 
 elif echo "$arch"|grep -q ', ARM aarch64, ';then
   debianami=ami-0aed0cf56d6c464bc

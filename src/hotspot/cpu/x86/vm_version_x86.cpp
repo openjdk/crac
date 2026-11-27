@@ -2238,6 +2238,11 @@ bool VM_Version::cpu_features_binary(VM_Version::VM_Features *data) {
   return true;
 }
 
+bool VM_Version::orig_cpu_features_binary(VM_Version::VM_Features *data) {
+  *data = _cpu_features.aot_code_cache_features();
+  return true;
+}
+
 #ifdef COMPILER2
 // Determine if it's running on Cascade Lake using default options.
 bool VM_Version::is_default_intel_cascade_lake() {
@@ -2295,6 +2300,8 @@ void VM_Version::initialize() {
     check_virtualizations();
   }
   _vm_version_initialized = true;
+
+  show_cpu_features();
 }
 
 typedef enum {

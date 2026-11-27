@@ -643,7 +643,7 @@ static bool apply_constraints(CracEngine &engine, bool *exact) {
   }
   if (!ignore) {
     VM_Version::VM_Features current_features;
-    if (VM_Version::cpu_features_binary(&current_features)) {
+    if (VM_Version::orig_cpu_features_binary(&current_features)) {
       engine.require_cpuinfo(&current_features, *exact);
     }
   }
@@ -1015,7 +1015,7 @@ void crac::restore(crac_restore_data& restore_data) {
   log_error(crac)("CRaC engine failed to restore from %s (error code %d)", CRaCRestoreFrom, err);
 
   VM_Version::VM_Features current_features;
-  VM_Version::cpu_features_binary(&current_features); // ignore return value
+  VM_Version::orig_cpu_features_binary(&current_features); // ignore return value
   engine.check_cpuinfo(&current_features, exact);
 }
 

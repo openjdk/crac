@@ -309,6 +309,11 @@ int LogFileOutput::write(LogMessageBuffer::Iterator msg_iterator) {
   }
 
   RotationLocker lock(_rotation_semaphore);
+  if (_stream == nullptr) {
+    // close() for a CRaC checkpoint may have run since the unlocked check above.
+    return 0;
+  }
+
   int written = LogFileStreamOutput::write(msg_iterator);
   if (written > 0) {
     _current_size += written;
@@ -349,6 +354,11 @@ void LogFileOutput::force_rotate() {
 }
 
 void LogFileOutput::rotate() {
+  if (_stream == nullptr) {
+    // The stream is null after a failed rotation or a failed reopen on CRaC restore.
+    return;
+  }
+
   if (fclose(_stream)) {
     jio_fprintf(defaultStream::error_stream(), "Error closing file '%s' during log rotation (%s).\n",
                 _file_name, os::strerror(errno));
@@ -469,6 +479,8 @@ int LogFileOutput::fd_get() const {
 }
 
 void LogFileOutput::close() {
+  // Other threads may still write to or rotate this output while CRaC closes it.
+  RotationLocker lock(_rotation_semaphore);
   if (_stream == nullptr) {
     return;
   }
@@ -480,6 +492,9 @@ void LogFileOutput::close() {
 }
 
 void LogFileOutput::reopen() {
+  // Other threads may still write to or rotate this output while CRaC reopens it.
+  RotationLocker lock(_rotation_semaphore);
+
   assert(_stream == nullptr, "reopening an already opened log file");
 
   // Open the active log file using the same stream as before
@@ -487,6 +502,12 @@ void LogFileOutput::reopen() {
   LogFileOutput::set_file_name_parameters(the_time);
   FREE_C_HEAP_ARRAY(_file_name);
   _file_name = make_file_name(_name + strlen(Prefix), _pid_str, _vm_start_time_str);
+  if (_file_count > 0) {
+    FREE_C_HEAP_ARRAY(_archive_name);
+    _archive_name_len = 2 + strlen(_file_name) + _file_count_max_digits;
+    _archive_name = NEW_C_HEAP_ARRAY(char, _archive_name_len, mtLogging);
+    _archive_name[0] = 0;
+  }
   _stream = os::fopen(_file_name, FileOpenMode);
   if (_stream == nullptr) {
     jio_fprintf(defaultStream::error_stream(), "Could not reopen log file '%s' (%s).\n",
@@ -494,6 +515,12 @@ void LogFileOutput::reopen() {
     return;
   }
 
-  // _current_size still keeps how much data we wrote for the rotation purposes.
-  // The log file may contain more data now.
+  // A restored process may have opened a different file (e.g. %p or %t in the name)
+  // and the new log file may have a different size.
+  struct stat st;
+  if (::fstat(fd_get(), &st) == 0) {
+    _current_size = (size_t)st.st_size;
+  } else {
+    _current_size = 0;
+  }
 }
